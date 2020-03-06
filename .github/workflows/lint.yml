@@ -15,12 +15,11 @@ jobs:
 
       - name: Install linters
         run: |
-          echo $(go env GOPATH)
-          bindir=$(go env GOPATH)
-          echo "... ${bindir}...."
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v1.23.8
+          bindir=$(go env GOPATH)/bin
+          set -x
+          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${bindir} v1.23.8
           go get -x github.com/matthewloring/validjson/cmd/validjson
-          go build -o $(go env GOPATH)/bin/validjson
+          go build -o ${bindir}/bin/validjson
 
       - name: Run linters
         run: |
