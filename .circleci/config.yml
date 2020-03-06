@@ -1,0 +1,19 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.14
+    steps:
+      - checkout
+      - run:
+          name: build
+          command: |
+            set -eux -o pipefail 
+            for dir in $(find * -type d); do
+              here="$(pwd)"
+              cd "${dir}"
+              echo $dir
+              go get -v -t -d ./...
+              go test -v ./...
+              cd "${here}"
+            done
