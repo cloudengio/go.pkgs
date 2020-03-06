@@ -16,7 +16,8 @@ jobs:
       - name: Install linters
         run: |
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v1.23.3
-          go build -o $(go env GOPATH)/bin/validjson github.com/matthewloring/validjson/cmd/validjson
+          go get github.com/matthewloring/validjson/cmd/validjson
+          go build -o $(go env GOPATH)/bin/validjson
 
       - name: Run linters
         run: |
