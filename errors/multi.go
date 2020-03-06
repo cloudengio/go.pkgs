@@ -7,7 +7,6 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 )
