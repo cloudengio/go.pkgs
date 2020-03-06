@@ -1,4 +1,4 @@
-// Copyright 2020 CloudEng LLC. All rights reserved.
+// Copyright 2020 cloudeng LLC. All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
@@ -26,8 +26,6 @@ func Unwrap(err error) error {
 func Is(err, target error) bool {
 	return errors.Is(err, target)
 }
-
-var errorType = reflect.TypeOf((*error)(nil)).Elem()
 
 // As calls errors.As.
 func As(err error, target interface{}) bool {
