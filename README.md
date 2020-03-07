@@ -1,7 +1,6 @@
 [![CircleCI](https://circleci.com/gh/cloudengio/go.pkg.svg?style=svg)](https://circleci.com/gh/cloudengio/go.pkg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/cloudengio/go.pkg)](https://goreportcard.com/report/github.com/cloudengio/go.pkg)
 
-# go.pkg contains a set of broadly useful go modules.
+# go.pkg contains a set of broadly useful go packages.
 
 It contains the following submodules, each of which can be imported and
 versioned independently of one another.
