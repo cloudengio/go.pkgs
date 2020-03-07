@@ -1,7 +1,6 @@
 # sync
 
 [![CircleCI](https://circleci.com/gh/cloudengio/go.pkg.svg?style=svg)](https://circleci.com/gh/cloudengio/go.pkg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/cloudengio/go.pkg/sync)](https://goreportcard.com/report/github.com/cloudengio/go.pkg/sync)
 
 sync provides primitives for working with collections of go routines and their associated context and error handling.
 
