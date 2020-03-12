@@ -19,7 +19,7 @@ const (
 
 // comparisons encodes the sorting order for different operations at the
 // same position; the stored value is returned from the sort.SliceStable less
-// function. Note that since SliceStable is used, comparions of the same
+// function. Note that since SliceStable is used, comparisons of the same
 // operation type return false to allow for stable sorting; true is returned
 // to provide precedence between ops, with the order being: delete, replace,
 // insert.
@@ -61,8 +61,8 @@ func Insert(pos uint, text string) Delta {
 	}
 }
 
-// Replace creates a Delta to replace the size bytes starting at pos
-// with the specified string. The string may be shorter or longer than size.
+// Replace creates a Delta to replace size bytes starting at pos
+// with text. The string may be shorter or longer than size.
 func Replace(pos, size uint, text string) Delta {
 	return Delta{
 		op:   replaceOp,
@@ -81,6 +81,8 @@ func Delete(pos, size uint) Delta {
 	}
 }
 
+// Validate determines if the supplied deltas fall within the bounds
+// of content.
 func Validate(contents []byte, deltas ...Delta) error {
 	sort.SliceStable(deltas, func(i, j int) bool {
 		// sort by reverse position.
@@ -91,7 +93,7 @@ func Validate(contents []byte, deltas ...Delta) error {
 		if d.from > len(contents) {
 			errs.Append(fmt.Errorf("out of range: %s", d))
 		} else {
-			if d.to != 0 {
+			if d.op != insertOp {
 				// replace or delete.
 				if d.to > len(contents) {
 					errs.Append(fmt.Errorf("out of range: %s", d))
@@ -129,7 +131,7 @@ func overwrite(a, b string) string {
 	return string(n)
 }
 
-// Do applies the supplied deltas to the supplied contents as follows:
+// Do applies the supplied deltas to contents as follows:
 //   1. Deltas are sorted by their start position, then at each position,
 //   2. deletions are applied, then
 //   3. replacements are applied, then,
@@ -137,6 +139,7 @@ func overwrite(a, b string) string {
 // Sorting is stable with respect the order specified in the function invocation.
 // Multiple deletions and replacements overwrite each other, whereas insertions
 // are concatenated.
+// All position values are with respect to the original value of contents.
 func Do(contents []byte, deltas ...Delta) []byte {
 	max := func(a, b int) int {
 		if a > b {
@@ -155,13 +158,14 @@ func Do(contents []byte, deltas ...Delta) []byte {
 	replacement := ""
 	replaceOffset := 0
 	patched := make([]byte, 0, 64*1024)
+	prevPos := 0
 	for _, d := range deltas {
 		if d.from > len(contents) || (d.op != insertOp && d.to > len(contents)) {
 			// all operations must start in range, replacements and deletes must
 			// end in range.
 			break
 		}
-		if d.op != replaceOp {
+		if d.op != replaceOp || d.from != prevPos {
 			offset = max(offset, replaceOffset)
 			patched = append(patched, replacement...)
 			replacement = ""
@@ -180,6 +184,7 @@ func Do(contents []byte, deltas ...Delta) []byte {
 		case insertOp:
 			patched = append(patched, d.text...)
 		}
+		prevPos = d.from
 	}
 	if len(replacement) > 0 {
 		patched = append(patched, replacement...)
@@ -189,4 +194,9 @@ func Do(contents []byte, deltas ...Delta) []byte {
 		patched = append(patched, contents[offset:]...)
 	}
 	return patched
+}
+
+// DoString is like Do but for strings.
+func DoString(contents string, deltas ...Delta) string {
+	return string(Do([]byte(contents), deltas...))
 }

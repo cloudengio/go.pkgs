@@ -2,11 +2,33 @@ package edit_test
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
 	"cloudeng.io/text/edit"
 )
+
+func ExampleDo() {
+	content := "world"
+	helloWorld := edit.DoString(content, edit.Insert(0, "hello "))
+	bonjourWorld := edit.DoString(helloWorld, edit.Replace(0, 5, "bonjour"))
+	hello := edit.DoString(helloWorld, edit.Delete(5, 6))
+	sentence := edit.DoString("some random things",
+		edit.Replace(0, 1, "S"),
+		edit.Replace(5, 6, "thoughts"),
+		edit.Delete(12, 6),
+		edit.Insert(18, "for the day."))
+	fmt.Println(helloWorld)
+	fmt.Println(bonjourWorld)
+	fmt.Println(hello)
+	fmt.Println(sentence)
+	// Output:
+	// hello world
+	// bonjour world
+	// hello
+	// Some thoughts for the day.
+}
 
 func TestString(t *testing.T) {
 	for i, tc := range []struct {
@@ -65,6 +87,8 @@ func TestEdits(t *testing.T) {
 		{[]byte("ab"), j(del(1, 1), del(0, 1)), []byte{}},
 
 		// replacements
+		{[]byte("a"), j(rpl(0, 1, "A")), []byte("A")},
+		{[]byte("ab"), j(rpl(0, 1, "A"), rpl(1, 1, "B")), []byte("AB")},
 		{[]byte("abcd"), j(rpl(0, 4, "xy")), []byte("xy")},
 		{[]byte("abcd"), j(rpl(0, 2, "xy")), []byte("xycd")},
 		{[]byte("abcd"), j(rpl(0, 1, "xy")), []byte("xybcd")},
