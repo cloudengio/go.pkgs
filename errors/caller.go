@@ -55,7 +55,6 @@ func (ae *annotated) Format(f fmt.State, c rune) {
 		format = "%v: %#" + string(c)
 	}
 	fmt.Fprintf(f, format, ae.annotation, ae.err)
-	return
 }
 
 // FileLocation returns the callers location as a filepath and line
