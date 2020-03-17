@@ -6,6 +6,7 @@ package errors_test
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -30,6 +31,9 @@ func (es *ErrorStruct) Is(target error) bool {
 
 func (es *ErrorStruct) As(target interface{}) bool {
 	v, ok := target.(*ErrorStruct)
+	if !ok {
+		return false
+	}
 	*v = *es
 	return ok
 }
@@ -145,12 +149,19 @@ func TestAsIs(t *testing.T) {
 	if got, want := errors.Is(m, &ErrorStruct{X: 22, S: "22"}), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	if got, want := errors.Is(m, os.ErrNoDeadline), false; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 
 	t3 := &ErrorStruct{}
 	if got, want := errors.As(m, t3), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := t3, t2; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	var rd io.Reader
+	if got, want := errors.As(m, &rd), false; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -167,5 +178,20 @@ func TestClone(t *testing.T) {
 	}
 	if got, want := c.Unwrap(), t1; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestErr(t *testing.T) {
+	m := &errors.M{}
+	if m.Err() != nil {
+		t.Errorf("unexpected non-nil error")
+	}
+	m.Append(os.ErrExist)
+	err := m.Err()
+	if err == nil {
+		t.Errorf("expected an error")
+	}
+	if _, ok := err.(*errors.M); !ok {
+		t.Errorf("failed to extract underlying type")
 	}
 }
