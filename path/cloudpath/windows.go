@@ -5,8 +5,19 @@
 package cloudpath
 
 import (
+	"net/url"
 	"strings"
 )
+
+func isWindowsDrive(p string) (string, bool) {
+	drive := p[0]
+	if drive >= 'A' && drive <= 'Z' || drive >= 'a' && drive <= 'z' {
+		if len(p) >= 2 && p[1] == ':' {
+			return string(drive), true
+		}
+	}
+	return "", false
+}
 
 // WindowsMatcher implements Matcher for Windows filenames. It returns
 // WindowsFileSystem for its scheme result.
@@ -20,17 +31,25 @@ func WindowsMatcher(p string) *Match {
 		Separator: '\\',
 		Local:     true,
 	}
-	// extended length names
-	p = strings.TrimPrefix(p, `\\?`)
-	drive := p[0]
-	if drive >= 'A' && drive <= 'Z' || drive >= 'a' && drive <= 'z' {
-		// drive format, either relative or absolute: c:foo.txt or c:\foo.txt
-		if len(p) >= 2 && p[1] == ':' {
-			m.Volume = string(drive)
-			m.Path = p
+
+	// Handle file:// uris.
+	if u, err := url.Parse(p); err == nil && u.Scheme == "file" {
+		wp := strings.TrimPrefix(u.Path, "/")
+		if drive, ok := isWindowsDrive(wp); ok && len(wp) > 2 && wp[2] == '/' {
+			m.Volume = drive
+			m.Separator = '/'
+			m.Path = wp
 			return m
 		}
 		return nil
+	}
+
+	// extended length names
+	p = strings.TrimPrefix(p, `\\?`)
+	if drive, ok := isWindowsDrive(p); ok {
+		m.Volume = drive
+		m.Path = p
+		return m
 	}
 	if len(p) < 2 || strings.Index(p, `\`) < -1 {
 		// no backslashes so there's no way to tell.
