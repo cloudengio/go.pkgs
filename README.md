@@ -1,4 +1,4 @@
-[![CircleCI](https://circleci.com/gh/cloudengio/go.pkg.svg?style=svg)](https://circleci.com/gh/cloudengio/go.pkg)
+[![CircleCI](https://circleci.com/gh/cloudengio/go.pkgs.svg?style=svg)](https://circleci.com/gh/cloudengio/go.pkgs)
 
 # go.pkgs contains a set of broadly useful go packages.
 

@@ -14,7 +14,10 @@ var DefaultMatchers MatcherSpec = []Matcher{
 	UnixMatcher,
 }
 
-// MatcherSpec represents a set of Matchers and local file system schemes.
+// MatcherSpec represents a set of Matchers that will be applied in order.
+// The ordering is important, the most specific matchers need to be applied
+// first. For example a matcher for Windows should precede that for a Unix
+// filesystem since the latter can accept filenames in Windows format.
 type MatcherSpec []Matcher
 
 // Match is the result of a successful match.

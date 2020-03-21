@@ -56,6 +56,14 @@ func TestWindows(t *testing.T) {
 			`\\?Z:a\b`,
 			cloudpath.WindowsFileSystem, "localhost", "Z", `Z:a\b`, '\\', nil,
 		},
+		{
+			"file:///c:/a/b/c/",
+			cloudpath.WindowsFileSystem, "localhost", "c", "c:/a/b/c/", '/', nil,
+		},
+		{
+			`file://ignored/c:/a/b/c/`,
+			cloudpath.WindowsFileSystem, "localhost", "c", "c:/a/b/c/", '/', nil,
+		},
 	}
 	if err := testMatcher(cloudpath.WindowsMatcher, data); err != nil {
 		t.Errorf("%v", err)

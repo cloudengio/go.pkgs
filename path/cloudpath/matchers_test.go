@@ -56,6 +56,14 @@ func TestMatch(t *testing.T) {
 			"gs://bucket/object",
 			cloudpath.GoogleCloudStorage, "", "bucket", "/bucket/object", '/', nil,
 		},
+		{
+			"file:///a/b/c/",
+			cloudpath.UnixFileSystem, "localhost", "", "/a/b/c/", '/', nil,
+		},
+		{
+			"file:///c:/a/b/c/",
+			cloudpath.WindowsFileSystem, "localhost", "c", "c:/a/b/c/", '/', nil,
+		},
 	}
 	if err := testMatcherSpec(cloudpath.DefaultMatchers, data); err != nil {
 		t.Errorf("%v", err)
