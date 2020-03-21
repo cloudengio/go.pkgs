@@ -22,7 +22,7 @@ func ExampleCaller() {
 	// file does not exist
 }
 
-func ExampleM_Caller() {
+func ExampleM_caller() {
 	m := &errors.M{}
 	m.Append(errors.Caller(os.ErrExist))
 	m.Append(errors.Caller(os.ErrInvalid))
