@@ -88,6 +88,12 @@ func Caller(err error) error {
 	return Annotate(FileLocation(2, 2), err)
 }
 
+// CallerAll returns a slice conntaing annotated versions of all of the
+// supplied errors.
+func CallerAll(err ...error) []error {
+	return AnnotateAll(FileLocation(2, 2), err...)
+}
+
 // Annotate returns an error representing the original error and the
 // supplied annotation.
 func Annotate(annotation string, err error) error {

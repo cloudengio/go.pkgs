@@ -195,3 +195,17 @@ func TestErr(t *testing.T) {
 		t.Errorf("failed to extract underlying type")
 	}
 }
+
+func ExampleM() {
+	m := &errors.M{}
+	fmt.Println(m.Err())
+	m.Append(os.ErrExist)
+	m.Append(os.ErrInvalid)
+	fmt.Println(m.Err())
+	// Output:
+	// <nil>
+	//   --- 1 of 2 errors
+	//   file already exists
+	//   --- 2 of 2 errors
+	//   invalid argument
+}
