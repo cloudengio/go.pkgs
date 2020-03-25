@@ -14,7 +14,7 @@ import (
 )
 
 func ExampleCaller() {
-	err := errors.Caller(os.ErrNotExist)
+	err := errors.WithCaller(os.ErrNotExist)
 	fmt.Printf("%v\n", err)
 	fmt.Printf("%v\n", errors.Unwrap(err))
 	// Output:
@@ -24,8 +24,8 @@ func ExampleCaller() {
 
 func ExampleM_caller() {
 	m := &errors.M{}
-	m.Append(errors.Caller(os.ErrExist))
-	m.Append(errors.Caller(os.ErrInvalid))
+	m.Append(errors.WithCaller(os.ErrExist))
+	m.Append(errors.WithCaller(os.ErrInvalid))
 	fmt.Println(m.Err())
 	// Output:
 	//   --- 1 of 2 errors
@@ -35,8 +35,8 @@ func ExampleM_caller() {
 }
 
 func ExampleFileLocation() {
-	fmt.Println(errors.FileLocation(1, 1))
-	fmt.Println(errors.FileLocation(1, 2))
+	fmt.Println(errors.Caller(1, 1))
+	fmt.Println(errors.Caller(1, 2))
 	// Output:
 	// caller_test.go:38
 	// errors/caller_test.go:39
@@ -48,7 +48,7 @@ func TestAnnotated(t *testing.T) {
 		Path: "/a/b",
 		Err:  os.ErrNotExist,
 	}
-	err := errors.Caller(myErr)
+	err := errors.WithCaller(myErr)
 	if got, want := err.Error(), "errors/caller_test.go:51: open /a/b: file does not exist"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -75,7 +75,7 @@ func TestAnnotated(t *testing.T) {
 }
 
 func TestPrintf(t *testing.T) {
-	err := errors.Caller(&os.PathError{
+	err := errors.WithCaller(&os.PathError{
 		Op:   "open",
 		Path: "/a/b",
 		Err:  os.ErrNotExist,

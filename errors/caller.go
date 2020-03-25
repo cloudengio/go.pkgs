@@ -57,13 +57,13 @@ func (ae *annotated) Format(f fmt.State, c rune) {
 	fmt.Fprintf(f, format, ae.annotation, ae.err)
 }
 
-// FileLocation returns the callers location as a filepath and line
+// Caller returns the caller's location as a filepath and line
 // number. Depth follows the convention for runtime.Caller. The
 // filepath is the trailing nameLen components of the filename
 // returned by runtime.Caller. A nameLen of 2 is generally the
 // best compromise between brevity and precision since it includes
 // the enclosing directory component as well as the filename.
-func FileLocation(depth, nameLen int) string {
+func Caller(depth, nameLen int) string {
 	_, file, line, _ := runtime.Caller(depth)
 	if nameLen <= 1 {
 		return filepath.Base(file) + ":" + strconv.Itoa(line)
@@ -83,15 +83,15 @@ func FileLocation(depth, nameLen int) string {
 	return base + ":" + strconv.Itoa(line)
 }
 
-// Caller returns an error annotated with the location of its immediate caller.
-func Caller(err error) error {
-	return Annotate(FileLocation(2, 2), err)
+// WithCaller returns an error annotated with the location of its immediate caller.
+func WithCaller(err error) error {
+	return Annotate(Caller(2, 2), err)
 }
 
-// CallerAll returns a slice conntaing annotated versions of all of the
+// WithCallerAll returns a slice conntaing annotated versions of all of the
 // supplied errors.
-func CallerAll(err ...error) []error {
-	return AnnotateAll(FileLocation(2, 2), err...)
+func WithCallerAll(err ...error) []error {
+	return AnnotateAll(Caller(2, 2), err...)
 }
 
 // Annotate returns an error representing the original error and the
