@@ -13,7 +13,7 @@ import (
 	"cloudeng.io/errors"
 )
 
-func ExampleCaller() {
+func ExampleWithCaller() {
 	err := errors.WithCaller(os.ErrNotExist)
 	fmt.Printf("%v\n", err)
 	fmt.Printf("%v\n", errors.Unwrap(err))
@@ -34,7 +34,7 @@ func ExampleM_caller() {
 	//   errors/caller_test.go:28: invalid argument
 }
 
-func ExampleFileLocation() {
+func ExampleCaller() {
 	fmt.Println(errors.Caller(1, 1))
 	fmt.Println(errors.Caller(1, 2))
 	// Output:
