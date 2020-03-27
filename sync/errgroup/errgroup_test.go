@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"cloudeng.io/sync/errgroup"
@@ -129,6 +130,46 @@ func ExampleWithCancel() {
 	//   a: context deadline exceeded
 	//   b: context deadline exceeded
 	//   c: context deadline exceeded
+}
+
+func TestLimit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
+	concurrency := 2
+	g = errgroup.WithConcurrency(g, concurrency)
+
+	var started int64
+	intCh := make(chan int64, 1)
+
+	go func() {
+		time.Sleep(time.Second)
+		intCh <- atomic.LoadInt64(&started)
+		cancel()
+	}()
+
+	invocations := 100
+	for i := 0; i < invocations; i++ {
+		g.Go(func() error {
+			atomic.AddInt64(&started, 1)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Minute):
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		fmt.Printf("unexpected error: %v", err)
+	}
+
+	if got, want := <-intCh, int64(concurrency); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := atomic.LoadInt64(&started), int64(invocations); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
 
 func ExampleT_pipeline() {
