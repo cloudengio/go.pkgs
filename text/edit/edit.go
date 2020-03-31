@@ -53,7 +53,7 @@ func (d Delta) String() string {
 }
 
 // Insert creates a Delta to insert text at pos.
-func Insert(pos uint, text string) Delta {
+func Insert(pos int, text string) Delta {
 	return Delta{
 		op:   insertOp,
 		from: int(pos),
@@ -63,7 +63,7 @@ func Insert(pos uint, text string) Delta {
 
 // Replace creates a Delta to replace size bytes starting at pos
 // with text. The string may be shorter or longer than size.
-func Replace(pos, size uint, text string) Delta {
+func Replace(pos, size int, text string) Delta {
 	return Delta{
 		op:   replaceOp,
 		from: int(pos),
@@ -73,7 +73,7 @@ func Replace(pos, size uint, text string) Delta {
 }
 
 // Delete creates a Delta to delete size bytes starting at pos.
-func Delete(pos, size uint) Delta {
+func Delete(pos, size int) Delta {
 	return Delta{
 		op:   deleteOp,
 		from: int(pos),
