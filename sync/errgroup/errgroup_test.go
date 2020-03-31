@@ -132,22 +132,24 @@ func ExampleWithCancel() {
 	//   c: context deadline exceeded
 }
 
-func TestLimit(t *testing.T) {
+func testConcurrency(t *testing.T, concurrency int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
-	concurrency := 2
 	g = errgroup.WithConcurrency(g, concurrency)
 
 	var started int64
 	intCh := make(chan int64, 1)
 
 	go func() {
+		// This could be flaky, but in practice, 1 seconds should be massively
+		// conservative for starting a small # of goroutines that immediately
+		// call select.
 		time.Sleep(time.Second)
 		intCh <- atomic.LoadInt64(&started)
 		cancel()
 	}()
 
-	invocations := 100
+	invocations := 50
 	for i := 0; i < invocations; i++ {
 		g.Go(func() error {
 			atomic.AddInt64(&started, 1)
@@ -163,13 +165,27 @@ func TestLimit(t *testing.T) {
 		fmt.Printf("unexpected error: %v", err)
 	}
 
-	if got, want := <-intCh, int64(concurrency); got != want {
-		t.Errorf("got %v, want %v", got, want)
+	if concurrency == 0 {
+		// No limit on concurrency, make sure we've started at least
+		// half the requested invocations.
+		if got, want := <-intCh, int64(invocations)/2; got < want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	} else {
+		if got, want := <-intCh, int64(concurrency); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 
 	if got, want := atomic.LoadInt64(&started), int64(invocations); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+func TestLimit(t *testing.T) {
+	testConcurrency(t, 2)
+	// Test with no limit.
+	testConcurrency(t, 0)
 }
 
 func ExampleT_pipeline() {

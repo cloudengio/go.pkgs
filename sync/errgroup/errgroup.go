@@ -55,16 +55,20 @@ func WithCancel(cancel func()) *T {
 
 // WithConcurrency returns a new Group that will limit the number of
 // goroutines to n. Note that the Go method will block when this limit is
-// reached.
+// reached. A value of 0 for n implies no limit on the number of goroutines
+// to use.
 func WithConcurrency(g *T, n int) *T {
-	ch := make(chan struct{}, n)
-	for i := 0; i < n; i++ {
-		ch <- struct{}{}
-	}
-	return &T{
+	r := &T{
 		cancelFunc: g.cancelFunc,
-		ch:         ch,
 	}
+	if n > 0 {
+		ch := make(chan struct{}, n)
+		for i := 0; i < n; i++ {
+			ch <- struct{}{}
+		}
+		r.ch = ch
+	}
+	return r
 }
 
 func (g *T) possiblyCancel() {
@@ -92,6 +96,21 @@ func (g *T) Go(f func() error) {
 		}
 		g.wg.Done()
 	}()
+}
+
+// GoContext is a drop-in alternative to the Go method that checks for ctx.Done()
+// before calling g.Go. If the ctx has been canceled it will return immediately
+// recoding the error and calling the internal stored cancel function.
+func (g *T) GoContext(ctx context.Context, f func() error) {
+	select {
+	case <-ctx.Done():
+		err := ctx.Err()
+		g.errors.Append(err)
+		g.possiblyCancel()
+		return
+	default:
+	}
+	g.Go(f)
 }
 
 // Wait waits for all goroutines to finish.
