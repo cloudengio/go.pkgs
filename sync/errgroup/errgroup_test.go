@@ -6,7 +6,6 @@ package errgroup_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -16,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/sync/errgroup"
 )
 
@@ -156,13 +156,13 @@ func testConcurrency(t *testing.T, concurrency int) {
 			select {
 			case <-ctx.Done():
 				return nil
-			case <-time.After(time.Minute):
+			case <-time.After(time.Hour):
 			}
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		fmt.Printf("unexpected error: %v", err)
+		t.Errorf("unexpected error: %v", err)
 	}
 
 	if concurrency == 0 {
@@ -186,6 +186,59 @@ func TestLimit(t *testing.T) {
 	testConcurrency(t, 2)
 	// Test with no limit.
 	testConcurrency(t, 0)
+}
+
+func TestGoContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
+	g = errgroup.WithConcurrency(g, 1)
+
+	var started int64
+	intCh := make(chan int64, 1)
+
+	go func() {
+		// This could be flaky, but in practice, 1 seconds should be massively
+		// conservative for starting a small # of goroutines that immediately
+		// call select.
+		time.Sleep(time.Second)
+		intCh <- atomic.LoadInt64(&started)
+		cancel()
+	}()
+
+	invocations := 10
+	for i := 0; i < invocations; i++ {
+		i := i
+		g.GoContext(ctx, func() error {
+			atomic.AddInt64(&started, 1)
+			if i == 0 {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(time.Hour):
+				}
+				return nil
+			}
+			time.After(time.Hour)
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		errs := err.(*errors.M)
+		for err := errs.Unwrap(); err != nil; err = errs.Unwrap() {
+			if got, want := err.Error(), "context canceled"; got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		}
+	}
+
+	if got, want := <-intCh, int64(1); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := atomic.LoadInt64(&started), int64(2); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }
 
 func ExampleT_pipeline() {
