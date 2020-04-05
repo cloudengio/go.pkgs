@@ -52,6 +52,10 @@ func (d Delta) String() string {
 	}
 }
 
+func (d Delta) Text() string {
+	return string(d.data)
+}
+
 // Insert creates a Delta to insert the supplied bytes at pos.
 func Insert(pos int, data []byte) Delta {
 	return Delta{
