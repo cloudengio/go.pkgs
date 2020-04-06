@@ -6,8 +6,8 @@ import (
 	"os/signal"
 )
 
-// HandleSignal will asynchronously invoke the supplied function when the specified signals
-// are received.
+// HandleSignal will asynchronously invoke the supplied function when the
+// specified signals are received.
 func HandleSignals(fn func(), signals ...os.Signal) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, signals...)
@@ -16,4 +16,11 @@ func HandleSignals(fn func(), signals ...os.Signal) {
 		fmt.Println("stopping on... ", sig)
 		fn()
 	}()
+}
+
+// Exit formats and prints the supplied parameters to os.Stderr and then
+// calls os.Exit(1).
+func Exit(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, format, args...)
+	os.Exit(1)
 }
