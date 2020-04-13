@@ -103,3 +103,39 @@ func CopyAll(fromDir, toDir string, ovewrite bool) error {
 		)
 	})
 }
+
+// ListRegular returns the lexicographically ordered regular files that lie
+// beneath dir.
+func ListRegular(dir string) ([]string, error) {
+	var files []string
+	sdir := strings.TrimSuffix(dir, string(filepath.Separator)) + string(filepath.Separator)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsDir() || (dir == path) {
+			return nil
+		}
+		files = append(files, strings.TrimPrefix(path, sdir))
+		return nil
+	})
+	return files, err
+}
+
+// ListDir returns the lexicographically ordered directories that lie beneath
+// dir.
+func ListDir(dir string) ([]string, error) {
+	var dirs []string
+	sdir := strings.TrimSuffix(dir, string(filepath.Separator)) + string(filepath.Separator)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsDir() || (dir == path) {
+			return nil
+		}
+		dirs = append(dirs, strings.TrimPrefix(path, sdir))
+		return nil
+	})
+	return dirs, err
+}
