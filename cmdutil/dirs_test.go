@@ -224,8 +224,7 @@ func TestCopyFile(t *testing.T) {
 			t.Errorf("%v: missing or wrong error: %v (%v)", errors.Caller(2, 1), err, text)
 		}
 	}
-	err = cmdutil.CopyFile(from, to, 0677, false)
-	assert(err)
+	assert(cmdutil.CopyFile(from, to, 0677, false))
 
 	expectedPaths := []string{"from", "to"}
 	expectedPerms := []string{"-rw-r-xr-x", "-rw-rwxrwx"}
@@ -239,8 +238,7 @@ func TestCopyFile(t *testing.T) {
 	fromNew := filepath.Join(td, "from-new")
 	fromNewSha := newFromFile(fromNew)
 
-	err = cmdutil.CopyFile(from, to, 0644, true)
-	assert(err)
+	assert(cmdutil.CopyFile(from, to, 0644, true))
 
 	expectedPaths = []string{from, fromNew, to}
 	expectedPerms = []string{"-rw-r-xr-x", "-rw-r-xr-x", "-rw-r--r--"}
@@ -268,11 +266,9 @@ func TestCopyFile(t *testing.T) {
 	assertErr(err, "permission denied")
 
 	// No file permissions.
-	os.Chmod(forbidden, 0777)
-	assert(err)
+	assert(os.Chmod(forbidden, 0777))
 	newFromFile(forbiddenFile)
-	os.Chmod(forbiddenFile, 0000)
-	assert(err)
+	assert(os.Chmod(forbiddenFile, 0000))
 	err = cmdutil.CopyFile(from, forbiddenFile, 0677, true)
 	assertErr(err, "permission denied")
 }
