@@ -60,7 +60,7 @@ func (d Delta) Text() string {
 func Insert(pos int, data []byte) Delta {
 	return Delta{
 		op:   insertOp,
-		from: int(pos),
+		from: pos,
 		data: data,
 	}
 }
@@ -75,8 +75,8 @@ func InsertString(pos int, text string) Delta {
 func Replace(pos, size int, data []byte) Delta {
 	return Delta{
 		op:   replaceOp,
-		from: int(pos),
-		to:   int(pos + size),
+		from: pos,
+		to:   pos + size,
 		data: data,
 	}
 }
@@ -90,8 +90,8 @@ func ReplaceString(pos, size int, text string) Delta {
 func Delete(pos, size int) Delta {
 	return Delta{
 		op:   deleteOp,
-		from: int(pos),
-		to:   int(pos + size),
+		from: pos,
+		to:   pos + size,
 	}
 }
 
