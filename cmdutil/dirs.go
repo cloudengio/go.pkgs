@@ -20,11 +20,10 @@ func CopyFile(from, to string, perms os.FileMode, overwrite bool) (returnErr err
 		if !overwrite {
 			return fmt.Errorf("will not overwrite existing file: %v", to)
 		}
-	} else {
-		if !os.IsNotExist(err) {
-			return err
-		}
+	} else if !os.IsNotExist(err) {
+		return err
 	}
+
 	output, err := os.OpenFile(to, os.O_CREATE|os.O_RDWR|os.O_TRUNC, perms)
 	if err != nil {
 		return err

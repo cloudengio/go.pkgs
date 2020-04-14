@@ -212,9 +212,20 @@ func TestCopyFile(t *testing.T) {
 		return hex.EncodeToString(tmp[:])
 	}
 	fromSha := newFromFile(from)
-	if err := cmdutil.CopyFile(from, to, 0677, false); err != nil {
-		t.Fatalf("CopyFile: %v", err)
+
+	assert := func(err error) {
+		if err != nil {
+			t.Fatalf("%v: %v", errors.Caller(2, 1), err)
+		}
 	}
+
+	assertErr := func(err error, text string) {
+		if err == nil || !strings.Contains(err.Error(), text) {
+			t.Errorf("%v: missing or wrong error: %v (%v)", errors.Caller(2, 1), err, text)
+		}
+	}
+	err = cmdutil.CopyFile(from, to, 0677, false)
+	assert(err)
 
 	expectedPaths := []string{"from", "to"}
 	expectedPerms := []string{"-rw-r-xr-x", "-rw-rwxrwx"}
@@ -228,9 +239,9 @@ func TestCopyFile(t *testing.T) {
 	fromNew := filepath.Join(td, "from-new")
 	fromNewSha := newFromFile(fromNew)
 
-	if err := cmdutil.CopyFile(from, to, 0644, true); err != nil {
-		t.Fatalf("CopyFile: %v", err)
-	}
+	err = cmdutil.CopyFile(from, to, 0644, true)
+	assert(err)
+
 	expectedPaths = []string{from, fromNew, to}
 	expectedPerms = []string{"-rw-r-xr-x", "-rw-r-xr-x", "-rw-r--r--"}
 	expectedShas = []string{fromSha, fromNewSha, fromNewSha}
@@ -241,17 +252,11 @@ func TestCopyFile(t *testing.T) {
 
 	// Test errors.
 	err = cmdutil.CopyFile(from, to, 0677, false)
-	if err == nil || !strings.Contains(err.Error(), "will not overwrite existing file") {
-		t.Errorf("missing or wrong error: %v", err)
-	}
+	assertErr(err, "will not overwrite existing file")
 	err = cmdutil.CopyFile(from, td, 0677, false)
-	if err == nil || !strings.Contains(err.Error(), "destination is a directory") {
-		t.Errorf("missing or wrong error: %v", err)
-	}
+	assertErr(err, "destination is a directory")
 	err = cmdutil.CopyFile(from, td, 0677, true)
-	if err == nil || !strings.Contains(err.Error(), "destination is a directory") {
-		t.Errorf("missing or wrong error: %v", err)
-	}
+	assertErr(err, "destination is a directory")
 
 	// No directory permissions.
 	forbidden := filepath.Join(td, "forbidden")
@@ -260,20 +265,14 @@ func TestCopyFile(t *testing.T) {
 	}
 	forbiddenFile := filepath.Join(forbidden, "test")
 	err = cmdutil.CopyFile(from, forbiddenFile, 0677, true)
-	if err == nil || !strings.Contains(err.Error(), "permission denied") {
-		t.Errorf("missing or wrong error: %v", err)
-	}
+	assertErr(err, "permission denied")
 
 	// No file permissions.
-	if err := os.Chmod(forbidden, 0777); err != nil {
-		t.Fatalf("Chmod: %v", err)
-	}
+	os.Chmod(forbidden, 0777)
+	assert(err)
 	newFromFile(forbiddenFile)
-	if err := os.Chmod(forbiddenFile, 0000); err != nil {
-		t.Fatalf("Chmod: %v", err)
-	}
+	os.Chmod(forbiddenFile, 0000)
+	assert(err)
 	err = cmdutil.CopyFile(from, forbiddenFile, 0677, true)
-	if err == nil || !strings.Contains(err.Error(), "permission denied") {
-		t.Errorf("missing or wrong error: %v", err)
-	}
+	assertErr(err, "permission denied")
 }
