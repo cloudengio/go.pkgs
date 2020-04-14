@@ -22,7 +22,7 @@ jobs:
 
       - name: Run linters
         run: |
-          for dir in $(find * -type d -depth 0); do
+          for dir in $(find * -type d -maxdepth 0); do
             here=$(pwd)
             cd "${dir}"
             echo "linting in: ${dir}"
