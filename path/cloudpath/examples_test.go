@@ -28,7 +28,7 @@ func ExampleScheme() {
 	// true "windows" "localhost" "c" "c:\\root\\file" \ map[]
 }
 
-func ExamplePrefix() {
+func ExampleT_Prefix() {
 	date := cloudpath.Split("2012-11-27", '/').AsPrefix()
 	for _, fullname := range []string{
 		"s3://my-bucket/2012-11-27/shard-0000-of-0001.json",

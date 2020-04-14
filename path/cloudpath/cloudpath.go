@@ -237,8 +237,7 @@ func (path T) AsFilepath() T {
 		return path.clone()
 	}
 	l := len(path)
-	switch l {
-	case 0:
+	if l == 0 {
 		return T{}
 	}
 	if len(path[l-1]) > 0 {
