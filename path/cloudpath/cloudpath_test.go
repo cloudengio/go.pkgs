@@ -19,13 +19,12 @@ func TestSplitJoin(t *testing.T) {
 	j := joinComponents
 	for i, tc := range []struct {
 		path               string
-		slice              []string
-		absolute, complete bool
+		slice              cloudpath.T
+		absolute, filepath bool
 		joined             string
 	}{
-		{"", nil, false, false, ""},
+		{"", cloudpath.T{}, false, false, ""},
 		{j(sep), s("", ""), true, false, sep},
-
 		{j(sep, "a"), s("", "a"), true, true, j(sep, "a")},
 		{j(sep, "a", sep), s("", "a", ""), true, false, j(sep, "a", sep)},
 		{"a", s("a"), false, true, "a"},
@@ -36,7 +35,7 @@ func TestSplitJoin(t *testing.T) {
 		{j("a", sep, "bc", sep), s("a", "bc", ""), false, false, j("a", sep, "bc", sep)},
 
 		// Add in some repeat separators.
-		{"", nil, false, false, ""},
+		{"", cloudpath.T{}, false, false, ""},
 		{j(sep, sep), s("", ""), true, false, sep},
 		{j(sep, sep, "a"), s("", "a"), true, true, j(sep, "a")},
 		{j(sep, sep, "a", sep), s("", "a", ""), true, false, j(sep, "a", sep)},
@@ -51,17 +50,24 @@ func TestSplitJoin(t *testing.T) {
 	} {
 		path := cloudpath.Split(tc.path, filepath.Separator)
 		if got, want := path, tc.slice; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+		if got, want := path.IsAbsolute(), tc.absolute; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
 		}
-		if got, want := cloudpath.IsAbsolute(path), tc.absolute; got != want {
+		if got, want := path.IsFilepath(), tc.filepath; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
 		}
-		if got, want := cloudpath.IsFilepath(path), tc.complete; got != want {
+		if got, want := path.Join(filepath.Separator), tc.joined; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
 		}
-		if got, want := cloudpath.Join(filepath.Separator, path...), tc.joined; got != want {
-			t.Errorf("%v: got %v, want %v", i, got, want)
-		}
+	}
+
+	if got, want := cloudpath.Split("/", '/').IsRoot(), true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := cloudpath.Split("/a", '/').IsRoot(), false; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
@@ -124,22 +130,22 @@ func testNoMatch(fn cloudpath.Matcher, testCases []string) error {
 }
 
 func TestLongestPrefixSuffix(t *testing.T) {
-	ij := func(paths ...string) [][]string {
-		r := [][]string{}
+	ij := func(paths ...string) []cloudpath.T {
+		r := []cloudpath.T{}
 		for _, p := range paths {
 			r = append(r, cloudpath.Split(p, '/'))
 		}
 		return r
 	}
-	oj := func(path string) []string {
+	oj := func(path string) cloudpath.T {
 		if len(path) == 0 {
-			return []string{}
+			return cloudpath.T{}
 		}
 		return cloudpath.Split(path, '/')
 	}
 	for i, tc := range []struct {
-		input          [][]string
-		prefix, suffix []string
+		input          []cloudpath.T
+		prefix, suffix cloudpath.T
 	}{
 		{nil, oj(""), oj("")},
 		{ij("", ""), oj(""), oj("")},
@@ -157,23 +163,23 @@ func TestLongestPrefixSuffix(t *testing.T) {
 		{ij("/a/b/c/x/y/", "/a/b/x/y/", "/a/b/z/x/y/"), oj("/a/b/"), oj("x/y/")},
 		{ij("/a/b/c/x/y/", "/a/b/x/y/", "/a/b/z/A/y/"), oj("/a/b/"), oj("y/")},
 	} {
-		if got, want := cloudpath.LongestCommonPrefix(tc.input...), tc.prefix; !reflect.DeepEqual(got, want) {
+		if got, want := cloudpath.LongestCommonPrefix(tc.input), tc.prefix; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: prefix: got %#v, want %#v", i, got, want)
 		}
-		if got, want := cloudpath.LongestCommonSuffix(tc.input...), tc.suffix; !reflect.DeepEqual(got, want) {
+		if got, want := cloudpath.LongestCommonSuffix(tc.input), tc.suffix; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: suffix: got %#v, want %#v", i, got, want)
 		}
 	}
 }
 
 func TestPrefix(t *testing.T) {
-	sl := func(p string) []string {
+	sl := func(p string) cloudpath.T {
 		return cloudpath.Split(p, '/')
 	}
 	for i, tc := range []struct {
-		input   []string
-		prefix  []string
-		trimmed []string
+		input   cloudpath.T
+		prefix  cloudpath.T
+		trimmed cloudpath.T
 		has     bool
 	}{
 		{sl(""), sl(""), sl(""), true},
@@ -222,8 +228,8 @@ func TestPrefix(t *testing.T) {
 		}
 	}
 	for i, tc := range []struct {
-		input  []string
-		prefix []string
+		input  cloudpath.T
+		prefix cloudpath.T
 	}{
 		{sl(""), sl("")},
 		{sl("a"), sl("")},
@@ -232,33 +238,36 @@ func TestPrefix(t *testing.T) {
 		{sl("/a/b/c"), sl("/a/b/")},
 		{sl("/a/b/c/"), sl("/a/b/c/")},
 	} {
-		if got, want := cloudpath.Prefix(tc.input), tc.prefix; !reflect.DeepEqual(got, want) {
+		if got, want := tc.input.Prefix(), tc.prefix; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %#v, want %#v", i, got, want)
 		}
 	}
 	for i, tc := range []struct {
-		input  []string
-		prefix []string
+		input    cloudpath.T
+		prefix   cloudpath.T
+		filepath cloudpath.T
 	}{
-		{sl(""), sl("")},
-		{sl("a"), sl("a/")},
-		{sl("a/"), sl("a/")},
+		{sl(""), sl(""), sl("")},
+		{sl("a"), sl("a/"), sl("a")},
+		{sl("a/"), sl("a/"), sl("a")},
 	} {
-		if got, want := cloudpath.AsPrefix(tc.input...), tc.prefix; !reflect.DeepEqual(got, want) {
+		if got, want := tc.input.AsPrefix(), tc.prefix; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+		if got, want := tc.input.AsFilepath(), tc.filepath; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %#v, want %#v", i, got, want)
 		}
 	}
-
 }
 
 func TestSuffix(t *testing.T) {
-	sl := func(p string) []string {
+	sl := func(p string) cloudpath.T {
 		return cloudpath.Split(p, '/')
 	}
 	for i, tc := range []struct {
-		input   []string
-		suffix  []string
-		trimmed []string
+		input   cloudpath.T
+		suffix  cloudpath.T
+		trimmed cloudpath.T
 		has     bool
 	}{
 		{sl(""), sl(""), sl(""), true},
@@ -274,15 +283,15 @@ func TestSuffix(t *testing.T) {
 		{sl("/a/b/"), sl("a/b"), sl("/a/b/"), false},
 		{sl("/a/b/"), sl("a/b/"), sl("/"), true},
 	} {
-		if got, want := cloudpath.HasSuffix(tc.input, tc.suffix), tc.has; got != want {
+		if got, want := tc.input.HasSuffix(tc.suffix), tc.has; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
 		}
-		if got, want := cloudpath.TrimSuffix(tc.input, tc.suffix), tc.trimmed; !reflect.DeepEqual(got, want) {
+		if got, want := tc.input.TrimSuffix(tc.suffix), tc.trimmed; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %#v, want %#v", i, got, want)
 		}
 	}
 	for i, tc := range []struct {
-		input []string
+		input cloudpath.T
 		base  string
 	}{
 		{sl(""), ""},
@@ -290,7 +299,105 @@ func TestSuffix(t *testing.T) {
 		{sl("/a"), "a"},
 		{sl("/a/"), ""},
 	} {
-		if got, want := cloudpath.Base(tc.input), tc.base; !reflect.DeepEqual(got, want) {
+		if got, want := tc.input.Base(), tc.base; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+	}
+}
+
+func TestPop(t *testing.T) {
+	sl := func(p string) cloudpath.T {
+		return cloudpath.Split(p, '/')
+	}
+	for i, tc := range []struct {
+		input     cloudpath.T
+		remainder cloudpath.T
+		popped    string
+	}{
+		{sl(""), sl(""), ""},
+		{sl("/"), sl("/"), ""},
+		{sl("./"), sl(""), "."},
+		{sl("a"), sl(""), "a"},
+		{sl("a/b"), sl("a/"), "b"},
+		{sl("a/b/c"), sl("a/b/"), "c"},
+		{sl("a/"), sl(""), "a"},
+		{sl("a/b/"), sl("a/"), "b"},
+		{sl("a/b/c/"), sl("a/b/"), "c"},
+		{sl("/a/"), sl("/"), "a"},
+		{sl("/a/b/"), sl("/a/"), "b"},
+		{sl("/a/b/c/"), sl("/a/b/"), "c"},
+	} {
+		rem, popped := tc.input.Pop()
+		if got, want := rem, tc.remainder; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+		if got, want := popped, tc.popped; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+		if got, want := rem.IsFilepath(), false; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestPush(t *testing.T) {
+	sl := func(p string) cloudpath.T {
+		return cloudpath.Split(p, '/')
+	}
+	for i, tc := range []struct {
+		input  cloudpath.T
+		push   string
+		pushed cloudpath.T
+	}{
+
+		{sl(""), "b", sl("b")},
+		{sl("/"), "b", sl("/b")},
+		{sl("a"), "b", sl("a/b")},
+		{sl("/a"), "b", sl("/a/b")},
+		{sl("a/"), "b", sl("a/b")},
+		{sl("/a/"), "b", sl("/a/b")},
+	} {
+		pushed := tc.input.Push(tc.push)
+		if got, want := pushed, tc.pushed; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+		if got, want := pushed.IsFilepath(), true; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+	}
+	for i, tc := range []struct {
+		input  cloudpath.T
+		pushed cloudpath.T
+	}{
+		{sl(""), sl("")},
+		{sl("/"), sl("/")},
+		{sl("a"), sl("a")},
+		{sl("/a"), sl("/a")},
+		{sl("a/"), sl("a")},
+		{sl("/a/"), sl("/a")},
+	} {
+		pushed := tc.input.Push("")
+		if got, want := pushed, tc.pushed; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+		if got, want := pushed, tc.input.AsFilepath(); !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %#v, want %#v", i, got, want)
+		}
+	}
+}
+
+func TestString(t *testing.T) {
+	for i, tc := range []struct {
+		input  string
+		output string
+	}{
+		{"", ""},
+		{"+", "/"},
+		{"+a", "/a"},
+		{"+a+bb", "/a/bb"},
+		{"+a+bb+", "/a/bb/"},
+	} {
+		if got, want := cloudpath.Split(tc.input, '+').String(), tc.output; got != want {
 			t.Errorf("%v: got %#v, want %#v", i, got, want)
 		}
 	}

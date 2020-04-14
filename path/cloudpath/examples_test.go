@@ -29,14 +29,14 @@ func ExampleScheme() {
 }
 
 func ExamplePrefix() {
-	date := cloudpath.AsPrefix("2012-11-27")
+	date := cloudpath.Split("2012-11-27", '/').AsPrefix()
 	for _, fullname := range []string{
 		"s3://my-bucket/2012-11-27/shard-0000-of-0001.json",
 		"/my-local-copy/2012-11-27/shard-0000-of-0001.json",
 		"https://storage.cloud.google.com/google-copy/2012-11-27/shard-0001-of-0001.json",
 	} {
 		components := cloudpath.SplitPath(fullname)
-		fmt.Printf("%v\n", cloudpath.HasSuffix(cloudpath.Prefix(components), date))
+		fmt.Printf("%v\n", components.Prefix().HasSuffix(date))
 		// Output:
 		// true
 		// true
