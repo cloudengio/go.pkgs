@@ -9,7 +9,7 @@ jobs:
           name: build
           command: |
             set -eux -o pipefail 
-            for dir in $(find * -type d -depth 0); do
+            for dir in $(find * -type d -maxdepth 0); do
               here="$(pwd)"
               cd "${dir}"
               echo $dir
