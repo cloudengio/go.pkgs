@@ -1,12 +1,14 @@
 package edit
 
 import (
+	"bytes"
+	"reflect"
 	"testing"
 )
 
 func TestSort(t *testing.T) {
-	ins := Insert
-	rpl := Replace
+	ins := InsertString
+	rpl := ReplaceString
 	del := Delete
 	j := func(ds ...Delta) []Delta {
 		return ds
@@ -16,7 +18,7 @@ func TestSort(t *testing.T) {
 			return false
 		}
 		for i := range a {
-			if a[i] != b[i] {
+			if !reflect.DeepEqual(a[i], b[i]) {
 				return false
 			}
 		}
@@ -89,7 +91,7 @@ func TestOverwrite(t *testing.T) {
 		{"aa", "bb", "bb"},
 		{"aa", "bbc", "bbc"},
 	} {
-		if got, want := overwrite(tc.a, tc.b), tc.c; got != want {
+		if got, want := overwrite([]byte(tc.a), []byte(tc.b)), []byte(tc.c); !bytes.Equal(got, want) {
 			t.Errorf("%v: got %v, want %v\n", i, got, want)
 		}
 	}

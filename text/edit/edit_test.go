@@ -11,14 +11,14 @@ import (
 
 func ExampleDo() {
 	content := "world"
-	helloWorld := edit.DoString(content, edit.Insert(0, "hello "))
-	bonjourWorld := edit.DoString(helloWorld, edit.Replace(0, 5, "bonjour"))
+	helloWorld := edit.DoString(content, edit.InsertString(0, "hello "))
+	bonjourWorld := edit.DoString(helloWorld, edit.ReplaceString(0, 5, "bonjour"))
 	hello := edit.DoString(helloWorld, edit.Delete(5, 6))
 	sentence := edit.DoString("some random things",
-		edit.Replace(0, 1, "S"),
-		edit.Replace(5, 6, "thoughts"),
+		edit.ReplaceString(0, 1, "S"),
+		edit.ReplaceString(5, 6, "thoughts"),
 		edit.Delete(12, 6),
-		edit.Insert(18, "for the day."))
+		edit.InsertString(18, "for the day."))
 	fmt.Println(helloWorld)
 	fmt.Println(bonjourWorld)
 	fmt.Println(hello)
@@ -35,11 +35,11 @@ func TestString(t *testing.T) {
 		op   edit.Delta
 		text string
 	}{
-		{edit.Insert(0, "xy"), "> @0#2"},
-		{edit.Insert(32, "xyyz"), "> @32#4"},
+		{edit.InsertString(0, "xy"), "> @0#2"},
+		{edit.InsertString(32, "xyyz"), "> @32#4"},
 		{edit.Delete(0, 1), "< @0#1"},
 		{edit.Delete(32, 10), "< @32#10"},
-		{edit.Replace(0, 2, "xy"), "~ @0#2/2"},
+		{edit.ReplaceString(0, 2, "xy"), "~ @0#2/2"},
 	} {
 		if got, want := tc.op.String(), tc.text; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
@@ -48,8 +48,8 @@ func TestString(t *testing.T) {
 }
 
 func TestEdits(t *testing.T) {
-	ins := edit.Insert
-	rpl := edit.Replace
+	ins := edit.InsertString
+	rpl := edit.ReplaceString
 	del := edit.Delete
 	j := func(ds ...edit.Delta) []edit.Delta {
 		return ds

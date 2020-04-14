@@ -34,7 +34,7 @@ var comparisons = [][]bool{
 type Delta struct {
 	op       editOp
 	from, to int
-	text     string
+	data     []byte
 }
 
 // String implements stringer. The format is as follows:
@@ -46,38 +46,52 @@ func (d Delta) String() string {
 	case deleteOp:
 		return fmt.Sprintf("< @%d#%d", d.from, d.to-d.from)
 	case insertOp:
-		return fmt.Sprintf("> @%d#%d", d.from, len(d.text))
+		return fmt.Sprintf("> @%d#%d", d.from, len(d.data))
 	default:
-		return fmt.Sprintf("~ @%d#%d/%d", d.from, d.to-d.from, len(d.text))
+		return fmt.Sprintf("~ @%d#%d/%d", d.from, d.to-d.from, len(d.data))
 	}
 }
 
-// Insert creates a Delta to insert text at pos.
-func Insert(pos uint, text string) Delta {
+func (d Delta) Text() string {
+	return string(d.data)
+}
+
+// Insert creates a Delta to insert the supplied bytes at pos.
+func Insert(pos int, data []byte) Delta {
 	return Delta{
 		op:   insertOp,
-		from: int(pos),
-		text: text,
+		from: pos,
+		data: data,
 	}
+}
+
+// InsertString is like Insert but for a string.
+func InsertString(pos int, text string) Delta {
+	return Insert(pos, []byte(text))
 }
 
 // Replace creates a Delta to replace size bytes starting at pos
 // with text. The string may be shorter or longer than size.
-func Replace(pos, size uint, text string) Delta {
+func Replace(pos, size int, data []byte) Delta {
 	return Delta{
 		op:   replaceOp,
-		from: int(pos),
-		to:   int(pos + size),
-		text: text,
+		from: pos,
+		to:   pos + size,
+		data: data,
 	}
 }
 
+// ReplaceString is like Replace but for a string.
+func ReplaceString(pos, size int, text string) Delta {
+	return Replace(pos, size, []byte(text))
+}
+
 // Delete creates a Delta to delete size bytes starting at pos.
-func Delete(pos, size uint) Delta {
+func Delete(pos, size int) Delta {
 	return Delta{
 		op:   deleteOp,
-		from: int(pos),
-		to:   int(pos + size),
+		from: pos,
+		to:   pos + size,
 	}
 }
 
@@ -120,15 +134,15 @@ func sortDeltas(deltas []Delta) {
 
 // overwrite returns a string that represents overwriting a with b.
 // If b is shorter than a, then it overwrites that shorter portion of a.
-func overwrite(a, b string) string {
+func overwrite(a, b []byte) []byte {
 	al, bl := len(a), len(b)
 	if bl > al {
 		return b
 	}
 	n := make([]byte, al)
-	copy(n, []byte(a))
-	copy(n[:bl], []byte(b))
-	return string(n)
+	copy(n, a)
+	copy(n[:bl], b)
+	return n
 }
 
 // Do applies the supplied deltas to contents as follows:
@@ -154,21 +168,21 @@ func Do(contents []byte, deltas ...Delta) []byte {
 	offset := 0
 	// Replacements complicate things, especially when there are multiple
 	// ones at the same position. Later replacements overwrite earlier ones.
-	// This requires keeping trakc of runs of replacements.
-	replacement := ""
+	// This requires keeping track of runs of replacements.
+	replacement := []byte{}
 	replaceOffset := 0
 	patched := make([]byte, 0, 64*1024)
 	prevPos := 0
 	for _, d := range deltas {
 		if d.from > len(contents) || (d.op != insertOp && d.to > len(contents)) {
-			// all operations must start in range, replacements and deletes must
+			// All operations must start in range, replacements and deletes must
 			// end in range.
 			break
 		}
 		if d.op != replaceOp || d.from != prevPos {
 			offset = max(offset, replaceOffset)
 			patched = append(patched, replacement...)
-			replacement = ""
+			replacement = nil
 			replaceOffset = 0
 		}
 		if d.from > offset {
@@ -179,10 +193,10 @@ func Do(contents []byte, deltas ...Delta) []byte {
 		case deleteOp:
 			offset = max(offset, d.to)
 		case replaceOp:
-			replacement = overwrite(replacement, d.text)
+			replacement = overwrite(replacement, d.data)
 			replaceOffset = max(replaceOffset, d.to)
 		case insertOp:
-			patched = append(patched, d.text...)
+			patched = append(patched, d.data...)
 		}
 		prevPos = d.from
 	}
