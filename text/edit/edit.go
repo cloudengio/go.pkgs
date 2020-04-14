@@ -168,14 +168,14 @@ func Do(contents []byte, deltas ...Delta) []byte {
 	offset := 0
 	// Replacements complicate things, especially when there are multiple
 	// ones at the same position. Later replacements overwrite earlier ones.
-	// This requires keeping trakc of runs of replacements.
+	// This requires keeping track of runs of replacements.
 	replacement := []byte{}
 	replaceOffset := 0
 	patched := make([]byte, 0, 64*1024)
 	prevPos := 0
 	for _, d := range deltas {
 		if d.from > len(contents) || (d.op != insertOp && d.to > len(contents)) {
-			// all operations must start in range, replacements and deletes must
+			// All operations must start in range, replacements and deletes must
 			// end in range.
 			break
 		}
