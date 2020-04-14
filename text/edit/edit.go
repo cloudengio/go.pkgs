@@ -60,7 +60,7 @@ func (d Delta) Text() string {
 func Insert(pos int, data []byte) Delta {
 	return Delta{
 		op:   insertOp,
-		from: int(pos),
+		from: pos,
 		data: data,
 	}
 }
@@ -75,8 +75,8 @@ func InsertString(pos int, text string) Delta {
 func Replace(pos, size int, data []byte) Delta {
 	return Delta{
 		op:   replaceOp,
-		from: int(pos),
-		to:   int(pos + size),
+		from: pos,
+		to:   pos + size,
 		data: data,
 	}
 }
@@ -90,8 +90,8 @@ func ReplaceString(pos, size int, text string) Delta {
 func Delete(pos, size int) Delta {
 	return Delta{
 		op:   deleteOp,
-		from: int(pos),
-		to:   int(pos + size),
+		from: pos,
+		to:   pos + size,
 	}
 }
 
@@ -168,14 +168,14 @@ func Do(contents []byte, deltas ...Delta) []byte {
 	offset := 0
 	// Replacements complicate things, especially when there are multiple
 	// ones at the same position. Later replacements overwrite earlier ones.
-	// This requires keeping trakc of runs of replacements.
+	// This requires keeping track of runs of replacements.
 	replacement := []byte{}
 	replaceOffset := 0
 	patched := make([]byte, 0, 64*1024)
 	prevPos := 0
 	for _, d := range deltas {
 		if d.from > len(contents) || (d.op != insertOp && d.to > len(contents)) {
-			// all operations must start in range, replacements and deletes must
+			// All operations must start in range, replacements and deletes must
 			// end in range.
 			break
 		}
