@@ -76,13 +76,12 @@ func TestMirrorDirTree(t *testing.T) {
 		"testdata/a",
 		"testdata/a/b",
 		"testdata/a/b/c",
-		"testdata/a/b/c/d",
 		"testdata/a/b/c/f5",
 		"testdata/a/b/c/f6",
-		"testdata/a/b/d",
 		"testdata/a/b/f3",
 		"testdata/a/b/f4",
 		"testdata/a/d",
+		"testdata/a/d/f7",
 		"testdata/a/f1",
 		"testdata/a/f2",
 	}
@@ -91,6 +90,7 @@ func TestMirrorDirTree(t *testing.T) {
 		"testdata/a/b/c/f6",
 		"testdata/a/b/f3",
 		"testdata/a/b/f4",
+		"testdata/a/d/f7",
 		"testdata/a/f1",
 		"testdata/a/f2",
 	}
@@ -99,8 +99,6 @@ func TestMirrorDirTree(t *testing.T) {
 		"testdata/a",
 		"testdata/a/b",
 		"testdata/a/b/c",
-		"testdata/a/b/c/d",
-		"testdata/a/b/d",
 		"testdata/a/d",
 	}
 	expectedPerms := []string{
@@ -108,13 +106,12 @@ func TestMirrorDirTree(t *testing.T) {
 		"-rwxr-xr-x",
 		"-rwxr-xr-x",
 		"-rwxr-xr-x",
-		"-rwxr-xr-x",
+		"-rw-r--r--",
+		"-rw-r--r--",
 		"-rw-r--r--",
 		"-rw-r--r--",
 		"-rwxr-xr-x",
 		"-rw-r--r--",
-		"-rw-r--r--",
-		"-rwxr-xr-x",
 		"-rw-r--r--",
 		"-rw-r--r--",
 	}
@@ -123,13 +120,12 @@ func TestMirrorDirTree(t *testing.T) {
 		"dbff5c5ac498571abd74ce3bf2cb8e70e06bfa12",
 		"039e550dde9aaa94d96c7a4cb2949cb3551b07e0",
 		"543dfd7437436cdc173bff5e5247e0f7a2be706d",
-		"ce6a0f29e68c23b0350cb5c85f6da344c250ac33",
 		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
 		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
-		"77665b88ab57e56b3a53bc02f7d042499184c320",
 		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
 		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
 		"798486e8b43bb20ef123b628b436fee8cfd2372b",
+		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
 		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
 		"da39a3ee5e6b4b0d3255bfef95601890afd80709", // empty file.
 	}
