@@ -86,6 +86,23 @@ func TestMirrorDirTree(t *testing.T) {
 		"testdata/a/f1",
 		"testdata/a/f2",
 	}
+	expectedRegular := []string{
+		"testdata/a/b/c/f5",
+		"testdata/a/b/c/f6",
+		"testdata/a/b/f3",
+		"testdata/a/b/f4",
+		"testdata/a/f1",
+		"testdata/a/f2",
+	}
+	expectedDirs := []string{
+		"testdata",
+		"testdata/a",
+		"testdata/a/b",
+		"testdata/a/b/c",
+		"testdata/a/b/c/d",
+		"testdata/a/b/d",
+		"testdata/a/d",
+	}
 	expectedPerms := []string{
 		"-rwxr-xr-x",
 		"-rwxr-xr-x",
@@ -132,6 +149,19 @@ func TestMirrorDirTree(t *testing.T) {
 	cmplists(t, paths, expectedPaths, true)
 	cmplists(t, perms, expectedPerms, false)
 	cmplists(t, shas, expectedShas, false)
+
+	regular, err := cmdutil.ListRegular(filepath.Join(td, "T1"))
+	if err != nil {
+		t.Fatalf("ListRegular: %v", err)
+	}
+
+	cmplists(t, regular, expectedRegular, true)
+
+	dirs, err := cmdutil.ListDir(filepath.Join(td, "T1"))
+	if err != nil {
+		t.Fatalf("ListRegular: %v", err)
+	}
+	cmplists(t, dirs, expectedDirs, true)
 	paths, perms, shas = copyall("testdata/", "T2/testdata", "T2")
 	cmplists(t, paths, expectedPaths, true)
 	cmplists(t, perms, expectedPerms, false)
