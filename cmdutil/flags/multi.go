@@ -30,7 +30,7 @@ func (r *Repeating) Get() interface{} {
 	return r.Values
 }
 
-// Commans represents the values for flags that contain comma separated
+// Commas represents the values for flags that contain comma separated
 // values. The optional validate function is applied to each sub value
 // separately.
 type Commas struct {

@@ -95,8 +95,6 @@ func TestTags(t *testing.T) {
 	}
 }
 
-type dummy struct{}
-
 func allFlags(fs *flag.FlagSet) string {
 	out := []string{}
 	fs.VisitAll(func(f *flag.Flag) {

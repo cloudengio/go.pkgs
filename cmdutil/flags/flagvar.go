@@ -111,12 +111,28 @@ func ParseFlagTag(t string) (name, value, usage string, err error) {
 	if err != nil {
 		return
 	}
-	usage, remaining, err = parseField(remaining, "<usage>", false, false)
-	if err != nil {
-		return
-	}
-
+	usage, _, err = parseField(remaining, "<usage>", false, false)
 	return
+}
+
+func defaultLiteralValue(typeName string) interface{} {
+	switch typeName {
+	case "int":
+		return int(0)
+	case "int64", "time.Duration":
+		return int64(0)
+	case "uint":
+		return uint(0)
+	case "uint64":
+		return uint64(0)
+	case "bool":
+		return bool(false)
+	case "float64":
+		return float64(0)
+	case "string":
+		return ""
+	}
+	return nil
 }
 
 func literalDefault(typeName, literal string, initialValue interface{}) (value interface{}, err error) {
@@ -128,23 +144,7 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 		}
 	}
 	if len(literal) == 0 {
-		switch typeName {
-		case "int":
-			value = int(0)
-		case "int64", "time.Duration":
-			value = int64(0)
-		case "uint":
-			value = uint(0)
-		case "uint64":
-			value = uint64(0)
-		case "bool":
-			value = bool(false)
-		case "float64":
-			value = float64(0)
-		case "string":
-			value = ""
-		}
-		return
+		return defaultLiteralValue(typeName), nil
 	}
 	var tmp int64
 	var utmp uint64
@@ -221,7 +221,60 @@ func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 	return nil
 }
 
-func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error {
+func createVarFlag(fs *flag.FlagSet, fieldValue reflect.Value, name, value, description string, usageDefaults map[string]string) error {
+	addr := fieldValue.Addr()
+	if !addr.Type().Implements(flagValueType) {
+		return fmt.Errorf("does not implement flag.Value")
+	}
+	dv := addr.Interface().(flag.Value)
+	fs.Var(dv, name, description)
+	if len(value) > 0 {
+		if err := dv.Set(value); err != nil {
+			return fmt.Errorf("failed to set initial default value for flag.Value: %v", err)
+		}
+	}
+	if ud, ok := usageDefaults[name]; ok {
+		fs.Lookup(name).DefValue = ud
+	} else {
+		fs.Lookup(name).DefValue = value
+	}
+	return nil
+}
+
+func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue interface{}, fieldValue reflect.Value, name, description string) bool {
+
+	switch dv := initialValue.(type) {
+	case int:
+		ptr := (*int)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.IntVar(ptr, name, dv, description)
+	case int64:
+		ptr := (*int64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.Int64Var(ptr, name, dv, description)
+	case uint:
+		ptr := (*uint)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.UintVar(ptr, name, dv, description)
+	case uint64:
+		ptr := (*uint64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.Uint64Var(ptr, name, dv, description)
+	case bool:
+		ptr := (*bool)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.BoolVar(ptr, name, dv, description)
+	case float64:
+		ptr := (*float64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.Float64Var(ptr, name, dv, description)
+	case string:
+		ptr := (*string)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.StringVar(ptr, name, dv, description)
+	case time.Duration:
+		ptr := (*time.Duration)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+		fs.DurationVar(ptr, name, dv, description)
+	default:
+		return false
+	}
+	return true
+}
+
+func getTypeVal(structWithFlags interface{}) (reflect.Type, reflect.Value, error) {
 	typ := reflect.TypeOf(structWithFlags)
 	val := reflect.ValueOf(structWithFlags)
 	if typ.Kind() == reflect.Ptr {
@@ -229,11 +282,19 @@ func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 		val = reflect.Indirect(val)
 	}
 	if !val.CanAddr() {
-		return fmt.Errorf("%T is not addressable", structWithFlags)
+		return nil, reflect.Value{}, fmt.Errorf("%T is not addressable", structWithFlags)
 	}
 
 	if typ.Kind() != reflect.Struct {
-		return fmt.Errorf("%T is not a pointer to a struct", structWithFlags)
+		return nil, reflect.Value{}, fmt.Errorf("%T is not a pointer to a struct", structWithFlags)
+	}
+	return typ, val, nil
+}
+
+func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error {
+	typ, val, err := getTypeVal(structWithFlags)
+	if err != nil {
+		return err
 	}
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -275,55 +336,15 @@ func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 		}
 
 		if initialValue == nil {
-			addr := fieldValue.Addr()
-			if !addr.Type().Implements(flagValueType) {
-				return fmt.Errorf("%v: does not implement flag.Value", errPrefix())
-			}
-			dv := addr.Interface().(flag.Value)
-			fs.Var(dv, name, description)
-			if len(value) > 0 {
-				if err := dv.Set(value); err != nil {
-					return fmt.Errorf("%v: failed to set initial default value for flag.Value: %v", errPrefix(), err)
-				}
-			}
-			if ud, ok := usageDefaults[name]; ok {
-				fs.Lookup(name).DefValue = ud
-			} else {
-				fs.Lookup(name).DefValue = value
+			if err := createVarFlag(fs, fieldValue, name, value, description, usageDefaults); err != nil {
+				return fmt.Errorf("%v: %v", errPrefix(), err)
 			}
 			continue
 		}
-
-		switch dv := initialValue.(type) {
-		case int:
-			ptr := (*int)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.IntVar(ptr, name, dv, description)
-		case int64:
-			ptr := (*int64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.Int64Var(ptr, name, dv, description)
-		case uint:
-			ptr := (*uint)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.UintVar(ptr, name, dv, description)
-		case uint64:
-			ptr := (*uint64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.Uint64Var(ptr, name, dv, description)
-		case bool:
-			ptr := (*bool)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.BoolVar(ptr, name, dv, description)
-		case float64:
-			ptr := (*float64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.Float64Var(ptr, name, dv, description)
-		case string:
-			ptr := (*string)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.StringVar(ptr, name, dv, description)
-		case time.Duration:
-			ptr := (*time.Duration)(unsafe.Pointer(fieldValue.Addr().Pointer()))
-			fs.DurationVar(ptr, name, dv, description)
-		default:
+		if !createFlagsBasedOnValue(fs, initialValue, fieldValue, name, description) {
 			// should never reach here.
 			panic(fmt.Sprintf("%v flag: field %v, flag %v: unsupported type %T", fieldTypeName, fieldName, name, initialValue))
 		}
 	}
-
 	return nil
 }
