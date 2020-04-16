@@ -51,7 +51,7 @@ const (
 	AWSS3 = "s3"
 	// GoogleCloudStorage is the scheme for Google's Cloud Storage object store.
 	GoogleCloudStorage = "GoogleCloudStorage"
-	// LocalUnixFileSystem is the scheme for unix like systems such as linux, macos etc.
+	// UnixFileSystem is the scheme for unix like systems such as linux, macos etc.
 	UnixFileSystem = "unix"
 	// WindowsFileSystem is the scheme for msdos and windows filesystems.
 	WindowsFileSystem = "windows"
@@ -106,7 +106,7 @@ func (ms MatcherSpec) Scheme(path string) string {
 	return ""
 }
 
-// Hoost returns the host component of the path if there is one.
+// Host returns the host component of the path if there is one.
 func (ms MatcherSpec) Host(path string) string {
 	if m := ms.Match(path); m != nil {
 		return m.Host

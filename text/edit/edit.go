@@ -52,6 +52,7 @@ func (d Delta) String() string {
 	}
 }
 
+// Text returns the text associated with the Delta.
 func (d Delta) Text() string {
 	return string(d.data)
 }

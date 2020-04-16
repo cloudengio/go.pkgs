@@ -32,12 +32,11 @@ func As(err error, target interface{}) bool {
 }
 
 // M represents multiple errors. It is thread safe. Typical usage is:
-//
-// errs := errors.M{}
-// ...
-// errs.Append(err)
-// ...
-// return errs.Err()
+//   errs := errors.M{}
+//   ...
+//   errs.Append(err)
+//   ...
+//   return errs.Err()
 type M struct {
 	mu   sync.RWMutex
 	errs []error // GUARDED_BY(mu)

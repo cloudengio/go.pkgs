@@ -25,7 +25,7 @@ func (r *Repeating) Set(v string) error {
 	return nil
 }
 
-// Set inplements flag.Getter.
+// Get inplements flag.Getter.
 func (r *Repeating) Get() interface{} {
 	return r.Values
 }
@@ -38,6 +38,7 @@ type Commas struct {
 	Validate func(string) error
 }
 
+// Set implements flag.Value.
 func (c *Commas) Set(v string) error {
 	vals := strings.Split(v, ",")
 	if fn := c.Validate; fn != nil {

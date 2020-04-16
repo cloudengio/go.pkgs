@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// HandleSignal will asynchronously invoke the supplied function when the
+// HandleSignals will asynchronously invoke the supplied function when the
 // specified signals are received.
 func HandleSignals(fn func(), signals ...os.Signal) {
 	sigCh := make(chan os.Signal, 1)
