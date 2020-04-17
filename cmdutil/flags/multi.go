@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package flags
 
 import "strings"
@@ -25,7 +29,7 @@ func (r *Repeating) Set(v string) error {
 	return nil
 }
 
-// Set inplements flag.Getter.
+// Get inplements flag.Getter.
 func (r *Repeating) Get() interface{} {
 	return r.Values
 }
@@ -38,6 +42,7 @@ type Commas struct {
 	Validate func(string) error
 }
 
+// Set implements flag.Value.
 func (c *Commas) Set(v string) error {
 	vals := strings.Split(v, ",")
 	if fn := c.Validate; fn != nil {
