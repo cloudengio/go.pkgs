@@ -16,5 +16,4 @@ func TestOneOf(t *testing.T) {
 	if err == nil || err.Error() != `unrecognised flag value: "bad" is not one of: a, b` {
 		t.Errorf("unexpected or missing error: %v", err)
 	}
-	t.Fail()
 }
