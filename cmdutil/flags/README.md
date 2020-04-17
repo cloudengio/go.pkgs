@@ -110,6 +110,12 @@ type Commas struct {
 Commas represents the values for flags that contain comma separated values.
 The optional validate function is applied to each sub value separately.
 
+### Type OneOf
+```go
+type OneOf string
+```
+OneOf represents a string that can take only one of a fixed set of values.
+
 ### Type Repeating
 ```go
 type Repeating struct {
