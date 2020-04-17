@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package edit provides support for editing in-memory byte slices using
 // insert, delete and replace operations.
 package edit

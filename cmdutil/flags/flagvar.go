@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package flags provides support for working with flag variables, and for
 // managing flag variables by embedding them in structs. A field in a struct
 // can be annotated with a tag that is used to identify it as a variable to be

@@ -1,5 +1,2 @@
-cloudeng.io v0.0.0-20200307051409-0c3c9076d3c7 h1:Y+3FCEviT2tejc/RbJ+Kj2v5O30U+aTTv2ZnCehWaWY=
-cloudeng.io/errors v0.0.2 h1:557CLQCWDOCzwuS2L7P+KLBqD1ZgWnDh+Pk4sX5uQv0=
-cloudeng.io/errors v0.0.2/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
-github.com/fluhus/godoc-tricks v1.0.0 h1:1jIf/PnkaqMe+LLwOfYsVaCZ5dhcxUPHLAHur9geBCk=
-github.com/fluhus/godoc-tricks v1.0.0/go.mod h1:1N650FoAiSfLt9dnD/ZxopiilNjtw+H8ocjRFbPWW2E=
+cloudeng.io/errors v0.0.5 h1:NmCUhMIvWQ/0Ny3cBWplA2RXPcnyNUiMovPe64LgX3A=
+cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
