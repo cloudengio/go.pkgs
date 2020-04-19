@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package structdoc provides a means of exposing struct tags for use for
+// Package structdoc provides a means of exposing struct tags for use when
 // generating documentation for those structs.
 package structdoc
 
@@ -12,13 +12,16 @@ import (
 	"strings"
 )
 
-// Field represents the description of a single field.
+// Field represents the description of a field and any similarly tagged
+// subfields.
 type Field struct {
-	// Name is the name of the original field. The name takes into account
-	// any name specified via a json or yaml tag.
+	// Name is the name of the original field. The name takes
+	// into account any name specified via a json or yaml tag.
 	Name string
 	// Doc is the text extracted from the struct tag for this field.
-	Doc    string
+	Doc string
+	// Fields, if this field is a struct, contains descriptions for
+	// any documented fields in that struct.
 	Fields []Field `json:",omitempty" yaml:",omitempty"`
 }
 
