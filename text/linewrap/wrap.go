@@ -18,7 +18,7 @@ func SimpleWrap(indent, width int, text string) string {
 	for words.Scan() {
 		word := words.Text()
 		displayWidth := 1
-		for _ = range word {
+		for range word {
 			displayWidth++
 		}
 		// Very simple 'jagginess' prevention, don't break the line
