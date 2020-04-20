@@ -10,7 +10,6 @@ import (
 type S2 struct {
 	B float32 `tag:"bar"`
 }
-
 type S1 struct {
 	A int `tag:"foo"`
 	B S2  `tag:"foo-bar"`
