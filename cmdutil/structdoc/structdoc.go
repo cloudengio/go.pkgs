@@ -64,7 +64,12 @@ type Description struct {
 	Fields []Field
 }
 
-func describeFields(indent int, fields []Field) string {
+// FormatFields formats the supplied fields as follows:
+//   <prefix><name>:<padding><text>
+// where padding is calculated so as to line up the text. Prefix sets the
+// number of spaces to be prefixed and indent increases the prefix for each
+// sub field.
+func FormatFields(prefix, indent int, fields []Field) string {
 	max := 0
 	for _, field := range fields {
 		if l := len(field.Name); l > max {
@@ -72,7 +77,7 @@ func describeFields(indent int, fields []Field) string {
 		}
 	}
 	out := &strings.Builder{}
-	spaces := strings.Repeat(" ", indent)
+	spaces := strings.Repeat(" ", prefix)
 	for _, field := range fields {
 		out.WriteString(spaces)
 		out.WriteString(field.Name)
@@ -81,7 +86,7 @@ func describeFields(indent int, fields []Field) string {
 		out.WriteString(field.Doc)
 		out.WriteString("\n")
 		if len(field.Fields) > 0 {
-			out.WriteString(describeFields(indent+2, field.Fields))
+			out.WriteString(FormatFields(prefix+indent, indent, field.Fields))
 		}
 	}
 	return out.String()
@@ -91,7 +96,7 @@ func describeFields(indent int, fields []Field) string {
 func (d *Description) String() string {
 	out := &strings.Builder{}
 	out.WriteString(d.Detail)
-	out.WriteString(describeFields(0, d.Fields))
+	out.WriteString(FormatFields(0, 2, d.Fields))
 	return out.String()
 }
 
