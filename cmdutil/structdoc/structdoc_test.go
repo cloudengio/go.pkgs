@@ -15,6 +15,10 @@ type S1 struct {
 	B S2  `tag:"foo-bar"`
 }
 
+type S3 struct {
+	S1
+}
+
 func TestStructDoc(t *testing.T) {
 	for i, tc := range []struct {
 		in   interface{}
@@ -38,6 +42,7 @@ func TestStructDoc(t *testing.T) {
 			`struct { A string "yaml:\"c\" tag:\"doc\"" }`,
 		},
 		{&S1{}, "detail:\nA: foo\nB: foo-bar\n  B: bar\n", "cloudeng.io/cmdutil/structdoc_test.S1"},
+		{&S3{}, "detail:\nA: foo\nB: foo-bar\n  B: bar\n", "cloudeng.io/cmdutil/structdoc_test.S3"},
 	} {
 		desc, err := structdoc.Describe(tc.in, "tag", "detail:\n")
 		if err != nil {
