@@ -64,7 +64,10 @@ type Description struct {
 	Fields []Field
 }
 
-func describeFields(indent int, fields []Field) string {
+// FormatFields formats the supplied fields as follows:
+//   <indent><name>:<padding><text>
+// where padding is calculated so as to line up the text.
+func FormatFields(indent int, fields []Field) string {
 	max := 0
 	for _, field := range fields {
 		if l := len(field.Name); l > max {
@@ -81,7 +84,7 @@ func describeFields(indent int, fields []Field) string {
 		out.WriteString(field.Doc)
 		out.WriteString("\n")
 		if len(field.Fields) > 0 {
-			out.WriteString(describeFields(indent+2, field.Fields))
+			out.WriteString(FormatFields(indent+2, field.Fields))
 		}
 	}
 	return out.String()
@@ -91,7 +94,7 @@ func describeFields(indent int, fields []Field) string {
 func (d *Description) String() string {
 	out := &strings.Builder{}
 	out.WriteString(d.Detail)
-	out.WriteString(describeFields(0, d.Fields))
+	out.WriteString(FormatFields(0, d.Fields))
 	return out.String()
 }
 
