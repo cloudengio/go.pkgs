@@ -43,6 +43,10 @@ func describeTags(tagName string, typ reflect.Type) []Field {
 		var subFields []Field
 		if field.Type.Kind() == reflect.Struct {
 			subFields = describeTags(tagName, field.Type)
+			if field.Anonymous {
+				fields = append(fields, subFields...)
+				subFields = nil
+			}
 		}
 		if !ok && (len(subFields) == 0) {
 			continue
