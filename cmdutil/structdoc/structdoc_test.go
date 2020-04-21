@@ -43,6 +43,13 @@ func TestStructDoc(t *testing.T) {
 		},
 		{&S1{}, "detail:\nA: foo\nB: foo-bar\n  B: bar\n", "cloudeng.io/cmdutil/structdoc_test.S1"},
 		{&S3{}, "detail:\nA: foo\nB: foo-bar\n  B: bar\n", "cloudeng.io/cmdutil/structdoc_test.S3"},
+		{struct {
+			AShortField               string `tag:"and a short description"`
+			ASomewhatLongName         string `tag:"a long description that will wrap to the next line since it's at least 80 chars long"`
+			AnEvenLongerNameForAField string `tag:"an even longer description that will wrap to the next line since it's also at least 80 chars long"`
+		}{}, "detail:\nA: doc\n",
+			`struct { A string "tag:\"doc\""; B string }`,
+		},
 	} {
 		desc, err := structdoc.Describe(tc.in, "tag", "detail:\n")
 		if err != nil {
