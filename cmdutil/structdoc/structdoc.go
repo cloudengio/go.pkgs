@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"cloudeng.io/text/linewrap"
 )
 
 // Field represents the description of a field and any similarly tagged
@@ -79,11 +81,11 @@ func FormatFields(prefix, indent int, fields []Field) string {
 	out := &strings.Builder{}
 	spaces := strings.Repeat(" ", prefix)
 	for _, field := range fields {
+		doc := linewrap.Paragraph(max-len(field.Name)+1, max+prefix+2, 80, field.Doc)
 		out.WriteString(spaces)
 		out.WriteString(field.Name)
 		out.WriteString(":")
-		out.WriteString(strings.Repeat(" ", max-len(field.Name)+1))
-		out.WriteString(field.Doc)
+		out.WriteString(doc)
 		out.WriteString("\n")
 		if len(field.Fields) > 0 {
 			out.WriteString(FormatFields(prefix+indent, indent, field.Fields))
