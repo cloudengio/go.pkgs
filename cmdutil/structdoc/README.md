@@ -9,6 +9,18 @@ Package structdoc provides a means of exposing struct tags for use when
 generating documentation for those structs.
 
 ## Functions
+### Func FormatFields
+```go
+func FormatFields(prefix, indent int, fields []Field) string
+```
+FormatFields formats the supplied fields as follows:
+
+    <prefix><name>:<padding><text>
+
+where padding is calculated so as to line up the text. Prefix sets the
+number of spaces to be prefixed and indent increases the prefix for each sub
+field.
+
 ### Func TypeName
 ```go
 func TypeName(t interface{}) string
