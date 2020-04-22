@@ -43,6 +43,34 @@ func TestStructDoc(t *testing.T) {
 		},
 		{&S1{}, "detail:\nA: foo\nB: foo-bar\n  B: bar\n", "cloudeng.io/cmdutil/structdoc_test.S1"},
 		{&S3{}, "detail:\nA: foo\nB: foo-bar\n  B: bar\n", "cloudeng.io/cmdutil/structdoc_test.S3"},
+		{struct {
+			AShortField               string `tag:"and a short description"`
+			ASomewhatLongName         string `tag:"a long description that will wrap to the next line since it's at least 80 chars long"`
+			AnEvenLongerNameForAField string `tag:"an even longer description that will wrap to the next line since it's also at least 80 chars long"`
+		}{}, `detail:
+AShortField:               and a short description
+ASomewhatLongName:         a long description that will wrap to the next line
+                           since it's at least 80 chars long
+AnEvenLongerNameForAField: an even longer description that will wrap to the next
+                           line since it's also at least 80 chars long
+`,
+			`struct { AShortField string "tag:\"and a short description\""; ASomewhatLongName string "tag:\"a long description that will wrap to the next line since it's at least 80 chars long\""; AnEvenLongerNameForAField string "tag:\"an even longer description that will wrap to the next line since it's also at least 80 chars long\"" }`,
+		},
+		{struct {
+			ASomewhatLongName string `tag:"a long description that will wrap to the next line since it's at least 80 chars long"`
+			SubStruct         struct {
+				AnEvenLongerNameForAField string `tag:"an even longer description that will wrap to the next line since it's also at least 80 chars long"`
+			} `tag:"a substruct"`
+		}{},
+			`detail:
+ASomewhatLongName: a long description that will wrap to the next line since it's
+                   at least 80 chars long
+SubStruct:         a substruct
+  AnEvenLongerNameForAField: an even longer description that will wrap to the
+                             next line since it's also at least 80 chars long
+`,
+			`struct { ASomewhatLongName string "tag:\"a long description that will wrap to the next line since it's at least 80 chars long\""; SubStruct struct { AnEvenLongerNameForAField string "tag:\"an even longer description that will wrap to the next line since it's also at least 80 chars long\"" } "tag:\"a substruct\"" }`,
+		},
 	} {
 		desc, err := structdoc.Describe(tc.in, "tag", "detail:\n")
 		if err != nil {

@@ -1,2 +1,4 @@
 cloudeng.io/errors v0.0.5 h1:NmCUhMIvWQ/0Ny3cBWplA2RXPcnyNUiMovPe64LgX3A=
 cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
+cloudeng.io/text v0.0.7 h1:A/uorDjYC3k7bsYygk4xWcib0tyYxX5TaImNQrLglOs=
+cloudeng.io/text v0.0.7/go.mod h1:VPOCvDDUBocQe7rfQDZcyEpScLooZo/6cJs1cM0LOMI=
