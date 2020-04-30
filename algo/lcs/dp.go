@@ -3,7 +3,6 @@ package lcs
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 // DP represents an LCS/SES solver that uses dynamic programming.
@@ -72,8 +71,7 @@ func (p *DP) LCS() interface{} {
 	if p.directions == nil {
 		return p.newSlice()
 	}
-	p.fill(p.na, p.nb, p.cmp)
-	p.print(os.Stdout)
+	p.fill()
 	return p.backtrack(p.directions, p.na-1, p.nb-1)
 }
 
@@ -81,7 +79,7 @@ func (p *DP) All() []interface{} {
 	if p.directions == nil {
 		return nil
 	}
-	p.fill(p.na, p.nb, p.cmp)
+	p.fill()
 	return p.backtrackAll(p.directions, p.na-1, p.nb-1)
 }
 
@@ -93,22 +91,20 @@ func (p *DP) SES() EditScript {
 	return EditScript(diff(p.directions, p.na-1, p.nb-1))
 }
 
-func (p *DP) fill(na, nb int, cmp comparator) {
+func (p *DP) fill() {
 	if p.filled {
 		return
 	}
 	p.filled = true
-	directions := p.directions
-
-	table := make([][]int32, na+1)
+	table := make([][]int32, p.na+1)
 	for i := range table {
-		table[i] = make([]int32, nb+1)
+		table[i] = make([]int32, p.nb+1)
 	}
-	for x := 1; x < len(directions); x++ {
-		for y := 1; y < len(directions[x]); y++ {
-			if cmp(x-1, y-1) {
+	for x := 1; x < len(p.directions); x++ {
+		for y := 1; y < len(p.directions[x]); y++ {
+			if p.cmp(x-1, y-1) {
 				table[x][y] = (table[x-1][y-1]) + 1
-				directions[x][y] = diagonal
+				p.directions[x][y] = diagonal
 				continue
 			}
 			prevUp := table[x-1][y]
@@ -116,13 +112,13 @@ func (p *DP) fill(na, nb int, cmp comparator) {
 			switch {
 			case prevLeft < prevUp:
 				table[x][y] = prevUp
-				directions[x][y] = up
+				p.directions[x][y] = up
 			case prevLeft > prevUp:
 				table[x][y] = prevLeft
-				directions[x][y] = left
+				p.directions[x][y] = left
 			default:
 				table[x][y] = prevLeft
-				directions[x][y] = upAndLeft
+				p.directions[x][y] = upAndLeft
 			}
 		}
 	}
