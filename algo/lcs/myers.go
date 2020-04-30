@@ -14,16 +14,15 @@ type Myers struct {
 // original algorithm as documented in:
 // An O(ND) Difference Algorithm and Its Variations, 1986.
 func NewMyers(a, b interface{}) *Myers {
-	na, nb, cmp, err := configure(a, b)
+	na, nb, err := configureAndValidate(a, b)
 	if err != nil {
 		panic(err)
 	}
 	return &Myers{
-		a:   a,
-		b:   b,
-		na:  na,
-		nb:  nb,
-		cmp: cmp,
+		a:  a,
+		b:  b,
+		na: na,
+		nb: nb,
 	}
 }
 
@@ -33,8 +32,9 @@ func NewMyers(a, b interface{}) *Myers {
 // http://simplygenius.net/Article/DiffTutorial1
 // https://blog.robertelder.org/diff-algorithm/
 
-// myersMiddle finds the middle snake.
-func myersMiddle(a, b interface{}, na, nb int32, cmp comparator) (d, x1, y1, x2, y2 int32) {
+// middleSnake finds the middle snake.
+func middleSnake(a, b interface{}, na, nb int32) (d, x1, y1, x2, y2 int32) {
+	cmp := cmpFor(a, b)
 	max := na + nb // max # edits (delete all a, insert all of b)
 	delta := int32(na - nb)
 
@@ -68,7 +68,7 @@ func myersMiddle(a, b interface{}, na, nb int32, cmp comparator) (d, x1, y1, x2,
 			}
 			y = x - k
 			mx, my = x, y
-			for x < na && y < nb && cmp(a, b, int(x), int(y)) {
+			for x < na && y < nb && cmp(int(x), int(y)) {
 				x++
 				y++
 			}
@@ -95,7 +95,7 @@ func myersMiddle(a, b interface{}, na, nb int32, cmp comparator) (d, x1, y1, x2,
 			}
 			y = x - k
 			mx, my = x, y
-			for x < na && y < nb && cmp(a, b, int(na-x-1), int(nb-y-1)) {
+			for x < na && y < nb && cmp(int(na-x-1), int(nb-y-1)) {
 				x++
 				y++
 			}
@@ -122,16 +122,16 @@ func idxSlice(sa, na int32) []int {
 	return idx
 }
 
-func myersLCS32(a, b []int32, cmp comparator) []int32 {
+func myersLCS32(a, b []int32) []int32 {
 	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
 		return nil
 	}
-	d, x, y, u, v := myersMiddle(a, b, na, nb, cmp)
+	d, x, y, u, v := middleSnake(a, b, na, nb)
 	if d > 1 {
-		nd := myersLCS32(a[:x], b[:y], cmp)
+		nd := myersLCS32(a[:x], b[:y])
 		nd = append(nd, a[x:u]...)
-		nd = append(nd, myersLCS32(a[u:na], b[v:nb], cmp)...)
+		nd = append(nd, myersLCS32(a[u:na], b[v:nb])...)
 		return nd
 	}
 	if nb > na {
@@ -140,16 +140,16 @@ func myersLCS32(a, b []int32, cmp comparator) []int32 {
 	return b
 }
 
-func myersLCS8(a, b []uint8, cmp comparator) []uint8 {
+func myersLCS8(a, b []uint8) []uint8 {
 	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
 		return nil
 	}
-	d, x, y, u, v := myersMiddle(a, b, na, nb, cmp)
+	d, x, y, u, v := middleSnake(a, b, na, nb)
 	if d > 1 {
-		nd := myersLCS8(a[:x], b[:y], cmp)
+		nd := myersLCS8(a[:x], b[:y])
 		nd = append(nd, a[x:u]...)
-		nd = append(nd, myersLCS8(a[u:na], b[v:nb], cmp)...)
+		nd = append(nd, myersLCS8(a[u:na], b[v:nb])...)
 		return nd
 	}
 	if nb > na {
@@ -161,44 +161,9 @@ func myersLCS8(a, b []uint8, cmp comparator) []uint8 {
 func (m *Myers) LCS() interface{} {
 	switch av := m.a.(type) {
 	case []int32:
-		return myersLCS32(av, m.b.([]int32), m.cmp)
+		return myersLCS32(av, m.b.([]int32))
 	case []uint8:
-		return myersLCS8(av, m.b.([]uint8), m.cmp)
+		return myersLCS8(av, m.b.([]uint8))
 	}
 	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 }
-
-/*
-func (differ *Myers) GreedySESLen() int {
-	a, b := differ.a, differ.b
-	na, nb := len(differ.a), len(differ.b)
-	ndiag := (na + nb)
-	contour := make([]int, (ndiag*2)+3)
-	offset := (len(contour) / 2)
-	for d := 0; d <= ndiag; d++ {
-		for k := -d; k <= d; k += 2 {
-			var x int
-			// Edge cases are:
-			// k == -d    - move down
-			// k == d * 2 - move right
-			// Normal case:
-			// move down or right depending on how far the move would be.
-			if k == -d || k != d*2 && contour[offset+k-1] < contour[offset+k+1] {
-				x = contour[offset+k+1] // move down
-			} else {
-				x = contour[offset+k-1] + 1 // move right
-			}
-			y := x - k
-			for x < na && y < nb && a[x] == b[y] {
-				x++
-				y++
-			}
-			contour[offset+k] = x
-			if x >= na && y >= nb {
-				return d
-			}
-		}
-	}
-	return 0
-}
-*/

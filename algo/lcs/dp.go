@@ -1,11 +1,20 @@
 package lcs
 
+import (
+	"fmt"
+	"io"
+	"os"
+)
+
 // DP represents an LCS/SES solver that uses dynamic programming.
 // See https://en.wikipedia.org/wiki/Longest_common_subsequence_problem.
 type DP struct {
-	a, b   interface{}
-	na, nb int
-	cmp    comparator
+	a, b     interface{}
+	na, nb   int
+	cmp      comparator
+	lookupA  accessor
+	append   appendor
+	newSlice func() interface{}
 
 	filled bool
 
@@ -20,16 +29,19 @@ type DP struct {
 // than just the first one found. If a single LCS or SES is sufficient then
 // the Myer's algorithm implementation is lilkey a better choice.
 func NewDP(a, b interface{}) *DP {
-	na, nb, cmp, err := configure(a, b)
+	na, nb, err := configureAndValidate(a, b)
 	if err != nil {
 		panic(err)
 	}
 	dp := &DP{
-		a:   a,
-		b:   b,
-		na:  na,
-		nb:  nb,
-		cmp: cmp,
+		a:        a,
+		b:        b,
+		na:       na,
+		nb:       nb,
+		cmp:      cmpFor(a, b),
+		lookupA:  accessorFor(a),
+		newSlice: newSliceFor(a),
+		append:   appendorFor(a),
 	}
 	if na == 0 || nb == 0 {
 		// Leave dp.directions as nil to indicate that one or other
@@ -56,25 +68,21 @@ const (
 	space         rune = 0x20   // utf8 space
 )
 
-type comparator func(a, b interface{}, i, j int) bool
-
-func (p *DP) LCS() []int {
+func (p *DP) LCS() interface{} {
 	if p.directions == nil {
-		return nil
+		return p.newSlice()
 	}
-	p.fill(p.a, p.b, p.na, p.nb, p.cmp)
-	if all := backtrack(p.directions, p.na-1, p.nb-1); len(all) > 0 {
-		return all[0]
-	}
-	return nil
+	p.fill(p.na, p.nb, p.cmp)
+	p.print(os.Stdout)
+	return p.backtrack(p.directions, p.na-1, p.nb-1)
 }
 
-func (p *DP) All() [][]int {
+func (p *DP) All() []interface{} {
 	if p.directions == nil {
 		return nil
 	}
-	p.fill(p.a, p.b, p.na, p.nb, p.cmp)
-	return backtrack(p.directions, p.na-1, p.nb-1)
+	p.fill(p.na, p.nb, p.cmp)
+	return p.backtrackAll(p.directions, p.na-1, p.nb-1)
 }
 
 // SES returns the shortest edit script to turn A into B.
@@ -85,7 +93,7 @@ func (p *DP) SES() EditScript {
 	return EditScript(diff(p.directions, p.na-1, p.nb-1))
 }
 
-func (p *DP) fill(a, b interface{}, na, nb int, cmp comparator) {
+func (p *DP) fill(na, nb int, cmp comparator) {
 	if p.filled {
 		return
 	}
@@ -98,7 +106,7 @@ func (p *DP) fill(a, b interface{}, na, nb int, cmp comparator) {
 	}
 	for x := 1; x < len(directions); x++ {
 		for y := 1; y < len(directions[x]); y++ {
-			if cmp(a, b, x-1, y-1) {
+			if cmp(x-1, y-1) {
 				table[x][y] = (table[x-1][y-1]) + 1
 				directions[x][y] = diagonal
 				continue
@@ -120,32 +128,49 @@ func (p *DP) fill(a, b interface{}, na, nb int, cmp comparator) {
 	}
 }
 
-func extend(paths [][]int, idx int) [][]int {
-	if len(paths) == 0 {
-		first := []int{idx}
-		return [][]int{first}
+func (p *DP) backtrack(directions [][]uint8, i, j int) interface{} {
+	if i == 0 || j == 0 {
+		return p.newSlice()
 	}
-	for i, p := range paths {
-		paths[i] = append(p, idx)
+	var dir uint8
+	dir = directions[i][j]
+	if dir == diagonal {
+		return p.append(p.backtrack(directions, i-1, j-1), p.lookupA(i))
 	}
-	return paths
+	if dir == up {
+		return p.backtrack(directions, i-1, j)
+	}
+	return p.backtrack(directions, i, j-1)
 }
 
-func backtrack(directions [][]uint8, i, j int) [][]int {
+func (p *DP) backtrackAll(directions [][]uint8, i, j int) []interface{} {
+	fmt.Printf("%v %v\n", i, j)
 	if i == 0 || j == 0 {
 		return nil
 	}
 	var dir uint8
 	dir = directions[i][j]
 	if dir == diagonal {
-		return extend(backtrack(directions, i-1, j-1), i)
+		paths := p.backtrackAll(directions, i-1, j-1)
+		val := p.lookupA(i)
+		//fmt.Printf("V: %c\n", val)
+		if len(paths) == 0 {
+			np := p.append(p.newSlice(), val)
+			//fmt.Printf("P 1: %c\n", np)
+			return []interface{}{np}
+		}
+		for i, path := range paths {
+			paths[i] = p.append(path, val)
+		}
+		//		fmt.Printf("P 2: %#v\n", paths)
+		return paths
 	}
-	var paths [][]int
+	var paths []interface{}
 	if dir == up || dir == upAndLeft {
-		paths = backtrack(directions, i-1, j)
+		paths = p.backtrackAll(directions, i-1, j)
 	}
 	if dir == left || dir == upAndLeft {
-		paths = append(paths, backtrack(directions, i, j-1)...)
+		paths = append(paths, p.backtrackAll(directions, i, j-1)...)
 	}
 	return paths
 }
@@ -164,7 +189,6 @@ func diff(directions [][]uint8, i, j int) []Edit {
 	return nil
 }
 
-/*
 func firstArrow(v uint8) rune {
 	if v == left || v == upAndLeft {
 		return leftArrow
@@ -184,13 +208,14 @@ func secondArrow(v uint8) rune {
 }
 
 func (p *DP) print(out io.Writer) {
-	out.Write([]byte("   "))
+	//out.Write([]byte("   "))
 	//	for _, c := range p.b[1:] {
-	//		out.Write([]byte(fmt.Sprintf(" %3c ", c)))
+	//		out.Write([]byte(fmt.Sprintf(" %3v ", c)))
 	//	}
-	//	out.Write([]byte("\n"))
+	//out.Write([]byte(fmt.Sprintf("%v\n", p.a)))
+	out.Write([]byte("\n"))
 	for a := 1; a < len(p.directions); a++ {
-		//		out.Write([]byte(fmt.Sprintf("%3c ", p.a[a])))
+		//out.Write([]byte(fmt.Sprintf("%vc ", p.a[a])))
 		for b := 1; b < len(p.directions[a]); b++ {
 			dir := p.directions[a][b]
 			str := fmt.Sprintf("  %c%c ", firstArrow(dir), secondArrow(dir))
@@ -199,4 +224,3 @@ func (p *DP) print(out io.Writer) {
 		out.Write([]byte("\n"))
 	}
 }
-*/

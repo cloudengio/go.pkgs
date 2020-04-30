@@ -8,30 +8,88 @@ import (
 	"reflect"
 )
 
-func configure(a, b interface{}) (na, nb int, cmp comparator, err error) {
+type comparator func(i, j int) bool
+type accessor func(i int) interface{}
+type appendor func(slice, value interface{}) interface{}
+
+func configureAndValidate(a, b interface{}) (na, nb int, err error) {
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
 		err = fmt.Errorf("input types differ: %T != %T", a, b)
 		return
 	}
 	switch ta := a.(type) {
 	case []int32:
-		na, nb = len(ta), len(b.([]int32))
-		cmp = compare32
+		b32 := b.([]int32)
+		na, nb = len(ta), len(b32)
 	case []uint8:
-		na, nb = len(ta), len(b.([]uint8))
-		cmp = compare8
+		b8 := b.([]uint8)
+		na, nb = len(ta), len(b8)
 	default:
 		err = fmt.Errorf("unsupported type: %T", a)
 	}
 	return
 }
 
-func compare32(a, b interface{}, i, j int) bool {
-	return a.([]int32)[i] == b.([]int32)[j]
+func cmpFor(a, b interface{}) comparator {
+	switch ta := a.(type) {
+	case []int32:
+		b32 := b.([]int32)
+		return func(i, j int) bool {
+			return ta[i] == b32[j]
+		}
+	case []uint8:
+		b8 := b.([]uint8)
+		return func(i, j int) bool {
+			return ta[i] == b8[j]
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", a))
+	}
 }
 
-func compare8(a, b interface{}, i, j int) bool {
-	return a.([]uint8)[i] == b.([]uint8)[j]
+func accessorFor(a interface{}) accessor {
+	switch ta := a.(type) {
+	case []int32:
+		return func(i int) interface{} {
+			return ta[i]
+		}
+	case []uint8:
+		return func(i int) interface{} {
+			return ta[i]
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", a))
+	}
+}
+
+func newSliceFor(item interface{}) func() interface{} {
+	switch item.(type) {
+	case []int32:
+		return func() interface{} {
+			return []int32{}
+		}
+	case []uint8:
+		return func() interface{} {
+			return []uint8{}
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", item))
+	}
+}
+
+func appendorFor(p interface{}) appendor {
+	switch p.(type) {
+	case []int32:
+		return func(s, v interface{}) interface{} {
+			return append(s.([]int32), v.(int32))
+		}
+	case []uint8:
+		return func(s, v interface{}) interface{} {
+			return append(s.([]uint8), v.(uint8))
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", p))
+	}
 }
 
 func Path(a interface{}, indices []int) interface{} {
