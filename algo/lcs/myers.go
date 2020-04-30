@@ -1,39 +1,42 @@
 package lcs
 
-type Myers struct {
-	a, b  []int32
-	table []int
-}
+import "fmt"
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+type Myers struct {
+	a, b   interface{}
+	na, nb int
+	cmp    comparator
+
+	table []int
 }
 
 // NewMyers returns a solver using the linear time/space variant of Myer's
 // original algorithm as documented in:
 // An O(ND) Difference Algorithm and Its Variations, 1986.
-func NewMyers(a, b []byte, decoder Decoder) *Myers {
-	da, db := decode(a, 0, decoder), decode(b, 0, decoder)
+func NewMyers(a, b interface{}) *Myers {
+	na, nb, cmp, err := configure(a, b)
+	if err != nil {
+		panic(err)
+	}
 	return &Myers{
-		a: da,
-		b: db,
+		a:   a,
+		b:   b,
+		na:  na,
+		nb:  nb,
+		cmp: cmp,
 	}
 }
 
-// Details on the implementation and details of the algorithms can be
-// found here:
+// Details on the implementation and details of the algorithms can be found
+// here:
 // http://xmailserver.org/diff2.pdf
 // http://simplygenius.net/Article/DiffTutorial1
 // https://blog.robertelder.org/diff-algorithm/
 
 // myersMiddle finds the middle snake.
-func myersMiddle(a, b []int32) (d, x1, y1, x2, y2 int32) {
-	na, nb := int32(len(a)), int32(len(b))
+func myersMiddle(a, b interface{}, na, nb int32, cmp comparator) (d, x1, y1, x2, y2 int32) {
 	max := na + nb // max # edits (delete all a, insert all of b)
-	delta := na - nb
+	delta := int32(na - nb)
 
 	odd := delta%2 != 0
 	even := !odd
@@ -65,7 +68,7 @@ func myersMiddle(a, b []int32) (d, x1, y1, x2, y2 int32) {
 			}
 			y = x - k
 			mx, my = x, y
-			for x < na && y < nb && a[x] == b[y] {
+			for x < na && y < nb && cmp(a, b, int(x), int(y)) {
 				x++
 				y++
 			}
@@ -75,7 +78,7 @@ func myersMiddle(a, b []int32) (d, x1, y1, x2, y2 int32) {
 			if odd && (-(k - delta)) >= -(d-1) && (-(k - delta)) <= (d-1) {
 				// Doe this snake overlap with one of the reverse ones? If so,
 				// the last snake is the longest one.
-				if forward[offset+k]+reverse[offset-(k-delta)] >= na {
+				if forward[offset+k]+reverse[offset-(k-delta)] >= int32(na) {
 					return 2*d - 1, mx, my, x, y
 				}
 			}
@@ -92,7 +95,7 @@ func myersMiddle(a, b []int32) (d, x1, y1, x2, y2 int32) {
 			}
 			y = x - k
 			mx, my = x, y
-			for x < na && y < nb && a[na-x-1] == b[nb-y-1] {
+			for x < na && y < nb && cmp(a, b, int(na-x-1), int(nb-y-1)) {
 				x++
 				y++
 			}
@@ -111,17 +114,24 @@ func myersMiddle(a, b []int32) (d, x1, y1, x2, y2 int32) {
 	panic("unreachable")
 }
 
-// myersLCS returns the LCS
-func myersLCS(a, b []int32) []int32 {
-	na, nb := len(a), len(b)
+func idxSlice(sa, na int32) []int {
+	idx := make([]int, na)
+	for i := range idx {
+		idx[i] = int(sa) + i
+	}
+	return idx
+}
+
+func myersLCS32(a, b []int32, cmp comparator) []int32 {
+	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
 		return nil
 	}
-	d, x, y, u, v := myersMiddle(a, b)
+	d, x, y, u, v := myersMiddle(a, b, na, nb, cmp)
 	if d > 1 {
-		nd := myersLCS(a[:x], b[:y])
+		nd := myersLCS32(a[:x], b[:y], cmp)
 		nd = append(nd, a[x:u]...)
-		nd = append(nd, myersLCS(a[u:na], b[v:nb])...)
+		nd = append(nd, myersLCS32(a[u:na], b[v:nb], cmp)...)
 		return nd
 	}
 	if nb > na {
@@ -130,12 +140,32 @@ func myersLCS(a, b []int32) []int32 {
 	return b
 }
 
-func (differ *Myers) LCS() []int32 {
-	return myersLCS(differ.a, differ.b)
+func myersLCS8(a, b []uint8, cmp comparator) []uint8 {
+	na, nb := int32(len(a)), int32(len(b))
+	if na == 0 || nb == 0 {
+		return nil
+	}
+	d, x, y, u, v := myersMiddle(a, b, na, nb, cmp)
+	if d > 1 {
+		nd := myersLCS8(a[:x], b[:y], cmp)
+		nd = append(nd, a[x:u]...)
+		nd = append(nd, myersLCS8(a[u:na], b[v:nb], cmp)...)
+		return nd
+	}
+	if nb > na {
+		return a
+	}
+	return b
 }
 
-func (differ *Myers) SESLen() int {
-	return len(myersLCS(differ.a, differ.b))
+func (m *Myers) LCS() interface{} {
+	switch av := m.a.(type) {
+	case []int32:
+		return myersLCS32(av, m.b.([]int32), m.cmp)
+	case []uint8:
+		return myersLCS8(av, m.b.([]uint8), m.cmp)
+	}
+	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 }
 
 /*

@@ -11,8 +11,8 @@ const (
 )
 
 type Edit struct {
-	Op    EditOp
-	Token int32
+	Op  EditOp
+	Pos int
 }
 
 type EditScript []Edit
@@ -28,7 +28,7 @@ func (es EditScript) String() string {
 		case Delete:
 			out.WriteRune('-')
 		}
-		out.WriteRune(e.Token)
+		out.WriteRune('x') //e.Token)
 		if i < len(es)-1 {
 			out.WriteRune(' ')
 		}

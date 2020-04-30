@@ -3,37 +3,51 @@
 // use with unicode/utf8 and other alphabets.
 package lcs
 
-type Solver interface {
-	LCS() []int32
-	SES() EditScript
-	All() [][]int32
+import (
+	"fmt"
+	"reflect"
+)
+
+func configure(a, b interface{}) (na, nb int, cmp comparator, err error) {
+	if reflect.TypeOf(a) != reflect.TypeOf(b) {
+		err = fmt.Errorf("input types differ: %T != %T", a, b)
+		return
+	}
+	switch ta := a.(type) {
+	case []int32:
+		na, nb = len(ta), len(b.([]int32))
+		cmp = compare32
+	case []uint8:
+		na, nb = len(ta), len(b.([]uint8))
+		cmp = compare8
+	default:
+		err = fmt.Errorf("unsupported type: %T", a)
+	}
+	return
 }
 
-// Decoder is used to decode a byte slice into a slice of int32s. Decoding
-// is required to allow for operation on utf8 data but also be used to
-// represent lines or fields using a 32bit hash with sufficient collision
-// performance.
+func compare32(a, b interface{}, i, j int) bool {
+	return a.([]int32)[i] == b.([]int32)[j]
+}
 
-type Decoder32 func([]byte) (int32, int)
-type Decoder64 func([]byte) (int64, int)
-type DecoderByte func([]byte) (int64, int)
+func compare8(a, b interface{}, i, j int) bool {
+	return a.([]uint8)[i] == b.([]uint8)[j]
+}
 
-func decode32(input []byte, blank int, decoder Decoder32) []int32 {
-	li := len(input)
-	cursor := 0
-	tmp := make([]int32, li+blank)
-	i := blank
-	for {
-		tok, n := decoder(input[cursor:])
-		if n == 0 {
-			continue
+func Path(a interface{}, indices []int) interface{} {
+	switch v := a.(type) {
+	case []int32:
+		out := make([]int32, len(indices))
+		for i, idx := range indices {
+			out[i] = v[idx]
 		}
-		tmp[i] = tok
-		i++
-		cursor += n
-		if cursor >= li {
-			break
+		return out
+	case []uint8:
+		out := make([]uint8, len(indices))
+		for i, idx := range indices {
+			out[i] = v[idx]
 		}
+		return out
 	}
-	return tmp[:i]
+	panic(fmt.Errorf("unsupported type: %T", a))
 }
