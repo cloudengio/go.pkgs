@@ -64,6 +64,7 @@ const (
 	insertAction
 )
 
+/*
 func (ea editAction) String() string {
 	switch ea {
 	case doneAction:
@@ -77,6 +78,7 @@ func (ea editAction) String() string {
 	}
 	panic("unreachable")
 }
+
 
 // editState implements a per edit-position state machine. A state machine is needed
 // to handle the fact that edit strings contain deletion+insertion pairs
@@ -111,11 +113,33 @@ func (es *editState) nextOp(pos int, script EditScript) (editAction, interface{}
 	es.inserting = true
 	return copyAction, nil, 0, false
 }
+*/
 
-func perPosition(pos int, script EditScript)
+func perPosition(pos int, script EditScript) ([]action, EditScript) {
+	if len(script) == 0 {
+		return []action{{op: copyAction, pos: pos}}, script
+	}
+	ops := []action{}
+	used := 0
+	for _, op := range script {
+		if op.A != pos {
+			break
+		}
+		used++
+		if op.Op == Delete {
+			ops = append(ops, action{op: skipAction, pos: pos})
+			continue
+		}
+		ops = append(ops, action{op: insertAction, pos: pos, insert: op.Val})
+	}
+	if len(ops) == 0 {
+		ops = []action{{op: copyAction, pos: pos}}
+	}
+	return ops, script[used:]
+}
 
 type action struct {
-	skip   bool
+	op     editOperation
 	pos    int
 	insert interface{}
 }
@@ -129,22 +153,21 @@ func interpret(n int, script EditScript) []action {
 		return actions
 	}
 	for i := 0; i < n; i++ {
-		es := &editState{}
-		for {
-			editAction, val, consumed, final := es.nextOp(i, script)
-			switch editAction {
-			case copyAction:
-				actions = append(actions, action{pos: i})
-			case insertAction:
-				actions = append(actions, action{pos: i, insert: val})
-			case skipAction:
-				actions = append(actions, action{pos: i, skip: true})
-			}
-			script = script[consumed:]
-			if final {
-				break
-			}
-		}
+		var edits []action
+		edits, script = perPosition(i, script)
+		actions = append(actions, edits...)
+		/*
+			for _, edit := range edits {
+				//editAction, val, consumed, final := es.nextOp(i, script)
+				switch edit.op {
+				case copyAction:
+					actions = append(actions, action{pos: i})
+				case insertAction:
+					actions = append(actions, action{pos: i, insert: val})
+				case skipAction:
+					actions = append(actions, action{pos: i, skip: true})
+				}
+			}*/
 	}
 	return actions
 }
