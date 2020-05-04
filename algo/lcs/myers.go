@@ -2,17 +2,17 @@ package lcs
 
 import "fmt"
 
+// Myers represents an implementation of Myer's longest common subsequence
+// and shortest edit script algorithm as as documented in:
+// An O(ND) Difference Algorithm and Its Variations, 1986.
 type Myers struct {
 	a, b   interface{}
 	na, nb int
 	cmp    comparator
-
-	table []int
 }
 
-// NewMyers returns a solver using the linear time/space variant of Myer's
-// original algorithm as documented in:
-// An O(ND) Difference Algorithm and Its Variations, 1986.
+// NewMyers returns a new instance of Myers. The implementation supports slices
+// of bytes/uint8, rune/int32 and int64s.
 func NewMyers(a, b interface{}) *Myers {
 	na, nb, err := configureAndValidate(a, b)
 	if err != nil {
@@ -32,7 +32,6 @@ func NewMyers(a, b interface{}) *Myers {
 // http://simplygenius.net/Article/DiffTutorial1
 // https://blog.robertelder.org/diff-algorithm/
 
-// middleSnake finds the middle snake.
 func middleSnake(a, b interface{}, na, nb int32) (d, x1, y1, x2, y2 int32) {
 	cmp := cmpFor(a, b)
 	max := na + nb // max # edits (delete all a, insert all of b)
@@ -122,6 +121,24 @@ func idxSlice(sa, na int32) []int {
 	return idx
 }
 
+func myersLCS64(a, b []int64) []int64 {
+	na, nb := int32(len(a)), int32(len(b))
+	if na == 0 || nb == 0 {
+		return nil
+	}
+	d, x, y, u, v := middleSnake(a, b, na, nb)
+	if d > 1 {
+		nd := myersLCS64(a[:x], b[:y])
+		nd = append(nd, a[x:u]...)
+		nd = append(nd, myersLCS64(a[u:na], b[v:nb])...)
+		return nd
+	}
+	if nb > na {
+		return a
+	}
+	return b
+}
+
 func myersLCS32(a, b []int32) []int32 {
 	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
@@ -158,12 +175,55 @@ func myersLCS8(a, b []uint8) []uint8 {
 	return b
 }
 
+// LCS returns the longest common subsquence.
 func (m *Myers) LCS() interface{} {
 	switch av := m.a.(type) {
+	case []int64:
+		return myersLCS64(av, m.b.([]int64))
 	case []int32:
 		return myersLCS32(av, m.b.([]int32))
 	case []uint8:
 		return myersLCS8(av, m.b.([]uint8))
+	}
+	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
+}
+
+func myersSES32(a, b []int32, cx int32) []Edit {
+	na, nb := int32(len(a)), int32(len(b))
+	var ses []Edit
+	if na > 0 && nb > 0 {
+		d, x, y, u, v := middleSnake(a, b, na, nb)
+		if d > 1 || (x != u && y != v) {
+			ses = append(ses, myersSES32(a[:x], b[:y], cx)...)
+			return append(ses, myersSES32(a[u:], b[v:], cx+u)...)
+		}
+		if nb > na {
+			return append(ses, myersSES32(nil, b[na:], cx+na)...)
+		}
+		if na > nb {
+			return append(ses, myersSES32(a[nb:], nil, cx+nb)...)
+		}
+		return ses
+	}
+	if na > 0 {
+		for i, val := range a {
+			ses = append(ses, Edit{Delete, int(cx) + i, val})
+		}
+		return ses
+	}
+	for _, val := range b {
+		ses = append(ses, Edit{Insert, floor0(int(cx) - 1), val})
+	}
+	return ses
+}
+
+// SES returns the shortest edit script.
+func (m *Myers) SES() EditScript {
+	switch av := m.a.(type) {
+	case []int32:
+		return myersSES32(av, m.b.([]int32), 0)
+	case []uint8:
+		//return myersEdit8(av, m.b.([]uint8))
 	}
 	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 }
