@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -251,4 +252,17 @@ world
 	if got, want := reconstructed, lb; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	out := &strings.Builder{}
+	lcs.PrettyVertical(out, a, replay)
+	if got, want := out.String(), `                     0
+-  6864772235558415538
+  -8997218578518345818
++ -6615550055289275125
+- -7192184552745107772
+   5717881983045765875
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }

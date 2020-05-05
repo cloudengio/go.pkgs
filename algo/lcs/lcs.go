@@ -73,16 +73,13 @@ func accessorFor(a interface{}) accessor {
 	}
 }
 
-/*
-func sliceLen(a interface{}) int {
-	v := reflect.ValueOf(a)
-	if v.Type().Kind() == reflect.Slice {
-		return v.Len()
+func fmtFor(a interface{}) string {
+	switch a.(type) {
+	case []int64:
+		return "% 20d"
+	case []int32, []uint8:
+		return "%3c"
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", a))
 	}
-	panic(fmt.Sprintf("unsupported type: %T", a))
 }
-
-func emptySliceOf(a interface{}) interface{} {
-	t := reflect.TypeOf(a)
-	return reflect.New(t).Elem().Interface()
-}*/
