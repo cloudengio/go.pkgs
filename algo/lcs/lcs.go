@@ -17,14 +17,15 @@ func configureAndValidate(a, b interface{}) (na, nb int, err error) {
 		return
 	}
 	switch ta := a.(type) {
+	case []int64:
+		b64 := b.([]int64)
+		na, nb = len(ta), len(b64)
 	case []int32:
 		b32 := b.([]int32)
 		na, nb = len(ta), len(b32)
-
 	case []uint8:
 		b8 := b.([]uint8)
 		na, nb = len(ta), len(b8)
-
 	default:
 		err = fmt.Errorf("unsupported type: %T", a)
 	}
@@ -33,6 +34,11 @@ func configureAndValidate(a, b interface{}) (na, nb int, err error) {
 
 func cmpFor(a, b interface{}) comparator {
 	switch ta := a.(type) {
+	case []int64:
+		b64 := b.([]int64)
+		return func(i, j int) bool {
+			return ta[i] == b64[j]
+		}
 	case []int32:
 		b32 := b.([]int32)
 		return func(i, j int) bool {
@@ -50,6 +56,10 @@ func cmpFor(a, b interface{}) comparator {
 
 func accessorFor(a interface{}) accessor {
 	switch ta := a.(type) {
+	case []int64:
+		return func(i int) interface{} {
+			return ta[i]
+		}
 	case []int32:
 		return func(i int) interface{} {
 			return ta[i]
@@ -63,6 +73,7 @@ func accessorFor(a interface{}) accessor {
 	}
 }
 
+/*
 func sliceLen(a interface{}) int {
 	v := reflect.ValueOf(a)
 	if v.Type().Kind() == reflect.Slice {
@@ -71,7 +82,6 @@ func sliceLen(a interface{}) int {
 	panic(fmt.Sprintf("unsupported type: %T", a))
 }
 
-/*
 func emptySliceOf(a interface{}) interface{} {
 	t := reflect.TypeOf(a)
 	return reflect.New(t).Elem().Interface()

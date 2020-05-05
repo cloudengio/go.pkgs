@@ -6,9 +6,12 @@ import "fmt"
 // and shortest edit script algorithm as as documented in:
 // An O(ND) Difference Algorithm and Its Variations, 1986.
 type Myers struct {
-	a, b   interface{}
-	na, nb int
-	cmp    comparator
+	a, b       interface{}
+	na, nb     int
+	cmp        comparator
+	slicer     func(v interface{}, from, to int32) interface{}
+	deletions  func(v interface{}, cx int) []Edit
+	insertions func(v interface{}, cx, cy int) []Edit
 }
 
 // NewMyers returns a new instance of Myers. The implementation supports slices
@@ -32,8 +35,7 @@ func NewMyers(a, b interface{}) *Myers {
 // http://simplygenius.net/Article/DiffTutorial1
 // https://blog.robertelder.org/diff-algorithm/
 
-func middleSnake(a, b interface{}, na, nb int32) (d, x1, y1, x2, y2 int32) {
-	cmp := cmpFor(a, b)
+func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 	max := na + nb // max # edits (delete all a, insert all of b)
 	delta := int32(na - nb)
 
@@ -126,7 +128,7 @@ func myersLCS64(a, b []int64) []int64 {
 	if na == 0 || nb == 0 {
 		return nil
 	}
-	d, x, y, u, v := middleSnake(a, b, na, nb)
+	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 	if d > 1 {
 		nd := myersLCS64(a[:x], b[:y])
 		nd = append(nd, a[x:u]...)
@@ -144,7 +146,7 @@ func myersLCS32(a, b []int32) []int32 {
 	if na == 0 || nb == 0 {
 		return nil
 	}
-	d, x, y, u, v := middleSnake(a, b, na, nb)
+	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 	if d > 1 {
 		nd := myersLCS32(a[:x], b[:y])
 		nd = append(nd, a[x:u]...)
@@ -162,7 +164,7 @@ func myersLCS8(a, b []uint8) []uint8 {
 	if na == 0 || nb == 0 {
 		return nil
 	}
-	d, x, y, u, v := middleSnake(a, b, na, nb)
+	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 	if d > 1 {
 		nd := myersLCS8(a[:x], b[:y])
 		nd = append(nd, a[x:u]...)
@@ -188,11 +190,41 @@ func (m *Myers) LCS() interface{} {
 	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 }
 
+/*
+func myersSES64(a, b []int64, cx int32) []Edit {
+	na, nb := int32(len(a)), int32(len(b))
+	var ses []Edit
+	if na > 0 && nb > 0 {
+		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
+		if d > 1 || (x != u && y != v) {
+			ses = append(ses, myersSES64(a[:x], b[:y], cx)...)
+			return append(ses, myersSES64(a[u:], b[v:], cx+u)...)
+		}
+		if nb > na {
+			return append(ses, myersSES64(nil, b[na:], cx+na)...)
+		}
+		if na > nb {
+			return append(ses, myersSES64(a[nb:], nil, cx+nb)...)
+		}
+		return ses
+	}
+	if na > 0 {
+		for i, val := range a {
+			ses = append(ses, Edit{Delete, int(cx) + i, val})
+		}
+		return ses
+	}
+	for _, val := range b {
+		ses = append(ses, Edit{Insert, floor0(int(cx) - 1), val})
+	}
+	return ses
+}
+
 func myersSES32(a, b []int32, cx int32) []Edit {
 	na, nb := int32(len(a)), int32(len(b))
 	var ses []Edit
 	if na > 0 && nb > 0 {
-		d, x, y, u, v := middleSnake(a, b, na, nb)
+		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 		if d > 1 || (x != u && y != v) {
 			ses = append(ses, myersSES32(a[:x], b[:y], cx)...)
 			return append(ses, myersSES32(a[u:], b[v:], cx+u)...)
@@ -217,13 +249,121 @@ func myersSES32(a, b []int32, cx int32) []Edit {
 	return ses
 }
 
+func myersSES8(a, b []uint8, cx int32) []Edit {
+	na, nb := int32(len(a)), int32(len(b))
+	var ses []Edit
+	if na > 0 && nb > 0 {
+		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
+		if d > 1 || (x != u && y != v) {
+			ses = append(ses, myersSES8(a[:x], b[:y], cx)...)
+			return append(ses, myersSES8(a[u:], b[v:], cx+u)...)
+		}
+		if nb > na {
+			return append(ses, myersSES8(nil, b[na:], cx+na)...)
+		}
+		if na > nb {
+			return append(ses, myersSES8(a[nb:], nil, cx+nb)...)
+		}
+		return ses
+	}
+	if na > 0 {
+		for i, val := range a {
+			ses = append(ses, Edit{Delete, int(cx) + i, val})
+		}
+		return ses
+	}
+	for _, val := range b {
+		ses = append(ses, Edit{Insert, floor0(int(cx) - 1), val})
+	}
+	return ses
+}
+*/
+
+func (m *Myers) ses(a, b interface{}, na, nb, cx, cy int32) []Edit {
+	var ses []Edit
+	if na > 0 && nb > 0 {
+		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
+		if d > 1 || (x != u && y != v) {
+			ses = append(ses,
+				m.ses(m.slicer(a, 0, x), m.slicer(b, 0, y), x, y, cx, cy)...)
+			return append(ses,
+				m.ses(m.slicer(a, u, na), m.slicer(b, v, nb), na-u, nb-v, cx+u, cy+v)...)
+		}
+		if nb > na {
+			return append(ses,
+				m.ses(nil, m.slicer(b, na, nb), 0, nb-na, cx+na, cy)...)
+		}
+		if na > nb {
+			return append(ses,
+				m.ses(m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy)...)
+		}
+		return ses
+	}
+	if na > 0 {
+		return m.deletions(a, int(cx))
+	}
+	return m.insertions(b, int(cx), int(cy))
+}
+
 // SES returns the shortest edit script.
 func (m *Myers) SES() EditScript {
-	switch av := m.a.(type) {
+	switch m.a.(type) {
+	case []int64:
+		m.slicer = func(v interface{}, from, to int32) interface{} {
+			return v.([]int64)[from:to]
+		}
+		m.deletions = func(v interface{}, cx int) []Edit {
+			var edits []Edit
+			for i, val := range v.([]int64) {
+				edits = append(edits, Edit{Delete, cx + i, 0, val})
+			}
+			return edits
+		}
+		m.insertions = func(v interface{}, cx, cy int) []Edit {
+			var edits []Edit
+			for i, val := range v.([]int64) {
+				edits = append(edits, Edit{Insert, floor0(int(cx) - 1), int(cy) + i, val})
+			}
+			return edits
+		}
 	case []int32:
-		return myersSES32(av, m.b.([]int32), 0)
+		m.slicer = func(v interface{}, from, to int32) interface{} {
+			return v.([]int32)[from:to]
+		}
+		m.deletions = func(v interface{}, cx int) []Edit {
+			var edits []Edit
+			for i, val := range v.([]int32) {
+				edits = append(edits, Edit{Delete, cx + i, 0, val})
+			}
+			return edits
+		}
+		m.insertions = func(v interface{}, cx, cy int) []Edit {
+			var edits []Edit
+			for i, val := range v.([]int32) {
+				edits = append(edits, Edit{Insert, floor0(int(cx) - 1), int(cy) + i, val})
+			}
+			return edits
+		}
 	case []uint8:
-		//return myersEdit8(av, m.b.([]uint8))
+		m.slicer = func(v interface{}, from, to int32) interface{} {
+			return v.([]uint8)[from:to]
+		}
+		m.deletions = func(v interface{}, cx int) []Edit {
+			var edits []Edit
+			for i, val := range v.([]uint8) {
+				edits = append(edits, Edit{Delete, cx + i, 0, val})
+			}
+			return edits
+		}
+		m.insertions = func(v interface{}, cx, cy int) []Edit {
+			var edits []Edit
+			for i, val := range v.([]uint8) {
+				edits = append(edits, Edit{Insert, floor0(int(cx) - 1), int(cy) + i, val})
+			}
+			return edits
+		}
+	default:
+		panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 	}
-	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
+	return m.ses(m.a, m.b, int32(m.na), int32(m.nb), 0, 0)
 }

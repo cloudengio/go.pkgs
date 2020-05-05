@@ -12,10 +12,15 @@ import (
 // one found. If a single LCS or SES is sufficient then the Myer's algorithm
 // implementation is lilkey a better choice.
 type DP struct {
-	a, b    interface{}
-	na, nb  int
-	cmp     comparator
-	lookupA accessor
+	a, b      interface{}
+	na, nb    int
+	cmp       comparator
+	lookupA   accessor
+	emptyAll  func() interface{}
+	appendAll func(a, b interface{}) interface{}
+	extend    func(i int, b interface{}) interface{}
+	empty     func() interface{}
+	append    func(a, b interface{}) interface{}
 
 	filled bool
 
@@ -24,7 +29,8 @@ type DP struct {
 	directions [][]uint8
 }
 
-// NewDP creates a new instance of DP.
+// NewDP creates a new instance of DP. The implementation supports slices
+// of bytes/uint8, rune/int32 and int64s.
 func NewDP(a, b interface{}) *DP {
 	na, nb, err := configureAndValidate(a, b)
 	if err != nil {
@@ -56,29 +62,105 @@ const (
 	upAndLeft uint8 = 0x3
 )
 
+// LCS returns the longest common subsquence.
 func (dp *DP) LCS() interface{} {
 	dp.fill()
-	switch a := dp.a.(type) {
+	switch dp.a.(type) {
+	case []int64:
+		dp.empty = func() interface{} {
+			return []int64{}
+		}
+		dp.append = func(a, b interface{}) interface{} {
+			return append(a.([]int64), b.(int64))
+		}
 	case []int32:
-		return dp.backtrack32(a, dp.na, dp.nb)
+		dp.empty = func() interface{} {
+			return []int32{}
+		}
+		dp.append = func(a, b interface{}) interface{} {
+			return append(a.([]int32), b.(int32))
+		}
 	case []uint8:
-		return dp.backtrack8(a, dp.na, dp.nb)
+		dp.empty = func() interface{} {
+			return []uint8{}
+		}
+		dp.append = func(a, b interface{}) interface{} {
+			return append(a.([]uint8), b.(uint8))
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type %T\n", dp.a))
+
 	}
-	panic(fmt.Sprintf("unsupported type %T\n", dp.a))
+	return dp.backtrack(dp.na, dp.nb)
 }
 
+// AllLCS returns all of the the longest common subsquences.
 func (dp *DP) AllLCS() interface{} {
 	dp.fill()
 	switch a := dp.a.(type) {
+	case []int64:
+		dp.emptyAll = func() interface{} {
+			return [][]int64{}
+		}
+		dp.appendAll = func(a, b interface{}) interface{} {
+			return append(a.([][]int64), b.([][]int64)...)
+		}
+		dp.extend = func(i int, p interface{}) interface{} {
+			sl := p.([][]int64)
+			v := a[i]
+			if len(sl) == 0 {
+				return [][]int64{{v}}
+			}
+			for i, p := range sl {
+				sl[i] = append(p, v)
+			}
+			return sl
+		}
 	case []int32:
-		return dp.backtrackAll32(a, dp.na, dp.nb)
+		dp.emptyAll = func() interface{} {
+			return [][]int32{}
+		}
+		dp.appendAll = func(a, b interface{}) interface{} {
+			return append(a.([][]int32), b.([][]int32)...)
+		}
+		dp.extend = func(i int, p interface{}) interface{} {
+			sl := p.([][]int32)
+			v := a[i]
+			if len(sl) == 0 {
+				return [][]int32{{v}}
+			}
+			for i, p := range sl {
+				sl[i] = append(p, v)
+			}
+			return sl
+		}
 	case []uint8:
-		return dp.backtrackAll8(a, dp.na, dp.nb)
+		dp.emptyAll = func() interface{} {
+			return [][]uint8{}
+		}
+		dp.appendAll = func(a, b interface{}) interface{} {
+			return append(a.([][]uint8), b.([][]uint8)...)
+		}
+		dp.extend = func(i int, p interface{}) interface{} {
+			sl := p.([][]uint8)
+			v := a[i]
+			if len(sl) == 0 {
+				return [][]uint8{{v}}
+			}
+			for i, p := range sl {
+				sl[i] = append(p, v)
+			}
+			return sl
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported type %T\n", dp.a))
 	}
-	panic(fmt.Sprintf("unsupported type %T\n", dp.a))
+	return dp.backtrackAll(dp.na, dp.nb)
+
 }
 
-// SES returns the shortest edit script to turn A into B.
+// SES returns the shortest edit script.
 func (dp *DP) SES() EditScript {
 	if dp.directions == nil {
 		return EditScript{}
@@ -121,80 +203,33 @@ func (dp *DP) fill() {
 	}
 }
 
-func (dp *DP) backtrack32(a []int32, i, j int) []int32 {
+func (dp *DP) backtrack(i, j int) interface{} {
 	if i == 0 || j == 0 {
-		return nil
+		return dp.empty()
 	}
 	switch dp.directions[i][j] {
 	case diagonal:
-		return append(dp.backtrack32(a, i-1, j-1), a[i-1])
+		return dp.append(dp.backtrack(i-1, j-1), dp.lookupA(i-1))
 	case up, upAndLeft:
-		return dp.backtrack32(a, i, j-1)
+		return dp.backtrack(i, j-1)
 	}
-	return dp.backtrack32(a, i-1, j)
+	return dp.backtrack(i-1, j)
 }
 
-func (dp *DP) backtrack8(a []uint8, i, j int) []uint8 {
+func (dp *DP) backtrackAll(i, j int) interface{} {
 	if i == 0 || j == 0 {
-		return nil
-	}
-	switch dp.directions[i][j] {
-	case diagonal:
-		return append(dp.backtrack8(a, i-1, j-1), a[i-1])
-	case up, upAndLeft:
-		return dp.backtrack8(a, i, j-1)
-	}
-	return dp.backtrack8(a, i-1, j)
-}
-
-func (dp *DP) backtrackAll32(a []int32, i, j int) [][]int32 {
-	if i == 0 || j == 0 {
-		return nil
+		return dp.emptyAll()
 	}
 	dir := dp.directions[i][j]
 	if dir == diagonal {
-		val := a[i-1]
-		paths := dp.backtrackAll32(a, i-1, j-1)
-		if len(paths) == 0 {
-			return [][]int32{{val}}
-		}
-		for i, path := range paths {
-			paths[i] = append(path, val)
-		}
-		return paths
+		return dp.extend(i-1, dp.backtrackAll(i-1, j-1))
 	}
-	var paths [][]int32
+	paths := dp.emptyAll()
 	if dir == up || dir == upAndLeft {
-		paths = dp.backtrackAll32(a, i, j-1)
+		paths = dp.backtrackAll(i, j-1)
 	}
 	if dir == left || dir == upAndLeft {
-		paths = append(paths, dp.backtrackAll32(a, i-1, j)...)
-	}
-	return paths
-}
-
-func (dp *DP) backtrackAll8(a []uint8, i, j int) [][]uint8 {
-	if i == 0 || j == 0 {
-		return nil
-	}
-	dir := dp.directions[i][j]
-	if dir == diagonal {
-		val := a[i-1]
-		paths := dp.backtrackAll8(a, i-1, j-1)
-		if len(paths) == 0 {
-			return [][]uint8{{val}}
-		}
-		for i, path := range paths {
-			paths[i] = append(path, val)
-		}
-		return paths
-	}
-	var paths [][]uint8
-	if dir == up || dir == upAndLeft {
-		paths = dp.backtrackAll8(a, i, j-1)
-	}
-	if dir == left || dir == upAndLeft {
-		paths = append(paths, dp.backtrackAll8(a, i-1, j)...)
+		paths = dp.appendAll(paths, dp.backtrackAll(i-1, j))
 	}
 	return paths
 }
@@ -212,10 +247,10 @@ func (dp *DP) diff(b accessor, i, j int) []Edit {
 		return dp.diff(b, i-1, j-1)
 	}
 	if j > 0 && (i == 0 || dir == up || dir == upAndLeft) {
-		return append(dp.diff(b, i, j-1), Edit{Insert, floor0(i - 1), b(j - 1)})
+		return append(dp.diff(b, i, j-1), Edit{Insert, floor0(i - 1), j - 1, b(j - 1)})
 	}
 	if i > 0 && (j == 0 || dir == left) {
-		return append(dp.diff(b, i-1, j), Edit{Delete, i - 1, 0})
+		return append(dp.diff(b, i-1, j), Edit{Delete, i - 1, 0, 0})
 	}
 	return nil
 }

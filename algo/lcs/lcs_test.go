@@ -1,6 +1,9 @@
 package lcs_test
 
 import (
+	"bytes"
+	"fmt"
+	"hash/fnv"
 	"reflect"
 	"sort"
 	"testing"
@@ -134,6 +137,11 @@ func TestLCS(t *testing.T) {
 			t.Errorf("%v: got %v is not one of %v", i, got, want)
 		}
 
+		edit = myers.SES()
+		if got, want := string(edit.Apply(a).([]uint8)), string(b.([]uint8)); got != want {
+			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]uint8)), edit.String())
+		}
+
 		dp = lcs.NewDP(a, b)
 		lcs8 = dp.LCS().([]uint8)
 		if got, want := string(lcs8), tc.all; !isOneOf(got, want) {
@@ -144,11 +152,10 @@ func TestLCS(t *testing.T) {
 			t.Errorf("%v: got %#v, want %#v", i, got, want)
 		}
 
-		/*
-			if got, want := myers.LCS().([]uint8), []byte(tc.lcs); !bytes.Equal(got, want) {
-				t.Errorf("%v: got %#v, want %#v", i, got, want)
-			}*/
-
+		edit = dp.SES()
+		if got, want := string(edit.Apply(a).([]uint8)), string(b.([]uint8)); got != want {
+			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]uint8)), edit.String())
+		}
 	}
 
 	// Test case for correct utf8 handling.
@@ -169,5 +176,42 @@ func TestLCS(t *testing.T) {
 	if got, want := string(myers.LCS().([]byte)), "日\xe6語"; got != want {
 		t.Errorf("got %#v, want %x %v", got, want, want)
 	}
+}
 
+func TestLines(t *testing.T) {
+	la := `
+line1 a b c
+line2 d e f
+line3 hello
+world
+`
+	lb := `
+line2 d e f
+hello
+world
+`
+	lineDecoder := func(data []byte) (int64, int) {
+		idx := bytes.Index(data, []byte{'\n'})
+		if idx <= 0 {
+			return 0, 1
+		}
+		h := fnv.New64a()
+		h.Write(data[:idx])
+		return int64(h.Sum64()), idx + 1
+	}
+
+	ld, err := codec.NewDecoder(lineDecoder)
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
+
+	a, b := ld.Decode([]byte(la)), ld.Decode([]byte(lb))
+	myers := lcs.NewMyers(a, b)
+	lcs64 := myers.SES()
+
+	fmt.Printf("A: %#v\n", a)
+	fmt.Printf("B: %#v\n", b)
+
+	fmt.Printf("XX: %v\n", lcs64)
+	t.Fail()
 }
