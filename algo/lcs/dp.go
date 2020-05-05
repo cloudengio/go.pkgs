@@ -250,7 +250,7 @@ func (dp *DP) diff(b accessor, i, j int) []Edit {
 		return append(dp.diff(b, i, j-1), Edit{Insert, floor0(i - 1), j - 1, b(j - 1)})
 	}
 	if i > 0 && (j == 0 || dir == left) {
-		return append(dp.diff(b, i-1, j), Edit{Delete, i - 1, 0, 0})
+		return append(dp.diff(b, i-1, j), Edit{Delete, i - 1, -1, 0})
 	}
 	return nil
 }

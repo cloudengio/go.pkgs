@@ -2,7 +2,6 @@ package lcs_test
 
 import (
 	"bytes"
-	"fmt"
 	"hash/fnv"
 	"reflect"
 	"sort"
@@ -11,6 +10,7 @@ import (
 
 	"cloudeng.io/algo/codec"
 	"cloudeng.io/algo/lcs"
+	"cloudeng.io/errors"
 )
 
 func isOneOf(got string, want []string) bool {
@@ -49,6 +49,28 @@ func all8(lcs [][]uint8) []string {
 	}
 	sort.Strings(str)
 	return str
+}
+
+func validateInsertions(t *testing.T, i int, edits lcs.EditScript, b interface{}) {
+	for _, e := range edits {
+		if e.Op != lcs.Insert {
+			continue
+		}
+		switch v := e.Val.(type) {
+		case int64:
+			if got, want := v, b.([]int64)[e.B]; got != want {
+				t.Errorf("%v: %v: got %v, want %v", errors.Caller(2, 1), i, got, want)
+			}
+		case int32:
+			if got, want := v, b.([]int32)[e.B]; got != want {
+				t.Errorf("%v: %v: got %c, want %c", errors.Caller(2, 1), i, got, want)
+			}
+		case uint8:
+			if got, want := v, b.([]uint8)[e.B]; got != want {
+				t.Errorf("%v: %v: got %c, want %c", errors.Caller(2, 1), i, got, want)
+			}
+		}
+	}
 }
 
 func TestLCS(t *testing.T) {
@@ -101,7 +123,6 @@ func TestLCS(t *testing.T) {
 		// rune and byte example where the results are identical.
 		{"日本語", "日本de語", 2, l("日本語")},
 	} {
-
 		a, b := u32.Decode([]byte(tc.a)), u32.Decode([]byte(tc.b))
 		myers := lcs.NewMyers(a, b)
 		lcs32 := myers.LCS().([]int32)
@@ -111,6 +132,7 @@ func TestLCS(t *testing.T) {
 
 		// test edit string by recreating 'b' from 'a'.
 		edit := myers.SES()
+		validateInsertions(t, i, edit, b)
 		if got, want := string(edit.Apply(a).([]int32)), string(b.([]int32)); got != want {
 			t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a.([]int32)), string(b.([]int32)), edit.String())
 		}
@@ -126,6 +148,7 @@ func TestLCS(t *testing.T) {
 
 		// test edit string by recreating 'b' from 'a'.
 		edit = dp.SES()
+		validateInsertions(t, i, edit, b)
 		if got, want := string(edit.Apply(a).([]int32)), string(b.([]int32)); got != want {
 			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]int32)), edit.String())
 		}
@@ -138,6 +161,7 @@ func TestLCS(t *testing.T) {
 		}
 
 		edit = myers.SES()
+		validateInsertions(t, i, edit, b)
 		if got, want := string(edit.Apply(a).([]uint8)), string(b.([]uint8)); got != want {
 			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]uint8)), edit.String())
 		}
@@ -153,6 +177,7 @@ func TestLCS(t *testing.T) {
 		}
 
 		edit = dp.SES()
+		validateInsertions(t, i, edit, b)
 		if got, want := string(edit.Apply(a).([]uint8)), string(b.([]uint8)); got != want {
 			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]uint8)), edit.String())
 		}
@@ -190,6 +215,7 @@ line2 d e f
 hello
 world
 `
+	lines := map[uint64]string{}
 	lineDecoder := func(data []byte) (int64, int) {
 		idx := bytes.Index(data, []byte{'\n'})
 		if idx <= 0 {
@@ -197,7 +223,9 @@ world
 		}
 		h := fnv.New64a()
 		h.Write(data[:idx])
-		return int64(h.Sum64()), idx + 1
+		sum := h.Sum64()
+		lines[sum] = string(data[:idx])
+		return int64(sum), idx + 1
 	}
 
 	ld, err := codec.NewDecoder(lineDecoder)
@@ -207,11 +235,20 @@ world
 
 	a, b := ld.Decode([]byte(la)), ld.Decode([]byte(lb))
 	myers := lcs.NewMyers(a, b)
-	lcs64 := myers.SES()
+	edits := myers.SES()
+	validateInsertions(t, 0, edits, b)
 
-	fmt.Printf("A: %#v\n", a)
-	fmt.Printf("B: %#v\n", b)
-
-	fmt.Printf("XX: %v\n", lcs64)
-	t.Fail()
+	replay := lcs.ReplayScript(len(a.([]int64)), edits)
+	var reconstructed string
+	for _, op := range replay {
+		switch op.Op {
+		case lcs.Identical:
+			reconstructed += lines[uint64(a.([]int64)[op.A])] + "\n"
+		case lcs.Insert:
+			reconstructed += lines[uint64(op.Val.(int64))] + "\n"
+		}
+	}
+	if got, want := reconstructed, lb; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }

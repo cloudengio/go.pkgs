@@ -190,95 +190,6 @@ func (m *Myers) LCS() interface{} {
 	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 }
 
-/*
-func myersSES64(a, b []int64, cx int32) []Edit {
-	na, nb := int32(len(a)), int32(len(b))
-	var ses []Edit
-	if na > 0 && nb > 0 {
-		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
-		if d > 1 || (x != u && y != v) {
-			ses = append(ses, myersSES64(a[:x], b[:y], cx)...)
-			return append(ses, myersSES64(a[u:], b[v:], cx+u)...)
-		}
-		if nb > na {
-			return append(ses, myersSES64(nil, b[na:], cx+na)...)
-		}
-		if na > nb {
-			return append(ses, myersSES64(a[nb:], nil, cx+nb)...)
-		}
-		return ses
-	}
-	if na > 0 {
-		for i, val := range a {
-			ses = append(ses, Edit{Delete, int(cx) + i, val})
-		}
-		return ses
-	}
-	for _, val := range b {
-		ses = append(ses, Edit{Insert, floor0(int(cx) - 1), val})
-	}
-	return ses
-}
-
-func myersSES32(a, b []int32, cx int32) []Edit {
-	na, nb := int32(len(a)), int32(len(b))
-	var ses []Edit
-	if na > 0 && nb > 0 {
-		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
-		if d > 1 || (x != u && y != v) {
-			ses = append(ses, myersSES32(a[:x], b[:y], cx)...)
-			return append(ses, myersSES32(a[u:], b[v:], cx+u)...)
-		}
-		if nb > na {
-			return append(ses, myersSES32(nil, b[na:], cx+na)...)
-		}
-		if na > nb {
-			return append(ses, myersSES32(a[nb:], nil, cx+nb)...)
-		}
-		return ses
-	}
-	if na > 0 {
-		for i, val := range a {
-			ses = append(ses, Edit{Delete, int(cx) + i, val})
-		}
-		return ses
-	}
-	for _, val := range b {
-		ses = append(ses, Edit{Insert, floor0(int(cx) - 1), val})
-	}
-	return ses
-}
-
-func myersSES8(a, b []uint8, cx int32) []Edit {
-	na, nb := int32(len(a)), int32(len(b))
-	var ses []Edit
-	if na > 0 && nb > 0 {
-		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
-		if d > 1 || (x != u && y != v) {
-			ses = append(ses, myersSES8(a[:x], b[:y], cx)...)
-			return append(ses, myersSES8(a[u:], b[v:], cx+u)...)
-		}
-		if nb > na {
-			return append(ses, myersSES8(nil, b[na:], cx+na)...)
-		}
-		if na > nb {
-			return append(ses, myersSES8(a[nb:], nil, cx+nb)...)
-		}
-		return ses
-	}
-	if na > 0 {
-		for i, val := range a {
-			ses = append(ses, Edit{Delete, int(cx) + i, val})
-		}
-		return ses
-	}
-	for _, val := range b {
-		ses = append(ses, Edit{Insert, floor0(int(cx) - 1), val})
-	}
-	return ses
-}
-*/
-
 func (m *Myers) ses(a, b interface{}, na, nb, cx, cy int32) []Edit {
 	var ses []Edit
 	if na > 0 && nb > 0 {
@@ -291,11 +202,11 @@ func (m *Myers) ses(a, b interface{}, na, nb, cx, cy int32) []Edit {
 		}
 		if nb > na {
 			return append(ses,
-				m.ses(nil, m.slicer(b, na, nb), 0, nb-na, cx+na, cy)...)
+				m.ses(nil, m.slicer(b, na, nb), 0, nb-na, cx+na, cy+na)...)
 		}
 		if na > nb {
 			return append(ses,
-				m.ses(m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy)...)
+				m.ses(m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy+nb)...)
 		}
 		return ses
 	}

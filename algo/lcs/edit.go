@@ -13,10 +13,22 @@ type EditOp int
 const (
 	Insert EditOp = iota
 	Delete
+	Identical
 )
 
-// Edit represents a single edit, the position in the original string
-// that it should take place at and the value for an insertion.
+// Edit represents a single edit.
+// For deletions, an edit specifies the index in the original (A)
+// slice to be deleted.
+// For insertions, an edit specifies the new value and the index in
+// the original (A) slice that the new value is to be inserted at,
+// but immediately after the existing value.
+// Insertions also provide the index of the new value in the new
+// (B) slice.
+// A third operation is provided, that identifies identical values, ie.
+// the members of the LCS and their position in the original slice.
+// This is operation is created by the ReplayScript function (and not
+// the SES methods) to simplify transforming the original script
+// into the new one. See the ReplayScript function.
 type Edit struct {
 	Op   EditOp
 	A, B int
@@ -27,8 +39,9 @@ type Edit struct {
 type EditScript []Edit
 
 var opStr = map[EditOp]string{
-	Insert: "+",
-	Delete: "-",
+	Insert:    "+",
+	Delete:    "-",
+	Identical: "=",
 }
 
 // String implements stringer.
@@ -46,8 +59,11 @@ func (es EditScript) String() string {
 			default:
 				out.WriteString(fmt.Sprintf("%v", e.Val))
 			}
+			out.WriteString(fmt.Sprintf("@[%v<%v]", e.A, e.B))
+
+		} else {
+			out.WriteString(fmt.Sprintf(" @[%v]", e.A))
 		}
-		out.WriteString(fmt.Sprintf(" @[%v]", e.A))
 		if i < len(es)-1 {
 			out.WriteString(", ")
 		}
@@ -70,11 +86,11 @@ type action struct {
 	insert interface{}
 }
 
-func perPosition(pos int, script EditScript) ([]action, EditScript) {
+func perPosition(pos int, script EditScript) ([]Edit, EditScript) {
 	if len(script) == 0 {
-		return []action{{op: copyAction, pos: pos}}, script
+		return []Edit{{Op: Identical, A: pos}}, script
 	}
-	ops := []action{}
+	ops := []Edit{}
 	used := 0
 	replacing, first := false, true
 	// need to handle the following cases:
@@ -87,83 +103,93 @@ func perPosition(pos int, script EditScript) ([]action, EditScript) {
 		}
 		used++
 		if op.Op == Delete {
-			ops = append(ops, action{op: skipAction, pos: pos})
+			ops = append(ops, op)
 			replacing = true
 			continue
 		}
 		if !replacing && first {
-			ops = append(ops, action{op: copyAction, pos: pos})
+			ops = append(ops, Edit{Op: Identical, A: pos})
 		}
-		ops = append(ops, action{op: insertAction, pos: pos, insert: op.Val})
+		ops = append(ops, op)
 		replacing, first = false, false
 	}
 	if len(ops) == 0 {
-		ops = []action{{op: copyAction, pos: pos}}
+		ops = []Edit{{Op: Identical, A: pos}}
 	}
 	return ops, script[used:]
 }
 
-func interpret(n int, script EditScript) []action {
-	var actions []action
-	if n == 0 {
-		for _, edit := range script {
-			actions = append(actions, action{op: insertAction, pos: 0, insert: edit.Val})
-		}
-		return actions
+// ReplayScript generates an EditScript that can be trivially 'replayed' to
+// create the new string from the original. It transforms stateful
+// deletion/insertion pairs and/or runs of insertions into edit operations
+// that can replayed by iterating over the script as follows:
+//
+//   var b []uint8
+//    for _, action := range actions {
+//		switch action.Op {
+//		case Insert:
+//			b = append(b, action.Val.(int64))
+//		case Identical:
+//			b = append(b, a[action.A])
+//		}
+//   }
+func ReplayScript(lenOriginal int, script EditScript) EditScript {
+	if lenOriginal == 0 {
+		return script
 	}
-	for i := 0; i < n; i++ {
-		var edits []action
-		edits, script = perPosition(i, script)
-		actions = append(actions, edits...)
+	var edits []Edit
+	for i := 0; i < lenOriginal; i++ {
+		var perPos []Edit
+		perPos, script = perPosition(i, script)
+		edits = append(edits, perPos...)
 	}
-	return actions
+	return edits
 }
 
 func apply64(script EditScript, a []int64) []int64 {
-	actions := interpret(len(a), script)
+	actions := ReplayScript(len(a), script)
 	b := make([]int64, 0, len(actions))
 	for _, action := range actions {
-		switch action.op {
-		case skipAction:
-		case insertAction:
-			b = append(b, action.insert.(int64))
-		case copyAction:
-			b = append(b, a[action.pos])
+		switch action.Op {
+		case Insert:
+			b = append(b, action.Val.(int64))
+		case Identical:
+			b = append(b, a[action.A])
 		}
 	}
 	return b
 }
 
 func apply32(script EditScript, a []int32) []int32 {
-	actions := interpret(len(a), script)
+	actions := ReplayScript(len(a), script)
 	b := make([]int32, 0, len(actions))
 	for _, action := range actions {
-		switch action.op {
-		case skipAction:
-		case insertAction:
-			b = append(b, action.insert.(int32))
-		case copyAction:
-			b = append(b, a[action.pos])
+		switch action.Op {
+		case Insert:
+			b = append(b, action.Val.(int32))
+		case Identical:
+			b = append(b, a[action.A])
 		}
 	}
 	return b
 }
 
 func apply8(script EditScript, a []uint8) []uint8 {
-	actions := interpret(len(a), script)
+	actions := ReplayScript(len(a), script)
 	b := make([]uint8, 0, len(actions))
 	for _, action := range actions {
-		switch action.op {
-		case skipAction:
-		case insertAction:
-			b = append(b, action.insert.(uint8))
-		case copyAction:
-			b = append(b, a[action.pos])
+		switch action.Op {
+		case Insert:
+			b = append(b, action.Val.(uint8))
+		case Identical:
+			b = append(b, a[action.A])
 		}
 	}
 	return b
 }
 
+// Apply transforms the original, supplied slice, to the new value by
+// applying the SES.
 func (es EditScript) Apply(a interface{}) interface{} {
 	if len(es) == 0 {
 		return a
