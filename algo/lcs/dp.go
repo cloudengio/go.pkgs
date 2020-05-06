@@ -244,7 +244,7 @@ func floor0(x int) int {
 func (dp *DP) diff(b accessor, i, j int) []Edit {
 	dir := dp.directions[i][j]
 	if i > 0 && j > 0 && dir == diagonal {
-		return dp.diff(b, i-1, j-1)
+		return append(dp.diff(b, i-1, j-1), Edit{Identical, i - 1, j - 1, b(j - 1)})
 	}
 	if j > 0 && (i == 0 || dir == up || dir == upAndLeft) {
 		return append(dp.diff(b, i, j-1), Edit{Insert, floor0(i - 1), j - 1, b(j - 1)})

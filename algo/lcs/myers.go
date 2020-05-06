@@ -1,17 +1,22 @@
 package lcs
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Myers represents an implementation of Myer's longest common subsequence
 // and shortest edit script algorithm as as documented in:
 // An O(ND) Difference Algorithm and Its Variations, 1986.
 type Myers struct {
-	a, b       interface{}
-	na, nb     int
-	cmp        comparator
-	slicer     func(v interface{}, from, to int32) interface{}
+	a, b   interface{}
+	na, nb int
+	cmp    comparator
+	slicer func(v interface{}, from, to int32) interface{}
+
 	deletions  func(v interface{}, cx int) []Edit
 	insertions func(v interface{}, cx, cy int) []Edit
+
+	edits func(v interface{}, op EditOp, cx, cy int) []Edit
 }
 
 // NewMyers returns a new instance of Myers. The implementation supports slices
@@ -126,7 +131,7 @@ func idxSlice(sa, na int32) []int {
 func myersLCS64(a, b []int64) []int64 {
 	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
-		return nil
+		return []int64{}
 	}
 	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 	if d > 1 {
@@ -136,15 +141,15 @@ func myersLCS64(a, b []int64) []int64 {
 		return nd
 	}
 	if nb > na {
-		return a
+		return append([]int64{}, a...)
 	}
-	return b
+	return append([]int64{}, b...)
 }
 
 func myersLCS32(a, b []int32) []int32 {
 	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
-		return nil
+		return []int32{}
 	}
 	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 	if d > 1 {
@@ -154,15 +159,15 @@ func myersLCS32(a, b []int32) []int32 {
 		return nd
 	}
 	if nb > na {
-		return a
+		return append([]int32{}, a...)
 	}
-	return b
+	return append([]int32{}, b...)
 }
 
 func myersLCS8(a, b []uint8) []uint8 {
 	na, nb := int32(len(a)), int32(len(b))
 	if na == 0 || nb == 0 {
-		return nil
+		return []uint8{}
 	}
 	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
 	if d > 1 {
@@ -172,9 +177,9 @@ func myersLCS8(a, b []uint8) []uint8 {
 		return nd
 	}
 	if nb > na {
-		return a
+		return append([]uint8{}, a...)
 	}
-	return b
+	return append([]uint8{}, b...)
 }
 
 // LCS returns the longest common subsquence.
@@ -190,30 +195,40 @@ func (m *Myers) LCS() interface{} {
 	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 }
 
-func (m *Myers) ses(a, b interface{}, na, nb, cx, cy int32) []Edit {
+func (m *Myers) ses(idx int, a, b interface{}, na, nb, cx, cy int32) []Edit {
 	var ses []Edit
 	if na > 0 && nb > 0 {
 		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
+
 		if d > 1 || (x != u && y != v) {
 			ses = append(ses,
-				m.ses(m.slicer(a, 0, x), m.slicer(b, 0, y), x, y, cx, cy)...)
+				m.ses(idx+1, m.slicer(a, 0, x), m.slicer(b, 0, y), x, y, cx, cy)...)
+			if x != u && y != v {
+				// middle snake is part of the lcs.
+				ses = append(ses, m.edits(m.slicer(a, x, u), Identical, int(cx+x), int(cy+y))...)
+			}
 			return append(ses,
-				m.ses(m.slicer(a, u, na), m.slicer(b, v, nb), na-u, nb-v, cx+u, cy+v)...)
+				m.ses(idx+1, m.slicer(a, u, na), m.slicer(b, v, nb), na-u, nb-v, cx+u, cy+v)...)
 		}
 		if nb > na {
+			// a is part of the LCS.
+			ses = append(ses, m.edits(m.slicer(a, 0, na), Identical, int(cx), int(cy))...)
 			return append(ses,
-				m.ses(nil, m.slicer(b, na, nb), 0, nb-na, cx+na, cy+na)...)
+				m.ses(idx+1, nil, m.slicer(b, na, nb), 0, nb-na, cx, cy+na)...)
 		}
 		if na > nb {
+			// b is part of the LCS.
+
+			ses = append(ses, m.edits(m.slicer(b, 0, nb), Identical, int(cx), int(cy))...)
 			return append(ses,
-				m.ses(m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy+nb)...)
+				m.ses(idx+1, m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy)...)
 		}
 		return ses
 	}
 	if na > 0 {
-		return m.deletions(a, int(cx))
+		return m.edits(a, Delete, int(cx), int(cy))
 	}
-	return m.insertions(b, int(cx), int(cy))
+	return m.edits(b, Insert, int(cx), int(cy))
 }
 
 // SES returns the shortest edit script.
@@ -223,17 +238,14 @@ func (m *Myers) SES() EditScript {
 		m.slicer = func(v interface{}, from, to int32) interface{} {
 			return v.([]int64)[from:to]
 		}
-		m.deletions = func(v interface{}, cx int) []Edit {
+		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
 			var edits []Edit
 			for i, val := range v.([]int64) {
-				edits = append(edits, Edit{Delete, cx + i, 0, val})
-			}
-			return edits
-		}
-		m.insertions = func(v interface{}, cx, cy int) []Edit {
-			var edits []Edit
-			for i, val := range v.([]int64) {
-				edits = append(edits, Edit{Insert, floor0(int(cx) - 1), int(cy) + i, val})
+				atx, aty := cx+i, cy+i
+				if op == Insert {
+					atx = floor0(cx - 1)
+				}
+				edits = append(edits, Edit{op, atx, aty, val})
 			}
 			return edits
 		}
@@ -241,17 +253,14 @@ func (m *Myers) SES() EditScript {
 		m.slicer = func(v interface{}, from, to int32) interface{} {
 			return v.([]int32)[from:to]
 		}
-		m.deletions = func(v interface{}, cx int) []Edit {
+		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
 			var edits []Edit
 			for i, val := range v.([]int32) {
-				edits = append(edits, Edit{Delete, cx + i, 0, val})
-			}
-			return edits
-		}
-		m.insertions = func(v interface{}, cx, cy int) []Edit {
-			var edits []Edit
-			for i, val := range v.([]int32) {
-				edits = append(edits, Edit{Insert, floor0(int(cx) - 1), int(cy) + i, val})
+				atx, aty := cx+i, cy+i
+				if op == Insert {
+					atx = floor0(cx - 1)
+				}
+				edits = append(edits, Edit{op, atx, aty, val})
 			}
 			return edits
 		}
@@ -259,22 +268,19 @@ func (m *Myers) SES() EditScript {
 		m.slicer = func(v interface{}, from, to int32) interface{} {
 			return v.([]uint8)[from:to]
 		}
-		m.deletions = func(v interface{}, cx int) []Edit {
+		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
 			var edits []Edit
 			for i, val := range v.([]uint8) {
-				edits = append(edits, Edit{Delete, cx + i, 0, val})
-			}
-			return edits
-		}
-		m.insertions = func(v interface{}, cx, cy int) []Edit {
-			var edits []Edit
-			for i, val := range v.([]uint8) {
-				edits = append(edits, Edit{Insert, floor0(int(cx) - 1), int(cy) + i, val})
+				atx, aty := cx+i, cy+i
+				if op == Insert {
+					atx = floor0(cx - 1)
+				}
+				edits = append(edits, Edit{op, atx, aty, val})
 			}
 			return edits
 		}
 	default:
 		panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
 	}
-	return m.ses(m.a, m.b, int32(m.na), int32(m.nb), 0, 0)
+	return m.ses(0, m.a, m.b, int32(m.na), int32(m.nb), 0, 0)
 }

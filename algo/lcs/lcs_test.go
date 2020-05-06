@@ -2,6 +2,7 @@ package lcs_test
 
 import (
 	"bytes"
+	"fmt"
 	"hash/fnv"
 	"reflect"
 	"sort"
@@ -50,6 +51,36 @@ func all8(lcs [][]uint8) []string {
 	}
 	sort.Strings(str)
 	return str
+}
+
+func lcsFromEdits(typ interface{}, script lcs.EditScript) interface{} {
+	switch typ.(type) {
+	case int64:
+		r := []int64{}
+		for _, op := range script {
+			if op.Op == lcs.Identical {
+				r = append(r, op.Val.(int64))
+			}
+		}
+		return r
+	case int32:
+		r := []int32{}
+		for _, op := range script {
+			if op.Op == lcs.Identical {
+				r = append(r, op.Val.(int32))
+			}
+		}
+		return r
+	case uint8:
+		r := []uint8{}
+		for _, op := range script {
+			if op.Op == lcs.Identical {
+				r = append(r, op.Val.(uint8))
+			}
+		}
+		return r
+	}
+	panic(fmt.Sprintf("unsupported type %T", typ))
 }
 
 func validateInsertions(t *testing.T, i int, edits lcs.EditScript, b interface{}) {
@@ -124,6 +155,7 @@ func TestLCS(t *testing.T) {
 		// rune and byte example where the results are identical.
 		{"日本語", "日本de語", 2, l("日本語")},
 	} {
+
 		a, b := u32.Decode([]byte(tc.a)), u32.Decode([]byte(tc.b))
 		myers := lcs.NewMyers(a, b)
 		lcs32 := myers.LCS().([]int32)
@@ -133,6 +165,9 @@ func TestLCS(t *testing.T) {
 
 		// test edit string by recreating 'b' from 'a'.
 		edit := myers.SES()
+		if got, want := lcsFromEdits(int32(0), edit).([]int32), lcs32; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %v, want %v", i, string(got), string(want))
+		}
 		validateInsertions(t, i, edit, b)
 		if got, want := string(edit.Apply(a).([]int32)), string(b.([]int32)); got != want {
 			t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a.([]int32)), string(b.([]int32)), edit.String())
@@ -149,6 +184,9 @@ func TestLCS(t *testing.T) {
 
 		// test edit string by recreating 'b' from 'a'.
 		edit = dp.SES()
+		if got, want := lcsFromEdits(int32(0), edit).([]int32), lcs32; !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %v, want %v", i, string(got), string(want))
+		}
 		validateInsertions(t, i, edit, b)
 		if got, want := string(edit.Apply(a).([]int32)), string(b.([]int32)); got != want {
 			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]int32)), edit.String())
@@ -239,9 +277,8 @@ world
 	edits := myers.SES()
 	validateInsertions(t, 0, edits, b)
 
-	replay := lcs.ReplayScript(len(a.([]int64)), edits)
 	var reconstructed string
-	for _, op := range replay {
+	for _, op := range edits {
 		switch op.Op {
 		case lcs.Identical:
 			reconstructed += lines[uint64(a.([]int64)[op.A])] + "\n"
@@ -254,7 +291,7 @@ world
 	}
 
 	out := &strings.Builder{}
-	lcs.PrettyVertical(out, a, replay)
+	lcs.PrettyVertical(out, a, edits)
 	if got, want := out.String(), `                     0
 -  6864772235558415538
   -8997218578518345818
