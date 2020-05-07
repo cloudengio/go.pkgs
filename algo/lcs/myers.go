@@ -35,11 +35,73 @@ func NewMyers(a, b interface{}) *Myers {
 // http://simplygenius.net/Article/DiffTutorial1
 // https://blog.robertelder.org/diff-algorithm/
 
-func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
-	max := na + nb // max # edits (delete all a, insert all of b)
+func forwardSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int32, offset int32) (nd, mx, my, x, y int32, ok bool) {
 	delta := na - nb
 	odd := delta%2 != 0
-	even := !odd
+	for k := -d; k <= d; k += 2 {
+		// Edge cases are:
+		// k == -d    - move down
+		// k == d * 2 - move right
+		// Normal case:
+		// move down or right depending on how far the move would be.
+		if k == -d || k != d && forward[offset+k-1] < forward[offset+k+1] {
+			x = forward[offset+k+1]
+		} else {
+			x = forward[offset+k-1] + 1
+		}
+		y = x - k
+		mx, my = x, y
+		for x < na && y < nb && cmp(int(x), int(y)) {
+			x++
+			y++
+		}
+		forward[offset+k] = x
+		// Can this snake potentially overlap with one of the reverse ones?
+		// Going forward only odd paths can be the longest ones.
+		if odd && (-(k - delta)) >= -(d-1) && (-(k - delta)) <= (d-1) {
+			// Doe this snake overlap with one of the reverse ones? If so,
+			// the last snake is the longest one.
+			if forward[offset+k]+reverse[offset-(k-delta)] >= na {
+				return 2*d - 1, mx, my, x, y, true
+			}
+		}
+	}
+	return 0, 0, 0, 0, 0, false
+}
+
+func reverseSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int32, offset int32) (nd, mx, my, x, y int32, ok bool) {
+	delta := na - nb
+	even := delta%2 == 0
+	for k := -d; k <= d; k += 2 {
+		// Edge cases as per forward search, but looking at the reverse
+		// stored values.
+		if k == -d || k != d && reverse[offset+k-1] < reverse[offset+k+1] {
+			x = reverse[offset+k+1]
+		} else {
+			x = reverse[offset+k-1] + 1
+		}
+		y = x - k
+		mx, my = x, y
+		for x < na && y < nb && cmp(int(na-x-1), int(nb-y-1)) {
+			x++
+			y++
+		}
+		reverse[offset+k] = x
+		// Can this snake potentially overlap with one of the forward ones?
+		// Going backward only even paths can be the longest ones.
+		if even && (-(k - delta)) >= -d && (-(k - delta)) <= d {
+			// Doe this snake overlap with one of the forward ones? If so,
+			// the last snake is the longest one.
+			if reverse[offset+k]+forward[offset-(k-delta)] >= na {
+				return 2 * d, na - x, nb - y, na - mx, nb - my, true
+			}
+		}
+	}
+	return 0, 0, 0, 0, 0, false
+}
+
+func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
+	max := na + nb // max # edits (delete all a, insert all of b)
 
 	// forward and reverse are accessed using k which is in the
 	// range -d .. +d, hence offset must be added to k.
@@ -53,63 +115,13 @@ func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 		halfway++
 	}
 	for d := int32(0); d <= halfway; d++ {
-		var x, y, mx, my int32
-		// Forward search.
-		for k := -d; k <= d; k += 2 {
-			// Edge cases are:
-			// k == -d    - move down
-			// k == d * 2 - move right
-			// Normal case:
-			// move down or right depending on how far the move would be.
-			if k == -d || k != d && forward[offset+k-1] < forward[offset+k+1] {
-				x = forward[offset+k+1]
-			} else {
-				x = forward[offset+k-1] + 1
-			}
-			y = x - k
-			mx, my = x, y
-			for x < na && y < nb && cmp(int(x), int(y)) {
-				x++
-				y++
-			}
-			forward[offset+k] = x
-			// Can this snake potentially overlap with one of the reverse ones?
-			// Going forward only odd paths can be the longest ones.
-			if odd && (-(k - delta)) >= -(d-1) && (-(k - delta)) <= (d-1) {
-				// Doe this snake overlap with one of the reverse ones? If so,
-				// the last snake is the longest one.
-				if forward[offset+k]+reverse[offset-(k-delta)] >= na {
-					return 2*d - 1, mx, my, x, y
-				}
-			}
+		if nd, mx, my, x, y, ok := forwardSearch(cmp, na, nb, d, forward, reverse, offset); ok {
+			return nd, mx, my, x, y
+		}
+		if nd, mx, my, x, y, ok := reverseSearch(cmp, na, nb, d, forward, reverse, offset); ok {
+			return nd, mx, my, x, y
 		}
 
-		// Reverse search.
-		for k := -d; k <= d; k += 2 {
-			// Edge cases as per forward search, but looking at the reverse
-			// stored values.
-			if k == -d || k != d && reverse[offset+k-1] < reverse[offset+k+1] {
-				x = reverse[offset+k+1]
-			} else {
-				x = reverse[offset+k-1] + 1
-			}
-			y = x - k
-			mx, my = x, y
-			for x < na && y < nb && cmp(int(na-x-1), int(nb-y-1)) {
-				x++
-				y++
-			}
-			reverse[offset+k] = x
-			// Can this snake potentially overlap with one of the forward ones?
-			// Going backward only even paths can be the longest ones.
-			if even && (-(k - delta)) >= -d && (-(k - delta)) <= d {
-				// Doe this snake overlap with one of the forward ones? If so,
-				// the last snake is the longest one.
-				if reverse[offset+k]+forward[offset-(k-delta)] >= na {
-					return 2 * d, na - x, nb - y, na - mx, nb - my
-				}
-			}
-		}
 	}
 	panic("unreachable")
 }
