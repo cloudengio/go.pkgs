@@ -4,11 +4,11 @@ import (
 	"fmt"
 )
 
-// DP represents a new dynamic programming based implementation for finding
+// DP represents a dynamic programming based implementation for finding
 // the longest common subsequence and shortest edit script (LCS/SES) for
 // transforming A to B.
 // See https://en.wikipedia.org/wiki/Longest_common_subsequence_problem.
-// This implementaion can return all LCS and SES rather than just the first
+// This implementation can return all LCS and SES rather than just the first
 // one found. If a single LCS or SES is sufficient then the Myer's algorithm
 // implementation is lilkey a better choice.
 type DP struct {

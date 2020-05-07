@@ -10,13 +10,8 @@ import (
 type Myers struct {
 	a, b   interface{}
 	na, nb int
-	cmp    comparator
 	slicer func(v interface{}, from, to int32) interface{}
-
-	deletions  func(v interface{}, cx int) []Edit
-	insertions func(v interface{}, cx, cy int) []Edit
-
-	edits func(v interface{}, op EditOp, cx, cy int) []Edit
+	edits  func(v interface{}, op EditOp, cx, cy int) []Edit
 }
 
 // NewMyers returns a new instance of Myers. The implementation supports slices
@@ -42,8 +37,7 @@ func NewMyers(a, b interface{}) *Myers {
 
 func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 	max := na + nb // max # edits (delete all a, insert all of b)
-	delta := int32(na - nb)
-
+	delta := na - nb
 	odd := delta%2 != 0
 	even := !odd
 
@@ -56,7 +50,7 @@ func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 	// Only need to search for D halfway through the table.
 	halfway := max / 2
 	if max%2 != 0 {
-		halfway += 1
+		halfway++
 	}
 	for d := int32(0); d <= halfway; d++ {
 		var x, y, mx, my int32
@@ -84,7 +78,7 @@ func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 			if odd && (-(k - delta)) >= -(d-1) && (-(k - delta)) <= (d-1) {
 				// Doe this snake overlap with one of the reverse ones? If so,
 				// the last snake is the longest one.
-				if forward[offset+k]+reverse[offset-(k-delta)] >= int32(na) {
+				if forward[offset+k]+reverse[offset-(k-delta)] >= na {
 					return 2*d - 1, mx, my, x, y
 				}
 			}
@@ -118,14 +112,6 @@ func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 		}
 	}
 	panic("unreachable")
-}
-
-func idxSlice(sa, na int32) []int {
-	idx := make([]int, na)
-	for i := range idx {
-		idx[i] = int(sa) + i
-	}
-	return idx
 }
 
 func myersLCS64(a, b []int64) []int64 {

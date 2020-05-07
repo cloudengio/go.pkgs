@@ -1,4 +1,4 @@
-// Package lcs provides implementations of alogorithms to find the
+// Package lcs provides implementations of algorithms to find the
 // longest common subsequence/shortest edit script (LCS/SES) suitable for
 // use with unicode/utf8 and other alphabets.
 package lcs
@@ -68,17 +68,6 @@ func accessorFor(a interface{}) accessor {
 		return func(i int) interface{} {
 			return ta[i]
 		}
-	default:
-		panic(fmt.Sprintf("unsupported type: %T", a))
-	}
-}
-
-func fmtFor(a interface{}) string {
-	switch a.(type) {
-	case []int64:
-		return "% 20d"
-	case []int32, []uint8:
-		return "%3c"
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", a))
 	}

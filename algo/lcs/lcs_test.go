@@ -105,6 +105,20 @@ func validateInsertions(t *testing.T, i int, edits lcs.EditScript, b interface{}
 	}
 }
 
+func decoders(t *testing.T) (i32, u8 codec.Decoder) {
+	i32, err := codec.NewDecoder(utf8.DecodeRune)
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
+	u8, err = codec.NewDecoder(func(input []byte) (byte, int) {
+		return input[0], 1
+	})
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
+	return
+}
+
 func TestLCS(t *testing.T) {
 	l := func(s ...string) []string {
 		if len(s) == 0 {
@@ -112,18 +126,7 @@ func TestLCS(t *testing.T) {
 		}
 		return s
 	}
-
-	u32, err := codec.NewDecoder(utf8.DecodeRune)
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
-
-	u8, err := codec.NewDecoder(func(input []byte) (byte, int) {
-		return input[0], 1
-	})
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
+	i32, u8 := decoders(t)
 
 	for i, tc := range []struct {
 		a, b string
@@ -132,9 +135,11 @@ func TestLCS(t *testing.T) {
 	}{
 		// Example from myer's 1986 paper.
 		{"ABCABBA", "CBABAC", 5, l("BABA", "CABA", "CBBA")},
+
 		// Wikipedia dynamic programming example.
 		{"AGCAT", "GAC", 4, l("AC", "GA", "GC")},
 		{"XMJYAUZ", "MZJAWXU", 4, l("MJAU")},
+
 		// Longer examples.
 		{"ABCADEFGH", "ABCIJKFGH", 6, l("ABCFGH")},
 		{"ABCDEF1234", "PQRST2UV4", 1, l("24")},
@@ -152,11 +157,11 @@ func TestLCS(t *testing.T) {
 		{"ABC", "ABXY", 1, l("AB")},
 		{"ABXY", "AB", 1, l("AB")},
 
-		// rune and byte example where the results are identical.
+		// Example where rune and byte results are identical.
 		{"日本語", "日本de語", 2, l("日本語")},
 	} {
 
-		a, b := u32.Decode([]byte(tc.a)), u32.Decode([]byte(tc.b))
+		a, b := i32.Decode([]byte(tc.a)), i32.Decode([]byte(tc.b))
 		myers := lcs.NewMyers(a, b)
 		lcs32 := myers.LCS().([]int32)
 		if got, want := string(lcs32), tc.all; !isOneOf(got, want) {
@@ -222,6 +227,10 @@ func TestLCS(t *testing.T) {
 		}
 	}
 
+}
+
+func TestUTF8(t *testing.T) {
+	i32, u8 := decoders(t)
 	// Test case for correct utf8 handling.
 	// a: 日本語
 	// b: 日本語 with the middle byte of the middle rune changed.
@@ -230,7 +239,7 @@ func TestLCS(t *testing.T) {
 	// trailing bytes.
 	ra := []byte{0xe6, 0x97, 0xa5, 0xe6, 0x9c, 0xac, 0xe8, 0xaa, 0x9e}
 	rb := []byte{0xe6, 0x97, 0xa5, 0xe6, 0x00, 0x00, 0xe8, 0xaa, 0x9e}
-	a, b := u32.Decode(ra), u32.Decode(rb)
+	a, b := i32.Decode(ra), i32.Decode(rb)
 	myers := lcs.NewMyers(a, b)
 	if got, want := string(myers.LCS().([]int32)), "日語"; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -239,6 +248,24 @@ func TestLCS(t *testing.T) {
 	myers = lcs.NewMyers(a, b)
 	if got, want := string(myers.LCS().([]byte)), "日\xe6語"; got != want {
 		t.Errorf("got %#v, want %x %v", got, want, want)
+	}
+
+	for i, tc := range []struct {
+		a, b   string
+		output string
+	}{
+		{"ABCABBA", "CBABAC", " CB AB AC\n-+|-||-|+\nA  C  B  \n"},
+		{"AGCAT", "GAC", " G A C\n-|-|-+\nA C T \n"},
+		{"XMJYAUZ", "MZJAWXU", " MZJ AWXU \n-|+|-|++|-\nX   Y    Z\n"},
+	} {
+		a, b := i32.Decode([]byte(tc.a)), i32.Decode([]byte(tc.b))
+		myers := lcs.NewMyers(a, b)
+		edit := myers.SES()
+		out := &strings.Builder{}
+		lcs.FormatHorizontal(out, a, edit)
+		if got, want := out.String(), tc.output; got != want {
+			t.Errorf("%v: got\n%v, want\n%v", i, got, want)
+		}
 	}
 }
 
@@ -291,7 +318,7 @@ world
 	}
 
 	out := &strings.Builder{}
-	lcs.PrettyVertical(out, a, edits)
+	lcs.FormatVertical(out, a, edits)
 	if got, want := out.String(), `                     0
 -  6864772235558415538
   -8997218578518345818
