@@ -20,7 +20,7 @@ func LineFNVHashDecoder(data []byte) (string, int64, int) {
 	}
 	idx := bytes.Index(data, []byte{'\n'})
 	if idx < 0 {
-		idx = len(data) - 1
+		idx = len(data)
 	}
 	h := fnv.New64a()
 	h.Write(data[:idx])
@@ -84,132 +84,96 @@ func lineRange(lines []int) string {
 func getEditsForGroup(edits lcs.EditScript) (group, script lcs.EditScript) {
 	last := 0
 	firstIns, firstDel := true, true
-	prevIns, prevDel := 0, 0
+	nextIns, nextDel := 0, 0
 	for i, edit := range edits {
 		switch edit.Op {
 		case lcs.Identical:
-			goto done
+			return group, edits[last+1:]
 		case lcs.Insert:
-			// multiple insertions
 			if firstIns {
-				prevIns = edit.A
+				nextIns = edit.A
 			}
-			if prevIns != edit.A {
-				last = i
+			if edit.A > nextIns {
 				goto done
 			}
+			nextIns = edit.A + 1
+			group = append(group, edit)
 			firstIns = false
 		case lcs.Delete:
 			if firstDel {
-				prevDel = edit.A
+				nextDel = edit.A
 			}
-			if prevDel != edit.A {
-				last = i
+			if edit.A > nextDel {
 				goto done
 			}
-			prevDel++
+			nextDel = edit.A + 1
 			firstDel = false
-		}
-
-	}
-done:
-	return edits[:last+1], edits[last+1:]
-}
-
-/*
-func getLinesForGroup(edits lcs.EditScript) (a, b []int) {
-	for edit := range edits {
-		switch edit.Op {
-		case lcs.Delete:
-			a = append(a, edit.A)
-		case lcs.Insert:
-			b = append(b, edit.B)
+			group = append(group, edit)
 		}
 		last = i
 	}
-	return a, b, edits[last+1:]
-}*/
+done:
+	return group, edits[last+1:]
+}
 
 type Group struct {
-	edits                 lcs.EditScript
-	insertions, deletions lcs.EditScript
-
+	edits                       lcs.EditScript
+	insertions, deletions       map[int][]lcs.Edit
 	insertedLines, deletedLines []int
-
-	//linesA, linesB []int
-	//textA, textB   string
-
-	//	deletions, insertions []int
-	//	decodedA, decodedB    []int32
+	insertedText, deletedText   string
 }
-
-/*
-func linemap(a []int) map[int]bool {
-	m := map[int]bool{}
-	for _, l := range a {
-		m[l] = true
-	}
-	return m
-}
-*/
 
 func (d *Diff) newGroup(edits lcs.EditScript) *Group {
-	ins, dels := []lcs.Edit{}, []lcs.Edit{}
-	for _, e := range edits {
-		switch e.Op {
+	insertions, deletions := map[int][]lcs.Edit{}, map[int][]lcs.Edit{}
+	insertedLines, deletedLines := []int{}, []int{}
+	for _, edit := range edits {
+		switch edit.Op {
 		case lcs.Insert:
-			ins = append(ins, e)
+			insertions[edit.A] = append(insertions[edit.A], edit)
+			insertedLines = append(insertedLines, edit.B)
 		case lcs.Delete:
-			dels = append(dels, e)
+			deletions[edit.A] = append(deletions[edit.A], edit)
+			deletedLines = append(deletedLines, edit.A)
 		}
 	}
 	return &Group{
-		insertions: ins,
-		deletions:  dels,
-		edits:      edits,
+		insertions:    insertions,
+		deletions:     deletions,
+		insertedLines: insertedLines,
+		deletedLines:  deletedLines,
+		edits:         edits,
+		insertedText:  text(d.linesB, insertedLines),
+		deletedText:   text(d.linesA, deletedLines),
 	}
-	/*
-		la, lb := linesFromScript(edits)
-		linesA: la,
-			linesB: lb,
-			textA:  text(d.linesA, la),
-			textB:  text(d.linesB, lb),
-		ma, mb := linemap(a), linemap(b)
-		deletions, insertions := []int{}, []int{}
-		for la := range ma {
-			deletions = append(deletions, la)
-		}
-		for lb := range mb {
-			insertions = append(insertions, lb)
-		}
-		textA := text(d.linesA, a)
-		textB := text(d.linesB, b)
-		//da, db := d.utf8Decoder.Decode([]byte(textA)), d.utf8Decoder.Decode([]byte(textB))
-		//decodedA:   da.([]int32),
-		//decodedB:   db.([]int32),
-		//edits:      lcs.NewMyers(da, db).SES(),
-		return &Group{
-			linesA:     a,
-			linesB:     b,
-			textA:      textA,
-			textB:      textB,
-			deletions:  deletions,
-			insertions: insertions,
-		}*/
 }
 
 func (g *Group) Summary() string {
-	/*	ins, dels := g.insertions, g.deletions
-		ni, nd := len(ins), len(dels)
-		switch {
-		case ni == nd:
-			return fmt.Sprintf("%sc%s", lineRange(dels), lineRange(ins))
-		case ni > 0:
-			return "a" + lineRange(ins)
-		case nd > 0:
-			return "d" + lineRange(dels)
-		}*/
-	return g.edits.String()
+	onlyKey := func(m map[int][]lcs.Edit) int {
+		for k := range m {
+			return k
+		}
+		panic("unreachable")
+	}
+	ins, dels := g.insertions, g.deletions
+	ni, nd := len(ins), len(dels)
+	switch {
+	case ni == 1 && nd == 0:
+		l := onlyKey(ins)
+		return fmt.Sprintf("%da%s", ins[l][0].A, lineRange(g.insertedLines))
+	case nd >= 1 && ni == 0:
+		l := g.deletedLines[0]
+		return fmt.Sprintf("%sd%v", lineRange(g.deletedLines), dels[l][0].B)
+	default:
+		return fmt.Sprintf("%sc%s", lineRange(g.deletedLines), lineRange(g.insertedLines))
+	}
+}
+
+func (g *Group) Inserted() string {
+	return g.insertedText
+}
+
+func (g *Group) Deleted() string {
+	return g.deletedText
 }
 
 type Diff struct {
@@ -232,6 +196,18 @@ func (d *Diff) Group(i int) *Group {
 }
 
 func DiffByLines(a, b []byte) *Diff {
+	return DiffByLinesUsing(a, b, Myers)
+}
+
+func Myers(a, b interface{}) lcs.EditScript {
+	return lcs.NewMyers(a, b).SES()
+}
+
+func DP(a, b interface{}) lcs.EditScript {
+	return lcs.NewDP(a, b).SES()
+}
+
+func DiffByLinesUsing(a, b []byte, engine func(a, b interface{}) lcs.EditScript) *Diff {
 	lda, ldb := NewLineDecoder(LineFNVHashDecoder), NewLineDecoder(LineFNVHashDecoder)
 	decA, err := codec.NewDecoder(lda.Decode)
 	if err != nil {
@@ -251,38 +227,16 @@ func DiffByLines(a, b []byte) *Diff {
 		linesB:      ldb.lines,
 	}
 
-	lineDiffs := lcs.NewMyers(da, db).SES()
+	lineDiffs := engine(da, db)
+	//	lcs.FormatVertical(os.Stdout, da, lineDiffs)
 	script := lineDiffs
 	for len(script) > 0 {
 		var edits lcs.EditScript
 		edits, script = getEditsForGroup(script)
+		if len(edits) == 0 {
+			continue
+		}
 		diff.groups = append(diff.groups, diff.newGroup(edits))
 	}
-
-	/*
-		for i, g := range diff.groups {
-			a, b := utf8Dec.Decode([]byte(g.textA)), utf8Dec.Decode([]byte(g.textB))
-			diff.groups[i].edits = lcs.NewMyers(a, b).SES()
-		}
-
-		//	lcs.PrettyVertical(os.Stdout, da, lineDiffs)
-		for _, g := range diff.groups {
-			//fmt.Printf("EDITS: %v\n", g.edits.String())
-			//fmt.Printf("EDITS: %v\n", g.edits[0])
-
-			//	lcs.FormatVertical(os.Stdout, g.decodedA, g.edits)
-			fmt.Printf("a%v\n", g.insertions)
-			fmt.Printf("d%v\n", g.deletions)
-			fmt.Printf("c%v\n", g.changes)
-			fmt.Printf("a%v\n", lineRange(g.insertions))
-			fmt.Printf("d%v\n", lineRange(g.deletions))
-			fmt.Printf("c%v\n", lineRange(g.changes))
-
-			fmt.Printf("%s\n", g.textA)
-			fmt.Printf("------------------\n")
-			fmt.Printf("%s\n", g.textB)
-			//lcs.PrettyHorizontal(os.Stdout, []int32(g.textA), g.edits)
-		}
-	*/
 	return diff
 }

@@ -138,3 +138,21 @@ func (es EditScript) Apply(a interface{}) interface{} {
 	}
 	panic(fmt.Sprintf("unsupported type %T\n", a))
 }
+
+// Reverse returns a new edit script that is the inverse of the one supplied.
+// That is, of the original script would transform A to B, then the results of
+// this function will transform B to A.
+func Reverse(es EditScript) EditScript {
+	rev := make([]Edit, len(es))
+	for i, e := range es {
+		switch e.Op {
+		case Identical:
+			rev[i] = Edit{Op: Insert, A: e.B, B: e.A, Val: e.Val}
+		case Delete:
+			rev[i] = Edit{Op: Insert, A: e.B, B: e.A, Val: e.Val}
+		case Insert:
+			rev[i] = Edit{Op: Delete, A: e.B, B: e.A, Val: e.Val}
+		}
+	}
+	return rev
+}

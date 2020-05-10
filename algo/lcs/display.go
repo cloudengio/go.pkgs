@@ -86,8 +86,12 @@ func FormatHorizontal(out io.Writer, a interface{}, script EditScript) {
 	out.Write([]byte{'\n'})
 
 	pad := func(o string, i int) {
+		totalPadding := displaySizes[i] - len(o)
+		prePad := totalPadding / 2
+		postPad := totalPadding - prePad
+		out.Write([]byte(strings.Repeat(" ", prePad)))
 		out.Write([]byte(o))
-		out.Write([]byte(strings.Repeat(" ", displaySizes[i]-len(o))))
+		out.Write([]byte(strings.Repeat(" ", postPad)))
 	}
 
 	for i, op := range script {

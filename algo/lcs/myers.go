@@ -197,7 +197,6 @@ func (m *Myers) ses(idx int, a, b interface{}, na, nb, cx, cy int32) []Edit {
 	var ses []Edit
 	if na > 0 && nb > 0 {
 		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
-
 		if d > 1 || (x != u && y != v) {
 			ses = append(ses,
 				m.ses(idx+1, m.slicer(a, 0, x), m.slicer(b, 0, y), x, y, cx, cy)...)
@@ -212,14 +211,13 @@ func (m *Myers) ses(idx int, a, b interface{}, na, nb, cx, cy int32) []Edit {
 			// a is part of the LCS.
 			ses = append(ses, m.edits(m.slicer(a, 0, na), Identical, int(cx), int(cy))...)
 			return append(ses,
-				m.ses(idx+1, nil, m.slicer(b, na, nb), 0, nb-na, cx, cy+na)...)
+				m.ses(idx+1, nil, m.slicer(b, na, nb), 0, nb-na, cx+na, cy+na)...)
 		}
 		if na > nb {
 			// b is part of the LCS.
-
 			ses = append(ses, m.edits(m.slicer(b, 0, nb), Identical, int(cx), int(cy))...)
 			return append(ses,
-				m.ses(idx+1, m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy)...)
+				m.ses(idx+1, m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy+nb)...)
 		}
 		return ses
 	}
@@ -231,6 +229,13 @@ func (m *Myers) ses(idx int, a, b interface{}, na, nb, cx, cy int32) []Edit {
 
 // SES returns the shortest edit script.
 func (m *Myers) SES() EditScript {
+	createEdit := func(cx, cy, i int, op EditOp, val interface{}) Edit {
+		atx := cx + i
+		if op == Insert {
+			atx = cx
+		}
+		return Edit{op, atx, cy + i, val}
+	}
 	switch m.a.(type) {
 	case []int64:
 		m.slicer = func(v interface{}, from, to int32) interface{} {
@@ -239,11 +244,7 @@ func (m *Myers) SES() EditScript {
 		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
 			var edits []Edit
 			for i, val := range v.([]int64) {
-				atx, aty := cx+i, cy+i
-				if op == Insert {
-					atx = floor0(cx - 1)
-				}
-				edits = append(edits, Edit{op, atx, aty, val})
+				edits = append(edits, createEdit(cx, cy, i, op, val))
 			}
 			return edits
 		}
@@ -254,11 +255,7 @@ func (m *Myers) SES() EditScript {
 		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
 			var edits []Edit
 			for i, val := range v.([]int32) {
-				atx, aty := cx+i, cy+i
-				if op == Insert {
-					atx = floor0(cx - 1)
-				}
-				edits = append(edits, Edit{op, atx, aty, val})
+				edits = append(edits, createEdit(cx, cy, i, op, val))
 			}
 			return edits
 		}
@@ -269,11 +266,7 @@ func (m *Myers) SES() EditScript {
 		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
 			var edits []Edit
 			for i, val := range v.([]uint8) {
-				atx, aty := cx+i, cy+i
-				if op == Insert {
-					atx = floor0(cx - 1)
-				}
-				edits = append(edits, Edit{op, atx, aty, val})
+				edits = append(edits, createEdit(cx, cy, i, op, val))
 			}
 			return edits
 		}

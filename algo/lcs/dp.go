@@ -166,7 +166,7 @@ func (dp *DP) SES() EditScript {
 		return EditScript{}
 	}
 	dp.fill()
-	return EditScript(dp.diff(accessorFor(dp.b), dp.na, dp.nb))
+	return EditScript(dp.diff(accessorFor(dp.a), accessorFor(dp.b), dp.na, dp.nb))
 }
 
 func (dp *DP) fill() {
@@ -241,16 +241,16 @@ func floor0(x int) int {
 	return x
 }
 
-func (dp *DP) diff(b accessor, i, j int) []Edit {
+func (dp *DP) diff(a, b accessor, i, j int) []Edit {
 	dir := dp.directions[i][j]
 	if i > 0 && j > 0 && dir == diagonal {
-		return append(dp.diff(b, i-1, j-1), Edit{Identical, i - 1, j - 1, b(j - 1)})
+		return append(dp.diff(a, b, i-1, j-1), Edit{Identical, i - 1, j - 1, b(j - 1)})
 	}
 	if j > 0 && (i == 0 || dir == up || dir == upAndLeft) {
-		return append(dp.diff(b, i, j-1), Edit{Insert, floor0(i - 1), j - 1, b(j - 1)})
+		return append(dp.diff(a, b, i, j-1), Edit{Insert, i, j - 1, b(j - 1)})
 	}
 	if i > 0 && (j == 0 || dir == left) {
-		return append(dp.diff(b, i-1, j), Edit{Delete, i - 1, -1, 0})
+		return append(dp.diff(a, b, i-1, j), Edit{Delete, i - 1, j, a(i - 1)})
 	}
 	return nil
 }

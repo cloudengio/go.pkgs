@@ -119,6 +119,60 @@ func decoders(t *testing.T) (i32, u8 codec.Decoder) {
 	return
 }
 
+type implementation interface {
+	LCS() interface{}
+	SES() lcs.EditScript
+}
+
+func testutf8(t *testing.T, impl implementation, i int, a, b []int32, all []string) {
+	lcs32 := impl.LCS().([]int32)
+	if got, want := string(lcs32), all; !isOneOf(got, want) {
+		t.Errorf("%v: got %v is not one of %v", i, got, want)
+	}
+
+	edit := impl.SES()
+	if got, want := lcsFromEdits(int32(0), edit).([]int32), lcs32; !reflect.DeepEqual(got, want) {
+		t.Errorf("%v: got %v, want %v", i, string(got), string(want))
+	}
+
+	// test edit string by recreating 'b' from 'a'.
+	validateInsertions(t, i, edit, b)
+	if got, want := string(edit.Apply(a).([]int32)), string(b); got != want {
+		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a), string(b), edit.String())
+	}
+
+	// and 'a' from 'b'
+	reverse := lcs.Reverse(edit)
+	validateInsertions(t, i, reverse, a)
+	if got, want := string(reverse.Apply(b).([]int32)), string(a); got != want {
+		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(b), string(a), edit.String())
+	}
+}
+
+func testbyte(t *testing.T, impl implementation, i int, a, b []uint8, all []string) {
+	lcs32 := impl.LCS().([]uint8)
+	if got, want := string(lcs32), all; !isOneOf(got, want) {
+		t.Errorf("%v: got %v is not one of %v", i, got, want)
+	}
+
+	// test edit string by recreating 'b' from 'a'.
+	edit := impl.SES()
+	if got, want := lcsFromEdits(uint8(0), edit).([]uint8), lcs32; !reflect.DeepEqual(got, want) {
+		t.Errorf("%v: got %v, want %v", i, string(got), string(want))
+	}
+	validateInsertions(t, i, edit, b)
+	if got, want := string(edit.Apply(a).([]uint8)), string(b); got != want {
+		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a), string(b), edit.String())
+	}
+
+	// and 'a' from 'b'
+	reverse := lcs.Reverse(edit)
+	validateInsertions(t, i, reverse, a)
+	if got, want := string(reverse.Apply(b).([]uint8)), string(a); got != want {
+		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(b), string(a), edit.String())
+	}
+}
+
 func TestLCS(t *testing.T) {
 	l := func(s ...string) []string {
 		if len(s) == 0 {
@@ -130,101 +184,52 @@ func TestLCS(t *testing.T) {
 
 	for i, tc := range []struct {
 		a, b string
-		ses  int
-		all  []string
+
+		all []string
 	}{
 		// Example from myer's 1986 paper.
-		{"ABCABBA", "CBABAC", 5, l("BABA", "CABA", "CBBA")},
+		{"ABCABBA", "CBABAC", l("BABA", "CABA", "CBBA")},
 
 		// Wikipedia dynamic programming example.
-		{"AGCAT", "GAC", 4, l("AC", "GA", "GC")},
-		{"XMJYAUZ", "MZJAWXU", 4, l("MJAU")},
+		{"AGCAT", "GAC", l("AC", "GA", "GC")},
+		{"XMJYAUZ", "MZJAWXU", l("MJAU")},
 
 		// Longer examples.
-		{"ABCADEFGH", "ABCIJKFGH", 6, l("ABCFGH")},
-		{"ABCDEF1234", "PQRST2UV4", 1, l("24")},
+		{"ABCADEFGH", "ABCIJKFGH", l("ABCFGH")},
+		{"ABCDEF1234", "PQRST2UV4", l("24")},
+		{"SABCDE", "SC", l("SC")},
+		{"SABCDE", "SSC", l("SC")},
 
 		// More exhaustive cases.
-		{"", "", 0, l()},
-		{"", "B", 0, l()},
-		{"B", "", 0, l()},
-		{"A", "A", 0, l("A")},
-		{"AB", "AB", 0, l("AB")},
-		{"AB", "ABC", 1, l("AB")},
-		{"ABC", "AB", 1, l("AB")},
-		{"AC", "AXC", 1, l("AC")},
-		{"ABC", "ABX", 1, l("AB")},
-		{"ABC", "ABXY", 1, l("AB")},
-		{"ABXY", "AB", 1, l("AB")},
+		{"", "", l()},
+		{"", "B", l()},
+		{"B", "", l()},
+		{"A", "A", l("A")},
+		{"AB", "AB", l("AB")},
+		{"AB", "ABC", l("AB")},
+		{"ABC", "AB", l("AB")},
+		{"AC", "AXC", l("AC")},
+		{"ABC", "ABX", l("AB")},
+		{"ABC", "ABXY", l("AB")},
+		{"ABXY", "AB", l("AB")},
 
 		// Example where rune and byte results are identical.
-		{"日本語", "日本de語", 2, l("日本語")},
+		{"日本語", "日本de語", l("日本語")},
 	} {
-
 		a, b := i32.Decode([]byte(tc.a)), i32.Decode([]byte(tc.b))
 		myers := lcs.NewMyers(a, b)
-		lcs32 := myers.LCS().([]int32)
-		if got, want := string(lcs32), tc.all; !isOneOf(got, want) {
-			t.Errorf("%v: got %v is not one of %v", i, got, want)
-		}
-
-		// test edit string by recreating 'b' from 'a'.
-		edit := myers.SES()
-		if got, want := lcsFromEdits(int32(0), edit).([]int32), lcs32; !reflect.DeepEqual(got, want) {
-			t.Errorf("%v: got %v, want %v", i, string(got), string(want))
-		}
-		validateInsertions(t, i, edit, b)
-		if got, want := string(edit.Apply(a).([]int32)), string(b.([]int32)); got != want {
-			t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a.([]int32)), string(b.([]int32)), edit.String())
-		}
+		testutf8(t, myers, i, a.([]int32), b.([]int32), tc.all)
 
 		dp := lcs.NewDP(a, b)
-		lcs32 = dp.LCS().([]int32)
-		if got, want := string(lcs32), tc.all; !isOneOf(got, want) {
-			t.Errorf("%v: got %v is not one of %v", i, got, want)
-		}
-		if got, want := all32(dp.AllLCS().([][]int32)), tc.all; !reflect.DeepEqual(got, want) {
-			t.Errorf("%v: got %#v, want %#v", i, got, want)
-		}
-
-		// test edit string by recreating 'b' from 'a'.
-		edit = dp.SES()
-		if got, want := lcsFromEdits(int32(0), edit).([]int32), lcs32; !reflect.DeepEqual(got, want) {
-			t.Errorf("%v: got %v, want %v", i, string(got), string(want))
-		}
-		validateInsertions(t, i, edit, b)
-		if got, want := string(edit.Apply(a).([]int32)), string(b.([]int32)); got != want {
-			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]int32)), edit.String())
-		}
+		testutf8(t, dp, i, a.([]int32), b.([]int32), tc.all)
 
 		a, b = u8.Decode([]byte(tc.a)), u8.Decode([]byte(tc.b))
 		myers = lcs.NewMyers(a, b)
-		lcs8 := myers.LCS().([]uint8)
-		if got, want := string(lcs8), tc.all; !isOneOf(got, want) {
-			t.Errorf("%v: got %v is not one of %v", i, got, want)
-		}
-
-		edit = myers.SES()
-		validateInsertions(t, i, edit, b)
-		if got, want := string(edit.Apply(a).([]uint8)), string(b.([]uint8)); got != want {
-			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]uint8)), edit.String())
-		}
+		testbyte(t, myers, i, a.([]uint8), b.([]uint8), tc.all)
 
 		dp = lcs.NewDP(a, b)
-		lcs8 = dp.LCS().([]uint8)
-		if got, want := string(lcs8), tc.all; !isOneOf(got, want) {
-			t.Errorf("%v: got %v is not one of %v", i, got, want)
-		}
+		testbyte(t, dp, i, a.([]uint8), b.([]uint8), tc.all)
 
-		if got, want := all8(dp.AllLCS().([][]uint8)), tc.all; !reflect.DeepEqual(got, want) {
-			t.Errorf("%v: got %#v, want %#v", i, got, want)
-		}
-
-		edit = dp.SES()
-		validateInsertions(t, i, edit, b)
-		if got, want := string(edit.Apply(a).([]uint8)), string(b.([]uint8)); got != want {
-			t.Errorf("%v: got %v, want %v for %s -> %s", i, got, want, string(a.([]uint8)), edit.String())
-		}
 	}
 
 }

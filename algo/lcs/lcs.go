@@ -8,6 +8,11 @@ import (
 	"reflect"
 )
 
+type T interface {
+	LCS(a, b interface{}) interface{}
+	SES(a, b interface{}) interface{}
+}
+
 type comparator func(i, j int) bool
 type accessor func(i int) interface{}
 
