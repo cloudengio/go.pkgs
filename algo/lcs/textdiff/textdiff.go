@@ -53,7 +53,7 @@ func (ld *LineDecoder) Decode(data []byte) (int64, int) {
 	line, sum, n := LineFNVHashDecoder(data)
 	ld.lines = append(ld.lines, line)
 	ld.hashes = append(ld.hashes, uint64(sum))
-	return int64(sum), n
+	return sum, n
 }
 
 // NumLines returns the number of lines decoded.
@@ -239,7 +239,7 @@ func DiffByLinesUsing(a, b []byte, engine func(a, b interface{}) lcs.EditScript)
 		panic(err)
 	}
 	decB, _ := codec.NewDecoder(ldb.Decode)
-	da, db := decA.Decode([]byte(a)), decB.Decode([]byte(b))
+	da, db := decA.Decode(a), decB.Decode(b)
 
 	utf8Dec, err := codec.NewDecoder(utf8.DecodeRune)
 	if err != nil {

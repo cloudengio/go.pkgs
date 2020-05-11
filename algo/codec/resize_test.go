@@ -18,7 +18,7 @@ func TestResize(t *testing.T) {
 	}{
 		{make([]uint8, 10, 20), 100, 10, 20, true},
 		{make([]uint8, 10, 21), 100, 10, 10, false},
-		{make([]int32, 3, 3), 100, 3, 3, true},
+		{make([]int32, 3), 100, 3, 3, true},
 		{make([]int32, 3, 7), 100, 3, 3, false},
 		{make([]string, 3, 4), 10, 3, 3, false},
 		{make([]int64, 3, 4), 10, 3, 3, false},

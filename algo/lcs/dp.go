@@ -238,13 +238,6 @@ func (dp *DP) backtrackAll(i, j int) interface{} {
 	return paths
 }
 
-func floor0(x int) int {
-	if x < 0 {
-		return 0
-	}
-	return x
-}
-
 func (dp *DP) diff(a, b accessor, i, j int) []Edit {
 	dir := dp.directions[i][j]
 	if i > 0 && j > 0 && dir == diagonal {

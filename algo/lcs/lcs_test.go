@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -51,32 +50,6 @@ func isOneOf(got string, want []string) bool {
 		}
 	}
 	return false
-}
-
-func all32(lcs [][]int32) []string {
-	dedup := map[string]bool{}
-	for _, l := range lcs {
-		dedup[string(l)] = true
-	}
-	str := []string{}
-	for k := range dedup {
-		str = append(str, k)
-	}
-	sort.Strings(str)
-	return str
-}
-
-func all8(lcs [][]uint8) []string {
-	dedup := map[string]bool{}
-	for _, l := range lcs {
-		dedup[string(l)] = true
-	}
-	str := []string{}
-	for k := range dedup {
-		str = append(str, k)
-	}
-	sort.Strings(str)
-	return str
 }
 
 func lcsFromEdits(typ interface{}, script lcs.EditScript) interface{} {
