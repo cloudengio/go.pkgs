@@ -32,15 +32,67 @@ behaves like WithContext but allows both the context and cancel function to
 be supplied which is required for working with context.WithDeadline and
 context.WithTimeout.
 
+### Functions
+
+```go
+func WithCancel(cancel func()) *T
+```
+WithCancel returns a new T that will call the supplied cancel function once
+on either a first non-nil error being returned or when Wait is called.
+
+
+```go
+func WithConcurrency(g *T, n int) *T
+```
+WithConcurrency returns a new Group that will limit the number of goroutines
+to n. Note that the Go method will block when this limit is reached. A value
+of 0 for n implies no limit on the number of goroutines to use.
+
+
+```go
+func WithContext(ctx context.Context) (*T, context.Context)
+```
+WithContext returns a new Group that will call the cancel function derived
+from the supplied context once on either a first non-nil error being
+returned by a goroutine or when Wait is called.
+
+
+
+### Methods
+
+```go
+func (g *T) Go(f func() error)
+```
+Go runs the supplied function from a goroutine. If this group was created
+using WithLimit then Go will block until a goroutine is available.
+
+
+```go
+func (g *T) GoContext(ctx context.Context, f func() error)
+```
+GoContext is a drop-in alternative to the Go method that checks for
+ctx.Done() before calling g.Go. If the ctx has been canceled it will return
+immediately recoding the error and calling the internal stored cancel
+function.
+
+
+```go
+func (g *T) Wait() error
+```
+Wait waits for all goroutines to finish.
+
+
+
+
 
 
 ## Examples
-
 ### [ExampleT](https://pkg.go.dev/cloudeng.io/sync/errgroup?tab=doc#example-T)
 
 ### [ExampleT_parallel](https://pkg.go.dev/cloudeng.io/sync/errgroup?tab=doc#example-T_parallel)
 
 ### [ExampleT_pipeline](https://pkg.go.dev/cloudeng.io/sync/errgroup?tab=doc#example-T_pipeline)
+
 
 
 

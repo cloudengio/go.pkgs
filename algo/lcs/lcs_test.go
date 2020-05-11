@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package lcs_test
 
 import (
@@ -14,6 +18,28 @@ import (
 	"cloudeng.io/algo/lcs"
 	"cloudeng.io/errors"
 )
+
+func ExampleMyers() {
+	runeDecoder, _ := codec.NewDecoder(utf8.DecodeRune)
+	a, b := runeDecoder.Decode([]byte("ABCABBA")), runeDecoder.Decode([]byte("CBABAC"))
+	fmt.Printf("%s\n", string(lcs.NewMyers(a, b).LCS().([]int32)))
+	// Output:
+	// BABA
+}
+
+func ExampleDP() {
+	runeDecoder, _ := codec.NewDecoder(utf8.DecodeRune)
+	a, b := runeDecoder.Decode([]byte("AGCAT")), runeDecoder.Decode([]byte("GAC"))
+	all := lcs.NewDP(a, b).AllLCS().([][]int32)
+	for _, lcs := range all {
+		fmt.Printf("%s\n", string(lcs))
+	}
+	// Output:
+	// GA
+	// GA
+	// GC
+	// AC
+}
 
 func isOneOf(got string, want []string) bool {
 	if len(got) == 0 && len(want) == 0 {

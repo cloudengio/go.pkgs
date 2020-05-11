@@ -42,6 +42,27 @@ Description represents a structured description of a struct type based on
 struct tags. The Detail field may be supplied when constructing the
 description.
 
+### Functions
+
+```go
+func Describe(t interface{}, tag, detail string) (*Description, error)
+```
+Describe generates a Description for the supplied type based on its struct
+tags. Detail can be used to provide a top level of detail, such as the type
+name and a summary.
+
+
+
+### Methods
+
+```go
+func (d *Description) String() string
+```
+String returns a string representation of the description.
+
+
+
+
 ### Type Field
 ```go
 type Field struct {
@@ -57,6 +78,8 @@ type Field struct {
 ```
 Field represents the description of a field and any similarly tagged
 subfields.
+
+
 
 
 

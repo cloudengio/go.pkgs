@@ -1,5 +1,11 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package textdiff providers support for diff'ing text.
 package textdiff
+
+// TODO(cnicolaou): adjust the lcs algorithms to be identical to diff?
 
 import (
 	"bytes"
@@ -36,10 +42,13 @@ type LineDecoder struct {
 	fn     func([]byte) (string, int64, int)
 }
 
+// NewLineDecoder returns a new instance of LineDecoder.
 func NewLineDecoder(fn func(data []byte) (string, int64, int)) *LineDecoder {
 	return &LineDecoder{fn: fn}
 }
 
+// Decode can be used as the decode function when creating a new
+// decoder using cloudeng.io/algo.codec.NewDecoder.
 func (ld *LineDecoder) Decode(data []byte) (int64, int) {
 	line, sum, n := LineFNVHashDecoder(data)
 	ld.lines = append(ld.lines, line)
@@ -47,10 +56,12 @@ func (ld *LineDecoder) Decode(data []byte) (int64, int) {
 	return int64(sum), n
 }
 
+// NumLines returns the number of lines decoded.
 func (ld *LineDecoder) NumLines() int {
 	return len(ld.lines)
 }
 
+// Line returns the i'th line.
 func (ld *LineDecoder) Line(i int) (string, uint64) {
 	return ld.lines[i], ld.hashes[i]
 }
@@ -116,6 +127,8 @@ done:
 	return group, edits[last+1:]
 }
 
+// Group represents a single diff 'group', that is a set of insertions/deletions
+// that are pertain to the same set of lines.
 type Group struct {
 	edits                       lcs.EditScript
 	insertions, deletions       map[int][]lcs.Edit
@@ -147,6 +160,8 @@ func (d *Diff) newGroup(edits lcs.EditScript) *Group {
 	}
 }
 
+// Summary returns a summary message in the style of the unix/linux diff
+// command line tool, eg. 1,2a3.
 func (g *Group) Summary() string {
 	onlyKey := func(m map[int][]lcs.Edit) int {
 		for k := range m {
@@ -168,14 +183,17 @@ func (g *Group) Summary() string {
 	}
 }
 
+// Inserted returns the text to be inserted.
 func (g *Group) Inserted() string {
 	return g.insertedText
 }
 
+// Deleted returns the text would be deleted.
 func (g *Group) Deleted() string {
 	return g.deletedText
 }
 
+// Diff represents the ability to diff two slices.
 type Diff struct {
 	utf8Decoder    codec.Decoder
 	linesA, linesB []string
@@ -187,26 +205,33 @@ func (d *Diff) Same() bool {
 	return len(d.groups) == 0
 }
 
+// NumGroups returns the number of 'diff groups' created.
 func (d *Diff) NumGroups() int {
 	return len(d.groups)
 }
 
+// Group returns the i'th 'diff group'.
 func (d *Diff) Group(i int) *Group {
 	return d.groups[i]
 }
 
+// DiffByLines calls DiffByLinesUsing with the Myers function.
 func DiffByLines(a, b []byte) *Diff {
 	return DiffByLinesUsing(a, b, Myers)
 }
 
+// Myers uses cloudeng.io/algo/myers to generate diffs.
 func Myers(a, b interface{}) lcs.EditScript {
 	return lcs.NewMyers(a, b).SES()
 }
 
+// DP uses cloudeng.io/algo/myers to generate diffs.
 func DP(a, b interface{}) lcs.EditScript {
 	return lcs.NewDP(a, b).SES()
 }
 
+// DiffByLinesUsing diffs the supplied strings on a line-by-line basis using
+// the supplied function to generate the diffs.
 func DiffByLinesUsing(a, b []byte, engine func(a, b interface{}) lcs.EditScript) *Diff {
 	lda, ldb := NewLineDecoder(LineFNVHashDecoder), NewLineDecoder(LineFNVHashDecoder)
 	decA, err := codec.NewDecoder(lda.Decode)
@@ -228,7 +253,6 @@ func DiffByLinesUsing(a, b []byte, engine func(a, b interface{}) lcs.EditScript)
 	}
 
 	lineDiffs := engine(da, db)
-	//	lcs.FormatVertical(os.Stdout, da, lineDiffs)
 	script := lineDiffs
 	for len(script) > 0 {
 		var edits lcs.EditScript

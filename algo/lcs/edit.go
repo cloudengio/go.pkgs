@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package lcs
 
 import (
@@ -16,8 +20,8 @@ const (
 )
 
 // Edit represents a single edit.
-// For deletions, an edit specifies the index in the original (A)
-// slice to be deleted.
+// For deletions, an edit specifies the index in the original (A) slice to be
+// deleted.
 // For insertions, an edit specifies the new value and the index in the original
 // (A) slice that the new value is to be inserted at, but immediately after the
 // existing value if that value was not deleted. Insertions also provide the
@@ -122,7 +126,7 @@ func apply8(script EditScript, a []uint8) []uint8 {
 	return b
 }
 
-// Apply transforms the original slice to the new value by
+// Apply transforms the original slice to the new slice by
 // applying the SES.
 func (es EditScript) Apply(a interface{}) interface{} {
 	if len(es) == 0 {
