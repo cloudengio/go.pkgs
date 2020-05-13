@@ -110,11 +110,38 @@ type Commas struct {
 Commas represents the values for flags that contain comma separated values.
 The optional validate function is applied to each sub value separately.
 
+### Methods
+
+```go
+func (c *Commas) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (c *Commas) String() string
+```
+String inplements flag.Value.
+
+
+
+
 ### Type OneOf
 ```go
 type OneOf string
 ```
 OneOf represents a string that can take only one of a fixed set of values.
+
+### Methods
+
+```go
+func (ef OneOf) Validate(value string, values ...string) error
+```
+Validate ensures that the instance of OneOf has one of the specified set
+values.
+
+
+
 
 ### Type Repeating
 ```go
@@ -126,11 +153,33 @@ type Repeating struct {
 Repeating represents the values from multiple instances of the same command
 line argument.
 
+### Methods
+
+```go
+func (r *Repeating) Get() interface{}
+```
+Get inplements flag.Getter.
+
+
+```go
+func (r *Repeating) Set(v string) error
+```
+Set inplements flag.Value.
+
+
+```go
+func (r *Repeating) String() string
+```
+String inplements flag.Value.
+
+
+
+
 
 
 ## Examples
-
 ### [ExampleRegisterFlagsInStruct](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-RegisterFlagsInStruct)
+
 
 
 

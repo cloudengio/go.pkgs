@@ -122,10 +122,62 @@ M represents multiple errors. It is thread safe. Typical usage is:
     ...
     return errs.Err()
 
+### Methods
+
+```go
+func (m *M) Append(errs ...error)
+```
+Append appends the specified errors excluding nil values.
+
+
+```go
+func (m *M) As(target interface{}) bool
+```
+As supports errors.As.
+
+
+```go
+func (m *M) Clone() *M
+```
+Clone returns a new errors.M that contains the same errors as itself.
+
+
+```go
+func (m *M) Err() error
+```
+Err returns nil if m contains no errors, or itself otherwise.
+
+
+```go
+func (m *M) Error() string
+```
+Error implements error.error
+
+
+```go
+func (m *M) Format(f fmt.State, c rune)
+```
+Format implements fmt.Formatter.Format.
+
+
+```go
+func (m *M) Is(target error) bool
+```
+Is supports errors.Is.
+
+
+```go
+func (m *M) Unwrap() error
+```
+Unwrap implements errors.Unwrap. It returns the first stored error and then
+removes that error.
+
+
+
+
 
 
 ## Examples
-
 ### [ExampleCaller](https://pkg.go.dev/cloudeng.io/errors?tab=doc#example-Caller)
 
 ### [ExampleWithCaller](https://pkg.go.dev/cloudeng.io/errors?tab=doc#example-WithCaller)
@@ -133,6 +185,7 @@ M represents multiple errors. It is thread safe. Typical usage is:
 ### [ExampleM](https://pkg.go.dev/cloudeng.io/errors?tab=doc#example-M)
 
 ### [ExampleM_caller](https://pkg.go.dev/cloudeng.io/errors?tab=doc#example-M_caller)
+
 
 
 
