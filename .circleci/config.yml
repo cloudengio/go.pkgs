@@ -1,19 +1,45 @@
-version: 2
 jobs:
-  build:
+  test:
     docker:
       - image: circleci/golang:1.14
     steps:
       - checkout
       - run:
-          name: build
+          name: test
           command: |
-            set -eux -o pipefail 
-            for dir in $(find * -type d -maxdepth 0); do
-              here="$(pwd)"
-              cd "${dir}"
-              echo $dir
-              go get -v -t -d ./...
-              go test -v ./...
-              cd "${here}"
+            for dir in $(find * -maxdepth 0 -type d); do
+              pushd "${dir}"
+              go get -t -d ./...
+              go test -failfast --covermode=atomic -race ./...
+              popd
             done
+
+  lint:
+    docker:
+      - image: circleci/golang:1.14
+    steps:
+      - checkout
+      - run:
+          name: downloads
+          command: |
+            cd errors
+            go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.27.0
+            go get github.com/matthewloring/validjson/cmd/validjson
+            go install -x github.com/golangci/golangci-lint/cmd/golangci-lint
+            go install -x github.com/matthewloring/validjson/cmd/validjson
+      - run:
+          name: lint
+          command: |
+            for dir in $(find * -maxdepth 0 -type d ); do
+              pushd "${dir}"
+              golangci-lint run ./...
+              validjson ./...
+              popd
+            done
+
+version: 2.1
+workflows:
+  main:
+    jobs:
+      - test
+      - lint
