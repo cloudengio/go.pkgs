@@ -7,6 +7,7 @@ package flags_test
 import (
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -24,6 +25,7 @@ func ExampleRegisterFlagsInStruct() {
 		A int    `flag:"int-flag,-1,intVar flag"`
 		B string `flag:"string-flag,'some,value,with,a,comma',stringVar flag"`
 		O int
+		H string `flag:"config,$HOME/config,config file in home directotyr"`
 	}{
 		O: 23,
 	}
@@ -37,6 +39,9 @@ func ExampleRegisterFlagsInStruct() {
 	flagSet.Parse([]string{"--int-flag=42"})
 	fmt.Println(eg.A)
 	fmt.Println(eg.B)
+	if got, want := eg.H, filepath.Join(os.Getenv("HOME"), "config"); got != want {
+		fmt.Printf("got %v, want %v", got, want)
+	}
 	// Output:
 	// -1
 	// some,value,with,a,comma
@@ -289,6 +294,42 @@ func TestRegister(t *testing.T) {
 	assert(s1.HNQ, "42")
 	assert(s1.V, myFlagVar(42))
 	assert(s1.X, myFlagVar(12))
+
+	os.Setenv("ENV_INT_TESTING", "0")
+	// Test shell variable expansion and functions.
+	s2 := struct {
+		A string `cmdline:"configA,$HOME/.config,config flag"`
+		B string `cmdline:"configB,$HOME/.config,config flag"`
+		C string `cmdline:"configC,$HOME/.config,config flag"`
+		D int    `cmdline:"exitCode,$ENV_INT_TESTING,an integer environment variable"`
+	}{}
+	values = map[string]interface{}{
+		"configB": "something-else",
+	}
+	usageDefaults = map[string]string{
+		"configC": "override",
+	}
+
+	expectedUsage = []string{
+		`cmdline:"configA,$HOME/.config,config flag"`,
+		`cmdline:"configB,something-else,config flag"`,
+		`cmdline:"configC,override,config flag"`,
+		`cmdline:"exitCode,$ENV_INT_TESTING,an integer environment variable"`,
+	}
+	sort.Strings(expectedUsage)
+
+	fs = &flag.FlagSet{}
+	err = flags.RegisterFlagsInStruct(fs, "cmdline", &s2, values, usageDefaults)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	if got, want := allFlags(fs), strings.Join(expectedUsage, "\n"); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	assert(strings.Contains(s2.A, "$HOME"), false)
+	assert(s2.B, "something-else")
+	assert(strings.Contains(s2.C, "$HOME"), false)
+	assert(s2.D >= 0, true)
 
 }
 
