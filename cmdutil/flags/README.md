@@ -59,6 +59,9 @@ default value for the flag and <usage> the detailed description for the
 flag. <default-value> may be left empty, but <name> and <usage> must be
 supplied. All fields can be quoted if they need to contain a comma.
 
+Default values may contain shell variables as per os.ExpandEnv. So
+$HOME/.configdir may be used for example.
+
 ### Func RegisterFlagsInStruct
 ```go
 func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
