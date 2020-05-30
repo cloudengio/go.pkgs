@@ -13,7 +13,7 @@ import (
 	"cloudeng.io/sync/ctxsync"
 )
 
-func ExampleWaitGrouo() {
+func ExampleWaitGroup() {
 	var wg ctxsync.WaitGroup
 	wg.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
