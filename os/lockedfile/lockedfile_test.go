@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cloudeng.io/os/lockedfile"
+	"cloudeng.io/os/lockedfile/internal/testenv"
 )
 
 func mustTempDir(t *testing.T) (dir string, remove func()) {
@@ -188,7 +189,7 @@ func TestSpuriousEDEADLK(t *testing.T) {
 	// 	P.2 unblocks and locks file B.
 	// 	P.2 unlocks file B.
 
-	MustHaveExec(t)
+	testenv.MustHaveExec(t)
 
 	dirVar := t.Name() + "DIR"
 

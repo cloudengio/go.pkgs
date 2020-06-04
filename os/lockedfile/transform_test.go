@@ -28,7 +28,7 @@ func roundDownToPowerOf2(x int) int {
 	}
 	bit := 1
 	for x != bit {
-		x = x &^ bit
+		x &^= bit
 		bit <<= 1
 	}
 	return x
