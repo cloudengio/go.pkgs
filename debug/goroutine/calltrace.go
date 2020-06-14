@@ -7,16 +7,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 )
+
+var goroutineID = int64(0)
 
 // CallTrace represents a goroutine aware call trace where each record
 // in the trace records the location it is called from. The trace can span
 // goroutines via its Go method.
-
-// records representing the execution of a given goroutine, each of which
-// may be branch into multiple goroutines via the
 type CallTrace struct {
 	next, prev, last *CallTrace
+	id               int64
 	callers          []uintptr
 	annotation       string
 	parent           *CallTrace
@@ -29,6 +30,10 @@ var MaxCallers = 32
 // Record logs the current call site in the trace.
 func (ct *CallTrace) Record(annotation string) {
 	ct.add(annotation)
+}
+
+func (ct *CallTrace) ID() int64 {
+	return ct.id
 }
 
 // Go logs the current call site and returns a new CallTrace, that is
@@ -53,9 +58,14 @@ func (ct *CallTrace) add(annotation string) {
 	if ct.callers == nil {
 		ct.callers = pcs
 		ct.annotation = annotation
+		ct.id = atomic.AddInt64(&goroutineID, 1)
 		return
 	}
-	nct := &CallTrace{callers: pcs, annotation: annotation}
+	nct := &CallTrace{
+		callers:    pcs,
+		annotation: annotation,
+		id:         ct.id,
+	}
 	if ct.next == nil {
 		ct.next = nct
 	}
@@ -90,7 +100,7 @@ func (ct *CallTrace) string(indent int, prev []runtime.Frame, out *strings.Build
 			if detailed {
 				out.WriteString("\n")
 			}
-			fmt.Fprintf(out, "%s%s\n", spaces, cur.annotation)
+			fmt.Fprintf(out, "%s%s (goroutine: %d)\n", spaces, cur.annotation, cur.id)
 		}
 		if detailed {
 			printFrames(spaces+"  ", displayFrames, out)
