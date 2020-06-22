@@ -4,166 +4,75 @@ package goroutine
 
 import (
 	"fmt"
-	"path/filepath"
-	"runtime"
 	"strings"
-	"sync/atomic"
 )
-
-var goroutineID = int64(0)
 
 // CallTrace represents a goroutine aware call trace where each record
 // in the trace records the location it is called from. The trace can span
 // goroutines via its Go method.
+// TODO: explain trace structure, parent and trace IDs, prefix removal etc.
+// TODO: figure out a more flexible display/output option.
 type CallTrace struct {
-	next, prev, last *CallTrace
-	id               int64
-	callers          []uintptr
-	annotation       string
-	parent           *CallTrace
-	children         []*CallTrace
+	trace
 }
 
-// MaxCallers represents the maximum number of PCs that can be recorded.
-var MaxCallers = 32
-
-// Record logs the current call site in the trace.
-func (ct *CallTrace) Record(annotation string) {
-	ct.add(annotation)
-}
-
+// ID returns the id of this calltrace. All traces are allocated a unique
+// id on first use, otherwise their id is zero.
 func (ct *CallTrace) ID() int64 {
 	return ct.id
 }
 
-// Go logs the current call site and returns a new CallTrace, that is
-// a child of the existing one, to be used in a goroutine started
-// from the current one.
-func (ct *CallTrace) Go(annotation string) *CallTrace {
-	ct.add(annotation)
-	nct := &CallTrace{parent: ct}
-	nct.add(annotation)
-	last := ct
-	if ct.last != nil {
-		last = ct.last
-	}
-	last.children = append(last.children, nct)
-	return nct
+// ParentID returns the parent id of this calltrace, that is the id that is
+// allocated to the first CallTrace record in this call trace hierarchy.
+func (ct *CallTrace) ParentID() int64 {
+	return ct.parentID
 }
 
-func (ct *CallTrace) add(annotation string) {
-	pcs := make([]uintptr, MaxCallers)
-	n := runtime.Callers(3, pcs)
-	pcs = pcs[:n]
-	if ct.callers == nil {
-		ct.callers = pcs
-		ct.annotation = annotation
-		ct.id = atomic.AddInt64(&goroutineID, 1)
-		return
-	}
-	nct := &CallTrace{
-		callers:    pcs,
-		annotation: annotation,
-		id:         ct.id,
-	}
-	if ct.next == nil {
-		ct.next = nct
-	}
-	nct.prev = nct.last
-	if ct.last != nil {
-		ct.last.next = nct
-	}
-	ct.last = nct
+// Logf logs the current call site and message. Skip is the number of callers
+// to skip, as per runtime.Callers.
+func (ct *CallTrace) Logf(skip int, format string, args ...interface{}) {
+	record := newRecord(skip + 2)
+	record.payload = fmt.Sprintf(format, args...)
+	appendRecord(&ct.trace, record)
+}
+
+// GoLogf logs the current call site and returns a new CallTrace, that is
+// a child of the existing one, to be used in a goroutine started from the
+// current one. Skip is the number of callers to skip, as per runtime.Callers.
+func (ct *CallTrace) GoLogf(skip int, format string, args ...interface{}) *CallTrace {
+	record := newRecord(skip + 2)
+	record.payload = fmt.Sprintf(format, args...)
+	nct := &CallTrace{}
+	appendGoroutineTrace(&ct.trace, &nct.trace, record)
+	return nct
 }
 
 func (ct *CallTrace) String() string {
 	out := &strings.Builder{}
-	ct.string(0, nil, out, false)
+	ct.string(out, false)
 	return out.String()
 }
 
-func (ct *CallTrace) DebugString() string {
+func (ct *CallTrace) Dump() string {
 	out := &strings.Builder{}
-	ct.string(0, nil, out, true)
+	fmt.Fprintf(out, "call trace % 8d : begin ----------------------\n", ct.id)
+	ct.string(out, true)
+	fmt.Fprintf(out, "call trace % 8d : end   ----------------------\n", ct.id)
 	return out.String()
 }
 
-func (ct *CallTrace) string(indent int, prev []runtime.Frame, out *strings.Builder, detailed bool) {
-	spaces := strings.Repeat(" ", indent)
-	cur := ct
-	for {
-		frames := framesFromPCs(cur.callers)
-		reverseFrames(frames)
-		displayFrames := trimPrefix(frames, prev)
-		prev = frames
-		if cur.parent == nil {
-			if detailed {
-				out.WriteString("\n")
-			}
-			fmt.Fprintf(out, "%s%s (goroutine: %d)\n", spaces, cur.annotation, cur.id)
-		}
+func (ct *CallTrace) string(out *strings.Builder, detailed bool) {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	walk(&ct.trace, 0, nil, func(level int, wr *walkRecord) {
+		spaces := strings.Repeat(" ", (level+1)*2)
 		if detailed {
-			printFrames(spaces+"  ", displayFrames, out)
+			out.WriteString("\n")
 		}
-		for _, child := range cur.children {
-			child.string(indent+2, prev, out, detailed)
+		fmt.Fprintf(out, "%s(%s:% 6d/%d) %s\n",
+			spaces, wr.time.Format("0102 15:04:05.000000"), wr.parentID, wr.id, wr.payload.(string))
+		if detailed {
+			printFrames(spaces+"  ", wr.relative, out)
 		}
-		if cur = cur.next; cur == nil {
-			break
-		}
-	}
-	return
-}
-
-func trimPrefix(frames, prefix []runtime.Frame) []runtime.Frame {
-	cp := commonPrefix(prefix, frames)
-	if prefix != nil && cp > 0 {
-		return frames[cp:]
-	}
-	return frames
-}
-
-func commonPrefix(a, b []runtime.Frame) int {
-	l := min(len(a), len(b))
-	for i := 0; i < l; i++ {
-		if a[i].PC != b[i].PC {
-			return i
-		}
-	}
-	return l
-}
-func reverseFrames(frames []runtime.Frame) {
-	l := len(frames)
-	for i := 0; i < l/2; i++ {
-		frames[i], frames[l-1] = frames[l-1], frames[i]
-		l--
-	}
-}
-
-func framesFromPCs(pcs []uintptr) []runtime.Frame {
-	out := make([]runtime.Frame, len(pcs))
-	frames := runtime.CallersFrames(pcs)
-	i := 0
-	for {
-		frame, more := frames.Next()
-		if !more {
-			break
-		}
-		out[i] = frame
-		i++
-	}
-	return out[:i]
-}
-
-func printFrames(spaces string, frames []runtime.Frame, out *strings.Builder) {
-	for _, frame := range frames {
-		fmt.Fprintf(out, "%s%s %s:%v\n", spaces, frame.Function, filepath.Base(frame.File), frame.Line)
-	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	})
 }
