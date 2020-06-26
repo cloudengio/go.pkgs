@@ -19,6 +19,7 @@ type trace struct {
 	mu           sync.Mutex
 	parentID, id int64
 	records      []*record // records for a single goroutine
+	gocaller     []uintptr
 }
 
 func appendRecord(t *trace, r *record) {
@@ -38,10 +39,8 @@ func appendGoroutineTrace(parent, branch *trace, r *record) {
 	parent.mu.Lock()
 	defer parent.mu.Unlock()
 	parent.records = append(parent.records, r)
+	parent.gocaller = r.callers
 }
-
-// MaxCallers represents the maximum number of PCs that can be recorded.
-var MaxCallers = 32
 
 // record is shared by CallTrace, MessageTrace etc.
 type record struct {
@@ -53,10 +52,12 @@ type record struct {
 }
 
 func newRecord(skip int) *record {
-	pcs := make([]uintptr, MaxCallers)
-	n := runtime.Callers(skip, pcs)
+	var buf [64]uintptr
+	n := runtime.Callers(skip, buf[:])
+	pcs := make([]uintptr, n)
+	copy(pcs, buf[:n])
 	return &record{
-		callers: pcs[:n],
+		callers: pcs,
 		time:    time.Now(),
 	}
 }
@@ -112,15 +113,16 @@ func printFrames(spaces string, frames []runtime.Frame, out io.Writer) {
 }
 
 type walkRecord struct {
-	payload        interface{}
-	id, parentID   int64
-	time           time.Time
-	full, relative []runtime.Frame
+	payload                  interface{}
+	id, parentID             int64
+	time                     time.Time
+	gocaller, full, relative []runtime.Frame
 }
 
 func walk(tr *trace, level int, prev []runtime.Frame, fn func(level int, wr *walkRecord)) {
 	for _, record := range tr.records {
 		frames := framesFromPCs(record.callers)
+		goframes := framesFromPCs(tr.gocaller)
 		reverseFrames(frames)
 		displayFrames := trimPrefix(frames, prev)
 		prev = frames
@@ -129,6 +131,7 @@ func walk(tr *trace, level int, prev []runtime.Frame, fn func(level int, wr *wal
 			id:       tr.id,
 			parentID: tr.parentID,
 			time:     record.time,
+			gocaller: goframes,
 			full:     frames,
 			relative: displayFrames,
 		})

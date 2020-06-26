@@ -3,6 +3,7 @@ package goroutine
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -30,6 +31,8 @@ const (
 	MessageWait MessageStatus = iota + 1
 	MessageSent
 	MessageReceived
+	MessageAcceptWait
+	MessageAccepted
 )
 
 func (m MessageStatus) String() string {
@@ -40,8 +43,12 @@ func (m MessageStatus) String() string {
 		return "->"
 	case MessageReceived:
 		return "<-"
+	case MessageAcceptWait:
+		return "<>"
+	case MessageAccepted:
+		return "=="
 	}
-	return "??"
+	return "unrecognised status"
 }
 
 type messageRecord struct {
@@ -108,12 +115,14 @@ func (mt *MessageTrace) string(out *strings.Builder, detailed bool) {
 
 // MessageRecord represents the metadata for a recorded message.
 type MessageRecord struct {
-	Name          string        // Name assigned to this message trace by Flatten.
-	ID, ParentID  int64         // The ID and ParentID of this record in the original trace.
-	Time          time.Time     // The time that the message was logged.
-	Status        MessageStatus // The status of the message.
-	Local, Remote net.Addr      // The local and remote addresses for the message.
-	Detail        interface{}   // The detail logged with the message.
+	Name          string          // Name assigned to this message trace by Flatten.
+	ID, ParentID  int64           // The ID and ParentID of this record in the original trace.
+	Time          time.Time       // The time that the message was logged.
+	Status        MessageStatus   // The status of the message.
+	Local, Remote net.Addr        // The local and remote addresses for the message.
+	Detail        interface{}     // The detail logged with the message.
+	GoCaller      []runtime.Frame // The full call stack of where the goroutine was launced from.
+	Callers       []runtime.Frame // The full call stack.
 }
 
 type MessageRecords []MessageRecord
@@ -127,6 +136,7 @@ func (mt *MessageTrace) Flatten(name string) MessageRecords {
 	walk(&mt.trace, 0, nil, func(level int, wr *walkRecord) {
 		payload := wr.payload.(messageRecord)
 		if payload.status == 0 {
+			// skip the record created when a go routine is spawned.
 			return
 		}
 		out = append(out, MessageRecord{
@@ -138,6 +148,8 @@ func (mt *MessageTrace) Flatten(name string) MessageRecords {
 			Local:    payload.local,
 			Remote:   payload.remote,
 			Detail:   payload.detail,
+			GoCaller: wr.gocaller,
+			Callers:  wr.full,
 		})
 	})
 	sort.Slice(out, func(i, j int) bool {
@@ -152,7 +164,7 @@ func (ms MessageRecords) String() string {
 		if mr.Status == 0 {
 			continue
 		}
-		fmt.Fprintf(out, "(%s:% 6d/%d) %s: %s %s %s: %s\n",
+		fmt.Fprintf(out, "(%s:% 6d/%d) % 20s: %s %s %s: %s\n",
 			mr.Time.Format("0102 15:04:05.000000"),
 			mr.ParentID,
 			mr.ID,
