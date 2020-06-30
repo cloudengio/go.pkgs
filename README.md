@@ -16,5 +16,3 @@ trace execution and communication.
 - [sync](sync/README.md): easy to use patterns for working with goroutines and concurrency.
 - [text](text/README.md): support for operating on text/in-memory data.
 - [text/linewrap](text/linewrap/README.md): simple line wrapping.
-
-  

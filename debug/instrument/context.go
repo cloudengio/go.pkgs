@@ -8,10 +8,6 @@ import (
 	"context"
 )
 
-type roleKeyType string
-
-var roleKey roleKeyType
-
 type callTraceKeyType struct{}
 
 var callTraceKey callTraceKeyType
@@ -20,14 +16,10 @@ type messageTraceKeyType struct{}
 
 var messageTraceKey messageTraceKeyType
 
-type ContextValue interface {
-	Value(interface{}) interface{}
-}
-
 // CallTraceFrom extracts a CallTrace from the supplied context. It returns an
 // empty, unused trace (i.e. its ID() method will return 0) if no trace
 // is found.
-func CallTraceFrom(ctx ContextValue) *CallTrace {
+func CallTraceFrom(ctx context.Context) *CallTrace {
 	if val := ctx.Value(callTraceKey); val != nil {
 		if v, ok := val.(*CallTrace); ok {
 			return v
@@ -39,7 +31,7 @@ func CallTraceFrom(ctx ContextValue) *CallTrace {
 // MessageTraceFrom extracts a MessageTrace from the supplied context. It
 // returns an empty, unused trace (i.e. its ID() method will return 0) if no
 // trace is found.
-func MessageTraceFrom(ctx ContextValue) *MessageTrace {
+func MessageTraceFrom(ctx context.Context) *MessageTrace {
 	if val := ctx.Value(messageTraceKey); val != nil {
 		if v, ok := val.(*MessageTrace); ok {
 			return v
@@ -48,7 +40,7 @@ func MessageTraceFrom(ctx ContextValue) *MessageTrace {
 	return &MessageTrace{} // id will be zero.
 }
 
-// WithCallTrace returns a context.Context that is guaranted to contain
+// WithCallTrace returns a context.Context that is guaranteed to contain
 // a call trace. If the context already had a trace then it is left in place
 // and the same context is returned, otherwise a new context is returneed
 // with an empty trace.
@@ -60,7 +52,7 @@ func WithCallTrace(ctx context.Context) context.Context {
 	return ctx
 }
 
-// WithMesageTrace returns a context.Context that is guaranted to contain
+// WithMesageTrace returns a context.Context that is guaranteed to contain
 // a message trace. If the context already had a trace then it is left in place
 // and the same context is returned, otherwise a new context is returneed
 // with an empty trace.

@@ -23,11 +23,11 @@ func isSorted(t *testing.T, mr instrument.MessageRecords) {
 			switch {
 			case cur.Status == instrument.MessageWait:
 				if prev.Status != instrument.MessageWait {
-					t.Errorf("wait preceeded by non wait: %v: %v %v", i, prev, cur)
+					t.Errorf("wait preceded by non wait: %v: %v %v", i, prev, cur)
 				}
 			case cur.Status == instrument.MessageSent:
 				if prev.Status == instrument.MessageReceived {
-					t.Errorf("received preceeded by sent: %v: %v %v", i, prev, cur)
+					t.Errorf("received preceded by sent: %v: %v %v", i, prev, cur)
 				}
 			}
 		}

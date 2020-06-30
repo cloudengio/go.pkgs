@@ -173,7 +173,7 @@ func printCallRecord(summary string, cr *CallRecord, out io.Writer, callers, rel
 	fmt.Fprint(out, indent, summary)
 	if callers {
 		out.Write([]byte{'\n'})
-		indent = indent + "  "
+		indent += "  "
 		if len(cr.GoCaller) > 0 {
 			goindent := indent + "go @ "
 			WriteFrames(out, goindent, cr.GoCaller[:1])

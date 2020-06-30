@@ -125,13 +125,13 @@ func TestCallTraceSimple(t *testing.T) {
 	}
 	if got, want := sanitizeString(dumpCallTrace(ct)), `  a
     testing.tRunner testing.go:991
-    cloudeng.io/debug/instrument_test.TestCallTraceSimple calltrace_test.go:113
+    cloudeng.io/debug/instrument_test.TestCallTraceSimple calltrace_test.go:117
 
   b
-    cloudeng.io/debug/instrument_test.TestCallTraceSimple calltrace_test.go:114
+    cloudeng.io/debug/instrument_test.TestCallTraceSimple calltrace_test.go:118
 
   c
-    cloudeng.io/debug/instrument_test.TestCallTraceSimple calltrace_test.go:115
+    cloudeng.io/debug/instrument_test.TestCallTraceSimple calltrace_test.go:119
 
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -203,52 +203,52 @@ func TestCallTraceGoroutines(t *testing.T) {
 	}
 	if got, want := sanitizeString(dumpCallTrace(ct)), `  a
     testing.tRunner testing.go:991
-    cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:162
+    cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:166
 
   GoLog goroutine L1 launch
-    cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
+    cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
 
     inside L1 goroutine
-      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
-      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:170
+      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
+      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:174
 
     inside L1 goroutine
-      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
-      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:172
+      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
+      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:176
 
     GoLog goroutine L2 launch
-      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
-      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:173
+      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
+      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:177
 
       inside L2 goroutine
-        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:173
-        cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1.1 calltrace_test.go:176
+        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:177
+        cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1.1 calltrace_test.go:180
 
       inside L2 goroutine
-        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:173
+        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:177
 
   GoLog goroutine L1 launch
     testing.tRunner testing.go:991
-    cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
+    cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
 
     inside L1 goroutine
-      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
-      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:170
+      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
+      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:174
 
     inside L1 goroutine
-      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
-      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:172
+      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
+      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:176
 
     GoLog goroutine L2 launch
-      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:168
-      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:173
+      go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines calltrace_test.go:172
+      cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:177
 
       inside L2 goroutine
-        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:173
-        cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1.1 calltrace_test.go:176
+        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:177
+        cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1.1 calltrace_test.go:180
 
       inside L2 goroutine
-        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:173
+        go @ cloudeng.io/debug/instrument_test.TestCallTraceGoroutines.func1 calltrace_test.go:177
 
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)

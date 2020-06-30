@@ -36,7 +36,7 @@ func ExampleMessageTrace() {
 	mt.Log(1, instrument.MessageSent, localAddr, remoteAddr, "some detail")
 	mt.Log(1, instrument.MessageReceived, localAddr, remoteAddr, "some detail")
 
-	fmt.Printf(mt.String())
+	fmt.Println(mt.String())
 	mt.Print(os.Stdout, true, true)
 }
 
@@ -54,13 +54,13 @@ func TestMessageTraceSimple(t *testing.T) {
 	}
 	if got, want := sanitizeString(dumpMessageTrace(mt)), `  172.16.1.1 -> 172.16.1.2: sent something
     testing.tRunner testing.go:991
-    cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:41
+    cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:45
 
   172.16.1.1 <- 172.16.1.2: received something
-    cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:42
+    cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:46
 
   172.16.1.1 <? 172.16.1.2: waiting for something
-    cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:43
+    cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:47
 
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -109,38 +109,38 @@ func TestMessageTraceGoroutines(t *testing.T) {
 	}
 	if got, want := sanitizeString(dumpMessageTrace(mt)), `  172.16.1.1 -> 172.16.1.2: first
     testing.tRunner testing.go:991
-    cloudeng.io/debug/instrument_test.TestMessageTraceGoroutines messagetrace_test.go:93
-    cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:69
+    cloudeng.io/debug/instrument_test.TestMessageTraceGoroutines messagetrace_test.go:97
+    cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:73
 
   GoLog launch goroutine 1
-    cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:75
+    cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:79
 
     GoLog launch goroutine 2
-      go @ cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:75
-      cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:78
+      go @ cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:79
+      cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
 
       172.16.1.1 <? 172.16.1.2: waiting
-        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:78
-        cloudeng.io/debug/instrument_test.generateMessageTrace.func1.1 messagetrace_test.go:81
+        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
+        cloudeng.io/debug/instrument_test.generateMessageTrace.func1.1 messagetrace_test.go:85
 
       172.16.1.1 <? 172.16.1.2: waiting
-        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:78
+        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
 
   GoLog launch goroutine 1
     testing.tRunner testing.go:991
-    cloudeng.io/debug/instrument_test.TestMessageTraceGoroutines messagetrace_test.go:93
-    cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:75
+    cloudeng.io/debug/instrument_test.TestMessageTraceGoroutines messagetrace_test.go:97
+    cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:79
 
     GoLog launch goroutine 2
-      go @ cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:75
-      cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:78
+      go @ cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:79
+      cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
 
       172.16.1.1 <? 172.16.1.2: waiting
-        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:78
-        cloudeng.io/debug/instrument_test.generateMessageTrace.func1.1 messagetrace_test.go:81
+        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
+        cloudeng.io/debug/instrument_test.generateMessageTrace.func1.1 messagetrace_test.go:85
 
       172.16.1.1 <? 172.16.1.2: waiting
-        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:78
+        go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
 
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
