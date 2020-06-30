@@ -1,25 +1,25 @@
-package goroutine
+package instrument
 
 import (
 	"fmt"
 	"io"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
 var (
-	traceID       int64
-	traceParentID int64
+	traceID int64
 )
 
 type trace struct {
-	mu           sync.Mutex
-	parentID, id int64
-	records      []*record // records for a single goroutine
-	gocaller     []uintptr
+	mu         sync.Mutex
+	rootID, id int64
+	records    []*record // records for a single goroutine
+	gocaller   []uintptr
 }
 
 func appendRecord(t *trace, r *record) {
@@ -27,38 +27,50 @@ func appendRecord(t *trace, r *record) {
 	defer t.mu.Unlock()
 	if t.id == 0 {
 		t.id = atomic.AddInt64(&traceID, 1)
-		t.parentID = atomic.AddInt64(&traceParentID, 1)
+		t.rootID = t.id
 	}
 	t.records = append(t.records, r)
 }
 
 func appendGoroutineTrace(parent, branch *trace, r *record) {
 	branch.id = atomic.AddInt64(&traceID, 1)
-	branch.parentID = parent.parentID
+	branch.rootID = parent.rootID
+	branch.gocaller = r.callers
 	r.goroutines = append(r.goroutines, branch)
+	r.gocall = true
 	parent.mu.Lock()
 	defer parent.mu.Unlock()
 	parent.records = append(parent.records, r)
-	parent.gocaller = r.callers
 }
 
 // record is shared by CallTrace, MessageTrace etc.
 type record struct {
 	// locking is provided by at the trace level.
 	callers    []uintptr
+	gocall     bool
 	time       time.Time
+	arguments  interface{}
 	payload    interface{}
 	goroutines []*trace
 }
 
-func newRecord(skip int) *record {
+func newRecord(skip int, args []interface{}) *record {
 	var buf [64]uintptr
 	n := runtime.Callers(skip, buf[:])
 	pcs := make([]uintptr, n)
 	copy(pcs, buf[:n])
+	var nargs interface{}
+	if len(args) == 1 {
+		nargs = args[0]
+	} else {
+		tmp := make([]interface{}, len(args))
+		copy(tmp, args)
+		nargs = tmp
+	}
 	return &record{
-		callers: pcs,
-		time:    time.Now(),
+		callers:   pcs,
+		time:      time.Now(),
+		arguments: nargs,
 	}
 }
 
@@ -92,6 +104,9 @@ func reverseFrames(frames []runtime.Frame) {
 }
 
 func framesFromPCs(pcs []uintptr) []runtime.Frame {
+	if len(pcs) == 0 {
+		return nil
+	}
 	out := make([]runtime.Frame, len(pcs))
 	frames := runtime.CallersFrames(pcs)
 	i := 0
@@ -106,16 +121,24 @@ func framesFromPCs(pcs []uintptr) []runtime.Frame {
 	return out[:i]
 }
 
-func printFrames(spaces string, frames []runtime.Frame, out io.Writer) {
+// WriteFrames writes out the supplied []runtime.Frame a frame per line
+// prefixed by the supplied string.
+func WriteFrames(out io.Writer, prefix string, frames []runtime.Frame) {
 	for _, frame := range frames {
-		fmt.Fprintf(out, "%s%s %s:%v\n", spaces, frame.Function, filepath.Base(frame.File), frame.Line)
+		fmt.Fprintf(out, "%s%s %s:%v\n",
+			prefix,
+			frame.Function,
+			filepath.Base(frame.File),
+			frame.Line)
 	}
 }
 
 type walkRecord struct {
+	arguments                interface{}
 	payload                  interface{}
-	id, parentID             int64
+	id, rootID               int64
 	time                     time.Time
+	gocall                   bool
 	gocaller, full, relative []runtime.Frame
 }
 
@@ -127,13 +150,15 @@ func walk(tr *trace, level int, prev []runtime.Frame, fn func(level int, wr *wal
 		displayFrames := trimPrefix(frames, prev)
 		prev = frames
 		fn(level, &walkRecord{
-			payload:  record.payload,
-			id:       tr.id,
-			parentID: tr.parentID,
-			time:     record.time,
-			gocaller: goframes,
-			full:     frames,
-			relative: displayFrames,
+			id:        tr.id,
+			rootID:    tr.rootID,
+			gocall:    record.gocall,
+			time:      record.time,
+			arguments: record.arguments,
+			payload:   record.payload,
+			gocaller:  goframes,
+			full:      frames,
+			relative:  displayFrames,
 		})
 		for _, goroutine := range record.goroutines {
 			walk(goroutine, level+1, prev, fn)
@@ -144,4 +169,31 @@ func walk(tr *trace, level int, prev []runtime.Frame, fn func(level int, wr *wal
 			prev = nil
 		}
 	}
+}
+
+func releaseArguments(tr *trace) {
+	for i, record := range tr.records {
+		tr.records[i].arguments = nil
+		for _, goroutine := range record.goroutines {
+			releaseArguments(goroutine)
+		}
+	}
+}
+
+func printArgs(args interface{}) string {
+	if sl, ok := args.([]interface{}); ok {
+		out := &strings.Builder{}
+		out.WriteRune(' ')
+		for i, v := range sl {
+			out.WriteString(fmt.Sprintf("%v", v))
+			if i < len(sl)-1 {
+				out.WriteString(", ")
+			}
+		}
+		return out.String()
+	}
+	if args == nil {
+		return ""
+	}
+	return fmt.Sprintf(" %v", args)
 }

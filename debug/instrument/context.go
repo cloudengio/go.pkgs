@@ -1,4 +1,4 @@
-package goroutine
+package instrument
 
 import (
 	"context"

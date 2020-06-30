@@ -1,14 +1,19 @@
-package goroutine
+package instrument
 
 import (
 	"fmt"
+	"io"
 	"net"
-	"runtime"
 	"sort"
 	"strings"
-	"time"
 )
 
+// MessageTrace provides the ability to log various communication primitives
+// (e.g. message sent, received etc) and their location in a linear execution
+// (Log, Logf) as well as to span the creation of goroutines and the execution
+// of said primitives in their linear execution (GoLog, GoLogf). A log record
+// consists of the parameters to the logging function and the location of the
+// call (ie. caller stackframes).
 type MessageTrace struct {
 	trace
 }
@@ -19,23 +24,27 @@ func (mt *MessageTrace) ID() int64 {
 	return mt.id
 }
 
-// ParentID returns the parent id of this message trace, that is the id
+// RootID returns the root id of this message trace, that is the id
 // that is allocated to the first MessageTrace record in this call trace.
-func (mt *MessageTrace) ParentID() int64 {
-	return mt.parentID
+func (mt *MessageTrace) RootID() int64 {
+	return mt.rootID
 }
 
-type MessageStatus int
+// MessagePrimitive represents the supported message operations.
+type MessagePrimitive int
 
+// The above are the defined communication primitives. They are defined
+// in order of preference when sorting by MergeMessageTraces.
 const (
-	MessageWait MessageStatus = iota + 1
-	MessageSent
-	MessageReceived
+	MessageWait MessagePrimitive = iota + 1
 	MessageAcceptWait
 	MessageAccepted
+	MessageSent
+	MessageReceived
 )
 
-func (m MessageStatus) String() string {
+// String implements fmt.Stringer.
+func (m MessagePrimitive) String() string {
 	switch m {
 	case MessageWait:
 		return "<?"
@@ -52,84 +61,121 @@ func (m MessageStatus) String() string {
 }
 
 type messageRecord struct {
-	status        MessageStatus
+	status        MessagePrimitive
 	local, remote net.Addr
-	detail        interface{}
 }
 
-func (mt *MessageTrace) Log(skip int, status MessageStatus, local, remote net.Addr, detail interface{}) {
-	record := newRecord(skip + 2)
+// Log logs the current call site and its arguments. The supplied arguments
+// are stored in a slice and retained until ReleaseArguments is called.
+// Skip is the number of callers to skip, as per runtime.Callers.
+func (mt *MessageTrace) Log(skip int, status MessagePrimitive, local, remote net.Addr, args ...interface{}) {
+	record := newRecord(skip+2, args)
 	record.payload = messageRecord{
 		status: status,
 		local:  local,
 		remote: remote,
-		detail: detail,
 	}
 	appendRecord(&mt.trace, record)
 }
 
-func (mt *MessageTrace) Go(skip int) *MessageTrace {
-	record := newRecord(skip + 2)
+// ReleaseArguments releases all stored arguments from previous
+// calls to Log or Logf.
+func (mt *MessageTrace) ReleaseArguments() {
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
+	releaseArguments(&mt.trace)
+}
+
+// Logf logs the current call site with its arguments being immediately
+// used to create a string (using fmt.Sprintf) that is stored within the trace.
+// Skip is the number of callers to skip, as per runtime.Callers.
+func (mt *MessageTrace) Logf(skip int, status MessagePrimitive, local, remote net.Addr, format string, args ...interface{}) {
+	mt.Log(skip+1, status, local, remote, fmt.Sprintf(format, args...))
+}
+
+// GoLog logs the current call site and returns a new MessageTrace, that is
+// a child of the existing one, to be used in a goroutine started from the
+// current one. Skip is the number of callers to skip, as per runtime.Callers.
+func (mt *MessageTrace) GoLog(skip int, args ...interface{}) *MessageTrace {
+	record := newRecord(skip+2, args)
 	record.payload = messageRecord{}
 	nct := &MessageTrace{}
 	appendGoroutineTrace(&mt.trace, &nct.trace, record)
 	return nct
 }
 
+// GoLogf logs the current call site and returns a new MessageTrace, that is
+// a child of the existing one, to be used in a goroutine started from the
+// current one. Skip is the number of callers to skip, as per runtime.Callers.
+func (mt *MessageTrace) GoLogf(skip int, format string, args ...interface{}) *MessageTrace {
+	return mt.GoLog(skip+1, fmt.Sprintf(format, args...))
+}
+
+// Print will print the trace to the supplied io.Writer, if callers is set
+// then the stack frame will be printed and if relative is set each displayed
+// stack frame will be relative to the previous one for
+func (mt *MessageTrace) Print(out io.Writer, callers, relative bool) {
+	mt.Walk(func(mr MessageRecord) {
+		printCallRecord(mr.String(), &mr.CallRecord, out, callers, relative)
+	})
+}
+
+// String implements fmt.Stringer.
 func (mt *MessageTrace) String() string {
 	out := &strings.Builder{}
-	mt.string(out, false)
+	mt.Walk(func(mr MessageRecord) {
+		out.WriteString(strings.Repeat(" ", (mr.Level+1)*2))
+		out.WriteString(mr.String())
+		out.WriteString("\n")
+	})
 	return out.String()
 }
 
-func (mt *MessageTrace) Dump() string {
-	out := &strings.Builder{}
-	fmt.Fprintf(out, "message trace % 8d : begin ----------------------\n", mt.id)
-	mt.string(out, true)
-	fmt.Fprintf(out, "message trace % 8d : end   ----------------------\n", mt.id)
-	return out.String()
-}
-
-func (mt *MessageTrace) string(out *strings.Builder, detailed bool) {
+// Walk traverses the call trace calling the supplied function for each record.
+func (mt *MessageTrace) Walk(fn func(mr MessageRecord)) {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 	walk(&mt.trace, 0, nil, func(level int, wr *walkRecord) {
 		payload := wr.payload.(messageRecord)
-		spaces := strings.Repeat(" ", (level+1)*2)
-		if detailed {
-			out.WriteString("\n")
-		}
-		fmt.Fprintf(out, "%s(%s:% 6d/%d) ",
-			spaces, wr.time.Format("0102 15:04:05.000000"), wr.parentID, wr.id)
-		if payload.status == 0 {
-			out.WriteString("go func()....\n")
-		} else {
-			fmt.Fprintf(out, "%s %s %s: %s\n",
-				payload.local, payload.status, payload.remote, payload.detail)
-		}
-		if detailed {
-			printFrames(spaces+"  ", wr.relative, out)
-		}
+		fn(MessageRecord{
+			CallRecord: newCallRecord(level, wr),
+			Status:     payload.status,
+			Local:      payload.local,
+			Remote:     payload.remote,
+		})
 	})
 }
 
 // MessageRecord represents the metadata for a recorded message.
 type MessageRecord struct {
-	Name          string          // Name assigned to this message trace by Flatten.
-	ID, ParentID  int64           // The ID and ParentID of this record in the original trace.
-	Time          time.Time       // The time that the message was logged.
-	Status        MessageStatus   // The status of the message.
-	Local, Remote net.Addr        // The local and remote addresses for the message.
-	Detail        interface{}     // The detail logged with the message.
-	GoCaller      []runtime.Frame // The full call stack of where the goroutine was launced from.
-	Callers       []runtime.Frame // The full call stack.
+	CallRecord
+	Tag           string           // Tag assigned to this message trace by Flatten.
+	Status        MessagePrimitive // The status of the message.
+	Local, Remote net.Addr         // The local and remote addresses for the message.
+}
+
+// String implements fmt.Stringer.
+func (mr MessageRecord) String() string {
+	out := &strings.Builder{}
+	out.WriteString(mr.prefix())
+	if len(mr.Tag) > 0 {
+		fmt.Fprintf(out, "% 20s:", mr.Tag)
+	}
+	if !mr.GoCall {
+		fmt.Fprintf(out, " %s %s %s:",
+			mr.Local,
+			mr.Status,
+			mr.Remote)
+	}
+	out.WriteString(printArgs(mr.Arguments))
+	return out.String()
 }
 
 type MessageRecords []MessageRecord
 
 // Flatten returns a slice of MessageRecords sorted primarily by time and
 // then by message status (in order of Waiting, Sent and Received).
-func (mt *MessageTrace) Flatten(name string) MessageRecords {
+func (mt *MessageTrace) Flatten(tag string) MessageRecords {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 	out := make([]MessageRecord, 0, len(mt.records))
@@ -140,16 +186,11 @@ func (mt *MessageTrace) Flatten(name string) MessageRecords {
 			return
 		}
 		out = append(out, MessageRecord{
-			Name:     name,
-			ID:       wr.id,
-			ParentID: wr.parentID,
-			Time:     wr.time,
-			Status:   payload.status,
-			Local:    payload.local,
-			Remote:   payload.remote,
-			Detail:   payload.detail,
-			GoCaller: wr.gocaller,
-			Callers:  wr.full,
+			CallRecord: newCallRecord(0, wr),
+			Tag:        tag,
+			Status:     payload.status,
+			Local:      payload.local,
+			Remote:     payload.remote,
 		})
 	})
 	sort.Slice(out, func(i, j int) bool {
@@ -161,19 +202,7 @@ func (mt *MessageTrace) Flatten(name string) MessageRecords {
 func (ms MessageRecords) String() string {
 	out := &strings.Builder{}
 	for _, mr := range ms {
-		if mr.Status == 0 {
-			continue
-		}
-		fmt.Fprintf(out, "(%s:% 6d/%d) % 20s: %s %s %s: %s\n",
-			mr.Time.Format("0102 15:04:05.000000"),
-			mr.ParentID,
-			mr.ID,
-			mr.Name,
-			mr.Local,
-			mr.Status,
-			mr.Remote,
-			mr.Detail,
-		)
+		fmt.Fprintln(out, mr.String())
 	}
 	return out.String()
 }
@@ -183,14 +212,7 @@ func sorter(a, b MessageRecord) bool {
 	case a.Time.Before(b.Time):
 		return true
 	case a.Time.Equal(b.Time):
-		switch {
-		case a.Status == MessageWait:
-			return true
-		case b.Status == MessageWait:
-			return false
-		default:
-			return a.Status == MessageSent
-		}
+		return a.Status < b.Status
 	}
 	return false
 }
