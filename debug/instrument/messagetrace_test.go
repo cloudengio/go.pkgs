@@ -53,7 +53,7 @@ func TestMessageTraceSimple(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := sanitizeString(dumpMessageTrace(mt)), `  172.16.1.1 -> 172.16.1.2: sent something
-    testing.tRunner testing.go:991
+    testing.tRunner testing.go:XXX
     cloudeng.io/debug/instrument_test.TestMessageTraceSimple messagetrace_test.go:45
 
   172.16.1.1 <- 172.16.1.2: received something
@@ -108,7 +108,7 @@ func TestMessageTraceGoroutines(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := sanitizeString(dumpMessageTrace(mt)), `  172.16.1.1 -> 172.16.1.2: first
-    testing.tRunner testing.go:991
+    testing.tRunner testing.go:XXX
     cloudeng.io/debug/instrument_test.TestMessageTraceGoroutines messagetrace_test.go:97
     cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:73
 
@@ -127,7 +127,7 @@ func TestMessageTraceGoroutines(t *testing.T) {
         go @ cloudeng.io/debug/instrument_test.generateMessageTrace.func1 messagetrace_test.go:82
 
   GoLog launch goroutine 1
-    testing.tRunner testing.go:991
+    testing.tRunner testing.go:XXX
     cloudeng.io/debug/instrument_test.TestMessageTraceGoroutines messagetrace_test.go:97
     cloudeng.io/debug/instrument_test.generateMessageTrace messagetrace_test.go:79
 
