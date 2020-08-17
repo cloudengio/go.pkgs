@@ -2,8 +2,8 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package expect provides support for stating expectations of various
-// forms of input.
+// Package expect provides support for making expectations on the contents
+// of input streams.
 package expect
 
 import (
@@ -94,8 +94,12 @@ func (e *UnexpectedInputError) Error() string {
 	return out.String()
 }
 
-// Lines represents a line oriented input stream against which expectations
-// can be made.
+// Lines provides line oriented expecations and will block waiting for the
+// expected input. A context with a timeout or deadline can be used to abort
+// the expectation. Literal and regular expression matches are supported as is
+// matching on EOF. Each operation accepts multiple literals or regular
+// expressions that are treated as an 'or' to allow for convenient handling
+// of different input orderings.
 type Lines struct {
 	rd        io.Reader
 	ch        chan *inputEvent
@@ -315,12 +319,8 @@ func (s *Lines) ExpectEventuallyRE(ctx context.Context, expressions ...*regexp.R
 	return s.eventually(ctx, nil, expressions)
 }
 
-// LastMatch returns the contents of the last successfully matched line.
-func (s *Lines) LastMatch() string {
-	return s.lastMatch
-}
-
-// LastLine returns the last successfully matched line number.
-func (s *Lines) LastLine() int {
-	return s.lastLine
+// LastMatch returns the line number and contents of the last successfully
+// matched input line.
+func (s *Lines) LastMatch() (int, string) {
+	return s.lastLine, s.lastMatch
 }

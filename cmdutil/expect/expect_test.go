@@ -18,6 +18,28 @@ import (
 	"cloudeng.io/cmdutil/expect"
 )
 
+func ExampleLines() {
+	ctx := context.Background()
+	rd, wr, _ := os.Pipe()
+	st := expect.NewLineStream(rd)
+
+	go func() {
+		fmt.Fprintf(wr, "A\nready\nC\n")
+		wr.Close()
+	}()
+	st.ExpectEventually(ctx, "ready")
+	fmt.Println(st.LastMatch())
+	st.ExpectNext(ctx, "C")
+	fmt.Println(st.LastMatch())
+	st.ExpectEOF(ctx)
+	if err := st.Err(); err != nil {
+		panic(err)
+	}
+	// Output:
+	// 2 ready
+	// 3 C
+}
+
 func newLineStream(t *testing.T) (*expect.Lines, *os.File) {
 	rd, wr, err := os.Pipe()
 	if err != nil {
@@ -42,10 +64,11 @@ func assert(t *testing.T, err error) {
 
 func assertMatch(t *testing.T, st *expect.Lines, input string, line int) {
 	_, _, loc, _ := runtime.Caller(1)
-	if got, want := st.LastMatch(), input; got != want {
+	n, c := st.LastMatch()
+	if got, want := c, input; got != want {
 		t.Errorf("line: %v: got %v, want %v", loc, got, want)
 	}
-	if got, want := st.LastLine(), line; got != want {
+	if got, want := n, line; got != want {
 		t.Errorf("line: %v: got %v, want %v", loc, got, want)
 	}
 }
@@ -175,5 +198,4 @@ func TestErrors(t *testing.T) {
 	st = expect.NewLineStream(erd)
 	err = st.ExpectEventually(ctx, "A", "B")
 	expectError("ExpectEventually: failed @ 0: an error")
-
 }
