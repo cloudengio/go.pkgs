@@ -38,7 +38,7 @@ CopyMessageTrace will copy a call trace from one context to another.
 ```go
 func WithCallTrace(ctx context.Context) context.Context
 ```
-WithCallTrace returns a context.Context that is guaranted to contain a call
+WithCallTrace returns a context.Context that is guaranteed to contain a call
 trace. If the context already had a trace then it is left in place and the
 same context is returned, otherwise a new context is returneed with an empty
 trace.
@@ -47,7 +47,7 @@ trace.
 ```go
 func WithMessageTrace(ctx context.Context) context.Context
 ```
-WithMesageTrace returns a context.Context that is guaranted to contain a
+WithMesageTrace returns a context.Context that is guaranteed to contain a
 message trace. If the context already had a trace then it is left in place
 and the same context is returned, otherwise a new context is returneed with
 an empty trace.
@@ -113,7 +113,7 @@ the logging function and the location of the call (ie. caller stackframes).
 ### Functions
 
 ```go
-func CallTraceFrom(ctx ContextValue) *CallTrace
+func CallTraceFrom(ctx context.Context) *CallTrace
 ```
 CallTraceFrom extracts a CallTrace from the supplied context. It returns an
 empty, unused trace (i.e. its ID() method will return 0) if no trace is
@@ -196,14 +196,6 @@ func (ct *CallTrace) Walk(fn func(cr CallRecord))
 Walk traverses the call trace calling the supplied function for each record.
 
 
-
-
-### Type ContextValue
-```go
-type ContextValue interface {
-	Value(interface{}) interface{}
-}
-```
 
 
 ### Type MessagePrimitive
@@ -296,7 +288,7 @@ call (ie. caller stackframes).
 ### Functions
 
 ```go
-func MessageTraceFrom(ctx ContextValue) *MessageTrace
+func MessageTraceFrom(ctx context.Context) *MessageTrace
 ```
 MessageTraceFrom extracts a MessageTrace from the supplied context. It
 returns an empty, unused trace (i.e. its ID() method will return 0) if no

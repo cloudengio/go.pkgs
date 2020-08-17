@@ -178,6 +178,38 @@ String inplements flag.Value.
 
 
 
+### Type SetMap
+```go
+type SetMap struct {
+	// contains filtered or unexported fields
+}
+```
+SetMaps represents flag variables, indexed by their address, whose value has
+someone been set.
+
+### Functions
+
+```go
+func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*SetMap, error)
+```
+RegisterFlagsInStructWithSetMap is like RegisterFlagsInStruct but returns a
+SetMap which can be used to determine which flag variables have been
+initialized either with a literal in the struct tag or via the valueDefaults
+argument.
+
+
+
+### Methods
+
+```go
+func (sm *SetMap) IsSet(field interface{}) (string, bool)
+```
+IsSet returns true if the supplied flag variable's value has been set,
+either via its str
+
+
+
+
 
 
 ## Examples

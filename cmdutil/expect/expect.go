@@ -1,3 +1,9 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+// Package expect provides support for stating expectations of various
+// forms of input.
 package expect
 
 import (
@@ -11,8 +17,8 @@ import (
 	"cloudeng.io/errors"
 )
 
-// UnexpectedInputError represents a failed expectation, i.e. when
-// the input in the stream does not match that requested.
+// UnexpectedInputError represents a failed expectation, i.e. when the contents
+// of the input do not match the expected contents.
 type UnexpectedInputError struct {
 	Err         error            // An underlying error, if any, eg. context cancelation.
 	Line        int              // The number of the last line that was read.
@@ -45,129 +51,121 @@ func (e *UnexpectedInputError) formatLiterals(out io.Writer) {
 	switch len(e.Literals) {
 	case 0:
 	case 1:
-		fmt.Fprintf(out, ":%s", e.Literals[0])
+		fmt.Fprintf(out, "\n!=\n%s", e.Literals[0])
 	default:
-		fmt.Fprintf(out, ":\n")
+		fmt.Fprintf(out, "\n!= any of:\n")
 		for _, l := range e.Literals {
-			fmt.Fprintf(out, "\t%s\n", l)
+			fmt.Fprintf(out, "%s\n", l)
 		}
 	}
-	return
 }
 
 func (e *UnexpectedInputError) formatREs(out io.Writer) {
 	switch len(e.Expressions) {
 	case 0:
 	case 1:
-		fmt.Fprintf(out, ": %s", e.Expressions[0])
+		fmt.Fprintf(out, "\n!=\n%s", e.Expressions[0])
 	default:
-		fmt.Fprintf(out, ":\n")
+		fmt.Fprintf(out, "\n!= any of:\n")
 		for _, re := range e.Expressions {
-			fmt.Fprintf(out, "\t%s\n", re)
+			fmt.Fprintf(out, "%s\n", re)
 		}
 	}
-	return
 }
 
+// Error implements error.
 func (e *UnexpectedInputError) Error() string {
 	opname := e.Expectation()
+	if err := e.Err; err != nil {
+		return fmt.Sprintf("%s: failed @ %v: %v", opname, e.Line, err)
+	}
 	out := &strings.Builder{}
-	fmt.Fprintf(out, "%s: failed @ %v:(%v)", opname, e.Line, e.Input)
-	e.formatLiterals(out)
-	e.formatREs(out)
+	input := e.Input
+	if e.EOF {
+		input = "<EOF>"
+	}
+	fmt.Fprintf(out, "%s: failed @ %v:\n%v", opname, e.Line, input)
+	if e.EOFExpected {
+		fmt.Fprintf(out, "\n!=\n<EOF>")
+	} else {
+		e.formatLiterals(out)
+		e.formatREs(out)
+	}
 	return out.String()
 }
 
-type Stream struct {
-	rd    io.Reader
-	brd   *bufio.Reader
-	eof   bool
-	input string
-	line  int
-	errs  *errors.M
+// Lines represents a line oriented input stream against which expectations
+// can be made.
+type Lines struct {
+	rd        io.Reader
+	ch        chan *inputEvent
+	eof       bool
+	input     string
+	line      int
+	lastMatch string
+	lastLine  int
+	errs      *errors.M
 }
 
-func New(rd io.Reader) *Stream {
-	s := &Stream{
+// NewLineStream creates a new instance of Lines.
+func NewLineStream(rd io.Reader) *Lines {
+	s := &Lines{
 		rd:   rd,
+		ch:   make(chan *inputEvent, 1),
 		errs: &errors.M{},
 	}
-	s.initReader()
+	go readLines(rd, s.ch)
 	return s
 }
 
-type record struct {
+type inputEvent struct {
 	input string
 	err   error
 }
 
-func (s *Stream) copy(ctx context.Context, ch chan<- error) {
-
+func readLines(rd io.Reader, ch chan<- *inputEvent) {
+	brd := bufio.NewReader(rd)
+	defer close(ch)
 	for {
-		str, err := s.brd.ReadString('\n')
+		str, err := brd.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				s.eof = true
-				err = nil
+				// closing the chanel indicates EOF.
+				return
 			}
-			ch <- err
+			ch <- &inputEvent{err: err}
 			return
 		}
-		s.input = strings.TrimSuffix(str, "\n")
-		s.line++
-		ch <- nil
+		ch <- &inputEvent{
+			input: strings.TrimSuffix(str, "\n"),
+		}
 	}
 }
 
-func (s *Stream) initReader() {
-	s.prd, s.prw = io.Pipe()
-	s.brd = bufio.NewReader(s.prd)
-	go func() {
-		for {
-			n, err := io.Copy(s.prw, s.rd)
-			fmt.Printf("%v .. %v\n", n, err)
-		}
-	}()
-}
-
-// Err returns all errors encountered. Note that ending of the stream
+// Err returns all errors encountered. Note that closing the underlying io.Reader
 // is not considered an error unless ExpectEOF failed.
-func (s *Stream) Err() error {
+func (s *Lines) Err() error {
 	return s.errs.Err()
 }
 
-func (s *Stream) nextLine(ctx context.Context) error {
-	ch := make(chan error, 1)
-	fmt.Printf("new chanel %v\n", ch)
-	go func() {
-		fmt.Printf("calling scan\n")
-		str, err := s.brd.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				s.eof = true
-				err = nil
-			}
-			ch <- err
-			return
-		}
-		s.input = strings.TrimSuffix(str, "\n")
-		s.line++
-		ch <- nil
-	}()
-	fmt.Printf("cvalling select: %v\n", ch)
+func (s *Lines) nextLine(ctx context.Context) error {
 	select {
-	case err := <-ch:
-		fmt.Printf("select %v: got input: %v\n", ch, err)
-		if err != nil {
+	case rec := <-s.ch:
+		switch {
+		case rec == nil:
+			s.eof = true
+			return nil
+		case rec.err != nil:
 			return &UnexpectedInputError{
-				Err:   err,
+				Err:   rec.err,
 				Line:  s.line,
 				EOF:   s.eof,
 				Input: s.input,
 			}
 		}
+		s.input = rec.input
+		s.line++
 	case <-ctx.Done():
-		fmt.Printf("select %v: canceled %v\n", ch, ctx.Err())
 		return &UnexpectedInputError{
 			Err:   ctx.Err(),
 			EOF:   s.eof,
@@ -178,14 +176,20 @@ func (s *Stream) nextLine(ctx context.Context) error {
 	return nil
 }
 
-func (s *Stream) ExpectNext(ctx context.Context, lines ...string) error {
+// ExpectNext will return nil if one of the supplied lines is equal to the next
+// line read from the input stream. It will block waiting for the next line;
+// the supplied context can be used to provide a timeout.
+func (s *Lines) ExpectNext(ctx context.Context, lines ...string) error {
 	if err := s.nextLine(ctx); err != nil {
+		err.(*UnexpectedInputError).Literals = lines
 		s.errs.Append(err)
 		return err
 	}
 	if !s.eof {
 		for _, line := range lines {
 			if line == s.input {
+				s.lastMatch = s.input
+				s.lastLine = s.line
 				return nil
 			}
 		}
@@ -200,14 +204,20 @@ func (s *Stream) ExpectNext(ctx context.Context, lines ...string) error {
 	return err
 }
 
-func (s *Stream) ExpectNextRE(ctx context.Context, expressions ...*regexp.Regexp) error {
+// ExpectNextRE will return nil if one of the supplied reqular expressions
+// matches the next line read from the input stream. It will block waiting
+// for the next line; the supplied context can be used to provide a timeout.
+func (s *Lines) ExpectNextRE(ctx context.Context, expressions ...*regexp.Regexp) error {
 	if err := s.nextLine(ctx); err != nil {
+		err.(*UnexpectedInputError).Expressions = expressions
 		s.errs.Append(err)
 		return err
 	}
 	if !s.eof {
 		for _, re := range expressions {
 			if re.MatchString(s.input) {
+				s.lastMatch = s.input
+				s.lastLine = s.line
 				return nil
 			}
 		}
@@ -222,15 +232,14 @@ func (s *Stream) ExpectNextRE(ctx context.Context, expressions ...*regexp.Regexp
 	return err
 }
 
-func (s *Stream) ExpectEOF(ctx context.Context) error {
+// ExpectEOF will return nil if the underlying input stream is closed. It will
+// block waiting for EOF; the supplied context can be used to provide a timeout.
+func (s *Lines) ExpectEOF(ctx context.Context) error {
 	if err := s.nextLine(ctx); err != nil {
-		fmt.Printf("nextLine: %v\n", err)
 		err.(*UnexpectedInputError).EOFExpected = true
 		s.errs.Append(err)
 		return err
 	}
-	fmt.Printf("nextLine: %v\n", s)
-
 	if s.eof {
 		return nil
 	}
@@ -243,47 +252,41 @@ func (s *Stream) ExpectEOF(ctx context.Context) error {
 	return err
 }
 
-func (s *Stream) eventually(ctx context.Context, literals []string, expressions []*regexp.Regexp) error {
-	type record struct {
-		found bool
-		err   error
-	}
-	resultCh := make(chan record, 1)
-	go func() {
-		for {
-			str, err := s.brd.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					s.eof = true
-				}
-				resultCh <- record{err: err}
-				return
+func (s *Lines) eventually(ctx context.Context, literals []string, expressions []*regexp.Regexp) error {
+	var err error
+	for {
+		select {
+		case rec := <-s.ch:
+			switch {
+			case rec == nil:
+				s.eof = true
+				goto done
+			case rec.err != nil:
+				err = rec.err
+				goto done
 			}
-			s.input = strings.TrimSuffix(str, "\n")
+			s.input = rec.input
 			s.line++
 			for _, line := range literals {
 				if s.input == line {
-					resultCh <- record{found: true}
-					return
+					s.lastMatch = s.input
+					s.lastLine = s.line
+					return nil
 				}
 			}
 			for _, expr := range expressions {
 				if expr.MatchString(s.input) {
-					resultCh <- record{found: true}
-					return
+					s.lastMatch = s.input
+					s.lastLine = s.line
+					return nil
 				}
 			}
+		case <-ctx.Done():
+			err = ctx.Err()
+			goto done
 		}
-	}()
-	var err error
-	select {
-	case rec := <-resultCh:
-		if rec.found {
-			return nil
-		}
-	case <-ctx.Done():
-		err = ctx.Err()
 	}
+done:
 	err = &UnexpectedInputError{
 		Err:         err,
 		EOF:         s.eof,
@@ -297,12 +300,27 @@ func (s *Stream) eventually(ctx context.Context, literals []string, expressions 
 	return err
 }
 
-func (s *Stream) ExpectEventually(ctx context.Context, lines ...string) error {
+// ExpectEventually will return nil if (and as soon as) one of the supplied lines
+// equals one of the lines read from the input stream. It will block waiting for
+// matching lines; the supplied context can be used to provide a timeout.
+func (s *Lines) ExpectEventually(ctx context.Context, lines ...string) error {
 	return s.eventually(ctx, lines, nil)
 }
 
-func (s *Stream) ExpectEventuallyRE(ctx context.Context, expressions ...*regexp.Regexp) error {
+// ExpectEventuallyRE will return nil if (and as soon as) one of the supplied
+// regular expressions matches one of the lines read from the input stream. It
+// will block waiting for matching lines; the supplied context can be used to
+// provide a timeout.
+func (s *Lines) ExpectEventuallyRE(ctx context.Context, expressions ...*regexp.Regexp) error {
 	return s.eventually(ctx, nil, expressions)
 }
 
-// TODO: add expectVAR - or rather regexpt for <NAME>=<XXX>
+// LastMatch returns the contents of the last successfully matched line.
+func (s *Lines) LastMatch() string {
+	return s.lastMatch
+}
+
+// LastLine returns the last successfully matched line number.
+func (s *Lines) LastLine() int {
+	return s.lastLine
+}
