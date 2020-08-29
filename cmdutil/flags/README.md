@@ -29,6 +29,12 @@ func AtMostOneSet(args ...interface{}) bool
 AtMostOneSet is like ExactlyOne except that it returns true if zero or one
 of its arguments are set.
 
+### Func Defaults
+```go
+func Defaults(fs *flag.FlagSet) string
+```
+Defaults returns the output of PrintDefaults() as a string.
+
 ### Func ExactlyOneSet
 ```go
 func ExactlyOneSet(args ...interface{}) bool
@@ -205,7 +211,8 @@ argument.
 func (sm *SetMap) IsSet(field interface{}) (string, bool)
 ```
 IsSet returns true if the supplied flag variable's value has been set,
-either via its str
+either via a string literal in the struct or via the valueDefaults argument
+to RegisterFlagsInStructWithSetMap.
 
 
 
