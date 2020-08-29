@@ -9,7 +9,7 @@
 //   <sub-command-1> <flags for sub-command-1> <args for sub-comand-1>
 //   ...
 //   <sub-command-n> <flags for sub-command-n> <args for sub-comand-n>
-package submcmd
+package subcmd
 
 import (
 	"context"
@@ -144,5 +144,5 @@ func (c Commands) Dispatch(ctx context.Context) error {
 			return cmd.runner(ctx, args)
 		}
 	}
-	return nil
+	return fmt.Errorf("%v is not one of the supported commands: %v", requested, strings.Join(c.Commands(), ", "))
 }
