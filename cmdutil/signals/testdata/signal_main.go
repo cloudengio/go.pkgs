@@ -26,9 +26,12 @@ func main() {
 	flag.Parse()
 	signals.DebounceDuration = time.Millisecond * 250
 	ctx := context.Background()
-	ctx, wait := signals.NotifyWithCancel(ctx, os.Interrupt)
+	ctx, handler := signals.NotifyWithCancel(ctx, os.Interrupt)
+	handler.RegisterCancel(func() {
+		fmt.Printf("CANCEL PID=%v\n", os.Getpid())
+	})
 	fmt.Printf("PID=%v\n", os.Getpid())
-	sig := wait()
+	sig := handler.WaitForSignal()
 	time.Sleep(signals.DebounceDuration * 2)
 	fmt.Println(sig.String())
 }

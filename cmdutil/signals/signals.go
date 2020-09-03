@@ -10,6 +10,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -29,23 +30,50 @@ const (
 // signals are ignored.
 var DebounceDuration time.Duration = time.Second
 
+type Handler struct {
+	mu         sync.Mutex
+	retCh      chan os.Signal
+	cancelList []func()
+}
+
+func (h *Handler) RegisterCancel(fns ...func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cancelList = append(h.cancelList, fns...)
+}
+
+func (h *Handler) cancel() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, cancel := range h.cancelList {
+		cancel()
+	}
+}
+
+func (h *Handler) WaitForSignal() os.Signal {
+	return <-h.retCh
+}
+
 // NotifyWithCancel is like signal.Notify except that it forks (and returns) the
 // supplied context to obtain a cancel function that is called when a signal
 // is received. It will also catch the cancelation of the supplied context
-// and turn into an instance of ContextDoneSignal. The returned function can
-// be used to wait for the signals to be received, a function is returned to
-// allow for the convenient use of defer. Typical usage would be:
+// and turn it into an instance of ContextDoneSignal. The returned handler can
+// be used to wait for the signals to be received and to register additional
+// cancelation functions to be invoked when a signal is received. Typical usage
+// would be:
 //
-// func main() {
-//    ctx, wait := signals.NotifyWithCancel(context.Background(), signals.Defaults()...)
-//    ....
-//    defer wait() // wait for a signal or context cancelation.
-//  }
+//   func main() {
+//      ctx, handler := signals.NotifyWithCancel(context.Background(), signals.Defaults()...)
+//      ....
+//      handler.RegisterCancel(func() { ... })
+//      ...
+//      defer hanlder.WaitForSignal() // wait for a signal or context cancelation.
+//    }
 //
 // If a second, different, signal is received then os.Exit(ExitCode) is called.
 // Subsequent signals are the same as the first are ignored for one second
 // but after that will similarly lead to os.Exit(ExitCode) being called.
-func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Context, func() os.Signal) {
+func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Context, *Handler) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Never drop the first two signals.
@@ -55,6 +83,7 @@ func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Contex
 
 	// Never block on forwarding the first signal.
 	retCh := make(chan os.Signal, 1)
+	handler := &Handler{retCh: retCh}
 	go func() {
 		close(isRunning)
 		var sig os.Signal
@@ -64,8 +93,10 @@ func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Contex
 			sigTime = time.Now()
 			retCh <- sig
 			cancel()
+			handler.cancel()
 		case <-ctx.Done():
 			retCh <- ContextDoneSignal(ctx.Err().Error())
+			handler.cancel()
 			return
 		}
 		for {
@@ -76,9 +107,7 @@ func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Contex
 		}
 	}()
 	<-isRunning
-	return ctx, func() os.Signal {
-		return <-retCh
-	}
+	return ctx, handler
 }
 
 // ContextDoneSignal implements os.Signal and is used to translate a
