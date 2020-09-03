@@ -7,6 +7,7 @@ package subcmd_test
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -14,22 +15,61 @@ import (
 	"cloudeng.io/errors"
 )
 
+func ExampleCommandSet() {
+	ctx := context.Background()
+	type rangeFlags struct {
+		From int `subcmd:"from,1,start value for a range"`
+		To   int `subcmd:"to,2,end value for a range "`
+	}
+	printRange := func(ctx context.Context, values interface{}, args []string) error {
+		r := values.(*rangeFlags)
+		fmt.Printf("%v..%v\n", r.From, r.To)
+		return nil
+	}
+
+	fs := subcmd.NewFlagSet()
+	fs.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
+	// Subcommands are added using the subcmd.WithSubcommands option.
+	cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
+	cmd.Document("print an integer range")
+	cmdSet := subcmd.NewCommandSet(cmd)
+
+	// Use cmdSet.Dispatch to access os.Args.
+	fmt.Println(cmdSet.Usage("example-command"))
+	cmdSet.DispatchWithArgs(ctx, "example-command", "ranger")
+	cmdSet.DispatchWithArgs(ctx, "example-command", "ranger", "--from=10", "--to=100")
+
+	// Output:
+	// Usage of example-command
+	//
+	// Usage of command ranger: print an integer range
+	// ranger [--from=1 --to=2]
+	//   -from int
+	//     	start value for a range (default 1)
+	//   -to int
+	//     	end value for a range  (default 2)
+	//
+	// 1..2
+	// 10..100
+}
+
 type flagsA struct {
-	A int `fl:"flag-a,,a: an int flag"`
-	B int `fl:"flag-b,,b: an int flag"`
+	A int `subcmd:"flag-a,,a: an int flag"`
+	B int `subcmd:"flag-b,,b: an int flag"`
 }
 
 type flagsB struct {
-	X string `fl:"flag-x,,x: a string flag"`
-	Y string `fl:"flag-y,,y: a string flag"`
+	X string `subcmd:"flag-x,,x: a string flag"`
+	Y string `subcmd:"flag-y,,y: a string flag"`
 }
 
 func TestCommandSet(t *testing.T) {
 	ctx := context.Background()
 	var err error
 	assertNoError := func() {
+		_, _, line, _ := runtime.Caller(1)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("line %v: %v", line, err)
 		}
 	}
 
@@ -51,41 +91,46 @@ func TestCommandSet(t *testing.T) {
 		return nil
 	}
 
-	cmdAFlags := subcmd.NewFlags("cmd-a", "subcmd a", "<args>...")
-	err = cmdAFlags.RegisterFlagStruct("fl", &flagsA{}, nil, nil)
+	cmdAFlags := subcmd.NewFlagSet()
+	err = cmdAFlags.RegisterFlagStruct(&flagsA{}, nil, nil)
 	assertNoError()
-	cmdBFlags := subcmd.NewFlags("cmd-b", "subcmd b")
-	err = cmdBFlags.RegisterFlagStruct("fl", &flagsB{}, nil, nil)
-	assertNoError()
-	commands := subcmd.First(cmdAFlags, runnerA).
-		Append(cmdBFlags, runnerB)
+	cmdA := subcmd.NewCommand("cmd-a", cmdAFlags, runnerA)
+	cmdA.Document("subcmd a", "<args>...")
 
-	err = commands.DispatchWithArgs(ctx, "cmd-a", "--flag-a=1", "--flag-b=3")
+	cmdBFlags := subcmd.NewFlagSet()
+	err = cmdBFlags.RegisterFlagStruct(&flagsB{}, nil, nil)
+	assertNoError()
+	cmdB := subcmd.NewCommand("cmd-b", cmdBFlags, runnerB)
+	cmdB.Document("subcmd b", "")
+	commands := subcmd.NewCommandSet(cmdA, cmdB)
+
+	err = commands.DispatchWithArgs(ctx, "test", "cmd-a", "--flag-a=1", "--flag-b=3")
 	assertNoError()
 	if got, want := out.String(), "1 .. 3\n"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := commands.Defaults(), `cmd-a: subcmd a
+	if got, want := commands.Usage("binary"), `Usage of binary
+
+Usage of command cmd-a: subcmd a
 cmd-a [--flag-a=0 --flag-b=0] <args>...
   -flag-a int
     	a: an int flag
   -flag-b int
     	b: an int flag
 
-cmd-b: subcmd b
+Usage of command cmd-b: subcmd b
 cmd-b [--flag-x= --flag-y=]
   -flag-x string
     	x: a string flag
   -flag-y string
     	y: a string flag
-
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	out.Reset()
-	err = commands.DispatchWithArgs(ctx, "cmd-b", "--flag-x=s1", "--flag-y=s3")
+	err = commands.DispatchWithArgs(ctx, "test", "cmd-b", "--flag-x=s1", "--flag-y=s3")
 	assertNoError()
 	if got, want := out.String(), "s1 .. s3\n"; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -104,50 +149,54 @@ func TestCommandOptions(t *testing.T) {
 		numArgs = len(args)
 		return nil
 	}
-	cmdAFlags := subcmd.NewFlags("cmd", "subcmd", "<args>...")
-	err := cmdAFlags.RegisterFlagStruct("fl", &flagsA{}, nil, nil)
+	cmdAFlags := subcmd.NewFlagSet()
+	err := cmdAFlags.RegisterFlagStruct(&flagsA{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmdExactlyN := subcmd.First(cmdAFlags, runnerA, subcmd.ExactlyNumArguments(2))
-	cmdNoArgs := subcmd.First(cmdAFlags, runnerA, subcmd.WithoutArguments())
-	cmdOptional := subcmd.First(cmdAFlags, runnerA, subcmd.OptionalSingleArgument())
+	cmdset := subcmd.NewCommandSet(
+		subcmd.NewCommand("exactly-two", cmdAFlags, runnerA, subcmd.ExactlyNumArguments(2)),
+		subcmd.NewCommand("none", cmdAFlags, runnerA, subcmd.WithoutArguments()),
+		subcmd.NewCommand("at-most-one", cmdAFlags, runnerA, subcmd.OptionalSingleArgument()),
+	)
 
 	expectedError := func(errmsg string) {
+		_, _, line, _ := runtime.Caller(1)
 		if err == nil || !strings.Contains(err.Error(), errmsg) {
-			t.Errorf("missing or incorrect error: %v does not contain %v", err, errmsg)
+			t.Errorf("line %v: missing or incorrect error: %v does not contain %v", line, err, errmsg)
 		}
 	}
 	expectedNArgs := func(n int) {
+		_, _, line, _ := runtime.Caller(1)
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("line %v: unexpected error: %v", line, err)
 		}
 		if got, want := numArgs, n; got != want {
-			t.Errorf("got %v, want %v", got, want)
+			t.Errorf("line %v: got %v, want %v", line, got, want)
 		}
 		numArgs = -1
 	}
-	err = cmdExactlyN.DispatchWithArgs(ctx, "cmd")
-	expectedError("cmd: accepts exactly 2 arguments")
-	err = cmdExactlyN.DispatchWithArgs(ctx, "cmd", "a", "b")
+	err = cmdset.DispatchWithArgs(ctx, "test", "exactly-two")
+	expectedError("exactly-two: accepts exactly 2 arguments")
+	err = cmdset.DispatchWithArgs(ctx, "test", "exactly-two", "a", "b")
 	expectedNArgs(2)
-	err = cmdNoArgs.DispatchWithArgs(ctx, "cmd", "aaa")
-	expectedError("cmd: does not accept any arguments")
-	err = cmdNoArgs.DispatchWithArgs(ctx, "cmd")
+	err = cmdset.DispatchWithArgs(ctx, "test", "none", "aaa")
+	expectedError("none: does not accept any arguments")
+	err = cmdset.DispatchWithArgs(ctx, "test", "none")
 	expectedNArgs(0)
-	err = cmdOptional.DispatchWithArgs(ctx, "cmd", "a", "b")
-	expectedError("cmd: accepts at most one argument")
-	err = cmdOptional.DispatchWithArgs(ctx, "cmd")
+	err = cmdset.DispatchWithArgs(ctx, "test", "at-most-one", "a", "b")
+	expectedError("at-most-one: accepts at most one argument")
+	err = cmdset.DispatchWithArgs(ctx, "test", "at-most-one")
 	expectedNArgs(0)
-	err = cmdOptional.DispatchWithArgs(ctx, "cmd", "a")
+	err = cmdset.DispatchWithArgs(ctx, "test", "at-most-one", "a")
 	expectedNArgs(1)
 }
 
 func TestMultiLevel(t *testing.T) {
 	ctx := context.Background()
 
-	cmd1, cmd2, cmd12, cmd22 := false, false, false, false
+	cmd1, cmd2, cmd11, cmd12 := false, false, false, false
 
 	c1 := func(ctx context.Context, values interface{}, args []string) error {
 		cmd1 = true
@@ -159,46 +208,56 @@ func TestMultiLevel(t *testing.T) {
 		return nil
 	}
 
+	c11 := func(ctx context.Context, values interface{}, args []string) error {
+		cmd11 = true
+		return nil
+	}
+
 	c12 := func(ctx context.Context, values interface{}, args []string) error {
 		cmd12 = true
 		return nil
 	}
 
-	c22 := func(ctx context.Context, values interface{}, args []string) error {
-		cmd22 = true
-		return nil
-	}
-
-	c1Flags := subcmd.NewFlags("c1", "c1")
-	c2Flags := subcmd.NewFlags("c2", "c2")
-	c12Flags := subcmd.NewFlags("c12", "c12")
-	c22Flags := subcmd.NewFlags("c22", "c22")
+	c1Flags := subcmd.NewFlagSet()
+	c2Flags := subcmd.NewFlagSet()
+	c11Flags := subcmd.NewFlagSet()
+	c12Flags := subcmd.NewFlagSet()
 	errs := errors.M{}
-	errs.Append(c1Flags.RegisterFlagStruct("fl", &flagsA{}, nil, nil))
-	errs.Append(c2Flags.RegisterFlagStruct("fl", &flagsA{}, nil, nil))
-	errs.Append(c12Flags.RegisterFlagStruct("fl", &flagsA{}, nil, nil))
+	errs.Append(c1Flags.RegisterFlagStruct(&flagsA{}, nil, nil))
+	errs.Append(c2Flags.RegisterFlagStruct(&flagsA{}, nil, nil))
+	errs.Append(c11Flags.RegisterFlagStruct(&flagsA{}, nil, nil))
+	errs.Append(c12Flags.RegisterFlagStruct(&flagsA{}, nil, nil))
 	if err := errs.Err(); err != nil {
 		t.Fatal(err)
 	}
 
-	l2 := subcmd.First(c12Flags, c12).Append(c22Flags, c22)
-	l1 := subcmd.First(c1Flags, c1, subcmd.SubCommands(l2)).
-		Append(c2Flags, c2)
+	c11Cmd := subcmd.NewCommand("c11", c11Flags, c11)
+	c11Cmd.Document("c11")
+	c12Cmd := subcmd.NewCommand("c12", c12Flags, c12)
+	c12Cmd.Document("c12")
+	l2 := subcmd.NewCommandSet(c11Cmd, c12Cmd)
+	c1Cmd := subcmd.NewCommand("c1", c1Flags, c1, subcmd.WithSubCommands(l2))
+	c1Cmd.Document("c1")
+	c2Cmd := subcmd.NewCommand("c2", c2Flags, c2)
+	c2Cmd.Document("c2")
 
-	if got, want := l1.Defaults(), `c1: c1
-c1 [--flag-a=0 --flag-b=0] c12|c22 ...
+	l1 := subcmd.NewCommandSet(c1Cmd, c2Cmd)
+
+	if got, want := l1.Usage("test"), `Usage of test
+
+Usage of command c1: c1
+c1 [--flag-a=0 --flag-b=0] c11|c12 ...
   -flag-a int
     	a: an int flag
   -flag-b int
     	b: an int flag
 
-c2: c2
+Usage of command c2: c2
 c2 [--flag-a=0 --flag-b=0]
   -flag-a int
     	a: an int flag
   -flag-b int
     	b: an int flag
-
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -206,39 +265,40 @@ c2 [--flag-a=0 --flag-b=0]
 	var err error
 
 	assert := func(b bool) {
+		_, _, line, _ := runtime.Caller(1)
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("line %v: unexpected error: %v", line, err)
 		}
 		if !b {
-			t.Errorf("expected value to be true")
+			t.Errorf("line %v: expected value to be true", line)
 		}
 	}
 
-	err = l1.DispatchWithArgs(ctx, "c1", "c12")
-	assert(cmd12)
-	assert(!cmd22)
+	err = l1.DispatchWithArgs(ctx, "test", "c1", "c11")
+	assert(cmd11)
+	assert(!cmd12)
 	assert(!cmd1)
 	assert(!cmd2)
 
-	err = l1.DispatchWithArgs(ctx, "c1", "c22")
+	err = l1.DispatchWithArgs(ctx, "test", "c1", "c12")
+	assert(cmd11)
 	assert(cmd12)
-	assert(cmd22)
 	assert(!cmd1)
 	assert(!cmd2)
 
-	err = l1.DispatchWithArgs(ctx, "c2")
+	err = l1.DispatchWithArgs(ctx, "test", "c2")
+	assert(cmd11)
 	assert(cmd12)
-	assert(cmd22)
 	assert(!cmd1)
 	assert(cmd2)
 
-	err = l1.DispatchWithArgs(ctx, "c1")
-	if err == nil || !strings.Contains(err.Error(), "missing top level command: available commands are: c12, c22") {
-		t.Errorf("expected an error: %v", err)
+	err = l1.DispatchWithArgs(ctx, "test", "c1")
+	if err == nil || !strings.Contains(err.Error(), "missing top level command: available commands are: c11, c12") {
+		t.Errorf("expected a particular error: %v", err)
 	}
 
-	err = l1.DispatchWithArgs(ctx, "c1", "cx")
-	if err == nil || !strings.Contains(err.Error(), "cx is not one of the supported commands: c12, c22") {
-		t.Errorf("expected an error: %v", err)
+	err = l1.DispatchWithArgs(ctx, "test", "c1", "cx")
+	if err == nil || !strings.Contains(err.Error(), "cx is not one of the supported commands: c11, c12") {
+		t.Errorf("expected a particular error: %v", err)
 	}
 }

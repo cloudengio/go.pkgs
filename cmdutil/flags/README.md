@@ -29,12 +29,6 @@ func AtMostOneSet(args ...interface{}) bool
 AtMostOneSet is like ExactlyOne except that it returns true if zero or one
 of its arguments are set.
 
-### Func Defaults
-```go
-func Defaults(fs *flag.FlagSet) string
-```
-Defaults returns the output of PrintDefaults() as a string.
-
 ### Func ExactlyOneSet
 ```go
 func ExactlyOneSet(args ...interface{}) bool
@@ -47,12 +41,6 @@ where 'set' means:
 
 ExactlyOneSet will panic if any of the arguments are not one of the above
 types.
-
-### Func NamesAndDefault
-```go
-func NamesAndDefault(fs *flag.FlagSet) string
-```
-NamesAndDefault returns a string with flag names and their default values.
 
 ### Func ParseFlagTag
 ```go

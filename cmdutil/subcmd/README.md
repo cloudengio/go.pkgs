@@ -5,36 +5,63 @@
 import cloudeng.io/cmdutil/subcmd
 ```
 
-Package subcmd provides a simple sub-command facility. It allows for
-creating command trees of the form:
+Package subcmd provides a multi-level command facility of the following
+form:
 
-Usage of <tool>
+    Usage of <tool>
+      <sub-command-1> <flags for sub-command-1> <args for sub-comand-1>
+        <sub-command-2-1> <flags for sub-command-2-1> <args for sub-comand-2-1>
+        ...
+        <sub-command-2-2> <flags for sub-command-2-2> <args for sub-comand-2-2>
+      ...
+      <sub-command-n> <flags for sub-command-n> <args for sub-comand-n>
 
-    <sub-command-1> <flags for sub-command-1> <args for sub-comand-1>
-       <sub-command-2-1> <flags for sub-command-2-1> <args for sub-comand-2-1>
-       ...
-       <sub-command-2-2> <flags for sub-command-2-2> <args for sub-comand-2-2>
-    ...
-    <sub-command-n> <flags for sub-command-n> <args for sub-comand-n>
+The primary motivation for this package was to avoid the need to use global
+variables to store flag values packages. Such global variables quickly
+become a maintenance problem as command line tools evolve and in particular
+as functions are refactored. The cloudeng.io/cmdutil/flags package provides
+a means of defining flags as fields in a struct with a struct tag providing
+the flag name, default value and usage and is used to represent all flags.
 
-Creating a command consists of defining the flags with associated
-descriptions and then associating the newly create Flags struct with the
-function to be run to implement that command. The
-flags.RegisterFlagsInStruct paradigm is used for defining flags. A
-CommandSet is then created as follows:
+subcmd builds on the standard flag package and mirrors its design but
+without requiring that flag.Parse or any of its global state be used.
 
-    cmds = subcmd.First(...).Append(...).Append(...)
+Flags are represented by a FlagSet which encapsulates an underlying
+flag.FlagSet but with flag variables provided via cloudeng.io/cmdutil/flags.
 
-Once created, typically in an init function, the CommandSet may be used by
-calling its Dispatch or DispatchWithArgs methods typically from the main
-function.
+The Command type associates a FlagSet with the function that implements that
+command as well as documenting the command. This 'runner' takes as an
+argument the struct used to store its flag values as well as the command
+line arguments; thus avoiding the need for global flag variables at the cost
+of a type assertion. A CommandSet is used to create the command hierarchy
+itself and finally the cmdset can be used to dispatch the appropriate
+command functions via cmdset.Dispatch or DispatchWithArgs.
 
-The encapsulation of all the flag definitions within a struct and then
-making that struct available to the runner function as a parameter
-conveniently avoids having to define flag values at a global level.
+    type rangeFlags struct {
+      From int `subcmd:"from,1,start value for a range"`
+      To   int `subcmd:"to,2,end value for a range "`
+    }
+    func printRange(ctx context.Context, values interface{}, args []string) error {
+      r := values.(*rangeFlags)
+      fmt.Printf("%v..%v\n", r.From, r.To)
+      return nil
+    }
+
+    func main() {
+      ctx := context.Background()
+      fs := subcmd.NewFlagSet()
+      fs.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
+      // Subcommands are added using the subcmd.WithSubcommands option.
+      cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
+      cmd.Document("print an integer range")
+      cmdSet := subcmd.NewCommandSet(cmd)
+      if err := cmdSet.Dispatch(ctx); err != nil {
+         panic(err)
+      }
+    }
 
 Note that this package will never call flag.Parse and will not associate any
-flags with flag.CommandLine. Commands.Usage() can be used to set flag.Usage.
+flags with flag.CommandLine.
 
 ## Types
 ### Type Command
@@ -45,14 +72,28 @@ type Command struct {
 ```
 Command represents a single command.
 
+### Functions
+
+```go
+func NewCommand(name string, flags *FlagSet, runner Runner, options ...CommandOption) *Command
+```
+NewCommand returns a new instance of Command.
+
+
+
 ### Methods
 
 ```go
-func (cmd Command) Usage() string
+func (cmd *Command) Document(description string, arguments ...string)
+```
+
+
+```go
+func (cmd *Command) Usage() string
 ```
 Usage returns a string containing a 'usage' message for the command. It
-includes a summary of the command, its flags and arguments and the flag
-defaults.
+includes a summary of the command (including a list of any sub commands) its
+flags and arguments and the flag defaults.
 
 
 
@@ -81,11 +122,11 @@ argument.
 
 
 ```go
-func SubCommands(cmds CommandSet) CommandOption
+func WithSubCommands(cmds *CommandSet) CommandOption
 ```
-SubCommands associates a set of commands that are subordinate to the current
-one. Once all flags for the current command processed the first argument
-must be one of these commands.
+WithSubCommands associates a set of commands that are subordinate to the
+current one. Once all of the flags for the current command processed the
+first argument must be one of these commands.
 
 
 ```go
@@ -98,7 +139,9 @@ WithoutArguments specifies that the command takes no arguments.
 
 ### Type CommandSet
 ```go
-type CommandSet []*Command
+type CommandSet struct {
+	// contains filtered or unexported fields
+}
 ```
 CommandSet represents a set of commands that are peers to each other, that
 is, the command line must specificy one of them.
@@ -106,7 +149,7 @@ is, the command line must specificy one of them.
 ### Functions
 
 ```go
-func First(flags *Flags, runner Runner, options ...CommandOption) CommandSet
+func NewCommandSet(cmds ...*Command) *CommandSet
 ```
 First creates the first command.
 
@@ -115,66 +158,62 @@ First creates the first command.
 ### Methods
 
 ```go
-func (cmds CommandSet) Append(flags *Flags, runner Runner, options ...CommandOption) CommandSet
-```
-Append adds a new command.
-
-
-```go
-func (cmds CommandSet) Commands() []string
+func (cmds *CommandSet) Commands() []string
 ```
 Commands returns the list of available commands.
 
 
 ```go
-func (cmds CommandSet) Defaults() string
-```
-Defaults returns the value of Defaults for each command in commands.
-
-
-```go
-func (cmds CommandSet) Dispatch(ctx context.Context) error
+func (cmds *CommandSet) Dispatch(ctx context.Context) error
 ```
 
 
 ```go
-func (cmds CommandSet) DispatchWithArgs(ctx context.Context, args ...string) error
+func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args ...string) error
 ```
 Dispatch determines which top level command has been requested, if any,
 parses the command line appropriately and then runs its associated function.
 
 
 ```go
-func (cmds CommandSet) Usage(name string) func()
+func (cmds *CommandSet) Output() io.Writer
+```
+
+
+```go
+func (cmds *CommandSet) SetOutput(out io.Writer)
+```
+
+
+```go
+func (cmds *CommandSet) Usage(name string) string
 ```
 Usage returns a function that can be assigned to flag.Usage.
 
 
 
 
-### Type Flags
+### Type FlagSet
 ```go
-type Flags struct {
+type FlagSet struct {
 	// contains filtered or unexported fields
 }
 ```
-Flags represents the name, description and flags for a command.
+FlagSet represents the name, description and flag values for a command.
 
 ### Functions
 
 ```go
-func NewFlags(name, description string, arguments ...string) *Flags
+func NewFlagSet() *FlagSet
 ```
-NewFlags returns a new instance of Flags. The flags are used to name and
-describe the command they are associated with and optionally, the arguments
-may also be given a desription.
+NewFlagSet returns a new instance of FlagSet.
 
 
 
 ### Methods
 
 ```go
-func (cf *Flags) IsSet(field interface{}) (string, bool)
+func (cf *FlagSet) IsSet(field interface{}) (string, bool)
 ```
 IsSet returns true if the supplied flag variable's value has been set,
 either via a string literal in the struct or via the valueDefaults argument
@@ -182,7 +221,7 @@ to RegisterFlagStruct.
 
 
 ```go
-func (cf *Flags) MustRegisterFlagStruct(tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string)
+func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string)
 ```
 MustRegisterFlagStruct is like RegisterFlagStruct except that it panics on
 encountering an error. Its use is encouraged over RegisterFlagStruct from
@@ -190,11 +229,11 @@ within init functions.
 
 
 ```go
-func (cf *Flags) RegisterFlagStruct(tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
+func (cf *FlagSet) RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
 ```
 RegisterFlagStruct registers a struct, using
-RegisterFlagsInStructWithSetMap. The returned SetMap can be queried by the
-IsSet method.
+flags.RegisterFlagsInStructWithSetMap. The struct tag must be 'subcomd'. The
+returned SetMap can be queried by the IsSet method.
 
 
 
@@ -205,6 +244,11 @@ type Runner func(ctx context.Context, flagValues interface{}, args []string) err
 ```
 Runner is the type of the function to be called to run a particular command.
 
+
+
+
+## Examples
+### [ExampleCommandSet](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSet)
 
 
 
