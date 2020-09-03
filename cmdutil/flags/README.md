@@ -48,6 +48,12 @@ where 'set' means:
 ExactlyOneSet will panic if any of the arguments are not one of the above
 types.
 
+### Func NamesAndDefault
+```go
+func NamesAndDefault(fs *flag.FlagSet) string
+```
+NamesAndDefault returns a string with flag names and their default values.
+
 ### Func ParseFlagTag
 ```go
 func ParseFlagTag(t string) (name, value, usage string, err error)
@@ -131,6 +137,49 @@ Set implements flag.Value.
 func (c *Commas) String() string
 ```
 String inplements flag.Value.
+
+
+
+
+### Type Map
+```go
+type Map struct {
+	// contains filtered or unexported fields
+}
+```
+Map represents a mapping of strings to values that implements flag.Value and
+can be used for command line flag values. It must be appropriately
+initialized with name, value pairs and a default value using its Register
+and Default methods.
+
+### Methods
+
+```go
+func (ef Map) Default(val interface{}) Map
+```
+
+
+```go
+func (ef *Map) Get() interface{}
+```
+Value implements flag.Getter.
+
+
+```go
+func (ef Map) Register(name string, val interface{}) Map
+```
+
+
+```go
+func (ef *Map) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (ef *Map) String() string
+```
+String implements flag.Value.
 
 
 
