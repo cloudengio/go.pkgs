@@ -415,7 +415,8 @@ type SetMap struct {
 }
 
 // IsSet returns true if the supplied flag variable's value has been
-// set, either via its str
+// set, either via a string literal in the struct or via the valueDefaults
+// argument to RegisterFlagsInStructWithSetMap.
 func (sm *SetMap) IsSet(field interface{}) (string, bool) {
 	v, ok := sm.set[reflect.ValueOf(field).Pointer()]
 	return v, ok

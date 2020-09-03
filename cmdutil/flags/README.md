@@ -129,6 +129,49 @@ String inplements flag.Value.
 
 
 
+### Type Map
+```go
+type Map struct {
+	// contains filtered or unexported fields
+}
+```
+Map represents a mapping of strings to values that implements flag.Value and
+can be used for command line flag values. It must be appropriately
+initialized with name, value pairs and a default value using its Register
+and Default methods.
+
+### Methods
+
+```go
+func (ef Map) Default(val interface{}) Map
+```
+
+
+```go
+func (ef *Map) Get() interface{}
+```
+Value implements flag.Getter.
+
+
+```go
+func (ef Map) Register(name string, val interface{}) Map
+```
+
+
+```go
+func (ef *Map) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (ef *Map) String() string
+```
+String implements flag.Value.
+
+
+
+
 ### Type OneOf
 ```go
 type OneOf string
@@ -205,7 +248,8 @@ argument.
 func (sm *SetMap) IsSet(field interface{}) (string, bool)
 ```
 IsSet returns true if the supplied flag variable's value has been set,
-either via its str
+either via a string literal in the struct or via the valueDefaults argument
+to RegisterFlagsInStructWithSetMap.
 
 
 
