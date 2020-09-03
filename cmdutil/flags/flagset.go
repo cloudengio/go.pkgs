@@ -18,3 +18,13 @@ func Defaults(fs *flag.FlagSet) string {
 	fs.PrintDefaults()
 	return out.String()
 }
+
+// NamesAndDefault returns a string with flag names and their default
+// values.
+func NamesAndDefault(fs *flag.FlagSet) string {
+	summary := []string{}
+	fs.VisitAll(func(fl *flag.Flag) {
+		summary = append(summary, "--"+fl.Name+"="+fl.DefValue)
+	})
+	return fs.Name() + " [" + strings.Join(summary, " ") + "]"
+}
