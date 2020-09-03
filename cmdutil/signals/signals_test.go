@@ -121,12 +121,23 @@ func TestMultipleCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	_, handler := signals.NotifyWithCancel(ctx, os.Interrupt)
 	out := []string{}
+	mu := sync.Mutex{}
+	writeString := func(m string) {
+		mu.Lock()
+		defer mu.Unlock()
+		out = append(out, m)
+	}
+	getString := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Join(out, "..")
+	}
 	handler.RegisterCancel(
 		func() {
-			out = append(out, "a")
+			writeString("a")
 		},
 		func() {
-			out = append(out, "b")
+			writeString("b")
 		},
 	)
 
@@ -139,7 +150,7 @@ func TestMultipleCancel(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	time.Sleep(time.Second)
-	if got, want := strings.Join(out, ""), "ab"; got != want {
+	if got, want := getString(), "a..b"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

@@ -69,6 +69,10 @@ type Handler struct {
 	// contains filtered or unexported fields
 }
 ```
+Handler represents a signal handler that can be used to wait for signal
+reception or context cancelation as per NotifyWithCancel. In addition it can
+be used to register additional cancel functions to be invoked on signal
+reception or context cancelation.
 
 ### Functions
 
@@ -102,11 +106,15 @@ after that will similarly lead to os.Exit(ExitCode) being called.
 ```go
 func (h *Handler) RegisterCancel(fns ...func())
 ```
+RegisterCancel registers one or more cancel functions to be invoked when a
+signal is received or the original context is canceled.
 
 
 ```go
 func (h *Handler) WaitForSignal() os.Signal
 ```
+WaitForSignal will wait for a signal to be received. Context cancelation is
+translated into a ContextDoneSignal signal.
 
 
 

@@ -30,12 +30,18 @@ const (
 // signals are ignored.
 var DebounceDuration time.Duration = time.Second
 
+// Handler represents a signal handler that can be used to wait for signal
+// reception or context cancelation as per NotifyWithCancel. In addition
+// it can be used to register additional cancel functions to be invoked
+// on signal reception or context cancelation.
 type Handler struct {
-	mu         sync.Mutex
 	retCh      chan os.Signal
-	cancelList []func()
+	mu         sync.Mutex
+	cancelList []func() // GUARDED_BY(mu)
 }
 
+// RegisterCancel registers one or more cancel functions to be invoked
+// when a signal is received or the original context is canceled.
 func (h *Handler) RegisterCancel(fns ...func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -50,6 +56,8 @@ func (h *Handler) cancel() {
 	}
 }
 
+// WaitForSignal will wait for a signal to be received. Context cancelation
+// is translated into a ContextDoneSignal signal.
 func (h *Handler) WaitForSignal() os.Signal {
 	return <-h.retCh
 }
