@@ -88,7 +88,7 @@ func (cf *Flags) MustRegisterFlagStruct(tag string, structWithFlags interface{},
 // set, either via a string literal in the struct or via the valueDefaults
 // argument to RegisterFlagStruct.
 func (cf *Flags) IsSet(field interface{}) (string, bool) {
-	return cf.IsSet(field)
+	return cf.sm.IsSet(field)
 }
 
 // Runner is the type of the function to be called to run a particular command.
@@ -111,13 +111,11 @@ func (cmd Command) Usage() string {
 	out.WriteString(cl)
 	if sc := cmd.opts.subcmds; sc != nil {
 		fmt.Fprintf(out, " %v ...", strings.Join(sc.Commands(), "|"))
-	} else {
-		if args := cmd.flags.arguments; len(args) > 0 {
-			if len(cl) > 0 {
-				out.WriteString(" ")
-			}
-			out.WriteString(args)
+	} else if args := cmd.flags.arguments; len(args) > 0 {
+		if len(cl) > 0 {
+			out.WriteString(" ")
 		}
+		out.WriteString(args)
 	}
 	out.WriteString("\n")
 	out.WriteString(flags.Defaults(fs))
