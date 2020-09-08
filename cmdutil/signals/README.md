@@ -37,28 +37,6 @@ func Defaults() []os.Signal
 ```
 Defaults returns a set of platform specific signals that are commonly used.
 
-### Func NotifyWithCancel
-```go
-func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Context, func() os.Signal)
-```
-NotifyWithCancel is like signal.Notify except that it forks (and returns)
-the supplied context to obtain a cancel function that is called when a
-signal is received. It will also catch the cancelation of the supplied
-context and turn into an instance of ContextDoneSignal. The returned
-function can be used to wait for the signals to be received, a function is
-returned to allow for the convenient use of defer. Typical usage would be:
-
-func main() {
-
-      ctx, wait := signals.NotifyWithCancel(context.Background(), signals.Defaults()...)
-      ....
-      defer wait() // wait for a signal or context cancelation.
-    }
-
-If a second, different, signal is received then os.Exit(ExitCode) is called.
-Subsequent signals are the same as the first are ignored for one second but
-after that will similarly lead to os.Exit(ExitCode) being called.
-
 
 
 ## Types
@@ -81,6 +59,62 @@ Signal implements os.Signal.
 func (s ContextDoneSignal) String() string
 ```
 Stringimplements os.Signal.
+
+
+
+
+### Type Handler
+```go
+type Handler struct {
+	// contains filtered or unexported fields
+}
+```
+Handler represents a signal handler that can be used to wait for signal
+reception or context cancelation as per NotifyWithCancel. In addition it can
+be used to register additional cancel functions to be invoked on signal
+reception or context cancelation.
+
+### Functions
+
+```go
+func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Context, *Handler)
+```
+NotifyWithCancel is like signal.Notify except that it forks (and returns)
+the supplied context to obtain a cancel function that is called when a
+signal is received. It will also catch the cancelation of the supplied
+context and turn it into an instance of ContextDoneSignal. The returned
+handler can be used to wait for the signals to be received and to register
+additional cancelation functions to be invoked when a signal is received.
+Typical usage would be:
+
+    func main() {
+       ctx, handler := signals.NotifyWithCancel(context.Background(), signals.Defaults()...)
+       ....
+       handler.RegisterCancel(func() { ... })
+       ...
+       defer hanlder.WaitForSignal() // wait for a signal or context cancelation.
+     }
+
+If a second, different, signal is received then os.Exit(ExitCode) is called.
+Subsequent signals are the same as the first are ignored for one second but
+after that will similarly lead to os.Exit(ExitCode) being called.
+
+
+
+### Methods
+
+```go
+func (h *Handler) RegisterCancel(fns ...func())
+```
+RegisterCancel registers one or more cancel functions to be invoked when a
+signal is received or the original context is canceled.
+
+
+```go
+func (h *Handler) WaitForSignal() os.Signal
+```
+WaitForSignal will wait for a signal to be received. Context cancelation is
+translated into a ContextDoneSignal signal.
 
 
 

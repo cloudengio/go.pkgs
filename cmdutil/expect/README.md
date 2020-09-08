@@ -25,7 +25,7 @@ different input orderings.
 ### Functions
 
 ```go
-func NewLineStream(rd io.Reader) *Lines
+func NewLineStream(rd io.Reader, opts ...Option) *Lines
 ```
 NewLineStream creates a new instance of Lines.
 
@@ -87,6 +87,22 @@ func (s *Lines) LastMatch() (int, string)
 ```
 LastMatch returns the line number and contents of the last successfully
 matched input line.
+
+
+
+
+### Type Option
+```go
+type Option func(*options)
+```
+Option represents an option.
+
+### Functions
+
+```go
+func TraceInput(out io.Writer) Option
+```
+TraceInput enables tracing of input as it is read.
 
 
 

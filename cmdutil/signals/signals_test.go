@@ -68,6 +68,11 @@ func TestSignal(t *testing.T) {
 		syscall.Kill(pid, syscall.SIGINT)
 		wg.Done()
 	}()
+
+	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := st.ExpectNext(ctx, "interrupt"); err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +90,9 @@ func TestSignal(t *testing.T) {
 		time.Sleep(time.Millisecond * 250)
 		syscall.Kill(pid, syscall.SIGINT)
 	}()
+	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.ExpectNext(ctx, "exit status 1"); err != nil {
 		t.Fatal(err)
 	}
@@ -97,14 +105,52 @@ func TestSignal(t *testing.T) {
 
 func TestCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	_, wait := signals.NotifyWithCancel(ctx, os.Interrupt)
+	_, handler := signals.NotifyWithCancel(ctx, os.Interrupt)
 
 	go func() {
 		cancel()
 	}()
 
-	sig := wait()
+	sig := handler.WaitForSignal()
 	if got, want := sig.String(), "context canceled"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestMultipleCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	_, handler := signals.NotifyWithCancel(ctx, os.Interrupt)
+	out := []string{}
+	mu := sync.Mutex{}
+	writeString := func(m string) {
+		mu.Lock()
+		defer mu.Unlock()
+		out = append(out, m)
+	}
+	getString := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Join(out, "..")
+	}
+	handler.RegisterCancel(
+		func() {
+			writeString("a")
+		},
+		func() {
+			writeString("b")
+		},
+	)
+
+	go func() {
+		cancel()
+	}()
+
+	sig := handler.WaitForSignal()
+	if got, want := sig.String(), "context canceled"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	time.Sleep(time.Second)
+	if got, want := getString(), "a..b"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

@@ -108,17 +108,35 @@ type Lines struct {
 	line      int
 	lastMatch string
 	lastLine  int
+	options   options
 	errs      *errors.M
 }
 
+type options struct {
+	trace io.Writer
+}
+
+// Option represents an option.
+type Option func(*options)
+
+// TraceInput enables tracing of input as it is read.
+func TraceInput(out io.Writer) Option {
+	return func(o *options) {
+		o.trace = out
+	}
+}
+
 // NewLineStream creates a new instance of Lines.
-func NewLineStream(rd io.Reader) *Lines {
+func NewLineStream(rd io.Reader, opts ...Option) *Lines {
 	s := &Lines{
 		rd:   rd,
 		ch:   make(chan *inputEvent, 1),
 		errs: &errors.M{},
 	}
-	go readLines(rd, s.ch)
+	for _, fn := range opts {
+		fn(&s.options)
+	}
+	go readLines(rd, s.options.trace, s.ch)
 	return s
 }
 
@@ -127,11 +145,14 @@ type inputEvent struct {
 	err   error
 }
 
-func readLines(rd io.Reader, ch chan<- *inputEvent) {
+func readLines(rd io.Reader, out io.Writer, ch chan<- *inputEvent) {
 	brd := bufio.NewReader(rd)
 	defer close(ch)
 	for {
 		str, err := brd.ReadString('\n')
+		if out != nil {
+			fmt.Fprintf(out, "> %v", str)
+		}
 		if err != nil {
 			if err == io.EOF {
 				// closing the chanel indicates EOF.
