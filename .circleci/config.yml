@@ -23,7 +23,7 @@ jobs:
           name: downloads
           command: |
             cd errors
-            go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.27.0
+            go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.31.0
             go get github.com/matthewloring/validjson/cmd/validjson
             go install -x github.com/golangci/golangci-lint/cmd/golangci-lint
             go install -x github.com/matthewloring/validjson/cmd/validjson
