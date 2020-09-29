@@ -478,3 +478,125 @@ func TestEmbedding(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestExplicitValueAssignment(t *testing.T) {
+	// Test all 'empty' defaults.
+	type CommonFlags struct {
+		A int `cmdline:"a,,use a"`
+		B int `cmdline:"b,,use b"`
+		Z int `cmdline:"c,,use c"`
+	}
+	s0 := struct {
+		CommonFlags
+		A int           `cmdline:"iv,,intVar flag"`
+		B int64         `cmdline:"iv64,,int64var flag"`
+		C uint          `cmdline:"u,,uintVar flag"`
+		D uint64        `cmdline:"u64,,uint64Var flag"`
+		E float64       `cmdline:"f64,,float64Var flag"`
+		F bool          `cmdline:"doit,,boolVar flag"`
+		G time.Duration `cmdline:"wait,,durationVar flag"`
+		H string        `cmdline:"str,,stringVar flag"`
+		V myFlagVar     `cmdline:"some-var,,user defined var flag"`
+	}{}
+	fs := &flag.FlagSet{}
+	sm, err := flags.RegisterFlagsInStructWithSetMap(fs, "cmdline", &s0, nil, nil)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+
+	assertNotSet := func(sm *flags.SetMap, v interface{}) {
+		_, _, line, _ := runtime.Caller(1)
+		if _, ok := sm.IsSet(v); ok {
+			t.Errorf("line %v: %p should have been set", line, v)
+		}
+	}
+	assertSet := func(sm *flags.SetMap, v interface{}, n string) {
+		_, _, line, _ := runtime.Caller(1)
+		name, ok := sm.IsSet(v)
+		if !ok {
+			t.Errorf("line %v: %p/%v should have been set", line, v, n)
+		}
+		if got, want := name, n; got != want {
+			t.Errorf("line %v: got %v, want %v", line, got, want)
+		}
+	}
+	assertNotSet(sm, &s0.CommonFlags.A)
+	assertNotSet(sm, &s0.CommonFlags.B)
+	assertNotSet(sm, &s0.Z)
+	assertNotSet(sm, &s0.A)
+	assertNotSet(sm, &s0.B)
+	assertNotSet(sm, &s0.C)
+	assertNotSet(sm, &s0.D)
+	assertNotSet(sm, &s0.E)
+	assertNotSet(sm, &s0.F)
+	assertNotSet(sm, &s0.G)
+	assertNotSet(sm, &s0.H)
+	assertNotSet(sm, &s0.V)
+
+	type CommonFlagsSet struct {
+		A int `cmdline:"a,1,use a"`
+		B int `cmdline:"b,2,use b"`
+		Z int `cmdline:"c,3,use c"`
+	}
+	s1 := struct {
+		CommonFlagsSet
+		A int           `cmdline:"iv,0,intVar flag"`
+		B int64         `cmdline:"iv64,0,int64var flag"`
+		C uint          `cmdline:"u,0,uintVar flag"`
+		D uint64        `cmdline:"u64,0,uint64Var flag"`
+		E float64       `cmdline:"f64,0,float64Var flag"`
+		F bool          `cmdline:"doit,false,boolVar flag"`
+		G time.Duration `cmdline:"wait,0,durationVar flag"`
+		H string        `cmdline:"str,'something, comma',stringVar flag"`
+		V myFlagVar     `cmdline:"some-var,12,user defined var flag"`
+	}{}
+	fs = &flag.FlagSet{}
+	sm, err = flags.RegisterFlagsInStructWithSetMap(fs, "cmdline", &s1, nil, nil)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	assertSet(sm, &s1.CommonFlagsSet.A, "a")
+	assertSet(sm, &s1.CommonFlagsSet.B, "b")
+	assertSet(sm, &s1.Z, "c")
+	assertSet(sm, &s1.A, "iv")
+	assertSet(sm, &s1.B, "iv64")
+	assertSet(sm, &s1.C, "u")
+	assertSet(sm, &s1.D, "u64")
+	assertSet(sm, &s1.E, "f64")
+	assertSet(sm, &s1.F, "doit")
+	assertSet(sm, &s1.G, "wait")
+	assertSet(sm, &s1.H, "str")
+	assertSet(sm, &s1.V, "some-var")
+
+	fs = &flag.FlagSet{}
+	sm, err = flags.RegisterFlagsInStructWithSetMap(fs, "cmdline", &s0, map[string]interface{}{
+		"a":        1,
+		"b":        2,
+		"c":        3,
+		"iv":       4,
+		"iv64":     5,
+		"u":        6,
+		"u64":      7,
+		"f64":      -1.2,
+		"doit":     false,
+		"wait":     time.Second,
+		"str":      "oops",
+		"some-var": 32,
+	}, nil)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+
+	assertSet(sm, &s0.CommonFlags.A, "a")
+	assertSet(sm, &s0.CommonFlags.B, "b")
+	assertSet(sm, &s0.Z, "c")
+	assertSet(sm, &s0.A, "iv")
+	assertSet(sm, &s0.B, "iv64")
+	assertSet(sm, &s0.C, "u")
+	assertSet(sm, &s0.D, "u64")
+	assertSet(sm, &s0.E, "f64")
+	assertSet(sm, &s0.F, "doit")
+	assertSet(sm, &s0.G, "wait")
+	assertSet(sm, &s0.H, "str")
+	assertSet(sm, &s0.V, "some-var")
+}

@@ -143,10 +143,11 @@ func defaultLiteralValue(typeName string) interface{} {
 	return nil
 }
 
-func literalDefault(typeName, literal string, initialValue interface{}) (value interface{}, usageDefault string, err error) {
+func literalDefault(typeName, literal string, initialValue interface{}) (value interface{}, usageDefault string, set bool, err error) {
 	if initialValue != nil {
 		switch v := initialValue.(type) {
 		case int, int64, uint, uint64, bool, float64, string, time.Duration:
+			set = true
 			value = v
 			return
 		}
@@ -161,6 +162,7 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 	}
 	var tmp int64
 	var utmp uint64
+	set = true
 	switch typeName {
 	case "int":
 		tmp, err = strconv.ParseInt(literal, 10, 64)
@@ -182,6 +184,8 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 		value, err = time.ParseDuration(literal)
 	case "string":
 		value = literal
+	default:
+		set = false
 	}
 	return
 }
@@ -215,42 +219,60 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 // will result in three flags, --a, --b and --c.
 // Note that embedding as a pointer is not supported.
 func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error {
-	err := registerFlagsInStruct(fs, tag, structWithFlags, valueDefaults, usageDefaults)
+	_, err := RegisterFlagsInStructWithSetMap(fs, tag, structWithFlags, valueDefaults, usageDefaults)
+	return err
+}
+
+// RegisterFlagsInStructWithSetMap is like RegisterFlagsInStruct but returns
+// a SetMap which can be used to determine which flag variables have been
+// initialized either with a literal in the struct tag or via the valueDefaults
+// argument.
+func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*SetMap, error) {
+	reg := &registrar{
+		fs:            fs,
+		tag:           tag,
+		valueDefaults: valueDefaults,
+		usageDefaults: usageDefaults,
+		sm:            &SetMap{set: map[interface{}]string{}},
+	}
+	err := reg.registerFlagsInStruct(structWithFlags)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for k := range valueDefaults {
 		if fs.Lookup(k) == nil {
-			return fmt.Errorf("flag %v does not exist but specified as a value default", k)
+			return nil, fmt.Errorf("flag %v does not exist but specified as a value default", k)
 		}
 	}
 	for k, v := range usageDefaults {
 		if fs.Lookup(k) == nil {
-			return fmt.Errorf("flag %v does not exist but specified as a usage default", k)
+			return nil, fmt.Errorf("flag %v does not exist but specified as a usage default", k)
 		}
 		fs.Lookup(k).DefValue = v
 	}
-	return nil
+	return reg.sm, nil
 }
 
-func createVarFlag(fs *flag.FlagSet, fieldValue reflect.Value, name, value, description string, usageDefaults map[string]string) error {
+func createVarFlag(fs *flag.FlagSet, fieldValue reflect.Value, name, value, description string, usageDefaults map[string]string) (bool, error) {
 	addr := fieldValue.Addr()
 	if !addr.Type().Implements(flagValueType) {
-		return fmt.Errorf("does not implement flag.Value")
+		return false, fmt.Errorf("does not implement flag.Value")
 	}
 	dv := addr.Interface().(flag.Value)
 	fs.Var(dv, name, description)
+	set := false
 	if len(value) > 0 {
 		if err := dv.Set(value); err != nil {
-			return fmt.Errorf("failed to set initial default value for flag.Value: %v", err)
+			return false, fmt.Errorf("failed to set initial default value for flag.Value: %v", err)
 		}
+		set = true
 	}
 	if ud, ok := usageDefaults[name]; ok {
 		fs.Lookup(name).DefValue = ud
 	} else {
 		fs.Lookup(name).DefValue = value
 	}
-	return nil
+	return set, nil
 }
 
 func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue interface{}, fieldValue reflect.Value, name, description string) bool {
@@ -303,7 +325,24 @@ func getTypeVal(structWithFlags interface{}) (reflect.Type, reflect.Value, error
 	return typ, val, nil
 }
 
-func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error {
+type registrar struct {
+	fs            *flag.FlagSet
+	tag           string
+	valueDefaults map[string]interface{}
+	usageDefaults map[string]string
+	sm            *SetMap
+}
+
+func (reg *registrar) possiblyEmbedded(fieldType reflect.StructField, addr reflect.Value) error {
+	if fieldType.Type.Kind() == reflect.Struct && fieldType.Anonymous {
+		if err := reg.registerFlagsInStruct(addr.Interface()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (reg *registrar) registerFlagsInStruct(structWithFlags interface{}) error {
 	typ, val, err := getTypeVal(structWithFlags)
 	if err != nil {
 		return err
@@ -311,13 +350,14 @@ func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 
 	for i := 0; i < typ.NumField(); i++ {
 		fieldType := typ.Field(i)
-		tags, ok := fieldType.Tag.Lookup(tag)
+		fieldValue := val.Field(i)
+		fieldName := fieldType.Name
+		fieldTypeName := fieldType.Type.String()
+
+		tags, ok := fieldType.Tag.Lookup(reg.tag)
 		if !ok {
-			if fieldType.Type.Kind() == reflect.Struct && fieldType.Anonymous {
-				addr := val.Field(i).Addr()
-				if err := registerFlagsInStruct(fs, tag, addr.Interface(), valueDefaults, usageDefaults); err != nil {
-					return err
-				}
+			if err := reg.possiblyEmbedded(fieldType, val.Field(i).Addr()); err != nil {
+				return err
 			}
 			continue
 		}
@@ -326,14 +366,10 @@ func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 		if err != nil {
 			return fmt.Errorf("field %v: failed to parse tag: %v", fieldType.Name, tags)
 		}
-
-		if fs.Lookup(name) != nil {
+		if reg.fs.Lookup(name) != nil {
 			return fmt.Errorf("flag %v already defined for this flag.FlagSet", name)
 		}
 
-		fieldValue := val.Field(i)
-		fieldName := fieldType.Name
-		fieldTypeName := fieldType.Type.String()
 		errPrefix := func() string {
 			return fmt.Sprintf("field: %v of type %v for flag %v", fieldName, fieldTypeName, name)
 		}
@@ -342,24 +378,46 @@ func registerFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 			return fmt.Errorf("%v: field can't be a pointer", errPrefix())
 		}
 
-		initialValue, usageDefault, err := literalDefault(fieldTypeName, value, valueDefaults[name])
+		initialValue, usageDefault, set, err := literalDefault(fieldTypeName, value, reg.valueDefaults[name])
 		if err != nil {
 			return fmt.Errorf("%v: failed to set initial default value: %v", errPrefix(), err)
 		}
 
+		if set {
+			reg.sm.set[fieldValue.Addr().Pointer()] = name
+		}
+
 		if initialValue == nil {
-			if err := createVarFlag(fs, fieldValue, name, value, description, usageDefaults); err != nil {
+			set, err := createVarFlag(reg.fs, fieldValue, name, value, description, reg.usageDefaults)
+			if err != nil {
 				return fmt.Errorf("%v: %v", errPrefix(), err)
+			}
+			if set {
+				reg.sm.set[fieldValue.Addr().Pointer()] = name
 			}
 			continue
 		}
-		if !createFlagsBasedOnValue(fs, initialValue, fieldValue, name, description) {
+		if !createFlagsBasedOnValue(reg.fs, initialValue, fieldValue, name, description) {
 			// should never reach here.
 			panic(fmt.Sprintf("%v flag: field %v, flag %v: unsupported type %T", fieldTypeName, fieldName, name, initialValue))
 		}
 		if len(usageDefault) > 0 {
-			fs.Lookup(name).DefValue = usageDefault
+			reg.fs.Lookup(name).DefValue = usageDefault
 		}
 	}
 	return nil
+}
+
+// SetMaps represents flag variables, indexed by their address, whose value
+// has someone been set.
+type SetMap struct {
+	set map[interface{}]string
+}
+
+// IsSet returns true if the supplied flag variable's value has been
+// set, either via a string literal in the struct or via the valueDefaults
+// argument to RegisterFlagsInStructWithSetMap.
+func (sm *SetMap) IsSet(field interface{}) (string, bool) {
+	v, ok := sm.set[reflect.ValueOf(field).Pointer()]
+	return v, ok
 }

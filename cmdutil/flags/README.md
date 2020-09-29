@@ -129,6 +129,49 @@ String inplements flag.Value.
 
 
 
+### Type Map
+```go
+type Map struct {
+	// contains filtered or unexported fields
+}
+```
+Map represents a mapping of strings to values that implements flag.Value and
+can be used for command line flag values. It must be appropriately
+initialized with name, value pairs and a default value using its Register
+and Default methods.
+
+### Methods
+
+```go
+func (ef Map) Default(val interface{}) Map
+```
+
+
+```go
+func (ef *Map) Get() interface{}
+```
+Value implements flag.Getter.
+
+
+```go
+func (ef Map) Register(name string, val interface{}) Map
+```
+
+
+```go
+func (ef *Map) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (ef *Map) String() string
+```
+String implements flag.Value.
+
+
+
+
 ### Type OneOf
 ```go
 type OneOf string
@@ -174,6 +217,39 @@ Set inplements flag.Value.
 func (r *Repeating) String() string
 ```
 String inplements flag.Value.
+
+
+
+
+### Type SetMap
+```go
+type SetMap struct {
+	// contains filtered or unexported fields
+}
+```
+SetMaps represents flag variables, indexed by their address, whose value has
+someone been set.
+
+### Functions
+
+```go
+func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*SetMap, error)
+```
+RegisterFlagsInStructWithSetMap is like RegisterFlagsInStruct but returns a
+SetMap which can be used to determine which flag variables have been
+initialized either with a literal in the struct tag or via the valueDefaults
+argument.
+
+
+
+### Methods
+
+```go
+func (sm *SetMap) IsSet(field interface{}) (string, bool)
+```
+IsSet returns true if the supplied flag variable's value has been set,
+either via a string literal in the struct or via the valueDefaults argument
+to RegisterFlagsInStructWithSetMap.
 
 
 
