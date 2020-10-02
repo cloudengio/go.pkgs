@@ -16,6 +16,13 @@ test:
 		cd ..; \
 	done
 
+lint:
+	for pkg in $(SUBMODULES); do \
+	cd $$pkg; \
+       		golangci-lint run -verbose ./...; \
+       		cd ..; \
+       	done
+
 pr:
 	for pkg in $(SUBMODULES); do \
 		cd $$pkg; \
