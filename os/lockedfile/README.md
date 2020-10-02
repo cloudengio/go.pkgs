@@ -6,7 +6,8 @@ import cloudeng.io/os/lockedfile
 ```
 
 Package lockedfile creates and manipulates files whose contents should only
-change atomically.
+change atomically. This package is forked from the go compilers internal
+packages.
 
 ## Functions
 ### Func Read
@@ -136,6 +137,12 @@ Lock attempts to lock the Mutex.
 If successful, Lock returns a non-nil unlock function: it is provided as a
 return-value instead of a separate method to remind the caller to check the
 accompanying error. (See https://golang.org/issue/20803.)
+
+
+```go
+func (mu *Mutex) RLock() (unlock func(), err error)
+```
+Lock attempts to lock the Mutex for read-only access.
 
 
 ```go
