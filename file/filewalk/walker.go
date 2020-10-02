@@ -20,10 +20,10 @@ import (
 // Contents represents the contents of the filesystem at the level represented
 // by Path.
 type Contents struct {
-	Path     string // The name of the level being scanned.
-	Children []Info `json:,omitempty` // Info on each of the next levels in the hierarchy.
-	Files    []Info `json:,omitempty` // Info for the files at this level.
-	Err      error  `json:,omitempty` // Non-nil if an error occurred.
+	Path     string  `json:p,omitempty` // The name of the level being scanned.
+	Children []*Info `json:c,omitempty` // Info on each of the next levels in the hierarchy.
+	Files    []*Info `json:f,omitempty` // Info for the files at this level.
+	Err      error   `json:e,omitempty` // Non-nil if an error occurred.
 }
 
 // ContentsFunc is the type of the function that is called to consume the results
@@ -36,7 +36,7 @@ type ContentsFunc func(ctx context.Context, prefix string, ch <-chan Contents) e
 // PrefixFunc is the type of the function that is called to determine if a given
 // level in the filesystem hiearchy should be further examined. If the skip
 // result is true then traversal will stop at this level.
-type PrefixFunc func(ctx context.Context, prefix string, info Info, err error) (skip bool, returnErr error)
+type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (skip bool, returnErr error)
 
 // Walker implements the filesyste walk.
 type Walker struct {
@@ -95,23 +95,28 @@ func New(scanner Scanner, opts ...Option) *Walker {
 
 // Info represents the information that can be retrieved for a filesystem
 // entry.
-type Info interface {
-	Name() string       // base name of the file
-	Size() int64        // length in bytes
-	ModTime() time.Time // modification time
-	IsPrefix() bool     // true if this Info refers to a directory or prefix
-	IsLink() bool       // true if this Info refers to a link, e.g. a symbolic link
-	Sys() interface{}   // underlying data source (can return nil)
+type Info struct {
+	Name     string      `json:"n,omitempty"` // base name of the file
+	Size     int64       `json:"s,omitempty"` // length in bytes
+	ModTime  time.Time   `json:"m,omitempty"` // modification time
+	IsPrefix bool        `json:"p,omitempty"` // true if this Info refers to a directory or prefix
+	IsLink   bool        `json:"l,omitempty"` // true if this Info refers to a link, e.g. a symbolic link
+	Sys      interface{} `json:"-"`           // underlying data source (can return nil)
 }
 
 // Scanner represents the interface that is implemeted for filesystems to
 // be scanned.
 type Scanner interface {
 	// Stat obtains Info for the specified path.
-	Stat(ctx context.Context, path string) (Info, error)
+	Stat(ctx context.Context, path string) (*Info, error)
+
 	// Join is used
 	Join(components ...string) string
+
 	List(ctx context.Context, path string, scanSize int, ch chan<- Contents)
+
+	//	BufferSize() int ???
+
 }
 
 type Error struct {
@@ -132,7 +137,7 @@ func (w *Walker) recordError(path, op string, err error) error {
 	return err
 }
 
-func (w *Walker) listLevel(ctx context.Context, path string, info Info) []Info {
+func (w *Walker) listLevel(ctx context.Context, path string) []*Info {
 	var wg sync.WaitGroup
 	wg.Add(3)
 
@@ -145,7 +150,7 @@ func (w *Walker) listLevel(ctx context.Context, path string, info Info) []Info {
 		wg.Done()
 	}(path)
 
-	var children []Info
+	var children []*Info
 
 	go func() {
 		defer close(rch)
@@ -171,23 +176,22 @@ func (w *Walker) listLevel(ctx context.Context, path string, info Info) []Info {
 	wg.Wait()
 
 	sort.Slice(children, func(i, j int) bool {
-		if children[i].Name() == children[j].Name() {
-			return children[i].Size() >= children[j].Size()
+		if children[i].Name == children[j].Name {
+			return children[i].Size >= children[j].Size
 		}
-		return children[i].Name() < children[j].Name()
+		return children[i].Name < children[j].Name
 	})
 	return children
 }
 
 type listRequest struct {
 	path    string
-	info    Info
-	childCh chan<- []Info
+	childCh chan<- []*Info
 }
 
 func (w *Walker) lister(ctx context.Context, workCh chan listRequest) {
 	for work := range workCh {
-		children := w.listLevel(ctx, work.path, work.info)
+		children := w.listLevel(ctx, work.path)
 		select {
 		case <-ctx.Done():
 			w.recordError(work.path, "ctx.Done()", ctx.Err())
@@ -260,7 +264,7 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 
 func (w *Walker) start(ctx context.Context, path string, requestCh chan<- listRequest) {
 	info, err := w.scanner.Stat(ctx, path)
-	if err == nil && !info.IsPrefix() {
+	if err == nil && !info.IsPrefix {
 
 	}
 	w.walker(ctx, path, requestCh)
@@ -278,12 +282,12 @@ func (w *Walker) walker(ctx context.Context, path string, requestCh chan<- listR
 	if skip {
 		return
 	}
-	ch := make(chan []Info, 1)
-	requestCh <- listRequest{path, info, ch}
+	ch := make(chan []*Info, 1)
+	requestCh <- listRequest{path, ch}
 	select {
 	case children := <-ch:
 		for _, child := range children {
-			w.walker(ctx, w.scanner.Join(path, child.Name()), requestCh)
+			w.walker(ctx, w.scanner.Join(path, child.Name), requestCh)
 		}
 	case <-ctx.Done():
 		w.recordError(path, "ctx.Done()", ctx.Err())

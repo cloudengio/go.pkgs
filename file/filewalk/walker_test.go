@@ -33,9 +33,9 @@ func (l *logger) filesFunc(ctx context.Context, prefix string, ch <-chan filewal
 			continue
 		}
 		for _, info := range results.Files {
-			full := filepath.Join(prefix, info.Name())
+			full := filepath.Join(prefix, info.Name)
 			files = append(files, full)
-			sizes[full] = info.Size()
+			sizes[full] = info.Size
 		}
 	}
 	sort.Strings(files)
@@ -45,17 +45,17 @@ func (l *logger) filesFunc(ctx context.Context, prefix string, ch <-chan filewal
 	return nil
 }
 
-func (l *logger) dirsFunc(ctx context.Context, prefix string, info filewalk.Info, err error) (bool, error) {
+func (l *logger) dirsFunc(ctx context.Context, prefix string, info *filewalk.Info, err error) (bool, error) {
 	if err != nil {
 		fmt.Fprintf(l.out, "dir  : error: %v: %v\n", prefix, err)
 		return true, nil
 	}
 	prefix = strings.TrimPrefix(prefix, l.prefix)
 	if len(l.skip) > 0 && prefix == l.skip {
-		fmt.Fprintf(l.out, "skip  : %v: %v\n", prefix, info.Size())
+		fmt.Fprintf(l.out, "skip  : %v: %v\n", prefix, info.Size)
 		return true, nil
 	}
-	fmt.Fprintf(l.out, "dir  : %v: %v\n", prefix, info.Size())
+	fmt.Fprintf(l.out, "dir  : %v: %v\n", prefix, info.Size)
 	return false, nil
 }
 
