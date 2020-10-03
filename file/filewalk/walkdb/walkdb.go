@@ -3,19 +3,143 @@
 package walkdb
 
 import (
-	"context"
-	"crypto/sha1"
-	"encoding/hex"
-	"encoding/json"
+	"container/heap"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"sync"
+	"time"
 
-	"cloudeng.io/sync/0.20200414211116-3c1830e6b648/errgroup"
+	"cloudeng.io/errors"
+	"github.com/recoilme/pudge"
 )
 
+const (
+	prefixSize               = "__prefixSize"
+	cumulativePrefixSize     = "__cumulativePrefixSize"
+	prefixFiles              = "__prefixFiles"
+	cumulativePrefixChildren = "__cumulativeFiles"
+)
+
+type Database struct {
+	pdb             *pudge.Db
+	prefixSize      sizeHeap
+	cumulativeSize  sizeHeap
+	prefixFiles     sizeHeap
+	cumulativeFiles sizeHeap
+	opts            options
+}
+
+type Option func(o *options)
+
+type options struct {
+	syncIntervalSeconds int
+}
+
+func SyncInterval(interval time.Duration) Option {
+	return func(o *options) {
+		i := interval + (500 * time.Millisecond)
+		o.syncIntervalSeconds = int(i.Round(time.Second).Seconds())
+	}
+}
+
+func Open(dbfile string, opts ...Option) (*Database, error) {
+	db := &Database{}
+	db.opts.syncIntervalSeconds = 30
+	for _, fn := range opts {
+		fn(&db.opts)
+	}
+	cfg := pudge.Config{
+		StoreMode:    2, // memory first, then file.
+		FileMode:     0666,
+		DirMode:      0777,
+		SyncInterval: db.opts.syncIntervalSeconds,
+	}
+	pdb, err := pudge.Open(dbfile, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	db.pdb = pdb
+	if err := db.loadStats(); err != nil {
+		pdb.Close()
+		return nil, fmt.Errorf("failed to load stats: %v", err)
+	}
+	return db, nil
+}
+
+func (db *Database) loadStats() error {
+	for _, stat := range []struct {
+		key  string
+		stat *sizeHeap
+	}{
+		{prefixSize, &db.prefixSize},
+		{cumulativePrefixSize, &db.cumulativeSize},
+		{prefixFiles, &db.prefixFiles},
+		{cumulativePrefixChildren, &db.cumulativeFiles},
+	} {
+		ok, err := db.pdb.Has(stat.key)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			heap.Init(stat.stat)
+			continue
+		}
+		if err := db.pdb.Get(stat.key, stat.stat); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *Database) saveStats() error {
+	errs := errors.M{}
+	errs.Append(db.pdb.Set(prefixSize, &db.prefixSize))
+	errs.Append(db.pdb.Set(cumulativePrefixSize, &db.cumulativeSize))
+	errs.Append(db.pdb.Set(prefixFiles, &db.prefixFiles))
+	errs.Append(db.pdb.Set(cumulativePrefixChildren, &db.cumulativeFiles))
+	return errs.Err()
+}
+
+func (db *Database) Persist() error {
+	errs := errors.M{}
+	errs.Append(db.saveStats())
+	errs.Append(db.pdb.Close())
+	return errs.Err()
+}
+
+func (db *Database) updateStats(prefix string, info PrefixInfo) {
+	db.prefixSize.update(prefix, info.Size)
+	db.cumulativeSize.update(prefix, info.CumulativeSize)
+	db.prefixFiles.update(prefix, len(info.Files))
+	db.cumulativeFiles.update(prefix, info.CumulativeFiles)
+}
+
+func (db *Database) Set(prefix string, info PrefixInfo) error {
+	db.updateStats(prefix, info)
+	return db.pdb.Set(prefix, &info)
+}
+
+func (db *Database) Get(prefix string) (*PrefixInfo, error) {
+	info := new(PrefixInfo)
+	if err := db.pdb.Get(prefix, info); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+type FileInfo struct {
+	Name    string
+	Size    int
+	ModTime time.Time
+}
+
+type PrefixInfo struct {
+	Children        []string
+	Files           []FileInfo
+	CumulativeFiles int
+	Size            int
+	CumulativeSize  int
+}
+
+/*
 type fileContents struct {
 	Records map[string]json.RawMessage `json:"r,omitempty"`
 }
@@ -125,3 +249,4 @@ func hashSHA1(path string) []byte {
 	h.Write([]byte(path))
 	return h.Sum(nil)
 }
+*/

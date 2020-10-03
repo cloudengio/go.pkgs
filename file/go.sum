@@ -7,3 +7,5 @@ cloudeng.io/errors v0.0.6/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
 cloudeng.io/sync v0.0.5 h1:fVkib4XhvbGceMe9F5rcXQzoJQxcdkVp2GZPIo2Dt78=
 cloudeng.io/sync v0.0.5/go.mod h1:ft73nqXGxRtWgcXoyWC+RLVjwCq+Ai0R/9oU4rnXf5g=
 cloudeng.io/text v0.0.7/go.mod h1:VPOCvDDUBocQe7rfQDZcyEpScLooZo/6cJs1cM0LOMI=
+github.com/recoilme/pudge v1.0.3 h1:h/9dEv5fRqtzM4lnO69kUoN+k7ukxxrW9NGb9ug0grM=
+github.com/recoilme/pudge v1.0.3/go.mod h1:VMvxBLVkrSStldckzCsETBXox3pfovfrnEchafXk8qA=

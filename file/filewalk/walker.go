@@ -111,6 +111,7 @@ type Scanner interface {
 	Stat(ctx context.Context, path string) (*Info, error)
 
 	// Join is used
+	//finish comments
 	Join(components ...string) string
 
 	List(ctx context.Context, path string, scanSize int, ch chan<- Contents)
