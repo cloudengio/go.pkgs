@@ -166,6 +166,7 @@ Commands returns the list of available commands.
 ```go
 func (cmds *CommandSet) Dispatch(ctx context.Context) error
 ```
+Dispatch will dispatch the appropriate sub command or return an error.
 
 
 ```go
@@ -176,13 +177,21 @@ parses the command line appropriately and then runs its associated function.
 
 
 ```go
+func (cmds *CommandSet) MustDispatch(ctx context.Context)
+```
+MustDispatch will dispatch the appropriate sub command or exit.
+
+
+```go
 func (cmds *CommandSet) Output() io.Writer
 ```
+Output is like flag.FlagSet.Output.
 
 
 ```go
 func (cmds *CommandSet) SetOutput(out io.Writer)
 ```
+SetOutput is like flag.FlagSet.SetOutput.
 
 
 ```go
