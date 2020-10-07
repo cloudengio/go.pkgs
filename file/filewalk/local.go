@@ -7,20 +7,23 @@ import (
 	"path/filepath"
 )
 
-type local struct{}
-
-func createInfo(i os.FileInfo) *Info {
-	return &Info{
-		Name:     i.Name(),
-		Size:     i.Size(),
-		ModTime:  i.ModTime(),
-		IsPrefix: i.IsDir(),
-		IsLink:   (i.Mode() & os.ModeSymlink) == os.ModeSymlink,
-		Sys:      i,
-	}
+type local struct {
+	scanSize int
 }
 
-func (l *local) List(ctx context.Context, path string, n int, ch chan<- Contents) {
+func createInfo(i os.FileInfo) *Info {
+	info := &Info{
+		Name:    i.Name(),
+		Size:    i.Size(),
+		ModTime: i.ModTime(),
+		sys:     i,
+	}
+	m := i.Mode()
+	info.Mode = FileMode(m&os.ModePerm | m&os.ModeSymlink | m&os.ModeDir)
+	return info
+}
+
+func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 	f, err := os.Open(path)
 	if err != nil {
 		ch <- Contents{Path: path, Err: err}
@@ -33,7 +36,7 @@ func (l *local) List(ctx context.Context, path string, n int, ch chan<- Contents
 			ch <- Contents{Path: path, Err: ctx.Err()}
 		default:
 		}
-		infos, err := f.Readdir(n)
+		infos, err := f.Readdir(l.scanSize)
 		if len(infos) > 0 {
 			files := make([]*Info, 0, len(infos))
 			dirs := make([]*Info, 0, 10)
@@ -73,6 +76,14 @@ func (l *local) Join(components ...string) string {
 	return filepath.Join(components...)
 }
 
-func LocalScanner() Scanner {
-	return &local{}
+func (l *local) IsPermissionError(err error) bool {
+	return os.IsPermission(err)
+}
+
+func (l *local) IsNotExist(err error) bool {
+	return os.IsNotExist(err)
+}
+
+func LocalScanner(scanSize int) Scanner {
+	return &local{scanSize: scanSize}
 }

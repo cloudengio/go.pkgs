@@ -3,62 +3,181 @@
 package walkdb
 
 import (
-	"container/heap"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"time"
 
 	"cloudeng.io/errors"
+	"cloudeng.io/file/filewalk"
+	"cloudeng.io/os/lockedfile"
 	"github.com/recoilme/pudge"
 )
 
 const (
-	prefixSize               = "__prefixSize"
-	cumulativePrefixSize     = "__cumulativePrefixSize"
-	prefixFiles              = "__prefixFiles"
-	cumulativePrefixChildren = "__cumulativeFiles"
+	diskUsage        = "__diskUsage"
+	numFiles         = "__numFiles"
+	numChildren      = "__numChildren"
+	totalDiskUsage   = "__totalDiskUsage"
+	totalNumFiles    = "__totalNumFiles"
+	totalNumChildren = "__totalNumChildren"
+	prefixdbFilename = "prefix.pudge"
+	statsdbFilename  = "stats.pudge"
+	dbLockName       = "walkdb.lock"
+	dbLockerInfoName = "walkdb.info"
 )
 
 type Database struct {
-	pdb             *pudge.Db
-	prefixSize      sizeHeap
-	cumulativeSize  sizeHeap
-	prefixFiles     sizeHeap
-	cumulativeFiles sizeHeap
-	opts            options
+	dir                string
+	prefixdb           *pudge.Db
+	prefixdbFilename   string
+	statsdb            *pudge.Db
+	statsdbFilename    string
+	dbLockFilename     string
+	dbLockInfoFilename string
+	dbMutex            *lockedfile.Mutex
+	unlockFn           func()
+	diskUsage          sizeHeap
+	numFiles           sizeHeap
+	numChildren        sizeHeap
+	totalDiskUsage     int64
+	totalNumChildren   int64
+	totalNumFiles      int64
+	opts               options
 }
 
-type Option func(o *options)
+var ErrReadonly = errors.New("database is opened in readonly mode")
+
+type Option func(o *Database)
 
 type options struct {
 	syncIntervalSeconds int
+	readOnly            bool
 }
 
 func SyncInterval(interval time.Duration) Option {
-	return func(o *options) {
+	return func(db *Database) {
 		i := interval + (500 * time.Millisecond)
-		o.syncIntervalSeconds = int(i.Round(time.Second).Seconds())
+		db.opts.syncIntervalSeconds = int(i.Round(time.Second).Seconds())
 	}
 }
 
-func Open(dbfile string, opts ...Option) (*Database, error) {
-	db := &Database{}
+func ReadOnly() Option {
+	return func(db *Database) {
+		db.opts.readOnly = true
+	}
+}
+
+type lockFileContents struct {
+	User string `json:"user"`
+	CWD  string `json:"current_directory"`
+	PPID int    `json:"parent_process_pid"`
+	PID  int    `json:"process_pid"`
+}
+
+func readLockerInfo(filename string) (lockFileContents, error) {
+	buf, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return lockFileContents{}, err
+	}
+	var contents lockFileContents
+	err = json.Unmarshal(buf, &contents)
+	return contents, err
+}
+
+func writeLockerInfo(filename string) error {
+	cwd, _ := os.Getwd()
+	pid := os.Getpid()
+	ppid := os.Getppid()
+	contents := lockFileContents{
+		User: os.Getenv("USER"),
+		CWD:  cwd,
+		PID:  pid,
+		PPID: ppid,
+	}
+	buf, err := json.Marshal(contents)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filename, buf, 0666)
+}
+
+func newDB(dir string) *Database {
+	db := &Database{
+		dir:                dir,
+		prefixdbFilename:   filepath.Join(dir, prefixdbFilename),
+		statsdbFilename:    filepath.Join(dir, statsdbFilename),
+		dbLockFilename:     filepath.Join(dir, dbLockName),
+		dbLockInfoFilename: filepath.Join(dir, dbLockerInfoName),
+		numFiles:           newSizeHeap(),
+		numChildren:        newSizeHeap(),
+		diskUsage:          newSizeHeap(),
+	}
+	db.dbMutex = lockedfile.MutexAt(db.dbLockFilename)
+	return db
+}
+
+func (db *Database) writeLock() error {
+	unlock, err := db.dbMutex.Lock()
+	if err == nil {
+		db.unlockFn = unlock
+		return writeLockerInfo(db.dbLockInfoFilename)
+	}
+	info, nerr := readLockerInfo(db.dbLockInfoFilename)
+	owner := ""
+	if nerr == nil {
+		if str, err := json.MarshalIndent(info, "\t", "  "); err != nil {
+			owner = "\n\tcurrent lock info\n" + string(str) + "\n"
+		}
+	}
+	return fmt.Errorf("failed to lock %v: %v%v", db.dir, err, owner)
+}
+
+func (db *Database) readLock() error {
+	unlock, err := db.dbMutex.RLock()
+	if err != nil {
+		return err
+	}
+	db.unlockFn = unlock
+	return nil
+}
+
+func (db *Database) unlock() error {
+	err := os.Remove(db.dbLockInfoFilename)
+	db.unlockFn()
+	return err
+}
+
+func Open(dir string, opts ...Option) (*Database, error) {
+	db := newDB(dir)
 	db.opts.syncIntervalSeconds = 30
 	for _, fn := range opts {
-		fn(&db.opts)
+		fn(db)
 	}
 	cfg := pudge.Config{
-		StoreMode:    2, // memory first, then file.
+		StoreMode:    0,
 		FileMode:     0666,
 		DirMode:      0777,
 		SyncInterval: db.opts.syncIntervalSeconds,
 	}
-	pdb, err := pudge.Open(dbfile, &cfg)
+	if db.opts.readOnly {
+		cfg.SyncInterval = 0
+	}
+	pdb, err := pudge.Open(db.prefixdbFilename, &cfg)
 	if err != nil {
 		return nil, err
 	}
-	db.pdb = pdb
+	sdb, err := pudge.Open(db.statsdbFilename, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	db.prefixdb = pdb
+	db.statsdb = sdb
 	if err := db.loadStats(); err != nil {
 		pdb.Close()
+		sdb.Close()
 		return nil, fmt.Errorf("failed to load stats: %v", err)
 	}
 	return db, nil
@@ -67,186 +186,136 @@ func Open(dbfile string, opts ...Option) (*Database, error) {
 func (db *Database) loadStats() error {
 	for _, stat := range []struct {
 		key  string
-		stat *sizeHeap
+		stat interface{}
 	}{
-		{prefixSize, &db.prefixSize},
-		{cumulativePrefixSize, &db.cumulativeSize},
-		{prefixFiles, &db.prefixFiles},
-		{cumulativePrefixChildren, &db.cumulativeFiles},
+		{numFiles, &db.numFiles},
+		{numChildren, &db.numChildren},
+		{diskUsage, &db.diskUsage},
+		{totalNumFiles, &db.totalNumFiles},
+		{totalNumChildren, &db.totalNumChildren},
+		{totalDiskUsage, &db.totalDiskUsage},
 	} {
-		ok, err := db.pdb.Has(stat.key)
+		ok, err := db.statsdb.Has(stat.key)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			heap.Init(stat.stat)
 			continue
 		}
-		if err := db.pdb.Get(stat.key, stat.stat); err != nil {
+		if err := db.statsdb.Get(stat.key, stat.stat); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+func (db *Database) updateStats(prefix string, info PrefixInfo) {
+	deltaFiles := db.numFiles.update(prefix, int64(len(info.Files)))
+	deltaChildren := db.numChildren.update(prefix, int64(len(info.Children)))
+	deltaUsage := db.diskUsage.update(prefix, info.DiskUsage)
+	db.totalNumFiles += deltaFiles
+	db.totalNumChildren += deltaChildren
+	db.totalDiskUsage += deltaUsage
+}
+
 func (db *Database) saveStats() error {
+	if db.opts.readOnly {
+		return ErrReadonly
+	}
 	errs := errors.M{}
-	errs.Append(db.pdb.Set(prefixSize, &db.prefixSize))
-	errs.Append(db.pdb.Set(cumulativePrefixSize, &db.cumulativeSize))
-	errs.Append(db.pdb.Set(prefixFiles, &db.prefixFiles))
-	errs.Append(db.pdb.Set(cumulativePrefixChildren, &db.cumulativeFiles))
+	db.diskUsage.init()
+	db.numFiles.init()
+	db.numChildren.init()
+	errs.Append(db.statsdb.Set(diskUsage, &db.diskUsage))
+	errs.Append(db.statsdb.Set(numFiles, &db.numFiles))
+	errs.Append(db.statsdb.Set(numChildren, &db.numChildren))
+	errs.Append(db.statsdb.Set(totalDiskUsage, &db.totalDiskUsage))
+	errs.Append(db.statsdb.Set(totalNumFiles, &db.totalNumFiles))
+	errs.Append(db.statsdb.Set(totalNumChildren, &db.totalNumChildren))
 	return errs.Err()
 }
 
 func (db *Database) Persist() error {
+	if db.opts.readOnly {
+		return ErrReadonly
+	}
 	errs := errors.M{}
 	errs.Append(db.saveStats())
-	errs.Append(db.pdb.Close())
+	errs.Append(db.statsdb.Close())
+	errs.Append(db.prefixdb.Close())
 	return errs.Err()
 }
 
-func (db *Database) updateStats(prefix string, info PrefixInfo) {
-	db.prefixSize.update(prefix, info.Size)
-	db.cumulativeSize.update(prefix, info.CumulativeSize)
-	db.prefixFiles.update(prefix, len(info.Files))
-	db.cumulativeFiles.update(prefix, info.CumulativeFiles)
-}
-
 func (db *Database) Set(prefix string, info PrefixInfo) error {
+	if db.opts.readOnly {
+		return ErrReadonly
+	}
 	db.updateStats(prefix, info)
-	return db.pdb.Set(prefix, &info)
+	return db.prefixdb.Set(prefix, &info)
 }
 
-func (db *Database) Get(prefix string) (*PrefixInfo, error) {
+func (db *Database) Get(prefix string) (*PrefixInfo, bool, error) {
 	info := new(PrefixInfo)
-	if err := db.pdb.Get(prefix, info); err != nil {
-		return nil, err
+	if err := db.prefixdb.Get(prefix, info); err != nil {
+		if err == pudge.ErrKeyNotFound {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
-	return info, nil
+	return info, true, nil
+}
+
+// UnchangedDirInfo returns true if the newly obtainined filewalk.Info is
+// unchanged from that in the database.
+func (db *Database) UnchangedDirInfo(prefix string, info *filewalk.Info) (*PrefixInfo, bool, error) {
+	pi, ok, err := db.Get(prefix)
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	unchanged := pi.ModTime == info.ModTime &&
+		filewalk.FileMode(pi.Mode) == info.Mode
+	if unchanged {
+		return pi, true, nil
+	}
+	return nil, false, nil
 }
 
 type FileInfo struct {
 	Name    string
-	Size    int
+	Size    int64
 	ModTime time.Time
 }
 
 type PrefixInfo struct {
-	Children        []string
-	Files           []FileInfo
-	CumulativeFiles int
-	Size            int
-	CumulativeSize  int
+	ModTime   time.Time
+	Mode      uint32
+	Size      int64
+	Children  []*filewalk.Info
+	Files     []FileInfo
+	DiskUsage int64
+	Err       string
 }
 
-/*
-type fileContents struct {
-	Records map[string]json.RawMessage `json:"r,omitempty"`
-}
-
-type Database struct {
-	mu    sync.Mutex
-	root  string
-	files []fileContents
-}
-
-func newDB(dir string) *Database {
-	return &Database{
-		root:  dir,
-		files: make([]fileContents, 16*16), // 2 char prefix from sha1 of dirname.
+func topN(m []Metric, n int) []Metric {
+	if len(m) <= n {
+		return m
 	}
+	return m[:n]
 }
 
-func New(dir string) (*Database, error) {
-	fi, err := os.Stat(dir)
-	if err == nil {
-		if !fi.IsDir() {
-			return nil, fmt.Errorf("%v is not a directory", dir)
-		}
-		return newDB(dir), nil
-	}
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
-	}
-	return newDB(dir), nil
+func (db *Database) FileCounts(n int) []Metric {
+	return db.numFiles.TopN(n)
 }
 
-func (db *Database) useOrLoad(prefix string) (int, error) {
-	file, idx := db.fileFor(prefix)
-	records := db.files[idx].Records
-	if records == nil {
-		rd, err := os.Open(file)
-		if err != nil {
-			return -1, err
-		}
-		defer rd.Close()
-		records = map[string]json.RawMessage{}
-		dec := json.NewDecoder(rd)
-		if err := dec.Decode(&records); err != nil {
-			return -1, fmt.Errorf("%v: failed to json decode contents: %v", file, err)
-		}
-		db.files[idx].Records = records
-	}
-	return idx, nil
+func (db *Database) ChildCounts(n int) []Metric {
+	return db.numChildren.TopN(n)
 }
 
-func (db *Database) Lookup(ctx context.Context, prefix string) (json.RawMessage, error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	idx, err := db.useOrLoad(prefix)
-	if err != nil {
-		return nil, err
-	}
-	return db.files[idx].Records[prefix], nil
+func (db *Database) DiskUsage(n int) []Metric {
+	return db.diskUsage.TopN(n)
 }
 
-func (db *Database) Update(ctx context.Context, prefix string, data json.RawMessage) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	idx, err := db.useOrLoad(prefix)
-	if err != nil {
-		return err
-	}
-	db.files[idx].Records[prefix] = data
-	return nil
+func (db *Database) Totals() (files, children, diskUsage int64) {
+	files, children, diskUsage = db.totalNumFiles, db.totalNumChildren, db.totalDiskUsage
+	return
 }
-
-func (db *Database) Persist(ctx context.Context) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	writers, ctx := errgroup.WithContext(ctx)
-	writers = errgroup.WithConcurrency(writers, 4)
-	for i := range db.files {
-		writers.Go(func() error {
-			return db.writeContents(i)
-		})
-	}
-	return writers.Err()
-}
-
-func (db *Database) writeContents(idx int) error {
-	filename := filepath.Join(db.root, fmt.Sprintf("02x", idx))
-	wr, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
-	if err != nil {
-		return err
-	}
-	defer wr.Close()
-	enc := json.NewEncoder(wr)
-	return enc.Encode(db.files[idx])
-}
-
-func (db *Database) fileFor(path string) (string, int) {
-	a := hex.EncodeToString(hashSHA1(path)[:2])
-	idx, _ := strconv.ParseInt(a, 16, 64)
-	return filepath.Join(db.root, a), int(idx)
-}
-
-func hashSHA1(path string) []byte {
-	h := sha1.New()
-	h.Write([]byte(path))
-	return h.Sum(nil)
-}
-*/

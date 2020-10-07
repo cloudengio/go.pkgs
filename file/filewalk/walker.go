@@ -1,13 +1,14 @@
 // Package filewalk provides support for concurrent traversal of file system
 // directories and files. It can traverse any filesytem that implements
 // the Scanner interface and is intended to be usable with cloud storage
-// systems as AWS S3 or GCP's Cloud Storage. All such systems must implement
-// some sort of hierarchical naming scheme, whether it be directory based
-// (as per Unix/POSIX filesystems) or by convention (as per S3).
+// systems as AWS S3 or GCP's Cloud Storage. All compatible systems must
+// implement some sort of hierarchical naming scheme, whether it be directory
+// based (as per Unix/POSIX filesystems) or by convention (as per S3).
 package filewalk
 
 import (
 	"context"
+	"os"
 	"runtime"
 	"sort"
 	"sync"
@@ -25,18 +26,6 @@ type Contents struct {
 	Files    []*Info `json:f,omitempty` // Info for the files at this level.
 	Err      error   `json:e,omitempty` // Non-nil if an error occurred.
 }
-
-// ContentsFunc is the type of the function that is called to consume the results
-// of scanning a single level in the filesystem hierarchy. Walker.Walk will
-// call this function and deliver all results for that level via the supplied
-// channel; that channel is closed when there is no more data. Errors, such
-// as failing to access the prefix, are delivered over the channel.
-type ContentsFunc func(ctx context.Context, prefix string, ch <-chan Contents) error
-
-// PrefixFunc is the type of the function that is called to determine if a given
-// level in the filesystem hiearchy should be further examined. If the skip
-// result is true then traversal will stop at this level.
-type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (skip bool, returnErr error)
 
 // Walker implements the filesyste walk.
 type Walker struct {
@@ -65,15 +54,6 @@ func Concurrency(n int) Option {
 	}
 }
 
-// ScanSize can be used to control the number of items retrieved per
-// filesystem scan, it is used to set the scanSize paramter for Scanner.List.
-// It defaults to 1000.
-func ScanSize(n int) Option {
-	return func(o *options) {
-		o.scanSize = n
-	}
-}
-
 // ChanSize can be used to set the size of the channel used to send results
 // to ResultsFunc. It defaults to being unbuffered.
 func ChanSize(n int) Option {
@@ -93,15 +73,46 @@ func New(scanner Scanner, opts ...Option) *Walker {
 	return w
 }
 
+type FileMode uint32
+
+const (
+	ModePrefix FileMode = FileMode(os.ModeDir)
+	ModeLink   FileMode = FileMode(os.ModeSymlink)
+	ModePerm   FileMode = FileMode(os.ModePerm)
+)
+
+func (fm FileMode) String() string {
+	return os.FileMode(fm).String()
+}
+
 // Info represents the information that can be retrieved for a filesystem
 // entry.
 type Info struct {
-	Name     string      `json:"n,omitempty"` // base name of the file
-	Size     int64       `json:"s,omitempty"` // length in bytes
-	ModTime  time.Time   `json:"m,omitempty"` // modification time
-	IsPrefix bool        `json:"p,omitempty"` // true if this Info refers to a directory or prefix
-	IsLink   bool        `json:"l,omitempty"` // true if this Info refers to a link, e.g. a symbolic link
-	Sys      interface{} `json:"-"`           // underlying data source (can return nil)
+	Name    string      // base name of the file
+	Size    int64       // length in bytes
+	ModTime time.Time   // modification time
+	Mode    FileMode    // permissions, directory or link.
+	sys     interface{} // underlying data source (can return nil)
+}
+
+// Sys returns the underlying, if available, data source.
+func (i Info) Sys() interface{} {
+	return i.sys
+}
+
+// IsPrefix returns true for a prefix.
+func (i Info) IsPrefix() bool {
+	return (i.Mode & ModePrefix) == ModePrefix
+}
+
+// IsLink returns true for a symbolic or other form of link.
+func (i Info) IsLink() bool {
+	return (i.Mode & ModeLink) == ModeLink
+}
+
+// Perms returns UNIX-style permissions.
+func (i Info) Perms() FileMode {
+	return (i.Mode & ModePerm)
 }
 
 // Scanner represents the interface that is implemeted for filesystems to
@@ -110,26 +121,36 @@ type Scanner interface {
 	// Stat obtains Info for the specified path.
 	Stat(ctx context.Context, path string) (*Info, error)
 
-	// Join is used
-	//finish comments
+	// Join is like filepath.Join for the filesystem supported by this scanner.
 	Join(components ...string) string
 
-	List(ctx context.Context, path string, scanSize int, ch chan<- Contents)
+	// List will send all of the contents of path over the supplied channel.
+	List(ctx context.Context, path string, ch chan<- Contents)
 
-	//	BufferSize() int ???
+	// IsPermissionError returns true if the specified error, as returned
+	// by the scanner's implementation, is a result of a permissions error.
+	IsPermissionError(err error) bool
 
+	// IsNotExist returns true if the specified error, as returned
+	// by the scanner's implementation, is a result of the object not existing.
+	IsNotExist(err error) bool
 }
 
+// Error implements error and provides additional detail on the error
+// encountered.
 type Error struct {
 	Path string
 	Op   string
 	Err  error
 }
 
+// Error implements error.
 func (e *Error) Error() string {
-	return e.Path + ": " + e.Op + ": " + e.Err.Error()
+	return "[" + e.Path + ": " + e.Op + "] " + e.Err.Error()
 }
 
+// recordError will record the specified error if it is not nil; ie.
+// its safe to call it with a nil error.
 func (w *Walker) recordError(path, op string, err error) error {
 	if err == nil {
 		return nil
@@ -138,7 +159,7 @@ func (w *Walker) recordError(path, op string, err error) error {
 	return err
 }
 
-func (w *Walker) listLevel(ctx context.Context, path string) []*Info {
+func (w *Walker) listLevel(ctx context.Context, req listRequest) []*Info {
 	var wg sync.WaitGroup
 	wg.Add(3)
 
@@ -146,10 +167,10 @@ func (w *Walker) listLevel(ctx context.Context, path string) []*Info {
 	rch := make(chan Contents, w.opts.chanSize)
 
 	go func(path string) {
-		w.scanner.List(ctx, path, w.opts.scanSize, ch)
+		w.scanner.List(ctx, path, ch)
 		close(ch)
 		wg.Done()
-	}(path)
+	}(req.path)
 
 	var children []*Info
 
@@ -159,7 +180,6 @@ func (w *Walker) listLevel(ctx context.Context, path string) []*Info {
 		for results := range ch {
 			select {
 			case <-ctx.Done():
-				w.recordError(path, "listLevel", ctx.Err())
 				return
 			default:
 			}
@@ -169,10 +189,10 @@ func (w *Walker) listLevel(ctx context.Context, path string) []*Info {
 	}()
 
 	go func(path string) {
-		err := w.contentsFn(ctx, path, rch)
+		err := w.contentsFn(ctx, path, req.info, rch)
 		w.recordError(path, "fileFunc", err)
 		wg.Done()
-	}(path)
+	}(req.path)
 
 	wg.Wait()
 
@@ -187,15 +207,16 @@ func (w *Walker) listLevel(ctx context.Context, path string) []*Info {
 
 type listRequest struct {
 	path    string
+	info    *Info
 	childCh chan<- []*Info
 }
 
 func (w *Walker) lister(ctx context.Context, workCh chan listRequest) {
 	for work := range workCh {
-		children := w.listLevel(ctx, work.path)
+		children := w.listLevel(ctx, work)
 		select {
 		case <-ctx.Done():
-			w.recordError(work.path, "ctx.Done()", ctx.Err())
+			return
 		default:
 		}
 		work.childCh <- children
@@ -204,6 +225,25 @@ func (w *Walker) lister(ctx context.Context, workCh chan listRequest) {
 	return
 }
 
+// ContentsFunc is the type of the function that is called to consume the results
+// of scanning a single level in the filesystem hierarchy. It should read
+// the contents of the supplied channel until that channel is closed.
+// Errors, such as failing to access the prefix, are delivered over the channel.
+type ContentsFunc func(ctx context.Context, prefix string, info *Info, ch <-chan Contents) error
+
+// PrefixFunc is the type of the function that is called to determine if a given
+// level in the filesystem hiearchy should be further examined or traversed.
+// If stop is true then traversal stops at this point, however if a list
+// of children is returned, they will be traversed directly rather than
+// obtaining the children from the filesystem. This allows for both
+// exclusions and incremental processing in conjunction with a database t
+// be implemented.
+type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (stop bool, children []*Info, returnErr error)
+
+// Walk traverses the hierarchies specified by each of the roots calling
+// prefixFn and contentsFn as it goes. prefixFn will always be called
+// before contentsFn for the same prefix, but no other ordering gaurantees
+// are provided.
 func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn ContentsFunc, roots ...string) error {
 	rootCtx := ctx
 	listers, ctx := errgroup.WithContext(rootCtx)
@@ -257,18 +297,10 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 
 	select {
 	case <-rootCtx.Done():
-		w.recordError("", "ctx.Done()", rootCtx.Err())
+		w.errs.Append(rootCtx.Err())
 	case <-waitCh:
 	}
 	return w.errs.Err()
-}
-
-func (w *Walker) start(ctx context.Context, path string, requestCh chan<- listRequest) {
-	info, err := w.scanner.Stat(ctx, path)
-	if err == nil && !info.IsPrefix {
-
-	}
-	w.walker(ctx, path, requestCh)
 }
 
 func (w *Walker) walker(ctx context.Context, path string, requestCh chan<- listRequest) {
@@ -278,19 +310,25 @@ func (w *Walker) walker(ctx context.Context, path string, requestCh chan<- listR
 	}
 	// Only call prefixFn if the stat fails and there is no prospect
 	// of listing its contents.
-	skip, err := w.prefixFn(ctx, path, info, err)
+	stop, children, err := w.prefixFn(ctx, path, info, err)
 	w.recordError(path, "stat", err)
-	if skip {
+	if stop {
+		return
+	}
+	if len(children) > 0 {
+		for _, child := range children {
+			w.walker(ctx, w.scanner.Join(path, child.Name), requestCh)
+		}
 		return
 	}
 	ch := make(chan []*Info, 1)
-	requestCh <- listRequest{path, ch}
+	requestCh <- listRequest{path, info, ch}
 	select {
 	case children := <-ch:
 		for _, child := range children {
 			w.walker(ctx, w.scanner.Join(path, child.Name), requestCh)
 		}
 	case <-ctx.Done():
-		w.recordError(path, "ctx.Done()", ctx.Err())
+		return
 	}
 }

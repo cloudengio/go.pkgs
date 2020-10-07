@@ -3,208 +3,331 @@ package filewalk_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
-	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
 )
 
 type logger struct {
-	prefix string
-	out    *strings.Builder
-	skip   string
+	prefix   string
+	lines    []string
+	children map[string][]*filewalk.Info
+	skip     string
 }
 
-func (l *logger) filesFunc(ctx context.Context, prefix string, ch <-chan filewalk.Contents) error {
-	sizes := map[string]int64{}
-	files := []string{}
+func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.Info, ch <-chan filewalk.Contents) error {
 	prefix = strings.TrimPrefix(prefix, l.prefix)
 	for results := range ch {
 		results.Path = strings.TrimPrefix(results.Path, l.prefix)
 		if err := results.Err; err != nil {
-			fmt.Fprintf(l.out, "list : %v: %v\n", results.Path,
-				strings.Replace(results.Err.Error(), l.prefix, "", 1))
+			l.lines = append(l.lines, fmt.Sprintf("%v: %v\n", results.Path,
+				strings.Replace(results.Err.Error(), l.prefix, "", 1)))
 			continue
 		}
 		for _, info := range results.Files {
 			full := filepath.Join(prefix, info.Name)
-			files = append(files, full)
-			sizes[full] = info.Size
+			link := ""
+			if info.IsLink() {
+				link = "@"
+			}
+			l.lines = append(l.lines, fmt.Sprintf("%v%s: %v\n", full, link, info.Size))
 		}
-	}
-	sort.Strings(files)
-	for _, f := range files {
-		fmt.Fprintf(l.out, "file : %v: %v\n", f, sizes[f])
 	}
 	return nil
 }
 
-func (l *logger) dirsFunc(ctx context.Context, prefix string, info *filewalk.Info, err error) (bool, error) {
+func (l *logger) dirsFunc(ctx context.Context, prefix string, info *filewalk.Info, err error) (bool, []*filewalk.Info, error) {
 	if err != nil {
-		fmt.Fprintf(l.out, "dir  : error: %v: %v\n", prefix, err)
-		return true, nil
+		l.lines = append(l.lines, fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
+		return true, nil, nil
 	}
 	prefix = strings.TrimPrefix(prefix, l.prefix)
 	if len(l.skip) > 0 && prefix == l.skip {
-		fmt.Fprintf(l.out, "skip  : %v: %v\n", prefix, info.Size)
-		return true, nil
+		return true, nil, nil
 	}
-	fmt.Fprintf(l.out, "dir  : %v: %v\n", prefix, info.Size)
-	return false, nil
+	l.lines = append(l.lines, fmt.Sprintf("%v*\n", prefix))
+	return false, l.children[prefix], nil
 }
 
-func TestSimple(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Log(tmpDir)
-	if err := createTestDir(tmpDir); err != nil {
+func TestLocalWalk(t *testing.T) {
+	ctx := context.Background()
+	sc := filewalk.LocalScanner(1)
+	wk := filewalk.New(sc)
+	nl := func() *logger {
+		return &logger{prefix: localTestTree,
+			children: map[string][]*filewalk.Info{},
+		}
+	}
+	lg := nl()
+	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedFull)
+
+	wk = filewalk.New(sc, filewalk.Concurrency(10))
+	lg = nl()
+	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedFull)
+
+	wk = filewalk.New(sc, filewalk.Concurrency(10))
+	lg = nl()
+	lg.skip = "/b0/b0.1"
+	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedPartial1)
+
+	lg = nl()
+	lg.skip = "/b0"
+	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedPartial2)
+
+	lg = nl()
+	b01, err := sc.Stat(ctx, sc.Join(localTestTree, "b0", "b0.1"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	sc := filewalk.LocalScanner()
-
-	wk := filewalk.New(sc)
-	lg := &logger{out: &strings.Builder{}, prefix: tmpDir}
-	testSimple(t, ctx, tmpDir, wk, lg, expectedFull)
-
-	wk = filewalk.New(sc, filewalk.ScanSize(1), filewalk.Concurrency(1))
-	lg = &logger{out: &strings.Builder{}, prefix: tmpDir}
-	testSimple(t, ctx, tmpDir, wk, lg, expectedFull)
-
-	wk = filewalk.New(sc, filewalk.ScanSize(1), filewalk.Concurrency(1))
-	lg = &logger{out: &strings.Builder{}, prefix: tmpDir, skip: "/b0/b0.1"}
-	testSimple(t, ctx, tmpDir, wk, lg, expectedPartial1)
-
-	lg = &logger{out: &strings.Builder{}, prefix: tmpDir, skip: "/b0"}
-	testSimple(t, ctx, tmpDir, wk, lg, expectedPartial2)
+	lg.children["/b0"] = []*filewalk.Info{b01}
+	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedExistingChildren)
 }
 
-func testSimple(t *testing.T, ctx context.Context, tmpDir string, wk *filewalk.Walker, lg *logger, expected string) {
+func testLocalWalk(t *testing.T, ctx context.Context, tmpDir string, wk *filewalk.Walker, lg *logger, expected string) {
 	_, _, line, _ := runtime.Caller(1)
 	err := wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, tmpDir)
 	if err != nil {
 		t.Errorf("line: %v: errors: %v", line, err)
 	}
-
-	if got, want := lg.out.String(), expected; got != want {
-		t.Errorf("ine: %v: got %v, want %v", line, got, want)
+	sort.Strings(lg.lines)
+	if got, want := strings.Join(lg.lines, ""), expected; got != want {
+		t.Errorf("line: %v: got %v, want %v", line, got, want)
 	}
 }
 
-func createTestDir(tmpDir string) error {
-	j := filepath.Join
-	errs := errors.M{}
-	dirs := []string{
-		j("a0"),
-		j("a0", "a0.0"),
-		j("a0", "a0.1"),
-		j("b0", "b0.0"),
-		j("b0", "b0.1", "b1.0"),
-	}
-	for _, dir := range dirs {
-		err := os.MkdirAll(j(tmpDir, dir), 0777)
-		errs.Append(err)
-		for _, file := range []string{"f0", "f1", "f2"} {
-			err = ioutil.WriteFile(j(tmpDir, dir, file), []byte{'1', '2', '3'}, 0666)
-			errs.Append(err)
-		}
-	}
-	err := os.Mkdir(j(tmpDir, "inaccessible-dir"), 0000)
-	errs.Append(err)
-	err = os.Symlink(j(tmpDir, "a0", "f0"), j(tmpDir, "lf0"))
-	errs.Append(err)
-	err = os.Symlink(j(tmpDir, "a0"), j(tmpDir, "la0"))
-	errs.Append(err)
-	err = os.Symlink("nowhere", j(tmpDir, "la1"))
-	errs.Append(err)
-	err = ioutil.WriteFile(j(tmpDir, "a0", "inaccessible-file"), []byte{'1', '2', '3'}, 0000)
-	errs.Append(err)
-	return errs.Err()
-}
-
-const expectedFull = `dir  : : 256
-file : la0: 75
-file : la1: 7
-file : lf0: 78
-dir  : /a0: 256
-file : /a0/f0: 3
-file : /a0/f1: 3
-file : /a0/f2: 3
-file : /a0/inaccessible-file: 3
-dir  : /a0/a0.0: 160
-file : /a0/a0.0/f0: 3
-file : /a0/a0.0/f1: 3
-file : /a0/a0.0/f2: 3
-dir  : /a0/a0.1: 160
-file : /a0/a0.1/f0: 3
-file : /a0/a0.1/f1: 3
-file : /a0/a0.1/f2: 3
-dir  : /b0: 128
-dir  : /b0/b0.0: 160
-file : /b0/b0.0/f0: 3
-file : /b0/b0.0/f1: 3
-file : /b0/b0.0/f2: 3
-dir  : /b0/b0.1: 96
-dir  : /b0/b0.1/b1.0: 160
-file : /b0/b0.1/b1.0/f0: 3
-file : /b0/b0.1/b1.0/f1: 3
-file : /b0/b0.1/b1.0/f2: 3
-dir  : /inaccessible-dir: 64
-list : /inaccessible-dir: open /inaccessible-dir: permission denied
+const expectedFull = `*
+/a0*
+/a0/a0.0*
+/a0/a0.0/f0: 3
+/a0/a0.0/f1: 3
+/a0/a0.0/f2: 3
+/a0/a0.1*
+/a0/a0.1/f0: 3
+/a0/a0.1/f1: 3
+/a0/a0.1/f2: 3
+/a0/f0: 3
+/a0/f1: 3
+/a0/f2: 3
+/a0/inaccessible-file: 3
+/b0*
+/b0/b0.0*
+/b0/b0.0/f0: 3
+/b0/b0.0/f1: 3
+/b0/b0.0/f2: 3
+/b0/b0.1*
+/b0/b0.1/b1.0*
+/b0/b0.1/b1.0/f0: 3
+/b0/b0.1/b1.0/f1: 3
+/b0/b0.1/b1.0/f2: 3
+/inaccessible-dir*
+/inaccessible-dir: open /inaccessible-dir: permission denied
+f0: 3
+f1: 3
+f2: 3
+la0@: 2
+la1@: 7
+lf0@: 5
 `
 
 // No b0.1 sub dir.
-const expectedPartial1 = `dir  : : 256
-file : la0: 75
-file : la1: 7
-file : lf0: 78
-dir  : /a0: 256
-file : /a0/f0: 3
-file : /a0/f1: 3
-file : /a0/f2: 3
-file : /a0/inaccessible-file: 3
-dir  : /a0/a0.0: 160
-file : /a0/a0.0/f0: 3
-file : /a0/a0.0/f1: 3
-file : /a0/a0.0/f2: 3
-dir  : /a0/a0.1: 160
-file : /a0/a0.1/f0: 3
-file : /a0/a0.1/f1: 3
-file : /a0/a0.1/f2: 3
-dir  : /b0: 128
-dir  : /b0/b0.0: 160
-file : /b0/b0.0/f0: 3
-file : /b0/b0.0/f1: 3
-file : /b0/b0.0/f2: 3
-skip  : /b0/b0.1: 96
-dir  : /inaccessible-dir: 64
-list : /inaccessible-dir: open /inaccessible-dir: permission denied
+const expectedPartial1 = `*
+/a0*
+/a0/a0.0*
+/a0/a0.0/f0: 3
+/a0/a0.0/f1: 3
+/a0/a0.0/f2: 3
+/a0/a0.1*
+/a0/a0.1/f0: 3
+/a0/a0.1/f1: 3
+/a0/a0.1/f2: 3
+/a0/f0: 3
+/a0/f1: 3
+/a0/f2: 3
+/a0/inaccessible-file: 3
+/b0*
+/b0/b0.0*
+/b0/b0.0/f0: 3
+/b0/b0.0/f1: 3
+/b0/b0.0/f2: 3
+/inaccessible-dir*
+/inaccessible-dir: open /inaccessible-dir: permission denied
+f0: 3
+f1: 3
+f2: 3
+la0@: 2
+la1@: 7
+lf0@: 5
 `
 
 // No b0 sub dir.
-const expectedPartial2 = `dir  : : 256
-file : la0: 75
-file : la1: 7
-file : lf0: 78
-dir  : /a0: 256
-file : /a0/f0: 3
-file : /a0/f1: 3
-file : /a0/f2: 3
-file : /a0/inaccessible-file: 3
-dir  : /a0/a0.0: 160
-file : /a0/a0.0/f0: 3
-file : /a0/a0.0/f1: 3
-file : /a0/a0.0/f2: 3
-dir  : /a0/a0.1: 160
-file : /a0/a0.1/f0: 3
-file : /a0/a0.1/f1: 3
-file : /a0/a0.1/f2: 3
-skip  : /b0: 128
-dir  : /inaccessible-dir: 64
-list : /inaccessible-dir: open /inaccessible-dir: permission denied
+const expectedPartial2 = `*
+/a0*
+/a0/a0.0*
+/a0/a0.0/f0: 3
+/a0/a0.0/f1: 3
+/a0/a0.0/f2: 3
+/a0/a0.1*
+/a0/a0.1/f0: 3
+/a0/a0.1/f1: 3
+/a0/a0.1/f2: 3
+/a0/f0: 3
+/a0/f1: 3
+/a0/f2: 3
+/a0/inaccessible-file: 3
+/inaccessible-dir*
+/inaccessible-dir: open /inaccessible-dir: permission denied
+f0: 3
+f1: 3
+f2: 3
+la0@: 2
+la1@: 7
+lf0@: 5
 `
+
+const expectedExistingChildren = `*
+/a0*
+/a0/a0.0*
+/a0/a0.0/f0: 3
+/a0/a0.0/f1: 3
+/a0/a0.0/f2: 3
+/a0/a0.1*
+/a0/a0.1/f0: 3
+/a0/a0.1/f1: 3
+/a0/a0.1/f2: 3
+/a0/f0: 3
+/a0/f1: 3
+/a0/f2: 3
+/a0/inaccessible-file: 3
+/b0*
+/b0/b0.1*
+/b0/b0.1/b1.0*
+/b0/b0.1/b1.0/f0: 3
+/b0/b0.1/b1.0/f1: 3
+/b0/b0.1/b1.0/f2: 3
+/inaccessible-dir*
+/inaccessible-dir: open /inaccessible-dir: permission denied
+f0: 3
+f1: 3
+f2: 3
+la0@: 2
+la1@: 7
+lf0@: 5
+`
+
+func TestFunctionErrors(t *testing.T) {
+	ctx := context.Background()
+	sc := filewalk.LocalScanner(1)
+	wk := filewalk.New(sc)
+
+	err := wk.Walk(ctx,
+		func(ctx context.Context, prefix string, info *filewalk.Info, err error) (skip bool, children []*filewalk.Info, returnErr error) {
+			return true, nil, fmt.Errorf("oops")
+		},
+		nil,
+		localTestTree,
+	)
+	if err == nil || !strings.Contains(err.Error(), "oops") {
+		t.Errorf("missing or unexpected error: %v", err)
+	}
+
+	err = wk.Walk(ctx,
+		func(ctx context.Context, prefix string, info *filewalk.Info, err error) (skip bool, children []*filewalk.Info, returnErr error) {
+			return false, nil, err
+		},
+		func(ctx context.Context, prefix string, info *filewalk.Info, ch <-chan filewalk.Contents) error {
+			for c := range ch {
+				_ = c
+			}
+			return fmt.Errorf("oh no")
+		},
+		localTestTree,
+	)
+	if err == nil || strings.Count(err.Error(), "oh no") != 9 {
+		t.Errorf("missing or unexpected error: %v", err)
+	}
+}
+
+type infiniteScanner struct{}
+
+func (is *infiniteScanner) List(ctx context.Context, path string, ch chan<- filewalk.Contents) {
+	time.Sleep(time.Millisecond * 1000)
+	ch <- filewalk.Contents{
+		Path: "infinite",
+		Children: []*filewalk.Info{
+			{
+				Name:    "child",
+				ModTime: time.Now(),
+				Mode:    filewalk.ModePrefix,
+			},
+		},
+		Files: []*filewalk.Info{
+			{
+				Name:    "file",
+				ModTime: time.Now(),
+			},
+		},
+	}
+}
+
+func (is *infiniteScanner) Stat(ctx context.Context, path string) (*filewalk.Info, error) {
+	info, err := os.Lstat(localTestTree)
+	if err != nil {
+		return nil, err
+	}
+	return &filewalk.Info{
+		Name:    info.Name(),
+		Size:    info.Size(),
+		ModTime: info.ModTime(),
+		Mode:    filewalk.FileMode(info.Mode()),
+		Sys:     info,
+	}, nil
+}
+
+func (is *infiniteScanner) Join(components ...string) string {
+	return filepath.Join(components...)
+}
+
+func (is *infiniteScanner) IsPermissionError(err error) bool {
+	return os.IsPermission(err)
+}
+
+func (is *infiniteScanner) IsNotExist(err error) bool {
+	return os.IsNotExist(err)
+}
+
+func TestCancel(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	is := &infiniteScanner{}
+	wk := filewalk.New(is, filewalk.Concurrency(4))
+	lg := &logger{}
+
+	ch := make(chan error)
+	go func() {
+		ch <- wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, "anywhere")
+	}()
+	go cancel()
+	select {
+	case err := <-ch:
+		if err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("missing or wrong error: %v", err)
+		}
+	case <-time.After(time.Second * 30):
+		t.Fatalf("timed out")
+	}
+
+	select {
+	case <-ctx.Done():
+		if err := ctx.Err(); err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("missing or wrong error: %v", err)
+		}
+	default:
+		t.Fatalf("context was not canceld")
+	}
+}
