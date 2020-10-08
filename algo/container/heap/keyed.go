@@ -20,15 +20,15 @@ type keyInt64 struct {
 
 // KeyedInt64 implements a heap whose values include both a key and
 // value to allow for updates to existing items in the heap. It also
-// keeps a running sum of the all of the items currently in the heap,
-// supports both ascending and desencding operations. It is safe for
+// keeps a running sum of the all of the values currently in the heap,
+// supports both ascending and desencding operations and is safe for
 // concurrent use.
 type KeyedInt64 struct {
 	mu sync.Mutex
 	h  *keyedInt64
 }
 
-// NewKeyedInt64
+// NewKeyedInt64 returns a new instance of KeyedInt64.
 func NewKeyedInt64(descending bool) *KeyedInt64 {
 	return &KeyedInt64{
 		h: &keyedInt64{
@@ -99,12 +99,16 @@ func (kih *keyedInt64) remove(key string) {
 	heap.Remove(kih, idx)
 }
 
+// Update updates the value associated with key or it adds it to
+// the heap.
 func (ki *KeyedInt64) Update(key string, value int64) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
 	ki.h.update(keyInt64{Key: key, Value: value})
 }
 
+// Pop removes the top most value (either largest or smallest) from
+// the heap.
 func (ki *KeyedInt64) Pop() (string, int64) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
@@ -112,6 +116,7 @@ func (ki *KeyedInt64) Pop() (string, int64) {
 	return kv.Key, kv.Value
 }
 
+// TopN removes at most the top most n items from the heap.
 func (ki *KeyedInt64) TopN(n int) []struct {
 	Key   string
 	Value int64
@@ -133,24 +138,28 @@ func (ki *KeyedInt64) TopN(n int) []struct {
 	return out
 }
 
-func (ki *KeyedInt64) Total() int64 {
+// Sum returns the current sum of all values in the heap.
+func (ki *KeyedInt64) Sum() int64 {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
 	return ki.h.Total
 }
 
+// Len returns the number of items in the heap.
 func (ki *KeyedInt64) Len() int {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
 	return len(ki.h.Values)
 }
 
+// Remove removes the specified item from the heap.
 func (ki *KeyedInt64) Remove(key string) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
 	ki.h.remove(key)
 }
 
+// GobDecode implements gob.GobDecoder.
 func (ki *KeyedInt64) GobDecode(buf []byte) error {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
@@ -158,6 +167,7 @@ func (ki *KeyedInt64) GobDecode(buf []byte) error {
 	return dec.Decode(&ki.h)
 }
 
+// GobEncode implements gob.GobEncode.
 func (ki *KeyedInt64) GobEncode() ([]byte, error) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
@@ -169,6 +179,7 @@ func (ki *KeyedInt64) GobEncode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// UnmarshalJSON implements json.Unmarshaler.
 func (ki *KeyedInt64) UnmarshalJSON(buf []byte) error {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
@@ -176,6 +187,7 @@ func (ki *KeyedInt64) UnmarshalJSON(buf []byte) error {
 	return dec.Decode(&ki.h)
 }
 
+// MarshalJSON implements json.Marshaler.
 func (ki *KeyedInt64) MarshalJSON() ([]byte, error) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()

@@ -16,15 +16,15 @@ type KeyedInt64 struct {
 ```
 KeyedInt64 implements a heap whose values include both a key and value to
 allow for updates to existing items in the heap. It also keeps a running sum
-of the all of the items currently in the heap, supports both ascending and
-desencding operations. It is safe for concurrent use.
+of the all of the values currently in the heap, supports both ascending and
+desencding operations and is safe for concurrent use.
 
 ### Functions
 
 ```go
 func NewKeyedInt64(descending bool) *KeyedInt64
 ```
-NewKeyedInt64
+NewKeyedInt64 returns a new instance of KeyedInt64.
 
 
 
@@ -33,31 +33,43 @@ NewKeyedInt64
 ```go
 func (ki *KeyedInt64) GobDecode(buf []byte) error
 ```
+GobDecode implements gob.GobDecoder.
 
 
 ```go
 func (ki *KeyedInt64) GobEncode() ([]byte, error)
 ```
+GobEncode implements gob.GobEncode.
 
 
 ```go
 func (ki *KeyedInt64) Len() int
 ```
+Len returns the number of items in the heap.
 
 
 ```go
 func (ki *KeyedInt64) MarshalJSON() ([]byte, error)
 ```
+MarshalJSON implements json.Marshaler.
 
 
 ```go
 func (ki *KeyedInt64) Pop() (string, int64)
 ```
+Pop removes the top most value (either largest or smallest) from the heap.
 
 
 ```go
 func (ki *KeyedInt64) Remove(key string)
 ```
+Remove removes the specified item from the heap.
+
+
+```go
+func (ki *KeyedInt64) Sum() int64
+```
+Sum returns the current sum of all values in the heap.
 
 
 ```go
@@ -66,21 +78,19 @@ func (ki *KeyedInt64) TopN(n int) []struct {
 	Value int64
 }
 ```
-
-
-```go
-func (ki *KeyedInt64) Total() int64
-```
+TopN removes at most the top most n items from the heap.
 
 
 ```go
 func (ki *KeyedInt64) UnmarshalJSON(buf []byte) error
 ```
+UnmarshalJSON implements json.Unmarshaler.
 
 
 ```go
 func (ki *KeyedInt64) Update(key string, value int64)
 ```
+Update updates the value associated with key or it adds it to the heap.
 
 
 

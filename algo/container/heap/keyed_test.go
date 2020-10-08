@@ -35,7 +35,7 @@ func assertStatsKI64(t *testing.T, h *heap.KeyedInt64, l int, v int64) {
 	if got, want := h.Len(), l; got != want {
 		t.Errorf("line %v: got %v, want %v", line, got, want)
 	}
-	if got, want := h.Total(), v; got != want {
+	if got, want := h.Sum(), v; got != want {
 		t.Errorf("line %v: got %v, want %v", line, got, want)
 	}
 }
@@ -156,7 +156,7 @@ func TestKeyedHeap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	olen, ototal := h.Len(), h.Total()
+	olen, ototal := h.Len(), h.Sum()
 	n := 100
 	top := h.TopN(n)
 	if err := isAscending(top); err != nil {
@@ -185,5 +185,5 @@ func TestKeyedHeap(t *testing.T) {
 	if got, want := gobHeap.TopN(n), top; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	assertStats(h.Len(), h.Total())
+	assertStats(h.Len(), h.Sum())
 }
