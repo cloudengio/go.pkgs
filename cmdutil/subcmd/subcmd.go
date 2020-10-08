@@ -72,6 +72,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloudeng.io/cmdutil"
 	"cloudeng.io/cmdutil/flags"
 )
 
@@ -268,14 +269,25 @@ func (cmds *CommandSet) Commands() []string {
 	return out
 }
 
+// Dispatch will dispatch the appropriate sub command or return an error.
 func (cmds *CommandSet) Dispatch(ctx context.Context) error {
 	return cmds.DispatchWithArgs(ctx, filepath.Base(os.Args[0]), os.Args[1:]...)
 }
 
+// MustDispatch will dispatch the appropriate sub command or exit.
+func (cmds *CommandSet) MustDispatch(ctx context.Context) {
+	err := cmds.DispatchWithArgs(ctx, filepath.Base(os.Args[0]), os.Args[1:]...)
+	if err != nil {
+		cmdutil.Exit("%v", err)
+	}
+}
+
+// SetOutput is like flag.FlagSet.SetOutput.
 func (cmds *CommandSet) SetOutput(out io.Writer) {
 	cmds.out = out
 }
 
+// Output is like flag.FlagSet.Output.
 func (cmds *CommandSet) Output() io.Writer {
 	return cmds.out
 }
