@@ -48,7 +48,7 @@ func TestKeyedHeapSimple(t *testing.T) {
 	assertStats := func(l int, v int64) {
 		assertStatsKI64(t, h, l, v)
 	}
-	h = heap.NewKeyedInt64(false)
+	h = heap.NewKeyedInt64(heap.Ascending)
 
 	h.Update("a", 33)
 	assertStats(1, 33)
@@ -74,7 +74,7 @@ func TestKeyedHeapSimple(t *testing.T) {
 	}
 	assertStats(0, 0)
 
-	h = heap.NewKeyedInt64(true)
+	h = heap.NewKeyedInt64(heap.Descending)
 	h.Update("a", 33)
 	assertStats(1, 33)
 	h.Update("b", 44)
@@ -114,12 +114,12 @@ func fillrand(h *heap.KeyedInt64, n int) {
 }
 
 func isAscending(items []struct {
-	Key   string
-	Value int64
+	K string
+	V int64
 }) error {
 	prev := items[0]
 	for i, kv := range items[1:] {
-		if got, want := prev.Value, kv.Value; got > want {
+		if got, want := prev.V, kv.V; got > want {
 			return fmt.Errorf("%v: key %v <= %v", i, got, want)
 		}
 		prev = kv
@@ -128,7 +128,7 @@ func isAscending(items []struct {
 }
 
 func TestKeyedHeap(t *testing.T) {
-	h := heap.NewKeyedInt64(false)
+	h := heap.NewKeyedInt64(heap.Ascending)
 
 	var wg sync.WaitGroup
 	iter := 8
@@ -186,4 +186,67 @@ func TestKeyedHeap(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	assertStats(h.Len(), h.Sum())
+}
+
+func BenchmarkUpdate(b *testing.B) {
+	kh := heap.NewKeyedInt64(heap.Ascending)
+	for i := 0; i < b.N; i++ {
+		fillrand(kh, 1000*1000)
+	}
+}
+
+func BenchmarkGobEncode(b *testing.B) {
+	kh := heap.NewKeyedInt64(heap.Ascending)
+	fillrand(kh, 1000*1000)
+	buf := &bytes.Buffer{}
+	enc := gob.NewEncoder(buf)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := enc.Encode(kh); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkGobDecode(b *testing.B) {
+	kh := heap.NewKeyedInt64(heap.Ascending)
+	fillrand(kh, 1000*1000)
+	buf := &bytes.Buffer{}
+	enc := gob.NewEncoder(buf)
+	enc.Encode(kh)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := gob.NewDecoder(bytes.NewReader(buf.Bytes()))
+		if err := dec.Decode(kh); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkJSONEncode(b *testing.B) {
+	kh := heap.NewKeyedInt64(heap.Ascending)
+	fillrand(kh, 1000*1000)
+	buf := &bytes.Buffer{}
+	enc := json.NewEncoder(buf)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := enc.Encode(kh); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkJSONDecode(b *testing.B) {
+	kh := heap.NewKeyedInt64(heap.Ascending)
+	fillrand(kh, 1000*1000)
+	buf := &bytes.Buffer{}
+	enc := json.NewEncoder(buf)
+	enc.Encode(kh)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := json.NewDecoder(bytes.NewReader(buf.Bytes()))
+		if err := dec.Decode(kh); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
