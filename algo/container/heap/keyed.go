@@ -11,6 +11,8 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"sync"
+
+	"cloudeng.io/errors"
 )
 
 type keyInt64 struct {
@@ -28,21 +30,30 @@ type KeyedInt64 struct {
 	h  *keyedInt64
 }
 
+// Order determines if the heap is maintained in ascending or descending
+// order.
+type Order bool
+
+const (
+	Ascending  Order = false
+	Descending Order = true
+)
+
 // NewKeyedInt64 returns a new instance of KeyedInt64.
-func NewKeyedInt64(descending bool) *KeyedInt64 {
+func NewKeyedInt64(order Order) *KeyedInt64 {
 	return &KeyedInt64{
 		h: &keyedInt64{
-			Descending: descending,
-			Lookup:     map[string]int{},
+			Order:  order,
+			lookup: map[string]int{},
 		},
 	}
 }
 
 type keyedInt64 struct {
-	Descending bool           `json:"d,omitempty"`
-	Lookup     map[string]int `json:"l"`
-	Values     []keyInt64     `json:"v"`
-	Total      int64          `json:"t"`
+	Order  Order
+	Values []keyInt64
+	Total  int64
+	lookup map[string]int
 }
 
 func (kih *keyedInt64) Len() int {
@@ -51,22 +62,22 @@ func (kih *keyedInt64) Len() int {
 
 func (kih *keyedInt64) Less(i, j int) bool {
 	ascending := (kih.Values[i].Value < kih.Values[j].Value)
-	if kih.Descending {
+	if kih.Order == Descending {
 		return !ascending
 	}
 	return ascending
 }
 
 func (kih *keyedInt64) Swap(i, j int) {
-	kih.Lookup[kih.Values[i].Key] = j
-	kih.Lookup[kih.Values[j].Key] = i
+	kih.lookup[kih.Values[i].Key] = j
+	kih.lookup[kih.Values[j].Key] = i
 	kih.Values[i], kih.Values[j] = kih.Values[j], kih.Values[i]
 }
 
 func (kih *keyedInt64) Push(x interface{}) {
 	m := x.(keyInt64)
 	kih.Values = append(kih.Values, m)
-	kih.Lookup[m.Key] = len(kih.Values) - 1
+	kih.lookup[m.Key] = len(kih.Values) - 1
 }
 
 func (kih *keyedInt64) Pop() interface{} {
@@ -75,12 +86,12 @@ func (kih *keyedInt64) Pop() interface{} {
 	x := old[n-1]
 	kih.Values = old[0 : n-1]
 	kih.Total -= x.Value
-	delete(kih.Lookup, x.Key)
+	delete(kih.lookup, x.Key)
 	return x
 }
 
 func (kih *keyedInt64) update(kv keyInt64) {
-	idx, ok := kih.Lookup[kv.Key]
+	idx, ok := kih.lookup[kv.Key]
 	if !ok {
 		heap.Push(kih, kv)
 		kih.Total += kv.Value
@@ -92,7 +103,7 @@ func (kih *keyedInt64) update(kv keyInt64) {
 }
 
 func (kih *keyedInt64) remove(key string) {
-	idx, ok := kih.Lookup[key]
+	idx, ok := kih.lookup[key]
 	if !ok {
 		return
 	}
@@ -118,8 +129,8 @@ func (ki *KeyedInt64) Pop() (string, int64) {
 
 // TopN removes at most the top most n items from the heap.
 func (ki *KeyedInt64) TopN(n int) []struct {
-	Key   string
-	Value int64
+	K string
+	V int64
 } {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
@@ -127,13 +138,13 @@ func (ki *KeyedInt64) TopN(n int) []struct {
 		n = len(ki.h.Values)
 	}
 	out := make([]struct {
-		Key   string
-		Value int64
+		K string
+		V int64
 	}, n)
 	for i := 0; i < n; i++ {
 		kv := heap.Pop(ki.h).(keyInt64)
-		out[i].Key = kv.Key
-		out[i].Value = kv.Value
+		out[i].K = kv.Key
+		out[i].V = kv.Value
 	}
 	return out
 }
@@ -159,24 +170,77 @@ func (ki *KeyedInt64) Remove(key string) {
 	ki.h.remove(key)
 }
 
-// GobDecode implements gob.GobDecoder.
-func (ki *KeyedInt64) GobDecode(buf []byte) error {
-	ki.mu.Lock()
-	defer ki.mu.Unlock()
-	dec := gob.NewDecoder(bytes.NewBuffer(buf))
-	return dec.Decode(&ki.h)
-}
-
 // GobEncode implements gob.GobEncode.
 func (ki *KeyedInt64) GobEncode() ([]byte, error) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
-	if err := enc.Encode(ki.h); err != nil {
-		return nil, err
+	errs := errors.M{}
+	errs.Append(enc.Encode(len(ki.h.Values)))
+	errs.Append(enc.Encode(ki.h.Order))
+	errs.Append(enc.Encode(ki.h.Total))
+	vals := make([]int64, len(ki.h.Values))
+	keys := make([]string, len(ki.h.Values))
+	for i, v := range ki.h.Values {
+		vals[i] = v.Value
+		keys[i] = v.Key
 	}
-	return buf.Bytes(), nil
+	errs.Append(enc.Encode(keys))
+	errs.Append(enc.Encode(vals))
+	return buf.Bytes(), errs.Err()
+}
+
+// GobDecode implements gob.GobDecoder.
+func (ki *KeyedInt64) GobDecode(buf []byte) error {
+	ki.mu.Lock()
+	defer ki.mu.Unlock()
+	dec := gob.NewDecoder(bytes.NewBuffer(buf))
+	errs := errors.M{}
+	var size int
+	errs.Append(dec.Decode(&size))
+	ki.h = &keyedInt64{
+		Values: make([]keyInt64, size),
+		lookup: make(map[string]int, size),
+	}
+	errs.Append(dec.Decode(&ki.h.Order))
+	errs.Append(dec.Decode(&ki.h.Total))
+	keys := make([]string, size)
+	vals := make([]int64, size)
+	errs.Append(dec.Decode(&keys))
+	errs.Append(dec.Decode(&vals))
+	for i := 0; i < size; i++ {
+		ki.h.Values[i].Key = keys[i]
+		ki.h.Values[i].Value = vals[i]
+		ki.h.lookup[keys[i]] = i
+	}
+	return errs.Err()
+}
+
+type jsonEncoding struct {
+	Size   int             `json:"size"`
+	Order  Order           `json:"order"`
+	Total  int64           `json:"total"`
+	Values json.RawMessage `json:"values"`
+}
+
+// MarshalJSON implements json.Marshaler.
+func (ki *KeyedInt64) MarshalJSON() ([]byte, error) {
+	ki.mu.Lock()
+	defer ki.mu.Unlock()
+	errs := errors.M{}
+	valbuf := &bytes.Buffer{}
+	enc := json.NewEncoder(valbuf)
+	errs.Append(enc.Encode(ki.h.Values))
+	buf := &bytes.Buffer{}
+	enc = json.NewEncoder(buf)
+	errs.Append(enc.Encode(jsonEncoding{
+		Size:   len(ki.h.Values),
+		Order:  ki.h.Order,
+		Total:  ki.h.Total,
+		Values: valbuf.Bytes(),
+	}))
+	return buf.Bytes(), errs.Err()
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -184,17 +248,19 @@ func (ki *KeyedInt64) UnmarshalJSON(buf []byte) error {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
 	dec := json.NewDecoder(bytes.NewBuffer(buf))
-	return dec.Decode(&ki.h)
-}
-
-// MarshalJSON implements json.Marshaler.
-func (ki *KeyedInt64) MarshalJSON() ([]byte, error) {
-	ki.mu.Lock()
-	defer ki.mu.Unlock()
-	buf := &bytes.Buffer{}
-	enc := json.NewEncoder(buf)
-	if err := enc.Encode(ki.h); err != nil {
-		return nil, err
+	hdr := jsonEncoding{}
+	errs := errors.M{}
+	errs.Append(dec.Decode(&hdr))
+	ki.h = &keyedInt64{
+		Order:  hdr.Order,
+		Total:  hdr.Total,
+		Values: make([]keyInt64, hdr.Size),
+		lookup: make(map[string]int, hdr.Size),
 	}
-	return buf.Bytes(), nil
+	dec = json.NewDecoder(bytes.NewBuffer(hdr.Values))
+	errs.Append(dec.Decode(&ki.h.Values))
+	for i, k := range ki.h.Values {
+		ki.h.lookup[k.Key] = i
+	}
+	return errs.Err()
 }
