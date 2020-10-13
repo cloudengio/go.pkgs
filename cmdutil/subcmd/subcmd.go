@@ -53,10 +53,14 @@
 //      cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
 //      cmd.Document("print an integer range")
 //      cmdSet := subcmd.NewCommandSet(cmd)
-//      if err := cmdSet.Dispatch(ctx); err != nil {
-//         panic(err)
-//      }
+//      cmdSet.MustDispatch(ctx)
 //    }
+//
+// In addition it is possible to register 'global' flags that may be specified
+// before any sub commands on invocation and also to wrap calls to any
+// subcommand's runner function. The former is useful for setting common flags
+// and the latter for acting on those flags and/or implementing common
+// functionality such as profiling or initializing logging etc.
 //
 // Note that this package will never call flag.Parse and will not associate
 // any flags with flag.CommandLine.
@@ -121,6 +125,10 @@ func (cf *FlagSet) IsSet(field interface{}) (string, bool) {
 // Runner is the type of the function to be called to run a particular command.
 type Runner func(ctx context.Context, flagValues interface{}, args []string) error
 
+// Main is the type of the function that can be used to intercept a call to
+// a Runner.
+type Main func(ctx context.Context, cmdRunner func() error) error
+
 // Command represents a single command.
 type Command struct {
 	name        string
@@ -144,6 +152,18 @@ func NewCommand(name string, flags *FlagSet, runner Runner, options ...CommandOp
 	return cmd
 }
 
+// NewCommandLevel returns a new instance of Command with subcommands.
+func NewCommandLevel(name string, subcmds *CommandSet) *Command {
+	cmd := &Command{
+		name:  name,
+		flags: NewFlagSet(),
+	}
+	cmd.opts.subcmds = subcmds
+	return cmd
+}
+
+// Document adds a description of the command and optionally descriptions
+// of its arguments.
 func (cmd *Command) Document(description string, arguments ...string) {
 	cmd.description = description
 	cmd.arguments = strings.Join(arguments, " ")
@@ -154,6 +174,9 @@ func namesAndDefault(name string, fs *flag.FlagSet) string {
 	fs.VisitAll(func(fl *flag.Flag) {
 		summary = append(summary, "--"+fl.Name+"="+fl.DefValue)
 	})
+	if len(summary) == 0 {
+		return name
+	}
 	return name + " [" + strings.Join(summary, " ") + "]"
 }
 
@@ -186,11 +209,17 @@ func (cmd *Command) Usage() string {
 	return out.String()
 }
 
+func (cmd *Command) summary() (name, desc string) {
+	return cmd.name, cmd.description
+}
+
 // CommandSet represents a set of commands that are peers to each other,
 // that is, the command line must specificy one of them.
 type CommandSet struct {
-	cmds []*Command
-	out  io.Writer
+	global     *FlagSet
+	globalMain Main
+	cmds       []*Command
+	out        io.Writer
 }
 
 // CommandOption represents an option controlling the handling of a given
@@ -228,24 +257,36 @@ func ExactlyNumArguments(n int) CommandOption {
 	}
 }
 
-// WithSubCommands associates a set of commands that are subordinate to the
-// current one. Once all of the flags for the current command processed the
-// first argument must be one of these commands.
-func WithSubCommands(cmds *CommandSet) CommandOption {
-	return func(o *options) {
-		*o = options{}
-		o.subcmds = cmds
-	}
-}
-
-// First creates the first command.
+// NewCommandSet creates a new command set.
 func NewCommandSet(cmds ...*Command) *CommandSet {
 	return &CommandSet{out: os.Stderr, cmds: cmds}
+}
+
+// WithGlobalFlags adds top-level/global flags that apply to all
+// commands. They must be specified before a subcommand, ie:
+// command <global-flags>* sub-command <sub-command-pflags>* args
+func (cmds *CommandSet) WithGlobalFlags(global *FlagSet) {
+	cmds.global = global
+}
+
+// WithMain arranges for Main to be called by Dispatch to wrap the call
+// to the requested RunnerFunc.
+func (cmds *CommandSet) WithMain(m Main) {
+	cmds.globalMain = m
 }
 
 // Defaults returns the value of Defaults for each command in commands.
 func (cmds *CommandSet) defaults() string {
 	out := &strings.Builder{}
+	if cmds.global != nil {
+		fs := cmds.global.flagSet
+		fmt.Fprintf(out, "global flags:%s\n", namesAndDefault("", fs))
+		orig := fs.Output()
+		fs.SetOutput(out)
+		fs.PrintDefaults()
+		fs.SetOutput(orig)
+		out.WriteString("\n")
+	}
 	for i, cmd := range cmds.cmds {
 		out.WriteString(cmd.Usage())
 		if i < len(cmds.cmds)-1 {
@@ -257,7 +298,7 @@ func (cmds *CommandSet) defaults() string {
 
 // Usage returns a function that can be assigned to flag.Usage.
 func (cmds *CommandSet) Usage(name string) string {
-	return fmt.Sprintf("Usage of %v\n\n%s", name, cmds.defaults())
+	return fmt.Sprintf("Usage of %v\n\n%s\n%s", name, cmds.Summary(), cmds.defaults())
 }
 
 // Commands returns the list of available commands.
@@ -267,6 +308,22 @@ func (cmds *CommandSet) Commands() []string {
 		out[i] = cmd.name
 	}
 	return out
+}
+
+func (cmds *CommandSet) Summary() string {
+	max := 0
+	for _, cmd := range cmds.cmds {
+		name, _ := cmd.summary()
+		if l := len(name); l > max {
+			max = l
+		}
+	}
+	out := &strings.Builder{}
+	for _, cmd := range cmds.cmds {
+		name, desc := cmd.summary()
+		fmt.Fprintf(out, " %v%v - %v\n", strings.Repeat(" ", max-len(name)), name, desc)
+	}
+	return out.String()
 }
 
 // Dispatch will dispatch the appropriate sub command or return an error.
@@ -295,6 +352,27 @@ func (cmds *CommandSet) Output() io.Writer {
 // Dispatch determines which top level command has been requested, if any,
 // parses the command line appropriately and then runs its associated function.
 func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args ...string) error {
+	if cmds.global != nil {
+		fs := cmds.global.flagSet
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		args = fs.Args()
+	}
+	return cmds.dispatchWithArgs(ctx, usage, args)
+}
+
+func (cmds *CommandSet) mainWrapper() Main {
+	wrapper := cmds.globalMain
+	if wrapper == nil {
+		wrapper = func(ctx context.Context, runner func() error) error {
+			return runner()
+		}
+	}
+	return wrapper
+}
+
+func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args []string) error {
 	if len(args) == 0 {
 		fmt.Fprintln(cmds.out, cmds.Usage(usage))
 		return fmt.Errorf("missing top level command: available commands are: %v", strings.Join(cmds.Commands(), ", "))
@@ -308,7 +386,7 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 	for _, cmd := range cmds.cmds {
 		fs := cmd.flags.flagSet
 		if requested == cmd.name {
-			if cmd.runner == nil {
+			if cmd.runner == nil && cmd.opts.subcmds == nil {
 				return fmt.Errorf("no runner registered for %v", requested)
 			}
 			args := args[1:]
@@ -319,25 +397,33 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 				}
 				return fmt.Errorf("%v: failed to parse flags: %v", cmd.name, err)
 			}
-			args = fs.Args()
-			switch {
-			case cmd.opts.withoutArgs:
-				if len(args) > 0 {
-					return fmt.Errorf("%v: does not accept any arguments", cmd.name)
-				}
-			case cmd.opts.optionalSingleArg:
-				if len(args) > 1 {
-					return fmt.Errorf("%v: accepts at most one argument", cmd.name)
-				}
-			case cmd.opts.exactArgs:
-				if len(args) != cmd.opts.numArgs {
-					return fmt.Errorf("%v: accepts exactly %v arguments", cmd.name, cmd.opts.numArgs)
-				}
-			case cmd.opts.subcmds != nil:
-				return cmd.opts.subcmds.DispatchWithArgs(ctx, usage, args...)
-			}
-			return cmd.runner(ctx, cmd.flags.flagValues, args)
+			return cmds.processChosenCmd(ctx, cmd, usage, fs.Args())
 		}
 	}
 	return fmt.Errorf("%v is not one of the supported commands: %v", requested, strings.Join(cmds.Commands(), ", "))
+}
+
+func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usage string, args []string) error {
+	switch {
+	case cmd.opts.withoutArgs:
+		if len(args) > 0 {
+			return fmt.Errorf("%v: does not accept any arguments", cmd.name)
+		}
+	case cmd.opts.optionalSingleArg:
+		if len(args) > 1 {
+			return fmt.Errorf("%v: accepts at most one argument", cmd.name)
+		}
+	case cmd.opts.exactArgs:
+		if len(args) != cmd.opts.numArgs {
+			return fmt.Errorf("%v: accepts exactly %v arguments", cmd.name, cmd.opts.numArgs)
+		}
+	case cmd.opts.subcmds != nil:
+		if cmd.opts.subcmds.globalMain == nil {
+			cmd.opts.subcmds.globalMain = cmds.globalMain
+		}
+		return cmd.opts.subcmds.dispatchWithArgs(ctx, usage, args)
+	}
+	return cmds.mainWrapper()(ctx, func() error {
+		return cmd.runner(ctx, cmd.flags.flagValues, args)
+	})
 }

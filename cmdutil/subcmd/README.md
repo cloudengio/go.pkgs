@@ -55,10 +55,14 @@ command functions via cmdset.Dispatch or DispatchWithArgs.
       cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
       cmd.Document("print an integer range")
       cmdSet := subcmd.NewCommandSet(cmd)
-      if err := cmdSet.Dispatch(ctx); err != nil {
-         panic(err)
-      }
+      cmdSet.MustDispatch(ctx)
     }
+
+In addition it is possible to register 'global' flags that may be specified
+before any sub commands on invocation and also to wrap calls to any
+subcommand's runner function. The former is useful for setting common flags
+and the latter for acting on those flags and/or implementing common
+functionality such as profiling or initializing logging etc.
 
 Note that this package will never call flag.Parse and will not associate any
 flags with flag.CommandLine.
@@ -80,12 +84,20 @@ func NewCommand(name string, flags *FlagSet, runner Runner, options ...CommandOp
 NewCommand returns a new instance of Command.
 
 
+```go
+func NewCommandLevel(name string, subcmds *CommandSet) *Command
+```
+NewCommandLevel returns a new instance of Command with subcommands.
+
+
 
 ### Methods
 
 ```go
 func (cmd *Command) Document(description string, arguments ...string)
 ```
+Document adds a description of the command and optionally descriptions of
+its arguments.
 
 
 ```go
@@ -122,14 +134,6 @@ argument.
 
 
 ```go
-func WithSubCommands(cmds *CommandSet) CommandOption
-```
-WithSubCommands associates a set of commands that are subordinate to the
-current one. Once all of the flags for the current command processed the
-first argument must be one of these commands.
-
-
-```go
 func WithoutArguments() CommandOption
 ```
 WithoutArguments specifies that the command takes no arguments.
@@ -151,7 +155,7 @@ is, the command line must specificy one of them.
 ```go
 func NewCommandSet(cmds ...*Command) *CommandSet
 ```
-First creates the first command.
+NewCommandSet creates a new command set.
 
 
 
@@ -195,9 +199,29 @@ SetOutput is like flag.FlagSet.SetOutput.
 
 
 ```go
+func (cmds *CommandSet) Summary() string
+```
+
+
+```go
 func (cmds *CommandSet) Usage(name string) string
 ```
 Usage returns a function that can be assigned to flag.Usage.
+
+
+```go
+func (cmds *CommandSet) WithGlobalFlags(global *FlagSet)
+```
+WithGlobalFlags adds top-level/global flags that apply to all commands. They
+must be specified before a subcommand, ie: command <global-flags>*
+sub-command <sub-command-pflags>* args
+
+
+```go
+func (cmds *CommandSet) WithMain(m Main)
+```
+WithMain arranges for Main to be called by Dispatch to wrap the call to the
+requested RunnerFunc.
 
 
 
@@ -245,6 +269,14 @@ flags.RegisterFlagsInStructWithSetMap. The struct tag must be 'subcomd'. The
 returned SetMap can be queried by the IsSet method.
 
 
+
+
+### Type Main
+```go
+type Main func(ctx context.Context, cmdRunner func() error) error
+```
+Main is the type of the function that can be used to intercept a call to a
+Runner.
 
 
 ### Type Runner
