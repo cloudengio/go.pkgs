@@ -71,6 +71,8 @@ type Field struct {
 	Name string
 	// Doc is the text extracted from the struct tag for this field.
 	Doc string
+	// Slice is true if this field is a slice.
+	Slice bool
 	// Fields, if this field is a struct, contains descriptions for
 	// any documented fields in that struct.
 	Fields []Field `json:",omitempty" yaml:",omitempty"`

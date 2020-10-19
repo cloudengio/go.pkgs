@@ -6,6 +6,7 @@ package subcmd_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"runtime"
 	"strings"
@@ -31,8 +32,7 @@ func ExampleCommandSet() {
 		return nil
 	}
 
-	fs := subcmd.NewFlagSet()
-	fs.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
+	fs := subcmd.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
 	// Subcommands are added using the subcmd.WithSubcommands option.
 	cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
 	cmd.Document("print an integer range")
@@ -42,7 +42,8 @@ func ExampleCommandSet() {
 	cmdSet.WithGlobalFlags(globals)
 
 	// Use cmdSet.Dispatch to access os.Args.
-	fmt.Println(cmdSet.Usage("example-command"))
+	fmt.Printf("%s", cmdSet.Usage("example-command"))
+	fmt.Printf("%s", cmdSet.Defaults("example-command"))
 	cmdSet.DispatchWithArgs(ctx, "example-command", "ranger")
 	cmdSet.DispatchWithArgs(ctx, "example-command", "-v=3", "ranger", "--from=10", "--to=100")
 
@@ -50,17 +51,13 @@ func ExampleCommandSet() {
 	// Usage of example-command
 	//
 	//  ranger - print an integer range
+	// Usage of example-command
+	//
+	//  ranger - print an integer range
 	//
 	// global flags: [--v=0]
 	//   -v int
-	//     	debugging verbosity
-	//
-	// Usage of command ranger: print an integer range
-	// ranger [--from=1 --to=2]
-	//   -from int
-	//     	start value for a range (default 1)
-	//   -to int
-	//     	end value for a range  (default 2)
+	//     debugging verbosity
 	//
 	// 0: 1..2
 	// 3: 10..100
@@ -104,18 +101,17 @@ func TestCommandSet(t *testing.T) {
 		return nil
 	}
 
-	cmdAFlags := subcmd.NewFlagSet()
-	err = cmdAFlags.RegisterFlagStruct(&flagsA{}, nil, nil)
+	cmdAFlags, err := subcmd.RegisterFlagStruct(&flagsA{}, nil, nil)
 	assertNoError()
 	cmdA := subcmd.NewCommand("cmd-a", cmdAFlags, runnerA)
 	cmdA.Document("subcmd a", "<args>...")
 
-	cmdBFlags := subcmd.NewFlagSet()
-	err = cmdBFlags.RegisterFlagStruct(&flagsB{}, nil, nil)
+	cmdBFlags, err := subcmd.RegisterFlagStruct(&flagsB{}, nil, nil)
 	assertNoError()
 	cmdB := subcmd.NewCommand("cmd-b", cmdBFlags, runnerB)
 	cmdB.Document("subcmd b", "")
 	commands := subcmd.NewCommandSet(cmdA, cmdB)
+	commands.Document("an explanation which will be line wrapped to something sensible and approaching 80 chars")
 
 	err = commands.DispatchWithArgs(ctx, "test", "cmd-a", "--flag-a=1", "--flag-b=3")
 	assertNoError()
@@ -125,22 +121,11 @@ func TestCommandSet(t *testing.T) {
 
 	if got, want := commands.Usage("binary"), `Usage of binary
 
+ an explanation which will be line wrapped to something sensible and approaching
+ 80 chars
+
  cmd-a - subcmd a
  cmd-b - subcmd b
-
-Usage of command cmd-a: subcmd a
-cmd-a [--flag-a=0 --flag-b=0] <args>...
-  -flag-a int
-    	a: an int flag
-  -flag-b int
-    	b: an int flag
-
-Usage of command cmd-b: subcmd b
-cmd-b [--flag-x= --flag-y=]
-  -flag-x string
-    	x: a string flag
-  -flag-y string
-    	y: a string flag
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -152,6 +137,27 @@ cmd-b [--flag-x= --flag-y=]
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	errHelp := func() {
+		if err != flag.ErrHelp {
+			t.Errorf("expected flag.ErrHelp: got %v", err)
+		}
+	}
+	help := &strings.Builder{}
+	commands.SetOutput(help)
+	err = commands.DispatchWithArgs(ctx, "test", "help", "cmd-a")
+	errHelp()
+	if got, want := help.String(), `Usage of command cmd-a: subcmd a
+cmd-a [--flag-a=0 --flag-b=0] <args>...
+
+  -flag-a int
+    a: an int flag
+  -flag-b int
+    b: an int flag
+
+
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
 
 func TestCommandOptions(t *testing.T) {
@@ -175,6 +181,7 @@ func TestCommandOptions(t *testing.T) {
 		subcmd.NewCommand("exactly-two", cmdAFlags, runnerA, subcmd.ExactlyNumArguments(2)),
 		subcmd.NewCommand("none", cmdAFlags, runnerA, subcmd.WithoutArguments()),
 		subcmd.NewCommand("at-most-one", cmdAFlags, runnerA, subcmd.OptionalSingleArgument()),
+		subcmd.NewCommand("at-least-two", cmdAFlags, runnerA, subcmd.AtLeastNArguments(2)),
 	)
 
 	expectedError := func(errmsg string) {
@@ -195,6 +202,8 @@ func TestCommandOptions(t *testing.T) {
 	}
 	err = cmdset.DispatchWithArgs(ctx, "test", "exactly-two")
 	expectedError("exactly-two: accepts exactly 2 arguments")
+	err = cmdset.DispatchWithArgs(ctx, "test", "at-least-two")
+	expectedError("at-least-two: accepts at least 2 arguments")
 	err = cmdset.DispatchWithArgs(ctx, "test", "exactly-two", "a", "b")
 	expectedNArgs(2)
 	err = cmdset.DispatchWithArgs(ctx, "test", "none", "aaa")
@@ -207,6 +216,8 @@ func TestCommandOptions(t *testing.T) {
 	expectedNArgs(0)
 	err = cmdset.DispatchWithArgs(ctx, "test", "at-most-one", "a")
 	expectedNArgs(1)
+	err = cmdset.DispatchWithArgs(ctx, "test", "at-least-two", "a", "b", "c")
+	expectedNArgs(3)
 }
 
 func TestMultiLevel(t *testing.T) {
@@ -287,7 +298,7 @@ func TestMultiLevel(t *testing.T) {
 		return runner()
 	})
 
-	if got, want := l1.Usage("test"), `Usage of test
+	if got, want := l1.Defaults("test"), `Usage of test
 
  c1 - c1
  c2 - c2
@@ -295,20 +306,8 @@ func TestMultiLevel(t *testing.T) {
 
 global flags: [--v=0]
   -v int
-    	debugging verbosity
+    debugging verbosity
 
-Usage of command c1: c1
-c1 c11|c12 ...
-
-Usage of command c2: c2
-c2 [--flag-a=0 --flag-b=0]
-  -flag-a int
-    	a: an int flag
-  -flag-b int
-    	b: an int flag
-
-Usage of command c3: c3
-c3 c31 ...
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -347,7 +346,7 @@ c3 c31 ...
 	assert(!l2Main, cmd2)
 
 	err = l1.DispatchWithArgs(ctx, "test", "c1")
-	if err == nil || !strings.Contains(err.Error(), "missing top level command: available commands are: c11, c12") {
+	if err == nil || !strings.Contains(err.Error(), "no command specified") {
 		t.Errorf("expected a particular error: %v", err)
 	}
 

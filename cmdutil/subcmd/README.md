@@ -120,6 +120,12 @@ command.
 ### Functions
 
 ```go
+func AtLeastNArguments(n int) CommandOption
+```
+AtLeastNArguments specifies that the command takes at least N arguments.
+
+
+```go
 func ExactlyNumArguments(n int) CommandOption
 ```
 ExactlyNumArguments specifies that the command takes exactly the specified
@@ -168,6 +174,12 @@ Commands returns the list of available commands.
 
 
 ```go
+func (cmds *CommandSet) Defaults(name string) string
+```
+Defaults returns the usage message and flag defaults.
+
+
+```go
 func (cmds *CommandSet) Dispatch(ctx context.Context) error
 ```
 Dispatch will dispatch the appropriate sub command or return an error.
@@ -178,6 +190,12 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 ```
 Dispatch determines which top level command has been requested, if any,
 parses the command line appropriately and then runs its associated function.
+
+
+```go
+func (cmds *CommandSet) Document(doc string)
+```
+Document adds a description for the command set.
 
 
 ```go
@@ -201,12 +219,14 @@ SetOutput is like flag.FlagSet.SetOutput.
 ```go
 func (cmds *CommandSet) Summary() string
 ```
+Summary returns a summary of the command set that includes its top level
+documentation and a list of its sub-commands.
 
 
 ```go
 func (cmds *CommandSet) Usage(name string) string
 ```
-Usage returns a function that can be assigned to flag.Usage.
+Usage returns the usage message for the command set.
 
 
 ```go
@@ -237,9 +257,29 @@ FlagSet represents the name, description and flag values for a command.
 ### Functions
 
 ```go
+func GlobalFlagSet() *FlagSet
+```
+GlobalFlagSet creates a new FlagSet that is to be used for global flags.
+
+
+```go
+func MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet
+```
+MustRegisterFlagStruct is like RegisterFlagStruct except that it panics on
+encountering an error. Its use is encouraged over RegisterFlagStruct from
+within init functions.
+
+
+```go
 func NewFlagSet() *FlagSet
 ```
 NewFlagSet returns a new instance of FlagSet.
+
+
+```go
+func RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*FlagSet, error)
+```
+RegisterFlagStruct creates a new FlagSet and calls RegisterFlagStruct on it.
 
 
 
