@@ -25,17 +25,16 @@ import (
 // Contents represents the contents of the filesystem at the level represented
 // by Path.
 type Contents struct {
-	Path     string `json:p,omitempty` // The name of the level being scanned.
-	Children []Info `json:c,omitempty` // Info on each of the next levels in the hierarchy.
-	Files    []Info `json:f,omitempty` // Info for the files at this level.
-	Err      error  `json:e,omitempty` // Non-nil if an error occurred.
+	Path     string `json:"p,omitempty"` // The name of the level being scanned.
+	Children []Info `json:"c,omitempty"` // Info on each of the next levels in the hierarchy.
+	Files    []Info `json:"f,omitempty"` // Info for the files at this level.
+	Err      error  `json:"e,omitempty"` // Non-nil if an error occurred.
 }
 
 // Walker implements the filesyste walk.
 type Walker struct {
 	fs         Filesystem
 	opts       options
-	listers    *errgroup.T
 	contentsFn ContentsFunc
 	prefixFn   PrefixFunc
 	errs       *errors.M
@@ -215,7 +214,6 @@ func (w *Walker) lister(ctx context.Context, workCh chan listRequest) {
 		work.childCh <- children
 		close(work.childCh)
 	}
-	return
 }
 
 // ContentsFunc is the type of the function that is called to consume the results
@@ -235,7 +233,7 @@ type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) 
 
 // Walk traverses the hierarchies specified by each of the roots calling
 // prefixFn and contentsFn as it goes. prefixFn will always be called
-// before contentsFn for the same prefix, but no other ordering gaurantees
+// before contentsFn for the same prefix, but no other ordering guarantees
 // are provided.
 func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn ContentsFunc, roots ...string) error {
 	rootCtx := ctx

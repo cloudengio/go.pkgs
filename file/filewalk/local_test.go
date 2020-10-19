@@ -23,13 +23,14 @@ var localTestTree string
 
 func TestMain(m *testing.M) {
 	tmpDir, _ := ioutil.TempDir("", "filewalk")
-	defer os.RemoveAll(tmpDir)
 	if err := createTestDir(tmpDir); err != nil {
 		fmt.Printf("failed to create testdir %v", err)
+		os.RemoveAll(tmpDir)
 		os.Exit(0)
 	}
 	localTestTree = tmpDir
 	code := m.Run()
+	os.RemoveAll(tmpDir)
 	os.Exit(code)
 }
 
@@ -107,7 +108,7 @@ func TestLocalFilesystem(t *testing.T) {
 
 	ch = make(chan filewalk.Contents)
 
-	dirs, files, errors, info = scan(sc, ch, sc.Join(localTestTree, "inaccessible-dir"))
+	_, _, errors, _ = scan(sc, ch, sc.Join(localTestTree, "inaccessible-dir"))
 
 	if got, want := len(errors), 1; got != want {
 		t.Fatalf("got %v, want %v", got, want)

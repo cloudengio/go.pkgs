@@ -71,20 +71,20 @@ func TestLocalWalk(t *testing.T) {
 		}
 	}
 	lg := nl()
-	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedFull)
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	wk = filewalk.New(sc, filewalk.Concurrency(10))
 	lg = nl()
-	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedFull)
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	wk = filewalk.New(sc, filewalk.Concurrency(10))
 	lg = nl()
 	lg.skip = "/b0/b0.1"
-	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedPartial1)
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial1)
 
 	lg = nl()
 	lg.skip = "/b0"
-	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedPartial2)
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial2)
 
 	lg = nl()
 	b01, err := sc.Stat(ctx, sc.Join(localTestTree, "b0", "b0.1"))
@@ -92,10 +92,10 @@ func TestLocalWalk(t *testing.T) {
 		t.Fatal(err)
 	}
 	lg.children["/b0"] = []filewalk.Info{b01}
-	testLocalWalk(t, ctx, localTestTree, wk, lg, expectedExistingChildren)
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
 }
 
-func testLocalWalk(t *testing.T, ctx context.Context, tmpDir string, wk *filewalk.Walker, lg *logger, expected string) {
+func testLocalWalk(ctx context.Context, t *testing.T, tmpDir string, wk *filewalk.Walker, lg *logger, expected string) {
 	_, _, line, _ := runtime.Caller(1)
 	err := wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, tmpDir)
 	if err != nil {
