@@ -16,7 +16,7 @@ func UnixMatcher(p string) *Match {
 	if u, err := url.Parse(p); err == nil && u.Scheme == "file" {
 		p = u.Path
 	}
-	if !strings.Contains(p, "/") {
+	if !strings.Contains(p, "/") && p != "." && p != ".." {
 		return nil
 	}
 	// Pretty much anything can be a unix filename, even a url.
