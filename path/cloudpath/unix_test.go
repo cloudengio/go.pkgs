@@ -17,6 +17,18 @@ func TestUnix(t *testing.T) {
 			cloudpath.UnixFileSystem, "localhost", "", "/", '/', nil,
 		},
 		{
+			"./",
+			cloudpath.UnixFileSystem, "localhost", "", "./", '/', nil,
+		},
+		{
+			".",
+			cloudpath.UnixFileSystem, "localhost", "", ".", '/', nil,
+		},
+		{
+			"..",
+			cloudpath.UnixFileSystem, "localhost", "", "..", '/', nil,
+		},
+		{
 			"/a/b",
 			cloudpath.UnixFileSystem, "localhost", "", "/a/b", '/', nil,
 		},
@@ -36,5 +48,11 @@ func TestUnix(t *testing.T) {
 		"",
 	}); err != nil {
 		t.Errorf("%v", err)
+	}
+
+	for _, d := range data {
+		if got, want := cloudpath.IsLocal(d.input), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }
