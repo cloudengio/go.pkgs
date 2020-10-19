@@ -67,6 +67,8 @@
 package subcmd
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -78,6 +80,7 @@ import (
 
 	"cloudeng.io/cmdutil"
 	"cloudeng.io/cmdutil/flags"
+	"cloudeng.io/text/linewrap"
 )
 
 // FlagSet represents the name, description and flag values for a command.
@@ -113,6 +116,28 @@ func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults 
 	if err != nil {
 		panic(err)
 	}
+}
+
+// RegisterFlagStruct creates a new FlagSet and calls RegisterFlagStruct
+// on it.
+func RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*FlagSet, error) {
+	fs := NewFlagSet()
+	err := fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
+	if err != nil {
+		return nil, err
+	}
+	return fs, nil
+}
+
+// MustRegisterFlagStruct is like RegisterFlagStruct except that it panics
+// on encountering an error. Its use is encouraged over RegisterFlagStruct from
+// within init functions.
+func MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet {
+	fs, err := RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
+	if err != nil {
+		panic(err)
+	}
+	return fs
 }
 
 // IsSet returns true if the supplied flag variable's value has been
@@ -202,10 +227,7 @@ func (cmd *Command) Usage() string {
 		out.WriteString(args)
 	}
 	out.WriteString("\n")
-	orig := cmd.flags.flagSet.Output()
-	defer cmd.flags.flagSet.SetOutput(orig)
-	cmd.flags.flagSet.SetOutput(out)
-	cmd.flags.flagSet.PrintDefaults()
+	fmt.Fprintf(out, "\n%s\n", printDefaults(cmd.flags.flagSet))
 	return out.String()
 }
 
@@ -216,6 +238,7 @@ func (cmd *Command) summary() (name, desc string) {
 // CommandSet represents a set of commands that are peers to each other,
 // that is, the command line must specificy one of them.
 type CommandSet struct {
+	document   string
 	global     *FlagSet
 	globalMain Main
 	cmds       []*Command
@@ -230,6 +253,7 @@ type options struct {
 	withoutArgs       bool
 	optionalSingleArg bool
 	exactArgs         bool
+	atLeastArgs       bool
 	numArgs           int
 	subcmds           *CommandSet
 }
@@ -257,6 +281,14 @@ func ExactlyNumArguments(n int) CommandOption {
 	}
 }
 
+// AtLeastNArguments specifies that the command takes at least N arguments.
+func AtLeastNArguments(n int) CommandOption {
+	return func(o *options) {
+		o.atLeastArgs = true
+		o.numArgs = n
+	}
+}
+
 // NewCommandSet creates a new command set.
 func NewCommandSet(cmds ...*Command) *CommandSet {
 	return &CommandSet{out: os.Stderr, cmds: cmds}
@@ -275,18 +307,10 @@ func (cmds *CommandSet) WithMain(m Main) {
 	cmds.globalMain = m
 }
 
-// Defaults returns the value of Defaults for each command in commands.
+// defaults returns the value of Defaults for each command in commands.
 func (cmds *CommandSet) defaults() string {
 	out := &strings.Builder{}
-	if cmds.global != nil {
-		fs := cmds.global.flagSet
-		fmt.Fprintf(out, "global flags:%s\n", namesAndDefault("", fs))
-		orig := fs.Output()
-		fs.SetOutput(out)
-		fs.PrintDefaults()
-		fs.SetOutput(orig)
-		out.WriteString("\n")
-	}
+	out.WriteString(cmds.globalDefaults())
 	for i, cmd := range cmds.cmds {
 		out.WriteString(cmd.Usage())
 		if i < len(cmds.cmds)-1 {
@@ -296,9 +320,64 @@ func (cmds *CommandSet) defaults() string {
 	return out.String()
 }
 
-// Usage returns a function that can be assigned to flag.Usage.
+func lineWrapDefaults(input string) string {
+	out := &strings.Builder{}
+	sc := bufio.NewScanner(bytes.NewBufferString(input))
+	block := &strings.Builder{}
+	writeBlock := func() {
+		if block.Len() > 0 {
+			fmt.Fprintf(out, "%s\n", linewrap.Block(4, 75, block.String()))
+			block.Reset()
+		}
+	}
+	for sc.Scan() {
+		l := sc.Text()
+		if len(l) < 3 {
+			continue
+		}
+		if l[:3] == "  -" {
+			writeBlock()
+			fmt.Fprintf(out, "%s\n", l)
+			continue
+		}
+		fmt.Fprintf(block, "%s\n", l)
+	}
+	writeBlock()
+	return out.String()
+}
+
+func printDefaults(fs *flag.FlagSet) string {
+	out := &strings.Builder{}
+	orig := fs.Output()
+	fs.SetOutput(out)
+	fs.PrintDefaults()
+	defer fs.SetOutput(orig)
+	return lineWrapDefaults(out.String())
+}
+
+func (cmds *CommandSet) globalDefaults() string {
+	out := &strings.Builder{}
+	if cmds.global != nil {
+		fs := cmds.global.flagSet
+		fmt.Fprintf(out, "global flags:%s\n", namesAndDefault("", fs))
+		fmt.Fprintf(out, "%s\n", printDefaults(fs))
+	}
+	return out.String()
+}
+
+// Usage returns the usage message for the command set.
 func (cmds *CommandSet) Usage(name string) string {
-	return fmt.Sprintf("Usage of %v\n\n%s\n%s", name, cmds.Summary(), cmds.defaults())
+	return fmt.Sprintf("Usage of %v\n\n%s\n", name, cmds.Summary())
+}
+
+// Defaults returns the usage message and flag defaults.
+func (cmds *CommandSet) Defaults(name string) string {
+	out := &strings.Builder{}
+	out.WriteString(cmds.Usage(name))
+	if gd := cmds.globalDefaults(); len(gd) > 0 {
+		fmt.Fprintf(out, "\n%s", gd)
+	}
+	return out.String()
 }
 
 // Commands returns the list of available commands.
@@ -310,6 +389,13 @@ func (cmds *CommandSet) Commands() []string {
 	return out
 }
 
+// Document adds a description for the command set.
+func (cmds *CommandSet) Document(doc string) {
+	cmds.document = doc
+}
+
+// Summary returns a summary of the command set that includes its top
+// level documentation and a list of its sub-commands.
 func (cmds *CommandSet) Summary() string {
 	max := 0
 	for _, cmd := range cmds.cmds {
@@ -319,9 +405,15 @@ func (cmds *CommandSet) Summary() string {
 		}
 	}
 	out := &strings.Builder{}
-	for _, cmd := range cmds.cmds {
+	if d := cmds.document; len(d) > 0 {
+		fmt.Fprintf(out, "%s\n\n", linewrap.Block(1, 80, d))
+	}
+	for i, cmd := range cmds.cmds {
 		name, desc := cmd.summary()
-		fmt.Fprintf(out, " %v%v - %v\n", strings.Repeat(" ", max-len(name)), name, desc)
+		fmt.Fprintf(out, " %v%v - %v", strings.Repeat(" ", max-len(name)), name, desc)
+		if i < len(cmds.cmds)-1 {
+			out.WriteByte('\n')
+		}
 	}
 	return out.String()
 }
@@ -337,6 +429,14 @@ func (cmds *CommandSet) MustDispatch(ctx context.Context) {
 	if err != nil {
 		cmdutil.Exit("%v", err)
 	}
+}
+
+// GlobalFlagSet creates a new FlagSet that is to be used for global flags.
+func GlobalFlagSet() *FlagSet {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	flag.CommandLine.Usage = func() {}
+	flag.CommandLine.SetOutput(ioutil.Discard)
+	return &FlagSet{flagSet: flag.CommandLine}
 }
 
 // SetOutput is like flag.FlagSet.SetOutput.
@@ -355,6 +455,9 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 	if cmds.global != nil {
 		fs := cmds.global.flagSet
 		if err := fs.Parse(args); err != nil {
+			if err == flag.ErrHelp {
+				fmt.Fprintln(cmds.out, cmds.Usage(usage), cmds.globalDefaults())
+			}
 			return err
 		}
 		args = fs.Args()
@@ -375,13 +478,24 @@ func (cmds *CommandSet) mainWrapper() Main {
 func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args []string) error {
 	if len(args) == 0 {
 		fmt.Fprintln(cmds.out, cmds.Usage(usage))
-		return fmt.Errorf("missing top level command: available commands are: %v", strings.Join(cmds.Commands(), ", "))
+		return fmt.Errorf("no command specified")
 	}
 	requested := args[0]
 	switch requested {
-	case "help", "-help", "--help", "-h", "--h":
+	case "-help", "--help", "-h", "--h":
 		fmt.Fprintln(cmds.out, cmds.Usage(usage))
 		return flag.ErrHelp
+	case "help":
+		if len(args) == 1 {
+			fmt.Fprintln(cmds.out, cmds.Usage(usage))
+			return flag.ErrHelp
+		}
+		for _, cmd := range cmds.cmds {
+			if args[1] == cmd.name {
+				fmt.Fprintln(cmds.out, cmd.Usage())
+				return flag.ErrHelp
+			}
+		}
 	}
 	for _, cmd := range cmds.cmds {
 		fs := cmd.flags.flagSet
@@ -392,7 +506,7 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 			args := args[1:]
 			if err := fs.Parse(args); err != nil {
 				if err == flag.ErrHelp {
-					fmt.Println(cmd.Usage())
+					fmt.Fprintln(cmds.out, cmd.Usage())
 					return err
 				}
 				return fmt.Errorf("%v: failed to parse flags: %v", cmd.name, err)
@@ -416,6 +530,10 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 	case cmd.opts.exactArgs:
 		if len(args) != cmd.opts.numArgs {
 			return fmt.Errorf("%v: accepts exactly %v arguments", cmd.name, cmd.opts.numArgs)
+		}
+	case cmd.opts.atLeastArgs:
+		if len(args) < cmd.opts.numArgs {
+			return fmt.Errorf("%v: accepts at least %v arguments", cmd.name, cmd.opts.numArgs)
 		}
 	case cmd.opts.subcmds != nil:
 		if cmd.opts.subcmds.globalMain == nil {

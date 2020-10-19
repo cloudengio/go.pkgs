@@ -22,6 +22,8 @@ type Field struct {
 	Name string
 	// Doc is the text extracted from the struct tag for this field.
 	Doc string
+	// Slice is true if this field is a slice.
+	Slice bool
 	// Fields, if this field is a struct, contains descriptions for
 	// any documented fields in that struct.
 	Fields []Field `json:",omitempty" yaml:",omitempty"`
@@ -29,6 +31,9 @@ type Field struct {
 
 func describeTags(tagName string, typ reflect.Type) []Field {
 	var fields []Field
+	if typ.Kind() != reflect.Struct {
+		return nil
+	}
 	for nf := 0; nf < typ.NumField(); nf++ {
 		field := typ.Field(nf)
 		doc, ok := field.Tag.Lookup(tagName)
@@ -43,6 +48,7 @@ func describeTags(tagName string, typ reflect.Type) []Field {
 			}
 		}
 		var subFields []Field
+		var slice bool
 		if field.Type.Kind() == reflect.Struct {
 			subFields = describeTags(tagName, field.Type)
 			if field.Anonymous {
@@ -50,10 +56,14 @@ func describeTags(tagName string, typ reflect.Type) []Field {
 				subFields = nil
 			}
 		}
+		if field.Type.Kind() == reflect.Slice {
+			slice = true
+			subFields = describeTags(tagName, field.Type.Elem())
+		}
 		if !ok && (len(subFields) == 0) {
 			continue
 		}
-		fields = append(fields, Field{Name: name, Doc: doc, Fields: subFields})
+		fields = append(fields, Field{Name: name, Doc: doc, Slice: slice, Fields: subFields})
 	}
 	return fields
 }
@@ -81,12 +91,18 @@ func FormatFields(prefix, indent int, fields []Field) string {
 	out := &strings.Builder{}
 	spaces := strings.Repeat(" ", prefix)
 	for _, field := range fields {
-		doc := linewrap.Paragraph(max-len(field.Name)+1, max+prefix+2, 80, field.Doc)
-		out.WriteString(spaces)
-		out.WriteString(field.Name)
-		out.WriteString(":")
-		out.WriteString(doc)
-		out.WriteString("\n")
+		if len(field.Name) > 0 {
+			doc := field.Doc
+			if field.Slice {
+				doc = "[]" + doc
+			}
+			doc = linewrap.Paragraph(max-len(field.Name)+1, max+prefix+2, 80, doc)
+			out.WriteString(spaces)
+			out.WriteString(field.Name)
+			out.WriteString(":")
+			out.WriteString(doc)
+			out.WriteString("\n")
+		}
 		if len(field.Fields) > 0 {
 			out.WriteString(FormatFields(prefix+indent, indent, field.Fields))
 		}
