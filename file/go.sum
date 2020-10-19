@@ -1,0 +1,11 @@
+cloudeng.io/algo v0.0.0-20201019005056-d61ea7d0acd4 h1:OVjIf2AtMzHoCNg0VM9+Vq0WCncGefLYDYblQo1RhoA=
+cloudeng.io/algo v0.0.0-20201019005056-d61ea7d0acd4/go.mod h1:WuSzbw++u4abQjLgEIIXHJDfob28mPRE9aDjwo9b5N4=
+cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
+cloudeng.io/errors v0.0.6 h1:4YRdxFk260BVH2tgFAY5oe2nKWAN0VXbFWlqOqSikUk=
+cloudeng.io/errors v0.0.6/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
+cloudeng.io/os v0.0.0-20201019005056-d61ea7d0acd4 h1:Z6+4uaXuUQw+sI04XYZ+D1SpFqc1aELHaWURU4U0X5c=
+cloudeng.io/os v0.0.0-20201019005056-d61ea7d0acd4/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
+cloudeng.io/sync v0.0.5 h1:fVkib4XhvbGceMe9F5rcXQzoJQxcdkVp2GZPIo2Dt78=
+cloudeng.io/sync v0.0.5/go.mod h1:ft73nqXGxRtWgcXoyWC+RLVjwCq+Ai0R/9oU4rnXf5g=
+github.com/recoilme/pudge v1.0.3 h1:h/9dEv5fRqtzM4lnO69kUoN+k7ukxxrW9NGb9ug0grM=
+github.com/recoilme/pudge v1.0.3/go.mod h1:VMvxBLVkrSStldckzCsETBXox3pfovfrnEchafXk8qA=
