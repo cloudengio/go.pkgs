@@ -8,10 +8,12 @@ versioned independently.
 - [algo](algo/README.md): common algorithm implementations.
 - [cmdutil](cmdutil/README.md): support for building command line tools.
 - [cmdutil/flags](cmdutil/flags/README.md): support for working with command line flags.
+- [cmdutil/profiling](cmdutil/profiling/README.md): support for requesting profiles from the command line.
 - [cmdutil/structdoc](cmdutil/structdoc/README.md): support for generating documentation using struct tags.
 - [debug/instrument] (debug/instrument/README.md): support for instrumenting code to
 trace execution and communication.
 - [errors](errors/README.md): support for working with go errors post go 1.13.
+- [file](file/README.md): support for working with files and filesystems, including cloud storage systems.
 - [os](os/README.md): os related and/or specific packages.
 - [path](path/README.md): support for working with paths and filenames, including cloud storage systems.
 - [sync](sync/README.md): easy to use patterns for working with goroutines and concurrency.
