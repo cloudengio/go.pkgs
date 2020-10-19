@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package filewalk_test
 
 import (
@@ -250,7 +254,7 @@ func TestFunctionErrors(t *testing.T) {
 		},
 		localTestTree,
 	)
-	if err == nil || strings.Count(err.Error(), "oh no") != 9 {
+	if err == nil || strings.Count(err.Error(), "oh no") != 1 {
 		t.Errorf("missing or unexpected error: %v", err)
 	}
 }

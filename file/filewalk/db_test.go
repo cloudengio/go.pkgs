@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package filewalk_test
 
 import (
@@ -13,13 +17,12 @@ import (
 func TestCodec(t *testing.T) {
 	now := time.Now().Round(0)
 	pi := filewalk.PrefixInfo{
-		ModTime:    now,
-		Size:       33,
-		UserID:     "500",
-		Mode:       0555,
-		DiskUsage:  999,
-		DiskLayout: "a string 11",
-		Err:        "some err",
+		ModTime:   now,
+		Size:      33,
+		UserID:    "500",
+		Mode:      0555,
+		DiskUsage: 999,
+		Err:       "some err",
 	}
 	child := filewalk.Info{
 		Name:    "file1",

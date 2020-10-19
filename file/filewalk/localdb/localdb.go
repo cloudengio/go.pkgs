@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package localdb provides an implementation of filewalk.Database that
 // uses a local key/value store.
 package localdb
@@ -25,8 +29,8 @@ const (
 	statsdbFilename  = "stats.pudge"
 	userdbFilename   = "users.pudge"
 	errordbFilename  = "errors.pudge"
-	dbLockName       = "walkdb.lock"
-	dbLockerInfoName = "walkdb.info"
+	dbLockName       = "db.lock"
+	dbLockerInfoName = "db.info"
 )
 
 // Database represents an on-disk database that stores information

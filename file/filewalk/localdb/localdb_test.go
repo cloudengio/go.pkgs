@@ -1,8 +1,13 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package localdb_test
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -158,6 +163,9 @@ func TestDBLocking(t *testing.T) {
 	}
 
 	dbDir = filepath.Join(tmpDir, "second")
+	if err := os.MkdirAll(dbDir, 0766); err != nil {
+		t.Fatal(err)
+	}
 
 	dbr1, err := localdb.Open(ctx, dbDir,
 		[]filewalk.DatabaseOption{filewalk.ReadOnly()},

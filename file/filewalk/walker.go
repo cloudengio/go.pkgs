@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package filewalk provides support for concurrent traversal of file system
 // directories and files. It can traverse any filesytem that implements
 // the Filesystem interface and is intended to be usable with cloud storage
