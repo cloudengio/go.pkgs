@@ -37,7 +37,7 @@ func ExampleDecimalBytes() {
 	// 0.5
 	// 2
 	// 1
-	// 1 KiB
-	// 1.5 B
+	// 1 KB
+	// 1.5 KB
 	// 1.5 GB
 }
