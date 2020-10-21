@@ -19,17 +19,20 @@ func TestParse(t *testing.T) {
 		GID:       "8577",
 		Groupname: "group",
 		Groups: []user.Group{
-			{"1", "g1"},
+			{Gid: "1", Name: "g1"},
 		},
 	}
 	id, err := userid.ParseIDCommandOutput("uid=384864(user) gid=8577(group) groups=1(g1)")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got, want := id, ida; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	ida.Groups = []user.Group{
-		{"1", "g1"},
-		{"22", "g2"},
-		{"3791", "g3"},
+		{Gid: "1", Name: "g1"},
+		{Gid: "22", Name: "g2"},
+		{Gid: "3791", Name: "g3"},
 	}
 	id, err = userid.ParseIDCommandOutput("uid=384864(user) gid=8577(group) groups=1(g1),22(g2),3791(g3)")
 	if err != nil {
