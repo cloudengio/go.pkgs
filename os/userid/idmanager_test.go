@@ -26,4 +26,8 @@ func TestManager(t *testing.T) {
 	if got, want := ok, true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	id, ok = idm.exists(id.UID)
+	if got, want := id.Username, user; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }

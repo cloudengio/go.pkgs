@@ -111,7 +111,9 @@ func (idm *IDManager) Lookup(id string) (IDInfo, error) {
 	}
 	idm.mu.Lock()
 	defer idm.mu.Unlock()
-	idm.users[id] = info
+	// Save the same information for both user name and user id.
+	idm.users[info.Username] = info
+	idm.users[info.UID] = info
 	return info, nil
 }
 
