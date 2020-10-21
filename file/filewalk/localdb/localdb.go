@@ -226,9 +226,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		fn(db)
 	}
 
-	err := db.acquireLock(ctx, db.opts.readOnly, db.opts.lockRetryDelay, db.opts.tryLock)
-
-	if err != nil {
+	if err := db.acquireLock(ctx, db.opts.readOnly, db.opts.lockRetryDelay, db.opts.tryLock); err != nil {
 		return nil, err
 	}
 
@@ -242,6 +240,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		cfg.SyncInterval = 0
 	}
 
+	var err error
 	db.prefixdb, err = pudge.Open(filepath.Join(dir, prefixdbFilename), &cfg)
 	if err != nil {
 		return nil, err
