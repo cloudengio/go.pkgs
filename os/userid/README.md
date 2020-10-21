@@ -26,6 +26,7 @@ IDInfo represents the parsed output of the 'id' command.
 ```go
 func ParseIDCommandOutput(out string) (IDInfo, error)
 ```
+ParseIDCommandOutput parses the output of the unix id command.
 
 
 
@@ -55,7 +56,7 @@ func (idm *IDManager) Lookup(id string) (IDInfo, error)
 ```
 LookupID returns IDInfo for the specified user id or user name. It returns
 user.UnknownUserError if the user cannot be found or the invocation of the
-id command fails somehow.
+'id' command fails somehow.
 
 
 
