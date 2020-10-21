@@ -22,7 +22,7 @@ desencding operations and is safe for concurrent use.
 ### Functions
 
 ```go
-func NewKeyedInt64(descending bool) *KeyedInt64
+func NewKeyedInt64(order Order) *KeyedInt64
 ```
 NewKeyedInt64 returns a new instance of KeyedInt64.
 
@@ -74,8 +74,8 @@ Sum returns the current sum of all values in the heap.
 
 ```go
 func (ki *KeyedInt64) TopN(n int) []struct {
-	Key   string
-	Value int64
+	K string
+	V int64
 }
 ```
 TopN removes at most the top most n items from the heap.
@@ -91,6 +91,23 @@ UnmarshalJSON implements json.Unmarshaler.
 func (ki *KeyedInt64) Update(key string, value int64)
 ```
 Update updates the value associated with key or it adds it to the heap.
+
+
+
+
+### Type Order
+```go
+type Order bool
+```
+Order determines if the heap is maintained in ascending or descending order.
+
+### Constants
+### Ascending, Descending
+```go
+Ascending Order = false
+Descending Order = true
+
+```
 
 
 

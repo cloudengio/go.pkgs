@@ -456,7 +456,10 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 		fs := cmds.global.flagSet
 		if err := fs.Parse(args); err != nil {
 			if err == flag.ErrHelp {
-				fmt.Fprintln(cmds.out, cmds.Usage(usage), cmds.globalDefaults())
+				fmt.Fprintln(cmds.out, cmds.Usage(usage))
+				if gd := cmds.globalDefaults(); len(gd) > 0 {
+					fmt.Fprintf(cmds.out, "%s", gd)
+				}
 			}
 			return err
 		}
