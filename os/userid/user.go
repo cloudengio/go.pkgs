@@ -42,6 +42,7 @@ func parseEquals(field string) (x, y string) {
 	return parts[0], parts[1]
 }
 
+// ParseIDCommandOutput parses the output of the unix id command.
 func ParseIDCommandOutput(out string) (IDInfo, error) {
 	var id IDInfo
 	parts := strings.Split(out, " ")
@@ -95,7 +96,7 @@ func (idm *IDManager) exists(id string) (IDInfo, bool) {
 
 // LookupID returns IDInfo for the specified user id or user name.
 // It returns user.UnknownUserError if the user cannot be found or
-// the invocation of the id command fails somehow.
+// the invocation of the 'id' command fails somehow.
 func (idm *IDManager) Lookup(id string) (IDInfo, error) {
 	if id, exists := idm.exists(id); exists {
 		return id, nil
