@@ -82,29 +82,38 @@ func ParseIDCommandOutput(out string) (IDInfo, error) {
 // IDManager implements a caching lookup of user information by
 // id or username that uses the 'id' command.
 type IDManager struct {
-	mu    sync.Mutex
-	users map[string]IDInfo
+	mu     sync.Mutex
+	users  map[string]IDInfo // keyed by username or uid
+	groups map[string]IDInfo // keyed by groupname or gid
 }
 
 // NewIDManager creates a new instance of IDManager.
 func NewIDManager() *IDManager {
 	return &IDManager{
-		users: map[string]IDInfo{},
+		users:  map[string]IDInfo{},
+		groups: map[string]IDInfo{},
 	}
 }
 
-func (idm *IDManager) exists(id string) (IDInfo, bool) {
+func (idm *IDManager) userExists(id string) (IDInfo, bool) {
 	idm.mu.Lock()
 	defer idm.mu.Unlock()
 	info, ok := idm.users[id]
 	return info, ok
 }
 
-// LookupID returns IDInfo for the specified user id or user name.
+func (idm *IDManager) groupExists(id string) (IDInfo, bool) {
+	idm.mu.Lock()
+	defer idm.mu.Unlock()
+	info, ok := idm.groups[id]
+	return info, ok
+}
+
+// LookupUser returns IDInfo for the specified user id or user name.
 // It returns user.UnknownUserError if the user cannot be found or
 // the invocation of the 'id' command fails somehow.
-func (idm *IDManager) Lookup(id string) (IDInfo, error) {
-	if id, exists := idm.exists(id); exists {
+func (idm *IDManager) LookupUser(id string) (IDInfo, error) {
+	if id, exists := idm.userExists(id); exists {
 		return id, nil
 	}
 	out, err := runIDCommand(id)
@@ -117,14 +126,38 @@ func (idm *IDManager) Lookup(id string) (IDInfo, error) {
 	}
 	idm.mu.Lock()
 	defer idm.mu.Unlock()
-	// Save the same information for both user name and user id.
+	// Save the same information for both user and groups.
 	idm.users[info.Username] = info
 	idm.users[info.UID] = info
+	for _, grp := range info.Groups {
+		idm.groups[grp.Name] = info
+		idm.groups[grp.Gid] = info
+	}
 	return info, nil
 }
 
+// LookupGroup returns IDInfo for the specified group id or group name.
+// It returns user.UnknownGroupError if the group cannot be found or
+// the invocation of the 'id' command fails somehow.
+func (idm *IDManager) LookupGroup(id string) (IDInfo, error) {
+	if id, exists := idm.groupExists(id); exists {
+		return id, nil
+	}
+	// run id for the current user in the hope that it discovers the
+	// group.
+	idm.LookupUser("")
+	if id, exists := idm.groupExists(id); exists {
+		return id, nil
+	}
+	return IDInfo{}, user.UnknownGroupError(id)
+}
+
 func runIDCommand(uid string) (string, error) {
-	cmd := exec.Command("id", uid)
+	args := []string{}
+	if len(uid) > 0 {
+		args = append(args, uid)
+	}
+	cmd := exec.Command("id", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), fmt.Errorf("%v: %v", strings.Join(cmd.Args, " "), err)

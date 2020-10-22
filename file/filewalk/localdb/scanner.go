@@ -42,6 +42,7 @@ func NewScanner(db *Database, prefix string, limit int, ifcOpts []filewalk.Scann
 		prefix: []byte(prefix),
 		nItems: limit,
 	}
+	sc.ifcOpts.ScanLimit = 1000
 	for _, fn := range ifcOpts {
 		fn(&sc.ifcOpts)
 	}
@@ -127,9 +128,9 @@ func (sc *Scanner) fetch() (bool, error) {
 		}
 	}
 	if sc.ifcOpts.RangeScan {
-		prefixes, info, err = sc.scanByPrefix(scanLimit)
-	} else {
 		prefixes, info, err = sc.scanByRange(scanLimit)
+	} else {
+		prefixes, info, err = sc.scanByPrefix(scanLimit)
 	}
 	if err != nil {
 		return false, err
@@ -147,6 +148,12 @@ func (sc *Scanner) fetch() (bool, error) {
 func (sc *Scanner) Scan(ctx context.Context) bool {
 	if sc.err != nil {
 		return false
+	}
+	select {
+	case <-ctx.Done():
+		sc.err = ctx.Err()
+		return false
+	default:
 	}
 	if !sc.more || sc.next >= len(sc.availablePrefix) {
 		more, err := sc.fetch()

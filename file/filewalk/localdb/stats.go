@@ -19,6 +19,7 @@ type statsCollection struct {
 	DiskUsage   *heap.KeyedInt64
 	NumFiles    *heap.KeyedInt64
 	NumChildren *heap.KeyedInt64
+	NumErrors   int64
 }
 
 func newStatsCollection(key string) *statsCollection {
@@ -47,47 +48,55 @@ func (sc *statsCollection) update(prefix string, info *filewalk.PrefixInfo) {
 	sc.NumFiles.Update(prefix, int64(len(info.Files)))
 	sc.NumChildren.Update(prefix, int64(len(info.Children)))
 	sc.DiskUsage.Update(prefix, info.DiskUsage)
+	if len(info.Err) != 0 {
+		sc.NumErrors++
+	}
 }
 
-type perUserStats struct {
-	stats map[string]*statsCollection
-	users []string
+// perItemStats provides granular, keyed, stats for providing
+// per user, or per group stats. It maintains a list of items
+// as well as per-item data so that per-item data can be loaded
+// incrementally as needed rather than all at once at startup.
+type perItemStats struct {
+	itemListKey string
+	stats       map[string]*statsCollection
+	itemKeys    []string
 }
 
-func newPerUserStats() *perUserStats {
-	return &perUserStats{
+func newPerItemStats(name string) *perItemStats {
+	return &perItemStats{
 		stats: make(map[string]*statsCollection),
 	}
 }
 
-func (pu *perUserStats) loadUserList(db *pudge.Db) error {
-	if err := db.Get(usersListKey, &pu.users); err != nil && err != pudge.ErrKeyNotFound {
+func (pu *perItemStats) loadItemList(db *pudge.Db) error {
+	if err := db.Get(pu.itemListKey, &pu.itemKeys); err != nil && err != pudge.ErrKeyNotFound {
 		return err
 	}
 	return nil
 }
 
-func (pu *perUserStats) initStatsForUser(db *pudge.Db, usr string) (*statsCollection, error) {
-	sdb, ok := pu.stats[usr]
+func (pu *perItemStats) initStatsForItem(db *pudge.Db, item string) (*statsCollection, error) {
+	sdb, ok := pu.stats[item]
 	if !ok {
-		pu.stats[usr] = newStatsCollection(usr)
-		err := db.Get(usr, pu.stats[usr])
-		pu.users = append(pu.users, usr)
-		return pu.stats[usr], err
+		pu.stats[item] = newStatsCollection(item)
+		err := db.Get(item, pu.stats[item])
+		pu.itemKeys = append(pu.itemKeys, item)
+		return pu.stats[item], err
 	}
 	return sdb, nil
 }
 
-func (pu *perUserStats) statsForUser(db *pudge.Db, usr string) (*statsCollection, error) {
-	sc, err := pu.initStatsForUser(db, usr)
+func (pu *perItemStats) statsForItem(db *pudge.Db, item string) (*statsCollection, error) {
+	sc, err := pu.initStatsForItem(db, item)
 	if err == pudge.ErrKeyNotFound {
-		return nil, fmt.Errorf("no stats found for user %v", usr)
+		return nil, fmt.Errorf("no stats found for item %v", item)
 	}
 	return sc, err
 }
 
-func (pu *perUserStats) updateUserStats(db *pudge.Db, prefix string, info *filewalk.PrefixInfo) error {
-	sdb, err := pu.initStatsForUser(db, info.UserID)
+func (pu *perItemStats) updateStats(db *pudge.Db, prefix string, item string, info *filewalk.PrefixInfo) error {
+	sdb, err := pu.initStatsForItem(db, item)
 	if err != nil && err != pudge.ErrKeyNotFound {
 		return err
 	}
@@ -95,12 +104,12 @@ func (pu *perUserStats) updateUserStats(db *pudge.Db, prefix string, info *filew
 	return nil
 }
 
-func (pu *perUserStats) save(db *pudge.Db) error {
+func (pu *perItemStats) save(db *pudge.Db) error {
 	// Take care to merge the set of users already loaded from the database
 	// plus any that have actually been accessed.
-	allUsers := map[string]bool{}
-	for _, u := range pu.users {
-		allUsers[u] = true
+	allItems := map[string]bool{}
+	for _, u := range pu.itemKeys {
+		allItems[u] = true
 	}
 	errs := errors.M{}
 	for usr, stats := range pu.stats {
@@ -108,13 +117,13 @@ func (pu *perUserStats) save(db *pudge.Db) error {
 			errs.Append(err)
 			continue
 		}
-		allUsers[usr] = true
+		allItems[usr] = true
 	}
-	users := make([]string, 0, len(allUsers))
-	for k := range allUsers {
-		users = append(users, k)
+	items := make([]string, 0, len(allItems))
+	for k := range allItems {
+		items = append(items, k)
 	}
-	sort.Strings(users)
-	errs.Append(db.Set(usersListKey, users))
+	sort.Strings(items)
+	errs.Append(db.Set(pu.itemListKey, items))
 	return errs.Err()
 }

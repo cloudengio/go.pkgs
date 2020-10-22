@@ -521,6 +521,10 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 }
 
 func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usage string, args []string) error {
+	plural := "arguments"
+	if cmd.opts.numArgs == 1 {
+		plural = "argument"
+	}
 	switch {
 	case cmd.opts.withoutArgs:
 		if len(args) > 0 {
@@ -532,11 +536,11 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		}
 	case cmd.opts.exactArgs:
 		if len(args) != cmd.opts.numArgs {
-			return fmt.Errorf("%v: accepts exactly %v arguments", cmd.name, cmd.opts.numArgs)
+			return fmt.Errorf("%v: accepts exactly %v %s", cmd.name, cmd.opts.numArgs, plural)
 		}
 	case cmd.opts.atLeastArgs:
 		if len(args) < cmd.opts.numArgs {
-			return fmt.Errorf("%v: accepts at least %v arguments", cmd.name, cmd.opts.numArgs)
+			return fmt.Errorf("%v: accepts at least %v %s", cmd.name, cmd.opts.numArgs, plural)
 		}
 	case cmd.opts.subcmds != nil:
 		if cmd.opts.subcmds.globalMain == nil {
