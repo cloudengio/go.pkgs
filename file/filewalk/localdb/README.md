@@ -6,7 +6,7 @@ import cloudeng.io/file/filewalk/localdb
 ```
 
 Package localdb provides an implementation of filewalk.Database that uses a
-local key/value store.
+local key/value store currently based on github.com/recoilme/pudge.
 
 ## Variables
 ### ErrReadonly
@@ -47,6 +47,11 @@ func (db *Database) Close(ctx context.Context) error
 
 ```go
 func (db *Database) Get(ctx context.Context, prefix string, info *filewalk.PrefixInfo) (bool, error)
+```
+
+
+```go
+func (db *Database) GroupIDs(ctx context.Context) ([]string, error)
 ```
 
 

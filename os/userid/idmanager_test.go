@@ -12,21 +12,21 @@ import (
 func TestManager(t *testing.T) {
 	idm := NewIDManager()
 	user := os.Getenv("USER")
-	id, err := idm.Lookup(user)
+	id, err := idm.LookupUser(user)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := id.Username, user; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	id, ok := idm.exists(user)
+	id, ok := idm.userExists(user)
 	if got, want := id.Username, user; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := ok, true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	id, ok = idm.exists(id.UID)
+	id, ok = idm.userExists(id.UID)
 	if got, want := ok, true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

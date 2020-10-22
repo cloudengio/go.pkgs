@@ -43,7 +43,7 @@ func TestDBSimple(t *testing.T) {
 	}
 	db, err := localdb.Open(ctx, dbDir, nil)
 	assert()
-	if got, want := len(db.Metrics()), 3; got != want {
+	if got, want := len(db.Metrics()), 4; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	users, err = db.UserIDs(ctx)
