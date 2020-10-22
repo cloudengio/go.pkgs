@@ -19,6 +19,7 @@ type PrefixInfo struct {
 	ModTime   time.Time
 	Size      int64
 	UserID    string
+	GroupID   string
 	Mode      FileMode
 	Children  []Info
 	Files     []Info
@@ -109,25 +110,39 @@ type Metric struct {
 
 // MetricOptions is configured by instances of MetricOption.
 type MetricOptions struct {
-	Global bool
-	UserID string
+	Global  bool
+	UserID  string
+	GroupID string
 }
 
 // MetricOption is used to request particular metrics, either per-user
 // or global to the entire database.
 type MetricOption func(o *MetricOptions)
 
+// Global requests a global metric.
 func Global() MetricOption {
 	return func(o *MetricOptions) {
 		o.Global = true
+		o.GroupID = ""
 		o.UserID = ""
 	}
 }
 
+// UserID requests a per-user metric.
 func UserID(userID string) MetricOption {
 	return func(o *MetricOptions) {
 		o.Global = false
+		o.GroupID = ""
 		o.UserID = userID
+	}
+}
+
+// GroupID requests a per-group metric.
+func GroupID(groupID string) MetricOption {
+	return func(o *MetricOptions) {
+		o.Global = false
+		o.GroupID = groupID
+		o.UserID = ""
 	}
 }
 
@@ -144,6 +159,9 @@ const (
 	// TotalDiskUsage refers to the total disk usage of the files and prefixes
 	// in the database taking the filesystems block size into account.
 	TotalDiskUsage MetricName = "totalDiskUsage"
+	// TotalError refers to the total number of errors encountered whilst
+	// analyzing the file system.
+	TotalErrorCount MetricName = "totalErrors"
 )
 
 // DatabaseOptions represents options common to all database implementations.
@@ -188,24 +206,31 @@ func ScanDescending() ScannerOption {
 	}
 }
 
+// RangeScan requests a range, as opposed to prefix scan. The range
+// scan will start the prefix passed to NewScanner and continue until
+// the number of keys specified by limit is reached.
 func RangeScan() ScannerOption {
 	return func(so *ScannerOptions) {
 		so.RangeScan = true
 	}
 }
 
+// KeysOnly requests that only keys and no data is scanned.
 func KeysOnly() ScannerOption {
 	return func(so *ScannerOptions) {
 		so.KeysOnly = true
 	}
 }
 
+// ScanErrors requests that errors database is scanned.
 func ScanErrors() ScannerOption {
 	return func(so *ScannerOptions) {
 		so.ScanErrors = true
 	}
 }
 
+// ScanLimit sets the number of items to be retrieved in a single
+// underlying storage operation.
 func ScanLimit(l int) ScannerOption {
 	return func(so *ScannerOptions) {
 		so.ScanLimit = l
@@ -230,6 +255,8 @@ type Database interface {
 	Close(ctx context.Context) error
 	// UserIDs returns the current set of userIDs known to the database.
 	UserIDs(ctx context.Context) ([]string, error)
+	// GroupIDs returns the current set of groupIDs known to the database.
+	GroupIDs(ctx context.Context) ([]string, error)
 	// Metrics returns the names of the supported metrics.
 	Metrics() []MetricName
 	// Total returns the total (ie. sum) for the requested metric.
@@ -242,7 +269,8 @@ type Database interface {
 	NewScanner(prefix string, limit int, opts ...ScannerOption) DatabaseScanner
 }
 
-// DatabaseScanner implements an idiomatic go scanner.
+// DatabaseScanner implements an idiomatic go scanner as created by
+// Database.NewScanner.
 type DatabaseScanner interface {
 	Scan(ctx context.Context) bool
 	PrefixInfo() (string, *PrefixInfo)

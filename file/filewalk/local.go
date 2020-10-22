@@ -20,9 +20,9 @@ func createInfo(i os.FileInfo) Info {
 		Name:    i.Name(),
 		Size:    i.Size(),
 		ModTime: i.ModTime(),
-		UserID:  getUserID(i.Sys()),
 		sys:     i,
 	}
+	info.UserID, info.GroupID = getUserAndGroupID(i.Sys())
 	m := i.Mode()
 	info.Mode = FileMode(m&os.ModePerm | m&os.ModeSymlink | m&os.ModeDir)
 	return info

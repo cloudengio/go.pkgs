@@ -55,6 +55,8 @@ type Database interface {
 	Close(ctx context.Context) error
 	// UserIDs returns the current set of userIDs known to the database.
 	UserIDs(ctx context.Context) ([]string, error)
+	// GroupIDs returns the current set of groupIDs known to the database.
+	GroupIDs(ctx context.Context) ([]string, error)
 	// Metrics returns the names of the supported metrics.
 	Metrics() []MetricName
 	// Total returns the total (ie. sum) for the requested metric.
@@ -111,7 +113,8 @@ type DatabaseScanner interface {
 	Err() error
 }
 ```
-DatabaseScanner implements an idiomatic go scanner.
+DatabaseScanner implements an idiomatic go scanner as created by
+Database.NewScanner.
 
 
 ### Type Error
@@ -202,6 +205,7 @@ func LocalFilesystem(scanSize int) Filesystem
 type Info struct {
 	Name    string    // base name of the file
 	UserID  string    // user id as returned by the underlying system
+	GroupID string    // group id as returned by the underlying system
 	Size    int64     // length in bytes
 	ModTime time.Time // modification time
 	Mode    FileMode  // permissions, directory or link.
@@ -256,7 +260,7 @@ type MetricName string
 MetricName names a particular metric supported by instances of Database.
 
 ### Constants
-### TotalFileCount, TotalPrefixCount, TotalDiskUsage
+### TotalFileCount, TotalPrefixCount, TotalDiskUsage, TotalErrorCount
 ```go
 // TotalFileCount refers to the total # of files in the database.
 TotalFileCount MetricName = "totalFileCount"
@@ -267,6 +271,9 @@ TotalPrefixCount MetricName = "totalPrefixCount"
 // TotalDiskUsage refers to the total disk usage of the files and prefixes
 // in the database taking the filesystems block size into account.
 TotalDiskUsage MetricName = "totalDiskUsage"
+// TotalError refers to the total number of errors encountered whilst
+// analyzing the file system.
+TotalErrorCount MetricName = "totalErrors"
 
 ```
 
@@ -285,11 +292,19 @@ global to the entire database.
 ```go
 func Global() MetricOption
 ```
+Global requests a global metric.
+
+
+```go
+func GroupID(groupID string) MetricOption
+```
+GroupID requests a per-group metric.
 
 
 ```go
 func UserID(userID string) MetricOption
 ```
+UserID requests a per-user metric.
 
 
 
@@ -297,8 +312,9 @@ func UserID(userID string) MetricOption
 ### Type MetricOptions
 ```go
 type MetricOptions struct {
-	Global bool
-	UserID string
+	Global  bool
+	UserID  string
+	GroupID string
 }
 ```
 MetricOptions is configured by instances of MetricOption.
@@ -346,6 +362,7 @@ type PrefixInfo struct {
 	ModTime   time.Time
 	Size      int64
 	UserID    string
+	GroupID   string
 	Mode      FileMode
 	Children  []Info
 	Files     []Info
@@ -382,11 +399,15 @@ ScannerOption represent a specific option common to all scanners.
 ```go
 func KeysOnly() ScannerOption
 ```
+KeysOnly requests that only keys and no data is scanned.
 
 
 ```go
 func RangeScan() ScannerOption
 ```
+RangeScan requests a range, as opposed to prefix scan. The range scan will
+start the prefix passed to NewScanner and continue until the number of keys
+specified by limit is reached.
 
 
 ```go
@@ -398,11 +419,14 @@ ScanDescending requests a descending scan, the default is ascending.
 ```go
 func ScanErrors() ScannerOption
 ```
+ScanErrors requests that errors database is scanned.
 
 
 ```go
 func ScanLimit(l int) ScannerOption
 ```
+ScanLimit sets the number of items to be retrieved in a single underlying
+storage operation.
 
 
 

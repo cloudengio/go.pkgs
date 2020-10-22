@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package localdb provides an implementation of filewalk.Database that
-// uses a local key/value store.
+// uses a local key/value store currently based on github.com/recoilme/pudge.
 package localdb
 
 import (
@@ -25,9 +25,11 @@ import (
 const (
 	globalStatsKey   = "__globalStats"
 	usersListKey     = "__userList"
+	groupsListKey    = "__groupList"
 	prefixdbFilename = "prefix.pudge"
 	statsdbFilename  = "stats.pudge"
 	userdbFilename   = "users.pudge"
+	groupdbFilename  = "groups.pudge"
 	errordbFilename  = "errors.pudge"
 	dbLockName       = "db.lock"
 	dbLockerInfoName = "db.info"
@@ -43,12 +45,14 @@ type Database struct {
 	statsdb            *pudge.Db
 	errordb            *pudge.Db
 	userdb             *pudge.Db
+	groupdb            *pudge.Db
 	dbLockFilename     string
 	dbLockInfoFilename string
 	dbMutex            *lockedfile.Mutex
 	unlockFn           func()
 	globalStats        *statsCollection
-	userStats          *perUserStats
+	userStats          *perItemStats
+	groupStats         *perItemStats
 }
 
 // ErrReadonly is returned if an attempt is made to write to a database
@@ -135,7 +139,8 @@ func newDB(dir string) *Database {
 		dbLockFilename:     filepath.Join(dir, dbLockName),
 		dbLockInfoFilename: filepath.Join(dir, dbLockerInfoName),
 		globalStats:        newStatsCollection(globalStatsKey),
-		userStats:          newPerUserStats(),
+		userStats:          newPerItemStats(usersListKey),
+		groupStats:         newPerItemStats(groupsListKey),
 	}
 	db.opts.lockRetryDelay = time.Second * 5
 	os.MkdirAll(dir, 0770)
@@ -260,6 +265,11 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		db.closeAll(ctx)
 		return nil, err
 	}
+	db.groupdb, err = pudge.Open(filepath.Join(dir, groupdbFilename), &cfg)
+	if err != nil {
+		db.closeAll(ctx)
+		return nil, err
+	}
 	if db.opts.resetStats {
 		return db, nil
 	}
@@ -267,9 +277,13 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		db.closeAll(ctx)
 		return nil, fmt.Errorf("failed to load stats: %v", err)
 	}
-	if err := db.userStats.loadUserList(db.userdb); err != nil {
+	if err := db.userStats.loadItemList(db.userdb); err != nil {
 		db.closeAll(ctx)
 		return nil, fmt.Errorf("failed to load user list: %v", err)
+	}
+	if err := db.groupStats.loadItemList(db.groupdb); err != nil {
+		db.closeAll(ctx)
+		return nil, fmt.Errorf("failed to load group list: %v", err)
 	}
 	return db, nil
 }
@@ -285,6 +299,7 @@ func (db *Database) closeAll(ctx context.Context) error {
 	closer(db.statsdb)
 	closer(db.errordb)
 	closer(db.userdb)
+	closer(db.groupdb)
 	db.unlock()
 	return errs.Err()
 }
@@ -310,6 +325,7 @@ func (db *Database) Save(ctx context.Context) error {
 	errs := errors.M{}
 	errs.Append(db.globalStats.save(db.statsdb, globalStatsKey))
 	errs.Append(db.userStats.save(db.userdb))
+	errs.Append(db.groupStats.save(db.groupdb))
 	errs.Append(db.closeAll(ctx))
 	return errs.Err()
 }
@@ -321,7 +337,8 @@ func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.Prefi
 	db.globalStats.update(prefix, info)
 	errs := errors.M{}
 	errs.Append(db.prefixdb.Set(prefix, info))
-	errs.Append(db.userStats.updateUserStats(db.userdb, prefix, info))
+	errs.Append(db.userStats.updateStats(db.userdb, prefix, info.UserID, info))
+	errs.Append(db.groupStats.updateStats(db.groupdb, prefix, info.GroupID, info))
 	err := errs.Err()
 	switch {
 	case err == nil && len(info.Err) == 0:
@@ -357,14 +374,20 @@ func (db *Database) NewScanner(prefix string, limit int, opts ...filewalk.Scanne
 }
 
 func (db *Database) UserIDs(ctx context.Context) ([]string, error) {
-	return db.userStats.users, nil
+	return db.userStats.itemKeys, nil
+}
+
+func (db *Database) GroupIDs(ctx context.Context) ([]string, error) {
+	return db.groupStats.itemKeys, nil
 }
 
 func getMetricNames() []filewalk.MetricName {
 	metrics := []filewalk.MetricName{
 		filewalk.TotalFileCount,
 		filewalk.TotalPrefixCount,
-		filewalk.TotalDiskUsage}
+		filewalk.TotalDiskUsage,
+		filewalk.TotalErrorCount,
+	}
 	sort.Slice(metrics, func(i, j int) bool {
 		return string(metrics[i]) < string(metrics[j])
 	})
@@ -383,12 +406,22 @@ func metricOptions(opts []filewalk.MetricOption) filewalk.MetricOptions {
 	return o
 }
 
+func (db *Database) statsCollectionForOption(o filewalk.MetricOptions) (*statsCollection, error) {
+	if o.Global {
+		return db.globalStats, nil
+	}
+	switch {
+	case len(o.UserID) > 0:
+		return db.userStats.statsForItem(db.userdb, o.UserID)
+	case len(o.GroupID) > 0:
+		return db.userStats.statsForItem(db.groupdb, o.GroupID)
+	}
+	return nil, fmt.Errorf("unrecognised options %#v", o)
+}
+
 func (db *Database) Total(ctx context.Context, name filewalk.MetricName, opts ...filewalk.MetricOption) (int64, error) {
 	o := metricOptions(opts)
-	if o.Global {
-		return db.globalStats.total(name)
-	}
-	sc, err := db.userStats.statsForUser(db.userdb, o.UserID)
+	sc, err := db.statsCollectionForOption(o)
 	if err != nil {
 		return -1, err
 	}
@@ -403,16 +436,15 @@ func (sc *statsCollection) total(name filewalk.MetricName) (int64, error) {
 		return sc.NumChildren.Sum(), nil
 	case filewalk.TotalDiskUsage:
 		return sc.DiskUsage.Sum(), nil
+	case filewalk.TotalErrorCount:
+		return sc.NumErrors, nil
 	}
 	return -1, fmt.Errorf("unsupported metric: %v", name)
 }
 
 func (db *Database) TopN(ctx context.Context, name filewalk.MetricName, n int, opts ...filewalk.MetricOption) ([]filewalk.Metric, error) {
 	o := metricOptions(opts)
-	if o.Global {
-		return db.globalStats.topN(name, n)
-	}
-	sc, err := db.userStats.statsForUser(db.userdb, o.UserID)
+	sc, err := db.statsCollectionForOption(o)
 	if err != nil {
 		return nil, err
 	}
@@ -438,6 +470,8 @@ func (sc *statsCollection) topN(name filewalk.MetricName, n int) ([]filewalk.Met
 		return topNMetrics(sc.NumChildren.TopN(n)), nil
 	case filewalk.TotalDiskUsage:
 		return topNMetrics(sc.DiskUsage.TopN(n)), nil
+	case filewalk.TotalErrorCount:
+		return nil, nil
 	}
 	return nil, fmt.Errorf("unsupported metric: %v", name)
 }

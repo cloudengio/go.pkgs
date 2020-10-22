@@ -11,10 +11,10 @@ import (
 	"syscall"
 )
 
-func getUserID(sys interface{}) string {
+func getUserAndGroupID(sys interface{}) (string, string) {
 	si, ok := sys.(*syscall.Stat_t)
 	if !ok {
-		return ""
+		return "", ""
 	}
-	return strconv.Itoa(int(si.Uid))
+	return strconv.Itoa(int(si.Uid)), strconv.Itoa(int(si.Gid))
 }

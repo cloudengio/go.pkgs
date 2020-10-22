@@ -97,6 +97,7 @@ func (fm FileMode) String() string {
 type Info struct {
 	Name    string      // base name of the file
 	UserID  string      // user id as returned by the underlying system
+	GroupID string      // group id as returned by the underlying system
 	Size    int64       // length in bytes
 	ModTime time.Time   // modification time
 	Mode    FileMode    // permissions, directory or link.
