@@ -96,14 +96,23 @@ func (pu *perUserStats) updateUserStats(db *pudge.Db, prefix string, info *filew
 }
 
 func (pu *perUserStats) save(db *pudge.Db) error {
-	users := make([]string, 0, len(pu.stats))
+	// Take care to merge the set of users already loaded from the database
+	// plus any that have actually been accessed.
+	allUsers := map[string]bool{}
+	for _, u := range pu.users {
+		allUsers[u] = true
+	}
 	errs := errors.M{}
 	for usr, stats := range pu.stats {
 		if err := stats.save(db, usr); err != nil {
 			errs.Append(err)
 			continue
 		}
-		users = append(users, usr)
+		allUsers[usr] = true
+	}
+	users := make([]string, 0, len(allUsers))
+	for k := range allUsers {
+		users = append(users, k)
 	}
 	sort.Strings(users)
 	errs.Append(db.Set(usersListKey, users))

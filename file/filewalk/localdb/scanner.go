@@ -18,12 +18,12 @@ import (
 type Scanner struct {
 	pdb     *pudge.Db
 	prefix  []byte
-	nItems  int
+	nItems  int // max number of items to read, 0 for all items.
 	ifcOpts filewalk.ScannerOptions
 
 	// scan state.
 	more            bool
-	limit, offset   int
+	offset          int
 	currentPrefix   string
 	currentInfo     filewalk.PrefixInfo
 	next            int
@@ -64,17 +64,6 @@ func NewScanner(db *Database, prefix string, limit int, ifcOpts []filewalk.Scann
 	return sc
 }
 
-func (sc *Scanner) processKeys(keys [][]byte) ([]string, []filewalk.PrefixInfo, error) {
-	if len(keys) == 0 {
-		return nil, nil, nil
-	}
-	sc.offset += len(keys)
-	if sc.ifcOpts.KeysOnly {
-		return getPrefixes(keys), nil, nil
-	}
-	return getItems(sc.pdb, keys)
-}
-
 func (sc *Scanner) scanByPrefix(limit int) ([]string, []filewalk.PrefixInfo, error) {
 	keys, err := sc.pdb.KeysByPrefix(sc.prefix, limit, sc.offset, !sc.ifcOpts.Descending)
 	if err != nil {
@@ -89,6 +78,17 @@ func (sc *Scanner) scanByRange(limit int) ([]string, []filewalk.PrefixInfo, erro
 		return nil, nil, err
 	}
 	return sc.processKeys(keys)
+}
+
+func (sc *Scanner) processKeys(keys [][]byte) ([]string, []filewalk.PrefixInfo, error) {
+	if len(keys) == 0 {
+		return nil, nil, nil
+	}
+	sc.offset += len(keys)
+	if sc.ifcOpts.KeysOnly {
+		return getPrefixes(keys), nil, nil
+	}
+	return getItems(sc.pdb, keys)
 }
 
 func getPrefixes(keys [][]byte) []string {
@@ -117,19 +117,19 @@ func (sc *Scanner) fetch() (bool, error) {
 		info     []filewalk.PrefixInfo
 		err      error
 	)
-	remaining := sc.limit
+	scanLimit := sc.ifcOpts.ScanLimit
 	if sc.nItems > 0 {
 		if sc.offset >= sc.nItems {
 			return false, nil
 		}
-		if limit := sc.nItems - sc.offset; remaining > limit {
-			remaining = limit
+		if remaining := sc.nItems - sc.offset; remaining < scanLimit {
+			scanLimit = remaining
 		}
 	}
-	if len(sc.prefix) > 0 {
-		prefixes, info, err = sc.scanByPrefix(remaining)
+	if sc.ifcOpts.RangeScan {
+		prefixes, info, err = sc.scanByPrefix(scanLimit)
 	} else {
-		prefixes, info, err = sc.scanByRange(remaining)
+		prefixes, info, err = sc.scanByRange(scanLimit)
 	}
 	if err != nil {
 		return false, err

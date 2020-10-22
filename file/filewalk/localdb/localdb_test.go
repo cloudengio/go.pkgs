@@ -223,7 +223,8 @@ func TestScanning(t *testing.T) {
 	defer db.Close(ctx)
 
 	keys := []string{}
-	sc := db.NewScanner("", 10, filewalk.ScanLimit(6))
+	limit := 10
+	sc := db.NewScanner("", limit, filewalk.ScanLimit(6))
 	for sc.Scan(ctx) {
 		k, v := sc.PrefixInfo()
 		keys = append(keys, k)
@@ -234,13 +235,13 @@ func TestScanning(t *testing.T) {
 	if err := sc.Err(); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < limit; i++ {
 		if got, want := keys[i], fmt.Sprintf("/a/%05v", i); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
-	sc = db.NewScanner("", 0)
+	sc = db.NewScanner("", 3333, filewalk.ScanLimit(6))
 	keys = []string{}
 	for sc.Scan(ctx) {
 		k, v := sc.PrefixInfo()
@@ -250,10 +251,13 @@ func TestScanning(t *testing.T) {
 		}
 	}
 
+	if got, want := len(keys), nitems; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 	for i := 0; i < nitems; i++ {
 		if got, want := keys[i], fmt.Sprintf("/a/%05v", i); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
-
 }

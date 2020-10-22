@@ -188,24 +188,31 @@ func ScanDescending() ScannerOption {
 	}
 }
 
+// RangeScan requests a range, as opposed to prefix scan. The range
+// scan will start the prefix passed to NewScanner and continue until
+// the number of keys specified by limit is reached.
 func RangeScan() ScannerOption {
 	return func(so *ScannerOptions) {
 		so.RangeScan = true
 	}
 }
 
+// KeysOnly requests that only keys and no data is scanned.
 func KeysOnly() ScannerOption {
 	return func(so *ScannerOptions) {
 		so.KeysOnly = true
 	}
 }
 
+// ScanErrors requests that errors database is scanned.
 func ScanErrors() ScannerOption {
 	return func(so *ScannerOptions) {
 		so.ScanErrors = true
 	}
 }
 
+// ScanLimit sets the number of items to be retrieved in a single
+// underlying storage operation.
 func ScanLimit(l int) ScannerOption {
 	return func(so *ScannerOptions) {
 		so.ScanLimit = l
