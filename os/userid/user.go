@@ -4,14 +4,16 @@
 
 // Package userid provides complimentary functionality to the standard os/user
 // package by using the 'id' command to avoid loss of functionality when
-// cross compiling. By way of background os/user has both a pure-go
-// implementation and a cgo implementation. The former parses /etc/passwd
-// and the latter uses the getwpent operations. The cgo implementation
-// cannot be used when cross compiling since cgo is generally disabled for
-// cross compilation. Hence applications that use os/user can find themselves
-// losing the ability to resolve info for all users when cross compiled and used
-// on systems that use a directory service that is accessible via getpwent
-// but whose members do not appear in the text file /etc/passwd.
+// cross compiling. It first use the os/user package and fall back to the
+// using the 'id' command. It offers reduced functionality as compared to
+// os/user. By way of background os/user has both a pure-go implementation and
+// a cgo implementation. The former parses /etc/passwd and the latter uses the
+// getwpent operations. The cgo implementation cannot be used when cross
+// compiling since cgo is generally disabled for cross compilation.
+// Hence applications that use os/user can find themselves losing the ability
+// to resolve info for all users when cross compiled and used on systems that
+// use a directory service that is accessible via getpwent but whose members
+// do not appear in the text file /etc/passwd.
 package userid
 
 import (
@@ -83,15 +85,15 @@ func ParseIDCommandOutput(out string) (IDInfo, error) {
 // id or username that uses the 'id' command.
 type IDManager struct {
 	mu     sync.Mutex
-	users  map[string]IDInfo // keyed by username or uid
-	groups map[string]IDInfo // keyed by groupname or gid
+	users  map[string]IDInfo     // keyed by username or uid
+	groups map[string]user.Group // keyed by groupname or gid
 }
 
 // NewIDManager creates a new instance of IDManager.
 func NewIDManager() *IDManager {
 	return &IDManager{
 		users:  map[string]IDInfo{},
-		groups: map[string]IDInfo{},
+		groups: map[string]user.Group{},
 	}
 }
 
@@ -102,11 +104,54 @@ func (idm *IDManager) userExists(id string) (IDInfo, bool) {
 	return info, ok
 }
 
-func (idm *IDManager) groupExists(id string) (IDInfo, bool) {
+func (idm *IDManager) groupExists(id string) (user.Group, bool) {
 	idm.mu.Lock()
 	defer idm.mu.Unlock()
-	info, ok := idm.groups[id]
-	return info, ok
+	grp, ok := idm.groups[id]
+	return grp, ok
+}
+
+func infoUsingIDCommand(id string) (IDInfo, error) {
+	out, err := runIDCommand(id)
+	if err != nil {
+		return IDInfo{}, user.UnknownUserError(id)
+	}
+	info, err := ParseIDCommandOutput(out)
+	if err != nil {
+		return IDInfo{}, user.UnknownUserError(id)
+	}
+	return info, nil
+}
+
+func infoUsingUserPackage(id string) (IDInfo, error) {
+	u, err := user.LookupId(id)
+	if err != nil {
+		u, err = user.Lookup(id)
+	}
+	if err == nil {
+		info := IDInfo{
+			UID:      u.Uid,
+			Username: u.Username,
+		}
+		grp, err := user.LookupGroupId(u.Gid)
+		if err == nil {
+			info.Groups = []user.Group{*grp}
+		}
+		return info, nil
+	}
+	return IDInfo{}, user.UnknownUserError(id)
+}
+
+func (idm *IDManager) update(info IDInfo) {
+	idm.mu.Lock()
+	defer idm.mu.Unlock()
+	// Save the same information for both user and groups.
+	idm.users[info.Username] = info
+	idm.users[info.UID] = info
+	for _, grp := range info.Groups {
+		idm.groups[grp.Name] = grp
+		idm.groups[grp.Gid] = grp
+	}
 }
 
 // LookupUser returns IDInfo for the specified user id or user name.
@@ -116,40 +161,45 @@ func (idm *IDManager) LookupUser(id string) (IDInfo, error) {
 	if id, exists := idm.userExists(id); exists {
 		return id, nil
 	}
-	out, err := runIDCommand(id)
+	info, err := infoUsingUserPackage(id)
+	if err == nil {
+		idm.update(info)
+		return info, nil
+	}
+	info, err = infoUsingIDCommand(id)
 	if err != nil {
-		return IDInfo{}, user.UnknownUserError(id)
+		return info, err
 	}
-	info, err := ParseIDCommandOutput(out)
-	if err != nil {
-		return IDInfo{}, user.UnknownUserError(id)
-	}
-	idm.mu.Lock()
-	defer idm.mu.Unlock()
-	// Save the same information for both user and groups.
-	idm.users[info.Username] = info
-	idm.users[info.UID] = info
-	for _, grp := range info.Groups {
-		idm.groups[grp.Name] = info
-		idm.groups[grp.Gid] = info
-	}
+	idm.update(info)
 	return info, nil
 }
 
 // LookupGroup returns IDInfo for the specified group id or group name.
 // It returns user.UnknownGroupError if the group cannot be found or
 // the invocation of the 'id' command fails somehow.
-func (idm *IDManager) LookupGroup(id string) (IDInfo, error) {
-	if id, exists := idm.groupExists(id); exists {
-		return id, nil
+func (idm *IDManager) LookupGroup(id string) (user.Group, error) {
+	if grp, exists := idm.groupExists(id); exists {
+		return grp, nil
 	}
+	grp, err := user.LookupGroupId(id)
+	if err != nil {
+		grp, err = user.LookupGroup(id)
+	}
+	if err == nil {
+		idm.mu.Lock()
+		defer idm.mu.Unlock()
+		idm.groups[grp.Name] = *grp
+		idm.groups[grp.Gid] = *grp
+		return *grp, nil
+	}
+
 	// run id for the current user in the hope that it discovers the
 	// group.
 	idm.LookupUser("")
 	if id, exists := idm.groupExists(id); exists {
 		return id, nil
 	}
-	return IDInfo{}, user.UnknownGroupError(id)
+	return user.Group{}, user.UnknownGroupError(id)
 }
 
 func runIDCommand(uid string) (string, error) {
