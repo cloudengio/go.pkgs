@@ -33,4 +33,9 @@ func TestManager(t *testing.T) {
 	if got, want := id.Username, user; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	idm.mu.Lock()
+	defer idm.mu.Unlock()
+	if len(idm.groups) == 0 {
+		t.Errorf("groups should not be empty")
+	}
 }
