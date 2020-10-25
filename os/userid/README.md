@@ -5,10 +5,18 @@
 import cloudeng.io/os/userid
 ```
 
-Package userid provides analogous functionality to the standard os/user
-package except that it uses the 'id' command to obtain user and group
-information rather than /etc/passwd since on many system installations the
-user package will fail to find a user whereas the id command can.
+Package userid provides complimentary functionality to the standard os/user
+package by using the 'id' command to avoid loss of functionality when cross
+compiling. It first use the os/user package and fall back to the using the
+'id' command. It offers reduced functionality as compared to os/user. By way
+of background os/user has both a pure-go implementation and a cgo
+implementation. The former parses /etc/passwd and the latter uses the
+getwpent operations. The cgo implementation cannot be used when cross
+compiling since cgo is generally disabled for cross compilation. Hence
+applications that use os/user can find themselves losing the ability to
+resolve info for all users when cross compiled and used on systems that use
+a directory service that is accessible via getpwent but whose members do not
+appear in the text file /etc/passwd.
 
 ## Types
 ### Type IDInfo
@@ -52,9 +60,17 @@ NewIDManager creates a new instance of IDManager.
 ### Methods
 
 ```go
-func (idm *IDManager) Lookup(id string) (IDInfo, error)
+func (idm *IDManager) LookupGroup(id string) (user.Group, error)
 ```
-LookupID returns IDInfo for the specified user id or user name. It returns
+LookupGroup returns IDInfo for the specified group id or group name. It
+returns user.UnknownGroupError if the group cannot be found or the
+invocation of the 'id' command fails somehow.
+
+
+```go
+func (idm *IDManager) LookupUser(id string) (IDInfo, error)
+```
+LookupUser returns IDInfo for the specified user id or user name. It returns
 user.UnknownUserError if the user cannot be found or the invocation of the
 'id' command fails somehow.
 
