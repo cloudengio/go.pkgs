@@ -31,8 +31,8 @@ func newStatsCollection(key string) *statsCollection {
 	}
 }
 
-func (sc *statsCollection) loadOrInit(db *pudge.Db, key string) error {
-	if err := db.Get(key, sc); err != nil {
+func loadIfExists(db *pudge.Db, key string, val interface{}) error {
+	if err := db.Get(key, val); err != nil {
 		if err != pudge.ErrKeyNotFound {
 			return err
 		}
@@ -40,8 +40,24 @@ func (sc *statsCollection) loadOrInit(db *pudge.Db, key string) error {
 	return nil
 }
 
+func (sc *statsCollection) loadIfExists(db *pudge.Db, key string) error {
+	errs := &errors.M{}
+	errs.Append(loadIfExists(db, key+".key", &sc.StatsKey))
+	errs.Append(loadIfExists(db, key+".files", &sc.NumFiles))
+	errs.Append(loadIfExists(db, key+".children", &sc.NumChildren))
+	errs.Append(loadIfExists(db, key+".usage", &sc.DiskUsage))
+	errs.Append(loadIfExists(db, key+".errors", &sc.NumErrors))
+	return errs.Err()
+}
+
 func (sc *statsCollection) save(db *pudge.Db, key string) error {
-	return db.Set(key, sc)
+	errs := &errors.M{}
+	errs.Append(db.Set(key+".key", sc.StatsKey))
+	errs.Append(db.Set(key+".files", sc.NumFiles))
+	errs.Append(db.Set(key+".children", sc.NumChildren))
+	errs.Append(db.Set(key+".usage", sc.DiskUsage))
+	errs.Append(db.Set(key+".errors", sc.NumErrors))
+	return errs.Err()
 }
 
 func (sc *statsCollection) update(prefix string, info *filewalk.PrefixInfo) {
@@ -79,8 +95,9 @@ func (pu *perItemStats) loadItemList(db *pudge.Db) error {
 func (pu *perItemStats) initStatsForItem(db *pudge.Db, item string) (*statsCollection, error) {
 	sdb, ok := pu.stats[item]
 	if !ok {
-		pu.stats[item] = newStatsCollection(item)
-		err := db.Get(item, pu.stats[item])
+		sc := newStatsCollection(item)
+		err := sc.loadIfExists(db, item)
+		pu.stats[item] = sc
 		pu.itemKeys = append(pu.itemKeys, item)
 		return pu.stats[item], err
 	}

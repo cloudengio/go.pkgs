@@ -273,7 +273,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 	if db.opts.resetStats {
 		return db, nil
 	}
-	if err := db.globalStats.loadOrInit(db.statsdb, globalStatsKey); err != nil {
+	if err := db.globalStats.loadIfExists(db.statsdb, globalStatsKey); err != nil {
 		db.closeAll(ctx)
 		return nil, fmt.Errorf("failed to load stats: %v", err)
 	}
