@@ -39,6 +39,7 @@ func gobEncodeInfo(enc *gob.Encoder, info []Info) error {
 	for _, i := range info {
 		errs.Append(enc.Encode(i.Name))
 		errs.Append(enc.Encode(i.UserID))
+		errs.Append(enc.Encode(i.GroupID))
 		errs.Append(enc.Encode(i.Size))
 		errs.Append(enc.Encode(i.ModTime))
 		errs.Append(enc.Encode(i.Mode))
@@ -55,6 +56,7 @@ func (pi PrefixInfo) GobEncode() ([]byte, error) {
 	errs.Append(enc.Encode(pi.ModTime))
 	errs.Append(enc.Encode(pi.Size))
 	errs.Append(enc.Encode(pi.UserID))
+	errs.Append(enc.Encode(pi.GroupID))
 	errs.Append(enc.Encode(pi.Mode))
 	errs.Append(enc.Encode(pi.DiskUsage))
 	errs.Append(enc.Encode(pi.Err))
@@ -77,6 +79,7 @@ func gobDecodeInfo(dec *gob.Decoder) ([]Info, error) {
 	for i := 0; i < size; i++ {
 		errs.Append(dec.Decode(&info[i].Name))
 		errs.Append(dec.Decode(&info[i].UserID))
+		errs.Append(dec.Decode(&info[i].GroupID))
 		errs.Append(dec.Decode(&info[i].Size))
 		errs.Append(dec.Decode(&info[i].ModTime))
 		errs.Append(dec.Decode(&info[i].Mode))
@@ -91,6 +94,7 @@ func (pi *PrefixInfo) GobDecode(buf []byte) error {
 	errs.Append(dec.Decode(&pi.ModTime))
 	errs.Append(dec.Decode(&pi.Size))
 	errs.Append(dec.Decode(&pi.UserID))
+	errs.Append(dec.Decode(&pi.GroupID))
 	errs.Append(dec.Decode(&pi.Mode))
 	errs.Append(dec.Decode(&pi.DiskUsage))
 	errs.Append(dec.Decode(&pi.Err))
@@ -237,6 +241,15 @@ func ScanLimit(l int) ScannerOption {
 	}
 }
 
+// DatabaseStats represents the statistices for a specific portion
+// of the overall database.
+type DatabaseStats struct {
+	Name        string
+	Description string
+	NumEntries  int64
+	Size        int64
+}
+
 // Database is the interface to be implemented by a database suitable for
 // use with filewalk.
 type Database interface {
@@ -245,24 +258,40 @@ type Database interface {
 	// associated with that user will be updated in addition to global ones.
 	// Metrics are updated approriately for
 	Set(ctx context.Context, prefix string, info *PrefixInfo) error
+
 	// Get returns the information stored for the specified prefix. It will
 	// return false if the entry does not exist in the database but with
 	// a nil error.
 	Get(ctx context.Context, prefix string, info *PrefixInfo) (bool, error)
+
+	// Delete removes the supplied prefixes from all databases. If recurse
+	// is set then all children of those prefixes will be similarly deleted.
+	Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error)
+
 	// Save saves the database to persistent storage.
 	Save(ctx context.Context) error
+
 	// Close will first Save and then release resources associated with the database.
 	Close(ctx context.Context) error
+
 	// UserIDs returns the current set of userIDs known to the database.
 	UserIDs(ctx context.Context) ([]string, error)
+
 	// GroupIDs returns the current set of groupIDs known to the database.
 	GroupIDs(ctx context.Context) ([]string, error)
+
 	// Metrics returns the names of the supported metrics.
 	Metrics() []MetricName
+
+	// Stats returns statistics on the database's components.
+	Stats() ([]DatabaseStats, error)
+
 	// Total returns the total (ie. sum) for the requested metric.
 	Total(ctx context.Context, name MetricName, opts ...MetricOption) (int64, error)
+
 	// TopN returns the top-n values for the requested metric.
 	TopN(ctx context.Context, name MetricName, n int, opts ...MetricOption) ([]Metric, error)
+
 	// NewScanner creates a scanner that will start at the specified prefix
 	// and scan at most limit items; a limit of 0 will scan all available
 	// items.

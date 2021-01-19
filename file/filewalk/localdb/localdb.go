@@ -344,8 +344,6 @@ func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.Prefi
 	case err == nil && len(info.Err) == 0:
 		return nil
 	case err == nil && len(info.Err) != 0:
-		// TODO(cnicolaou): build a lexicon of layout and user info
-		// to save space on disk.
 		errs.Append(db.errordb.Set(prefix, &info))
 		return errs.Err()
 	}
@@ -367,6 +365,35 @@ func (db *Database) Get(ctx context.Context, prefix string, info *filewalk.Prefi
 		return false, err
 	}
 	return true, nil
+}
+
+func (db *Database) Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error) {
+	errs := &errors.M{}
+	deleted := 0
+	for _, prefix := range prefixes {
+		deleted += db.delete(ctx, separator, prefix, recurse, errs)
+	}
+	return deleted, errs.Err()
+}
+
+func (db *Database) delete(ctx context.Context, separator, prefix string, recurse bool, errs *errors.M) int {
+	var existing filewalk.PrefixInfo
+	err := db.prefixdb.Get(prefix, &existing)
+	if err != nil {
+		errs.Append(fmt.Errorf("%v: %v", prefix, err))
+		return 0
+	}
+	deleted := 1
+	if recurse {
+		for _, child := range existing.Children {
+			deleted += db.delete(ctx, separator, prefix+separator+child.Name, true, errs)
+		}
+	}
+	errs.Append(db.prefixdb.Delete(prefix))
+	db.globalStats.remove(prefix)
+	errs.Append(db.userStats.remove(db.userdb, prefix, existing.UserID))
+	errs.Append(db.groupStats.remove(db.groupdb, prefix, existing.GroupID))
+	return deleted
 }
 
 func (db *Database) NewScanner(prefix string, limit int, opts ...filewalk.ScannerOption) filewalk.DatabaseScanner {
@@ -392,6 +419,43 @@ func getMetricNames() []filewalk.MetricName {
 		return string(metrics[i]) < string(metrics[j])
 	})
 	return metrics
+}
+
+func (db *Database) statsForDb(pdb *pudge.Db, filename, name, desc string) (filewalk.DatabaseStats, error) {
+	count, err := pdb.Count()
+	if err != nil {
+		return filewalk.DatabaseStats{}, fmt.Errorf("failed to get # entries for %v: %v", name, err)
+	}
+	info, err := os.Stat(filepath.Join(db.dir, filename))
+	if err != nil {
+		return filewalk.DatabaseStats{}, fmt.Errorf("failed to stat %v for %v: %v", filename, name, err)
+	}
+	return filewalk.DatabaseStats{
+		Name:        name,
+		Description: desc,
+		NumEntries:  int64(count),
+		Size:        info.Size(),
+	}, nil
+}
+
+func (db *Database) Stats() ([]filewalk.DatabaseStats, error) {
+	stats := []filewalk.DatabaseStats{}
+	errs := errors.M{}
+	for _, dbi := range []struct {
+		pdb                  *pudge.Db
+		filename, name, desc string
+	}{
+		{db.prefixdb, prefixdbFilename, "prefixes", "database containing information for every prefix"},
+		{db.statsdb, statsdbFilename, "stats", "database containing statistics for every prefix"},
+		{db.userdb, userdbFilename, "user-stats", "database containing statistics for every prefix partitioned by user"},
+		{db.groupdb, groupdbFilename, "group-stats", "database containing statistics for every prefix partioned by group"},
+		{db.errordb, errordbFilename, "errors", "database containing information on errors encountered to date"},
+	} {
+		stat, err := db.statsForDb(dbi.pdb, dbi.filename, dbi.name, dbi.desc)
+		stats = append(stats, stat)
+		errs.Append(err)
+	}
+	return stats, errs.Err()
 }
 
 func (db *Database) Metrics() []filewalk.MetricName {

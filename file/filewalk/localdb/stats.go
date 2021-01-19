@@ -32,25 +32,52 @@ func newStatsCollection(key string) *statsCollection {
 }
 
 func (sc *statsCollection) loadOrInit(db *pudge.Db, key string) error {
-	if err := db.Get(key, sc); err != nil {
-		if err != pudge.ErrKeyNotFound {
-			return err
+	for _, kv := range []struct {
+		key string
+		val interface{}
+	}{
+		{key + ".key", &sc.StatsKey},
+		{key + ".files", &sc.NumFiles},
+		{key + ".children", &sc.NumChildren},
+		{key + ".usage", &sc.DiskUsage},
+	} {
+		if err := db.Get(kv.key, kv.val); err != nil {
+			if err != pudge.ErrKeyNotFound {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (sc *statsCollection) save(db *pudge.Db, key string) error {
-	return db.Set(key, sc)
+	errs := errors.M{}
+	errs.Append(db.Set(key+".key", sc.StatsKey))
+	errs.Append(db.Set(key+".files", sc.NumFiles))
+	errs.Append(db.Set(key+".children", sc.NumChildren))
+	errs.Append(db.Set(key+".usage", sc.DiskUsage))
+	return errs.Err()
 }
 
 func (sc *statsCollection) update(prefix string, info *filewalk.PrefixInfo) {
-	sc.NumFiles.Update(prefix, int64(len(info.Files)))
-	sc.NumChildren.Update(prefix, int64(len(info.Children)))
-	sc.DiskUsage.Update(prefix, info.DiskUsage)
+	if info.DiskUsage > 0 {
+		sc.DiskUsage.Update(prefix, info.DiskUsage)
+	}
+	if len(info.Files) > 0 {
+		sc.NumFiles.Update(prefix, int64(len(info.Files)))
+	}
+	if len(info.Children) > 0 {
+		sc.NumChildren.Update(prefix, int64(len(info.Children)))
+	}
 	if len(info.Err) != 0 {
 		sc.NumErrors++
 	}
+}
+
+func (sc *statsCollection) remove(prefix string) {
+	sc.DiskUsage.Remove(prefix)
+	sc.NumChildren.Remove(prefix)
+	sc.NumFiles.Remove(prefix)
 }
 
 // perItemStats provides granular, keyed, stats for providing
@@ -69,6 +96,14 @@ func newPerItemStats(name string) *perItemStats {
 	}
 }
 
+func dumpKeys(db *pudge.Db) {
+	keys, err := db.Keys(nil, 0, 0, true)
+	fmt.Printf("ERR: %v %v\n", err, len(keys))
+	for _, k := range keys {
+		fmt.Printf("%s\n", k)
+	}
+}
+
 func (pu *perItemStats) loadItemList(db *pudge.Db) error {
 	if err := db.Get(pu.itemListKey, &pu.itemKeys); err != nil && err != pudge.ErrKeyNotFound {
 		return err
@@ -79,8 +114,12 @@ func (pu *perItemStats) loadItemList(db *pudge.Db) error {
 func (pu *perItemStats) initStatsForItem(db *pudge.Db, item string) (*statsCollection, error) {
 	sdb, ok := pu.stats[item]
 	if !ok {
-		pu.stats[item] = newStatsCollection(item)
-		err := db.Get(item, pu.stats[item])
+		sc := newStatsCollection(item)
+		err := sc.loadOrInit(db, item)
+		if err != nil {
+			return nil, err
+		}
+		pu.stats[item] = sc
 		pu.itemKeys = append(pu.itemKeys, item)
 		return pu.stats[item], err
 	}
@@ -90,6 +129,7 @@ func (pu *perItemStats) initStatsForItem(db *pudge.Db, item string) (*statsColle
 func (pu *perItemStats) statsForItem(db *pudge.Db, item string) (*statsCollection, error) {
 	sc, err := pu.initStatsForItem(db, item)
 	if err == pudge.ErrKeyNotFound {
+		dumpKeys(db)
 		return nil, fmt.Errorf("no stats found for item %v", item)
 	}
 	return sc, err
@@ -101,6 +141,15 @@ func (pu *perItemStats) updateStats(db *pudge.Db, prefix string, item string, in
 		return err
 	}
 	sdb.update(prefix, info)
+	return nil
+}
+
+func (pu *perItemStats) remove(db *pudge.Db, prefix string, item string) error {
+	sdb, err := pu.initStatsForItem(db, item)
+	if err != nil && err != pudge.ErrKeyNotFound {
+		return err
+	}
+	sdb.remove(prefix)
 	return nil
 }
 
