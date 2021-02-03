@@ -7,5 +7,5 @@ cloudeng.io/os v0.0.0-20201019005056-d61ea7d0acd4 h1:Z6+4uaXuUQw+sI04XYZ+D1SpFqc
 cloudeng.io/os v0.0.0-20201019005056-d61ea7d0acd4/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
 cloudeng.io/sync v0.0.5 h1:fVkib4XhvbGceMe9F5rcXQzoJQxcdkVp2GZPIo2Dt78=
 cloudeng.io/sync v0.0.5/go.mod h1:ft73nqXGxRtWgcXoyWC+RLVjwCq+Ai0R/9oU4rnXf5g=
-github.com/recoilme/pudge v1.0.3 h1:h/9dEv5fRqtzM4lnO69kUoN+k7ukxxrW9NGb9ug0grM=
-github.com/recoilme/pudge v1.0.3/go.mod h1:VMvxBLVkrSStldckzCsETBXox3pfovfrnEchafXk8qA=
+github.com/cosnicolaou/pudge v1.0.4 h1:JJ9lRVdvP8pQOfSDnQsMJ5WYWub8PAs38VdI9dWle20=
+github.com/cosnicolaou/pudge v1.0.4/go.mod h1:PSbC4eylkssiQ+gAE+AWaMQSo41g/otqflfbcsMrupk=

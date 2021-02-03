@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,9 +21,16 @@ import (
 
 type logger struct {
 	prefix   string
+	linesMu  sync.Mutex
 	lines    []string
 	children map[string][]filewalk.Info
 	skip     string
+}
+
+func (l *logger) appendLine(s string) {
+	l.linesMu.Lock()
+	l.lines = append(l.lines, s)
+	l.linesMu.Unlock()
 }
 
 func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.Info, ch <-chan filewalk.Contents) ([]filewalk.Info, error) {
@@ -31,7 +39,7 @@ func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.In
 	for results := range ch {
 		results.Path = strings.TrimPrefix(results.Path, l.prefix)
 		if err := results.Err; err != nil {
-			l.lines = append(l.lines, fmt.Sprintf("%v: %v\n", results.Path,
+			l.appendLine(fmt.Sprintf("%v: %v\n", results.Path,
 				strings.Replace(results.Err.Error(), l.prefix, "", 1)))
 			continue
 		}
@@ -41,7 +49,7 @@ func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.In
 			if info.IsLink() {
 				link = "@"
 			}
-			l.lines = append(l.lines, fmt.Sprintf("%v%s: %v\n", full, link, info.Size))
+			l.appendLine(fmt.Sprintf("%v%s: %v\n", full, link, info.Size))
 		}
 		children = append(children, results.Children...)
 	}
@@ -50,14 +58,14 @@ func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.In
 
 func (l *logger) dirsFunc(ctx context.Context, prefix string, info *filewalk.Info, err error) (bool, []filewalk.Info, error) {
 	if err != nil {
-		l.lines = append(l.lines, fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
+		l.appendLine(fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
 		return true, nil, nil
 	}
 	prefix = strings.TrimPrefix(prefix, l.prefix)
 	if len(l.skip) > 0 && prefix == l.skip {
 		return true, nil, nil
 	}
-	l.lines = append(l.lines, fmt.Sprintf("%v*\n", prefix))
+	l.appendLine(fmt.Sprintf("%v*\n", prefix))
 	return false, l.children[prefix], nil
 }
 

@@ -7,7 +7,9 @@ package heap
 
 import (
 	"bytes"
+	"compress/flate"
 	"container/heap"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"sync"
@@ -174,20 +176,43 @@ func (ki *KeyedInt64) Remove(key string) {
 func (ki *KeyedInt64) GobEncode() ([]byte, error) {
 	ki.mu.Lock()
 	defer ki.mu.Unlock()
-	buf := &bytes.Buffer{}
-	enc := gob.NewEncoder(buf)
 	errs := errors.M{}
+
+	// Prepare two buffers, one for values, the other for keys.
+	// Write values as varint's and keys as compressed strings.
+	nVals := len(ki.h.Values)
+	keyBuf := bytes.NewBuffer(make([]byte, 0, nVals*16))
+	keyWriter, err := flate.NewWriter(keyBuf, flate.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	keyEnc := gob.NewEncoder(keyWriter)
+	valBuf := make([]byte, 0, nVals*3)
+	valIdx := 0
+	for _, v := range ki.h.Values {
+		var b [binary.MaxVarintLen64]byte
+		n := binary.PutVarint(b[:], v.Value)
+		valIdx += n
+		valBuf = append(valBuf, b[:n]...)
+		errs.Append(keyEnc.Encode(v.Key))
+	}
+	valBuf = valBuf[:valIdx]
+	errs.Append(keyWriter.Flush())
+	errs.Append(keyWriter.Close())
+	if err := errs.Err(); err != nil {
+		return nil, err
+	}
+
+	// Write out the gob encodings of the key and value bufs and
+	// associated metadata.
+	sz := keyBuf.Len() + valIdx + 64
+	buf := bytes.NewBuffer(make([]byte, 0, sz))
+	enc := gob.NewEncoder(buf)
 	errs.Append(enc.Encode(len(ki.h.Values)))
 	errs.Append(enc.Encode(ki.h.Order))
 	errs.Append(enc.Encode(ki.h.Total))
-	vals := make([]int64, len(ki.h.Values))
-	keys := make([]string, len(ki.h.Values))
-	for i, v := range ki.h.Values {
-		vals[i] = v.Value
-		keys[i] = v.Key
-	}
-	errs.Append(enc.Encode(keys))
-	errs.Append(enc.Encode(vals))
+	errs.Append(enc.Encode(keyBuf.Bytes()))
+	errs.Append(enc.Encode(valBuf))
 	return buf.Bytes(), errs.Err()
 }
 
@@ -205,14 +230,21 @@ func (ki *KeyedInt64) GobDecode(buf []byte) error {
 	}
 	errs.Append(dec.Decode(&ki.h.Order))
 	errs.Append(dec.Decode(&ki.h.Total))
-	keys := make([]string, size)
-	vals := make([]int64, size)
-	errs.Append(dec.Decode(&keys))
-	errs.Append(dec.Decode(&vals))
+	var keyBuf, valBuf []byte
+	errs.Append(dec.Decode(&keyBuf))
+	errs.Append(dec.Decode(&valBuf))
+
+	keyReader := flate.NewReader(bytes.NewBuffer(keyBuf))
+	keyDec := gob.NewDecoder(keyReader)
+	valIdx := 0
 	for i := 0; i < size; i++ {
-		ki.h.Values[i].Key = keys[i]
-		ki.h.Values[i].Value = vals[i]
-		ki.h.lookup[keys[i]] = i
+		var n int
+		ki.h.Values[i].Value, n = binary.Varint(valBuf[valIdx:])
+		valIdx += n
+		var key string
+		errs.Append(keyDec.Decode(&key))
+		ki.h.Values[i].Key = key
+		ki.h.lookup[key] = i
 	}
 	return errs.Err()
 }
