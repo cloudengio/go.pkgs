@@ -9,6 +9,7 @@ package localdb
 import (
 	"context"
 	"encoding/json"
+	"expvar"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -19,8 +20,11 @@ import (
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/os/lockedfile"
-	"github.com/recoilme/pudge"
+	"cloudeng.io/sync/errgroup"
+	"github.com/cosnicolaou/pudge"
 )
+
+var dbStatus = expvar.NewMap("pudgedb")
 
 const (
 	globalStatsKey   = "__globalStats"
@@ -218,6 +222,12 @@ func (db *Database) unlock() error {
 	return err
 }
 
+type stringer string
+
+func (s stringer) String() string {
+	return string(s)
+}
+
 func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, opts ...DatabaseOption) (filewalk.Database, error) {
 	db := newDB(dir)
 	var dbOpts filewalk.DatabaseOptions
@@ -245,45 +255,60 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		cfg.SyncInterval = 0
 	}
 
-	var err error
-	db.prefixdb, err = pudge.Open(filepath.Join(dir, prefixdbFilename), &cfg)
-	if err != nil {
-		return nil, err
+	var gdb errgroup.T
+	for _, dbg := range []struct {
+		dbp  **pudge.Db
+		name string
+	}{
+		{&db.prefixdb, prefixdbFilename},
+		{&db.statsdb, statsdbFilename},
+		{&db.errordb, errordbFilename},
+		{&db.userdb, userdbFilename},
+		{&db.groupdb, groupdbFilename},
+	} {
+		name := filepath.Join(dir, dbg.name)
+		dbp := dbg.dbp
+		gdb.Go(func() error {
+			var err error
+			dbStatus.Set(name, stringer("opening"))
+			*dbp, err = pudge.Open(name, &cfg)
+			if err != nil {
+				dbStatus.Set(name, stringer("opened: failed: "+err.Error()))
+				return err
+			}
+			dbStatus.Set(name, stringer("opened"))
+			return nil
+		})
 	}
-	db.statsdb, err = pudge.Open(filepath.Join(dir, statsdbFilename), &cfg)
-	if err != nil {
-		db.closeAll(ctx)
-		return nil, err
-	}
-	db.errordb, err = pudge.Open(filepath.Join(dir, errordbFilename), &cfg)
-	if err != nil {
-		db.closeAll(ctx)
-		return nil, err
-	}
-	db.userdb, err = pudge.Open(filepath.Join(dir, userdbFilename), &cfg)
-	if err != nil {
-		db.closeAll(ctx)
-		return nil, err
-	}
-	db.groupdb, err = pudge.Open(filepath.Join(dir, groupdbFilename), &cfg)
-	if err != nil {
+	if err := gdb.Wait(); err != nil {
 		db.closeAll(ctx)
 		return nil, err
 	}
 	if db.opts.resetStats {
 		return db, nil
 	}
-	if err := db.globalStats.loadOrInit(db.statsdb, globalStatsKey); err != nil {
+	var gstats errgroup.T
+	gstats.Go(func() error {
+		if err := db.globalStats.loadOrInit(db.statsdb, globalStatsKey); err != nil {
+			return fmt.Errorf("failed to load stats: %v", err)
+		}
+		return nil
+	})
+	gstats.Go(func() error {
+		if err := db.userStats.loadItemList(db.userdb); err != nil {
+			return fmt.Errorf("failed to load user list: %v", err)
+		}
+		return nil
+	})
+	gstats.Go(func() error {
+		if err := db.groupStats.loadItemList(db.groupdb); err != nil {
+			return fmt.Errorf("failed to load group list: %v", err)
+		}
+		return nil
+	})
+	if err := gstats.Wait(); err != nil {
 		db.closeAll(ctx)
-		return nil, fmt.Errorf("failed to load stats: %v", err)
-	}
-	if err := db.userStats.loadItemList(db.userdb); err != nil {
-		db.closeAll(ctx)
-		return nil, fmt.Errorf("failed to load user list: %v", err)
-	}
-	if err := db.groupStats.loadItemList(db.groupdb); err != nil {
-		db.closeAll(ctx)
-		return nil, fmt.Errorf("failed to load group list: %v", err)
+		return nil, err
 	}
 	return db, nil
 }
@@ -311,6 +336,31 @@ func (db *Database) saveStats() error {
 	return db.globalStats.save(db.statsdb, globalStatsKey)
 }
 
+func (db *Database) CompactAndClose(ctx context.Context) error {
+	if db.opts.readOnly {
+		return fmt.Errorf("database is readonly")
+	}
+	g := errgroup.T{}
+	g.Go(func() error {
+		return db.prefixdb.CompactAndClose()
+	})
+	g.Go(func() error {
+		return db.statsdb.CompactAndClose()
+	})
+	g.Go(func() error {
+		return db.userdb.CompactAndClose()
+	})
+	g.Go(func() error {
+		return db.groupdb.CompactAndClose()
+	})
+	g.Go(func() error {
+		return db.errordb.CompactAndClose()
+	})
+	err := g.Wait()
+	db.unlock()
+	return err
+}
+
 func (db *Database) Close(ctx context.Context) error {
 	if !db.opts.readOnly {
 		return db.Save(ctx)
@@ -322,12 +372,20 @@ func (db *Database) Save(ctx context.Context) error {
 	if db.opts.readOnly {
 		return ErrReadonly
 	}
-	errs := errors.M{}
-	errs.Append(db.globalStats.save(db.statsdb, globalStatsKey))
-	errs.Append(db.userStats.save(db.userdb))
-	errs.Append(db.groupStats.save(db.groupdb))
-	errs.Append(db.closeAll(ctx))
-	return errs.Err()
+	g := errgroup.T{}
+	g.Go(func() error {
+		return db.globalStats.save(db.statsdb, globalStatsKey)
+	})
+	g.Go(func() error {
+		return db.userStats.save(db.userdb)
+	})
+	g.Go(func() error {
+		return db.groupStats.save(db.groupdb)
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	return db.closeAll(ctx)
 }
 
 func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.PrefixInfo) error {
@@ -369,31 +427,33 @@ func (db *Database) Get(ctx context.Context, prefix string, info *filewalk.Prefi
 
 func (db *Database) Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error) {
 	errs := &errors.M{}
-	deleted := 0
+	deletions := make([]interface{}, 0, len(prefixes))
 	for _, prefix := range prefixes {
-		deleted += db.delete(ctx, separator, prefix, recurse, errs)
+		deletions = append(deletions, db.delete(ctx, separator, prefix, recurse, errs)...)
 	}
+	deleted, err := db.prefixdb.DeleteKeys(deletions)
+	errs.Append(err)
 	return deleted, errs.Err()
 }
 
-func (db *Database) delete(ctx context.Context, separator, prefix string, recurse bool, errs *errors.M) int {
+func (db *Database) delete(ctx context.Context, separator, prefix string, recurse bool, errs *errors.M) []interface{} {
 	var existing filewalk.PrefixInfo
 	err := db.prefixdb.Get(prefix, &existing)
 	if err != nil {
-		errs.Append(fmt.Errorf("%v: %v", prefix, err))
-		return 0
+		errs.Append(fmt.Errorf("get: %v: %v", prefix, err))
+		return nil
 	}
-	deleted := 1
+	var deletions []interface{}
 	if recurse {
+		deletions = make([]interface{}, 0, len(existing.Children))
 		for _, child := range existing.Children {
-			deleted += db.delete(ctx, separator, prefix+separator+child.Name, true, errs)
+			deletions = append(deletions, db.delete(ctx, separator, prefix+separator+child.Name, true, errs)...)
 		}
 	}
-	errs.Append(db.prefixdb.Delete(prefix))
 	db.globalStats.remove(prefix)
 	errs.Append(db.userStats.remove(db.userdb, prefix, existing.UserID))
 	errs.Append(db.groupStats.remove(db.groupdb, prefix, existing.GroupID))
-	return deleted
+	return append(deletions, prefix)
 }
 
 func (db *Database) NewScanner(prefix string, limit int, opts ...filewalk.ScannerOption) filewalk.DatabaseScanner {
@@ -426,15 +486,15 @@ func (db *Database) statsForDb(pdb *pudge.Db, filename, name, desc string) (file
 	if err != nil {
 		return filewalk.DatabaseStats{}, fmt.Errorf("failed to get # entries for %v: %v", name, err)
 	}
-	info, err := os.Stat(filepath.Join(db.dir, filename))
+	size, err := pdb.FileSize()
 	if err != nil {
-		return filewalk.DatabaseStats{}, fmt.Errorf("failed to stat %v for %v: %v", filename, name, err)
+		return filewalk.DatabaseStats{}, fmt.Errorf("failed to size %v for %v: %v", filename, name, err)
 	}
 	return filewalk.DatabaseStats{
 		Name:        name,
 		Description: desc,
 		NumEntries:  int64(count),
-		Size:        info.Size(),
+		Size:        size,
 	}, nil
 }
 

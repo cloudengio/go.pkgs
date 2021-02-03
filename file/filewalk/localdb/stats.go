@@ -11,7 +11,8 @@ import (
 	"cloudeng.io/algo/container/heap"
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
-	"github.com/recoilme/pudge"
+	"cloudeng.io/sync/errgroup"
+	"github.com/cosnicolaou/pudge"
 )
 
 type statsCollection struct {
@@ -32,6 +33,7 @@ func newStatsCollection(key string) *statsCollection {
 }
 
 func (sc *statsCollection) loadOrInit(db *pudge.Db, key string) error {
+	var g errgroup.T
 	for _, kv := range []struct {
 		key string
 		val interface{}
@@ -41,13 +43,20 @@ func (sc *statsCollection) loadOrInit(db *pudge.Db, key string) error {
 		{key + ".children", &sc.NumChildren},
 		{key + ".usage", &sc.DiskUsage},
 	} {
-		if err := db.Get(kv.key, kv.val); err != nil {
-			if err != pudge.ErrKeyNotFound {
-				return err
+		kv := kv
+		g.Go(func() error {
+			dbStatus.Set(kv.key, stringer("loading"))
+			if err := db.Get(kv.key, kv.val); err != nil {
+				if err != pudge.ErrKeyNotFound {
+					dbStatus.Set(kv.key, stringer("loaded: error "+err.Error()))
+					return err
+				}
 			}
-		}
+			dbStatus.Set(kv.key, stringer("loaded"))
+			return nil
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
 func (sc *statsCollection) save(db *pudge.Db, key string) error {
@@ -96,14 +105,6 @@ func newPerItemStats(name string) *perItemStats {
 	}
 }
 
-func dumpKeys(db *pudge.Db) {
-	keys, err := db.Keys(nil, 0, 0, true)
-	fmt.Printf("ERR: %v %v\n", err, len(keys))
-	for _, k := range keys {
-		fmt.Printf("%s\n", k)
-	}
-}
-
 func (pu *perItemStats) loadItemList(db *pudge.Db) error {
 	if err := db.Get(pu.itemListKey, &pu.itemKeys); err != nil && err != pudge.ErrKeyNotFound {
 		return err
@@ -129,7 +130,6 @@ func (pu *perItemStats) initStatsForItem(db *pudge.Db, item string) (*statsColle
 func (pu *perItemStats) statsForItem(db *pudge.Db, item string) (*statsCollection, error) {
 	sc, err := pu.initStatsForItem(db, item)
 	if err == pudge.ErrKeyNotFound {
-		dumpKeys(db)
 		return nil, fmt.Errorf("no stats found for item %v", item)
 	}
 	return sc, err

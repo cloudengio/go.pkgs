@@ -274,6 +274,10 @@ type Database interface {
 	// Close will first Save and then release resources associated with the database.
 	Close(ctx context.Context) error
 
+	// CompactAndClose will perform any necessary/possible/supported
+	// compaction on the database and close it.
+	CompactAndClose(ctx context.Context) error
+
 	// UserIDs returns the current set of userIDs known to the database.
 	UserIDs(ctx context.Context) ([]string, error)
 

@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"cloudeng.io/file/filewalk"
-	"github.com/recoilme/pudge"
+	"github.com/cosnicolaou/pudge"
 )
 
 // Scanner allows for the contents of an instance of Database to be
@@ -42,7 +42,7 @@ func NewScanner(db *Database, prefix string, limit int, ifcOpts []filewalk.Scann
 		prefix: []byte(prefix),
 		nItems: limit,
 	}
-	sc.ifcOpts.ScanLimit = 1000
+	sc.ifcOpts.ScanLimit = 100000
 	for _, fn := range ifcOpts {
 		fn(&sc.ifcOpts)
 	}
