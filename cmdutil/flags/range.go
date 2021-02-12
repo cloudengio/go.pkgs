@@ -2,6 +2,7 @@ package flags
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -147,8 +148,7 @@ func parseRangeSpec(sep byte, val string) (RangeSpec, error) {
 	}
 }
 
-// RangeSpecs represents a slice of RangeSpec. It implements
-// flag.Value
+// RangeSpecs represents comma separated list of RangeSpec's.
 type RangeSpecs []RangeSpec
 
 // Set implements flag.Value.
@@ -193,8 +193,7 @@ func (crs *ColonRangeSpec) Set(v string) error {
 	return crs.set(':', v)
 }
 
-// ColonRangeSpecs represents a slice of ColonRangeSpec. It implements
-// flag.Value.
+// ColonRangeSpecs represents comma separated list of ColonRangeSpec's.
 type ColonRangeSpecs []ColonRangeSpec
 
 // Set implements flag.Value.
@@ -215,6 +214,86 @@ func (crs *ColonRangeSpecs) String() string {
 	crl := len((*crs)) - 1
 	for i, s := range *crs {
 		s.writeString(":", out)
+		if i < crl {
+			out.WriteString(",")
+		}
+	}
+	return out.String()
+}
+
+// IntRangeSpec represents ranges whose values must be integers.
+type IntRangeSpec struct {
+	From, To      int
+	RelativeToEnd bool
+	ExtendsToEnd  bool
+}
+
+// Set implements flag.Value.
+func (ir *IntRangeSpec) Set(val string) error {
+	r := &RangeSpec{}
+	if err := r.Set(val); err != nil {
+		return err
+	}
+	from, err := strconv.Atoi(r.From)
+	if err != nil {
+		return &ErrInvalidRange{msg: fmt.Sprintf("%v is not an int: %v", r.From, err)}
+
+	}
+	ir.From = from
+	if len(r.To) > 0 {
+		to, err := strconv.Atoi(r.To)
+		if err != nil {
+			return &ErrInvalidRange{msg: fmt.Sprintf("%v is not an int: %v", r.To, err)}
+		}
+		ir.To = to
+	}
+	ir.RelativeToEnd = r.RelativeToEnd
+	ir.ExtendsToEnd = r.ExtendsToEnd
+	return nil
+}
+
+func (rs IntRangeSpec) writeString(sep string, out *strings.Builder) {
+	if rs.RelativeToEnd {
+		out.WriteString(sep)
+	}
+	out.WriteString(strconv.Itoa(rs.From))
+	if rs.To != 0 {
+		out.WriteString(sep)
+		out.WriteString(strconv.Itoa(rs.To))
+	}
+	if rs.ExtendsToEnd {
+		out.WriteString(sep)
+	}
+}
+
+// String implements flag.Value.
+func (ir *IntRangeSpec) String() string {
+	out := strings.Builder{}
+	ir.writeString("-", &out)
+	return out.String()
+}
+
+// IntRangeSpecs represents a comma separated list of IntRangeSpec's.
+type IntRangeSpecs []IntRangeSpec
+
+// Set implements flag.Value.
+func (irs *IntRangeSpecs) Set(val string) error {
+	for _, p := range strings.Split(val, ",") {
+		var rs IntRangeSpec
+		if err := rs.Set(p); err != nil {
+			return err
+		}
+		*irs = append(*irs, rs)
+	}
+	return nil
+}
+
+// String implements flag.Value.
+func (irs *IntRangeSpecs) String() string {
+	out := strings.Builder{}
+	crl := len((*irs)) - 1
+	for i, rs := range *irs {
+		out.WriteString(rs.String())
 		if i < crl {
 			out.WriteString(",")
 		}
