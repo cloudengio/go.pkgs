@@ -1,4 +1,4 @@
-jobs:
+go install -x github.com/matthewloring/validjson/cmd/validjson@latestjobs:
   test:
     docker:
       - image: cimg/go:1.16
@@ -24,8 +24,8 @@ jobs:
           name: downloads
           command: |
             curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-            go get github.com/matthewloring/validjson/cmd/validjson
-            go install -x github.com/matthewloring/validjson/cmd/validjson
+            go get github.com/matthewloring/validjson/cmd/validjson@latest
+            go install -x github.com/matthewloring/validjson/cmd/validjson@latest
       - run:
           name: lint
           command: |
