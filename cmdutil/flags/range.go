@@ -252,16 +252,16 @@ func (ir *IntRangeSpec) Set(val string) error {
 	return nil
 }
 
-func (rs IntRangeSpec) writeString(sep string, out *strings.Builder) {
-	if rs.RelativeToEnd {
+func (ir *IntRangeSpec) writeString(sep string, out *strings.Builder) {
+	if ir.RelativeToEnd {
 		out.WriteString(sep)
 	}
-	out.WriteString(strconv.Itoa(rs.From))
-	if rs.To != 0 {
+	out.WriteString(strconv.Itoa(ir.From))
+	if ir.To != 0 {
 		out.WriteString(sep)
-		out.WriteString(strconv.Itoa(rs.To))
+		out.WriteString(strconv.Itoa(ir.To))
 	}
-	if rs.ExtendsToEnd {
+	if ir.ExtendsToEnd {
 		out.WriteString(sep)
 	}
 }

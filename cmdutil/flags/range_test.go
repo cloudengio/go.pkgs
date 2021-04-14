@@ -187,17 +187,17 @@ func TestIntRanges(t *testing.T) {
 	}
 	err := irs.Set("a-1")
 	if err == nil || !errors.Is(err, &flags.ErrInvalidRange{}) {
-		fmt.Errorf("missing or wrong error: %v", err)
+		t.Errorf("missing or wrong error: %v", err)
 	}
 	err = irs.Set("1-a")
 	if err == nil || !errors.Is(err, &flags.ErrInvalidRange{}) {
-		fmt.Errorf("missing or wrong error: %v", err)
+		t.Errorf("missing or wrong error: %v", err)
 	}
 	t.Log(err)
 	ir := flags.IntRangeSpec{}
 	err = ir.Set("---a")
 	if err == nil || !errors.Is(err, &flags.ErrInvalidRange{}) {
-		fmt.Errorf("missing or wrong error: %v", err)
+		t.Errorf("missing or wrong error: %v", err)
 	}
 	t.Log(err)
 }
