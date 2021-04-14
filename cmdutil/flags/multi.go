@@ -4,7 +4,9 @@
 
 package flags
 
-import "strings"
+import (
+	"strings"
+)
 
 // Repeating represents the values from multiple instances of the same
 // command line argument.
