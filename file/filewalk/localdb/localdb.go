@@ -68,6 +68,7 @@ type DatabaseOption func(o *Database)
 
 type options struct {
 	readOnly            bool
+	errorsOnly          bool
 	resetStats          bool
 	syncIntervalSeconds int
 	lockRetryDelay      time.Duration
@@ -235,6 +236,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		fn(&dbOpts)
 	}
 	db.opts.readOnly = dbOpts.ReadOnly
+	db.opts.errorsOnly = dbOpts.ErrorsOnly
 	db.opts.resetStats = dbOpts.ResetStats
 	db.opts.lockRetryDelay = time.Minute
 	for _, fn := range opts {
@@ -255,17 +257,24 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		cfg.SyncInterval = 0
 	}
 
-	var gdb errgroup.T
-	for _, dbg := range []struct {
+	type dbPair struct {
 		dbp  **pudge.Db
 		name string
-	}{
-		{&db.prefixdb, prefixdbFilename},
-		{&db.statsdb, statsdbFilename},
+	}
+
+	var toOpen = []dbPair{
 		{&db.errordb, errordbFilename},
-		{&db.userdb, userdbFilename},
-		{&db.groupdb, groupdbFilename},
-	} {
+	}
+	if !db.opts.errorsOnly {
+		toOpen = append(toOpen,
+			dbPair{&db.prefixdb, prefixdbFilename},
+			dbPair{&db.statsdb, statsdbFilename},
+			dbPair{&db.userdb, userdbFilename},
+			dbPair{&db.groupdb, groupdbFilename},
+		)
+	}
+	var gdb errgroup.T
+	for _, dbg := range toOpen {
 		name := filepath.Join(dir, dbg.name)
 		dbp := dbg.dbp
 		gdb.Go(func() error {
@@ -283,6 +292,9 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 	if err := gdb.Wait(); err != nil {
 		db.closeAll(ctx)
 		return nil, err
+	}
+	if db.opts.errorsOnly {
+		return db, nil
 	}
 	if db.opts.resetStats {
 		return db, nil
@@ -405,11 +417,14 @@ func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.Prefi
 		errs.Append(db.errordb.Set(prefix, &info))
 		return errs.Err()
 	}
-	ninfo := &filewalk.PrefixInfo{}
+	ninfo := &filewalk.PrefixInfo{
+		ModTime: time.Now(),
+	}
+	timestamp := time.Now().Format(time.StampMilli)
 	if len(info.Err) != 0 {
-		ninfo.Err = fmt.Sprintf("%v: failed to write to database: %v", info.Err, err)
+		ninfo.Err = fmt.Sprintf("%v: %v: failed to write to database: %v", timestamp, info.Err, err)
 	} else {
-		ninfo.Err = fmt.Sprintf("failed to write to database: %v", err)
+		ninfo.Err = fmt.Sprintf("%v: failed to write to database: %v", timestamp, err)
 	}
 	errs.Append(db.errordb.Set(prefix, ninfo))
 	return errs.Err()
@@ -427,13 +442,24 @@ func (db *Database) Get(ctx context.Context, prefix string, info *filewalk.Prefi
 
 func (db *Database) Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error) {
 	errs := &errors.M{}
+	deleted := 0
+	for _, prefix := range prefixes {
+		deletions := db.delete(ctx, separator, prefix, recurse, errs)
+		nd, err := db.prefixdb.DeleteKeys(deletions)
+		if err != nil {
+			return deleted, fmt.Errorf("%v: %v", deletions[nd+1], err)
+		}
+		deleted++
+	}
+	return deleted, errs.Err()
+}
+
+func (db *Database) DeleteErrors(ctx context.Context, prefixes []string) (int, error) {
 	deletions := make([]interface{}, 0, len(prefixes))
 	for _, prefix := range prefixes {
-		deletions = append(deletions, db.delete(ctx, separator, prefix, recurse, errs)...)
+		deletions = append(deletions, prefix)
 	}
-	deleted, err := db.prefixdb.DeleteKeys(deletions)
-	errs.Append(err)
-	return deleted, errs.Err()
+	return db.errordb.DeleteKeys(deletions)
 }
 
 func (db *Database) delete(ctx context.Context, separator, prefix string, recurse bool, errs *errors.M) []interface{} {

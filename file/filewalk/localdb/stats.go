@@ -101,7 +101,8 @@ type perItemStats struct {
 
 func newPerItemStats(name string) *perItemStats {
 	return &perItemStats{
-		stats: make(map[string]*statsCollection),
+		itemListKey: name,
+		stats:       make(map[string]*statsCollection),
 	}
 }
 
