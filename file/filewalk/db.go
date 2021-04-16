@@ -172,6 +172,7 @@ const (
 type DatabaseOptions struct {
 	ResetStats bool
 	ReadOnly   bool
+	ErrorsOnly bool
 }
 
 // DatabaseOption represent a specific option common to all databases.
@@ -188,6 +189,14 @@ func ResetStats() DatabaseOption {
 func ReadOnly() DatabaseOption {
 	return func(o *DatabaseOptions) {
 		o.ReadOnly = true
+	}
+}
+
+// ErrorsOnly requests that only the errors portion of the database
+// be opened.
+func ErrorsOnly() DatabaseOption {
+	return func(o *DatabaseOptions) {
+		o.ErrorsOnly = true
 	}
 }
 
@@ -267,6 +276,9 @@ type Database interface {
 	// Delete removes the supplied prefixes from all databases. If recurse
 	// is set then all children of those prefixes will be similarly deleted.
 	Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error)
+
+	// DeleteErrors deletes the errors associated with the specified prefixes.
+	DeleteErrors(ctx context.Context, prefixes []string) (int, error)
 
 	// Save saves the database to persistent storage.
 	Save(ctx context.Context) error
