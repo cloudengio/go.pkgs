@@ -13,10 +13,10 @@ package filewalk
 import (
 	"context"
 	"expvar"
+	"fmt"
 	"os"
 	"runtime"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -24,8 +24,9 @@ import (
 	"cloudeng.io/sync/errgroup"
 )
 
-var listingVar = expvar.NewMap("filewalk-listing")
-var walkingVar = expvar.NewMap("filewalk-walking")
+var listingVar = expvar.NewMap("cloudeng.io/file/filewalk.listing")
+var walkingVar = expvar.NewMap("cloudeng.io/file/filewalk.walking")
+var syncVar = expvar.NewMap("cloudeng.io/file/filewalk.sync")
 
 // Contents represents the contents of the filesystem at the level represented
 // by Path.
@@ -92,7 +93,7 @@ const (
 	ModePerm   FileMode = FileMode(os.ModePerm)
 )
 
-// String implements stringer.
+// String implements jsonString.
 func (fm FileMode) String() string {
 	return os.FileMode(fm).String()
 }
@@ -174,7 +175,8 @@ func (w *Walker) recordError(path, op string, err error) error {
 }
 
 func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *Info) []Info {
-	listingVar.Set(idx, stringer(path))
+	listingVar.Set(idx, jsonString(path))
+	defer listingVar.Delete(idx)
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
@@ -204,10 +206,10 @@ func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *I
 	return children
 }
 
-type stringer string
+type jsonString string
 
-func (s stringer) String() string {
-	return string(s)
+func (s jsonString) String() string {
+	return `"` + string(s) + `"`
 }
 
 // ContentsFunc is the type of the function that is called to consume the results
@@ -247,7 +249,7 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	// create and prime the concurrency limiter for walking directories.
 	walkerLimitCh := make(chan string, w.opts.concurrency*2)
 	for i := 0; i < cap(walkerLimitCh); i++ {
-		walkerLimitCh <- strconv.Itoa(i)
+		walkerLimitCh <- fmt.Sprintf("%04d", i)
 	}
 
 	var wg sync.WaitGroup
@@ -297,8 +299,12 @@ func (w *Walker) walkChildren(ctx context.Context, path string, children []Info,
 			return
 		default:
 			// no concurreny is available fallback to sync.
-			w.walker(ctx, idx, w.fs.Join(path, child.Name), limitCh)
+			p := w.fs.Join(path, child.Name)
+			now := time.Now().Format(time.Stamp)
+			syncVar.Set(p, jsonString(now))
+			w.walker(ctx, now, p, limitCh)
 			wg.Done()
+			syncVar.Delete(p)
 			continue
 		}
 		go func() {
@@ -317,7 +323,8 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 	case <-ctx.Done():
 		return
 	}
-	walkingVar.Set(idx, stringer(path))
+	walkingVar.Set(idx, jsonString(path))
+	defer walkingVar.Delete(idx)
 	info, err := w.fs.Stat(ctx, path)
 	stop, children, err := w.prefixFn(ctx, path, &info, err)
 	w.recordError(path, "stat", err)
