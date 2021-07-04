@@ -45,14 +45,14 @@ func (sc *statsCollection) loadOrInit(db *pudge.Db, key string) error {
 	} {
 		kv := kv
 		g.Go(func() error {
-			dbStatus.Set(kv.key, stringer("loading"))
+			dbStatus.Set(kv.key, jsonString("loading"))
 			if err := db.Get(kv.key, kv.val); err != nil {
 				if err != pudge.ErrKeyNotFound {
-					dbStatus.Set(kv.key, stringer("loaded: error "+err.Error()))
+					dbStatus.Set(kv.key, jsonString("loaded: error "+err.Error()))
 					return err
 				}
 			}
-			dbStatus.Set(kv.key, stringer("loaded"))
+			dbStatus.Set(kv.key, jsonString("loaded"))
 			return nil
 		})
 	}
