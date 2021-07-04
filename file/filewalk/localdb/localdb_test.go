@@ -167,6 +167,16 @@ func TestDBLocking(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ndbd, err := localdb.Open(ctx, dbDir,
+		[]filewalk.DatabaseOption{},
+		localdb.LockStatusDelay(time.Millisecond*100),
+		localdb.TryLock(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ndbd.Close(ctx)
+
 	dbr1, err := localdb.Open(ctx, dbDir,
 		[]filewalk.DatabaseOption{filewalk.ReadOnly()},
 		localdb.LockStatusDelay(time.Millisecond*100),
