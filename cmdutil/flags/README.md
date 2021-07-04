@@ -103,6 +103,52 @@ pointer is not supported.
 
 
 ## Types
+### Type ColonRangeSpec
+```go
+type ColonRangeSpec struct {
+	RangeSpec
+}
+```
+ColonRangeSpec is like RangeSpec except that : is the separator.
+
+### Methods
+
+```go
+func (crs *ColonRangeSpec) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (crs *ColonRangeSpec) String() string
+```
+String implements flag.Value.
+
+
+
+
+### Type ColonRangeSpecs
+```go
+type ColonRangeSpecs []ColonRangeSpec
+```
+ColonRangeSpecs represents comma separated list of ColonRangeSpec's.
+
+### Methods
+
+```go
+func (crs *ColonRangeSpecs) Set(val string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (crs *ColonRangeSpecs) String() string
+```
+String implements flag.Value.
+
+
+
+
 ### Type Commas
 ```go
 type Commas struct {
@@ -125,6 +171,102 @@ Set implements flag.Value.
 func (c *Commas) String() string
 ```
 String inplements flag.Value.
+
+
+
+
+### Type ErrInvalidRange
+```go
+type ErrInvalidRange struct {
+	// contains filtered or unexported fields
+}
+```
+ErrInvalidRange represents the error generated for an invalid range. Use
+errors.Is to test for it.
+
+### Methods
+
+```go
+func (ire *ErrInvalidRange) Error() string
+```
+Error implements error.
+
+
+```go
+func (ire ErrInvalidRange) Is(target error) bool
+```
+Is implements errors.Is.
+
+
+
+
+### Type ErrMap
+```go
+type ErrMap struct {
+	// contains filtered or unexported fields
+}
+```
+
+### Methods
+
+```go
+func (me *ErrMap) Error() string
+```
+Error implements error.
+
+
+```go
+func (me ErrMap) Is(target error) bool
+```
+Is implements errors.Is.
+
+
+
+
+### Type IntRangeSpec
+```go
+type IntRangeSpec struct {
+	From, To      int
+	RelativeToEnd bool
+	ExtendsToEnd  bool
+}
+```
+IntRangeSpec represents ranges whose values must be integers.
+
+### Methods
+
+```go
+func (ir *IntRangeSpec) Set(val string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (ir *IntRangeSpec) String() string
+```
+String implements flag.Value.
+
+
+
+
+### Type IntRangeSpecs
+```go
+type IntRangeSpecs []IntRangeSpec
+```
+IntRangeSpecs represents a comma separated list of IntRangeSpec's.
+
+### Methods
+
+```go
+func (irs *IntRangeSpecs) Set(val string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (irs *IntRangeSpecs) String() string
+```
+String implements flag.Value.
 
 
 
@@ -185,6 +327,82 @@ func (ef OneOf) Validate(value string, values ...string) error
 ```
 Validate ensures that the instance of OneOf has one of the specified set
 values.
+
+
+
+
+### Type RangeSpec
+```go
+type RangeSpec struct {
+	From, To      string
+	RelativeToEnd bool
+	ExtendsToEnd  bool
+}
+```
+RangeSpec represents a specification for a 'range' such as that used to
+specify pages to be printed or table columns to be accessed. It implements
+flag.Value.
+
+Each range is of the general form:
+
+    <from>[-<to>] | -<from>[-<to>|-] | <from>-
+
+which allows for the following:
+
+    <from>        : a single item
+    <from>-<to>   : a range of one or more items
+    -<from>       : a single item, relative to the end
+    -<from>-<to>  : a range, whose start and end are indexed relative the end
+    -<from>-      : a range, relative to the end that extends to the end
+    <from>-       : a range that extends to the end
+
+Note that the interpretation of these ranges is left to users of this type.
+For example, intepreting these values as pages in a document could lead to
+the following:
+
+     3      : page 3
+    2-4     : pages 2 through 4
+    4-2     : pages 4 through 2
+     -2     : second to last page
+    -4-2    : fourth from last to second from last
+    -2-4    : second from last to fourth from last
+    -2-     : second to last and all following pages
+    2-      : page 2 and all following pages.
+
+### Methods
+
+```go
+func (rs *RangeSpec) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (rs RangeSpec) String() string
+```
+String implements flag.Value.
+
+
+
+
+### Type RangeSpecs
+```go
+type RangeSpecs []RangeSpec
+```
+RangeSpecs represents comma separated list of RangeSpec's.
+
+### Methods
+
+```go
+func (rs *RangeSpecs) Set(val string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (rs *RangeSpecs) String() string
+```
+String implements flag.Value.
 
 
 
@@ -258,6 +476,10 @@ to RegisterFlagsInStructWithSetMap.
 
 ## Examples
 ### [ExampleRegisterFlagsInStruct](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-RegisterFlagsInStruct)
+
+### [ExampleMap](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-Map)
+
+### [ExampleRangeSpecs](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-RangeSpecs)
 
 
 

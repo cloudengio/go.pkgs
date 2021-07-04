@@ -46,6 +46,21 @@ func (db *Database) Close(ctx context.Context) error
 
 
 ```go
+func (db *Database) CompactAndClose(ctx context.Context) error
+```
+
+
+```go
+func (db *Database) Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error)
+```
+
+
+```go
+func (db *Database) DeleteErrors(ctx context.Context, prefixes []string) (int, error)
+```
+
+
+```go
 func (db *Database) Get(ctx context.Context, prefix string, info *filewalk.PrefixInfo) (bool, error)
 ```
 
@@ -72,6 +87,11 @@ func (db *Database) Save(ctx context.Context) error
 
 ```go
 func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.PrefixInfo) error
+```
+
+
+```go
+func (db *Database) Stats() ([]filewalk.DatabaseStats, error)
 ```
 
 
@@ -170,13 +190,6 @@ Scan implements filewalk.DatabaseScanner.
 
 
 
-
-
-
-
-### TODO
-- cnicolaou: build a lexicon of layout and user info
-to save space on disk.
 
 
 

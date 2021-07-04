@@ -29,6 +29,12 @@ of the predefined named profiles from runtime/pprof are supported. If a new,
 custom profile is requested, then the caller must obtain a reference to it
 via pprof.Lookup and the create profiling records appropriately.
 
+### Func StartFromSpecs
+```go
+func StartFromSpecs(specs ...ProfileSpec) (func(), error)
+```
+StartFromSpecs starts all of the specified profiles.
+
 
 
 ## Types

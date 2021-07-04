@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 package reloadfs_test
 
 import (
@@ -195,7 +199,7 @@ func TestModTime(t *testing.T) {
 	// Same size, but considered too old.
 	out.Reset()
 	dynamic.Open("world.txt")
-	if got, want := out.String(), fmt.Sprintf("reused: world.txt -> testdata/world.txt: <nil>"); got != want {
+	if got, want := out.String(), "reused: world.txt -> testdata/world.txt: <nil>"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

@@ -1,3 +1,7 @@
+// Copyright 2020 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package reloadfs provides an implemtation of fs.FS whose contents
 // can be selectively reloaded from disk. This allows for default contents
 // to be embedded in a binary, typically via go:embed, to be overridden at
