@@ -49,7 +49,7 @@
 //      ctx := context.Background()
 //      fs := subcmd.NewFlagSet()
 //      fs.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
-//      // Subcommands are added using the subcmd.WithSubcommands option.
+//      // Subcommands are created using subcmd.NewCommandLevel.
 //      cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
 //      cmd.Document("print an integer range")
 //      cmdSet := subcmd.NewCommandSet(cmd)

@@ -24,7 +24,7 @@ import (
 	"github.com/cosnicolaou/pudge"
 )
 
-var dbStatus = expvar.NewMap("pudgedb")
+var dbStatus = expvar.NewMap("cloudeng.io/file/filewalk.pudgedb")
 
 const (
 	globalStatsKey   = "__globalStats"
@@ -223,10 +223,10 @@ func (db *Database) unlock() error {
 	return err
 }
 
-type stringer string
+type jsonString string
 
-func (s stringer) String() string {
-	return string(s)
+func (s jsonString) String() string {
+	return `"` + string(s) + `"`
 }
 
 func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, opts ...DatabaseOption) (filewalk.Database, error) {
@@ -279,13 +279,13 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		dbp := dbg.dbp
 		gdb.Go(func() error {
 			var err error
-			dbStatus.Set(name, stringer("opening"))
+			dbStatus.Set(name, jsonString("opening"))
 			*dbp, err = pudge.Open(name, &cfg)
 			if err != nil {
-				dbStatus.Set(name, stringer("opened: failed: "+err.Error()))
+				dbStatus.Set(name, jsonString("opened: failed: "+err.Error()))
 				return err
 			}
-			dbStatus.Set(name, stringer("opened"))
+			dbStatus.Set(name, jsonString("opened"))
 			return nil
 		})
 	}
