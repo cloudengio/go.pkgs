@@ -19,7 +19,7 @@ test:
 lint:
 	for pkg in $(SUBMODULES); do \
 	cd $$pkg; \
-       		golangci-lint run -verbose ./...; \
+       		golangci-lint run ./...; \
        		cd ..; \
        	done
 
@@ -29,7 +29,7 @@ pr:
 		go run cloudeng.io/go/cmd/gousage --overwrite ./...; \
 		go run cloudeng.io/go/cmd/goannotate --config=../copyright-annotation.yaml --annotation=cloudeng-copyright ./...; \
 		go run cloudeng.io/go/cmd/gomarkdown --overwrite --circleci=cloudengio/go.gotools --goreportcard ./...; \
-		golangci-lint run -verbose ./...; \
+		golangci-lint run ./...; \
 		$(RM) go.sum; \
 		go mod tidy; \
 		cd ..; \

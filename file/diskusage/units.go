@@ -4,8 +4,10 @@
 
 package diskusage
 
+// Base2Bytes represents a number of bytes in base 2.
 type Base2Bytes int64
 
+// Values for Base2Bytes.
 const (
 	KiB Base2Bytes = 1024
 	MiB Base2Bytes = KiB * 1024
@@ -15,8 +17,10 @@ const (
 	EiB Base2Bytes = PiB * 1024
 )
 
+// Base2Bytes represents a number of bytes in base 10.
 type DecimalBytes int64
 
+// Values for DecimalBytes.
 const (
 	KB DecimalBytes = 1000
 	MB DecimalBytes = KB * 1000
