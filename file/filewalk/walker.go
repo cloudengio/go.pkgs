@@ -86,6 +86,7 @@ func New(filesystem Filesystem, opts ...Option) *Walker {
 // set of UNIX-style permissions.
 type FileMode uint32
 
+// Valuese for FileMode.
 const (
 	ModePrefix FileMode = FileMode(os.ModeDir)
 	ModeLink   FileMode = FileMode(os.ModeSymlink)

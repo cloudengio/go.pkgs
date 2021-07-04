@@ -28,7 +28,7 @@ const (
 
 // DebounceDuration is the time period during which subsequent identical
 // signals are ignored.
-var DebounceDuration time.Duration = time.Second
+var DebounceDuration = time.Second
 
 // Handler represents a signal handler that can be used to wait for signal
 // reception or context cancelation as per NotifyWithCancel. In addition

@@ -12,8 +12,8 @@ import (
 // EditOp represents an edit operation.
 type EditOp int
 
+// Values for EditOP.
 const (
-	// EditOp values are as follows:
 	Insert EditOp = iota
 	Delete
 	Identical
