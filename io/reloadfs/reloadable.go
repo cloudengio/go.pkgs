@@ -7,6 +7,7 @@ package reloadfs
 
 import (
 	"io/fs"
+	"log"
 	"os"
 	"path"
 	"sync"
@@ -57,6 +58,8 @@ func (r *reloadable) statEmbedded(name string) (fs.FileInfo, error) {
 	return fi, nil
 }
 
+const debug = false
+
 func (r *reloadable) reload(name string) (bool, bool, error) {
 	ondisk, err := os.Stat(r.reloadablePath(name))
 	if err == nil {
@@ -69,6 +72,12 @@ func (r *reloadable) reload(name string) (bool, bool, error) {
 				return true, true, nil
 			}
 			return false, true, os.ErrNotExist
+		}
+		if debug {
+			log.Printf("reload: %v: %v -> %v\n", name, r.embeddedPath(name), r.reloadablePath(name))
+			log.Printf("reload: embedded: %v %v", inram.Size(), r.reloadAfter)
+			log.Printf("reload: ondisk: %v %v", ondisk.Size(), ondisk.ModTime())
+			log.Printf("reload: ondisk: %v", r.embeddedIsStale(inram, ondisk))
 		}
 		return r.embeddedIsStale(inram, ondisk), false, nil
 	}
@@ -193,7 +202,8 @@ func (a Action) String() string {
 //
 // Currently files are reloaded when Open'ed, in the future support may be
 // provided to watch for changes and reload (or update metdata) those
-// ahead of time.
+// ahead of time. Reloaded files are not cached and will be reloaded on
+// every access.
 func New(root, prefix string, embedded fs.FS, opts ...ReloadableOption) fs.FS {
 	r := &reloadable{
 		embedded:    embedded,
