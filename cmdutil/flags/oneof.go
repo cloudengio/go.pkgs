@@ -17,7 +17,8 @@ type OneOf string
 // Validate ensures that the instance of OneOf has one of the specified set
 // values.
 func (ef OneOf) Validate(value string, values ...string) error {
-	allowed := append(values, value)
+	allowed := append([]string{}, values...)
+	allowed = append(allowed, value)
 	for _, val := range allowed {
 		if string(ef) == val {
 			return nil

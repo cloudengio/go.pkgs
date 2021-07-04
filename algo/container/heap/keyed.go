@@ -36,6 +36,7 @@ type KeyedInt64 struct {
 // order.
 type Order bool
 
+// Values for Order.
 const (
 	Ascending  Order = false
 	Descending Order = true
