@@ -87,6 +87,9 @@ func TestPrintf(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := fmt.Sprintf("%#v", err), `errors/caller_test.go:78: &os.PathError{Op:"open", Path:"/a/b", Err:(*errors.errorString)`; !strings.HasPrefix(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+		// go 1.16 changes the package that generates this error.
+		if got, want := fmt.Sprintf("%#v", err), `errors/caller_test.go:78: &fs.PathError{Op:"open", Path:"/a/b", Err:(*errors.errorString)`; !strings.HasPrefix(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }

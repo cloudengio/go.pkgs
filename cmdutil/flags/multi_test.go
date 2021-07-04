@@ -7,6 +7,7 @@ package flags_test
 import (
 	"flag"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -30,6 +31,10 @@ func TestMulti(t *testing.T) {
 	err := fs.Parse([]string{"-x=a", "-x=b"})
 	if err == nil || !strings.Contains(err.Error(), "oops") {
 		t.Fatalf("unexpected or missing error: %v", err)
+	}
+
+	if got, want := ms.Get().([]string), []string{"a", "b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 

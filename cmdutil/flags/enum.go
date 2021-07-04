@@ -19,10 +19,25 @@ type Map struct {
 	values map[string]interface{}
 }
 
+type ErrMap struct {
+	msg string
+}
+
+// Error implements error.
+func (me *ErrMap) Error() string {
+	return me.msg
+}
+
+// Is implements errors.Is.
+func (me ErrMap) Is(target error) bool {
+	_, ok := target.(*ErrMap)
+	return ok
+}
+
 // Set implements flag.Value.
 func (ef *Map) Set(v string) error {
 	if ef.values == nil {
-		return fmt.Errorf("no values have been registered")
+		return &ErrMap{msg: "no values have been registered"}
 	}
 	tmp, ok := ef.values[v]
 	if !ok {
@@ -31,7 +46,7 @@ func (ef *Map) Set(v string) error {
 			vals = append(vals, k)
 		}
 		sort.Strings(vals)
-		return fmt.Errorf("%v not one of %v", v, strings.Join(vals, ", "))
+		return &ErrMap{msg: fmt.Sprintf("%v not one of %v", v, strings.Join(vals, ", "))}
 	}
 	ef.value = tmp
 	return nil

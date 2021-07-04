@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"cloudeng.io/file/filewalk"
-	"github.com/recoilme/pudge"
+	"github.com/cosnicolaou/pudge"
 )
 
 // Scanner allows for the contents of an instance of Database to be
@@ -23,6 +23,7 @@ type Scanner struct {
 
 	// scan state.
 	more            bool
+	empty           bool
 	offset          int
 	currentPrefix   string
 	currentInfo     filewalk.PrefixInfo
@@ -42,7 +43,7 @@ func NewScanner(db *Database, prefix string, limit int, ifcOpts []filewalk.Scann
 		prefix: []byte(prefix),
 		nItems: limit,
 	}
-	sc.ifcOpts.ScanLimit = 1000
+	sc.ifcOpts.ScanLimit = 100000
 	for _, fn := range ifcOpts {
 		fn(&sc.ifcOpts)
 	}
@@ -56,11 +57,23 @@ func NewScanner(db *Database, prefix string, limit int, ifcOpts []filewalk.Scann
 		pi := &filewalk.PrefixInfo{}
 		if err := sc.pdb.Get(sc.prefix, pi); err != nil {
 			if err == pudge.ErrKeyNotFound {
-				sc.err = fmt.Errorf("start prefix not found, try removing a trailing / and/or make sure it matches a complete prefix or filename")
+				sc.err = fmt.Errorf("start prefix %v not found, try removing a trailing / and/or make sure it matches a complete prefix or filename", string(sc.prefix))
 			} else {
-				sc.err = err
+				sc.err = fmt.Errorf("start prefix: %v: %v", string(sc.prefix), err)
 			}
 		}
+		return sc
+	}
+	// test for empty database, there appears to be no other way for
+	// pudge to scan an empty database cleanly.
+	first, err := sc.pdb.Keys(nil, 0, 0, !sc.ifcOpts.Descending)
+	if err != nil {
+		sc.err = fmt.Errorf("failed to find first key: %v", err)
+		return sc
+	}
+	if len(first) == 0 {
+		sc.empty = true
+		return sc
 	}
 	return sc
 }
@@ -68,7 +81,7 @@ func NewScanner(db *Database, prefix string, limit int, ifcOpts []filewalk.Scann
 func (sc *Scanner) scanByPrefix(limit int) ([]string, []filewalk.PrefixInfo, error) {
 	keys, err := sc.pdb.KeysByPrefix(sc.prefix, limit, sc.offset, !sc.ifcOpts.Descending)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("scan by prefix: %v: %v", string(sc.prefix), err)
 	}
 	return sc.processKeys(keys)
 }
@@ -76,7 +89,7 @@ func (sc *Scanner) scanByPrefix(limit int) ([]string, []filewalk.PrefixInfo, err
 func (sc *Scanner) scanByRange(limit int) ([]string, []filewalk.PrefixInfo, error) {
 	keys, err := sc.pdb.Keys(sc.prefix, limit, sc.offset, !sc.ifcOpts.Descending)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("scan by range: %v: %v", string(sc.prefix), err)
 	}
 	return sc.processKeys(keys)
 }
@@ -146,7 +159,7 @@ func (sc *Scanner) fetch() (bool, error) {
 
 // Scan implements filewalk.DatabaseScanner.
 func (sc *Scanner) Scan(ctx context.Context) bool {
-	if sc.err != nil {
+	if sc.err != nil || sc.empty {
 		return false
 	}
 	select {

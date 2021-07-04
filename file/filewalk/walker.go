@@ -12,15 +12,20 @@ package filewalk
 
 import (
 	"context"
+	"expvar"
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/sync/errgroup"
 )
+
+var listingVar = expvar.NewMap("filewalk-listing")
+var walkingVar = expvar.NewMap("filewalk-walking")
 
 // Contents represents the contents of the filesystem at the level represented
 // by Path.
@@ -168,18 +173,19 @@ func (w *Walker) recordError(path, op string, err error) error {
 	return err
 }
 
-func (w *Walker) listLevel(ctx context.Context, req listRequest) []Info {
+func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *Info) []Info {
+	listingVar.Set(idx, stringer(path))
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
 		w.fs.List(ctx, path, ch)
 		close(ch)
-	}(req.path)
+	}(path)
 
-	children, err := w.contentsFn(ctx, req.path, req.info, ch)
+	children, err := w.contentsFn(ctx, path, info, ch)
 
 	if err != nil {
-		w.recordError(req.path, "fileFunc", err)
+		w.recordError(path, "fileFunc", err)
 		return nil
 	}
 
@@ -198,23 +204,10 @@ func (w *Walker) listLevel(ctx context.Context, req listRequest) []Info {
 	return children
 }
 
-type listRequest struct {
-	path    string
-	info    *Info
-	childCh chan<- []Info
-}
+type stringer string
 
-func (w *Walker) lister(ctx context.Context, workCh chan listRequest) {
-	for work := range workCh {
-		children := w.listLevel(ctx, work)
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		work.childCh <- children
-		close(work.childCh)
-	}
+func (s stringer) String() string {
+	return string(s)
 }
 
 // ContentsFunc is the type of the function that is called to consume the results
@@ -251,25 +244,22 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	w.prefixFn = prefixFn
 	w.contentsFn = contentsFn
 
-	requestCh := make(chan listRequest, w.opts.concurrency*2)
-
-	for i := 0; i < w.opts.concurrency; i++ {
-		listers.Go(func() error {
-			w.lister(ctx, requestCh)
-			return nil
-		})
-	}
-
-	for _, root := range roots {
-		root := root
-		walkers.Go(func() error {
-			w.walker(ctx, root, requestCh)
-			return nil
-		})
+	// create and prime the concurrency limiter for walking directories.
+	walkerLimitCh := make(chan string, w.opts.concurrency*2)
+	for i := 0; i < cap(walkerLimitCh); i++ {
+		walkerLimitCh <- strconv.Itoa(i)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
+
+	for _, root := range roots {
+		root := root
+		walkers.Go(func() error {
+			w.walker(ctx, <-walkerLimitCh, root, walkerLimitCh)
+			return nil
+		})
+	}
 
 	go func() {
 		w.errs.Append(listers.Wait())
@@ -278,7 +268,6 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 
 	go func() {
 		w.errs.Append(walkers.Wait())
-		close(requestCh)
 		wg.Done()
 	}()
 
@@ -296,29 +285,51 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	return w.errs.Err()
 }
 
-func (w *Walker) walker(ctx context.Context, path string, requestCh chan<- listRequest) {
+func (w *Walker) walkChildren(ctx context.Context, path string, children []Info, limitCh chan string) {
+	var wg sync.WaitGroup
+	wg.Add(len(children))
+	for _, child := range children {
+		child := child
+		var idx string
+		select {
+		case idx = <-limitCh:
+		case <-ctx.Done():
+			return
+		default:
+			// no concurreny is available fallback to sync.
+			w.walker(ctx, idx, w.fs.Join(path, child.Name), limitCh)
+			wg.Done()
+			continue
+		}
+		go func() {
+			w.walker(ctx, idx, w.fs.Join(path, child.Name), limitCh)
+			wg.Done()
+			limitCh <- idx
+		}()
+	}
+	wg.Wait()
+
+}
+
+func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh chan string) {
+	select {
+	default:
+	case <-ctx.Done():
+		return
+	}
+	walkingVar.Set(idx, stringer(path))
 	info, err := w.fs.Stat(ctx, path)
-	// Only call prefixFn if the stat fails and there is no prospect
-	// of listing its contents.
 	stop, children, err := w.prefixFn(ctx, path, &info, err)
 	w.recordError(path, "stat", err)
 	if stop {
 		return
 	}
 	if len(children) > 0 {
-		for _, child := range children {
-			w.walker(ctx, w.fs.Join(path, child.Name), requestCh)
-		}
+		w.walkChildren(ctx, path, children, limitCh)
 		return
 	}
-	ch := make(chan []Info, 1)
-	requestCh <- listRequest{path, &info, ch}
-	select {
-	case children := <-ch:
-		for _, child := range children {
-			w.walker(ctx, w.fs.Join(path, child.Name), requestCh)
-		}
-	case <-ctx.Done():
-		return
+	children = w.listLevel(ctx, idx, path, &info)
+	if len(children) > 0 {
+		w.walkChildren(ctx, path, children, limitCh)
 	}
 }

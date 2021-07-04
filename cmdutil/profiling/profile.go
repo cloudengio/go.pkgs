@@ -115,3 +115,23 @@ func Start(name, filename string) (func() error, error) {
 		return errs.Err()
 	}, nil
 }
+
+// StartFromSpecs starts all of the specified profiles.
+func StartFromSpecs(specs ...ProfileSpec) (func(), error) {
+	deferedSaves := []func() error{}
+	for _, profile := range specs {
+		save, err := Start(profile.Name, profile.Filename)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("profiling: %v %v\n", profile.Name, profile.Filename)
+		deferedSaves = append(deferedSaves, save)
+	}
+	return func() {
+		for _, save := range deferedSaves {
+			if err := save(); err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+			}
+		}
+	}, nil
+}
