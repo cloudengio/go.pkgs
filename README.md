@@ -10,6 +10,7 @@ versioned independently.
 - [debug](debug/README.md): support for instrumenting code to trace execution and communication.
 - [errors](errors/README.md): support for working with go errors post go 1.13.
 - [file](file/README.md): support for working with files and filesystems, including cloud storage systems.
+- [io]: I/O related packages.
 - [os](os/README.md): os related and/or specific packages.
 - [path](path/README.md): support for working with paths and filenames, including cloud storage systems.
 - [sync](sync/README.md): easy to use patterns for working with goroutines and concurrency.
