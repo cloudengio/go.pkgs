@@ -21,8 +21,16 @@ type DevServer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	filter io.WriteCloser
+	addrRE *regexp.Regexp
 	ch     chan []byte
 	cmd    *exec.Cmd
+}
+
+// DevServerFlags represents the flags commonly used when using
+// webpack dev servers.
+type DevServerFlags struct {
+	WebpackDir    string `subcmd:"webpack-dir,,'set to a directory containing a webpack configuration with the webpack dev server configured. This dev server will then be started and requests proxied to it.'"`
+	WebpackServer string `subcmd:"webpack-server,,set to the url of an already running webpack dev server to which requests will be proxied."`
 }
 
 // NewDevServer creates a new instance of DevServer. Note, that the
@@ -50,13 +58,28 @@ func SetSdoutStderr(stdout, stderr io.Writer) DevServerOption {
 	}
 }
 
+// AddrRegularExpression specifies the regular expression to use for
+// determining the running server's address. The default RE is:
+// 'Project is running at'. However, some configurations may use a different
+// output.
+func AddrRegularExpression(re *regexp.Regexp) DevServerOption {
+	return func(ds *DevServer) {
+		ds.addrRE = re
+	}
+}
+
 // DevServerOption represents an option to Configure.
 type DevServerOption func(ds *DevServer)
+
+var hostRE = regexp.MustCompile("Project is running at")
 
 // Configure applies options and mus be called before Start.
 func (ds *DevServer) Configure(opts ...DevServerOption) {
 	for _, fn := range opts {
 		fn(ds)
+	}
+	if ds.addrRE == nil {
+		ds.addrRE = hostRE
 	}
 }
 
@@ -83,12 +106,10 @@ func (ds *DevServer) WaitForURL(ctx context.Context) (*url.URL, error) {
 	}
 }
 
-var hostRE = regexp.MustCompile("Project is running at")
-
 // Start starts the dev server.
 func (ds *DevServer) Start() error {
 	ds.ch = make(chan []byte, 1)
-	ds.filter = executil.NewLineFilter(ds.cmd.Stdout, hostRE, ds.ch)
+	ds.filter = executil.NewLineFilter(ds.cmd.Stdout, ds.addrRE, ds.ch)
 	ds.cmd.Stdout = ds.filter
 	return ds.cmd.Start()
 }

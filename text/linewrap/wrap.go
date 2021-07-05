@@ -35,31 +35,47 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	out := &strings.Builder{}
 	out.WriteString(initialPad)
 	offset := len(pad)
-	words := bufio.NewScanner(bytes.NewBufferString(text))
-	words.Split(bufio.ScanWords)
+	lines := bufio.NewScanner(bytes.NewBufferString(text))
 	newLine := true
-	for words.Scan() {
-		word := words.Text()
-		displayWidth := 1
-		for range word {
-			displayWidth++
+	nBlankLines := 0
+	for lines.Scan() {
+		words := bufio.NewScanner(bytes.NewBufferString(lines.Text()))
+		words.Split(bufio.ScanWords)
+		blankLine := true
+		for words.Scan() {
+			word := words.Text()
+			blankLine = false
+			displayWidth := 1
+			for range word {
+				displayWidth++
+			}
+			// Very simple 'jagginess' prevention, don't break the line
+			// until doing so is worse than not doing so.
+			remaining := width - offset
+			overage := offset + displayWidth - width
+			if (offset+displayWidth > width) && (overage > remaining) {
+				out.WriteString("\n")
+				out.WriteString(pad)
+				offset = len(pad)
+				newLine = true
+			}
+			if !newLine {
+				out.WriteRune(' ')
+			}
+			newLine = false
+			offset += displayWidth
+			out.WriteString(word)
 		}
-		// Very simple 'jagginess' prevention, don't break the line
-		// until doing so is worse than not doing so.
-		remaining := width - offset
-		overage := offset + displayWidth - width
-		if (offset+displayWidth > width) && (overage > remaining) {
-			out.WriteString("\n")
-			out.WriteString(pad)
-			offset = len(pad)
-			newLine = true
+		if blankLine {
+			nBlankLines++
+			if nBlankLines == 1 {
+				out.WriteString("\n\n")
+				out.WriteString(initialPad)
+				offset = len(pad)
+			}
+		} else {
+			nBlankLines = 0
 		}
-		if !newLine {
-			out.WriteRune(' ')
-		}
-		newLine = false
-		offset += displayWidth
-		out.WriteString(word)
 	}
 	return out.String()
 }

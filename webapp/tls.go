@@ -5,6 +5,7 @@
 package webapp
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -18,6 +19,8 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"cloudeng.io/cmdutil/subcmd"
 )
 
 type selfSignedCertOptions struct {
@@ -93,9 +96,9 @@ func (opts *selfSignedCertOptions) setDefaults() error {
 
 // NewSelfSignedCert creates a self signed certificate. Default values for
 // the supported options are:
-//   - an rsa 4096 bit private key will be geenrated and used.
+//   - an rsa 4096 bit private key will be generated and used.
 //   - "localhost" and "127.0.0.1" are used for the DNS and IP addresses
-//     used for the certificate.
+//     included in the certificate.
 //   - certificates are valid from time.Now() and for 5 days.
 //   - the organization is 'cloudeng llc'.
 func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) error {
@@ -206,4 +209,26 @@ func allIPS() []string {
 		}
 	}
 	return all
+}
+
+// selfSignedCertFlags represents the flags for creating a self signed certificate
+// as used by the command returned by SelfSignedCertCommand.
+type selfSignedCertFlags struct {
+	CertificateFile string `subcmd:"ssl-cert,localhost.crt,ssl certificate file"`
+	KeyFile         string `subcmd:"ssl-key,localhost.key,ssl private key file"`
+}
+
+func SelfSignedCertCommand(name string) *subcmd.Command {
+	certFlagSet := subcmd.MustRegisterFlagStruct(&selfSignedCertFlags{}, nil, nil)
+	certCmd := subcmd.NewCommand(name, certFlagSet, certCmd, subcmd.ExactlyNumArguments(0))
+	certCmd.Document(`create a self signed certificate`)
+	return certCmd
+}
+
+func certCmd(ctx context.Context, values interface{}, args []string) error {
+	cl := values.(*selfSignedCertFlags)
+	return NewSelfSignedCert(cl.CertificateFile,
+		cl.KeyFile,
+		CertAllIPAddresses(),
+	)
 }

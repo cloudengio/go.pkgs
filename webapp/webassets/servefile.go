@@ -11,6 +11,8 @@ import (
 	"os"
 )
 
+// ServeFile writes the specified file from the supplied fs.FS returning
+// to the supplied writer, returning an appropriate http status code.
 func ServeFile(wr io.Writer, fsys fs.FS, name string) (int, error) {
 	f, err := fsys.Open(name)
 	if err != nil {

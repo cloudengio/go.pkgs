@@ -60,6 +60,17 @@ that specifies the URL it is listening on.
 
 
 
+### Type DevServerFlags
+```go
+type DevServerFlags struct {
+	WebpackDir    string `subcmd:"webpack-dir,,'set to a directory containing a webpack configuration with the webpack dev server configured. This dev server will then be started and requests proxied to it.'"`
+	WebpackServer string `subcmd:"webpack-server,,set to the url of an already running webpack dev server to which requests will be proxied."`
+}
+```
+DevServerFlags represents the flags commonly used when using webpack dev
+servers.
+
+
 ### Type DevServerOption
 ```go
 type DevServerOption func(ds *DevServer)
@@ -67,6 +78,14 @@ type DevServerOption func(ds *DevServer)
 DevServerOption represents an option to Configure.
 
 ### Functions
+
+```go
+func AddrRegularExpression(re *regexp.Regexp) DevServerOption
+```
+AddrRegularExpression specifies the regular expression to use for
+determining the running server's address. The default RE is: 'Project is
+running at'. However, some configurations may use a different output.
+
 
 ```go
 func SetSdoutStderr(stdout, stderr io.Writer) DevServerOption

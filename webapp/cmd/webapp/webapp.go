@@ -87,7 +87,7 @@ func main() {
 }
 
 func prodServe(ctx context.Context, values interface{}, args []string) error {
-	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*ProdServerFlags)
 	router := httprouter.New()
@@ -113,7 +113,7 @@ func prodServe(ctx context.Context, values interface{}, args []string) error {
 }
 
 func devServe(ctx context.Context, values interface{}, args []string) error {
-	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*DevServerFlags)
 	router := httprouter.New()
@@ -158,6 +158,7 @@ func configureAPIEndpoints(router *httprouter.Router) {
 		fmt.Fprintln(w, "hello")
 	})
 }
+
 func serveIndexHTML(fsys fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		code, err := webassets.ServeFile(w, fsys, "index.html")

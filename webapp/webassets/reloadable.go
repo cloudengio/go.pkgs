@@ -7,10 +7,43 @@ package webassets
 import (
 	"io/fs"
 	"log"
+	"os"
 	"time"
 
 	"cloudeng.io/io/reloadfs"
 )
+
+// AssetsFlags represents the flags used to control loading of
+// assets from the local filesystem to override those original embedded in
+// the application binary.
+type AssetsFlags struct {
+	ReloadEnable    bool   `subcmd:"reload-enable,false,'if set, newer local filesystem versions of embedded asset files will be used'"`
+	ReloadNew       bool   `subcmd:"reload-new-files,true,'if set, files that only exist on the local filesystem may be used'"`
+	ReloadRoot      string `subcmd:"reload-root,$PWD,'the filesystem location that contains assets to be used in preference to embedded ones. This is generally set to the directory that the application was built in to allow for updated versions of the original embedded assets to be used. It defaults to the current directory. For external/production use this will generally refer to a different directory.'"`
+	ReloadLogging   bool   `subcmd:"reload-logging,false,set to enable logging"`
+	ReloadDebugging bool   `subcmd:"reload-debugging,false,set to enable debug logging"`
+}
+
+// OptionsFromFlags parses AssetsFlags to determine the options to be passed to
+// NewAssets()
+func OptionsFromFlags(rf *AssetsFlags) []AssetsOption {
+	if !rf.ReloadEnable {
+		return nil
+	}
+	var opts []AssetsOption
+	root := rf.ReloadRoot
+	if len(root) == 0 {
+		root, _ = os.Getwd()
+	}
+	opts = append(opts, EnableReloading(root, time.Now(), rf.ReloadNew))
+	if rf.ReloadLogging {
+		opts = append(opts, EnableLogging())
+	}
+	if rf.ReloadDebugging {
+		opts = append(opts, EnableDebugging())
+	}
+	return opts
+}
 
 type assets struct {
 	fs.FS
@@ -18,6 +51,7 @@ type assets struct {
 	reloadAfter time.Time
 	reloadFrom  string
 	loadNew     bool
+	debug       bool
 }
 
 // AssetsOption represents an option to NewAssets.
@@ -27,6 +61,13 @@ type AssetsOption func(a *assets)
 func EnableLogging() AssetsOption {
 	return func(a *assets) {
 		a.logger = fsLogger
+	}
+}
+
+// EnableDebugging enables debug output.
+func EnableDebugging() AssetsOption {
+	return func(a *assets) {
+		a.debug = true
 	}
 }
 
@@ -79,6 +120,7 @@ func NewAssets(prefix string, fsys fs.FS, opts ...AssetsOption) fs.FS {
 		reloadfs.UseLogger(a.logger),
 		reloadfs.ReloadAfter(a.reloadAfter),
 		reloadfs.LoadNewFiles(a.loadNew),
+		reloadfs.DebugOutput(a.debug),
 	)
 	return a
 }

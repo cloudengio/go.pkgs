@@ -27,6 +27,7 @@ type reloadable struct {
 	stat        map[string]fs.FileInfo
 	reloadAfter time.Time
 	loadNew     bool
+	debug       bool
 }
 
 func (r *reloadable) reloadablePath(p string) string {
@@ -62,9 +63,11 @@ func (r *reloadable) statEmbedded(name string) (fs.FileInfo, error) {
 	return fi, nil
 }
 
-const debug = false
-
 func (r *reloadable) reload(name string) (bool, bool, error) {
+	if r.debug {
+		log.Printf("reload: %v: embedded: %v, disk: %v",
+			name, r.embeddedPath(name), r.reloadablePath(name))
+	}
 	ondisk, err := os.Stat(r.reloadablePath(name))
 	if err == nil {
 		inram, err := r.statEmbedded(name)
@@ -73,12 +76,12 @@ func (r *reloadable) reload(name string) (bool, bool, error) {
 				return false, true, err
 			}
 			if r.loadNew {
+				log.Printf("load new....????")
 				return true, true, nil
 			}
 			return false, true, os.ErrNotExist
 		}
-		if debug {
-			log.Printf("reload: %v: %v -> %v\n", name, r.embeddedPath(name), r.reloadablePath(name))
+		if r.debug {
 			log.Printf("reload: embedded: %v %v", inram.Size(), r.reloadAfter)
 			log.Printf("reload: ondisk: %v %v", ondisk.Size(), ondisk.ModTime())
 			log.Printf("reload: ondisk: %v", r.embeddedIsStale(inram, ondisk))
@@ -86,7 +89,13 @@ func (r *reloadable) reload(name string) (bool, bool, error) {
 		return r.embeddedIsStale(inram, ondisk), false, nil
 	}
 	if os.IsNotExist(err) {
+		if r.debug {
+			log.Printf("reload: %v: on disk %v - does not exist on disk\n", name, r.reloadablePath(name))
+		}
 		return false, false, nil
+	}
+	if r.debug {
+		log.Printf("reload: %v: error: %v\n", name, err)
 	}
 	return false, false, err
 }
@@ -153,6 +162,13 @@ func LoadNewFiles(a bool) ReloadableOption {
 func ReloadAfter(t time.Time) ReloadableOption {
 	return func(r *reloadable) {
 		r.reloadAfter = t
+	}
+}
+
+// DebugOutput debug output.
+func DebugOutput(enable bool) ReloadableOption {
+	return func(r *reloadable) {
+		r.debug = enable
 	}
 }
 

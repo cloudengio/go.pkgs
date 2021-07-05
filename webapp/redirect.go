@@ -5,8 +5,11 @@
 package webapp
 
 import (
+	"context"
+	"log"
 	"net"
 	"net/http"
+	"time"
 )
 
 // RedirectToHTTPSHandlerFunc is a http.HandlerFunc that will redirect
@@ -27,4 +30,22 @@ func RedirectToHTTPSHandlerFunc(tlsPort string) http.HandlerFunc {
 		u.Scheme = "https"
 		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 	})
+}
+
+// RedirectPort80 starts an http.Server that will redirect port 80 to
+// the specified supplied https port.
+func RedirectPort80(ctx context.Context, httpsAddr string) error {
+	_, tlsPort, _ := net.SplitHostPort(httpsAddr)
+	redirect := RedirectToHTTPSHandlerFunc(tlsPort)
+	ln, srv, err := NewHTTPServer(":80", redirect)
+	if err != nil {
+		return err
+	}
+	go func() {
+		err := ServeWithShutdown(ctx, ln, srv, time.Minute)
+		if err != nil {
+			log.Printf("failed to shutdown http redirect to tls port %s", tlsPort)
+		}
+	}()
+	return nil
 }

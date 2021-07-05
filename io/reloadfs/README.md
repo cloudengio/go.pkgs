@@ -82,6 +82,12 @@ ReloadableOption represents an option to ReloadableFS.
 ### Functions
 
 ```go
+func DebugOutput(enable bool) ReloadableOption
+```
+DebugOutput debug output.
+
+
+```go
 func LoadNewFiles(a bool) ReloadableOption
 ```
 LoadNewFiles controls whether files that exist only in file system and not
