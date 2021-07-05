@@ -1,5 +1,10 @@
+cloudeng.io/cmdutil v0.0.0-20210704025717-1959c99d30a8/go.mod h1:qkwPnJERmrvxi16/Yz0w666pFNwBFL0Nzspvv9AZ9HQ=
 cloudeng.io/errors v0.0.5 h1:NmCUhMIvWQ/0Ny3cBWplA2RXPcnyNUiMovPe64LgX3A=
 cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
+cloudeng.io/io v0.0.0-20210705212102-ab34f3a7a9fe h1:7vrJKTnGszq21Syzfgw8/07HN9x4rwxpkpdMQ+fqpaQ=
+cloudeng.io/io v0.0.0-20210705212102-ab34f3a7a9fe/go.mod h1:wm8AtJlHkbFNXqh/4cyb8iqAzlBXPzcIpVbKw8/AMd4=
+cloudeng.io/os v0.0.0-20210416232737-f41cdfa1ea0b/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
+cloudeng.io/text v0.0.7/go.mod h1:VPOCvDDUBocQe7rfQDZcyEpScLooZo/6cJs1cM0LOMI=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.5.0 h1:/QaMHBdZ26BB3SSst0Iwl10Epc+xhTquomWX0oZEB6w=

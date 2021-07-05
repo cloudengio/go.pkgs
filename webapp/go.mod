@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20210704025717-1959c99d30a8
-	cloudeng.io/io v0.0.0-00010101000000-000000000000
+	cloudeng.io/io v0.0.0-20210705212102-ab34f3a7a9fe // indirect
 	cloudeng.io/os v0.0.0-20210416232737-f41cdfa1ea0b
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693
