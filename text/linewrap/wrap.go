@@ -38,19 +38,12 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	out.WriteString(initialPad)
 	offset := len(pad)
 	lines := bufio.NewScanner(bytes.NewBufferString(text))
-<<<<<<< HEAD
-	newLine := true
-=======
->>>>>>> master
 	nBlankLines := 0
 	for lines.Scan() {
 		words := bufio.NewScanner(bytes.NewBufferString(lines.Text()))
 		words.Split(bufio.ScanWords)
 		blankLine := true
-<<<<<<< HEAD
-=======
 		newLine := true
->>>>>>> master
 		for words.Scan() {
 			word := words.Text()
 			blankLine = false

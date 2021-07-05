@@ -10,11 +10,3 @@ require (
 	github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
 )
-
-replace cloudeng.io/os => ../os
-
-replace cloudeng.io/io => ../io
-
-replace cloudeng.io/cmdutil => ../cmdutil
-
-replace cloudeng.io/text => ../text
