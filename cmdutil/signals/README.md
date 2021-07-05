@@ -22,7 +22,7 @@ ExitCode = 1
 ## Variables
 ### DebounceDuration
 ```go
-DebounceDuration time.Duration = time.Second
+DebounceDuration = time.Second
 
 ```
 DebounceDuration is the time period during which subsequent identical

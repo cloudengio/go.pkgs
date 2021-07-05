@@ -124,12 +124,12 @@ EditOp represents an edit operation.
 ### Constants
 ### Insert, Delete, Identical
 ```go
-// EditOp values are as follows:
 Insert EditOp = iota
 Delete
 Identical
 
 ```
+Values for EditOP.
 
 
 

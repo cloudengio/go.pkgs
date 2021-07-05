@@ -45,24 +45,47 @@ type Database interface {
 	// associated with that user will be updated in addition to global ones.
 	// Metrics are updated approriately for
 	Set(ctx context.Context, prefix string, info *PrefixInfo) error
+
 	// Get returns the information stored for the specified prefix. It will
 	// return false if the entry does not exist in the database but with
 	// a nil error.
 	Get(ctx context.Context, prefix string, info *PrefixInfo) (bool, error)
+
+	// Delete removes the supplied prefixes from all databases. If recurse
+	// is set then all children of those prefixes will be similarly deleted.
+	Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error)
+
+	// DeleteErrors deletes the errors associated with the specified prefixes.
+	DeleteErrors(ctx context.Context, prefixes []string) (int, error)
+
 	// Save saves the database to persistent storage.
 	Save(ctx context.Context) error
+
 	// Close will first Save and then release resources associated with the database.
 	Close(ctx context.Context) error
+
+	// CompactAndClose will perform any necessary/possible/supported
+	// compaction on the database and close it.
+	CompactAndClose(ctx context.Context) error
+
 	// UserIDs returns the current set of userIDs known to the database.
 	UserIDs(ctx context.Context) ([]string, error)
+
 	// GroupIDs returns the current set of groupIDs known to the database.
 	GroupIDs(ctx context.Context) ([]string, error)
+
 	// Metrics returns the names of the supported metrics.
 	Metrics() []MetricName
+
+	// Stats returns statistics on the database's components.
+	Stats() ([]DatabaseStats, error)
+
 	// Total returns the total (ie. sum) for the requested metric.
 	Total(ctx context.Context, name MetricName, opts ...MetricOption) (int64, error)
+
 	// TopN returns the top-n values for the requested metric.
 	TopN(ctx context.Context, name MetricName, n int, opts ...MetricOption) ([]Metric, error)
+
 	// NewScanner creates a scanner that will start at the specified prefix
 	// and scan at most limit items; a limit of 0 will scan all available
 	// items.
@@ -80,6 +103,12 @@ type DatabaseOption func(o *DatabaseOptions)
 DatabaseOption represent a specific option common to all databases.
 
 ### Functions
+
+```go
+func ErrorsOnly() DatabaseOption
+```
+ErrorsOnly requests that only the errors portion of the database be opened.
+
 
 ```go
 func ReadOnly() DatabaseOption
@@ -100,6 +129,7 @@ ResetStats requests that the database reset its statistics when opened.
 type DatabaseOptions struct {
 	ResetStats bool
 	ReadOnly   bool
+	ErrorsOnly bool
 }
 ```
 DatabaseOptions represents options common to all database implementations.
@@ -115,6 +145,19 @@ type DatabaseScanner interface {
 ```
 DatabaseScanner implements an idiomatic go scanner as created by
 Database.NewScanner.
+
+
+### Type DatabaseStats
+```go
+type DatabaseStats struct {
+	Name        string
+	Description string
+	NumEntries  int64
+	Size        int64
+}
+```
+DatabaseStats represents the statistices for a specific portion of the
+overall database.
 
 
 ### Type Error
@@ -154,6 +197,7 @@ ModeLink FileMode = FileMode(os.ModeSymlink)
 ModePerm FileMode = FileMode(os.ModePerm)
 
 ```
+Valuese for FileMode.
 
 
 
@@ -162,7 +206,7 @@ ModePerm FileMode = FileMode(os.ModePerm)
 ```go
 func (fm FileMode) String() string
 ```
-String implements stringer.
+String implements jsonString.
 
 
 

@@ -11,6 +11,7 @@ import cloudeng.io/file/diskusage
 ```go
 type Base2Bytes int64
 ```
+Base2Bytes represents a number of bytes in base 2.
 
 ### Constants
 ### KiB, MiB, GiB, TiB, PiB, EiB
@@ -23,6 +24,7 @@ PiB Base2Bytes = TiB * 1024
 EiB Base2Bytes = PiB * 1024
 
 ```
+Values for Base2Bytes.
 
 
 
@@ -71,6 +73,7 @@ func NewSimple(blocksize int64) Calculator
 ```go
 type DecimalBytes int64
 ```
+Base2Bytes represents a number of bytes in base 10.
 
 ### Constants
 ### KB, MB, GB, TB, PB, EB
@@ -83,6 +86,7 @@ PB DecimalBytes = TB * 1000
 EB DecimalBytes = PB * 1000
 
 ```
+Values for DecimalBytes.
 
 
 
