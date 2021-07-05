@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"strings"
+	"unicode"
 )
 
 // Paragraph wraps the supplied text as a 'paragraph' with separate indentation
@@ -32,16 +33,24 @@ func Comment(indent, width int, comment, text string) string {
 func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	initialPad := strings.Repeat(" ", initial) + prefix
 	pad := strings.Repeat(" ", indent) + prefix
+	blankPad := strings.TrimRightFunc(pad, unicode.IsSpace)
 	out := &strings.Builder{}
 	out.WriteString(initialPad)
 	offset := len(pad)
 	lines := bufio.NewScanner(bytes.NewBufferString(text))
+<<<<<<< HEAD
 	newLine := true
+=======
+>>>>>>> master
 	nBlankLines := 0
 	for lines.Scan() {
 		words := bufio.NewScanner(bytes.NewBufferString(lines.Text()))
 		words.Split(bufio.ScanWords)
 		blankLine := true
+<<<<<<< HEAD
+=======
+		newLine := true
+>>>>>>> master
 		for words.Scan() {
 			word := words.Text()
 			blankLine = false
@@ -69,8 +78,12 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 		if blankLine {
 			nBlankLines++
 			if nBlankLines == 1 {
-				out.WriteString("\n\n")
-				out.WriteString(initialPad)
+				out.WriteString("\n")
+				if len(prefix) > 0 {
+					out.WriteString(blankPad)
+				}
+				out.WriteString("\n")
+				out.WriteString(pad)
 				offset = len(pad)
 			}
 		} else {

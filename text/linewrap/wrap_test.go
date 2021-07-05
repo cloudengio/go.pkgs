@@ -12,6 +12,11 @@ import (
 
 const stringsText = `FieldsFunc splits the string s at each run of Unicode code points c satisfying f(c) and returns an array of slices of s. If all code points in s satisfy f(c) or the string is empty, an empty slice is returned. FieldsFunc makes no guarantees about the order in which it calls f(c). If f does not return consistent results for a given c, FieldsFunc may crash.`
 
+const multiParagraphText = `FieldsFunc splits the string s at each run of Unicode code points c satisfying f(c) and returns an array of slices of s. If all code points in s satisfy f(c) or the string is empty, an empty slice is returned. FieldsFunc makes no guarantees about the order in which it calls f(c). If f does not return consistent results for a given c, FieldsFunc may crash.
+
+FieldsFunc splits the string s at each run of Unicode code points c satisfying f(c) and returns an array of slices of s. If all code points in s satisfy f(c) or the string is empty, an empty slice is returned. FieldsFunc makes no guarantees about the order in which it calls f(c). If f does not return consistent results for a given c, FieldsFunc may crash.
+`
+
 const blockStringsText = `    FieldsFunc splits the string s at each run of Unicode code points c satisfying
     f(c) and returns an array of slices of s. If all code points in s satisfy
     f(c) or the string is empty, an empty slice is returned. FieldsFunc makes
@@ -80,4 +85,13 @@ func TestWrap(t *testing.T) {
 	if got, want := linewrap.Comment(2, 78, "// ", stringsText), commentStringsText; got != want {
 		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
 	}
+
+	if got, want := linewrap.Block(4, 78, multiParagraphText), blockStringsText+"\n\n"+blockStringsText; got != want {
+		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+	}
+
+	if got, want := linewrap.Comment(2, 78, "// ", multiParagraphText), commentStringsText+"\n  //\n"+commentStringsText; got != want {
+		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+	}
+
 }
