@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"io"
 	"regexp"
+	"strings"
 )
 
 type linefilter struct {
@@ -17,6 +18,7 @@ type linefilter struct {
 	forward io.Writer
 	ch      chan<- []byte
 	prd     *io.PipeReader
+	errCh   chan error
 }
 
 func discardIfNil(w io.Writer) io.Writer {
@@ -27,14 +29,16 @@ func discardIfNil(w io.Writer) io.Writer {
 }
 
 // NewLineFilter returns an io.WriteCloser that scans the contents of the
-// supplied io.Writer and sends lines that match a regexp to the supplied
+// supplied io.Writer and sends lines that match the regexp to the supplied
 // channel. It can be used to filter the output of a command started
-// by the exec package for example for specific output.
+// by the exec package for example for specific output. Call Close on
+// the returned io.WriteCloser to ensure that all resources are reclaimed.
 func NewLineFilter(forward io.Writer, re *regexp.Regexp, ch chan<- []byte) io.WriteCloser {
 	lf := &linefilter{
 		forward: discardIfNil(forward),
 		re:      re,
 		ch:      ch,
+		errCh:   make(chan error, 1),
 	}
 	lf.prd, lf.PipeWriter = io.Pipe()
 	go lf.readlines()
@@ -50,7 +54,7 @@ func send(ch chan<- []byte, buf []byte) {
 	}
 }
 
-func (lf *linefilter) readlines() error {
+func (lf *linefilter) readlines() {
 	sc := bufio.NewScanner(lf.prd)
 	for sc.Scan() {
 		buf := sc.Bytes()
@@ -60,12 +64,18 @@ func (lf *linefilter) readlines() error {
 		lf.forward.Write(buf)
 		lf.forward.Write([]byte{'\n'})
 	}
-	return sc.Err()
+	lf.errCh <- sc.Err()
 }
 
 // Close implements io.Closer.
 func (lf *linefilter) Close() error {
 	// TODO(cnicolaou): make sure all goroutines shutdown.
+	lf.prd.Close()
+	lf.PipeWriter.Close()
 	close(lf.ch)
+	err := <-lf.errCh
+	if !strings.Contains(err.Error(), "read/write on closed pipe") {
+		return err
+	}
 	return nil
 }
