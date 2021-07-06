@@ -27,7 +27,13 @@ jobs:
             go get github.com/matthewloring/validjson/cmd/validjson@latest
             go install -x github.com/matthewloring/validjson/cmd/validjson@latest
             mkdir -p webapp/cmd/webapp/webapp-sample/build
+            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/css
+            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/js
+            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/media
             touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
+            touch webapp/cmd/webapp/webapp-sample/build/static/css/dummy-for-embed
+            touch webapp/cmd/webapp/webapp-sample/build/static/js/dummy-for-embed
+            touch webapp/cmd/webapp/webapp-sample/build/static/media/dummy-for-embed
       - run:
           name: lint
           command: |
