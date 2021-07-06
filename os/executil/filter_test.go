@@ -31,11 +31,11 @@ func Example() {
 	fmt.Println("filtered output")
 	fmt.Println(string(buf))
 	fmt.Println("all of the output")
-	fmt.Println(all.String())
 	wg.Wait()
 	if err := filter.Close(); err != nil {
 		fmt.Println(err)
 	}
+	fmt.Println(all.String())
 
 	// Output:
 	// filtered output

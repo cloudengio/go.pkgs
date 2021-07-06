@@ -15,10 +15,10 @@ import (
 type linefilter struct {
 	*io.PipeWriter
 	re      *regexp.Regexp
-	forward io.Writer
 	ch      chan<- []byte
 	prd     *io.PipeReader
 	errCh   chan error
+	forward io.Writer
 }
 
 func discardIfNil(w io.Writer) io.Writer {
