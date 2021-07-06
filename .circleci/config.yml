@@ -26,8 +26,8 @@ jobs:
             curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
             go get github.com/matthewloring/validjson/cmd/validjson@latest
             go install -x github.com/matthewloring/validjson/cmd/validjson@latest
-	    mkdir -p webapp/cmd/webapp/webapp-sample/build
-	    touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
+            mkdir -p webapp/cmd/webapp/webapp-sample/build
+            touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
       - run:
           name: lint
           command: |
