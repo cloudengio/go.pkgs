@@ -71,7 +71,7 @@ func NewCertServingCache(certStore CertStore, opts ...CertServingCacheOption) *C
 	sc := &CertServingCache{
 		cache:     map[string]entry{},
 		certStore: certStore,
-		nowFunc:   func() time.Time { return time.Now() },
+		nowFunc:   time.Now,
 		ttl:       time.Hour * 6,
 	}
 	for _, fn := range opts {
@@ -153,12 +153,25 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 	if err != nil || len(x509Certs) == 0 {
 		return nil, fmt.Errorf("acme/autocert: no public key/certs found for %v", name)
 	}
+	leaf, err := m.verifyLeafCert(name, now, x509Certs)
+	if err != nil {
+		return nil, err
+	}
+	tlscert := &tls.Certificate{
+		Certificate: pubDER,
+		PrivateKey:  privKey,
+		Leaf:        leaf,
+	}
+	return tlscert, nil
+}
+
+func (m *CertServingCache) verifyLeafCert(name string, now time.Time, x509Certs []*x509.Certificate) (*x509.Certificate, error) {
 	leaf := x509Certs[0]
 	intermediates := x509.NewCertPool()
 	for _, ic := range x509Certs[1:] {
 		intermediates.AddCert(ic)
 	}
-	_, err = leaf.Verify(x509.VerifyOptions{
+	_, err := leaf.Verify(x509.VerifyOptions{
 		DNSName:       name,
 		Intermediates: intermediates,
 		CurrentTime:   now,
@@ -167,12 +180,7 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 	if err != nil {
 		return nil, fmt.Errorf("acme/autocert: invalid leaf cert %v: %v", name, err)
 	}
-	tlscert := &tls.Certificate{
-		Certificate: pubDER,
-		PrivateKey:  privKey,
-		Leaf:        leaf,
-	}
-	return tlscert, nil
+	return leaf, nil
 }
 
 // Attempt to parse the given private key DER block. OpenSSL 0.9.8 generates

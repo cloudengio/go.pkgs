@@ -94,13 +94,18 @@ func prodServe(ctx context.Context, values interface{}, args []string) error {
 
 	configureAPIEndpoints(router)
 
-	ln, srv, err := webapp.NewTLSServer(cl.HTTPServerFlags.Address, router)
+	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags)
+	if err != nil {
+		return err
+	}
+
+	ln, srv, err := webapp.NewTLSServer(cl.HTTPServerFlags.Address, router, cfg)
 	if err != nil {
 		return err
 	}
 
 	// Force all http traffic to an https port.
-	if err := webapp.RedirectPort80(ctx, cl.HTTPServerFlags.Address); err != nil {
+	if err := webapp.RedirectPort80(ctx, cl.HTTPServerFlags.Address, cl.AcmeRedirectTarget); err != nil {
 		return err
 	}
 
@@ -108,7 +113,7 @@ func prodServe(ctx context.Context, values interface{}, args []string) error {
 
 	assets := webassets.NewAssets(webpackedAssetPrefix, webpackedAssets)
 	router.ServeFiles("/*filepath", http.FS(assets))
-	webapp.ServeTLSWithShutdown(ctx, ln, srv, cl.CertificateFile, cl.KeyFile, 5*time.Second)
+	webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 	return nil
 }
 
@@ -120,7 +125,12 @@ func devServe(ctx context.Context, values interface{}, args []string) error {
 
 	configureAPIEndpoints(router)
 
-	ln, srv, err := webapp.NewTLSServer(cl.HTTPServerFlags.Address, router)
+	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags)
+	if err != nil {
+		return err
+	}
+
+	ln, srv, err := webapp.NewTLSServer(cl.HTTPServerFlags.Address, router, cfg)
 	if err != nil {
 		return err
 	}
@@ -148,7 +158,7 @@ func devServe(ctx context.Context, values interface{}, args []string) error {
 	}
 
 	log.Printf("running on %s", ln.Addr())
-	webapp.ServeTLSWithShutdown(ctx, ln, srv, cl.CertificateFile, cl.KeyFile, 5*time.Second)
+	webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 
 	return nil
 }

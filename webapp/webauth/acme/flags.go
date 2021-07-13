@@ -65,10 +65,8 @@ func NewManagerFromFlags(ctx context.Context, cache autocert.Cache, cl CertFlags
 	default:
 		if len(provider) == 0 {
 			provider = LetsEncryptStaging
-		} else {
-			if _, err := url.Parse(provider); err != nil {
-				return nil, fmt.Errorf("invalid url: %v: %v", provider, err)
-			}
+		} else if _, err := url.Parse(provider); err != nil {
+			return nil, fmt.Errorf("invalid url: %v: %v", provider, err)
 		}
 	}
 	client := &acme.Client{
