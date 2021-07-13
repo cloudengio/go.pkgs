@@ -89,6 +89,10 @@ A typical configuration, for domain an.example, could be:
 
 	   curl --cacert letsencrypt-stg-root-x1.pem --resolve an.exmaple:443:<ip-address-of-cert-manager-host> https://an.example
 
+This approach allows for automated management TLS certifcates for server
+farms that live behind firewalls/loadbalancers, are hosted on services
+such as AWS fargate, ECS/EKS etc with no overhead other than implementing
+the http-01 redirect and having access to the certificates.
 `)
 }
 
