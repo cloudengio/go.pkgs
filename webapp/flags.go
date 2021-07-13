@@ -7,7 +7,6 @@ package webapp
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"strings"
 	"sync"
@@ -72,16 +71,15 @@ func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string) (
 		return nil, fmt.Errorf("failed to create cache instance: %v %v: %v", typ, name, err)
 	}
 	var opts []CertServingCacheOption
-	var rootCAs *x509.CertPool
 	if len(testingCA) > 0 {
 		certPool, err := CertPoolForTesting(testingCA)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to obtain cert pool containing %v", testingCA)
 		}
-		opts = append(opts, CertCacheRootCAs(rootCAs))
+		opts = append(opts, CertCacheRootCAs(certPool))
 	}
 	return &tls.Config{
-		GetCertificate: NewCertServingCache(cache, rootCAs).GetCertificate,
+		GetCertificate: NewCertServingCache(cache, opts...).GetCertificate,
 	}, nil
 }
 

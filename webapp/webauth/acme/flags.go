@@ -21,13 +21,15 @@ const (
 	LetsEncryptProduction = acme.LetsEncryptURL
 )
 
-// ACMEHostCertFlags represents the flags required to configure a
-// a request for a TLS certificate for a host (not wildcards/domains).
+// CertFlags represents the flags required to configure an autocert.Manager
+// isntance for managing TLS certificates for hosts/domains using the
+// acme http-01 challenge. Note that wildcard domains are not supported
+// by this challenge.
 // The currently supported/tested acme service providers are letsencrypt
 // staging and production via the values 'letsencrypt-staging' and
-// 'letsencrypt' for the --service flag; however any URL can be specified
+// 'letsencrypt' for the --acme-service flag; however any URL can be specified
 // via this flag.
-type ACMECertFlags struct {
+type CertFlags struct {
 	AcmeClientHost string          `subcmd:"acme-client-host,,'host running the acme client responsible for refreshing certificates, https requests to this host for one of the certificate hosts will result in the certificate for the certificate host being refreshed if necessary'"`
 	Hosts          flags.Repeating `subcmd:"acme-cert-host,,'host for which certs are to be obtained'"`
 	AcmeProvider   string          `subcmd:"acme-service,letsencrypt-staging,'the acme service to use, specify letsencrypt or letsencrypt-staging or a url'"`
@@ -38,7 +40,7 @@ type ACMECertFlags struct {
 
 // NewManagerFromFlags creates a new autocert.Manager from the flag values.
 // The cache may be not be nil.
-func NewManagerFromFlags(ctx context.Context, cache autocert.Cache, cl ACMECertFlags) (*autocert.Manager, error) {
+func NewManagerFromFlags(ctx context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error) {
 	if cache == nil {
 		return nil, fmt.Errorf("no cache provided")
 	}

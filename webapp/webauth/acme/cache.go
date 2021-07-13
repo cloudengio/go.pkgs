@@ -133,7 +133,7 @@ func (f CertStoreFactory) Type() string {
 
 func unsupported(typ string) string {
 	return fmt.Sprintf(
-		"unsupported factory type: %s: use one of ", typ, strings.Join([]string{dirCacheName, nullCacheName}, ","))
+		"unsupported factory type: %s: use one of %s", typ, strings.Join([]string{dirCacheName, nullCacheName}, ","))
 }
 
 // New implements webapp.CertStoreFactory.
