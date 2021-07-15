@@ -109,7 +109,7 @@ type CertStore interface {
 type CertStoreFactory interface {
 	Type() string
 	Describe() string
-	New(ctx context.Context, name string) (CertStore, error)
+	New(ctx context.Context, name string, opts ...interface{}) (CertStore, error)
 }
 
 var (
