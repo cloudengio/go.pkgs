@@ -79,6 +79,13 @@ func RegisterCertStoreFactory(cache CertStoreFactory)
 RegisterCertStoreFactory makes the supplied CertStoreFactory available for
 use via the TLSCertStoreFlags command line flags.
 
+### Func RegisteredCertStores
+```go
+func RegisteredCertStores() []string
+```
+RegisteredCertStores returns the list of currently registered certificate
+stores.
+
 ### Func SelfSignedCertCommand
 ```go
 func SelfSignedCertCommand(name string) *subcmd.Command
@@ -104,8 +111,12 @@ within the specified grace period.
 
 ### Func TLSConfigFromFlags
 ```go
-func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, error)
+func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, storeOpts ...interface{}) (*tls.Config, error)
 ```
+TLSConfigFromFlags creates a tls.Config based on the supplied flags, which
+may require obtaining certificates directly from pem files or from a
+possibly remote certificate store using TLSConfigUsingCertStore. Any
+supplied storeOpts are passed to TLSConfigUsingCertStore.
 
 ### Func TLSConfigUsingCertFiles
 ```go
@@ -116,8 +127,10 @@ read from the supplied files.
 
 ### Func TLSConfigUsingCertStore
 ```go
-func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string) (*tls.Config, error)
+func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string, storeOpts ...interface{}) (*tls.Config, error)
 ```
+TLSConfigUsingCertStore returns a tls.Config configured with the certificate
+obtained from a certificate store.
 
 
 
@@ -190,9 +203,19 @@ refreshed. This is generally only required for testing purposes.
 ```go
 type CertStore interface {
 	Get(ctx context.Context, name string) ([]byte, error)
+	Put(ctx context.Context, name string, data []byte) error
+	Delete(ctx context.Context, name string) error
 }
 ```
 CertStore represents a store for TLS certificates.
+
+### Functions
+
+```go
+func NewCertStore(ctx context.Context, typ, name string, storeOpts ...interface{}) (CertStore, error)
+```
+
+
 
 
 ### Type CertStoreFactory
@@ -200,7 +223,7 @@ CertStore represents a store for TLS certificates.
 type CertStoreFactory interface {
 	Type() string
 	Describe() string
-	New(ctx context.Context, name string) (CertStore, error)
+	New(ctx context.Context, name string, opts ...interface{}) (CertStore, error)
 }
 ```
 CertStoreFactory is the interface that must be implemented to register a new

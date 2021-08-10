@@ -108,7 +108,7 @@ Describe implements webapp.CertStoreFactory.
 
 
 ```go
-func (f CertStoreFactory) New(ctx context.Context, dir string) (webapp.CertStore, error)
+func (f CertStoreFactory) New(ctx context.Context, dir string, opts ...interface{}) (webapp.CertStore, error)
 ```
 New implements webapp.CertStoreFactory.
 

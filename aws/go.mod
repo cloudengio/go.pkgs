@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20210706232935-3692cd52401d // indirect
+	cloudeng.io/go v0.0.0-20201002213843-cae5e0ddc080 // indirect
 	cloudeng.io/webapp v0.0.0-20210706232935-3692cd52401d // indirect
 	github.com/aws/aws-sdk-go-v2 v1.8.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.6.0 // indirect
