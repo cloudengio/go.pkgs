@@ -20,7 +20,8 @@
 //  Certificates obtained by the of cert-manager must be distributed to all other
 //  services that serve the hosts for which the certificates were obtained. Thiscan
 //  be achieved by storing the certificates in a shared store accessible to all
-//  services, or by simply copying the certificates. The former is preferred.
+//  services, or by simply copying the certificates. The former is preferred anda
+//  shared stored using AWS' secretsmanager can be used to do so.
 //
 //  A typical configuration, for domain an.example, could be:
 //
@@ -38,10 +39,14 @@
 //  curl --cacert letsencrypt-stg-root-x1.pem --resolve an.exmaple:443:<ip-address-of-cert-manager-host>
 //  https://an.example
 //
+//  This approach allows for automated management TLS certifcates for serverfarms
+//  that live behind firewalls/loadbalancers, are hosted on servicessuch as AWS
+//  fargate, ECS/EKS etc with no overhead other than implementingthe http-01 redirect
+//  and having access to the certificates.
 //
-//
-//   cert-manager - manage obtaining and renewing tls certificates
+//   cert-manager - manage obtaining and renewing tls certificates using an acme service such as letsencrypt.org.
 //  redirect-test - test redirecting acme http-01 challenges back to a central server that implements the acme client.
+//     cert-store - store and retrieve certificates directly from a certificate store.
 //
 // flag: help requested
 package main
