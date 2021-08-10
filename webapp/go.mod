@@ -3,7 +3,7 @@ module cloudeng.io/webapp
 go 1.16
 
 require (
-	cloudeng.io/aws v0.0.0-00010101000000-000000000000 // indirect
+	cloudeng.io/aws v0.0.0-20210810182711-5f2a337d2d3e // indirect
 	cloudeng.io/cmdutil v0.0.0-20210706232935-3692cd52401d
 	cloudeng.io/errors v0.0.5
 	cloudeng.io/io v0.0.0-20210705212102-ab34f3a7a9fe

@@ -1,3 +1,5 @@
+cloudeng.io/aws v0.0.0-20210810182711-5f2a337d2d3e h1:KgDwCiSlpXL2MTDit7gzor+zLwpWj0Abg7ZWGvFh4F8=
+cloudeng.io/aws v0.0.0-20210810182711-5f2a337d2d3e/go.mod h1:LDbamaV0nhDJ61m4+df/g/qFZv5d5EdMISeEkRrift4=
 cloudeng.io/cmdutil v0.0.0-20210705212102-ab34f3a7a9fe h1:Eli3y7zyKLtUIPoxPzDOJdEQ4+Sn8bz9Ued7X8z5XjY=
 cloudeng.io/cmdutil v0.0.0-20210705212102-ab34f3a7a9fe/go.mod h1:EwLVTEiRF+bZPVXIzJBuZttVmF6w2ETHcmNIpdOQbTg=
 cloudeng.io/cmdutil v0.0.0-20210706232935-3692cd52401d h1:HR3zTZhN0geYVrGSdn9G0nUFvVC4lWbAuOyr1A8C0ng=
