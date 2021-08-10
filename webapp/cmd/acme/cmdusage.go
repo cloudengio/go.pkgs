@@ -1,0 +1,47 @@
+// Copyright 2021 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+// Usage of acme
+//
+//  manage ACME issued TLS certificates
+//
+//  This command forms the basis of managing TLS certificates formultiple host
+//  domains. The configuration relies on running a dedicatedacme client host that
+//  is responsible for interacting with an acme servicefor obtaining certificates.
+//  It will refresh those certificates as they nearexpiration. However, since this
+//  server is dedicated to managingcertificates it does not support any other
+//  services and consequently allother services do not implement the acme protocol.
+//  Rather, these otherservices will redirect any http-01 acme challenges back to
+//  this dedicatedacme service. This comannd implements two sub commands: 'cert-manager'
+//  whichis the dedicated acme manager and 'redirect-test' which illustrates how
+//  other services should redirect back to the host running the 'cert-manager'.
+//
+//  Certificates obtained by the of cert-manager must be distributed to all other
+//  services that serve the hosts for which the certificates were obtained. Thiscan
+//  be achieved by storing the certificates in a shared store accessible to all
+//  services, or by simply copying the certificates. The former is preferred.
+//
+//  A typical configuration, for domain an.example, could be:
+//
+//  - run cert-manager on host certs.an.example. Port 80 must be accessible tothe
+//  internet. It could be configured with www.an.example and an.exampleas the allowed
+//  hosts/domains for which it will manage certificates.- all instances of services
+//  that run on www.an.example an an.example mustimplement the redirect to
+//  certs.an.example as implemented by theredirect test.- the dns entries for
+//  an.example and www.an.example need not include theIP address of certs.an.example.
+//  - cert-manager will periodically issue http GETS againsthttps://www.an.example
+//  and https://an.example that are directed to itself(bypassing DNS) to initiate
+//  the refresh process. Note that the sameeffect can be achieved using curl's
+//  resolve option - for example:
+//
+//  curl --cacert letsencrypt-stg-root-x1.pem --resolve an.exmaple:443:<ip-address-of-cert-manager-host>
+//  https://an.example
+//
+//
+//
+//   cert-manager - manage obtaining and renewing tls certificates
+//  redirect-test - test redirecting acme http-01 challenges back to a central server that implements the acme client.
+//
+// flag: help requested
+package main
