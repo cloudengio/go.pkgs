@@ -1,3 +1,7 @@
+cloudeng.io/cmdutil v0.0.0-20210706232935-3692cd52401d h1:HR3zTZhN0geYVrGSdn9G0nUFvVC4lWbAuOyr1A8C0ng=
+cloudeng.io/cmdutil v0.0.0-20210706232935-3692cd52401d/go.mod h1:EwLVTEiRF+bZPVXIzJBuZttVmF6w2ETHcmNIpdOQbTg=
+cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
+cloudeng.io/text v0.0.8/go.mod h1:VPOCvDDUBocQe7rfQDZcyEpScLooZo/6cJs1cM0LOMI=
 github.com/aws/aws-sdk-go-v2 v1.8.0 h1:HcN6yDnHV9S7D69E7To0aUppJhiJNEzQSNcUxc7r3qo=
 github.com/aws/aws-sdk-go-v2 v1.8.0/go.mod h1:xEFuWz+3TYdlPRuo+CqATbeDWIWyaT5uAPwPaWtgse0=
 github.com/aws/aws-sdk-go-v2/config v1.6.0 h1:rtoCnNObhVm7me+v9sA2aY+NtHNZjjWWC3ifXVci+wE=

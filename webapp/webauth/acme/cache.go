@@ -141,7 +141,7 @@ func unsupported(typ string) string {
 }
 
 // New implements webapp.CertStoreFactory.
-func (f CertStoreFactory) New(ctx context.Context, dir string) (webapp.CertStore, error) {
+func (f CertStoreFactory) New(ctx context.Context, dir string, opts ...interface{}) (webapp.CertStore, error) {
 	switch f.typ {
 	case dirCacheName:
 		return NewDirCache(dir, true), nil

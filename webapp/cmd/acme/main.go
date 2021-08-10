@@ -14,9 +14,12 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"time"
 
+	"cloudeng.io/aws/awscertstore"
+	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/errors"
 	"cloudeng.io/webapp"
@@ -29,30 +32,33 @@ var cmdSet *subcmd.CommandSet
 type certManagerFlags struct {
 	acme.CertFlags
 	webapp.TLSCertStoreFlags
+	awsconfig.AWSFlags
 }
 
 type testRedirectFlags struct {
 	webapp.HTTPServerFlags
+	awsconfig.AWSFlags
 }
 
 func init() {
 	webapp.RegisterCertStoreFactory(acme.AutoCertDiskStore)
 	webapp.RegisterCertStoreFactory(acme.AutoCertNullStore)
+	webapp.RegisterCertStoreFactory(awscertstore.AutoCertStore)
 }
 
 func init() {
-	getLocalCertCmd := subcmd.NewCommand("cert-manager",
+	certManagerCmd := subcmd.NewCommand("cert-manager",
 		subcmd.MustRegisterFlagStruct(&certManagerFlags{}, nil, nil),
-		getLocalCert, subcmd.ExactlyNumArguments(0))
-	getLocalCertCmd.Document(`manage obtaining and renewing tls certificates`)
-	cmdSet = subcmd.NewCommandSet(getLocalCertCmd)
+		manageCerts, subcmd.ExactlyNumArguments(0))
+	certManagerCmd.Document(`manage obtaining and renewing tls certificates using an acme service such as letsencrypt.org.`)
+	cmdSet = subcmd.NewCommandSet(certManagerCmd)
 
 	testRedirectCmd := subcmd.NewCommand("redirect-test",
 		subcmd.MustRegisterFlagStruct(&testRedirectFlags{}, nil, nil),
 		testACMERedirect, subcmd.ExactlyNumArguments(0))
 	testRedirectCmd.Document(`test redirecting acme http-01 challenges back to a central server that implements the acme client.`)
 
-	cmdSet = subcmd.NewCommandSet(getLocalCertCmd, testRedirectCmd)
+	cmdSet = subcmd.NewCommandSet(certManagerCmd, testRedirectCmd, certSubCmd())
 	cmdSet.Document(`manage ACME issued TLS certificates
 
 This command forms the basis of managing TLS certificates for
@@ -70,7 +76,8 @@ other services should redirect back to the host running the 'cert-manager'.
 Certificates obtained by the of cert-manager must be distributed to all other
 services that serve the hosts for which the certificates were obtained. This
 can be achieved by storing the certificates in a shared store accessible to all
-services, or by simply copying the certificates. The former is preferred.
+services, or by simply copying the certificates. The former is preferred and
+a shared stored using AWS' secretsmanager can be used to do so.
 
 A typical configuration, for domain an.example, could be:
 
@@ -100,19 +107,40 @@ func main() {
 	cmdSet.MustDispatch(context.Background())
 }
 
-func getLocalCert(ctx context.Context, values interface{}, args []string) error {
-	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
-	defer done()
-	cl := values.(*certManagerFlags)
-
+func newAutoCertCacheFromFlags(ctx context.Context, cl webapp.TLSCertStoreFlags, awscl awsconfig.AWSFlags) (autocert.Cache, error) {
+	opts := []awscertstore.AWSCacheOption{}
+	if awscl.AWS {
+		awscfg, err := awsconfig.LoadUsingFlags(ctx, awscl)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, awscertstore.WithAWSConfig(awscfg))
+	}
+	if cl.ListStoreTypes {
+		return nil, fmt.Errorf(strings.Join(webapp.RegisteredCertStores(), "\n"))
+	}
 	var cache autocert.Cache
 	switch {
 	case cl.CertStoreType == acme.AutoCertDiskStore.Type():
 		cache = acme.NewDirCache(cl.CertStore, false)
 	case cl.CertStoreType == acme.AutoCertNullStore.Type():
 		cache = acme.NewNullCache()
+	case cl.CertStoreType == awscertstore.AutoCertStore.Type():
+		cache = awscertstore.NewHybridCache(cl.CertStore, opts...)
 	default:
-		return fmt.Errorf("unsupported cert store type: %v", cl.CertStoreType)
+		return nil, fmt.Errorf("unsupported cert store type: %v", cl.CertStoreType)
+	}
+	return cache, nil
+}
+
+func manageCerts(ctx context.Context, values interface{}, args []string) error {
+	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
+	defer done()
+	cl := values.(*certManagerFlags)
+
+	cache, err := newAutoCertCacheFromFlags(ctx, cl.TLSCertStoreFlags, cl.AWSFlags)
+	if err != nil {
+		return err
 	}
 
 	mgr, err := acme.NewManagerFromFlags(ctx, cache, cl.CertFlags)
@@ -247,7 +275,16 @@ func testACMERedirect(ctx context.Context, values interface{}, args []string) er
 		return err
 	}
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags)
+	storeOpts := []interface{}{}
+	if cl.AWS {
+		cfg, err := awsconfig.Load(ctx)
+		if err != nil {
+			return err
+		}
+		storeOpts = append(storeOpts, awscertstore.WithAWSConfig(cfg))
+	}
+
+	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, storeOpts...)
 	if err != nil {
 		return err
 	}

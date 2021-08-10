@@ -46,9 +46,13 @@ type HTTPServerFlags struct {
 	TestingCAPem       string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 }
 
-func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, error) {
+// TLSConfigFromFlags creates a tls.Config based on the supplied flags, which
+// may require obtaining certificates directly from pem files or from a
+// possibly remote certificate store using TLSConfigUsingCertStore. Any
+// supplied storeOpts are passed to TLSConfigUsingCertStore.
+func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, storeOpts ...interface{}) (*tls.Config, error) {
 	if cl.ListStoreTypes {
-		return nil, fmt.Errorf(strings.Join(certCacheHelp(), "\n"))
+		return nil, fmt.Errorf(strings.Join(RegisteredCertStores(), "\n"))
 	}
 	useCache := len(cl.CertStoreType) > 0 || len(cl.CertStore) > 0
 	useFiles := len(cl.CertificateFile) > 0 || len(cl.KeyFile) > 0
@@ -56,17 +60,19 @@ func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, e
 		return nil, fmt.Errorf("can't use both a certificate cache and certificate files")
 	}
 	if useCache {
-		return TLSConfigUsingCertStore(ctx, cl.CertStoreType, cl.CertStore, cl.TestingCAPem)
+		return TLSConfigUsingCertStore(ctx, cl.CertStoreType, cl.CertStore, cl.TestingCAPem, storeOpts...)
 	}
 	return TLSConfigUsingCertFiles(cl.CertificateFile, cl.KeyFile)
 }
 
-func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string) (*tls.Config, error) {
+// TLSConfigUsingCertStore returns a tls.Config configured with the certificate
+// obtained from a certificate store.
+func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string, storeOpts ...interface{}) (*tls.Config, error) {
 	factory, err := getFactory(typ)
 	if err != nil {
 		return nil, err
 	}
-	cache, err := factory.New(ctx, name)
+	cache, err := factory.New(ctx, name, storeOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache instance: %v %v: %v", typ, name, err)
 	}
@@ -81,6 +87,18 @@ func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string) (
 	return &tls.Config{
 		GetCertificate: NewCertServingCache(cache, opts...).GetCertificate,
 	}, nil
+}
+
+func NewCertStore(ctx context.Context, typ, name string, storeOpts ...interface{}) (CertStore, error) {
+	factory, err := getFactory(typ)
+	if err != nil {
+		return nil, err
+	}
+	store, err := factory.New(ctx, name, storeOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache instance: %v %v: %v", typ, name, err)
+	}
+	return store, nil
 }
 
 // TLSConfigUsingCertFiles returns a tls.Config configured with the
@@ -101,6 +119,8 @@ func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
 // CertStore represents a store for TLS certificates.
 type CertStore interface {
 	Get(ctx context.Context, name string) ([]byte, error)
+	Put(ctx context.Context, name string, data []byte) error
+	Delete(ctx context.Context, name string) error
 }
 
 // CertStoreFactory is the interface that must be implemented to register
@@ -135,7 +155,9 @@ func RegisterCertStoreFactory(cache CertStoreFactory) {
 	stores[cache.Type()] = cache
 }
 
-func certCacheHelp() []string {
+// RegisteredCertStores returns the list of currently registered certificate
+// stores.
+func RegisteredCertStores() []string {
 	storesMu.Lock()
 	defer storesMu.Unlock()
 	names := make([]string, 0, len(stores))
