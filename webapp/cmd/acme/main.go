@@ -35,12 +35,8 @@ type certManagerFlags struct {
 	awsconfig.AWSFlags
 }
 
-type testRedirectFlags struct {
-	webapp.HTTPServerFlags
-	awsconfig.AWSFlags
-}
-
 func init() {
+	// Register the available certificate stores.
 	webapp.RegisterCertStoreFactory(acme.AutoCertDiskStore)
 	webapp.RegisterCertStoreFactory(acme.AutoCertNullStore)
 	webapp.RegisterCertStoreFactory(awscertstore.AutoCertStore)
@@ -53,12 +49,11 @@ func init() {
 	certManagerCmd.Document(`manage obtaining and renewing tls certificates using an acme service such as letsencrypt.org.`)
 	cmdSet = subcmd.NewCommandSet(certManagerCmd)
 
-	testRedirectCmd := subcmd.NewCommand("redirect-test",
-		subcmd.MustRegisterFlagStruct(&testRedirectFlags{}, nil, nil),
-		testACMERedirect, subcmd.ExactlyNumArguments(0))
-	testRedirectCmd.Document(`test redirecting acme http-01 challenges back to a central server that implements the acme client.`)
-
-	cmdSet = subcmd.NewCommandSet(certManagerCmd, testRedirectCmd, certSubCmd())
+	cmdSet = subcmd.NewCommandSet(
+		certManagerCmd,
+		redirectCmd(),
+		certSubCmd(),
+		validateCmd())
 	cmdSet.Document(`manage ACME issued TLS certificates
 
 This command forms the basis of managing TLS certificates for
@@ -77,7 +72,8 @@ Certificates obtained by the of cert-manager must be distributed to all other
 services that serve the hosts for which the certificates were obtained. This
 can be achieved by storing the certificates in a shared store accessible to all
 services, or by simply copying the certificates. The former is preferred and
-a shared stored using AWS' secretsmanager can be used to do so.
+a shared store using AWS' secretsmanager can be used to do so as per
+cloudeng.io/aws/awscertstore.
 
 A typical configuration, for domain an.example, could be:
 
@@ -217,42 +213,23 @@ func waitForServers(ctx context.Context) {
 func refreshCertificates(ctx context.Context, interval time.Duration, acmeClientHost string, hosts []string, rootCAPemFile string) {
 	rt := &http.Transport{
 		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
+		MaxIdleConns:          10,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
+		Timeout:   60 * time.Second,
+		KeepAlive: 60 * time.Second,
 	}
 	rt.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return dialer.DialContext(ctx, "tcp", acmeClientHost+":443")
 	}
-	if len(rootCAPemFile) > 0 {
-		certPool, err := webapp.CertPoolForTesting(rootCAPemFile)
-		if err != nil {
-			log.Printf("Failed to obtain cert pool containing %v", rootCAPemFile)
-		} else {
-			rt.TLSClientConfig = &tls.Config{
-				RootCAs: certPool,
-			}
-		}
-	}
+	customCertPool(rt, rootCAPemFile)
 	client := &http.Client{Transport: rt}
 	for {
 		for _, host := range hosts {
-			u := url.URL{
-				Scheme: "https",
-				Host:   host,
-				Path:   "/",
-			}
-			resp, err := client.Get(u.String())
-			if err == nil {
-				log.Printf("%v: %v\n", u.String(), resp.StatusCode)
-			} else {
-				log.Printf("%v: error %v\n", u.String(), err)
-			}
+			pingHost(client, host)
 		}
 		select {
 		case <-ctx.Done():
@@ -262,42 +239,35 @@ func refreshCertificates(ctx context.Context, interval time.Duration, acmeClient
 	}
 }
 
-func testACMERedirect(ctx context.Context, values interface{}, args []string) error {
-	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
-	defer done()
-	cl := values.(*testRedirectFlags)
-
-	if len(cl.AcmeRedirectTarget) == 0 {
-		return fmt.Errorf("must specific a target for the acme client")
+func customCertPool(ht *http.Transport, rootCAPemFile string) {
+	if len(rootCAPemFile) > 0 {
+		ht.TLSClientConfig = customTLSConfig(rootCAPemFile)
 	}
+}
 
-	if err := webapp.RedirectPort80(ctx, ":443", cl.AcmeRedirectTarget); err != nil {
-		return err
-	}
-
-	storeOpts := []interface{}{}
-	if cl.AWS {
-		cfg, err := awsconfig.Load(ctx)
+func customTLSConfig(rootCAPemFile string) *tls.Config {
+	if len(rootCAPemFile) > 0 {
+		certPool, err := webapp.CertPoolForTesting(rootCAPemFile)
 		if err != nil {
-			return err
+			log.Printf("Failed to obtain cert pool containing %v", rootCAPemFile)
+		} else {
+			return &tls.Config{RootCAs: certPool}
 		}
-		storeOpts = append(storeOpts, awscertstore.WithAWSConfig(cfg))
 	}
+	return &tls.Config{}
+}
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, storeOpts...)
-	if err != nil {
-		return err
+func pingHost(client *http.Client, hostName string) error {
+	u := url.URL{
+		Scheme: "https",
+		Host:   hostName,
+		Path:   "/",
 	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "hello\n")
-	})
-	ln, srv, err := webapp.NewTLSServer(cl.Address, mux, cfg)
-	if err != nil {
-		return err
+	resp, err := client.Get(u.String())
+	if err == nil {
+		log.Printf("%v: %v\n", u.String(), resp.StatusCode)
+	} else {
+		log.Printf("%v: error %v\n", u.String(), err)
 	}
-	fmt.Printf("listening on: %v\n", ln.Addr())
-	srv.TLSConfig = cfg
-	return webapp.ServeTLSWithShutdown(ctx, ln, srv, time.Minute)
+	return err
 }

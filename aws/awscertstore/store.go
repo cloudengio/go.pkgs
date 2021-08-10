@@ -127,7 +127,7 @@ func (ac *awscache) newClient(ctx context.Context, name string, readonly bool) (
 	if !ac.hasConfig {
 		return nil, fmt.Errorf("no aws.Config was specified, use WithAWSConfig when creating the store")
 	}
-	accountID, err := awsconfig.AccountID(ctx, ac.config)
+	accountID, err := getAccountIDOnce(ctx, ac.config)
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +158,7 @@ func translateError(err error) error {
 // Note that currently deletions of aws stored keys are not allowed.
 func (ac *awscache) Delete(ctx context.Context, name string) error {
 	name = strings.ReplaceAll(name, ".", "_")
+	_ = name
 	return ErrUnsupportedOperation
 }
 
@@ -247,8 +248,7 @@ func captureOpts(opts []interface{}) []AWSCacheOption {
 
 // New implements webapp.CertStoreFactory.
 func (f CertStoreFactory) New(ctx context.Context, name string, opts ...interface{}) (webapp.CertStore, error) {
-	switch f.typ {
-	case awsCacheName:
+	if f.typ == awsCacheName {
 		return NewAWSCache(captureOpts(opts)...), nil
 	}
 	return nil, errors.New(unsupported(f.typ))
@@ -256,8 +256,7 @@ func (f CertStoreFactory) New(ctx context.Context, name string, opts ...interfac
 
 // Describe implements webapp.CertStoreFactory.
 func (f CertStoreFactory) Describe() string {
-	switch f.typ {
-	case awsCacheName:
+	if f.typ == awsCacheName {
 		return awsCacheName + " retrieves certificates from AWS secretsmanager"
 	}
 	panic(unsupported(f.typ))

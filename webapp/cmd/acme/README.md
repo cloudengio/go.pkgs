@@ -21,7 +21,8 @@ Usage of `acme`
     services that serve the hosts for which the certificates were obtained. Thiscan
     be achieved by storing the certificates in a shared store accessible to all
     services, or by simply copying the certificates. The former is preferred anda
-    shared stored using AWS' secretsmanager can be used to do so.
+    shared store using AWS' secretsmanager can be used to do so as per
+    cloudeng.io/aws/awscertstore.
 
     A typical configuration, for domain an.example, could be:
 
@@ -47,6 +48,7 @@ Usage of `acme`
      cert-manager - manage obtaining and renewing tls certificates using an `acme` service such as letsencrypt.org.
     redirect-test - test redirecting `acme` http-01 challenges back to a central server that implements the `acme` client.
        cert-store - store and retrieve certificates directly from a certificate store.
+         validate - validate the certificates for a host/domain
 
 flag: help requested
 
