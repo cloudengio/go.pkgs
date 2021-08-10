@@ -20,6 +20,13 @@ application.
 An example/template can be found in cmd/webapp.
 
 ## Functions
+### Func CertPoolForTesting
+```go
+func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error)
+```
+CertPoolForTesting returns a new x509.CertPool containing the certs in the
+specified pem files. It is intended for testing purposes only.
+
 ### Func NewHTTPServer
 ```go
 func NewHTTPServer(addr string, handler http.Handler) (net.Listener, *http.Server, error)
@@ -42,36 +49,50 @@ supported options are:
 
 ### Func NewTLSServer
 ```go
-func NewTLSServer(addr string, handler http.Handler) (net.Listener, *http.Server, error)
+func NewTLSServer(addr string, handler http.Handler, cfg *tls.Config) (net.Listener, *http.Server, error)
 ```
 NewTLSServer returns a new *http.Server and a listener whose address
 defaults to ":https".
 
 ### Func RedirectPort80
 ```go
-func RedirectPort80(ctx context.Context, httpsAddr string) error
+func RedirectPort80(ctx context.Context, httpsAddr string, acmeRedirectHost string) error
 ```
 RedirectPort80 starts an http.Server that will redirect port 80 to the
-specified supplied https port.
+specified supplied https port. If acmeRedirect is specified then acme
+HTTP-01 challenges will be redirected to that URL.
 
 ### Func RedirectToHTTPSHandlerFunc
 ```go
-func RedirectToHTTPSHandlerFunc(tlsPort string) http.HandlerFunc
+func RedirectToHTTPSHandlerFunc(tlsPort string, acmeRedirectHost *url.URL) http.HandlerFunc
 ```
 RedirectToHTTPSHandlerFunc is a http.HandlerFunc that will redirect to the
 specified port but using https as the scheme. Install it on port 80 to
-redirect all http requests to https on tlsPort. tlsPort defaults to 443.
+redirect all http requests to https on tlsPort. tlsPort defaults to 443. If
+acmeRedirect is specified then acme HTTP-01 challenges will be redirected to
+that URL.
+
+### Func RegisterCertStoreFactory
+```go
+func RegisterCertStoreFactory(cache CertStoreFactory)
+```
+RegisterCertStoreFactory makes the supplied CertStoreFactory available for
+use via the TLSCertStoreFlags command line flags.
 
 ### Func SelfSignedCertCommand
 ```go
 func SelfSignedCertCommand(name string) *subcmd.Command
 ```
+SelfSignedCertCommand returns a subcmd.Command that provides the ability to
+generate a self signed certificate and private key file.
 
 ### Func ServeTLSWithShutdown
 ```go
-func ServeTLSWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, cert, key string, grace time.Duration) error
+func ServeTLSWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, grace time.Duration) error
 ```
-ServeTLSWithShutdown is like ServeWithShutdown except for a TLS server.
+ServeTLSWithShutdown is like ServeWithShutdown except for a TLS server. Note
+that any TLS options must be configured prior to calling this function via
+the TLSConfig field in http.Server.
 
 ### Func ServeWithShutdown
 ```go
@@ -81,24 +102,136 @@ ServeWithShutdown runs srv.ListenAndServe in background and then waits for
 the context to be canceled. It will then attempt to shutdown the web server
 within the specified grace period.
 
+### Func TLSConfigFromFlags
+```go
+func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, error)
+```
+
+### Func TLSConfigUsingCertFiles
+```go
+func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error)
+```
+TLSConfigUsingCertFiles returns a tls.Config configured with the certificate
+read from the supplied files.
+
+### Func TLSConfigUsingCertStore
+```go
+func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string) (*tls.Config, error)
+```
+
 
 
 ## Types
+### Type CertServingCache
+```go
+type CertServingCache struct {
+	// contains filtered or unexported fields
+}
+```
+CertServingCache implements an in-memory cache of TLS/SSL certificates
+loaded from a backing store. Validation of the certificates is performed on
+loading rather than every use. It provides a GetCertificate method that can
+be used by tls.Config. A TTL (default of 6 hours) is used so that the
+in-memory cache will reload certificates from the store on a periodic basis
+(with some jitter) to allow for certificates to be refreshed.
+
+### Functions
+
+```go
+func NewCertServingCache(certStore CertStore, opts ...CertServingCacheOption) *CertServingCache
+```
+NewCertServingCache returns a new instance of CertServingCache that uses the
+supplied CertStore.
+
+
+
+### Methods
+
+```go
+func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error)
+```
+GetCertificate can be assigned to tls.Config.GetCertificate.
+
+
+
+
+### Type CertServingCacheOption
+```go
+type CertServingCacheOption func(*CertServingCache)
+```
+CertServingCacheOption represents options to NewCertServingCache.
+
+### Functions
+
+```go
+func CertCacheNowFunc(fn func() time.Time) CertServingCacheOption
+```
+CertCacheNowFunc sets the function used to obtain the current time. This is
+generally only required for testing purposes.
+
+
+```go
+func CertCacheRootCAs(rootCAs *x509.CertPool) CertServingCacheOption
+```
+CertCacheRootCAs sets the rootCAs to be used when verifying the validity of
+the certificate loaded from the back store.
+
+
+```go
+func CertCacheTTL(ttl time.Duration) CertServingCacheOption
+```
+CertCacheTTL sets the in-memory TTL beyond which cache entries are
+refreshed. This is generally only required for testing purposes.
+
+
+
+
+### Type CertStore
+```go
+type CertStore interface {
+	Get(ctx context.Context, name string) ([]byte, error)
+}
+```
+CertStore represents a store for TLS certificates.
+
+
+### Type CertStoreFactory
+```go
+type CertStoreFactory interface {
+	Type() string
+	Describe() string
+	New(ctx context.Context, name string) (CertStore, error)
+}
+```
+CertStoreFactory is the interface that must be implemented to register a new
+CertStore type with this package so that it may accessed via the
+TLSCertStoreFlags command line flags.
+
+
 ### Type HTTPServerFlags
 ```go
 type HTTPServerFlags struct {
-	Address         string `subcmd:"https,:8080,address to run https web server on"`
-	CertificateFile string `subcmd:"ssl-cert,localhost.crt,ssl certificate file"`
-	KeyFile         string `subcmd:"ssl-key,localhost.key,ssl private key file"`
+	Address string `subcmd:"https,:8080,address to run https web server on"`
+	TLSCertFlags
+	AcmeRedirectTarget string `subcmd:"acme-redirect-target,,host implementing acme client that this http server will redirect acme challenges to"`
+	TestingCAPem       string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 }
 ```
-HTTPServerFlags defines commonly used flags for running an http server.
+HTTPServerFlags defines commonly used flags for running an http server. TLS
+certificates may be retrieved either from a local cert and key file as
+specified by tls-cert and tls-key; this is generally used for testing or
+when the domain certificates are available only as files. The altnerative,
+preferred for production, source for TLS certificates is from a cache as
+specified by tls-cert-cache-type and tls-cert-cache-name. The cache may be
+on local disk, or preferably in some shared service such as Amazon's Secrets
+Service.
 
 
 ### Type SelfSignedOption
 ```go
 type SelfSignedOption func(ssc *selfSignedCertOptions)
 ```
+SelfSignedOption represents an option to NewSelfSignedCert.
 
 ### Functions
 
@@ -136,6 +269,33 @@ func CertPrivateKey(key crypto.PrivateKey) SelfSignedOption
 CertPrivateKey specifies the private key to use for the certificate.
 
 
+
+
+### Type TLSCertFlags
+```go
+type TLSCertFlags struct {
+	TLSCertStoreFlags
+	CertificateFile string `subcmd:"tls-cert,,ssl certificate file"`
+	KeyFile         string `subcmd:"tls-key,,ssl private key file"`
+}
+```
+TLSCertFlags defines commonly used flags for obtaining TLS/SSL certificates.
+Certificates may be obtained in one of two ways: from a cache of
+certificates, or from local files.
+
+
+### Type TLSCertStoreFlags
+```go
+type TLSCertStoreFlags struct {
+	CertStoreType  string `subcmd:"tls-cert-store-type,,'the type of the certificate store to use for retrieving tls certificates, use --tls-list-stores to see the currently available types'"`
+	CertStore      string `subcmd:"tls-cert-store,,'name/address of the certificate cache to use for retrieving tls certificates, the interpreation of this depends on the tls-cert-store-type flag'"`
+	ListStoreTypes bool   `subcmd:"tls-list-stores,,list the available types of tls certificate store"`
+}
+```
+TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
+certificate store. This is generally used in conjunction with
+TLSConfigFromFlags for apps that simply want to use stored certificates.
+Apps that manage/obtain/renew certificates may use them directly.
 
 
 

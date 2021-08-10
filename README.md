@@ -6,8 +6,9 @@ It contains the following submodules, each of which can be imported and
 versioned independently. 
 
 - [algo](algo/README.md): common algorithm implementations.
+- [aws]: Amazon Web Services related packages.
 - [cmdutil](cmdutil/README.md): support for building command line tools.
-- [debug](debug/README.md): support for instrumenting code to trace execution and communication.
+- [debug]: support for instrumenting code to trace execution and communication.
 - [errors](errors/README.md): support for working with go errors post go 1.13.
 - [file](file/README.md): support for working with files and filesystems, including cloud storage systems.
 - [io]: I/O related packages.

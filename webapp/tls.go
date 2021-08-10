@@ -15,6 +15,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"net"
 	"os"
@@ -30,6 +31,7 @@ type selfSignedCertOptions struct {
 	orgs []string
 }
 
+// SelfSignedOption represents an option to NewSelfSignedCert.
 type SelfSignedOption func(ssc *selfSignedCertOptions)
 
 // CertDNSHosts specifies the set of dns host names to use in the
@@ -218,6 +220,8 @@ type selfSignedCertFlags struct {
 	KeyFile         string `subcmd:"ssl-key,localhost.key,ssl private key file"`
 }
 
+// SelfSignedCertCommand returns a subcmd.Command that provides the
+// ability to generate a self signed certificate and private key file.
 func SelfSignedCertCommand(name string) *subcmd.Command {
 	certFlagSet := subcmd.MustRegisterFlagStruct(&selfSignedCertFlags{}, nil, nil)
 	certCmd := subcmd.NewCommand(name, certFlagSet, certCmd, subcmd.ExactlyNumArguments(0))
@@ -231,4 +235,25 @@ func certCmd(ctx context.Context, values interface{}, args []string) error {
 		cl.KeyFile,
 		CertAllIPAddresses(),
 	)
+}
+
+// CertPoolForTesting returns a new x509.CertPool containing the certs
+// in the specified pem files. It is intended for testing purposes only.
+func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error) {
+	if len(pemFiles) == 0 {
+		return nil, fmt.Errorf("no CA pem files specified")
+	}
+	rootCAs := x509.NewCertPool()
+	for _, pemFile := range pemFiles {
+		certs, err := ioutil.ReadFile(pemFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", pemFile, err)
+		}
+
+		// Append our cert to the system pool
+		if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+			return nil, fmt.Errorf("no certs appended")
+		}
+	}
+	return rootCAs, nil
 }

@@ -33,7 +33,7 @@ func ExampleCommandSet() {
 	}
 
 	fs := subcmd.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
-	// Subcommands are added using the subcmd.WithSubcommands option.
+	// Subcommands are added using subcmd.NewCommandLevel.
 	cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
 	cmd.Document("print an integer range")
 	cmdSet := subcmd.NewCommandSet(cmd)
