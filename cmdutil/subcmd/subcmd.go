@@ -152,7 +152,7 @@ type Runner func(ctx context.Context, flagValues interface{}, args []string) err
 
 // Main is the type of the function that can be used to intercept a call to
 // a Runner.
-type Main func(ctx context.Context, cmdRunner func() error) error
+type Main func(ctx context.Context, cmdRunner func(ctx context.Context) error) error
 
 // Command represents a single command.
 type Command struct {
@@ -471,8 +471,8 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 func (cmds *CommandSet) mainWrapper() Main {
 	wrapper := cmds.globalMain
 	if wrapper == nil {
-		wrapper = func(ctx context.Context, runner func() error) error {
-			return runner()
+		wrapper = func(ctx context.Context, runner func(ctx context.Context) error) error {
+			return runner(ctx)
 		}
 	}
 	return wrapper
@@ -548,7 +548,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		}
 		return cmd.opts.subcmds.dispatchWithArgs(ctx, usage, args)
 	}
-	return cmds.mainWrapper()(ctx, func() error {
+	return cmds.mainWrapper()(ctx, func(ctx context.Context) error {
 		return cmd.runner(ctx, cmd.flags.flagValues, args)
 	})
 }
