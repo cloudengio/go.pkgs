@@ -1,60 +1,54 @@
+version: 2.1
+
+orbs:
+  win: circleci/windows@2.4.1
+
 jobs:
-  test:
+  test-linux:
     docker:
-      - image: cimg/go:1.16
+      - image: cimg/go:<< parameters.go >>
     steps:
       - checkout
       - run:
           name: test
           command: |
             export USER=circleci
-            mkdir -p webapp/cmd/webapp/webapp-sample/build
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/css
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/js
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/media
-            touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/css/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/js/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/media/dummy-for-embed
-            for dir in $(find * -maxdepth 0 -type d); do
-              pushd "${dir}"
-              go get -t -d ./...
-              go test -failfast --covermode=atomic -race ./...
-              popd
-            done
+            make test-ci
+
+  test-windows:
+    executor:
+      name: win/default
+    steps:
+      - checkout
+      - run:
+          name: test
+          command: |
+            export USER=circleci
+            make test-ci
 
   lint:
     docker:
-      - image: cimg/go:1.16
+      - image: cimg/go:<< parameters.go >>
     steps:
       - checkout
       - run:
           name: downloads
           command: |
-            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-            go get github.com/matthewloring/validjson/cmd/validjson@latest
-            go install -x github.com/matthewloring/validjson/cmd/validjson@latest
-            mkdir -p webapp/cmd/webapp/webapp-sample/build
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/css
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/js
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/media
-            touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/css/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/js/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/media/dummy-for-embed
+            make prep-lint-ci
       - run:
           name: lint
           command: |
-            for dir in $(find * -maxdepth 0 -type d ); do
-              pushd "${dir}"
-              golangci-lint run ./...
-              validjson ./...
-              popd
-            done
+            make lint-ci
 
-version: 2.1
 workflows:
   main:
     jobs:
-      - test
-      - lint
+      - test-linux:
+          matrix:
+            parameters:
+              go: ["go1.16", "go1.17"]
+      - test-windows
+      - lint:
+          matrix:
+            parameters:
+              go: ["go1.17"]

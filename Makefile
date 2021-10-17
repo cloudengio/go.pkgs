@@ -9,6 +9,23 @@ build:
 		cd ..; \
 	done
 
+prep-ci:
+	mkdir -p webapp/cmd/webapp/webapp-sample/build
+	mkdir -p webapp/cmd/webapp/webapp-sample/build/static/css
+	mkdir -p webapp/cmd/webapp/webapp-sample/build/static/js
+	mkdir -p webapp/cmd/webapp/webapp-sample/build/static/media
+	touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
+	touch webapp/cmd/webapp/webapp-sample/build/static/css/dummy-for-embed
+	touch webapp/cmd/webapp/webapp-sample/build/static/js/dummy-for-embed
+	touch webapp/cmd/webapp/webapp-sample/build/static/media/dummy-for-embed
+
+test-ci: prep-ci
+	for pkg in $(SUBMODULES); do \
+		cd $$pkg; \
+		go test -failfast --covermode=atomic -race ./...; \
+		cd ..; \
+	done
+
 test:
 	for pkg in $(SUBMODULES); do \
 		cd $$pkg; \
@@ -16,12 +33,25 @@ test:
 		cd ..; \
 	done
 
+prep-lint-ci: prep-ci
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+	go get github.com/matthewloring/validjson/cmd/validjson@latest
+	go install -x github.com/matthewloring/validjson/cmd/validjson@latest
+
+lint-ci:
+	for pkg in $(SUBMODULES); do \
+		cd $$pkg; \
+		golangci-lint run ./...; \
+		validjson ./...; \
+		cd ..; \
+	done
+
 lint:
 	for pkg in $(SUBMODULES); do \
-	cd $$pkg; \
-       		golangci-lint run ./...; \
-       		cd ..; \
-       	done
+		cd $$pkg; \
+		golangci-lint run ./...; \
+		cd ..; \
+	done
 
 pr:
 	for pkg in $(SUBMODULES); do \
