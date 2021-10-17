@@ -414,7 +414,7 @@ func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.Prefi
 	case err == nil && len(info.Err) == 0:
 		return nil
 	case err == nil && len(info.Err) != 0:
-		errs.Append(db.errordb.Set(prefix, &info))
+		errs.Append(db.errordb.Set(prefix, info))
 		return errs.Err()
 	}
 	ninfo := &filewalk.PrefixInfo{
@@ -447,7 +447,8 @@ func (db *Database) Delete(ctx context.Context, separator string, prefixes []str
 		deletions := db.delete(ctx, separator, prefix, recurse, errs)
 		nd, err := db.prefixdb.DeleteKeys(deletions)
 		if err != nil {
-			return deleted, fmt.Errorf("%v: %v", deletions[nd+1], err)
+			errs.Append(fmt.Errorf("%v: %v", deletions[nd+1], err))
+			continue
 		}
 		deleted++
 	}
