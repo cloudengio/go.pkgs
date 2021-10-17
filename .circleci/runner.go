@@ -12,18 +12,29 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 var (
-	prepFlag bool
-	testFlag bool
+	prepFlag    bool
+	testFlag    bool
+	modulesFlag bool
 )
 
 func main() {
 	ctx := context.Background()
-	flag.BoolVar(&prepFlag, "prep", true, "prepare file system for tests")
-	flag.BoolVar(&testFlag, "test", true, "run tests")
+	flag.BoolVar(&prepFlag, "prep", false, "prepare file system for tests")
+	flag.BoolVar(&modulesFlag, "modules", false, "print modules in this repo")
+	flag.BoolVar(&testFlag, "test", false, "run tests")
 	flag.Parse()
+
+	if modulesFlag {
+		mods, err := subdirs()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(strings.Join(mods, " "))
+	}
 
 	if prepFlag {
 		if err := prep(); err != nil {
@@ -85,7 +96,7 @@ func runTests(ctx context.Context) error {
 }
 
 func runTest(ctx context.Context, dir string) error {
-	fmt.Printf("DIR: %v\n", dir)
+	fmt.Printf("%v...\n", dir)
 	cmd := exec.CommandContext(ctx, "go", "test", "-failfast", "--covermode=atomic", "-race", "./...")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout

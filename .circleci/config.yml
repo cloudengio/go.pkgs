@@ -16,7 +16,7 @@ jobs:
           name: test
           command: |
             export USER=circleci
-            go run .circlci/runner.go --prep --test
+            go run .circleci/runner.go --prep --test
 
   test-windows:
     executor:
@@ -27,7 +27,7 @@ jobs:
           name: test
           command: |
             export USER=circleci
-            go run .circlci\runner.go --prep --test
+            go run .circleci\runner.go --prep --test
 
   lint:
     parameters:
@@ -40,11 +40,19 @@ jobs:
       - run:
           name: prep
           command: |
-            make -f .circleci/Makefile prep-test prep-lint
+            url -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+            go get github.com/matthewloring/validjson/cmd/validjson@latest
+            go install -x github.com/matthewloring/validjson/cmd/validjson@latest
+            go run .circleci/runner.go --prep
       - run:
           name: lint
           command: |
-            make -f .circleci/Makefile lint
+            for pkg in $(go run .circleci/runner --modules); do \
+              cd $$pkg; \
+              golangci-lint run ./...; \
+              validjson ./...; \
+              cd ..; \
+            done
 
 workflows:
   main:
