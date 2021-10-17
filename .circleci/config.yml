@@ -22,11 +22,11 @@ jobs:
     executor:
       name: win/default
     steps:
+      - run: git config --global core.autocrlf false
       - checkout
       - run:
           name: test
           command: |
-            export USER=circleci
             go run .circleci\runner.go --prep --test
 
   lint:

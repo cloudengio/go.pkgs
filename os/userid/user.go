@@ -4,7 +4,8 @@
 
 // Package userid provides complimentary functionality to the standard os/user
 // package by using the 'id' command to avoid loss of functionality when
-// cross compiling. It first use the os/user package and fall back to the
+// cross compiling. It provides minimal functionality for windows, see below.
+// On Unix systems, it first uses the os/user package and then falls back to the
 // using the 'id' command. It offers reduced functionality as compared to
 // os/user. By way of background os/user has both a pure-go implementation and
 // a cgo implementation. The former parses /etc/passwd and the latter uses the
@@ -14,11 +15,14 @@
 // to resolve info for all users when cross compiled and used on systems that
 // use a directory service that is accessible via getpwent but whose members
 // do not appear in the text file /etc/passwd.
+//
+// For windows it uses the PowerShell to obtain minimal information on
+// the user and windows SID and represents that information in the same
+// format as the 'id' command.
 package userid
 
 import (
 	"fmt"
-	"os/exec"
 	"os/user"
 	"strings"
 	"sync"
@@ -200,17 +204,4 @@ func (idm *IDManager) LookupGroup(id string) (user.Group, error) {
 		return id, nil
 	}
 	return user.Group{}, user.UnknownGroupError(id)
-}
-
-func runIDCommand(uid string) (string, error) {
-	args := []string{}
-	if len(uid) > 0 {
-		args = append(args, uid)
-	}
-	cmd := exec.Command("id", args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(out), fmt.Errorf("%v: %v", strings.Join(cmd.Args, " "), err)
-	}
-	return string(out), err
 }
