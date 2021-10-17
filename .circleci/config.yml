@@ -16,7 +16,7 @@ jobs:
           name: test
           command: |
             export USER=circleci
-            make test-ci
+            go run .circlci\runner.go --prep --test
 
   test-windows:
     executor:
@@ -27,7 +27,7 @@ jobs:
           name: test
           command: |
             export USER=circleci
-            make test-ci
+            go run .circlci\runner.go --prep --test
 
   lint:
     parameters:
@@ -38,13 +38,13 @@ jobs:
     steps:
       - checkout
       - run:
-          name: downloads
+          name: prep
           command: |
-            make prep-lint-ci
+            make -f .circleci/Makefile prep-test prep-lint
       - run:
           name: lint
           command: |
-            make lint-ci
+            make -f .circleci/Makefile lint
 
 workflows:
   main:
