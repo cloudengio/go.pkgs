@@ -59,13 +59,18 @@ func TestSignal(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	cmd, _, st := runCmd("--debounce=5s")
+	cmd, pid, st := runCmd("--debounce=5s")
 	go func() {
 		// Make sure that multiple signals in quick succession do not
 		// cause the process to exit.
-		cmd.Process.Signal(syscall.SIGINT)
-		cmd.Process.Signal(syscall.SIGINT)
-		cmd.Process.Signal(syscall.SIGINT)
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			t.Log(err)
+			return
+		}
+		proc.Signal(syscall.SIGINT)
+		proc.Signal(syscall.SIGINT)
+		proc.Signal(syscall.SIGINT)
 		wg.Done()
 	}()
 
@@ -84,11 +89,16 @@ func TestSignal(t *testing.T) {
 
 	// Make sure that a second signal after the debounce period leads to
 	// an exit.
-	cmd, _, st = runCmd("--debounce=250ms")
+	cmd, pid, st = runCmd("--debounce=250ms")
 	go func() {
-		cmd.Process.Signal(syscall.SIGINT)
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			t.Log(err)
+			return
+		}
+		proc.Signal(syscall.SIGINT)
 		time.Sleep(time.Millisecond * 250)
-		cmd.Process.Signal(syscall.SIGINT)
+		proc.Signal(syscall.SIGINT)
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)
