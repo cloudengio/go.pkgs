@@ -4,6 +4,8 @@ cloudeng.io/cmdutil v0.0.0-20210810185238-8d5e0be9ddb1 h1:Hdej+SPhzS0LmyJ5vVWicf
 cloudeng.io/cmdutil v0.0.0-20210810185238-8d5e0be9ddb1/go.mod h1:EwLVTEiRF+bZPVXIzJBuZttVmF6w2ETHcmNIpdOQbTg=
 cloudeng.io/cmdutil v0.0.0-20210810234338-761e51ad96c2 h1:Bwx+MzzRVQDZ8xlSqu+kddvQFZCcp0ptLQWlZiipM4s=
 cloudeng.io/cmdutil v0.0.0-20210810234338-761e51ad96c2/go.mod h1:EwLVTEiRF+bZPVXIzJBuZttVmF6w2ETHcmNIpdOQbTg=
+cloudeng.io/cmdutil v0.0.0-20211018015315-f2da3f13f51b h1:/oPSA/hUEN9MrT9Gksihn0jEjRoXvqWEfcJtRbjHcJg=
+cloudeng.io/cmdutil v0.0.0-20211018015315-f2da3f13f51b/go.mod h1:EwLVTEiRF+bZPVXIzJBuZttVmF6w2ETHcmNIpdOQbTg=
 cloudeng.io/errors v0.0.5 h1:NmCUhMIvWQ/0Ny3cBWplA2RXPcnyNUiMovPe64LgX3A=
 cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
 cloudeng.io/io v0.0.0-20210705212102-ab34f3a7a9fe/go.mod h1:wm8AtJlHkbFNXqh/4cyb8iqAzlBXPzcIpVbKw8/AMd4=
@@ -11,12 +13,16 @@ cloudeng.io/os v0.0.0-20210706011652-f497a495b359 h1:ppC6TCnvOFTiprFTyokr1H+DBjy
 cloudeng.io/os v0.0.0-20210706011652-f497a495b359/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
 cloudeng.io/os v0.0.0-20210810234338-761e51ad96c2 h1:y+tPDyHeHSubnB5Lcnxu4EMxBH2K+pcxMI6F3WSzzF4=
 cloudeng.io/os v0.0.0-20210810234338-761e51ad96c2/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
+cloudeng.io/os v0.0.0-20211018015315-f2da3f13f51b h1:1G02UBIDgqycmD4X5/Jsteb9Ga8BNiY+txBRTLKJZwA=
+cloudeng.io/os v0.0.0-20211018015315-f2da3f13f51b/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
 cloudeng.io/text v0.0.8 h1:zJkm29A0G6Q9KRshiqQQArQ2X3P+X9G7AnNiMaCgRB0=
 cloudeng.io/text v0.0.8/go.mod h1:VPOCvDDUBocQe7rfQDZcyEpScLooZo/6cJs1cM0LOMI=
 cloudeng.io/webapp v0.0.0-20210810185238-8d5e0be9ddb1 h1:kLX0/xzwvtHYJKsuhP/spGQ4/K9Ve0VZqyUPDxGY91w=
 cloudeng.io/webapp v0.0.0-20210810185238-8d5e0be9ddb1/go.mod h1:dkXqOP6LT2nXhql/X1FP2zxCHyk2eScDDsrHQnbN3Ak=
 cloudeng.io/webapp v0.0.0-20210810234338-761e51ad96c2 h1:6hCx2PRjA3oo5zCb+kpgBb5B+XyDBpBbxUHt6la/WmA=
 cloudeng.io/webapp v0.0.0-20210810234338-761e51ad96c2/go.mod h1:TbIMSUMw82mwscEvQW8SkzpxXW+oYe/63DobtP/uoYE=
+cloudeng.io/webapp v0.0.0-20211018015315-f2da3f13f51b h1:SfbQMb0sanXEHUOCtdB6VIkT4jzC3KDWELARYGTkWWA=
+cloudeng.io/webapp v0.0.0-20211018015315-f2da3f13f51b/go.mod h1:TbIMSUMw82mwscEvQW8SkzpxXW+oYe/63DobtP/uoYE=
 github.com/aws/aws-sdk-go-v2 v1.7.0/go.mod h1:tb9wi5s61kTDA5qCkcDbt3KRVV74GGslQkl/DRdX/P4=
 github.com/aws/aws-sdk-go-v2 v1.8.0 h1:HcN6yDnHV9S7D69E7To0aUppJhiJNEzQSNcUxc7r3qo=
 github.com/aws/aws-sdk-go-v2 v1.8.0/go.mod h1:xEFuWz+3TYdlPRuo+CqATbeDWIWyaT5uAPwPaWtgse0=
