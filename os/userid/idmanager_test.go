@@ -5,13 +5,12 @@
 package userid
 
 import (
-	"os"
 	"testing"
 )
 
 func TestManager(t *testing.T) {
 	idm := NewIDManager()
-	user := os.Getenv("USER")
+	user := GetCurrentUser()
 	id, err := idm.LookupUser(user)
 	if err != nil {
 		t.Fatal(err)
