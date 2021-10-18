@@ -16,7 +16,7 @@ type lockType uint32
 
 const (
 	readLock  lockType = 0
-	writeLock lockType = windows.LOCKFILE_EXCLUSIVE_LOCK
+	writeLock lockType = LOCKFILE_EXCLUSIVE_LOCK
 )
 
 const (

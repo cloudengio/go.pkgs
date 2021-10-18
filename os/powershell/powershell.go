@@ -5,6 +5,13 @@
 //go:build windows
 // +build windows
 
+package powershell
+
+import (
+	"bytes"
+	"os/exec"
+)
+
 // T represents an instance of a Windows PowerShell
 type T struct {
 	ps string
@@ -13,15 +20,13 @@ type T struct {
 // New creates a new PowerShell instance.
 func New() *T {
 	ps, _ := exec.LookPath("powershell.exe")
-	return &PowerShell{
-		powerShell: ps,
-	}
+	return &T{ps}
 }
 
 // Run executes the supplied commands using PowerShell.
-func (p *PowerShell) Run(args ...string) (stdOut string, stdErr string, err error) {
+func (p *T) Run(args ...string) (stdOut string, stdErr string, err error) {
 	args = append([]string{"-NoProfile", "-NonInteractive"}, args...)
-	cmd := exec.Command(p.powerShell, args...)
+	cmd := exec.Command(p.ps, args...)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	cmd.Stdout = stdout

@@ -43,7 +43,7 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestParseSID(t *testing.T) {
+func TestParseWindowsUserids(t *testing.T) {
 	s := func(a ...string) []string {
 		return a
 	}
@@ -66,5 +66,13 @@ func TestParseSID(t *testing.T) {
 		if got, want := sa, tc.sub; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %v, want %v", tc.sid, got, want)
 		}
+	}
+
+	d, u := userid.ParseWindowsUser(`domain\user`)
+	if got, want := d, "domain"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := u, "user"; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }

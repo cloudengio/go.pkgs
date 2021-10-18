@@ -26,7 +26,7 @@ func TestSimple(t *testing.T) {
 	if len(stdout) < 2 {
 		t.Errorf("looks too small to be a valid user name)")
 	}
-	if os.GetEnv("CIRCLECI") == "true" {
+	if os.Getenv("CIRCLECI") == "true" {
 		if got, want := stdout, "circleci"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}

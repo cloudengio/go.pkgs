@@ -9,6 +9,7 @@ package userid
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -24,4 +25,14 @@ func runIDCommand(uid string) (string, error) {
 		return string(out), fmt.Errorf("%v: %v", strings.Join(cmd.Args, " "), err)
 	}
 	return string(out), err
+}
+
+// GetCurrentUser returns the current user as determined by environment
+// variables.
+func GetCurrentUser() string {
+	return os.Getenv("USER")
+}
+
+func usernameOnly(s string) string {
+	return s
 }

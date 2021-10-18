@@ -135,7 +135,7 @@ func infoUsingUserPackage(id string) (IDInfo, error) {
 	if err == nil {
 		info := IDInfo{
 			UID:      u.Uid,
-			Username: u.Username,
+			Username: usernameOnly(u.Username),
 		}
 		grp, err := user.LookupGroupId(u.Gid)
 		if err == nil {
