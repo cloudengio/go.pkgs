@@ -31,7 +31,11 @@ func list(t *testing.T, root string) ([]string, []string, []string) {
 		names = append(names, path)
 		perms = append(perms, info.Mode().Perm().String())
 		if info.IsDir() {
-			s := sha1.Sum([]byte(strings.TrimPrefix(path, root)))
+			fn := strings.TrimPrefix(path, root)
+			if isWindows() {
+				fn = strings.ReplaceAll(strings.TrimPrefix(path, root), `\`, `/`)
+			}
+			s := sha1.Sum([]byte(fn))
 			shas = append(shas, hex.EncodeToString(s[:]))
 			return err
 		}
@@ -75,35 +79,39 @@ func TestMirrorDirTree(t *testing.T) {
 	}
 	defer os.RemoveAll(td)
 
+	fp := func(p string) string {
+		return strings.ReplaceAll(p, "/", string(filepath.Separator))
+	}
+
 	expectedPaths := []string{
-		"testdata",
-		"testdata/a",
-		"testdata/a/b",
-		"testdata/a/b/c",
-		"testdata/a/b/c/f5",
-		"testdata/a/b/c/f6",
-		"testdata/a/b/f3",
-		"testdata/a/b/f4",
-		"testdata/a/d",
-		"testdata/a/d/f7",
-		"testdata/a/f1",
-		"testdata/a/f2",
+		fp("testdata"),
+		fp("testdata/a"),
+		fp("testdata/a/b"),
+		fp("testdata/a/b/c"),
+		fp("testdata/a/b/c/f5"),
+		fp("testdata/a/b/c/f6"),
+		fp("testdata/a/b/f3"),
+		fp("testdata/a/b/f4"),
+		fp("testdata/a/d"),
+		fp("testdata/a/d/f7"),
+		fp("testdata/a/f1"),
+		fp("testdata/a/f2"),
 	}
 	expectedRegular := []string{
-		"testdata/a/b/c/f5",
-		"testdata/a/b/c/f6",
-		"testdata/a/b/f3",
-		"testdata/a/b/f4",
-		"testdata/a/d/f7",
-		"testdata/a/f1",
-		"testdata/a/f2",
+		fp("testdata/a/b/c/f5"),
+		fp("testdata/a/b/c/f6"),
+		fp("testdata/a/b/f3"),
+		fp("testdata/a/b/f4"),
+		fp("testdata/a/d/f7"),
+		fp("testdata/a/f1"),
+		fp("testdata/a/f2"),
 	}
 	expectedDirs := []string{
-		"testdata",
-		"testdata/a",
-		"testdata/a/b",
-		"testdata/a/b/c",
-		"testdata/a/d",
+		fp("testdata"),
+		fp("testdata/a"),
+		fp("testdata/a/b"),
+		fp("testdata/a/b/c"),
+		fp("testdata/a/d"),
 	}
 	expectedPerms := []string{
 		"-rwxr-xr-x",
@@ -118,6 +126,22 @@ func TestMirrorDirTree(t *testing.T) {
 		"-rw-r--r--",
 		"-rw-r--r--",
 		"-rw-r--r--",
+	}
+	if isWindows() {
+		expectedPerms = []string{
+			"-rwxrwxrwx",
+			"-rwxrwxrwx",
+			"-rwxrwxrwx",
+			"-rwxrwxrwx",
+			"-rw-rw-rw-",
+			"-rw-rw-rw-",
+			"-rw-rw-rw-",
+			"-rw-rw-rw-",
+			"-rwxrwxrwx",
+			"-rw-rw-rw-",
+			"-rw-rw-rw-",
+			"-rw-rw-rw-",
+		}
 	}
 	expectedShas := []string{
 		"7956815567b5ab861b991832a34b63b507729e0a", // sha of filename
@@ -219,17 +243,40 @@ func TestCopyFile(t *testing.T) {
 		}
 	}
 
-	assertErr := func(err error, text string) {
-		if err == nil || !strings.Contains(err.Error(), text) {
-			t.Errorf("%v: missing or wrong error: %v (%v)", errors.Caller(2, 1), err, text)
+	assertErr := func(err error, possibleErrors ...string) {
+		if err == nil {
+			t.Errorf("%v: missing error", errors.Caller(2, 1))
+			return
 		}
+		for _, text := range possibleErrors {
+			if strings.Contains(err.Error(), text) {
+				return
+			}
+		}
+		t.Errorf("%v: missing or wrong error: got %v does not contain any of %q", errors.Caller(2, 1), err, strings.Join(possibleErrors, ", "))
 	}
-	assert(cmdutil.CopyFile(from, to, 0677, false))
+
+	assert(cmdutil.CopyFile(from, to, 0477, false))
 
 	expectedPaths := []string{"from", "to"}
-	expectedPerms := []string{"-rw-r-xr-x", "-rw-rwxrwx"}
 	expectedShas := []string{fromSha, fromSha}
+	expectedPerms := []string{"-rw-r-xr-x", "-r--rwxrwx"}
+	if isWindows() {
+		expectedPerms = []string{"-rw-rw-rw-", "-r--r--r--"}
+	}
 	paths, perms, shas := list(t, td)
+	cmplists(t, paths, expectedPaths, true)
+	cmplists(t, perms, expectedPerms, false)
+	cmplists(t, shas, expectedShas, false)
+	os.Remove(to)
+
+	assert(cmdutil.CopyFile(from, to, 0677, false))
+
+	expectedPerms = []string{"-rw-r-xr-x", "-rw-rwxrwx"}
+	if isWindows() {
+		expectedPerms = []string{"-rw-rw-rw-", "-rw-rw-rw-"}
+	}
+	paths, perms, shas = list(t, td)
 	cmplists(t, paths, expectedPaths, true)
 	cmplists(t, perms, expectedPerms, false)
 	cmplists(t, shas, expectedShas, false)
@@ -242,6 +289,9 @@ func TestCopyFile(t *testing.T) {
 
 	expectedPaths = []string{from, fromNew, to}
 	expectedPerms = []string{"-rw-r-xr-x", "-rw-r-xr-x", "-rw-r--r--"}
+	if isWindows() {
+		expectedPerms = []string{"-rw-rw-rw-", "-rw-rw-rw-", "-rw-rw-rw-"}
+	}
 	expectedShas = []string{fromSha, fromNewSha, fromNewSha}
 	paths, perms, shas = list(t, td)
 	cmplists(t, paths, expectedPaths, true)
@@ -258,17 +308,19 @@ func TestCopyFile(t *testing.T) {
 
 	// No directory permissions.
 	forbidden := filepath.Join(td, "forbidden")
-	if err := os.MkdirAll(forbidden, 0000); err != nil {
+	if err := os.MkdirAll(forbidden, 0400); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	forbiddenFile := filepath.Join(forbidden, "test")
 	err = cmdutil.CopyFile(from, forbiddenFile, 0677, true)
-	assertErr(err, "permission denied")
+	if !isWindows() {
+		assertErr(err, "permission denied")
+	}
 
 	// No file permissions.
 	assert(os.Chmod(forbidden, 0777))
 	newFromFile(forbiddenFile)
 	assert(os.Chmod(forbiddenFile, 0000))
 	err = cmdutil.CopyFile(from, forbiddenFile, 0677, true)
-	assertErr(err, "permission denied")
+	assertErr(err, "permission denied", "Access is denied")
 }
