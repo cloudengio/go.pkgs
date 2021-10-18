@@ -21,6 +21,11 @@ var (
 	modulesFlag bool
 )
 
+func done(msg string, err error) {
+	fmt.Printf("Failed: %s: %s\n", msg, err)
+	os.Exit(1)
+}
+
 func main() {
 	ctx := context.Background()
 	flag.BoolVar(&prepFlag, "prep", false, "prepare file system for tests")
@@ -31,19 +36,19 @@ func main() {
 	if modulesFlag {
 		mods, err := subdirs()
 		if err != nil {
-			panic(err)
+			done("finding modules", err)
 		}
 		fmt.Println(strings.Join(mods, " "))
 	}
 
 	if prepFlag {
 		if err := prep(); err != nil {
-			panic(err)
+			done("prep", err)
 		}
 	}
 	if testFlag {
 		if err := runTests(ctx); err != nil {
-			panic(err)
+			done("tests", err)
 		}
 	}
 }
