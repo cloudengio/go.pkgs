@@ -20,8 +20,8 @@ var (
 )
 
 type trace struct {
-	mu         sync.Mutex
 	rootID, id int64
+	mu         sync.Mutex
 	records    []*record // records for a single goroutine
 	gocaller   []uintptr
 }
@@ -49,7 +49,7 @@ func appendGoroutineTrace(parent, branch *trace, r *record) {
 
 // record is shared by CallTrace, MessageTrace etc.
 type record struct {
-	// locking is provided by at the trace level.
+	// locking is provided at the trace level.
 	callers    []uintptr
 	gocall     bool
 	time       time.Time

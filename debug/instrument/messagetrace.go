@@ -177,8 +177,8 @@ func (mr MessageRecord) String() string {
 
 type MessageRecords []MessageRecord
 
-// Flatten returns a slice of MessageRecords sorted primarily by time and
-// then by message status (in order of Waiting, Sent and Received).
+// Flatten returns a slice of MessageRecords sorted by level, rootID, ID,
+// time and finally by message status (in order of Waiting, Sent and Received).
 func (mt *MessageTrace) Flatten(tag string) MessageRecords {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
@@ -213,12 +213,17 @@ func (ms MessageRecords) String() string {
 
 func sorter(a, b MessageRecord) bool {
 	switch {
-	case a.Time.Before(b.Time):
-		return true
-	case a.Time.Equal(b.Time):
+	case a.Level != b.Level:
+		return a.Level < b.Level
+	case a.RootID != b.RootID:
+		return a.RootID < b.RootID
+	case a.ID != b.ID:
+		return a.ID < b.ID
+	case !a.Time.Equal(b.Time):
+		return a.Time.Before(b.Time)
+	default:
 		return a.Status < b.Status
 	}
-	return false
 }
 
 func mergePair(a, b MessageRecords) MessageRecords {
@@ -246,7 +251,7 @@ func mergePair(a, b MessageRecords) MessageRecords {
 	return out
 }
 
-func MergeMesageTraces(traces ...MessageRecords) MessageRecords {
+func MergeMessageTraces(traces ...MessageRecords) MessageRecords {
 	switch len(traces) {
 	case 0:
 		return MessageRecords{}
@@ -255,5 +260,5 @@ func MergeMesageTraces(traces ...MessageRecords) MessageRecords {
 	}
 	merged := mergePair(traces[0], traces[1])
 	traces = append([]MessageRecords{merged}, traces[2:]...)
-	return MergeMesageTraces(traces...)
+	return MergeMessageTraces(traces...)
 }
