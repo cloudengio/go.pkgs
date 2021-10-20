@@ -15,14 +15,14 @@ type local struct {
 	scanSize int
 }
 
-func createInfo(i os.FileInfo) Info {
+func createInfo(path string, i os.FileInfo) Info {
 	info := Info{
 		Name:    i.Name(),
 		Size:    i.Size(),
 		ModTime: i.ModTime(),
 		sys:     i,
 	}
-	info.UserID, info.GroupID = getUserAndGroupID(i.Sys())
+	info.UserID, info.GroupID = getUserAndGroupID(path, i)
 	m := i.Mode()
 	info.Mode = FileMode(m&os.ModePerm | m&os.ModeSymlink | m&os.ModeDir)
 	return info
@@ -47,10 +47,10 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 			dirs := make([]Info, 0, 10)
 			for _, info := range infos {
 				if info.IsDir() {
-					dirs = append(dirs, createInfo(info))
+					dirs = append(dirs, createInfo(path, info))
 					continue
 				}
-				files = append(files, createInfo(info))
+				files = append(files, createInfo(path, info))
 			}
 			ch <- Contents{
 				Path:     path,
@@ -74,7 +74,7 @@ func (l *local) Stat(ctx context.Context, path string) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
-	return createInfo(info), nil
+	return createInfo(path, info), nil
 }
 
 func (l *local) Join(components ...string) string {

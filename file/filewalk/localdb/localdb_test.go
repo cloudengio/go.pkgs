@@ -138,18 +138,19 @@ func TestDBLocking(t *testing.T) {
 	}
 	db.Close(ctx)
 
-	db, err = localdb.Open(ctx, dbDir, nil)
+	db, err = localdb.Open(ctx, dbDir+".1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = localdb.Open(ctx, dbDir, nil,
+
+	_, err = localdb.Open(ctx, dbDir+".2", nil,
 		localdb.LockStatusDelay(time.Millisecond*100),
 		localdb.TryLock(),
 	)
 	if err == nil || !strings.Contains(err.Error(), "failed to lock") {
 		t.Fatalf("missing or unexpected error: %v", err)
 	}
-	_, err = localdb.Open(ctx, dbDir,
+	_, err = localdb.Open(ctx, dbDir+".3",
 		[]filewalk.DatabaseOption{filewalk.ReadOnly()},
 		localdb.LockStatusDelay(time.Millisecond*100),
 		localdb.TryLock(),
@@ -196,6 +197,9 @@ func TestDBLocking(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dbr2.Close(ctx)
+	buf := make([]byte, 1024*1024)
+	n := runtime.Stack(buf, true)
+	fmt.Printf("%s\n", string(buf[:n]))
 }
 
 func fill(ctx context.Context, db filewalk.Database, when time.Time, n int) error {

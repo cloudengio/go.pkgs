@@ -187,7 +187,9 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		} else {
 			unlock, err = db.dbMutex.Lock()
 		}
+		fmt.Printf("sending... %v\n", db.dbLockFilename)
 		ch <- lockResult{unlock, err}
+		fmt.Printf("sent... %v\n", db.dbLockFilename)
 	}()
 	for {
 		select {
@@ -205,6 +207,11 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		case <-time.After(tryDelay):
 			if tryLock {
 				err := fmt.Errorf("failed to acquire %slock after %v", lockType, tryDelay)
+				select {
+				case <-ch:
+				default:
+					break
+				}
 				return lockerErrorInfo(db.dir, db.dbLockInfoFilename, err)
 			}
 			fmt.Fprintf(os.Stderr, "waiting to acquire %slock: lock info from %s:\n", lockType, db.dbLockInfoFilename)

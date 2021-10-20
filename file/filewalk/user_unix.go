@@ -8,12 +8,13 @@
 package filewalk
 
 import (
+	"os"
 	"strconv"
 	"syscall"
 )
 
-func getUserAndGroupID(sys interface{}) (string, string) {
-	si, ok := sys.(*syscall.Stat_t)
+func getUserAndGroupID(path string, info os.FileInfo) (string, string) {
+	si, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return "", ""
 	}
