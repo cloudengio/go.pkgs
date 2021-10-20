@@ -169,7 +169,7 @@ func lockerErrorInfo(dir, filename string, err error) error {
 	return fmt.Errorf("failed to lock %v: %v\nlock info from: %v:\n%v", dir, err, filename, lockerInfo(filename))
 }
 
-func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay time.Duration, tryLock bool) error {
+func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay time.Duration, tryLock bool) (func(), error) {
 	type lockResult struct {
 		unlock func()
 		err    error
@@ -179,6 +179,13 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		lockType = "read "
 	}
 	ch := make(chan lockResult)
+	cleanup := func() {
+		select {
+		case lr := <-ch:
+			fmt.Printf("cleanup.... \n")
+			lr.unlock()
+		}
+	}
 	go func() {
 		var unlock func()
 		var err error
@@ -187,9 +194,7 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		} else {
 			unlock, err = db.dbMutex.Lock()
 		}
-		fmt.Printf("sending... %v\n", db.dbLockFilename)
 		ch <- lockResult{unlock, err}
-		fmt.Printf("sent... %v\n", db.dbLockFilename)
 	}()
 	for {
 		select {
@@ -197,22 +202,17 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 			if lr.err == nil {
 				db.unlockFn = lr.unlock
 				if readOnly {
-					return nil
+					return nil, nil
 				}
-				return writeLockerInfo(db.dbLockInfoFilename)
+				return nil, writeLockerInfo(db.dbLockInfoFilename)
 			}
-			return lockerErrorInfo(db.dir, db.dbLockInfoFilename, lr.err)
+			return nil, lockerErrorInfo(db.dir, db.dbLockInfoFilename, lr.err)
 		case <-ctx.Done():
-			return ctx.Err()
+			return cleanup, ctx.Err()
 		case <-time.After(tryDelay):
 			if tryLock {
 				err := fmt.Errorf("failed to acquire %slock after %v", lockType, tryDelay)
-				select {
-				case <-ch:
-				default:
-					break
-				}
-				return lockerErrorInfo(db.dir, db.dbLockInfoFilename, err)
+				return cleanup, lockerErrorInfo(db.dir, db.dbLockInfoFilename, err)
 			}
 			fmt.Fprintf(os.Stderr, "waiting to acquire %slock: lock info from %s:\n", lockType, db.dbLockInfoFilename)
 			fmt.Fprintf(os.Stderr, "%s\n", lockerInfo(db.dbLockInfoFilename))
@@ -236,7 +236,7 @@ func (s jsonString) String() string {
 	return `"` + string(s) + `"`
 }
 
-func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, opts ...DatabaseOption) (filewalk.Database, error) {
+func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, opts ...DatabaseOption) (filewalk.Database, func(), error) {
 	db := newDB(dir)
 	var dbOpts filewalk.DatabaseOptions
 	for _, fn := range ifcOpts {
@@ -250,8 +250,8 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		fn(db)
 	}
 
-	if err := db.acquireLock(ctx, db.opts.readOnly, db.opts.lockRetryDelay, db.opts.tryLock); err != nil {
-		return nil, err
+	if cleanup, err := db.acquireLock(ctx, db.opts.readOnly, db.opts.lockRetryDelay, db.opts.tryLock); err != nil {
+		return nil, cleanup, err
 	}
 
 	cfg := pudge.Config{
@@ -298,13 +298,13 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 	}
 	if err := gdb.Wait(); err != nil {
 		db.closeAll(ctx)
-		return nil, err
+		return nil, func() {}, err
 	}
 	if db.opts.errorsOnly {
-		return db, nil
+		return db, func() {}, nil
 	}
 	if db.opts.resetStats {
-		return db, nil
+		return db, func() {}, nil
 	}
 	var gstats errgroup.T
 	gstats.Go(func() error {
@@ -327,9 +327,9 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 	})
 	if err := gstats.Wait(); err != nil {
 		db.closeAll(ctx)
-		return nil, err
+		return nil, func() {}, err
 	}
-	return db, nil
+	return db, func() {}, nil
 }
 
 func (db *Database) closeAll(ctx context.Context) error {
