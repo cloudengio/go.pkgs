@@ -13,6 +13,8 @@ cloudeng.io/os v0.0.0-20211018015315-f2da3f13f51b h1:1G02UBIDgqycmD4X5/Jsteb9Ga8
 cloudeng.io/os v0.0.0-20211018015315-f2da3f13f51b/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
 cloudeng.io/os v0.0.0-20211020173334-a97970871511 h1:+ljD3HgbbdwlKBQ/nDIpZKsdsNxW9EMWYt7pwOMPCBk=
 cloudeng.io/os v0.0.0-20211020173334-a97970871511/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
+cloudeng.io/os v0.0.0-20211020181111-9f1e14f842e1 h1:OkH2j970GjcBFd0ctYcBG75x5aBLGyXQHB01b4F8krs=
+cloudeng.io/os v0.0.0-20211020181111-9f1e14f842e1/go.mod h1:zDPvwPXgSgP49+ueO5AsGoPMZ5ohGjYvlCUI0JGcuNQ=
 cloudeng.io/sync v0.0.5 h1:fVkib4XhvbGceMe9F5rcXQzoJQxcdkVp2GZPIo2Dt78=
 cloudeng.io/sync v0.0.5/go.mod h1:ft73nqXGxRtWgcXoyWC+RLVjwCq+Ai0R/9oU4rnXf5g=
 github.com/cosnicolaou/pudge v1.0.6 h1:ej1AaUPxI3++Cn1qzbOuCCGflHWvvjAFaoKZzVG3cUQ=
