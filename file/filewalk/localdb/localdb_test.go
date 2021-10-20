@@ -105,7 +105,7 @@ func TestDBSimple(t *testing.T) {
 	err = db.Close(ctx)
 	assert()
 
-	db, _, err = localdb.Open(ctx, dbDir, nil)
+	db, err = localdb.Open(ctx, dbDir, nil)
 	assert()
 	defer db.Close(ctx)
 
