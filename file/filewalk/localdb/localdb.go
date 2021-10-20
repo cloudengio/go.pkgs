@@ -15,11 +15,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/os/lockedfile"
+	"cloudeng.io/os/userid"
 	"cloudeng.io/sync/errgroup"
 	"github.com/cosnicolaou/pudge"
 )
@@ -53,7 +55,9 @@ type Database struct {
 	dbLockFilename     string
 	dbLockInfoFilename string
 	dbMutex            *lockedfile.Mutex
-	unlockFn           func()
+	unlockedMu         sync.Mutex
+	unlocked           bool   // GUARDED_BY(unlockedMu)
+	unlockFn           func() // GUARDED_BY(unlockedMu)
 	globalStats        *statsCollection
 	userStats          *perItemStats
 	groupStats         *perItemStats
@@ -126,7 +130,7 @@ func writeLockerInfo(filename string) error {
 	pid := os.Getpid()
 	ppid := os.Getppid()
 	contents := lockFileContents{
-		User: os.Getenv("USER"),
+		User: userid.GetCurrentUser(),
 		CWD:  cwd,
 		PID:  pid,
 		PPID: ppid,
@@ -169,7 +173,7 @@ func lockerErrorInfo(dir, filename string, err error) error {
 	return fmt.Errorf("failed to lock %v: %v\nlock info from: %v:\n%v", dir, err, filename, lockerInfo(filename))
 }
 
-func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay time.Duration, tryLock bool) (func(), error) {
+func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay time.Duration, tryLock bool) error {
 	type lockResult struct {
 		unlock func()
 		err    error
@@ -179,13 +183,7 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		lockType = "read "
 	}
 	ch := make(chan lockResult)
-	cleanup := func() {
-		select {
-		case lr := <-ch:
-			fmt.Printf("cleanup.... \n")
-			lr.unlock()
-		}
-	}
+	ctx, cancel := context.WithCancel(ctx)
 	go func() {
 		var unlock func()
 		var err error
@@ -194,25 +192,35 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		} else {
 			unlock, err = db.dbMutex.Lock()
 		}
-		ch <- lockResult{unlock, err}
+		select {
+		case ch <- lockResult{unlock, err}:
+		case <-ctx.Done():
+			if unlock != nil {
+				db.setUnlockFn(unlock)
+				db.unlock()
+			}
+		}
 	}()
 	for {
 		select {
 		case lr := <-ch:
 			if lr.err == nil {
-				db.unlockFn = lr.unlock
+				db.setUnlockFn(func() { lr.unlock(); cancel() })
 				if readOnly {
-					return nil, nil
+					return nil
 				}
-				return nil, writeLockerInfo(db.dbLockInfoFilename)
+				return writeLockerInfo(db.dbLockInfoFilename)
 			}
-			return nil, lockerErrorInfo(db.dir, db.dbLockInfoFilename, lr.err)
+			cancel()
+			return lockerErrorInfo(db.dir, db.dbLockInfoFilename, lr.err)
 		case <-ctx.Done():
-			return cleanup, ctx.Err()
+			cancel()
+			return ctx.Err()
 		case <-time.After(tryDelay):
 			if tryLock {
 				err := fmt.Errorf("failed to acquire %slock after %v", lockType, tryDelay)
-				return cleanup, lockerErrorInfo(db.dir, db.dbLockInfoFilename, err)
+				cancel()
+				return lockerErrorInfo(db.dir, db.dbLockInfoFilename, err)
 			}
 			fmt.Fprintf(os.Stderr, "waiting to acquire %slock: lock info from %s:\n", lockType, db.dbLockInfoFilename)
 			fmt.Fprintf(os.Stderr, "%s\n", lockerInfo(db.dbLockInfoFilename))
@@ -224,9 +232,21 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 	}
 }
 
+func (db *Database) setUnlockFn(fn func()) {
+	db.unlockedMu.Lock()
+	defer db.unlockedMu.Unlock()
+	db.unlockFn = fn
+}
+
 func (db *Database) unlock() error {
+	db.unlockedMu.Lock()
+	defer db.unlockedMu.Unlock()
+	if db.unlocked {
+		return nil
+	}
 	err := os.Remove(db.dbLockInfoFilename)
 	db.unlockFn()
+	db.unlocked = true
 	return err
 }
 
@@ -236,7 +256,7 @@ func (s jsonString) String() string {
 	return `"` + string(s) + `"`
 }
 
-func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, opts ...DatabaseOption) (filewalk.Database, func(), error) {
+func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, opts ...DatabaseOption) (filewalk.Database, error) {
 	db := newDB(dir)
 	var dbOpts filewalk.DatabaseOptions
 	for _, fn := range ifcOpts {
@@ -250,8 +270,8 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		fn(db)
 	}
 
-	if cleanup, err := db.acquireLock(ctx, db.opts.readOnly, db.opts.lockRetryDelay, db.opts.tryLock); err != nil {
-		return nil, cleanup, err
+	if err := db.acquireLock(ctx, db.opts.readOnly, db.opts.lockRetryDelay, db.opts.tryLock); err != nil {
+		return nil, err
 	}
 
 	cfg := pudge.Config{
@@ -298,13 +318,13 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 	}
 	if err := gdb.Wait(); err != nil {
 		db.closeAll(ctx)
-		return nil, func() {}, err
+		return nil, err
 	}
 	if db.opts.errorsOnly {
-		return db, func() {}, nil
+		return db, nil
 	}
 	if db.opts.resetStats {
-		return db, func() {}, nil
+		return db, nil
 	}
 	var gstats errgroup.T
 	gstats.Go(func() error {
@@ -327,9 +347,9 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 	})
 	if err := gstats.Wait(); err != nil {
 		db.closeAll(ctx)
-		return nil, func() {}, err
+		return nil, err
 	}
-	return db, func() {}, nil
+	return db, nil
 }
 
 func (db *Database) closeAll(ctx context.Context) error {
