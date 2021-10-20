@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package filelock
 
 import (
-	"internal/syscall/windows"
 	"os"
 	"syscall"
 )
@@ -16,7 +16,7 @@ type lockType uint32
 
 const (
 	readLock  lockType = 0
-	writeLock lockType = windows.LOCKFILE_EXCLUSIVE_LOCK
+	writeLock lockType = LOCKFILE_EXCLUSIVE_LOCK
 )
 
 const (
@@ -32,7 +32,7 @@ func lock(f File, lt lockType) error {
 	// We want to lock the entire file, so we leave the offset as zero.
 	ol := new(syscall.Overlapped)
 
-	err := windows.LockFileEx(syscall.Handle(f.Fd()), uint32(lt), reserved, allBytes, allBytes, ol)
+	err := LockFileEx(syscall.Handle(f.Fd()), uint32(lt), reserved, allBytes, allBytes, ol)
 	if err != nil {
 		return &os.PathError{
 			Op:   lt.String(),
@@ -45,7 +45,7 @@ func lock(f File, lt lockType) error {
 
 func unlock(f File) error {
 	ol := new(syscall.Overlapped)
-	err := windows.UnlockFileEx(syscall.Handle(f.Fd()), reserved, allBytes, allBytes, ol)
+	err := UnlockFileEx(syscall.Handle(f.Fd()), reserved, allBytes, allBytes, ol)
 	if err != nil {
 		return &os.PathError{
 			Op:   "Unlock",
@@ -58,7 +58,7 @@ func unlock(f File) error {
 
 func isNotSupported(err error) bool {
 	switch err {
-	case windows.ERROR_NOT_SUPPORTED, windows.ERROR_CALL_NOT_IMPLEMENTED, ErrNotSupported:
+	case ERROR_NOT_SUPPORTED, ERROR_CALL_NOT_IMPLEMENTED, ErrNotSupported:
 		return true
 	default:
 		return false
