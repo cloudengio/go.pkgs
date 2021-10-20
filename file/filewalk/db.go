@@ -8,10 +8,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
+	"os"
 	"sync"
 	"time"
+	"unsafe"
 
 	"cloudeng.io/errors"
+	"golang.org/x/sys/unix"
 )
 
 // PrefixInfo represents information on a given prefix.
@@ -74,6 +78,24 @@ func gobDecodeInfo(dec *gob.Decoder) ([]Info, error) {
 	err := dec.Decode(&size)
 	if err != nil {
 		return nil, err
+	}
+	if size > 10000 {
+		s := int(unsafe.Sizeof(Info{}))
+		var rlim unix.Rlimit
+		var rusage unix.Rusage
+		if unix.Getrlimit(unix.RLIMIT_AS, &rlim) == nil && unix.Getrusage(0, &rusage) == nil {
+			total := s * size
+			fmt.Fprintf(os.Stderr, "rlimit current: [%v:%v] Info size %v bytes * %v = %v, max rss %v\n", rlim.Cur, rlim.Max, s, size, total, rusage.Maxrss)
+			nt := (rusage.Maxrss * 1024) + int64(total)
+			if nt > int64(rlim.Cur) {
+				fmt.Fprintf(os.Stderr, "soft limit exceeded %v > %v\n", nt, int64(rlim.Cur))
+				return nil, fmt.Errorf("soft limit exceeded %v > %v", nt, int64(rlim.Cur))
+			}
+			if nt > int64(rlim.Max) {
+				fmt.Fprintf(os.Stderr, "hard limit exceeded %v > %v\n", nt, int64(rlim.Max))
+				return nil, fmt.Errorf("hard limit exceeded %v > %v", nt, int64(rlim.Max))
+			}
+		}
 	}
 	info := make([]Info, size)
 	for i := 0; i < size; i++ {

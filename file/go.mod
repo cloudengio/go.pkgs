@@ -8,4 +8,5 @@ require (
 	cloudeng.io/os v0.0.0-20210704014939-91f28fa328fe
 	cloudeng.io/sync v0.0.5
 	github.com/cosnicolaou/pudge v1.0.6
+	golang.org/x/sys v0.0.0-20211020154033-fcb26fe61c20 // indirect
 )
