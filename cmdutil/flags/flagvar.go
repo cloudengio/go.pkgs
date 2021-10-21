@@ -15,7 +15,6 @@ package flags
 import (
 	"flag"
 	"fmt"
-	"os"
 	"reflect"
 	"strconv"
 	"time"
@@ -156,7 +155,7 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 		value = defaultLiteralValue(typeName)
 		return
 	}
-	if tmp := os.ExpandEnv(literal); tmp != literal {
+	if tmp := ExpandEnv(literal); tmp != literal {
 		usageDefault = literal
 		literal = tmp
 	}

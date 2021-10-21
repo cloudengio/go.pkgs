@@ -68,8 +68,7 @@ func IsDir(path string) bool {
 //   and both create an exact copy of the tree a/b rooted at c/b.
 // If overwrite is set any existing files will be overwritten. Existing
 // directories will always have their contents updated.
-// It is not intended for use with very large directory trees since it uses
-// filepath.Walk.
+// It is suitable for very large directory trees since it uses filepath.Walk.
 func CopyAll(fromDir, toDir string, ovewrite bool) error {
 	for _, path := range []string{fromDir, toDir} {
 		if !IsDir(path) {

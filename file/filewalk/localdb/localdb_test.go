@@ -130,6 +130,7 @@ func TestDBSimple(t *testing.T) {
 
 func TestDBLocking(t *testing.T) {
 	ctx := context.Background()
+
 	tmpDir := t.TempDir()
 	dbDir := filepath.Join(tmpDir, "first")
 	db, err := localdb.Open(ctx, dbDir, nil)
@@ -142,6 +143,7 @@ func TestDBLocking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = localdb.Open(ctx, dbDir, nil,
 		localdb.LockStatusDelay(time.Millisecond*100),
 		localdb.TryLock(),
@@ -149,6 +151,7 @@ func TestDBLocking(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "failed to lock") {
 		t.Fatalf("missing or unexpected error: %v", err)
 	}
+
 	_, err = localdb.Open(ctx, dbDir,
 		[]filewalk.DatabaseOption{filewalk.ReadOnly()},
 		localdb.LockStatusDelay(time.Millisecond*100),
@@ -158,9 +161,13 @@ func TestDBLocking(t *testing.T) {
 		t.Fatalf("missing or unexpected error: %v", err)
 	}
 
+	fmt.Printf("should unblock the previous lock....\n")
 	if err := db.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
+
+	time.Sleep(time.Second)
+	return
 
 	dbDir = filepath.Join(tmpDir, "second")
 	if err := os.MkdirAll(dbDir, 0766); err != nil {
@@ -196,6 +203,9 @@ func TestDBLocking(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dbr2.Close(ctx)
+	buf := make([]byte, 1024*1024)
+	n := runtime.Stack(buf, true)
+	fmt.Printf("%s\n", string(buf[:n]))
 }
 
 func fill(ctx context.Context, db filewalk.Database, when time.Time, n int) error {

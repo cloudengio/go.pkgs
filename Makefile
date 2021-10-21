@@ -1,4 +1,4 @@
-.PHONY: build test pullrequest
+.PHONY: build test pr
 
 SUBMODULES = $(wildcard */)
 
@@ -18,10 +18,17 @@ test:
 
 lint:
 	for pkg in $(SUBMODULES); do \
-	cd $$pkg; \
-       		golangci-lint run ./...; \
-       		cd ..; \
-       	done
+		cd $$pkg; \
+		golangci-lint run ./...; \
+		cd ..; \
+	done
+
+deps:
+	for pkg in $(SUBMODULES); do \
+		cd $$pkg; \
+		go get -u cloudeng.io/...; \
+		cd ..; \
+	done
 
 pr:
 	for pkg in $(SUBMODULES); do \
@@ -35,4 +42,3 @@ pr:
 		go mod tidy; \
 		cd ..; \
 	done
-
