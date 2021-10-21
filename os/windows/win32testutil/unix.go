@@ -23,5 +23,5 @@ func MakeInaccessibleToOwner(path string) error {
 
 // MakeAcessibleToOwner makes path ccessible to its owner.
 func MakeAccessibleToOwner(path string) error {
-	return os.Chmod(path, 700)
+	return os.Chmod(path, 0777)
 }
