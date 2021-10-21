@@ -2,15 +2,11 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-//go:build windows
-// +build windows
+//go:build !windows
+// +build !windows
 
-package filewalk
+package internal
 
-import (
-	"os"
-)
-
-func getUserAndGroupID(path string, info os.FileInfo) (string, string) {
-	return "", ""
+func MakeInaccessibleToOwner(path string) error {
+	return nil
 }

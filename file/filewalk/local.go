@@ -50,7 +50,20 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 					dirs = append(dirs, createInfo(path, info))
 					continue
 				}
-				files = append(files, createInfo(path, info))
+				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
+					s, err := os.Readlink(filepath.Join(path, info.Name()))
+					if err == nil {
+						ni := createInfo(path, info)
+						ni.Size = int64(len(s))
+						files = append(files, ni)
+						continue
+					}
+				}
+				ni := createInfo(path, info)
+				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
+					ni.Size = symlinkSize(path, info)
+				}
+				files = append(files, ni)
 			}
 			ch <- Contents{
 				Path:     path,

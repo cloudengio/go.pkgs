@@ -33,6 +33,18 @@ func main() {
 	flag.BoolVar(&testFlag, "test", false, "run tests")
 	flag.Parse()
 
+	if len(flag.Args()) > 0 {
+		fmt.Fprintf(os.Stderr, "please specify a flag, no arguments are supported\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if !(modulesFlag || prepFlag || testFlag) {
+		fmt.Fprintf(os.Stderr, "at least one flag is required\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	if modulesFlag {
 		mods, err := subdirs()
 		if err != nil {
@@ -51,6 +63,7 @@ func main() {
 			done("tests", err)
 		}
 	}
+
 }
 
 func prep() error {
