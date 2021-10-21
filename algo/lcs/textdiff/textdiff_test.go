@@ -6,9 +6,8 @@ package textdiff_test
 
 import (
 	"bufio"
-	"bytes"
 	"io/ioutil"
-	"os/exec"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,16 +51,12 @@ func TestDiffGroups(t *testing.T) {
 	}
 }
 
-func runDiff(t *testing.T, f1, f2 string) (inserted, deleted []string) {
-	cmd := exec.Command("diff", f1, f2)
-	output, err := cmd.CombinedOutput()
+func processDiffOutput(t *testing.T, diffFile string) (inserted, deleted []string) {
+	diffs, err := os.Open(diffFile)
 	if err != nil {
-		// diff returns an error when files differ.
-		if _, ok := err.(*exec.ExitError); !ok {
-			t.Fatalf("%v: %v", strings.Join(cmd.Args, " "), err)
-		}
+		t.Fatal(err)
 	}
-	sc := bufio.NewScanner(bytes.NewBuffer(output))
+	sc := bufio.NewScanner(diffs)
 
 	inRun := false
 	var deletedText, insertedText string
@@ -131,7 +126,7 @@ func TestTextDiff(t *testing.T) {
 	myersOutput := append([]string{}, diffOutput...)
 	myersOutput[2] = dpOutput[2]
 
-	insertedAll, deletedAll := runDiff(t, f1, f2)
+	insertedAll, deletedAll := processDiffOutput(t, filepath.Join("testdata", "textdiff.go.a.b"))
 
 	//	insertedAll[0] = strings.TrimPrefix(insertedAll[0], "\n") + "\n"
 	deletedAll[1] = "\n" + strings.TrimSuffix(deletedAll[1], "\n")

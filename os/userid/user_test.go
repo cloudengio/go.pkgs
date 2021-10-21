@@ -42,3 +42,13 @@ func TestParse(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestParseWindowsUserids(t *testing.T) {
+	d, u := userid.ParseWindowsUser(`domain\user`)
+	if got, want := d, "domain"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := u, "user"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

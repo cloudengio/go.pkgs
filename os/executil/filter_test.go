@@ -8,24 +8,40 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sync"
+	"time"
 
 	"cloudeng.io/os/executil"
 )
 
 func Example() {
+	go func() {
+		time.Sleep(time.Second * 5)
+		buf := make([]byte, 1024*1024)
+		n := runtime.Stack(buf, true)
+		fmt.Fprintf(os.Stderr, "%s\n", string(buf[:n]))
+		os.Exit(1)
+	}()
 	ctx := context.Background()
 	all := &bytes.Buffer{}
-	cmd := exec.CommandContext(ctx, "cat", filepath.Join("testdata", "example"))
+	// Use go run testdata/cat.go for compatibility across windows and unix.
+	cmd := exec.CommandContext(ctx, "go", "run", filepath.Join("testdata", "cat.go"), filepath.Join("testdata", "example"))
 	ch := make(chan []byte, 1)
 	filter := executil.NewLineFilter(all, regexp.MustCompile("filter me:"), ch)
 	cmd.Stdout = filter
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go func() { cmd.Start(); wg.Done() }()
+	go func() {
+		if err := cmd.Start(); err != nil {
+			panic(err)
+		}
+		wg.Done()
+	}()
 
 	buf := <-ch
 	fmt.Println("filtered output")

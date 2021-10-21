@@ -1,3 +1,7 @@
+// Copyright 2021 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
 // Package awscertstore provides an implementation of a autocert.DirCache
 // and cloudeng.io/webapp.CertStore for use when managing TLS certificates
 // on AWS. In particular, it uses the AWS secrets manager to store TLS

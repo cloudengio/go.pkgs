@@ -110,7 +110,8 @@ type CallRecord struct {
 	// trace that created this one via a GoLog or GoLogf call.
 	ID, RootID int64
 	// Level is the number of GoLog or GoLogf calls that preceded
-	// the creation of this record.
+	// the creation of this record. It is used to generate relative
+	// relative stack traces when printing traces.
 	Level int
 	// Time is the time that the record was created at.
 	Time time.Time

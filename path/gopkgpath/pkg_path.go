@@ -77,6 +77,7 @@ func (pc *pathCache) pkgPath(file string) (string, error) {
 	}
 
 	pkgPath := strings.TrimPrefix(dir, root)
+	pkgPath = strings.ReplaceAll(pkgPath, string(filepath.Separator), "/")
 	if !strings.HasPrefix(pkgPath, module) {
 		pkgPath = path.Join(module, pkgPath)
 	}

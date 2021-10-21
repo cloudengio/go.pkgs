@@ -70,14 +70,14 @@ func Caller(depth, nameLen int) string {
 	}
 	base := ""
 	for i := 0; i < nameLen; i++ {
-		idx := strings.LastIndex(file, string(filepath.Separator))
+		idx := strings.LastIndex(file, "/")
 		if idx < 0 {
 			break
 		}
 		base = file[idx:] + base
 		file = file[:idx]
 	}
-	if base[0] == '/' {
+	if len(base) > 0 && base[0] == '/' {
 		base = base[1:]
 	}
 	return base + ":" + strconv.Itoa(line)

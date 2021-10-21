@@ -76,7 +76,6 @@ func (r *reloadable) reload(name string) (bool, bool, error) {
 				return false, true, err
 			}
 			if r.loadNew {
-				log.Printf("load new....????")
 				return true, true, nil
 			}
 			return false, true, os.ErrNotExist

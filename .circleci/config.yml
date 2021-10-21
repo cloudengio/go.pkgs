@@ -1,60 +1,68 @@
+version: 2.1
+
+orbs:
+  win: circleci/windows@2.4.1
+
 jobs:
-  test:
+  test-linux:
+    parameters:
+      go:
+        type: string
     docker:
-      - image: cimg/go:1.16
+      - image: cimg/go:<< parameters.go >>
     steps:
       - checkout
       - run:
           name: test
           command: |
             export USER=circleci
-            mkdir -p webapp/cmd/webapp/webapp-sample/build
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/css
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/js
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/media
-            touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/css/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/js/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/media/dummy-for-embed
-            for dir in $(find * -maxdepth 0 -type d); do
-              pushd "${dir}"
-              go get -t -d ./...
-              go test -failfast --covermode=atomic -race ./...
-              popd
-            done
+            go run .circleci/runner.go --prep --test
+
+  test-windows:
+    executor:
+      name: win/default
+    steps:
+      - run: git config --global core.autocrlf false
+      - checkout
+      - run:
+          name: test
+          command: |
+            go run .circleci\runner.go --prep --test
 
   lint:
+    parameters:
+      go:
+        type: string
     docker:
-      - image: cimg/go:1.16
+      - image: cimg/go:<< parameters.go >>
     steps:
       - checkout
       - run:
-          name: downloads
+          name: prep
           command: |
             curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
             go get github.com/matthewloring/validjson/cmd/validjson@latest
             go install -x github.com/matthewloring/validjson/cmd/validjson@latest
-            mkdir -p webapp/cmd/webapp/webapp-sample/build
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/css
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/js
-            mkdir -p webapp/cmd/webapp/webapp-sample/build/static/media
-            touch webapp/cmd/webapp/webapp-sample/build/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/css/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/js/dummy-for-embed
-            touch webapp/cmd/webapp/webapp-sample/build/static/media/dummy-for-embed
+            go run .circleci/runner.go --prep
       - run:
           name: lint
           command: |
-            for dir in $(find * -maxdepth 0 -type d ); do
-              pushd "${dir}"
-              golangci-lint run ./...
-              validjson ./...
-              popd
+            for pkg in $(go run .circleci/runner --modules); do \
+              cd $$pkg; \
+              golangci-lint run ./...; \
+              validjson ./...; \
+              cd ..; \
             done
 
-version: 2.1
 workflows:
-  main:
+  circleci:
     jobs:
-      - test
-      - lint
+      - test-linux:
+          matrix:
+            parameters:
+              go: ["1.16", "1.17"]
+      - test-windows
+      - lint:
+          matrix:
+            parameters:
+              go: ["1.17"]

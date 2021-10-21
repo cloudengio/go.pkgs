@@ -87,11 +87,11 @@ func TestLocalWalk(t *testing.T) {
 
 	wk = filewalk.New(sc, filewalk.Concurrency(10))
 	lg = nl()
-	lg.skip = "/b0/b0.1"
+	lg.skip = strings.ReplaceAll("/b0/b0.1", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial1)
 
 	lg = nl()
-	lg.skip = "/b0"
+	lg.skip = strings.ReplaceAll("/b0", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial2)
 
 	lg = nl()
@@ -99,7 +99,7 @@ func TestLocalWalk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lg.children["/b0"] = []filewalk.Info{b01}
+	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] = []filewalk.Info{b01}
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
 }
 
@@ -115,7 +115,7 @@ func testLocalWalk(ctx context.Context, t *testing.T, tmpDir string, wk *filewal
 	}
 }
 
-const expectedFull = `*
+var expectedFull = `*
 /a0*
 /a0/a0.0*
 /a0/a0.0/f0: 3
@@ -150,7 +150,7 @@ lf0@: 5
 `
 
 // No b0.1 sub dir.
-const expectedPartial1 = `*
+var expectedPartial1 = `*
 /a0*
 /a0/a0.0*
 /a0/a0.0/f0: 3
@@ -180,7 +180,7 @@ lf0@: 5
 `
 
 // No b0 sub dir.
-const expectedPartial2 = `*
+var expectedPartial2 = `*
 /a0*
 /a0/a0.0*
 /a0/a0.0/f0: 3
@@ -204,7 +204,7 @@ la1@: 7
 lf0@: 5
 `
 
-const expectedExistingChildren = `*
+var expectedExistingChildren = `*
 /a0*
 /a0/a0.0*
 /a0/a0.0/f0: 3
@@ -233,6 +233,15 @@ la0@: 2
 la1@: 7
 lf0@: 5
 `
+
+func init() {
+	if filepath.Separator != '/' {
+		for _, p := range []*string{&expectedFull, &expectedPartial1, &expectedPartial2, &expectedExistingChildren} {
+			*p = strings.ReplaceAll(*p, "/", string(filepath.Separator))
+			*p = strings.ReplaceAll(*p, "permission denied", "Access is denied.")
+		}
+	}
+}
 
 func TestFunctionErrors(t *testing.T) {
 	ctx := context.Background()
