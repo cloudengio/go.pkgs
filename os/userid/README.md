@@ -31,12 +31,6 @@ func GetCurrentUser() string
 GetCurrentUser returns the current user as determined by environment
 variables.
 
-### Func ParseWindowsSID
-```go
-func ParseWindowsSID(sid string) (version, auth string, sub []string)
-```
-ParseWindowsSID parses a windows Security Identifier (SID).
-
 ### Func ParseWindowsUser
 ```go
 func ParseWindowsUser(u string) (domain, user string)

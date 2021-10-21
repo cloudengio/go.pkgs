@@ -21,8 +21,8 @@ than fromDir itself. Thus:
     and both create an exact copy of the tree a/b rooted at c/b.
 
 If overwrite is set any existing files will be overwritten. Existing
-directories will always have their contents updated. It is not intended for
-use with very large directory trees since it uses filepath.Walk.
+directories will always have their contents updated. It is suitable for very
+large directory trees since it uses filepath.Walk.
 
 ### Func CopyFile
 ```go

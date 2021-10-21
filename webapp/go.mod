@@ -8,7 +8,6 @@ require (
 	cloudeng.io/errors v0.0.6
 	cloudeng.io/io v0.0.0-20211021142722-0f4ca8c478da
 	cloudeng.io/os v0.0.0-20211021163203-fcd6492c88b6
-	cloudeng.io/text v0.0.8 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.8.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.7.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0

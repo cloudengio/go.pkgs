@@ -7,6 +7,12 @@ import cloudeng.io/os/windows/win32testutil
 
 
 ## Functions
+### Func MakeAccessibleToOwner
+```go
+func MakeAccessibleToOwner(path string) error
+```
+MakeAcessibleToOwner makes path ccessible to its owner.
+
 ### Func MakeInaccessibleToOwner
 ```go
 func MakeInaccessibleToOwner(path string) error
