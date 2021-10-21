@@ -9,7 +9,6 @@ package signals_test
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -47,14 +46,9 @@ func TestSignal(t *testing.T) {
 	go func() {
 		// Make sure that multiple signals in quick succession do not
 		// cause the process to exit.
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			t.Log(err)
-			return
-		}
-		proc.Signal(syscall.SIGINT)
-		proc.Signal(syscall.SIGINT)
-		proc.Signal(syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT)
 		wg.Done()
 	}()
 
@@ -75,14 +69,9 @@ func TestSignal(t *testing.T) {
 	// an exit.
 	cmd, pid, st = runCmd("--debounce=250ms")
 	go func() {
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			t.Log(err)
-			return
-		}
-		proc.Signal(syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT)
 		time.Sleep(time.Millisecond * 250)
-		proc.Signal(syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT)
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)
