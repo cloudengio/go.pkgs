@@ -27,6 +27,7 @@ deps:
 	for pkg in $(SUBMODULES); do \
 		cd $$pkg; \
 		go get -u cloudeng.io/...; \
+		go mod tidy; \
 		cd ..; \
 	done
 
