@@ -23,6 +23,13 @@ lint:
 		cd ..; \
 	done
 
+deps:
+	for pkg in $(SUBMODULES); do \
+		cd $$pkg; \
+		go get -u cloudeng.io/...; \
+		cd ..; \
+	done
+
 pr:
 	for pkg in $(SUBMODULES); do \
 		cd $$pkg; \
