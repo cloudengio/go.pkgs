@@ -247,7 +247,7 @@ func ExampleT_pipeline() {
 	// The use of errgroup.T ensures that on return all of the goroutines
 	// have completed and the chanels used are closed.
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	g := errgroup.WithCancel(cancel)
 	numGenerators, numCounters := 4, 8
 
@@ -308,7 +308,7 @@ func ExampleT_pipeline() {
 	if err := g.Wait(); err != nil {
 		fmt.Printf("failed: %v", err)
 	}
-	// After one second, measure the normalized number of random numbers
+	// After some time, measure the normalized number of random numbers
 	// per decile with appropriate rounding. Print the distribution
 	// to verify the expected values.
 	for i, v := range counters {
