@@ -55,7 +55,7 @@ jobs:
             done
 
 workflows:
-  main:
+  circleci:
     jobs:
       - test-linux:
           matrix:
