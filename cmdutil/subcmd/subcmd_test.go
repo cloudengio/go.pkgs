@@ -277,9 +277,9 @@ func TestMultiLevel(t *testing.T) {
 	c12Cmd := subcmd.NewCommand("c12", c12Flags, c12)
 	c12Cmd.Document("c12")
 	l21 := subcmd.NewCommandSet(c11Cmd, c12Cmd)
-	l21.WithMain(func(ctx context.Context, runner func() error) error {
+	l21.WithMain(func(ctx context.Context, runner func(context.Context) error) error {
 		l2Main = true
-		return runner()
+		return runner(ctx)
 	})
 	c31Cmd := subcmd.NewCommand("c31", c31Flags, c31)
 	c31Cmd.Document("c31")
@@ -293,9 +293,9 @@ func TestMultiLevel(t *testing.T) {
 	c3Cmd.Document("c3")
 	l1 := subcmd.NewCommandSet(c1Cmd, c2Cmd, c3Cmd)
 	l1.WithGlobalFlags(globals)
-	l1.WithMain(func(ctx context.Context, runner func() error) error {
+	l1.WithMain(func(ctx context.Context, runner func(context.Context) error) error {
 		l1Main = true
-		return runner()
+		return runner(ctx)
 	})
 
 	if got, want := l1.Defaults("test"), `Usage of test
