@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cloudeng.io/io/reloadfs"
+	"cloudeng.io/os/windows/win32testutil"
 )
 
 //go:embed testdata
@@ -44,14 +45,16 @@ func createMirror(t *testing.T, tmpDir string) func() {
 	writeFile(filepath.Join("d0", "world.txt"), "not d0/world....", 0600)
 
 	writeFile(filepath.Join("statwillfail", "statwillfail.txt"), "not hello....", 0600)
-	if err := os.Chmod(ud, 000); err != nil { // doesn't work on windows.
+	if err := os.Chmod(ud, 000); err != nil {
 		t.Fatal(err)
 	}
+	win32testutil.MakeInaccessibleToOwner(ud) // Chmod only works for rw on windows.
 
 	writeFile("open-will-fail.txt", "can-read-me", 0000)
 
 	return func() {
 		os.Chmod(ud, 0700)
+		win32testutil.MakeAccessibleToOwner(ud)
 	}
 }
 
@@ -60,6 +63,7 @@ func readFromFS(fs fs.FS, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer f.Close()
 	buf, err := io.ReadAll(f)
 	if err != nil {
 		return "", err
@@ -106,13 +110,16 @@ not d0/world....`; got != want {
 	for _, name := range []string{"does-not-exist.txt", "a-new-file.txt"} {
 		if _, err := dynamic.Open(name); err == nil || !os.IsNotExist(err) {
 			t.Errorf("%v: missing or wrong error: %v", name, err)
+
 		}
 	}
 
 	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.LoadNewFiles(true))
-	if _, err := dynamic.Open("a-new-file.txt"); err != nil {
+	fs, err := dynamic.Open("a-new-file.txt")
+	if err != nil {
 		t.Errorf("new file should have been found: %v", err)
 	}
+	fs.Close()
 
 	contents = readAll(t, dynamic, "hello.txt", path.Join("d0", "world.txt"))
 	if got, want := contents, `not hello....
@@ -120,7 +127,7 @@ not d0/world....`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	fs, err := dynamic.Open("a-new-file.txt")
+	fs, err = dynamic.Open("a-new-file.txt")
 	if err != nil {
 		t.Errorf("new file should have been found: %v", err)
 	}
@@ -130,7 +137,7 @@ not d0/world....`; got != want {
 		t.Errorf("missing or wrong error: %v", err)
 	}
 
-	if _, err := dynamic.Open(path.Join("statwillfail", "statwillfail.txt")); err == nil || !strings.Contains(err.Error(), "permission denied") {
+	if _, err := dynamic.Open(path.Join("statwillfail", "statwillfail.txt")); err == nil || !(strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "Access is denied")) {
 		t.Errorf("missing or wrong error: %v", err)
 	}
 

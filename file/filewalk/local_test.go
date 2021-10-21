@@ -17,7 +17,7 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
-	"cloudeng.io/file/internal"
+	"cloudeng.io/os/windows/win32testutil"
 )
 
 var localTestTree string
@@ -145,7 +145,7 @@ func createTestDir(tmpDir string) error {
 	}
 	err := os.Mkdir(j(tmpDir, "inaccessible-dir"), 0000)
 	errs.Append(err)
-	err = internal.MakeInaccessibleToOwner(j(tmpDir, "inaccessible-dir")) // windows.
+	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "inaccessible-dir"))
 	errs.Append(err)
 	err = os.Symlink(j("a0", "f0"), j(tmpDir, "lf0"))
 	errs.Append(err)
@@ -155,7 +155,7 @@ func createTestDir(tmpDir string) error {
 	errs.Append(err)
 	err = ioutil.WriteFile(j(tmpDir, "a0", "inaccessible-file"), []byte{'1', '2', '3'}, 0000)
 	errs.Append(err)
-	err = internal.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-file")) // windows.
+	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-file")) // windows.
 	errs.Append(err)
 	return errs.Err()
 }

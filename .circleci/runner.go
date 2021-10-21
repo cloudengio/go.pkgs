@@ -105,10 +105,15 @@ func runTests(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	failed := false
 	for _, dir := range dirs {
 		if err := runTest(ctx, dir); err != nil {
-			return err
+			fmt.Fprintf(os.Stderr, "%v: failed: %v\n", dir, err)
+			failed = true
 		}
+	}
+	if failed {
+		return fmt.Errorf("tests failed")
 	}
 	return nil
 }

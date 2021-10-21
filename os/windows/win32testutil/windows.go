@@ -11,10 +11,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func denySID(sid *windows.SID) windows.EXPLICIT_ACCESS {
+func explicitAccess(mode windows.ACCESS_MODE, perms windows.ACCESS_MASK, sid *windows.SID) windows.EXPLICIT_ACCESS {
 	return windows.EXPLICIT_ACCESS{
-		AccessPermissions: 0,
-		AccessMode:        windows.DENY_ACCESS,
+		AccessPermissions: perms,
+		AccessMode:        mode,
 		Inheritance:       windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 		Trustee: windows.TRUSTEE{
 			TrusteeForm:  windows.TRUSTEE_IS_SID,
@@ -24,14 +24,13 @@ func denySID(sid *windows.SID) windows.EXPLICIT_ACCESS {
 	}
 }
 
-// MakeInaccessibleToOwner makes path inaccessible to its owner.
-func MakeInaccessibleToOwner(path string) error {
+func sidAllowDeny(mode windows.ACCESS_MODE, perms windows.ACCESS_MASK, path string) error {
 	owner, err := windows.StringToSid("S-1-3-0")
 	if err != nil {
 		return nil
 	}
 	dacl, err := windows.ACLFromEntries(
-		[]windows.EXPLICIT_ACCESS{denySID(owner)},
+		[]windows.EXPLICIT_ACCESS{explicitAccess(mode, perms, owner)},
 		nil)
 	if err != nil {
 		return err
@@ -45,4 +44,14 @@ func MakeInaccessibleToOwner(path string) error {
 		dacl,
 		nil,
 	)
+}
+
+// MakeInaccessibleToOwner makes path inaccessible to its owner.
+func MakeInaccessibleToOwner(path string) error {
+	return sidAllowDeny(windows.DENY_ACCESS, 0, path)
+}
+
+// MakeAcessibleToOwner makes path ccessible to its owner.
+func MakeAccessibleToOwner(path string) error {
+	return sidAllowDeny(windows.GRANT_ACCESS, windows.GENERIC_ALL, path)
 }

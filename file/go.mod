@@ -6,7 +6,7 @@ require (
 	cloudeng.io/algo v0.0.0-20211020182350-26cccc266fd8
 	cloudeng.io/cmdutil v0.0.0-20211020182350-26cccc266fd8 // indirect
 	cloudeng.io/errors v0.0.6
-	cloudeng.io/os v0.0.0-20211020182350-26cccc266fd8
+	cloudeng.io/os v0.0.0-20211021142722-0f4ca8c478da
 	cloudeng.io/sync v0.0.5
 	github.com/cosnicolaou/pudge v1.0.6
 	golang.org/x/sys v0.0.0-20211020174200-9d6173849985 // indirect
