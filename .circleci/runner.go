@@ -33,12 +33,6 @@ func main() {
 	flag.BoolVar(&testFlag, "test", false, "run tests")
 	flag.Parse()
 
-	if len(flag.Args()) > 0 {
-		fmt.Fprintf(os.Stderr, "please specify a flag, no arguments are supported\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-
 	if !(modulesFlag || prepFlag || testFlag) {
 		fmt.Fprintf(os.Stderr, "at least one flag is required\n")
 		flag.Usage()
@@ -51,15 +45,24 @@ func main() {
 			done("finding modules", err)
 		}
 		fmt.Println(strings.Join(mods, " "))
+		return
 	}
-
+	mods := flag.Args()
+	if len(mods) == 0 {
+		var err error
+		mods, err = subdirs()
+		if err != nil {
+			done("finding modules", err)
+		}
+	}
 	if prepFlag {
 		if err := prep(); err != nil {
 			done("prep", err)
 		}
 	}
+
 	if testFlag {
-		if err := runTests(ctx); err != nil {
+		if err := runTests(ctx, mods); err != nil {
 			done("tests", err)
 		}
 	}
@@ -100,11 +103,7 @@ func subdirs() ([]string, error) {
 	return dirs, err
 }
 
-func runTests(ctx context.Context) error {
-	dirs, err := subdirs()
-	if err != nil {
-		return err
-	}
+func runTests(ctx context.Context, dirs []string) error {
 	failed := false
 	for _, dir := range dirs {
 		if err := runTest(ctx, dir); err != nil {
@@ -120,9 +119,15 @@ func runTests(ctx context.Context) error {
 
 func runTest(ctx context.Context, dir string) error {
 	fmt.Printf("%v...\n", dir)
-	cmd := exec.CommandContext(ctx, "go", "test", "-failfast", "--covermode=atomic", "-race", "./...")
+	cmd := exec.CommandContext(ctx, "go", "test", "-failfast", "--covermode=atomic", "--vet=off", "-race", "./...")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err := cmd.Run()
+	if err == nil {
+		fmt.Printf("%v... ok\n", dir)
+	} else {
+		fmt.Printf("%v... failed\n", dir)
+	}
+	return err
 }
