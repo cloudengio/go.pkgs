@@ -11,6 +11,7 @@ import (
 	"os"
 )
 
+// symlinkSize returns the size of the symlinks.
 func symlinkSize(path string, info os.FileInfo) int64 {
 	return info.Size()
 }

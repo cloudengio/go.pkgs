@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 )
 
-// need to read the symlink to determine its size on windows.
+// symlinkSize returns the size of the symlinks. On windows we need to read
+// the symlink to determine its size on windows.
 func symlinkSize(path string, info os.FileInfo) int64 {
 	s, err := os.Readlink(filepath.Join(path, info.Name()))
 	if err != nil {
 		return info.Size()
 	}
 	return int64(len(s))
-
 }

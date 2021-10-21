@@ -44,7 +44,7 @@ func createMirror(t *testing.T, tmpDir string) func() {
 	writeFile(filepath.Join("d0", "world.txt"), "not d0/world....", 0600)
 
 	writeFile(filepath.Join("statwillfail", "statwillfail.txt"), "not hello....", 0600)
-	if err := os.Chmod(ud, 000); err != nil {
+	if err := os.Chmod(ud, 000); err != nil { // doesn't work on windows.
 		t.Fatal(err)
 	}
 
@@ -120,9 +120,11 @@ not d0/world....`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if _, err := dynamic.Open("a-new-file.txt"); err != nil {
+	fs, err := dynamic.Open("a-new-file.txt")
+	if err != nil {
 		t.Errorf("new file should have been found: %v", err)
 	}
+	fs.Close()
 
 	if _, err := dynamic.Open("non-existent-file.txt"); err == nil || !os.IsNotExist(err) {
 		t.Errorf("missing or wrong error: %v", err)
@@ -155,10 +157,11 @@ func TestLogging(t *testing.T) {
 	defer cleanup()
 
 	out.Reset()
-	dynamic.Open("hello.txt")
+	fs, _ := dynamic.Open("hello.txt")
 	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 
 	out.Reset()
 	dynamic.Open("a-new-file.txt")
@@ -168,10 +171,11 @@ func TestLogging(t *testing.T) {
 
 	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.UseLogger(logger), reloadfs.LoadNewFiles(true))
 	out.Reset()
-	dynamic.Open("a-new-file.txt")
+	fs, _ = dynamic.Open("a-new-file.txt")
 	if got, want := out.String(), fmt.Sprintf("reloaded new file: a-new-file.txt -> %s/testdata/a-new-file.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 }
 
 func TestModTime(t *testing.T) {
@@ -191,16 +195,18 @@ func TestModTime(t *testing.T) {
 	)
 
 	// Sizes differ.
-	dynamic.Open("hello.txt")
+	fs, _ := dynamic.Open("hello.txt")
 	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 
 	// Same size, but considered too old.
 	out.Reset()
-	dynamic.Open("world.txt")
+	fs, _ = dynamic.Open("world.txt")
 	if got, want := out.String(), "reused: world.txt -> testdata/world.txt: <nil>"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 
 }
