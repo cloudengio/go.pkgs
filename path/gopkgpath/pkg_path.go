@@ -9,7 +9,6 @@ package gopkgpath
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -67,7 +66,7 @@ func (pc *pathCache) pkgPath(file string) (string, error) {
 		return "", err
 	}
 	gomodfile := filepath.Join(root, "go.mod")
-	gomod, err := ioutil.ReadFile(gomodfile)
+	gomod, err := os.ReadFile(gomodfile)
 	if err != nil {
 		return "", err
 	}
