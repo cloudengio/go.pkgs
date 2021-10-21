@@ -12,7 +12,16 @@
 
 package win32testutil
 
+import (
+	"os"
+)
+
 // MakeInaccessibleToOwner makes path inaccessible to its owner.
 func MakeInaccessibleToOwner(path string) error {
-	return nil
+	return os.Chmod(path, 000)
+}
+
+// MakeAcessibleToOwner makes path ccessible to its owner.
+func MakeAccessibleToOwner(path string) error {
+	return os.Chmod(path, 0777)
 }
