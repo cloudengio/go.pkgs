@@ -1,4 +1,4 @@
-// Copyright 2020 cloudeng llc. All rights reserved.
+// Copyright 2021 cloudeng llc. All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
@@ -8,12 +8,13 @@
 package filewalk
 
 import (
+	"os"
 	"strconv"
 	"syscall"
 )
 
-func getUserAndGroupID(sys interface{}) (string, string) {
-	si, ok := sys.(*syscall.Stat_t)
+func getUserAndGroupID(path string, info os.FileInfo) (string, string) {
+	si, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return "", ""
 	}

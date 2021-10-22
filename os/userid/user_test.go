@@ -44,30 +44,6 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseWindowsUserids(t *testing.T) {
-	s := func(a ...string) []string {
-		return a
-	}
-	for _, tc := range []struct {
-		sid       string
-		authority string
-		sub       []string
-	}{
-		{"S-1-0-0", "0", s("0")},
-		{"S-1-5-32-544", "5", s("32", "544")},
-		{"S-1-5-21-255908664-2662632750-4148280483-500", "5", s("21", "255908664", "2662632750", "4148280483", "500")},
-	} {
-		v, a, sa := userid.ParseWindowsSID(tc.sid)
-		if got, want := v, "1"; got != want {
-			t.Errorf("%v: got %v, want %v", tc.sid, got, want)
-		}
-		if got, want := a, tc.authority; got != want {
-			t.Errorf("%v: got %v, want %v", tc.sid, got, want)
-		}
-		if got, want := sa, tc.sub; !reflect.DeepEqual(got, want) {
-			t.Errorf("%v: got %v, want %v", tc.sid, got, want)
-		}
-	}
-
 	d, u := userid.ParseWindowsUser(`domain\user`)
 	if got, want := d, "domain"; got != want {
 		t.Errorf("got %v, want %v", got, want)

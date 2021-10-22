@@ -69,7 +69,8 @@ type CallRecord struct {
 	// trace that created this one via a GoLog or GoLogf call.
 	ID, RootID int64
 	// Level is the number of GoLog or GoLogf calls that preceded
-	// the creation of this record.
+	// the creation of this record. It is used to generate relative
+	// relative stack traces when printing traces.
 	Level int
 	// Time is the time that the record was created at.
 	Time time.Time
@@ -258,7 +259,7 @@ type MessageRecords []MessageRecord
 ### Functions
 
 ```go
-func MergeMesageTraces(traces ...MessageRecords) MessageRecords
+func MergeMessageTraces(traces ...MessageRecords) MessageRecords
 ```
 
 
@@ -301,8 +302,8 @@ trace is found.
 ```go
 func (mt *MessageTrace) Flatten(tag string) MessageRecords
 ```
-Flatten returns a slice of MessageRecords sorted primarily by time and then
-by message status (in order of Waiting, Sent and Received).
+Flatten returns a slice of MessageRecords sorted by level, rootID, ID, time
+and finally by message status (in order of Waiting, Sent and Received).
 
 
 ```go

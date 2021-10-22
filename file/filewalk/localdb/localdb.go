@@ -15,11 +15,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/os/lockedfile"
+	"cloudeng.io/os/userid"
 	"cloudeng.io/sync/errgroup"
 	"github.com/cosnicolaou/pudge"
 )
@@ -53,7 +55,9 @@ type Database struct {
 	dbLockFilename     string
 	dbLockInfoFilename string
 	dbMutex            *lockedfile.Mutex
-	unlockFn           func()
+	unlockedMu         sync.Mutex
+	unlocked           bool   // GUARDED_BY(unlockedMu)
+	unlockFn           func() // GUARDED_BY(unlockedMu)
 	globalStats        *statsCollection
 	userStats          *perItemStats
 	groupStats         *perItemStats
@@ -126,7 +130,7 @@ func writeLockerInfo(filename string) error {
 	pid := os.Getpid()
 	ppid := os.Getppid()
 	contents := lockFileContents{
-		User: os.Getenv("USER"),
+		User: userid.GetCurrentUser(),
 		CWD:  cwd,
 		PID:  pid,
 		PPID: ppid,
@@ -179,6 +183,7 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		lockType = "read "
 	}
 	ch := make(chan lockResult)
+	ctx, cancel := context.WithCancel(ctx)
 	go func() {
 		var unlock func()
 		var err error
@@ -187,24 +192,34 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		} else {
 			unlock, err = db.dbMutex.Lock()
 		}
-		ch <- lockResult{unlock, err}
+		select {
+		case ch <- lockResult{unlock, err}:
+		case <-ctx.Done():
+			if unlock != nil {
+				db.setUnlockFn(unlock)
+				db.unlock()
+			}
+		}
 	}()
 	for {
 		select {
 		case lr := <-ch:
 			if lr.err == nil {
-				db.unlockFn = lr.unlock
+				db.setUnlockFn(func() { lr.unlock(); cancel() })
 				if readOnly {
 					return nil
 				}
 				return writeLockerInfo(db.dbLockInfoFilename)
 			}
+			cancel()
 			return lockerErrorInfo(db.dir, db.dbLockInfoFilename, lr.err)
 		case <-ctx.Done():
+			cancel()
 			return ctx.Err()
 		case <-time.After(tryDelay):
 			if tryLock {
 				err := fmt.Errorf("failed to acquire %slock after %v", lockType, tryDelay)
+				cancel()
 				return lockerErrorInfo(db.dir, db.dbLockInfoFilename, err)
 			}
 			fmt.Fprintf(os.Stderr, "waiting to acquire %slock: lock info from %s:\n", lockType, db.dbLockInfoFilename)
@@ -217,9 +232,21 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 	}
 }
 
+func (db *Database) setUnlockFn(fn func()) {
+	db.unlockedMu.Lock()
+	defer db.unlockedMu.Unlock()
+	db.unlockFn = fn
+}
+
 func (db *Database) unlock() error {
+	db.unlockedMu.Lock()
+	defer db.unlockedMu.Unlock()
+	if db.unlocked {
+		return nil
+	}
 	err := os.Remove(db.dbLockInfoFilename)
 	db.unlockFn()
+	db.unlocked = true
 	return err
 }
 

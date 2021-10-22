@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cloudeng.io/io/reloadfs"
+	"cloudeng.io/os/windows/win32testutil"
 )
 
 //go:embed testdata
@@ -47,11 +48,13 @@ func createMirror(t *testing.T, tmpDir string) func() {
 	if err := os.Chmod(ud, 000); err != nil {
 		t.Fatal(err)
 	}
+	win32testutil.MakeInaccessibleToOwner(ud) // Chmod only works for rw on windows.
 
 	writeFile("open-will-fail.txt", "can-read-me", 0000)
 
 	return func() {
 		os.Chmod(ud, 0700)
+		win32testutil.MakeAccessibleToOwner(ud)
 	}
 }
 
@@ -60,6 +63,7 @@ func readFromFS(fs fs.FS, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer f.Close()
 	buf, err := io.ReadAll(f)
 	if err != nil {
 		return "", err
@@ -106,13 +110,16 @@ not d0/world....`; got != want {
 	for _, name := range []string{"does-not-exist.txt", "a-new-file.txt"} {
 		if _, err := dynamic.Open(name); err == nil || !os.IsNotExist(err) {
 			t.Errorf("%v: missing or wrong error: %v", name, err)
+
 		}
 	}
 
 	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.LoadNewFiles(true))
-	if _, err := dynamic.Open("a-new-file.txt"); err != nil {
+	fs, err := dynamic.Open("a-new-file.txt")
+	if err != nil {
 		t.Errorf("new file should have been found: %v", err)
 	}
+	fs.Close()
 
 	contents = readAll(t, dynamic, "hello.txt", path.Join("d0", "world.txt"))
 	if got, want := contents, `not hello....
@@ -120,15 +127,17 @@ not d0/world....`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if _, err := dynamic.Open("a-new-file.txt"); err != nil {
+	fs, err = dynamic.Open("a-new-file.txt")
+	if err != nil {
 		t.Errorf("new file should have been found: %v", err)
 	}
+	fs.Close()
 
 	if _, err := dynamic.Open("non-existent-file.txt"); err == nil || !os.IsNotExist(err) {
 		t.Errorf("missing or wrong error: %v", err)
 	}
 
-	if _, err := dynamic.Open(path.Join("statwillfail", "statwillfail.txt")); err == nil || !strings.Contains(err.Error(), "permission denied") {
+	if _, err := dynamic.Open(path.Join("statwillfail", "statwillfail.txt")); err == nil || !(strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "Access is denied")) {
 		t.Errorf("missing or wrong error: %v", err)
 	}
 
@@ -155,10 +164,11 @@ func TestLogging(t *testing.T) {
 	defer cleanup()
 
 	out.Reset()
-	dynamic.Open("hello.txt")
+	fs, _ := dynamic.Open("hello.txt")
 	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 
 	out.Reset()
 	dynamic.Open("a-new-file.txt")
@@ -168,10 +178,11 @@ func TestLogging(t *testing.T) {
 
 	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.UseLogger(logger), reloadfs.LoadNewFiles(true))
 	out.Reset()
-	dynamic.Open("a-new-file.txt")
+	fs, _ = dynamic.Open("a-new-file.txt")
 	if got, want := out.String(), fmt.Sprintf("reloaded new file: a-new-file.txt -> %s/testdata/a-new-file.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 }
 
 func TestModTime(t *testing.T) {
@@ -191,16 +202,18 @@ func TestModTime(t *testing.T) {
 	)
 
 	// Sizes differ.
-	dynamic.Open("hello.txt")
+	fs, _ := dynamic.Open("hello.txt")
 	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 
 	// Same size, but considered too old.
 	out.Reset()
-	dynamic.Open("world.txt")
+	fs, _ = dynamic.Open("world.txt")
 	if got, want := out.String(), "reused: world.txt -> testdata/world.txt: <nil>"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	fs.Close()
 
 }

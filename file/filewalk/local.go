@@ -15,14 +15,14 @@ type local struct {
 	scanSize int
 }
 
-func createInfo(i os.FileInfo) Info {
+func createInfo(path string, i os.FileInfo) Info {
 	info := Info{
 		Name:    i.Name(),
 		Size:    i.Size(),
 		ModTime: i.ModTime(),
 		sys:     i,
 	}
-	info.UserID, info.GroupID = getUserAndGroupID(i.Sys())
+	info.UserID, info.GroupID = getUserAndGroupID(path, i)
 	m := i.Mode()
 	info.Mode = FileMode(m&os.ModePerm | m&os.ModeSymlink | m&os.ModeDir)
 	return info
@@ -47,10 +47,23 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 			dirs := make([]Info, 0, 10)
 			for _, info := range infos {
 				if info.IsDir() {
-					dirs = append(dirs, createInfo(info))
+					dirs = append(dirs, createInfo(path, info))
 					continue
 				}
-				files = append(files, createInfo(info))
+				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
+					s, err := os.Readlink(filepath.Join(path, info.Name()))
+					if err == nil {
+						ni := createInfo(path, info)
+						ni.Size = int64(len(s))
+						files = append(files, ni)
+						continue
+					}
+				}
+				ni := createInfo(path, info)
+				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
+					ni.Size = symlinkSize(path, info)
+				}
+				files = append(files, ni)
 			}
 			ch <- Contents{
 				Path:     path,
@@ -74,7 +87,7 @@ func (l *local) Stat(ctx context.Context, path string) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
-	return createInfo(info), nil
+	return createInfo(path, info), nil
 }
 
 func (l *local) Join(components ...string) string {

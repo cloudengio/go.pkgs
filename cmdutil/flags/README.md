@@ -42,6 +42,16 @@ where 'set' means:
 ExactlyOneSet will panic if any of the arguments are not one of the above
 types.
 
+### Func ExpandEnv
+```go
+func ExpandEnv(e string) string
+```
+ExpandEnv is like os.ExpandEnv but supports 'pseudo' environment variables
+that have OS specific handling as follows:
+
+$USERHOME is replaced by $HOME on unix-like sytems and
+$HOMEDRIVE:\\$HOMEPATH on windows. On windows, / are replaced with \.
+
 ### Func ParseFlagTag
 ```go
 func ParseFlagTag(t string) (name, value, usage string, err error)

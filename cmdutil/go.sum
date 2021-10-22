@@ -1,4 +1,4 @@
-cloudeng.io/errors v0.0.5 h1:NmCUhMIvWQ/0Ny3cBWplA2RXPcnyNUiMovPe64LgX3A=
-cloudeng.io/errors v0.0.5/go.mod h1:4iZnGEBj5F3SqTHZF6AHiFMgeHeJWJJkVHx/UwbDYok=
-cloudeng.io/text v0.0.8 h1:zJkm29A0G6Q9KRshiqQQArQ2X3P+X9G7AnNiMaCgRB0=
-cloudeng.io/text v0.0.8/go.mod h1:VPOCvDDUBocQe7rfQDZcyEpScLooZo/6cJs1cM0LOMI=
+cloudeng.io/errors v0.0.7 h1:GqFEwQrkOhoaF3Nla8tDzHhFwzYYHWmRmGkf4Ag2zGM=
+cloudeng.io/errors v0.0.7/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
+cloudeng.io/text v0.0.9 h1:/2W1L7IsOYbeyHpACriekh0NXCSuFdx+I/eTIml26lI=
+cloudeng.io/text v0.0.9/go.mod h1:nGTZ1g2Wq0fhlGWX5BKPAsChSYeB/MHu1dLI1Kk9004=

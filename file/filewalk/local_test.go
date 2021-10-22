@@ -17,14 +17,20 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
+	"cloudeng.io/os/windows/win32testutil"
 )
 
 var localTestTree string
 
 func TestMain(m *testing.M) {
-	tmpDir, _ := ioutil.TempDir("", "filewalk")
+	tmpDir, err := ioutil.TempDir("", "filewalk")
+	if err != nil {
+		fmt.Printf("failed to create testdir: %v", err)
+		os.RemoveAll(tmpDir)
+		os.Exit(0)
+	}
 	if err := createTestDir(tmpDir); err != nil {
-		fmt.Printf("failed to create testdir %v", err)
+		fmt.Printf("failed to create testdir: %v", err)
 		os.RemoveAll(tmpDir)
 		os.Exit(0)
 	}
@@ -139,6 +145,8 @@ func createTestDir(tmpDir string) error {
 	}
 	err := os.Mkdir(j(tmpDir, "inaccessible-dir"), 0000)
 	errs.Append(err)
+	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "inaccessible-dir"))
+	errs.Append(err)
 	err = os.Symlink(j("a0", "f0"), j(tmpDir, "lf0"))
 	errs.Append(err)
 	err = os.Symlink(j("a0"), j(tmpDir, "la0"))
@@ -146,6 +154,8 @@ func createTestDir(tmpDir string) error {
 	err = os.Symlink("nowhere", j(tmpDir, "la1"))
 	errs.Append(err)
 	err = ioutil.WriteFile(j(tmpDir, "a0", "inaccessible-file"), []byte{'1', '2', '3'}, 0000)
+	errs.Append(err)
+	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-file")) // windows.
 	errs.Append(err)
 	return errs.Err()
 }
