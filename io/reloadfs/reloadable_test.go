@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"cloudeng.io/io/reloadfs"
-	"cloudeng.io/os/windows/win32testutil"
+	"cloudeng.io/sys/windows/win32testutil"
 )
 
 //go:embed testdata

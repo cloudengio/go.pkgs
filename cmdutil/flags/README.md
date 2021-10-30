@@ -49,8 +49,8 @@ func ExpandEnv(e string) string
 ExpandEnv is like os.ExpandEnv but supports 'pseudo' environment variables
 that have OS specific handling as follows:
 
-$USERHOME is replaced by $HOME on unix-like sytems and
-$HOMEDRIVE:\\$HOMEPATH on windows. On windows, / are replaced with \.
+On Windows $HOME and $PATH are replaced by and $HOMEDRIVE:\\$HOMEPATH and
+$Path respectively. On Windows /'s are replaced with \'s.
 
 ### Func ParseFlagTag
 ```go
@@ -69,8 +69,8 @@ default value for the flag and <usage> the detailed description for the
 flag. <default-value> may be left empty, but <name> and <usage> must be
 supplied. All fields can be quoted if they need to contain a comma.
 
-Default values may contain shell variables as per os.ExpandEnv. So
-$HOME/.configdir may be used for example.
+Default values may contain shell variables as per flags.ExpandEnv. So
+$HOME/.configdir may be used on both UNIX and Windows for example.
 
 ### Func RegisterFlagsInStruct
 ```go
