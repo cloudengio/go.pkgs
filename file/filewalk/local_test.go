@@ -17,7 +17,7 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
-	"cloudeng.io/os/windows/win32testutil"
+	"cloudeng.io/sys/windows/win32testutil"
 )
 
 var localTestTree string

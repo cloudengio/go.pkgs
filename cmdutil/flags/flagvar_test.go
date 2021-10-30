@@ -25,7 +25,7 @@ func ExampleRegisterFlagsInStruct() {
 		A int    `flag:"int-flag,-1,intVar flag"`
 		B string `flag:"string-flag,'some,value,with,a,comma',stringVar flag"`
 		O int
-		H string `flag:"config,$USERHOME/config,config file in home directotyr"`
+		H string `flag:"config,$HOME/config,config file in home directotyr"`
 	}{
 		O: 23,
 	}
