@@ -167,7 +167,6 @@ func TestDBLocking(t *testing.T) {
 	}
 
 	time.Sleep(time.Second)
-	return
 
 	dbDir = filepath.Join(tmpDir, "second")
 	if err := os.MkdirAll(dbDir, 0766); err != nil {
