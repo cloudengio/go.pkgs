@@ -313,7 +313,7 @@ returned SetMap can be queried by the IsSet method.
 
 ### Type Main
 ```go
-type Main func(ctx context.Context, cmdRunner func() error) error
+type Main func(ctx context.Context, cmdRunner func(ctx context.Context) error) error
 ```
 Main is the type of the function that can be used to intercept a call to a
 Runner.
