@@ -9,16 +9,14 @@ package flags
 
 import (
 	"os"
-	"strings"
 )
 
 // ExpandEnv is like os.ExpandEnv but supports 'pseudo' environment
 // variables that have OS specific handling as follows:
 //
-// On UNIX systems $USERHOME is replaced by $HOME.
-// On Windows $USERHOME and $HOME are replaced by and $HOMEDRIVE:\\$HOMEPATH
+// On Windows $HOME and $PATH are replaced by and $HOMEDRIVE:\\$HOMEPATH
+// and $Path respectively.
 // On Windows /'s are replaced with \'s.
 func ExpandEnv(e string) string {
-	e = strings.ReplaceAll(e, "$USERHOME", "$HOME")
 	return os.ExpandEnv(e)
 }

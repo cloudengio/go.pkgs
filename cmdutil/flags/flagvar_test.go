@@ -39,7 +39,7 @@ func ExampleRegisterFlagsInStruct() {
 	flagSet.Parse([]string{"--int-flag=42"})
 	fmt.Println(eg.A)
 	fmt.Println(eg.B)
-	if got, want := eg.H, filepath.Join(flags.ExpandEnv("$USERHOME"), "config"); got != want {
+	if got, want := eg.H, filepath.Join(flags.ExpandEnv("$HOME"), "config"); got != want {
 		fmt.Printf("got %v, want %v", got, want)
 	}
 	// Output:

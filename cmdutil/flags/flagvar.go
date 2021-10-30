@@ -104,7 +104,7 @@ func parseField(t, field string, allowEmpty, expectMore bool) (value, remaining 
 // be supplied. All fields can be quoted if they need to contain a comma.
 //
 // Default values may contain shell variables as per flags.ExpandEnv.
-// So $USERHOME/.configdir may be used for example.
+// So $HOME/.configdir may be used on both UNIX and Windows for example.
 func ParseFlagTag(t string) (name, value, usage string, err error) {
 	if len(t) == 0 {
 		err = fmt.Errorf("empty or missing tag")
