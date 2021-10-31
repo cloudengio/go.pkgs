@@ -1,4 +1,4 @@
-[![CircleCI](https://circleci.com/gh/cloudengio/go.pkgs.svg?style=svg)](https://circleci.com/gh/cloudengio/go.pkgs)
+[![CircleCI](https://circleci.com/gh/cloudengio/go.pkgs.svg?style=svg&label)](https://circleci.com/gh/cloudengio/go.pkgs)
 ![GithubActions](https://github.com/cosnicolaou/pbzip2/actions/workflows/macos.yml/badge.svg)
 
 # go.pkgs contains a set of broadly useful go packages.

@@ -1,2 +1,3 @@
-golang.org/x/sys v0.0.0-20211020174200-9d6173849985 h1:LOlKVhfDyahgmqa97awczplwkjzNaELFg3zRIJ13RYo=
-golang.org/x/sys v0.0.0-20211020174200-9d6173849985/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+cloudeng.io/sys v0.0.0-20211030052257-ec4c6f8b878e h1:TbuKQhV6BKhVDBlGj6l0gZQMJy+pnArNZhwHnHqE6+I=
+cloudeng.io/sys v0.0.0-20211030052257-ec4c6f8b878e/go.mod h1:fNIWqX26NzdShrH3lBfxzPhP1jju7JOt7Rg8PxBvYvA=
+golang.org/x/sys v0.0.0-20211029165221-6e7872819dc8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=

@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"cloudeng.io/os/windows/powershell"
+	"cloudeng.io/sys/windows/powershell"
 )
 
 func runIDCommand(uid string) (string, error) {

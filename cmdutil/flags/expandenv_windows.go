@@ -15,10 +15,10 @@ import (
 // ExpandEnv is like os.ExpandEnv but supports 'pseudo' environment
 // variables that have OS specific handling as follows:
 //
-// $USERHOME is replaced by $HOME on unix-like sytems and $HOMEDRIVE:\\$HOMEPATH
-// on windows.
-// On windows, / are replaced with \.
+// On Windows $HOME and $PATH are replaced by and $HOMEDRIVE:\\$HOMEPATH
+// and $Path respectively.
+// On Windows /'s are replaced with \'s.
 func ExpandEnv(e string) string {
-	e = strings.ReplaceAll(e, "$USERHOME", `$HOMEDRIVE$HOMEPATH`)
+	e = strings.ReplaceAll(e, "$HOME", `$HOMEDRIVE$HOMEPATH`)
 	return strings.ReplaceAll(os.ExpandEnv(e), `/`, `\`)
 }

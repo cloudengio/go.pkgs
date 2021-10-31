@@ -25,7 +25,7 @@ func ExampleRegisterFlagsInStruct() {
 		A int    `flag:"int-flag,-1,intVar flag"`
 		B string `flag:"string-flag,'some,value,with,a,comma',stringVar flag"`
 		O int
-		H string `flag:"config,$USERHOME/config,config file in home directotyr"`
+		H string `flag:"config,$HOME/config,config file in home directotyr"`
 	}{
 		O: 23,
 	}
@@ -39,7 +39,7 @@ func ExampleRegisterFlagsInStruct() {
 	flagSet.Parse([]string{"--int-flag=42"})
 	fmt.Println(eg.A)
 	fmt.Println(eg.B)
-	if got, want := eg.H, filepath.Join(flags.ExpandEnv("$USERHOME"), "config"); got != want {
+	if got, want := eg.H, filepath.Join(flags.ExpandEnv("$HOME"), "config"); got != want {
 		fmt.Printf("got %v, want %v", got, want)
 	}
 	// Output:
