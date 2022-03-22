@@ -72,6 +72,8 @@ func (pi PrefixInfo) GobEncode() ([]byte, error) {
 	return buf, errs.Err()
 }
 
+const debugDecodeSize = 10 * 1024 * 1024
+
 func gobDecodeInfo(dec *gob.Decoder) ([]Info, error) {
 	errs := errors.M{}
 	var size int
@@ -79,7 +81,7 @@ func gobDecodeInfo(dec *gob.Decoder) ([]Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	if size > 10000 {
+	if debugDecodeSize > 0 && size > debugDecodeSize {
 		s := int(unsafe.Sizeof(Info{}))
 		var rlim unix.Rlimit
 		var rusage unix.Rusage
