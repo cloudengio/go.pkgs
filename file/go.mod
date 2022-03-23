@@ -9,4 +9,5 @@ require (
 	cloudeng.io/sync v0.0.6
 	cloudeng.io/sys v0.0.0-20211030052257-ec4c6f8b878e
 	github.com/cosnicolaou/pudge v1.0.6
+	golang.org/x/sys v0.0.0-20211029165221-6e7872819dc8
 )

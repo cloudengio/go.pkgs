@@ -68,12 +68,19 @@ func (pi PrefixInfo) GobEncode() ([]byte, error) {
 	return buf, errs.Err()
 }
 
+const debugDecodeSize = 10 * 1024 * 1024
+
 func gobDecodeInfo(dec *gob.Decoder) ([]Info, error) {
 	errs := errors.M{}
 	var size int
 	err := dec.Decode(&size)
 	if err != nil {
 		return nil, err
+	}
+	if debugDecodeSize > 0 && size > debugDecodeSize {
+		if err := dumpMemStats(size); err != nil {
+			return nil, err
+		}
 	}
 	info := make([]Info, size)
 	for i := 0; i < size; i++ {
