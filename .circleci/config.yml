@@ -41,8 +41,7 @@ jobs:
           name: prep
           command: |
             curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-            go get github.com/matthewloring/validjson/cmd/validjson@latest
-            go install -x github.com/matthewloring/validjson/cmd/validjson@latest
+            go install github.com/matthewloring/validjson/cmd/validjson@latest
             go run .circleci/runner.go --prep
       - run:
           name: lint
