@@ -25,6 +25,12 @@ jobs:
       - run: git config --global core.autocrlf false
       - checkout
       - run:
+          name: install go << parameters.go >>
+          command: |
+            WebClient = New-Object System.Net.WebClient
+            WebClient.DownloadFile("https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi","C:\golang.msi")
+            C:\golang.msi
+      - run:
           name: test
           command: |
             go run .circleci\runner.go --prep --test
@@ -60,7 +66,10 @@ workflows:
           matrix:
             parameters:
               go: ["1.18"]
-      - test-windows
+      - test-windows:
+          matrix:
+            parameters:
+              go: ["1.18.1"]
       - lint:
           matrix:
             parameters:
