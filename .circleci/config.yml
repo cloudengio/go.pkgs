@@ -19,6 +19,9 @@ jobs:
             go run .circleci/runner.go --prep --test
 
   test-windows:
+    parameters:
+      go:
+        type: string
     executor:
       name: win/default
     steps:
