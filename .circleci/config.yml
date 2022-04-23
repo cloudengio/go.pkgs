@@ -30,8 +30,7 @@ jobs:
       - run:
           name: install go << parameters.go >>
           command: |
-            WebClient = New-Object System.Net.WebClient
-            WebClient.DownloadFile("https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi","C:\golang.msi")
+            wget "https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi" -outfile "C:\golang.msi"
             C:\golang.msi
       - run:
           name: test
