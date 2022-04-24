@@ -35,7 +35,7 @@ jobs:
       - run:
           name: verify version
           command: |
-            go --version
+            go version
       - run:
           name: test
           command: |
