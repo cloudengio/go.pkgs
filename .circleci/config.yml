@@ -30,7 +30,7 @@ jobs:
       - run:
           name: install go << parameters.go >>
           command: |
-            Invoke-WebRequest -uri https://go.dev/dl/go<<parameters.go>.windows-amd64.msi -OutFile golang.msi
+            Invoke-WebRequest -uri "https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi" -OutFile golang.msi
             Start-Process .\msiexec.exe -Wait -ArgumentList '/I golang.msi /quiet'
       - run:
           name: verify version
