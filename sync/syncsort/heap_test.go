@@ -65,10 +65,6 @@ func shuffle[T any](items []syncsort.Item[T]) []syncsort.Item[T] {
 	return shuffled
 }
 
-func compareSlices[T []any](a, b T) {
-
-}
-
 func flatten[T any](shuffled []syncsort.Item[[]T]) []T {
 	flattened := make([]T, 0, len(shuffled))
 	for _, s := range shuffled {
