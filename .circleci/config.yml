@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  win: circleci/windows@2.4.1
+  win: circleci/windows@4.1.1
 
 jobs:
   test-linux:
@@ -19,11 +19,23 @@ jobs:
             go run .circleci/runner.go --prep --test
 
   test-windows:
+    parameters:
+      go:
+        type: string
     executor:
       name: win/default
     steps:
       - run: git config --global core.autocrlf false
       - checkout
+      - run:
+          name: install go << parameters.go >>
+          command: |
+            Invoke-WebRequest -uri "https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi" -OutFile golang.msi
+            Start-Process msiexec.exe -Wait -ArgumentList '/I golang.msi /quiet'
+      - run:
+          name: verify version
+          command: |
+            go version
       - run:
           name: test
           command: |
@@ -41,8 +53,6 @@ jobs:
           name: prep
           command: |
             curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-            go get github.com/matthewloring/validjson/cmd/validjson@latest
-            go install -x github.com/matthewloring/validjson/cmd/validjson@latest
             go run .circleci/runner.go --prep
       - run:
           name: lint
@@ -50,19 +60,21 @@ jobs:
             for pkg in $(go run .circleci/runner --modules); do \
               cd $$pkg; \
               golangci-lint run ./...; \
-              validjson ./...; \
               cd ..; \
             done
 
 workflows:
-  circleci:
+  build-test-lint:
     jobs:
       - test-linux:
           matrix:
             parameters:
-              go: ["1.16", "1.17"]
-      - test-windows
+              go: ["1.18"]
+      - test-windows:
+          matrix:
+            parameters:
+              go: ["1.18.1"]
       - lint:
           matrix:
             parameters:
-              go: ["1.17"]
+              go: ["1.18"]

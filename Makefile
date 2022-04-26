@@ -32,12 +32,13 @@ deps:
 	done
 
 pr:
+	go install cloudeng.io/go/cmd/goannotate@latest cloudeng.io/go/cmd/gousage@latest cloudeng.io/go/cmd/gomarkdown@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 	for pkg in $(SUBMODULES); do \
 		cd $$pkg; \
-		go get cloudeng.io/go/cmd/goannotate cloudeng.io/go/cmd/gousage cloudeng.io/go/cmd/gomarkdown; \
-		go run cloudeng.io/go/cmd/gousage --overwrite ./...; \
-		go run cloudeng.io/go/cmd/goannotate --config=../copyright-annotation.yaml --annotation=cloudeng-copyright ./...; \
-		go run cloudeng.io/go/cmd/gomarkdown --overwrite --circleci=cloudengio/go.gotools --goreportcard ./...; \
+		go run cloudeng.io/go/cmd/gousage@latest --overwrite ./...; \
+		PATH=$$PATH:$$(go env GOPATH)/bin go run cloudeng.io/go/cmd/goannotate@latest --config=../copyright-annotation.yaml --annotation=cloudeng-copyright ./...; \
+		go run cloudeng.io/go/cmd/gomarkdown@latest --overwrite --circleci=cloudengio/go.gotools --goreportcard ./...; \
 		golangci-lint run ./...; \
 		$(RM) go.sum; \
 		go mod tidy; \
