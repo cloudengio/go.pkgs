@@ -4,7 +4,12 @@
 
 package lcs
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
 
 // DP represents a dynamic programming based implementation for finding
 // the longest common subsequence and shortest edit script (LCS/SES) for
@@ -117,14 +122,17 @@ func (dp *DP[T]) extend(i int, bt [][]T) [][]T {
 	if len(bt) == 0 {
 		return [][]T{{dp.a[i]}}
 	}
+	fmt.Printf("extend: %v, a %v\n", i, dp.a)
 	for i, p := range bt {
-		fmt.Printf("SL: %v %v %v\n", bt[i], p, dp.a[i])
+		fmt.Printf("extend: %v %v %v\n", bt[i], p, dp.a[i])
 		bt[i] = append(p, dp.a[i])
 	}
 	return bt
 }
 
 func (dp *DP[T]) backtrackAll(i, j int) [][]T {
+	dp.print(os.Stdout)
+	fmt.Printf("IJ: %v x %v\n", i, j)
 	if i == 0 || j == 0 {
 		return [][]T{}
 	}
@@ -156,7 +164,6 @@ func (dp *DP[T]) diff(i, j int) []Edit[T] {
 	return nil
 }
 
-/*
 const (
 	upArrow       rune = 0x2191 // utf8 up arrow
 	leftArrow     rune = 0x2190 // utf8 left arrow
@@ -182,8 +189,8 @@ func secondArrow(v uint8) rune {
 	}
 }
 
-func (p *DP) print(out io.Writer) {
-	mx, my := p.na, p.nb
+func (p *DP[T]) print(out io.Writer) {
+	mx, my := len(p.a), len(p.b)
 	row := &strings.Builder{}
 	for y := 0; y < my; y++ {
 		for x := 0; x < mx; x++ {
@@ -195,4 +202,3 @@ func (p *DP) print(out io.Writer) {
 		row.Reset()
 	}
 }
-*/
