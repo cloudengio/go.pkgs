@@ -87,19 +87,27 @@ func lineRange(lines []int) string {
 	}
 }
 
-// getEditsForGroup splts edits into groups of contiguous of related edit
+func sliceEdits(edits *lcs.EditScript[int64], from int) *lcs.EditScript[int64] {
+	sl := (*edits)[from:]
+	var ns lcs.EditScript[int64] = make([]lcs.Edit[int64], len(sl))
+	copy(ns, sl)
+	return &ns
+}
+
+// getEditsForGroup splits edits into groups of contiguous of related edit
 // operations.
 // 1. groups split at an 'identical' boundary
 // 2. multiple insertions at a single point
 // 3. runs of contiguous deletions
-func getEditsForGroup(edits lcs.EditScript) (group, script lcs.EditScript) {
+func getEditsForGroup(edits *lcs.EditScript[int64]) (group, script *lcs.EditScript[int64]) {
 	last := 0
 	firstIns, firstDel := true, true
 	nextIns, nextDel := 0, 0
-	for i, edit := range edits {
+	grp := []lcs.Edit[int64]{}
+	for i, edit := range *edits {
 		switch edit.Op {
 		case lcs.Identical:
-			return group, edits[last+1:]
+			goto done
 		case lcs.Insert:
 			if firstIns {
 				nextIns = edit.A
@@ -108,7 +116,7 @@ func getEditsForGroup(edits lcs.EditScript) (group, script lcs.EditScript) {
 				goto done
 			}
 			nextIns = edit.A + 1
-			group = append(group, edit)
+			grp = append(grp, edit)
 			firstIns = false
 		case lcs.Delete:
 			if firstDel {
@@ -119,27 +127,28 @@ func getEditsForGroup(edits lcs.EditScript) (group, script lcs.EditScript) {
 			}
 			nextDel = edit.A + 1
 			firstDel = false
-			group = append(group, edit)
+			grp = append(grp, edit)
 		}
 		last = i
 	}
 done:
-	return group, edits[last+1:]
+	var ges lcs.EditScript[int64] = grp
+	return &ges, sliceEdits(edits, last+1)
 }
 
 // Group represents a single diff 'group', that is a set of insertions/deletions
 // that are pertain to the same set of lines.
 type Group struct {
-	edits                       lcs.EditScript
-	insertions, deletions       map[int][]lcs.Edit
+	edits                       *lcs.EditScript[int64]
+	insertions, deletions       map[int][]lcs.Edit[int64]
 	insertedLines, deletedLines []int
 	insertedText, deletedText   string
 }
 
-func (d *Diff) newGroup(edits lcs.EditScript) *Group {
-	insertions, deletions := map[int][]lcs.Edit{}, map[int][]lcs.Edit{}
+func (d *Diff) newGroup(edits *lcs.EditScript[int64]) *Group {
+	insertions, deletions := map[int][]lcs.Edit[int64]{}, map[int][]lcs.Edit[int64]{}
 	insertedLines, deletedLines := []int{}, []int{}
-	for _, edit := range edits {
+	for _, edit := range *edits {
 		switch edit.Op {
 		case lcs.Insert:
 			insertions[edit.A] = append(insertions[edit.A], edit)
@@ -163,7 +172,7 @@ func (d *Diff) newGroup(edits lcs.EditScript) *Group {
 // Summary returns a summary message in the style of the unix/linux diff
 // command line tool, eg. 1,2a3.
 func (g *Group) Summary() string {
-	onlyKey := func(m map[int][]lcs.Edit) int {
+	onlyKey := func(m map[int][]lcs.Edit[int64]) int {
 		for k := range m {
 			return k
 		}
@@ -195,7 +204,7 @@ func (g *Group) Deleted() string {
 
 // Diff represents the ability to diff two slices.
 type Diff struct {
-	utf8Decoder    codec.Decoder
+	utf8Decoder    codec.Decoder[rune]
 	linesA, linesB []string
 	groups         []*Group
 }
@@ -215,49 +224,51 @@ func (d *Diff) Group(i int) *Group {
 	return d.groups[i]
 }
 
-// DiffByLines calls DiffByLinesUsing with the Myers function.
-func DiffByLines(a, b []byte) *Diff {
-	return DiffByLinesUsing(a, b, Myers)
+// Myers uses cloudeng.io/algo/lcs.Myers to generate diffs.
+func Myers(a, b string) *lcs.EditScript[rune] {
+	return lcs.NewMyers([]rune(a), []rune(b)).SES()
 }
 
-// Myers uses cloudeng.io/algo/myers to generate diffs.
-func Myers(a, b interface{}) lcs.EditScript {
-	return lcs.NewMyers(a, b).SES()
+// DP uses cloudeng.io/algo/lcs.DP to generate diffs.
+func DP(a, b string) *lcs.EditScript[rune] {
+	return lcs.NewDP([]rune(a), []rune(b)).SES()
 }
 
-// DP uses cloudeng.io/algo/myers to generate diffs.
-func DP(a, b interface{}) lcs.EditScript {
-	return lcs.NewDP(a, b).SES()
+// LinesMyers uses cloudeng.io/algo/lcs.Myers to generate diffs.
+func LinesMyers(a, b []byte) *Diff {
+	return diffLinesUsing(a, b, func(a, b []int64) *lcs.EditScript[int64] {
+		return lcs.NewMyers(a, b).SES()
+	})
 }
 
-// DiffByLinesUsing diffs the supplied strings on a line-by-line basis using
+// LinesDP uses cloudeng.io/algo/lcs.DP to generate diffs.
+func LinesDP(a, b []byte) *Diff {
+	return diffLinesUsing([]byte(a), []byte(b), func(a, b []int64) *lcs.EditScript[int64] {
+		return lcs.NewDP(a, b).SES()
+	})
+}
+
+// diffByLinesUsing diffs the supplied strings on a line-by-line basis using
 // the supplied function to generate the diffs.
-func DiffByLinesUsing(a, b []byte, engine func(a, b interface{}) lcs.EditScript) *Diff {
+func diffLinesUsing(a, b []byte, engine func(a, b []int64) *lcs.EditScript[int64]) *Diff {
 	lda, ldb := NewLineDecoder(LineFNVHashDecoder), NewLineDecoder(LineFNVHashDecoder)
-	decA, err := codec.NewDecoder(lda.Decode)
-	if err != nil {
-		panic(err)
-	}
-	decB, _ := codec.NewDecoder(ldb.Decode)
+	decA := codec.NewDecoder(lda.Decode)
+	decB := codec.NewDecoder(ldb.Decode)
 	da, db := decA.Decode(a), decB.Decode(b)
 
-	utf8Dec, err := codec.NewDecoder(utf8.DecodeRune)
-	if err != nil {
-		panic(err)
-	}
+	lineDiffs := engine(da, db)
 
+	utf8Dec := codec.NewDecoder(utf8.DecodeRune)
 	diff := &Diff{
 		utf8Decoder: utf8Dec,
 		linesA:      lda.lines,
 		linesB:      ldb.lines,
 	}
-
-	lineDiffs := engine(da, db)
 	script := lineDiffs
-	for len(script) > 0 {
-		var edits lcs.EditScript
+	for len(*script) > 0 {
+		var edits *lcs.EditScript[int64]
 		edits, script = getEditsForGroup(script)
-		if len(edits) == 0 {
+		if edits == nil || len(*edits) == 0 {
 			continue
 		}
 		diff.groups = append(diff.groups, diff.newGroup(edits))

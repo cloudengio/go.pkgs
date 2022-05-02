@@ -73,11 +73,6 @@ func validateInsertions[T comparable](t *testing.T, i int, edits *lcs.EditScript
 	}
 }
 
-type implementation[T comparable] interface {
-	LCS() []T
-	SES() *lcs.EditScript[T]
-}
-
 func testLCSImpl[T comparable](t *testing.T, i int, lcs []T, edit *lcs.EditScript[T], a, b []T, all [][]T) {
 	if got, want := lcs, all; !isOneOf(got, want) {
 		t.Errorf("%v: got %v is not one of %v", i, got, want)

@@ -12,14 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"cloudeng.io/algo/lcs"
 	"cloudeng.io/algo/lcs/textdiff"
 )
 
 func TestDiffGroups(t *testing.T) {
 	l := func(s ...string) []string { return s }
-	for e, engine := range []func(a, b interface{}) lcs.EditScript{
-		textdiff.DP, textdiff.Myers,
+	for e, engine := range []func(a, b []byte) *textdiff.Diff{
+		textdiff.LinesDP, textdiff.LinesMyers,
 	} {
 		for i, tc := range []struct {
 			a, b    string
@@ -35,8 +34,7 @@ func TestDiffGroups(t *testing.T) {
 			{"S\nA\nB\nC\nS", "S\nAA\nBB\nCC\nS", l("2,4c2,4")},
 			{"S\nAA\nBB\nCC\nS", "S\nA\nB\nC\nS", l("2,4c2,4")},
 		} {
-
-			diffs := textdiff.DiffByLinesUsing([]byte(tc.a), []byte(tc.b), engine)
+			diffs := engine([]byte(tc.a), []byte(tc.b))
 			ng := diffs.NumGroups()
 			if got, want := ng, len(tc.summary); got != want {
 				t.Errorf("%v.%v: got %v, want %v\n", e, i, got, want)
@@ -133,16 +131,16 @@ func TestTextDiff(t *testing.T) {
 	insertedAll[2] = "\n" + strings.TrimSuffix(insertedAll[2], "\n")
 
 	for e, tc := range []struct {
-		engine func(a, b interface{}) lcs.EditScript
+		engine func(a, b []byte) *textdiff.Diff
 		output []string
 	}{
-		{textdiff.DP, dpOutput},
-		{textdiff.Myers, myersOutput},
+		{textdiff.LinesDP, dpOutput},
+		{textdiff.LinesMyers, myersOutput},
 	} {
 		if e != 0 {
 			continue
 		}
-		diffs := textdiff.DiffByLinesUsing(a, b, tc.engine)
+		diffs := tc.engine(a, b)
 		if got, want := diffs.NumGroups(), len(tc.output); got != want {
 			t.Errorf("%v: got %v, want %v", e, got, want)
 		}

@@ -7,7 +7,6 @@ package lcs
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -122,17 +121,15 @@ func (dp *DP[T]) extend(i int, bt [][]T) [][]T {
 	if len(bt) == 0 {
 		return [][]T{{dp.a[i]}}
 	}
-	fmt.Printf("extend: %v, a %v\n", i, dp.a)
+	v := dp.a[i]
 	for i, p := range bt {
-		fmt.Printf("extend: %v %v %v\n", bt[i], p, dp.a[i])
-		bt[i] = append(p, dp.a[i])
+		bt[i] = append(p, v)
 	}
 	return bt
 }
 
 func (dp *DP[T]) backtrackAll(i, j int) [][]T {
-	dp.print(os.Stdout)
-	fmt.Printf("IJ: %v x %v\n", i, j)
+	//	dp.print(os.Stdout)
 	if i == 0 || j == 0 {
 		return [][]T{}
 	}
@@ -189,12 +186,12 @@ func secondArrow(v uint8) rune {
 	}
 }
 
-func (p *DP[T]) print(out io.Writer) {
-	mx, my := len(p.a), len(p.b)
+func (dp *DP[T]) print(out io.Writer) {
+	mx, my := len(dp.a), len(dp.b)
 	row := &strings.Builder{}
 	for y := 0; y < my; y++ {
 		for x := 0; x < mx; x++ {
-			dir := p.directions[x][y]
+			dir := dp.directions[x][y]
 			row.WriteString(fmt.Sprintf("  %c%c ", firstArrow(dir), secondArrow(dir)))
 		}
 		row.WriteString("\n")
