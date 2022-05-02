@@ -3,21 +3,18 @@
 // license that can be found in the LICENSE file.
 
 // Package codec provides support for interpreting byte slices as slices of
-// other basic types such as runes, int64's or strings. Go's lack of generics
-// make this awkward and this package currently supports a fixed set of
-// basic types (slices of byte/uint8, rune/int32, int64 and string).
+// other basic types such as runes, int64's or strings.
 package codec
-
-import "fmt"
 
 // Decoder represents the ability to decode a byte slice into a slice of
 // some other data type.
-type Decoder interface {
-	Decode(input []byte) interface{}
+type Decoder[T any] interface {
+	Decode(input []byte) []T
 }
 
 type options struct {
 	resizePrecent int
+	sizePercent   int
 }
 
 // Option represents an option accepted by NewDecoder.
@@ -34,108 +31,54 @@ func ResizePercent(percent int) Option {
 	}
 }
 
+// SizePercent requests that the initially allocated slice be 'percent' as
+// large as the original input slice's size in bytes. A percent of 25 will
+// divide the original size by 4 for example.
+func SizePercent(percent int) Option {
+	return func(o *options) {
+		o.sizePercent = percent
+	}
+}
+
 // NewDecode returns an instance of Decoder appropriate for the supplied
-// function. The currently supported function signatures are:
-//   func([]byte) (uint8, int)
-//   func([]byte) (int32, int)
-//   func([]byte) (int64, int)
-//   func([]byte) (string, int)
-func NewDecoder(fn interface{}, opts ...Option) (Decoder, error) {
-	var o options
-	o.resizePrecent = 100
+// function.
+func NewDecoder[T any](fn func([]byte) (T, int), opts ...Option) Decoder[T] {
+	dec := &decoder[T]{fn: fn}
+	dec.resizePrecent = 100
 	for _, fn := range opts {
-		fn(&o)
+		fn(&dec.options)
 	}
-	switch v := fn.(type) {
-	case func([]byte) (uint8, int):
-		return &decoder8{o, v}, nil
-	case func([]byte) (int32, int):
-		return &decoder32{o, v}, nil
-	case func([]byte) (int64, int):
-		return &decoder64{o, v}, nil
-	case func([]byte) (string, int):
-		return &decoderString{o, v}, nil
+	if dec.sizePercent == 0 {
+		dec.sizePercent = 100
 	}
-	return nil, fmt.Errorf("unsupported type for decoder function: %T", fn)
+	return dec
 }
 
-type decoder8 struct {
+type decoder[T any] struct {
 	options
-	fn func([]byte) (uint8, int)
+	fn func([]byte) (T, int)
 }
 
 // Decode implements Decoder.
-func (d *decoder8) Decode(input []byte) interface{} {
-	out := make([]uint8, len(input))
-	n := decode(input, func(in []byte, i int) (n int) {
-		out[i], n = d.fn(in)
-		return
-	})
-	return resize(out[:n], d.resizePrecent)
-}
-
-type decoder32 struct {
-	options
-	fn func([]byte) (int32, int)
-}
-
-// Decode implements Decoder.
-func (d *decoder32) Decode(input []byte) interface{} {
-	out := make([]int32, len(input))
-	n := decode(input, func(in []byte, i int) (n int) {
-		out[i], n = d.fn(in)
-		return
-	})
-	return resize(out[:n], d.resizePrecent)
-}
-
-type decoder64 struct {
-	options
-	fn func([]byte) (int64, int)
-}
-
-// Decode implements Decoder.
-func (d *decoder64) Decode(input []byte) interface{} {
-	out := make([]int64, len(input))
-	n := decode(input, func(in []byte, i int) (n int) {
-		out[i], n = d.fn(in)
-		return
-	})
-	return resize(out[:n], d.resizePrecent)
-}
-
-type decoderString struct {
-	options
-	fn func([]byte) (string, int)
-}
-
-// Decode implements Decoder.
-func (d *decoderString) Decode(input []byte) interface{} {
-	out := make([]string, len(input))
-	n := decode(input, func(in []byte, i int) (n int) {
-		out[i], n = d.fn(in)
-		return
-	})
-	return resize(out[:n], d.resizePrecent)
-}
-
-func decode(input []byte, fn func([]byte, int) int) int {
+func (d *decoder[T]) Decode(input []byte) []T {
 	if len(input) == 0 {
-		return 0
+		return []T{}
 	}
+	out := make([]T, 0, len(input)/(100/d.sizePercent))
 	cursor, i := 0, 0
 	for {
-		n := fn(input[cursor:], i)
+		item, n := d.fn(input[cursor:])
 		if n == 0 {
 			break
 		}
+		out = append(out, item)
 		i++
 		cursor += n
 		if cursor >= len(input) {
 			break
 		}
 	}
-	return i
+	return resize(out[:i], d.resizePrecent)
 }
 
 func resizedNeeded(used, available int, percent int) bool {
@@ -150,34 +93,11 @@ func resizedNeeded(used, available int, percent int) bool {
 // slice to it if the ratio of wasted to used, ie:
 //   (cap(slice) - len(slice)) / len(slice))
 // exceeds the specified percentage.
-func resize(slice interface{}, percent int) interface{} {
-	switch v := slice.(type) {
-	case []uint8:
-		if resizedNeeded(len(v), cap(v), percent) {
-			r := make([]uint8, len(v))
-			copy(r, v)
-			return r
-		}
-	case []int32:
-		if resizedNeeded(len(v), cap(v), percent) {
-			r := make([]int32, len(v))
-			copy(r, v)
-			return r
-		}
-	case []int64:
-		if resizedNeeded(len(v), cap(v), percent) {
-			r := make([]int64, len(v))
-			copy(r, v)
-			return r
-		}
-	case []string:
-		if resizedNeeded(len(v), cap(v), percent) {
-			r := make([]string, len(v))
-			copy(r, v)
-			return r
-		}
-	default:
-		panic(fmt.Sprintf("unsupported type %T", slice))
+func resize[T any](slice []T, percent int) []T {
+	if resizedNeeded(len(slice), cap(slice), percent) {
+		r := make([]T, len(slice))
+		copy(r, slice)
+		return r
 	}
 	return slice
 }

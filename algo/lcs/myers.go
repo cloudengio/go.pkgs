@@ -4,33 +4,20 @@
 
 package lcs
 
-import (
-	"fmt"
-)
-
 // Myers represents an implementation of Myer's longest common subsequence
 // and shortest edit script algorithm as as documented in:
 // An O(ND) Difference Algorithm and Its Variations, 1986.
-type Myers struct {
-	a, b   interface{}
-	na, nb int
-	slicer func(v interface{}, from, to int32) interface{}
-	edits  func(v interface{}, op EditOp, cx, cy int) []Edit
+type Myers[T comparable] struct {
+	a, b []T
+	/*	na, nb int
+		slicer func(v interface{}, from, to int32) interface{}
+		edits  func(v interface{}, op EditOp, cx, cy int) []Edit*/
 }
 
 // NewMyers returns a new instance of Myers. The implementation supports slices
 // of bytes/uint8, rune/int32 and int64s.
-func NewMyers(a, b interface{}) *Myers {
-	na, nb, err := configureAndValidate(a, b)
-	if err != nil {
-		panic(err)
-	}
-	return &Myers{
-		a:  a,
-		b:  b,
-		na: na,
-		nb: nb,
-	}
+func NewMyers[T comparable](a, b []T) *Myers[T] {
+	return &Myers[T]{a: a, b: b}
 }
 
 // Details on the implementation and details of the algorithms can be found
@@ -39,7 +26,8 @@ func NewMyers(a, b interface{}) *Myers {
 // http://simplygenius.net/Article/DiffTutorial1
 // https://blog.robertelder.org/diff-algorithm/
 
-func forwardSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int32, offset int32) (nd, mx, my, x, y int32, ok bool) {
+func forwardSearch[T comparable](a, b []T, d int32, forward, reverse []int32, offset int32) (nd, mx, my, x, y int32, ok bool) {
+	na, nb := int32(len(a)), int32(len(b))
 	delta := na - nb
 	odd := delta%2 != 0
 	for k := -d; k <= d; k += 2 {
@@ -55,7 +43,7 @@ func forwardSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int
 		}
 		y = x - k
 		mx, my = x, y
-		for x < na && y < nb && cmp(int(x), int(y)) {
+		for x < na && y < nb && a[x] == b[y] {
 			x++
 			y++
 		}
@@ -73,7 +61,8 @@ func forwardSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int
 	return 0, 0, 0, 0, 0, false
 }
 
-func reverseSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int32, offset int32) (nd, mx, my, x, y int32, ok bool) {
+func reverseSearch[T comparable](a, b []T, d int32, forward, reverse []int32, offset int32) (nd, mx, my, x, y int32, ok bool) {
+	na, nb := int32(len(a)), int32(len(b))
 	delta := na - nb
 	even := delta%2 == 0
 	for k := -d; k <= d; k += 2 {
@@ -86,7 +75,7 @@ func reverseSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int
 		}
 		y = x - k
 		mx, my = x, y
-		for x < na && y < nb && cmp(int(na-x-1), int(nb-y-1)) {
+		for x < na && y < nb && a[na-x-1] == b[nb-y-1] {
 			x++
 			y++
 		}
@@ -104,8 +93,8 @@ func reverseSearch(cmp comparator, na, nb int32, d int32, forward, reverse []int
 	return 0, 0, 0, 0, 0, false
 }
 
-func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
-	max := na + nb // max # edits (delete all a, insert all of b)
+func middleSnake[T comparable](a, b []T) (d, x1, y1, x2, y2 int32) {
+	max := int32(len(a) + len(b)) // max # edits (delete all a, insert all of b)
 
 	// forward and reverse are accessed using k which is in the
 	// range -d .. +d, hence offset must be added to k.
@@ -119,109 +108,63 @@ func middleSnake(cmp comparator, na, nb int32) (d, x1, y1, x2, y2 int32) {
 		halfway++
 	}
 	for d := int32(0); d <= halfway; d++ {
-		if nd, mx, my, x, y, ok := forwardSearch(cmp, na, nb, d, forward, reverse, offset); ok {
+		if nd, mx, my, x, y, ok := forwardSearch(a, b, d, forward, reverse, offset); ok {
 			return nd, mx, my, x, y
 		}
-		if nd, mx, my, x, y, ok := reverseSearch(cmp, na, nb, d, forward, reverse, offset); ok {
+		if nd, mx, my, x, y, ok := reverseSearch(a, b, d, forward, reverse, offset); ok {
 			return nd, mx, my, x, y
 		}
-
 	}
 	panic("unreachable")
 }
 
-func myersLCS64(a, b []int64) []int64 {
-	na, nb := int32(len(a)), int32(len(b))
-	if na == 0 || nb == 0 {
-		return []int64{}
+func myersLCS[T comparable](a, b []T) []T {
+	if len(a) == 0 || len(b) == 0 {
+		return []T{}
 	}
-	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
+	d, x, y, u, v := middleSnake(a, b)
 	if d > 1 {
-		nd := myersLCS64(a[:x], b[:y])
+		nd := myersLCS(a[:x], b[:y])
 		nd = append(nd, a[x:u]...)
-		nd = append(nd, myersLCS64(a[u:na], b[v:nb])...)
+		nd = append(nd, myersLCS(a[u:], b[v:])...)
 		return nd
 	}
-	if nb > na {
-		return append([]int64{}, a...)
+	if len(b) > len(a) {
+		return append([]T{}, a...)
 	}
-	return append([]int64{}, b...)
-}
-
-func myersLCS32(a, b []int32) []int32 {
-	na, nb := int32(len(a)), int32(len(b))
-	if na == 0 || nb == 0 {
-		return []int32{}
-	}
-	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
-	if d > 1 {
-		nd := myersLCS32(a[:x], b[:y])
-		nd = append(nd, a[x:u]...)
-		nd = append(nd, myersLCS32(a[u:na], b[v:nb])...)
-		return nd
-	}
-	if nb > na {
-		return append([]int32{}, a...)
-	}
-	return append([]int32{}, b...)
-}
-
-func myersLCS8(a, b []uint8) []uint8 {
-	na, nb := int32(len(a)), int32(len(b))
-	if na == 0 || nb == 0 {
-		return []uint8{}
-	}
-	d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
-	if d > 1 {
-		nd := myersLCS8(a[:x], b[:y])
-		nd = append(nd, a[x:u]...)
-		nd = append(nd, myersLCS8(a[u:na], b[v:nb])...)
-		return nd
-	}
-	if nb > na {
-		return append([]uint8{}, a...)
-	}
-	return append([]uint8{}, b...)
+	return append([]T{}, b...)
 }
 
 // LCS returns the longest common subsquence.
-func (m *Myers) LCS() interface{} {
-	switch av := m.a.(type) {
-	case []int64:
-		return myersLCS64(av, m.b.([]int64))
-	case []int32:
-		return myersLCS32(av, m.b.([]int32))
-	case []uint8:
-		return myersLCS8(av, m.b.([]uint8))
-	}
-	panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
+func (m *Myers[T]) LCS() []T {
+	return myersLCS(m.a, m.b)
 }
 
-func (m *Myers) ses(idx int, a, b interface{}, na, nb, cx, cy int32) []Edit {
-	var ses []Edit
+func (m *Myers[T]) ses(idx int, a, b []T, na, nb, cx, cy int32) []Edit[T] {
+	var ses []Edit[T]
 	if na > 0 && nb > 0 {
-		d, x, y, u, v := middleSnake(cmpFor(a, b), na, nb)
+		d, x, y, u, v := middleSnake(a, b)
 		if d > 1 || (x != u && y != v) {
 			ses = append(ses,
-				m.ses(idx+1, m.slicer(a, 0, x), m.slicer(b, 0, y), x, y, cx, cy)...)
+				m.ses(idx+1, a[0:x], b[0:y], x, y, cx, cy)...)
 			if x != u && y != v {
 				// middle snake is part of the lcs.
-				ses = append(ses, m.edits(m.slicer(a, x, u), Identical, int(cx+x), int(cy+y))...)
+				ses = append(ses, m.edits(a[x:u], Identical, int(cx+x), int(cy+y))...)
 			}
 			return append(ses,
-				m.ses(idx+1, m.slicer(a, u, na), m.slicer(b, v, nb), na-u, nb-v, cx+u, cy+v)...)
+				m.ses(idx+1, a[u:na], b[v:nb], na-u, nb-v, cx+u, cy+v)...)
 		}
 		if nb > na {
 			// a is part of the LCS.
-			ses = append(ses, m.edits(m.slicer(a, 0, na), Identical, int(cx), int(cy))...)
+			ses = append(ses, m.edits(a[0:na], Identical, int(cx), int(cy))...)
 			return append(ses,
-				m.ses(idx+1, nil, m.slicer(b, na, nb), 0, nb-na, cx+na, cy+na)...)
+				m.ses(idx+1, nil, b[na:nb], 0, nb-na, cx+na, cy+na)...)
 		}
 		if na > nb {
 			// b is part of the LCS.
-			ses = append(ses, m.edits(m.slicer(b, 0, nb), Identical, int(cx), int(cy))...)
+			ses = append(ses, m.edits(b[0:nb], Identical, int(cx), int(cy))...)
 			return append(ses,
-				m.ses(idx+1, m.slicer(a, nb, na), nil, na-nb, 0, cx+nb, cy+nb)...)
+				m.ses(idx+1, a[nb:na], nil, na-nb, 0, cx+nb, cy+nb)...)
 		}
 		return ses
 	}
@@ -231,51 +174,23 @@ func (m *Myers) ses(idx int, a, b interface{}, na, nb, cx, cy int32) []Edit {
 	return m.edits(b, Insert, int(cx), int(cy))
 }
 
-// SES returns the shortest edit script.
-func (m *Myers) SES() EditScript {
-	createEdit := func(cx, cy, i int, op EditOp, val interface{}) Edit {
+func (m *Myers[T]) edits(vals []T, op EditOp, cx, cy int) []Edit[T] {
+	createEdit := func(cx, cy, i int, op EditOp, val T) Edit[T] {
 		atx := cx + i
 		if op == Insert {
 			atx = cx
 		}
-		return Edit{op, atx, cy + i, val}
+		return Edit[T]{op, atx, cy + i, val}
 	}
-	switch m.a.(type) {
-	case []int64:
-		m.slicer = func(v interface{}, from, to int32) interface{} {
-			return v.([]int64)[from:to]
-		}
-		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
-			var edits []Edit
-			for i, val := range v.([]int64) {
-				edits = append(edits, createEdit(cx, cy, i, op, val))
-			}
-			return edits
-		}
-	case []int32:
-		m.slicer = func(v interface{}, from, to int32) interface{} {
-			return v.([]int32)[from:to]
-		}
-		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
-			var edits []Edit
-			for i, val := range v.([]int32) {
-				edits = append(edits, createEdit(cx, cy, i, op, val))
-			}
-			return edits
-		}
-	case []uint8:
-		m.slicer = func(v interface{}, from, to int32) interface{} {
-			return v.([]uint8)[from:to]
-		}
-		m.edits = func(v interface{}, op EditOp, cx, cy int) []Edit {
-			var edits []Edit
-			for i, val := range v.([]uint8) {
-				edits = append(edits, createEdit(cx, cy, i, op, val))
-			}
-			return edits
-		}
-	default:
-		panic(fmt.Sprintf("unreachable: wrong type: %T", m.a))
+	var edits []Edit[T]
+	for i, v := range vals {
+		edits = append(edits, createEdit(cx, cy, i, op, v))
 	}
-	return m.ses(0, m.a, m.b, int32(m.na), int32(m.nb), 0, 0)
+	return edits
+}
+
+// SES returns the shortest edit script.
+func (m *Myers[T]) SES() *EditScript[T] {
+	var es EditScript[T] = m.ses(0, m.a, m.b, int32(len(m.a)), int32(len(m.b)), 0, 0)
+	return &es
 }

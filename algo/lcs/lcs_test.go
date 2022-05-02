@@ -19,17 +19,17 @@ import (
 )
 
 func ExampleMyers() {
-	runeDecoder, _ := codec.NewDecoder(utf8.DecodeRune)
+	runeDecoder := codec.NewDecoder(utf8.DecodeRune)
 	a, b := runeDecoder.Decode([]byte("ABCABBA")), runeDecoder.Decode([]byte("CBABAC"))
-	fmt.Printf("%s\n", string(lcs.NewMyers(a, b).LCS().([]int32)))
+	fmt.Printf("%v\n", string(lcs.NewMyers(a, b).LCS()))
 	// Output:
 	// BABA
 }
 
 func ExampleDP() {
-	runeDecoder, _ := codec.NewDecoder(utf8.DecodeRune)
+	runeDecoder := codec.NewDecoder(utf8.DecodeRune)
 	a, b := runeDecoder.Decode([]byte("AGCAT")), runeDecoder.Decode([]byte("GAC"))
-	all := lcs.NewDP(a, b).AllLCS().([][]int32)
+	all := lcs.NewDP(a, b).AllLCS()
 	for _, lcs := range all {
 		fmt.Printf("%s\n", string(lcs))
 	}
@@ -40,151 +40,78 @@ func ExampleDP() {
 	// AC
 }
 
-func isOneOf(got string, want []string) bool {
+func isOneOf[T comparable](got []T, want [][]T) bool {
 	if len(got) == 0 && len(want) == 0 {
 		return true
 	}
 	for _, w := range want {
-		if got == w {
+		if reflect.DeepEqual(got, w) {
 			return true
 		}
 	}
 	return false
 }
 
-func lcsFromEdits(typ interface{}, script lcs.EditScript) interface{} {
-	switch typ.(type) {
-	case int64:
-		r := []int64{}
-		for _, op := range script {
-			if op.Op == lcs.Identical {
-				r = append(r, op.Val.(int64))
-			}
+func lcsFromEdits[T comparable](typ interface{}, script *lcs.EditScript[T]) interface{} {
+	r := []T{}
+	for _, op := range *script {
+		if op.Op == lcs.Identical {
+			r = append(r, op.Val)
 		}
-		return r
-	case int32:
-		r := []int32{}
-		for _, op := range script {
-			if op.Op == lcs.Identical {
-				r = append(r, op.Val.(int32))
-			}
-		}
-		return r
-	case uint8:
-		r := []uint8{}
-		for _, op := range script {
-			if op.Op == lcs.Identical {
-				r = append(r, op.Val.(uint8))
-			}
-		}
-		return r
 	}
-	panic(fmt.Sprintf("unsupported type %T", typ))
+	return r
 }
 
-func validateInsertions(t *testing.T, i int, edits lcs.EditScript, b interface{}) {
-	for _, e := range edits {
+func validateInsertions[T comparable](t *testing.T, i int, edits *lcs.EditScript[T], b []T) {
+	for _, e := range *edits {
 		if e.Op != lcs.Insert {
 			continue
 		}
-		switch v := e.Val.(type) {
-		case int64:
-			if got, want := v, b.([]int64)[e.B]; got != want {
-				t.Errorf("%v: %v: got %v, want %v", errors.Caller(2, 1), i, got, want)
-			}
-		case int32:
-			if got, want := v, b.([]int32)[e.B]; got != want {
-				t.Errorf("%v: %v: got %c, want %c", errors.Caller(2, 1), i, got, want)
-			}
-		case uint8:
-			if got, want := v, b.([]uint8)[e.B]; got != want {
-				t.Errorf("%v: %v: got %c, want %c", errors.Caller(2, 1), i, got, want)
-			}
+		if got, want := e.Val, b[e.B]; got != want {
+			t.Errorf("%v: %v: got %v, want %v", errors.Caller(2, 1), i, got, want)
 		}
 	}
 }
 
-func decoders(t *testing.T) (i32, u8 codec.Decoder) {
-	i32, err := codec.NewDecoder(utf8.DecodeRune)
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
-	u8, err = codec.NewDecoder(func(input []byte) (byte, int) {
-		return input[0], 1
-	})
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
-	return
+type implementation[T comparable] interface {
+	LCS() []T
+	SES() *lcs.EditScript[T]
 }
 
-type implementation interface {
-	LCS() interface{}
-	SES() lcs.EditScript
-}
-
-func testutf8(t *testing.T, impl implementation, i int, a, b []int32, all []string) {
-	lcs32 := impl.LCS().([]int32)
-	if got, want := string(lcs32), all; !isOneOf(got, want) {
+func testLCSImpl[T comparable](t *testing.T, i int, lcs []T, edit *lcs.EditScript[T], a, b []T, all [][]T) {
+	if got, want := lcs, all; !isOneOf(got, want) {
 		t.Errorf("%v: got %v is not one of %v", i, got, want)
 	}
-
-	edit := impl.SES()
-	if got, want := lcsFromEdits(int32(0), edit).([]int32), lcs32; !reflect.DeepEqual(got, want) {
-		t.Errorf("%v: got %v, want %v", i, string(got), string(want))
+	if got, want := lcsFromEdits(int32(0), edit), lcs; !reflect.DeepEqual(got, want) {
+		t.Errorf("%v: got %v, want %v", i, got, want)
 	}
 
 	// test edit string by recreating 'b' from 'a'.
 	validateInsertions(t, i, edit, b)
-	if got, want := string(edit.Apply(a).([]int32)), string(b); got != want {
-		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a), string(b), edit.String())
+	if got, want := edit.Apply(a), b; !reflect.DeepEqual(got, want) {
+		t.Errorf("%v: got %v want %v for %v -> %v via %s", i, got, want, a, b, edit.String())
 	}
 
 	// and 'a' from 'b'
-	reverse := lcs.Reverse(edit)
+	reverse := edit.Reverse()
 	validateInsertions(t, i, reverse, a)
-	if got, want := string(reverse.Apply(b).([]int32)), string(a); got != want {
-		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(b), string(a), edit.String())
-	}
-}
-
-func testbyte(t *testing.T, impl implementation, i int, a, b []uint8, all []string) {
-	lcs32 := impl.LCS().([]uint8)
-	if got, want := string(lcs32), all; !isOneOf(got, want) {
-		t.Errorf("%v: got %v is not one of %v", i, got, want)
-	}
-
-	// test edit string by recreating 'b' from 'a'.
-	edit := impl.SES()
-	if got, want := lcsFromEdits(uint8(0), edit).([]uint8), lcs32; !reflect.DeepEqual(got, want) {
-		t.Errorf("%v: got %v, want %v", i, string(got), string(want))
-	}
-	validateInsertions(t, i, edit, b)
-	if got, want := string(edit.Apply(a).([]uint8)), string(b); got != want {
-		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(a), string(b), edit.String())
-	}
-
-	// and 'a' from 'b'
-	reverse := lcs.Reverse(edit)
-	validateInsertions(t, i, reverse, a)
-	if got, want := string(reverse.Apply(b).([]uint8)), string(a); got != want {
-		t.Errorf("%v: got %v want %v for %s -> %s via %s", i, got, want, string(b), string(a), edit.String())
+	if got, want := reverse.Apply(b), a; !reflect.DeepEqual(got, want) {
+		t.Errorf("%v: got %v want %v for %v -> %v via %s", i, got, want, b, a, edit.String())
 	}
 }
 
 func TestLCS(t *testing.T) {
+
 	l := func(s ...string) []string {
 		if len(s) == 0 {
 			return []string{}
 		}
 		return s
 	}
-	i32, u8 := decoders(t)
 
 	for i, tc := range []struct {
 		a, b string
-
-		all []string
+		all  []string
 	}{
 		// Example from myer's 1986 paper.
 		{"ABCABBA", "CBABAC", l("BABA", "CABA", "CBBA")},
@@ -215,26 +142,44 @@ func TestLCS(t *testing.T) {
 		// Example where rune and byte results are identical.
 		{"日本語", "日本de語", l("日本語")},
 	} {
-		a, b := i32.Decode([]byte(tc.a)), i32.Decode([]byte(tc.b))
-		myers := lcs.NewMyers(a, b)
-		testutf8(t, myers, i, a.([]int32), b.([]int32), tc.all)
+		runeDecoder := codec.NewDecoder(utf8.DecodeRune)
 
-		dp := lcs.NewDP(a, b)
-		testutf8(t, dp, i, a.([]int32), b.([]int32), tc.all)
+		allRunes := make([][]rune, len(tc.all))
+		for i := range tc.all {
+			allRunes[i] = []rune(tc.all[i])
+		}
 
-		a, b = u8.Decode([]byte(tc.a)), u8.Decode([]byte(tc.b))
-		myers = lcs.NewMyers(a, b)
-		testbyte(t, myers, i, a.([]uint8), b.([]uint8), tc.all)
+		sa, sb := runeDecoder.Decode([]byte(tc.a)), runeDecoder.Decode([]byte(tc.b))
+		smyers := lcs.NewMyers(sa, sb)
 
-		dp = lcs.NewDP(a, b)
-		testbyte(t, dp, i, a.([]uint8), b.([]uint8), tc.all)
+		testLCSImpl(t, i, smyers.LCS(), smyers.SES(), sa, sb, allRunes)
 
+		sdp := lcs.NewDP(sa, sb)
+		testLCSImpl(t, i, sdp.LCS(), sdp.SES(), sa, sb, allRunes)
+
+		byteDecoder := codec.NewDecoder(func(input []byte) (byte, int) {
+			return input[0], 1
+		})
+
+		allBytes := make([][]byte, len(tc.all))
+		for i := range tc.all {
+			allBytes[i] = []byte(tc.all[i])
+		}
+
+		ba, bb := byteDecoder.Decode([]byte(tc.a)), byteDecoder.Decode([]byte(tc.b))
+		bmyers := lcs.NewMyers(ba, bb)
+		testLCSImpl(t, i, bmyers.LCS(), bmyers.SES(), ba, bb, allBytes)
+
+		bdp := lcs.NewDP(ba, bb)
+		testLCSImpl(t, i, bdp.LCS(), bdp.SES(), ba, bb, allBytes)
 	}
-
 }
 
 func TestUTF8(t *testing.T) {
-	i32, u8 := decoders(t)
+	i32, u8 := codec.NewDecoder(utf8.DecodeRune), codec.NewDecoder(func(input []byte) (byte, int) {
+		return input[0], 1
+	})
+
 	// Test case for correct utf8 handling.
 	// a: 日本語
 	// b: 日本語 with the middle byte of the middle rune changed.
@@ -243,14 +188,13 @@ func TestUTF8(t *testing.T) {
 	// trailing bytes.
 	ra := []byte{0xe6, 0x97, 0xa5, 0xe6, 0x9c, 0xac, 0xe8, 0xaa, 0x9e}
 	rb := []byte{0xe6, 0x97, 0xa5, 0xe6, 0x00, 0x00, 0xe8, 0xaa, 0x9e}
-	a, b := i32.Decode(ra), i32.Decode(rb)
-	myers := lcs.NewMyers(a, b)
-	if got, want := string(myers.LCS().([]int32)), "日語"; got != want {
+	sa, sb := i32.Decode(ra), i32.Decode(rb)
+	if got, want := string(lcs.NewMyers(sa, sb).LCS()), "日語"; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	a, b = u8.Decode(ra), u8.Decode(rb)
-	myers = lcs.NewMyers(a, b)
-	if got, want := string(myers.LCS().([]byte)), "日\xe6語"; got != want {
+
+	ba, bb := u8.Decode(ra), u8.Decode(rb)
+	if got, want := string(lcs.NewMyers(ba, bb).LCS()), "日\xe6語"; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %#v, want %x %v", got, want, want)
 	}
 
@@ -266,7 +210,7 @@ func TestUTF8(t *testing.T) {
 		myers := lcs.NewMyers(a, b)
 		edit := myers.SES()
 		out := &strings.Builder{}
-		lcs.FormatHorizontal(out, a, edit)
+		edit.FormatHorizontal(out, a)
 		if got, want := out.String(), tc.output; got != want {
 			t.Errorf("%v: got\n%v, want\n%v", i, got, want)
 		}
@@ -298,10 +242,7 @@ world
 		return int64(sum), idx + 1
 	}
 
-	ld, err := codec.NewDecoder(lineDecoder)
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
+	ld := codec.NewDecoder(lineDecoder)
 
 	a, b := ld.Decode([]byte(la)), ld.Decode([]byte(lb))
 	myers := lcs.NewMyers(a, b)
@@ -309,12 +250,12 @@ world
 	validateInsertions(t, 0, edits, b)
 
 	var reconstructed string
-	for _, op := range edits {
+	for _, op := range *edits {
 		switch op.Op {
 		case lcs.Identical:
-			reconstructed += lines[uint64(a.([]int64)[op.A])] + "\n"
+			reconstructed += lines[uint64(a[op.A])] + "\n"
 		case lcs.Insert:
-			reconstructed += lines[uint64(op.Val.(int64))] + "\n"
+			reconstructed += lines[uint64(op.Val)] + "\n"
 		}
 	}
 	if got, want := reconstructed, lb; got != want {
@@ -322,7 +263,7 @@ world
 	}
 
 	out := &strings.Builder{}
-	lcs.FormatVertical(out, a, edits)
+	edits.FormatVertical(out, a)
 	if got, want := out.String(), `                     0
 -  6864772235558415538
   -8997218578518345818

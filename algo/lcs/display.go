@@ -4,12 +4,7 @@
 
 package lcs
 
-import (
-	"fmt"
-	"io"
-	"strings"
-)
-
+/*
 func verticalFormatFor(a interface{}) string {
 	switch a.(type) {
 	case []int64:
@@ -21,8 +16,9 @@ func verticalFormatFor(a interface{}) string {
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", a))
 	}
-}
+}*/
 
+/*
 // FormatVertical prints a representation of the edit script with one
 // item per line, eg:
 //   -  6864772235558415538
@@ -30,7 +26,7 @@ func verticalFormatFor(a interface{}) string {
 //   + -6615550055289275125
 //   - -7192184552745107772
 //      5717881983045765875
-func FormatVertical(out io.Writer, a interface{}, script EditScript) {
+func FormatVertical[T comparable](out io.Writer, a []T, script EditScript) {
 	lookupA := accessorFor(a)
 	format := verticalFormatFor(a)
 	for _, op := range script {
@@ -47,7 +43,9 @@ func FormatVertical(out io.Writer, a interface{}, script EditScript) {
 		}
 	}
 }
+*/
 
+/*
 func horizontalFormatFor(a interface{}) string {
 	switch a.(type) {
 	case []int64:
@@ -59,8 +57,9 @@ func horizontalFormatFor(a interface{}) string {
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", a))
 	}
-}
+}*/
 
+/*
 // FormatVertical prints a representation of the edit script across
 // three lines, with the top line showing the result of applying the
 // edit, the middle line the operations applied and the bottom line
@@ -120,3 +119,4 @@ func FormatHorizontal(out io.Writer, a interface{}, script EditScript) {
 	}
 	out.Write([]byte{'\n'})
 }
+*/
