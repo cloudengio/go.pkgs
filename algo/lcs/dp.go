@@ -6,6 +6,8 @@ package lcs
 
 import (
 	"fmt"
+	"io"
+	"strings"
 )
 
 // DP represents a dynamic programming based implementation for finding
@@ -15,17 +17,8 @@ import (
 // This implementation can return all LCS and SES rather than just the first
 // one found. If a single LCS or SES is sufficient then the Myer's algorithm
 // implementation is lilkey a better choice.
-type DP struct {
-	a, b      interface{}
-	na, nb    int
-	cmp       comparator
-	lookupA   accessor
-	emptyAll  func() interface{}
-	appendAll func(a, b interface{}) interface{}
-	extend    func(i int, b interface{}) interface{}
-	empty     func() interface{}
-	append    func(a, b interface{}) interface{}
-
+type DP[T comparable] struct {
+	a, b   []T
 	filled bool
 
 	// Store only the directions in this table. For now, use 8 bits
@@ -35,25 +28,14 @@ type DP struct {
 
 // NewDP creates a new instance of DP. The implementation supports slices
 // of bytes/uint8, rune/int32 and int64s.
-func NewDP(a, b interface{}) *DP {
-	na, nb, err := configureAndValidate(a, b)
-	if err != nil {
-		panic(err)
-	}
-	dp := &DP{
-		a:       a,
-		b:       b,
-		na:      na,
-		nb:      nb,
-		cmp:     cmpFor(a, b),
-		lookupA: accessorFor(a),
-	}
-	// A will be the X and b the Y axis.
+func NewDP[T comparable](a, b []T) *DP[T] {
+	dp := &DP[T]{a: a, b: b}
+	// a will be the X and b the Y axis.
 	// The directions/score matrix has an extra 0th row/column to
 	// simplify bounds checking.
-	directions := make([][]uint8, na+1)
+	directions := make([][]uint8, len(a)+1)
 	for i := range directions {
-		directions[i] = make([]uint8, nb+1)
+		directions[i] = make([]uint8, len(b)+1)
 	}
 	dp.directions = directions
 	return dp
@@ -67,125 +49,40 @@ const (
 )
 
 // LCS returns the longest common subsquence.
-func (dp *DP) LCS() interface{} {
+func (dp *DP[T]) LCS() []T {
 	dp.fill()
-	switch dp.a.(type) {
-	case []int64:
-		dp.empty = func() interface{} {
-			return []int64{}
-		}
-		dp.append = func(a, b interface{}) interface{} {
-			return append(a.([]int64), b.(int64))
-		}
-	case []int32:
-		dp.empty = func() interface{} {
-			return []int32{}
-		}
-		dp.append = func(a, b interface{}) interface{} {
-			return append(a.([]int32), b.(int32))
-		}
-	case []uint8:
-		dp.empty = func() interface{} {
-			return []uint8{}
-		}
-		dp.append = func(a, b interface{}) interface{} {
-			return append(a.([]uint8), b.(uint8))
-		}
-	default:
-		panic(fmt.Sprintf("unsupported type %T\n", dp.a))
-
-	}
-	return dp.backtrack(dp.na, dp.nb)
+	return dp.backtrack(len(dp.a), len(dp.b))
 }
 
 // AllLCS returns all of the the longest common subsquences.
-func (dp *DP) AllLCS() interface{} {
+func (dp *DP[T]) AllLCS() [][]T {
 	dp.fill()
-	switch a := dp.a.(type) {
-	case []int64:
-		dp.emptyAll = func() interface{} {
-			return [][]int64{}
-		}
-		dp.appendAll = func(a, b interface{}) interface{} {
-			return append(a.([][]int64), b.([][]int64)...)
-		}
-		dp.extend = func(i int, p interface{}) interface{} {
-			sl := p.([][]int64)
-			v := a[i]
-			if len(sl) == 0 {
-				return [][]int64{{v}}
-			}
-			for i, p := range sl {
-				sl[i] = append(p, v)
-			}
-			return sl
-		}
-	case []int32:
-		dp.emptyAll = func() interface{} {
-			return [][]int32{}
-		}
-		dp.appendAll = func(a, b interface{}) interface{} {
-			return append(a.([][]int32), b.([][]int32)...)
-		}
-		dp.extend = func(i int, p interface{}) interface{} {
-			sl := p.([][]int32)
-			v := a[i]
-			if len(sl) == 0 {
-				return [][]int32{{v}}
-			}
-			for i, p := range sl {
-				sl[i] = append(p, v)
-			}
-			return sl
-		}
-	case []uint8:
-		dp.emptyAll = func() interface{} {
-			return [][]uint8{}
-		}
-		dp.appendAll = func(a, b interface{}) interface{} {
-			return append(a.([][]uint8), b.([][]uint8)...)
-		}
-		dp.extend = func(i int, p interface{}) interface{} {
-			sl := p.([][]uint8)
-			v := a[i]
-			if len(sl) == 0 {
-				return [][]uint8{{v}}
-			}
-			for i, p := range sl {
-				sl[i] = append(p, v)
-			}
-			return sl
-		}
-
-	default:
-		panic(fmt.Sprintf("unsupported type %T\n", dp.a))
-	}
-	return dp.backtrackAll(dp.na, dp.nb)
-
+	return dp.backtrackAll(len(dp.a), len(dp.b))
 }
 
 // SES returns the shortest edit script.
-func (dp *DP) SES() EditScript {
+func (dp *DP[T]) SES() *EditScript[T] {
 	if dp.directions == nil {
-		return EditScript{}
+		return &EditScript[T]{}
 	}
 	dp.fill()
-	return EditScript(dp.diff(accessorFor(dp.a), accessorFor(dp.b), dp.na, dp.nb))
+	var es EditScript[T] = dp.diff(len(dp.a), len(dp.b))
+	return &es
 }
 
-func (dp *DP) fill() {
+func (dp *DP[T]) fill() {
 	if dp.filled {
 		return
 	}
 	dp.filled = true
 
-	table := make([][]int32, dp.na+1)
+	table := make([][]int32, len(dp.a)+1)
 	for i := range table {
-		table[i] = make([]int32, dp.nb+1)
+		table[i] = make([]int32, len(dp.b)+1)
 	}
-	for y := 1; y <= dp.nb; y++ {
-		for x := 1; x <= dp.na; x++ {
-			if dp.cmp(x-1, y-1) {
+	for y := 1; y <= len(dp.b); y++ {
+		for x := 1; x <= len(dp.a); x++ {
+			if dp.a[x-1] == dp.b[y-1] {
 				table[x][y] = table[x-1][y-1] + 1
 				dp.directions[x][y] = diagonal
 				continue
@@ -207,52 +104,63 @@ func (dp *DP) fill() {
 	}
 }
 
-func (dp *DP) backtrack(i, j int) interface{} {
+func (dp *DP[T]) backtrack(i, j int) []T {
 	if i == 0 || j == 0 {
-		return dp.empty()
+		return []T{}
 	}
 	switch dp.directions[i][j] {
 	case diagonal:
-		return dp.append(dp.backtrack(i-1, j-1), dp.lookupA(i-1))
+		return append(dp.backtrack(i-1, j-1), dp.a[i-1])
 	case up, upAndLeft:
 		return dp.backtrack(i, j-1)
 	}
 	return dp.backtrack(i-1, j)
 }
 
-func (dp *DP) backtrackAll(i, j int) interface{} {
+func (dp *DP[T]) extend(i int, bt [][]T) [][]T {
+	if len(bt) == 0 {
+		return [][]T{{dp.a[i]}}
+	}
+	v := dp.a[i]
+	for i, p := range bt {
+		bt[i] = append(p, v)
+	}
+	return bt
+}
+
+func (dp *DP[T]) backtrackAll(i, j int) [][]T {
+	//	dp.print(os.Stdout)
 	if i == 0 || j == 0 {
-		return dp.emptyAll()
+		return [][]T{}
 	}
 	dir := dp.directions[i][j]
 	if dir == diagonal {
 		return dp.extend(i-1, dp.backtrackAll(i-1, j-1))
 	}
-	paths := dp.emptyAll()
+	paths := [][]T{}
 	if dir == up || dir == upAndLeft {
 		paths = dp.backtrackAll(i, j-1)
 	}
 	if dir == left || dir == upAndLeft {
-		paths = dp.appendAll(paths, dp.backtrackAll(i-1, j))
+		paths = append(paths, dp.backtrackAll(i-1, j)...)
 	}
 	return paths
 }
 
-func (dp *DP) diff(a, b accessor, i, j int) []Edit {
+func (dp *DP[T]) diff(i, j int) []Edit[T] {
 	dir := dp.directions[i][j]
 	if i > 0 && j > 0 && dir == diagonal {
-		return append(dp.diff(a, b, i-1, j-1), Edit{Identical, i - 1, j - 1, b(j - 1)})
+		return append(dp.diff(i-1, j-1), Edit[T]{Identical, i - 1, j - 1, dp.b[j-1]})
 	}
 	if j > 0 && (i == 0 || dir == up || dir == upAndLeft) {
-		return append(dp.diff(a, b, i, j-1), Edit{Insert, i, j - 1, b(j - 1)})
+		return append(dp.diff(i, j-1), Edit[T]{Insert, i, j - 1, dp.b[j-1]})
 	}
 	if i > 0 && (j == 0 || dir == left) {
-		return append(dp.diff(a, b, i-1, j), Edit{Delete, i - 1, j, a(i - 1)})
+		return append(dp.diff(i-1, j), Edit[T]{Delete, i - 1, j, dp.a[i-1]})
 	}
 	return nil
 }
 
-/*
 const (
 	upArrow       rune = 0x2191 // utf8 up arrow
 	leftArrow     rune = 0x2190 // utf8 left arrow
@@ -278,12 +186,12 @@ func secondArrow(v uint8) rune {
 	}
 }
 
-func (p *DP) print(out io.Writer) {
-	mx, my := p.na, p.nb
+func (dp *DP[T]) print(out io.Writer) {
+	mx, my := len(dp.a), len(dp.b)
 	row := &strings.Builder{}
 	for y := 0; y < my; y++ {
 		for x := 0; x < mx; x++ {
-			dir := p.directions[x][y]
+			dir := dp.directions[x][y]
 			row.WriteString(fmt.Sprintf("  %c%c ", firstArrow(dir), secondArrow(dir)))
 		}
 		row.WriteString("\n")
@@ -291,4 +199,3 @@ func (p *DP) print(out io.Writer) {
 		row.Reset()
 	}
 }
-*/
