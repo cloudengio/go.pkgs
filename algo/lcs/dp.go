@@ -4,6 +4,8 @@
 
 package lcs
 
+import "fmt"
+
 // DP represents a dynamic programming based implementation for finding
 // the longest common subsequence and shortest edit script (LCS/SES) for
 // transforming A to B.
@@ -116,6 +118,7 @@ func (dp *DP[T]) extend(i int, bt [][]T) [][]T {
 		return [][]T{{dp.a[i]}}
 	}
 	for i, p := range bt {
+		fmt.Printf("SL: %v %v %v\n", bt[i], p, dp.a[i])
 		bt[i] = append(p, dp.a[i])
 	}
 	return bt
