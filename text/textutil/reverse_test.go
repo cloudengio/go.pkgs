@@ -12,6 +12,23 @@ import (
 	"cloudeng.io/text/textutil"
 )
 
+func twoStep(input string) string {
+	// Get Unicode code points.
+	n := 0
+	rune := make([]rune, len(input))
+	for _, r := range input {
+		rune[n] = r
+		n++
+	}
+	rune = rune[0:n]
+	// Reverse
+	for i := 0; i < n/2; i++ {
+		rune[i], rune[n-1-i] = rune[n-1-i], rune[i]
+	}
+	// Convert back to UTF-8.
+	return string(rune)
+}
+
 func TestReverse(t *testing.T) {
 	for i, tc := range []struct {
 		input  string
@@ -43,6 +60,9 @@ func TestReverse(t *testing.T) {
 		if tc != rrv {
 			t.Errorf("reverse failed for %v", tc)
 		}
+		if got, want := twoStep(tc), rv; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }
 
@@ -62,6 +82,16 @@ func BenchmarkReverse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, tc := range testStrings {
 			textutil.ReverseString(tc)
+		}
+	}
+}
+
+func BenchmarkReverseTwoStep(b *testing.B) {
+	testStrings := genTestStrings()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, tc := range testStrings {
+			twoStep(tc)
 		}
 	}
 }
