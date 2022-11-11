@@ -63,15 +63,17 @@
 // and the latter for acting on those flags and/or implementing common
 // functionality such as profiling or initializing logging etc.
 //
-// Creating command trees with their documentation is cumbersome using the
-// NewCommand and NewCommandset functions. An easier, and more readable way
-// to do so is via a YAML configuration. The FromYAML function reads a yaml
-// specification of a command tree, its summary documentation and argument
-// specification. The returned CommandSetYAML type can then be used to
-// 'decorate' the command tree with the runner functions and flag value
-// instances. This is more comprehensible means of defining the command
-// tree than doing so entirely via function calls. The YAML mechanism
-// provides identical functionality to calling the functions directly.
+// The FromYAML function provides a more convenient and readable means of creating
+// a command tree than using the NewCommand and NewCommandSet functions directly.
+// FromYAML reads a yaml specification of a command tree, its
+// summary documentation and argument specification and calls NewCommand
+// and NewCommandSet internally.
+//
+// The returned CommandSetYAML type can then be used to 'decorate' the command
+// tree with the runner functions and flag value instances. This is more comprehensible
+// means of defining the command tree than doing so entirely via function calls.
+// The YAML mechanism provides identical functionality to calling the functions
+// directly.
 //
 // The YAML specification is show below and reflects the structure
 // (ie. is recursive) of the command tree to be created.
