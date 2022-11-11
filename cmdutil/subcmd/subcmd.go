@@ -4,13 +4,13 @@
 
 // Package subcmd provides a multi-level command facility of the following form:
 //
-//   Usage of <tool>
-//     <sub-command-1> <flags for sub-command-1> <args for sub-comand-1>
-//       <sub-command-2-1> <flags for sub-command-2-1> <args for sub-comand-2-1>
-//       ...
-//       <sub-command-2-2> <flags for sub-command-2-2> <args for sub-comand-2-2>
-//     ...
-//     <sub-command-n> <flags for sub-command-n> <args for sub-comand-n>
+//	Usage of <tool>
+//	  <sub-command-1> <flags for sub-command-1> <args for sub-comand-1>
+//	    <sub-command-2-1> <flags for sub-command-2-1> <args for sub-comand-2-1>
+//	    ...
+//	    <sub-command-2-2> <flags for sub-command-2-2> <args for sub-comand-2-2>
+//	  ...
+//	  <sub-command-n> <flags for sub-command-n> <args for sub-comand-n>
 //
 // The primary motivation for this package was to avoid the need to use global
 // variables to store flag values packages. Such global variables quickly
@@ -35,32 +35,72 @@
 // the cmdset can be used to dispatch the appropriate command functions
 // via cmdset.Dispatch or DispatchWithArgs.
 //
-//    type rangeFlags struct {
-//      From int `subcmd:"from,1,start value for a range"`
-//      To   int `subcmd:"to,2,end value for a range "`
-//    }
-//    func printRange(ctx context.Context, values interface{}, args []string) error {
-//      r := values.(*rangeFlags)
-//      fmt.Printf("%v..%v\n", r.From, r.To)
-//      return nil
-//    }
+//	type rangeFlags struct {
+//	  From int `subcmd:"from,1,start value for a range"`
+//	  To   int `subcmd:"to,2,end value for a range "`
+//	}
 //
-//    func main() {
-//      ctx := context.Background()
-//      fs := subcmd.NewFlagSet()
-//      fs.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
-//      // Subcommands are created using subcmd.NewCommandLevel.
-//      cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
-//      cmd.Document("print an integer range")
-//      cmdSet := subcmd.NewCommandSet(cmd)
-//      cmdSet.MustDispatch(ctx)
-//    }
+//	func printRange(ctx context.Context, values interface{}, args []string) error {
+//	  r := values.(*rangeFlags)
+//	  fmt.Printf("%v..%v\n", r.From, r.To)
+//	  return nil
+//	}
+//
+//
+//	func main() {
+//	  ctx := context.Background()
+//	  fs := subcmd.MustRegisteredFlags(&rangeFlags{})
+//	  // Subcommands are created using subcmd.NewCommandLevel.
+//	  cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
+//	  cmd.Document("print an integer range")
+//	  cmdSet := subcmd.NewCommandSet(cmd)
+//	  cmdSet.MustDispatch(ctx)
+//	}
 //
 // In addition it is possible to register 'global' flags that may be specified
 // before any sub commands on invocation and also to wrap calls to any
 // subcommand's runner function. The former is useful for setting common flags
 // and the latter for acting on those flags and/or implementing common
 // functionality such as profiling or initializing logging etc.
+//
+// Creating command trees with their documentation is cumbersome using the
+// NewCommand and NewCommandset functions. An easier, and more readable way
+// to do so is via a YAML configuration. The FromYAML function reads a yaml
+// specification of a command tree, its summary documentation and argument
+// specification. The returned CommandSetYAML type can then be used to
+// 'decorate' the command tree with the runner functions and flag value
+// instances. This is more comprehensible means of defining the command
+// tree than doing so entirely via function calls. The YAML mechanism
+// provides identical functionality to calling the functions directly.
+//
+// The YAML specification is show below and reflects the structure
+// (ie. is recursive) of the command tree to be created.
+//
+//	name: command-name
+//	summary: description of the command
+//	arguments:
+//	commands:
+//	  - name:
+//	    summary:
+//	    arguments:
+//	    commands:
+//
+// The summary is displayed when the command's usage information is displayed.
+// The arguments: field is a list of the expected arguments that also defines
+// the number of expected arguments.
+//
+//  1. If the field is missing or the list is empty then no arguments are allowed.
+//
+//  2. If the list contains n arguments then exactly that number of arguments
+//     is expected, unless, the last argument in the list is '...' in which case
+//     at least that number is
+//     expected.
+//
+//  3. If there is a single item in the list and it is enclosed
+//     in [] (in a quoted string), then 0 or 1 arguments are expected.
+//
+// To define a simple command line, with no sub-commands, specify only
+// the name:, summary: and arguments: fields.
 //
 // Note that this package will never call flag.Parse and will not associate
 // any flags with flag.CommandLine.
@@ -98,6 +138,27 @@ func NewFlagSet() *FlagSet {
 	return &FlagSet{flagSet: fs}
 }
 
+// MustRegisteredFlagSet is a convenience function that creates a new
+// FlagSet and calls RegisterFlagStruct on it. The valueDefaults and
+// usageDefaults are extracted from the defaults variadic parameter.
+// MustRegisteredFlagSet will panic if defaults contains inappopriate types
+// for the value and usage defaults.
+func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *FlagSet {
+	fs := NewFlagSet()
+	var valueDefaults map[string]interface{}
+	var usageDefaults map[string]string
+	for _, def := range defaults {
+		switch v := def.(type) {
+		case map[string]interface{}:
+			valueDefaults = v
+		case map[string]string:
+			usageDefaults = v
+		}
+	}
+	fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
+	return fs
+}
+
 // RegisterFlagStruct registers a struct, using flags.RegisterFlagsInStructWithSetMap.
 // The struct tag must be 'subcomd'. The returned SetMap can be queried by the
 // IsSet method.
@@ -111,11 +172,12 @@ func (cf *FlagSet) RegisterFlagStruct(flagValues interface{}, valueDefaults map[
 // MustRegisterFlagStruct is like RegisterFlagStruct except that it panics
 // on encountering an error. Its use is encouraged over RegisterFlagStruct from
 // within init functions.
-func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) {
+func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet {
 	err := cf.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
 	if err != nil {
 		panic(err)
 	}
+	return cf
 }
 
 // RegisterFlagStruct creates a new FlagSet and calls RegisterFlagStruct
@@ -166,6 +228,14 @@ type Command struct {
 
 // NewCommand returns a new instance of Command.
 func NewCommand(name string, flags *FlagSet, runner Runner, options ...CommandOption) *Command {
+	if flags == nil {
+		flags = &FlagSet{}
+	}
+	if runner == nil {
+		runner = func(ctx context.Context, values interface{}, args []string) error {
+			return fmt.Errorf("no runner specified for: %v", name)
+		}
+	}
 	cmd := &Command{
 		name:   name,
 		runner: runner,
@@ -241,6 +311,7 @@ type CommandSet struct {
 	document   string
 	global     *FlagSet
 	globalMain Main
+	cmd        *Command
 	cmds       []*Command
 	out        io.Writer
 }
@@ -307,6 +378,10 @@ func (cmds *CommandSet) WithMain(m Main) {
 	cmds.globalMain = m
 }
 
+func (cmds *CommandSet) TopLevel(cmd *Command) {
+	cmds.cmd = cmd
+}
+
 // defaults returns the value of Defaults for each command in commands.
 func (cmds *CommandSet) defaults() string {
 	out := &strings.Builder{}
@@ -359,7 +434,11 @@ func (cmds *CommandSet) globalDefaults() string {
 	out := &strings.Builder{}
 	if cmds.global != nil {
 		fs := cmds.global.flagSet
-		fmt.Fprintf(out, "global flags:%s\n", namesAndDefault("", fs))
+		if cmds.cmd != nil {
+			fmt.Fprintf(out, "flags:%s\n", namesAndDefault("", fs))
+		} else {
+			fmt.Fprintf(out, "global flags:%s\n", namesAndDefault("", fs))
+		}
 		fmt.Fprintf(out, "%s\n", printDefaults(fs))
 	}
 	return out.String()
@@ -478,17 +557,22 @@ func (cmds *CommandSet) mainWrapper() Main {
 	return wrapper
 }
 
-func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args []string) error {
+func (cmds *CommandSet) processHelp(usage string, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
-		return fmt.Errorf("no command specified")
+		return nil
 	}
-	requested := args[0]
-	switch requested {
+	switch args[0] {
 	case "-help", "--help", "-h", "--h":
 		fmt.Fprintln(cmds.out, cmds.Usage(usage))
 		return flag.ErrHelp
 	case "help":
+		if cmds.cmd != nil {
+			if len(args) < 2 || args[1] == cmds.cmd.name {
+				fmt.Fprintln(cmds.out, cmds.cmd.Usage())
+				return flag.ErrHelp
+			}
+			return fmt.Errorf("%v is not one of the supported commands", args[1])
+		}
 		if len(args) == 1 {
 			fmt.Fprintln(cmds.out, cmds.Usage(usage))
 			return flag.ErrHelp
@@ -499,20 +583,60 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 				return flag.ErrHelp
 			}
 		}
+
 	}
+	return nil
+}
+
+func (cmds *CommandSet) parseArgs(fs *flag.FlagSet, cmd *Command, args []string) error {
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprintln(cmds.out, cmd.Usage())
+			return err
+		}
+		return fmt.Errorf("%v: failed to parse flags: %v", cmd.name, err)
+	}
+	return nil
+}
+
+func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args []string) error {
+	tlcmd := cmds.cmd
+	if len(args) == 0 && tlcmd == nil {
+		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		return fmt.Errorf("no command specified")
+	}
+
+	if err := cmds.processHelp(usage, args); err != nil {
+		return err
+	}
+
+	if tlcmd != nil {
+		// can only be a single top-level command with no flags or arguments.
+		fs := tlcmd.flags.flagSet
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		// run top level command.
+		return cmds.processChosenCmd(ctx, cmds.cmd, usage, fs.Args())
+	}
+
+	if len(args) == 0 {
+		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		return fmt.Errorf("no command specified")
+	}
+
+	requested := args[0]
 	for _, cmd := range cmds.cmds {
+		if cmd.flags == nil {
+			return fmt.Errorf("no flags specified for %v", cmd.name)
+		}
 		fs := cmd.flags.flagSet
 		if requested == cmd.name {
 			if cmd.runner == nil && cmd.opts.subcmds == nil {
 				return fmt.Errorf("no runner registered for %v", requested)
 			}
-			args := args[1:]
-			if err := fs.Parse(args); err != nil {
-				if err == flag.ErrHelp {
-					fmt.Fprintln(cmds.out, cmd.Usage())
-					return err
-				}
-				return fmt.Errorf("%v: failed to parse flags: %v", cmd.name, err)
+			if err := cmds.parseArgs(fs, cmd, args[1:]); err != nil {
+				return err
 			}
 			return cmds.processChosenCmd(ctx, cmd, usage, fs.Args())
 		}
