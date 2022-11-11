@@ -65,29 +65,29 @@
 //
 // The FromYAML function provides a more convenient and readable means of creating
 // a command tree than using the NewCommand and NewCommandSet functions directly.
-// FromYAML reads a yaml specification of a command tree, its
-// summary documentation and argument specification and calls NewCommand
-// and NewCommandSet internally.
+// FromYAML reads a yaml specification of a command tree, its summary documentation
+// and argument specification and calls NewCommand and NewCommandSet internally.
 //
 // The returned CommandSetYAML type can then be used to 'decorate' the command
-// tree with the runner functions and flag value instances. This is more comprehensible
-// means of defining the command tree than doing so entirely via function calls.
-// The YAML mechanism provides identical functionality to calling the functions
-// directly.
+// tree with the runner functions and flag value instances. The YAML mechanism
+// provides identical functionality to calling the functions directly.
 //
-// The YAML specification is show below and reflects the structure
-// (ie. is recursive) of the command tree to be created.
+// The YAML specification is show below and reflects the tree structure
+// of the command tree to be created.
 //
-//	name: command-name
-//	summary: description of the command
-//	arguments:
-//	commands:
-//	  - name:
-//	    summary:
-//	    arguments:
-//	    commands:
+//		name: command-name
+//		summary: description of the command
+//		arguments:
+//		commands:
+//		  - name:
+//		    summary:
+//		    arguments:
+//		    commands:
+//	   - name:
+//	     summary:
+//	     ...
 //
-// The summary is displayed when the command's usage information is displayed.
+// The summary and argument values are used in calls in the Command.Document.
 // The arguments: field is a list of the expected arguments that also defines
 // the number of expected arguments.
 //
@@ -103,6 +103,15 @@
 //
 // To define a simple command line, with no sub-commands, specify only
 // the name:, summary: and arguments: fields.
+//
+// CommandSet.Dispatch implements support for requesting help information
+// on the top level and subcommands. Running a command with sub-commands
+// without specifying one of those sub-commands results in a 'usage' message
+// showing summary information and the available subcommands. Help on
+// a specific subcommand is available via '<command> help <sub-command>' or
+// for multi-level commands '<command> <sub-command> help <next-sub-command>'.
+// The --help flag can be used to display information on a commands
+// flags and arguments, eg: '<command> --help' or "<command> <sub-command> --help".
 //
 // Note that this package will never call flag.Parse and will not associate
 // any flags with flag.CommandLine.
