@@ -184,9 +184,7 @@ func TestLogging(t *testing.T) {
 	fs.Close()
 
 	out.Reset()
-	if _, err := dynamic.Open("a-new-file.txt"); err != nil {
-		t.Fatal(err)
-	}
+	_, _ = dynamic.Open("a-new-file.txt")
 	if got, want := out.String(), fmt.Sprintf("new files not allowed: a-new-file.txt -> %s/testdata/a-new-file.txt: file does not exist", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

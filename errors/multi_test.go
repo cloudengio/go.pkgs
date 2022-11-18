@@ -172,9 +172,7 @@ func TestClone(t *testing.T) {
 	m := &errors.M{}
 	m.Append(t1, t2)
 	c := m.Clone()
-	if err := m.Unwrap(); err != nil {
-		t.Fatal(err)
-	}
+	_ = m.Unwrap()
 	if got, want := m.Unwrap(), t2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
