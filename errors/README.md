@@ -85,6 +85,18 @@ func New(m string) error
 ```
 New calls errors.New.
 
+### Func NewM
+```go
+func NewM(errs ...error) error
+```
+NewM is equivalent to:
+
+    errs := errors.M{}
+    ...
+    errs.Append(err)
+    ...
+    return errs.Err()
+
 ### Func Unwrap
 ```go
 func Unwrap(err error) error

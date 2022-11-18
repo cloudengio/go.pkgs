@@ -43,6 +43,19 @@ type M struct {
 	errs []error // GUARDED_BY(mu)
 }
 
+// NewM is equivalent to:
+//
+//	errs := errors.M{}
+//	...
+//	errs.Append(err)
+//	...
+//	return errs.Err()
+func NewM(errs ...error) error {
+	err := &M{}
+	err.Append(errs...)
+	return err.Err()
+}
+
 // Append appends the specified errors excluding nil values.
 func (m *M) Append(errs ...error) {
 	m.mu.Lock()

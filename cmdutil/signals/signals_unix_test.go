@@ -46,9 +46,9 @@ func TestSignal(t *testing.T) {
 	go func() {
 		// Make sure that multiple signals in quick succession do not
 		// cause the process to exit.
-		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
-		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
-		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
+		_ = syscall.Kill(pid, syscall.SIGINT)
+		_ = syscall.Kill(pid, syscall.SIGINT)
+		_ = syscall.Kill(pid, syscall.SIGINT)
 		wg.Done()
 	}()
 
@@ -69,9 +69,9 @@ func TestSignal(t *testing.T) {
 	// an exit.
 	cmd, pid, st = runCmd("--debounce=250ms")
 	go func() {
-		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
+		_ = syscall.Kill(pid, syscall.SIGINT)
 		time.Sleep(time.Millisecond * 250)
-		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
+		_ = syscall.Kill(pid, syscall.SIGINT)
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)

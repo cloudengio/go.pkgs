@@ -167,12 +167,11 @@ func (e *Error) Error() string {
 
 // recordError will record the specified error if it is not nil; ie.
 // its safe to call it with a nil error.
-func (w *Walker) recordError(path, op string, err error) error {
+func (w *Walker) recordError(path, op string, err error) {
 	if err == nil {
-		return nil
+		return
 	}
 	w.errs.Append(&Error{path, op, err})
-	return err
 }
 
 func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *Info) []Info {
@@ -188,7 +187,7 @@ func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *I
 	children, err := w.contentsFn(ctx, path, info, ch)
 
 	if err != nil {
-		w.recordError(path, "fileFunc", err) //nolint:errcheck
+		w.recordError(path, "fileFunc", err)
 		return nil
 	}
 
@@ -328,7 +327,7 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 	defer walkingVar.Delete(idx)
 	info, err := w.fs.Stat(ctx, path)
 	stop, children, err := w.prefixFn(ctx, path, &info, err)
-	w.recordError(path, "stat", err) //nolint:errcheck
+	w.recordError(path, "stat", err)
 	if stop {
 		return
 	}

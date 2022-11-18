@@ -147,13 +147,13 @@ func (es *EditScript[T]) FormatVertical(out io.Writer, a []T) {
 		switch op.Op {
 		case Identical:
 			f := fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(fmt.Sprintf("  %s\n", f))) //nolint:errcheck
+			_, _ = out.Write([]byte(fmt.Sprintf("  %s\n", f)))
 		case Delete:
 			f := fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(fmt.Sprintf("- %s\n", f))) //nolint:errcheck
+			_, _ = out.Write([]byte(fmt.Sprintf("- %s\n", f)))
 		case Insert:
 			f := fmt.Sprintf(format, op.Val)
-			out.Write([]byte(fmt.Sprintf("+ %s\n", f))) //nolint:errcheck
+			_, _ = out.Write([]byte(fmt.Sprintf("+ %s\n", f)))
 		}
 	}
 }
@@ -183,25 +183,25 @@ func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T) {
 		switch op.Op {
 		case Identical:
 			f = fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(f)) //nolint:errcheck
+			_, _ = out.Write([]byte(f))
 		case Delete:
 			f = fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(strings.Repeat(" ", len(f)))) //nolint:errcheck
+			_, _ = out.Write([]byte(strings.Repeat(" ", len(f))))
 		case Insert:
 			f = fmt.Sprintf(format, op.Val)
-			out.Write([]byte(f)) //nolint:errcheck
+			_, _ = out.Write([]byte(f))
 		}
 		displaySizes = append(displaySizes, len(f))
 	}
-	out.Write([]byte{'\n'}) //nolint:errcheck
+	_, _ = out.Write([]byte{'\n'})
 
 	pad := func(o string, i int) {
 		totalPadding := displaySizes[i] - len(o)
 		prePad := totalPadding / 2
 		postPad := totalPadding - prePad
-		out.Write([]byte(strings.Repeat(" ", prePad)))  //nolint:errcheck
-		out.Write([]byte(o))                            //nolint:errcheck
-		out.Write([]byte(strings.Repeat(" ", postPad))) //nolint:errcheck
+		_, _ = out.Write([]byte(strings.Repeat(" ", prePad)))
+		_, _ = out.Write([]byte(o))
+		_, _ = out.Write([]byte(strings.Repeat(" ", postPad)))
 	}
 
 	for i, op := range *es {
@@ -214,15 +214,15 @@ func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T) {
 			pad("+", i)
 		}
 	}
-	out.Write([]byte{'\n'}) //nolint:errcheck
+	_, _ = out.Write([]byte{'\n'})
 	for i, op := range *es {
 		switch op.Op {
 		case Delete:
 			f := fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(f)) //nolint:errcheck
+			_, _ = out.Write([]byte(f))
 		default:
 			pad("", i)
 		}
 	}
-	out.Write([]byte{'\n'}) //nolint:errcheck
+	_, _ = out.Write([]byte{'\n'})
 }

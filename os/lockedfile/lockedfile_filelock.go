@@ -8,9 +8,9 @@
 package lockedfile
 
 import (
-	"fmt"
 	"os"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/os/lockedfile/internal/filelock"
 )
 
@@ -44,7 +44,7 @@ func openFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 			// and ignore errors for the rest.
 			if fi, statErr := f.Stat(); statErr != nil || fi.Mode().IsRegular() {
 				if uerr := filelock.Unlock(f); uerr != nil {
-					err = fmt.Errorf("failed to unlock %v: (%v): after %v", name, uerr, err)
+					err = errors.NewM(err, uerr)
 				}
 				f.Close()
 				return nil, err

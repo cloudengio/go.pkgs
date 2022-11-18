@@ -12,6 +12,8 @@ import (
 	"io"
 	"os"
 	"runtime"
+
+	"cloudeng.io/errors"
 )
 
 // A File is a locked *os.File.
@@ -151,7 +153,9 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 		// failure before we have overwritten the original contents.
 		if _, err := f.WriteAt(new[len(old):], int64(len(old))); err != nil {
 			// Make a best effort to remove the incomplete tail.
-			f.Truncate(int64(len(old))) //nolint:errcheck
+			if nerr := f.Truncate(int64(len(old))); nerr != nil {
+				return errors.NewM(err, nerr)
+			}
 			return err
 		}
 	}
@@ -161,7 +165,7 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 	defer func() {
 		if err != nil {
 			if _, err := f.WriteAt(old, 0); err == nil {
-				f.Truncate(int64(len(old))) //nolint:errcheck
+				_ = f.Truncate(int64(len(old)))
 			}
 		}
 	}()
