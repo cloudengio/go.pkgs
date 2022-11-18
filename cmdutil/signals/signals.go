@@ -70,13 +70,13 @@ func (h *Handler) WaitForSignal() os.Signal {
 // cancelation functions to be invoked when a signal is received. Typical usage
 // would be:
 //
-//   func main() {
-//      ctx, handler := signals.NotifyWithCancel(context.Background(), signals.Defaults()...)
-//      ....
-//      handler.RegisterCancel(func() { ... })
-//      ...
-//      defer hanlder.WaitForSignal() // wait for a signal or context cancelation.
-//    }
+//	func main() {
+//	   ctx, handler := signals.NotifyWithCancel(context.Background(), signals.Defaults()...)
+//	   ....
+//	   handler.RegisterCancel(func() { ... })
+//	   ...
+//	   defer hanlder.WaitForSignal() // wait for a signal or context cancelation.
+//	 }
 //
 // If a second, different, signal is received then os.Exit(ExitCode) is called.
 // Subsequent signals are the same as the first are ignored for one second

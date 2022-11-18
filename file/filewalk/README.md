@@ -392,10 +392,10 @@ is to use all available CPUs.
 ```go
 type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (stop bool, children []Info, returnErr error)
 ```
-PrefixFunc is the type of the function that is called to determine if a
-given level in the filesystem hiearchy should be further examined or
-traversed. If stop is true then traversal stops at this point, however if a
-list of children is returned, they will be traversed directly rather than
+PrefixFunc is the type of the function that is called to determine if
+a given level in the filesystem hiearchy should be further examined or
+traversed. If stop is true then traversal stops at this point, however if
+a list of children is returned, they will be traversed directly rather than
 obtaining the children from the filesystem. This allows for both exclusions
 and incremental processing in conjunction with a database t be implemented.
 

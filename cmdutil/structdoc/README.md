@@ -38,8 +38,8 @@ type Description struct {
 	Fields []Field
 }
 ```
-Description represents a structured description of a struct type based on
-struct tags. The Detail field may be supplied when constructing the
+Description represents a structured description of a struct type based
+on struct tags. The Detail field may be supplied when constructing the
 description.
 
 ### Functions

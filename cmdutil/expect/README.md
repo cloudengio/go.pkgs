@@ -17,8 +17,8 @@ type Lines struct {
 ```
 Lines provides line oriented expecations and will block waiting for the
 expected input. A context with a timeout or deadline can be used to abort
-the expectation. Literal and regular expression matches are supported as is
-matching on EOF. Each operation accepts multiple literals or regular
+the expectation. Literal and regular expression matches are supported as
+is matching on EOF. Each operation accepts multiple literals or regular
 expressions that are treated as an 'or' to allow for convenient handling of
 different input orderings.
 
@@ -43,8 +43,8 @@ io.Reader is not considered an error unless ExpectEOF failed.
 ```go
 func (s *Lines) ExpectEOF(ctx context.Context) error
 ```
-ExpectEOF will return nil if the underlying input stream is closed. It will
-block waiting for EOF; the supplied context can be used to provide a
+ExpectEOF will return nil if the underlying input stream is closed.
+It will block waiting for EOF; the supplied context can be used to provide a
 timeout.
 
 
@@ -61,9 +61,9 @@ timeout.
 func (s *Lines) ExpectEventuallyRE(ctx context.Context, expressions ...*regexp.Regexp) error
 ```
 ExpectEventuallyRE will return nil if (and as soon as) one of the supplied
-regular expressions matches one of the lines read from the input stream. It
-will block waiting for matching lines; the supplied context can be used to
-provide a timeout.
+regular expressions matches one of the lines read from the input stream.
+It will block waiting for matching lines; the supplied context can be used
+to provide a timeout.
 
 
 ```go

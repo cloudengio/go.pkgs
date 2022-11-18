@@ -145,7 +145,7 @@ type FlagSet struct {
 func NewFlagSet() *FlagSet {
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	fs.Usage = func() {}
-	fs.SetOutput(ioutil.Discard)
+	fs.SetOutput(io.Discard)
 	return &FlagSet{flagSet: fs}
 }
 

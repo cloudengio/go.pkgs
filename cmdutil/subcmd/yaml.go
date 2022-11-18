@@ -39,13 +39,6 @@ func buildTree(cmdDict map[string]*Command, parent string, defs []commandDef) []
 	return cmds
 }
 
-type commandMenu struct {
-	Name      string
-	Summary   string
-	Arguments []string
-	Commands  []commandDef
-}
-
 type commandDef struct {
 	Name      string
 	Summary   string
