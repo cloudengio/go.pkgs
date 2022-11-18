@@ -69,9 +69,9 @@ func TestSignal(t *testing.T) {
 	// an exit.
 	cmd, pid, st = runCmd("--debounce=250ms")
 	go func() {
-		syscall.Kill(pid, syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
 		time.Sleep(time.Millisecond * 250)
-		syscall.Kill(pid, syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)

@@ -56,7 +56,9 @@ func createMirror(t *testing.T, tmpDir string) func() {
 	writeFile("open-will-fail.txt", "can-read-me", 0000)
 
 	return func() {
-		os.Chmod(ud, 0700)
+		if err := os.Chmod(ud, 0700); err != nil {
+			panic(err)
+		}
 		if err := win32testutil.MakeAccessibleToOwner(ud); err != nil {
 			panic(err)
 		}
@@ -89,9 +91,10 @@ func readAll(t *testing.T, fs fs.FS, names ...string) string {
 	return strings.Join(output, "\n")
 }
 
-func TestData(t *testing.T) {
+func TestData(t *testing.T) { //nolint:gocyclo
 	files := []string{"hello.txt", "world.txt", "d0/hello.txt", "d0/world.txt"}
 	tmpDir := t.TempDir()
+
 	dynamic := reloadfs.New(tmpDir, "testdata", content)
 	contents := readAll(t, dynamic, files...)
 	if got, want := contents, `hello
@@ -181,7 +184,9 @@ func TestLogging(t *testing.T) {
 	fs.Close()
 
 	out.Reset()
-	dynamic.Open("a-new-file.txt")
+	if _, err := dynamic.Open("a-new-file.txt"); err != nil {
+		t.Fatal(err)
+	}
 	if got, want := out.String(), fmt.Sprintf("new files not allowed: a-new-file.txt -> %s/testdata/a-new-file.txt: file does not exist", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

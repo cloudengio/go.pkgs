@@ -95,7 +95,7 @@ func (m *CertServingCache) get(name string, when time.Time) *tls.Certificate {
 	return nil
 }
 
-func (m *CertServingCache) put(name string, cert *tls.Certificate, when time.Time) {
+func (m *CertServingCache) put(name string, cert *tls.Certificate, when time.Time) { //nolint:unused
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
 	m.cache[name] = entry{cert: cert, expiry: when.Add(m.ttl)}

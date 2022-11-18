@@ -243,7 +243,7 @@ func LinesMyers(a, b []byte) *Diff {
 
 // LinesDP uses cloudeng.io/algo/lcs.DP to generate diffs.
 func LinesDP(a, b []byte) *Diff {
-	return diffLinesUsing([]byte(a), []byte(b), func(a, b []int64) *lcs.EditScript[int64] {
+	return diffLinesUsing(a, b, func(a, b []int64) *lcs.EditScript[int64] {
 		return lcs.NewDP(a, b).SES()
 	})
 }

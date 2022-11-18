@@ -124,7 +124,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,7 +144,7 @@ type FlagSet struct {
 func NewFlagSet() *FlagSet {
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	fs.Usage = func() {}
-	fs.SetOutput(ioutil.Discard)
+	fs.SetOutput(io.Discard)
 	return &FlagSet{flagSet: fs}
 }
 
@@ -396,7 +395,7 @@ func (cmds *CommandSet) TopLevel(cmd *Command) {
 }
 
 // defaults returns the value of Defaults for each command in commands.
-func (cmds *CommandSet) defaults() string {
+func (cmds *CommandSet) defaults() string { //nolint:unused
 	out := &strings.Builder{}
 	out.WriteString(cmds.globalDefaults())
 	for i, cmd := range cmds.cmds {

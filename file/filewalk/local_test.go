@@ -7,7 +7,6 @@ package filewalk_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,7 +22,7 @@ import (
 var localTestTree string
 
 func TestMain(m *testing.M) {
-	tmpDir, err := ioutil.TempDir("", "filewalk")
+	tmpDir, err := os.MkdirTemp("", "filewalk")
 	if err != nil {
 		fmt.Printf("failed to create testdir: %v", err)
 		os.RemoveAll(tmpDir)
@@ -139,7 +138,7 @@ func createTestDir(tmpDir string) error {
 		err := os.MkdirAll(j(tmpDir, dir), 0777)
 		errs.Append(err)
 		for _, file := range []string{"f0", "f1", "f2"} {
-			err = ioutil.WriteFile(j(tmpDir, dir, file), []byte{'1', '2', '3'}, 0666)
+			err = os.WriteFile(j(tmpDir, dir, file), []byte{'1', '2', '3'}, 0666)
 			errs.Append(err)
 		}
 	}
@@ -153,7 +152,7 @@ func createTestDir(tmpDir string) error {
 	errs.Append(err)
 	err = os.Symlink("nowhere", j(tmpDir, "la1"))
 	errs.Append(err)
-	err = ioutil.WriteFile(j(tmpDir, "a0", "inaccessible-file"), []byte{'1', '2', '3'}, 0000)
+	err = os.WriteFile(j(tmpDir, "a0", "inaccessible-file"), []byte{'1', '2', '3'}, 0000)
 	errs.Append(err)
 	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-file")) // windows.
 	errs.Append(err)

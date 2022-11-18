@@ -10,7 +10,6 @@ package lockedfile
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"runtime"
 )
@@ -136,7 +135,7 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 	}
 	defer f.Close()
 
-	old, err := ioutil.ReadAll(f)
+	old, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}

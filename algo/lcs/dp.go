@@ -168,14 +168,14 @@ const (
 	space         rune = 0x20   // utf8 space
 )
 
-func FirstArrow(v uint8) rune {
+func firstArrow(v uint8) rune {
 	if v == left || v == upAndLeft {
 		return leftArrow
 	}
 	return space
 }
 
-func SecondArrow(v uint8) rune {
+func secondArrow(v uint8) rune {
 	switch v {
 	case up, upAndLeft:
 		return upArrow
@@ -186,7 +186,7 @@ func SecondArrow(v uint8) rune {
 	}
 }
 
-func (dp *DP[T]) print(out io.Writer) {
+func (dp *DP[T]) Fprint(out io.Writer) {
 	mx, my := len(dp.a), len(dp.b)
 	row := &strings.Builder{}
 	for y := 0; y < my; y++ {

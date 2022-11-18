@@ -188,7 +188,7 @@ func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *I
 	children, err := w.contentsFn(ctx, path, info, ch)
 
 	if err != nil {
-		w.recordError(path, "fileFunc", err)
+		w.recordError(path, "fileFunc", err) //nolint:errcheck
 		return nil
 	}
 
@@ -328,7 +328,7 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 	defer walkingVar.Delete(idx)
 	info, err := w.fs.Stat(ctx, path)
 	stop, children, err := w.prefixFn(ctx, path, &info, err)
-	w.recordError(path, "stat", err)
+	w.recordError(path, "stat", err) //nolint:errcheck
 	if stop {
 		return
 	}

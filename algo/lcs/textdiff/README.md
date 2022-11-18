@@ -10,9 +10,9 @@ Package textdiff providers support for diff'ing text.
 ## Functions
 ### Func DP
 ```go
-func DP(a, b interface{}) lcs.EditScript
+func DP(a, b string) *lcs.EditScript[rune]
 ```
-DP uses cloudeng.io/algo/myers to generate diffs.
+DP uses cloudeng.io/algo/lcs.DP to generate diffs.
 
 ### Func LineFNVHashDecoder
 ```go
@@ -23,9 +23,9 @@ of which is represented by a 64 bit hash obtained from fnv.New64a.
 
 ### Func Myers
 ```go
-func Myers(a, b interface{}) lcs.EditScript
+func Myers(a, b string) *lcs.EditScript[rune]
 ```
-Myers uses cloudeng.io/algo/myers to generate diffs.
+Myers uses cloudeng.io/algo/lcs.Myers to generate diffs.
 
 
 
@@ -41,16 +41,15 @@ Diff represents the ability to diff two slices.
 ### Functions
 
 ```go
-func DiffByLines(a, b []byte) *Diff
+func LinesDP(a, b []byte) *Diff
 ```
-DiffByLines calls DiffByLinesUsing with the Myers function.
+LinesDP uses cloudeng.io/algo/lcs.DP to generate diffs.
 
 
 ```go
-func DiffByLinesUsing(a, b []byte, engine func(a, b interface{}) lcs.EditScript) *Diff
+func LinesMyers(a, b []byte) *Diff
 ```
-DiffByLinesUsing diffs the supplied strings on a line-by-line basis using
-the supplied function to generate the diffs.
+LinesMyers uses cloudeng.io/algo/lcs.Myers to generate diffs.
 
 
 

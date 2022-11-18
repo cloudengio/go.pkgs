@@ -27,7 +27,7 @@ func ExampleLines() {
 		fmt.Fprintf(wr, "A\nready\nC\n")
 		wr.Close()
 	}()
-	st.ExpectEventually(ctx, "ready")
+	st.ExpectEventually(ctx, "ready") //nolint:errcheck
 	fmt.Println(st.LastMatch())
 	st.ExpectNext(ctx, "C") //nolint:errcheck
 	fmt.Println(st.LastMatch())
