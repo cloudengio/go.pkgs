@@ -44,8 +44,12 @@ func ExampleCommandSet() {
 	// Use cmdSet.Dispatch to access os.Args.
 	fmt.Printf("%s", cmdSet.Usage("example-command"))
 	fmt.Printf("%s", cmdSet.Defaults("example-command"))
-	cmdSet.DispatchWithArgs(ctx, "example-command", "ranger")
-	cmdSet.DispatchWithArgs(ctx, "example-command", "-v=3", "ranger", "--from=10", "--to=100")
+	if err := cmdSet.DispatchWithArgs(ctx, "example-command", "ranger"); err != nil {
+		panic(err)
+	}
+	if err := cmdSet.DispatchWithArgs(ctx, "example-command", "-v=3", "ranger", "--from=10", "--to=100"); err != nil {
+		panic(err)
+	}
 
 	// Output:
 	// Usage of example-command
@@ -132,6 +136,9 @@ func TestCommandSet(t *testing.T) {
 
 	out.Reset()
 	err = commands.DispatchWithArgs(ctx, "test", "cmd-b", "--flag-x=s1", "--flag-y=s3")
+	if err != nil {
+		t.Fatal(err)
+	}
 	assertNoError()
 	if got, want := out.String(), "s1 .. s3\n"; got != want {
 		t.Errorf("got %v, want %v", got, want)

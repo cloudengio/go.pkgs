@@ -5,8 +5,8 @@
 import cloudeng.io/path/gopkgpath
 ```
 
-Package gopkgpath provides support for obtaining and working with go package
-paths when go modules are used. It does not support vendor or GOPATH
+Package gopkgpath provides support for obtaining and working with go
+package paths when go modules are used. It does not support vendor or GOPATH
 configurations.
 
 ## Functions
@@ -29,9 +29,9 @@ modules are being used.
 ```go
 func Type(v interface{}) string
 ```
-Type returns the package path for the type of the supplied argument. That
-type must be a defined/named type, anoymous types, function variables etc
-will return "".
+Type returns the package path for the type of the supplied argument.
+That type must be a defined/named type, anoymous types, function variables
+etc will return "".
 
 
 

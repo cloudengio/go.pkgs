@@ -36,7 +36,9 @@ func ExampleRegisterFlagsInStruct() {
 	}
 	fmt.Println(eg.A)
 	fmt.Println(eg.B)
-	flagSet.Parse([]string{"--int-flag=42"})
+	if err := flagSet.Parse([]string{"--int-flag=42"}); err != nil {
+		panic(err)
+	}
 	fmt.Println(eg.A)
 	fmt.Println(eg.B)
 	if got, want := eg.H, filepath.Join(flags.ExpandEnv("$HOME"), "config"); got != want {
@@ -470,8 +472,7 @@ func TestEmbedding(t *testing.T) {
 		B  int `cmdline:"b,1,use a"`
 	}{}
 	fs = &flag.FlagSet{}
-	flags.RegisterFlagsInStruct(fs, "cmdline", &s2, nil, nil)
-	if err != nil {
+	if err := flags.RegisterFlagsInStruct(fs, "cmdline", &s2, nil, nil); err != nil {
 		t.Errorf("%v", err)
 	}
 	if got, want := allFlags(fs), `cmdline:"b,1,use a"`; got != want {

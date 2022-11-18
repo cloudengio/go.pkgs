@@ -168,14 +168,14 @@ const (
 	space         rune = 0x20   // utf8 space
 )
 
-func firstArrow(v uint8) rune {
+func FirstArrow(v uint8) rune {
 	if v == left || v == upAndLeft {
 		return leftArrow
 	}
 	return space
 }
 
-func secondArrow(v uint8) rune {
+func SecondArrow(v uint8) rune {
 	switch v {
 	case up, upAndLeft:
 		return upArrow
@@ -195,7 +195,7 @@ func (dp *DP[T]) print(out io.Writer) {
 			row.WriteString(fmt.Sprintf("  %c%c ", firstArrow(dir), secondArrow(dir)))
 		}
 		row.WriteString("\n")
-		out.Write([]byte(row.String()))
+		out.Write([]byte(row.String())) //nolint:errcheck
 		row.Reset()
 	}
 }

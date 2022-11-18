@@ -11,11 +11,11 @@ generating self-signed TLS certificates etc. The sub-packages provide
 support for managing the assets to be served, various forms of
 authentication and common toolchains such as webpack. For production
 purposes assets are built into the server's binary, but for development they
-are built into the binary but can be overridden from a local filesystem or
-from a running development server that manages those assets (eg. a webpack
-dev server instance). This provides the flexibility for both simple
-deployment of production servers and iterative development within the same
-application.
+are built into the binary but can be overridden from a local filesystem
+or from a running development server that manages those assets (eg.
+a webpack dev server instance). This provides the flexibility for both
+simple deployment of production servers and iterative development within the
+same application.
 
 An example/template can be found in cmd/webapp.
 
@@ -40,12 +40,11 @@ func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) er
 ```
 NewSelfSignedCert creates a self signed certificate. Default values for the
 supported options are:
-
-    - an rsa 4096 bit private key will be generated and used.
-    - "localhost" and "127.0.0.1" are used for the DNS and IP addresses
-      included in the certificate.
-    - certificates are valid from time.Now() and for 5 days.
-    - the organization is 'cloudeng llc'.
+  - an rsa 4096 bit private key will be generated and used.
+  - "localhost" and "127.0.0.1" are used for the DNS and IP addresses
+    included in the certificate.
+  - certificates are valid from time.Now() and for 5 days.
+  - the organization is 'cloudeng llc'.
 
 ### Func NewTLSServer
 ```go
@@ -66,11 +65,11 @@ HTTP-01 challenges will be redirected to that URL.
 ```go
 func RedirectToHTTPSHandlerFunc(tlsPort string, acmeRedirectHost *url.URL) http.HandlerFunc
 ```
-RedirectToHTTPSHandlerFunc is a http.HandlerFunc that will redirect to the
-specified port but using https as the scheme. Install it on port 80 to
-redirect all http requests to https on tlsPort. tlsPort defaults to 443. If
-acmeRedirect is specified then acme HTTP-01 challenges will be redirected to
-that URL.
+RedirectToHTTPSHandlerFunc is a http.HandlerFunc that will redirect to
+the specified port but using https as the scheme. Install it on port 80 to
+redirect all http requests to https on tlsPort. tlsPort defaults to 443.
+If acmeRedirect is specified then acme HTTP-01 challenges will be redirected
+to that URL.
 
 ### Func RegisterCertStoreFactory
 ```go
@@ -97,9 +96,9 @@ generate a self signed certificate and private key file.
 ```go
 func ServeTLSWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, grace time.Duration) error
 ```
-ServeTLSWithShutdown is like ServeWithShutdown except for a TLS server. Note
-that any TLS options must be configured prior to calling this function via
-the TLSConfig field in http.Server.
+ServeTLSWithShutdown is like ServeWithShutdown except for a TLS server.
+Note that any TLS options must be configured prior to calling this function
+via the TLSConfig field in http.Server.
 
 ### Func ServeWithShutdown
 ```go
@@ -113,10 +112,10 @@ within the specified grace period.
 ```go
 func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, storeOpts ...interface{}) (*tls.Config, error)
 ```
-TLSConfigFromFlags creates a tls.Config based on the supplied flags, which
-may require obtaining certificates directly from pem files or from a
-possibly remote certificate store using TLSConfigUsingCertStore. Any
-supplied storeOpts are passed to TLSConfigUsingCertStore.
+TLSConfigFromFlags creates a tls.Config based on the supplied flags,
+which may require obtaining certificates directly from pem files or
+from a possibly remote certificate store using TLSConfigUsingCertStore.
+Any supplied storeOpts are passed to TLSConfigUsingCertStore.
 
 ### Func TLSConfigUsingCertFiles
 ```go
@@ -142,9 +141,9 @@ type CertServingCache struct {
 }
 ```
 CertServingCache implements an in-memory cache of TLS/SSL certificates
-loaded from a backing store. Validation of the certificates is performed on
-loading rather than every use. It provides a GetCertificate method that can
-be used by tls.Config. A TTL (default of 6 hours) is used so that the
+loaded from a backing store. Validation of the certificates is performed
+on loading rather than every use. It provides a GetCertificate method that
+can be used by tls.Config. A TTL (default of 6 hours) is used so that the
 in-memory cache will reload certificates from the store on a periodic basis
 (with some jitter) to allow for certificates to be refreshed.
 
@@ -226,8 +225,8 @@ type CertStoreFactory interface {
 	New(ctx context.Context, name string, opts ...interface{}) (CertStore, error)
 }
 ```
-CertStoreFactory is the interface that must be implemented to register a new
-CertStore type with this package so that it may accessed via the
+CertStoreFactory is the interface that must be implemented to register
+a new CertStore type with this package so that it may accessed via the
 TLSCertStoreFlags command line flags.
 
 
@@ -240,8 +239,8 @@ type HTTPServerFlags struct {
 	TestingCAPem       string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 }
 ```
-HTTPServerFlags defines commonly used flags for running an http server. TLS
-certificates may be retrieved either from a local cert and key file as
+HTTPServerFlags defines commonly used flags for running an http server.
+TLS certificates may be retrieved either from a local cert and key file as
 specified by tls-cert and tls-key; this is generally used for testing or
 when the domain certificates are available only as files. The altnerative,
 preferred for production, source for TLS certificates is from a cache as
@@ -315,8 +314,8 @@ type TLSCertStoreFlags struct {
 	ListStoreTypes bool   `subcmd:"tls-list-stores,,list the available types of tls certificate store"`
 }
 ```
-TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
-certificate store. This is generally used in conjunction with
+TLSCertStoreFlags defines commonly used flags for specifying a
+TLS/SSL certificate store. This is generally used in conjunction with
 TLSConfigFromFlags for apps that simply want to use stored certificates.
 Apps that manage/obtain/renew certificates may use them directly.
 

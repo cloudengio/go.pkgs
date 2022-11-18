@@ -48,13 +48,18 @@ func createMirror(t *testing.T, tmpDir string) func() {
 	if err := os.Chmod(ud, 000); err != nil {
 		t.Fatal(err)
 	}
-	win32testutil.MakeInaccessibleToOwner(ud) // Chmod only works for rw on windows.
+	// Chmod only works for rw on windows.
+	if err := win32testutil.MakeInaccessibleToOwner(ud); err != nil {
+		t.Fatal(err)
+	}
 
 	writeFile("open-will-fail.txt", "can-read-me", 0000)
 
 	return func() {
 		os.Chmod(ud, 0700)
-		win32testutil.MakeAccessibleToOwner(ud)
+		if err := win32testutil.MakeAccessibleToOwner(ud); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -155,7 +160,9 @@ func TestLogging(t *testing.T) {
 	}
 
 	dynamic := reloadfs.New(tmpDir, "testdata", content, reloadfs.UseLogger(logger))
-	dynamic.Open("hello.txt")
+	if _, err := dynamic.Open("hello.txt"); err != nil {
+		t.Fatal(err)
+	}
 	if got, want := out.String(), "reused: hello.txt -> testdata/hello.txt: <nil>"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -164,7 +171,10 @@ func TestLogging(t *testing.T) {
 	defer cleanup()
 
 	out.Reset()
-	fs, _ := dynamic.Open("hello.txt")
+	fs, err := dynamic.Open("hello.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

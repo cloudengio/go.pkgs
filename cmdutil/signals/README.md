@@ -70,8 +70,8 @@ type Handler struct {
 }
 ```
 Handler represents a signal handler that can be used to wait for signal
-reception or context cancelation as per NotifyWithCancel. In addition it can
-be used to register additional cancel functions to be invoked on signal
+reception or context cancelation as per NotifyWithCancel. In addition it
+can be used to register additional cancel functions to be invoked on signal
 reception or context cancelation.
 
 ### Functions

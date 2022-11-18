@@ -80,9 +80,11 @@ func enableCPUProfiling(filename string) (func() error, error) {
 // Typical usage is as follows:
 //
 // save, err := profiling.Start("cpu", "cpu.out")
-// if err != nil {
-//    panic(err)
-// }
+//
+//	if err != nil {
+//	   panic(err)
+//	}
+//
 // defer save()
 //
 // For a heap profile simply use Start("heap", "heap.out"). Note that the

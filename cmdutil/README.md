@@ -13,8 +13,8 @@ Package cmdutil provides support for implementing command line utilities.
 func CopyAll(fromDir, toDir string, ovewrite bool) error
 ```
 CopyAll will create an exact copy, including permissions, of a local
-filesystem hierarchy. The arguments must both refer to directories. A
-trailing slash (/) for the fromDir copies the contents of fromDir rather
+filesystem hierarchy. The arguments must both refer to directories.
+A trailing slash (/) for the fromDir copies the contents of fromDir rather
 than fromDir itself. Thus:
 
     CopyAll("a/b", "c") is the same as CopyAll("a/b/", "c/b")

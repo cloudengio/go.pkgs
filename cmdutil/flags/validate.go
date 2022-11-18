@@ -53,8 +53,9 @@ func count(mask []int) int {
 
 // ExactlyOneSet will return true if exactly one of its arguments is 'set',
 // where 'set' means:
-//   1. for strings, the length is > 0.
-//   2. fo slices, arrays and maps, their length is > 0.
+//  1. for strings, the length is > 0.
+//  2. fo slices, arrays and maps, their length is > 0.
+//
 // ExactlyOneSet will panic if any of the arguments are not one of the above
 // types.
 func ExactlyOneSet(args ...interface{}) bool {

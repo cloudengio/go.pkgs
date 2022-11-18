@@ -8,31 +8,34 @@
 // thread safe manner. It also provides convenience routines for annotating
 // existing errors with caller and other information.
 //
-//   errs := errors.M{}
-//   errs.Append(fn(a))
-//   errs.Append(fn(b))
-//   err := errs.Err()
-//
+//	errs := errors.M{}
+//	errs.Append(fn(a))
+//	errs.Append(fn(b))
+//	err := errs.Err()
 //
 // The location of a function's immediate caller (depth of 1) in form of the
 // directory/filename:<line> (name len of 2) can be obtained as follows:
-//   errors.Caller(1, 2)
+//
+//	errors.Caller(1, 2)
 //
 // Annotations, can be added as follows:
-//   err := errors.WithCaller(os.ErrNotExist)
+//
+//	err := errors.WithCaller(os.ErrNotExist)
 //
 // Where:
-//   fmt.Printf("%v\n", err)
-//   fmt.Printf("%v\n", errors.Unwrap(err))
+//
+//	fmt.Printf("%v\n", err)
+//	fmt.Printf("%v\n", errors.Unwrap(err))
 //
 // Would produce:
-//   errors/caller_test.go:17: file does not exist
-//   file does not exist
+//
+//	errors/caller_test.go:17: file does not exist
+//	file does not exist
 //
 // Annotated errors can be passed to errors.M:
-//   errs := errors.M{}
-//   errs.Append(errors.WithCaller(fn(a)))
-//   errs.Append(errors.WithCaller(fn(b)))
-//   err := errs.Err()
 //
+//	errs := errors.M{}
+//	errs.Append(errors.WithCaller(fn(a)))
+//	errs.Append(errors.WithCaller(fn(b)))
+//	err := errs.Err()
 package errors

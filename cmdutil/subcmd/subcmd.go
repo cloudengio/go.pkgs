@@ -166,7 +166,9 @@ func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *Fla
 			usageDefaults = v
 		}
 	}
-	fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
+	if err := fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults); err != nil {
+		panic(err)
+	}
 	return fs
 }
 
@@ -525,7 +527,7 @@ func (cmds *CommandSet) MustDispatch(ctx context.Context) {
 func GlobalFlagSet() *FlagSet {
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	flag.CommandLine.Usage = func() {}
-	flag.CommandLine.SetOutput(ioutil.Discard)
+	flag.CommandLine.SetOutput(io.Discard)
 	return &FlagSet{flagSet: flag.CommandLine}
 }
 

@@ -29,9 +29,9 @@ func ExampleLines() {
 	}()
 	st.ExpectEventually(ctx, "ready")
 	fmt.Println(st.LastMatch())
-	st.ExpectNext(ctx, "C")
+	st.ExpectNext(ctx, "C") //nolint:errcheck
 	fmt.Println(st.LastMatch())
-	st.ExpectEOF(ctx)
+	st.ExpectEOF(ctx) //nolint:errcheck
 	if err := st.Err(); err != nil {
 		panic(err)
 	}
@@ -50,8 +50,8 @@ func newLineStream(t *testing.T) (*expect.Lines, *os.File) {
 
 func writeLines(wr io.Writer, lines ...string) {
 	for _, l := range lines {
-		wr.Write([]byte(l))
-		wr.Write([]byte{'\n'})
+		wr.Write([]byte(l))    //nolint:errcheck
+		wr.Write([]byte{'\n'}) //nolint:errcheck
 	}
 }
 

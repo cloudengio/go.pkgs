@@ -38,7 +38,7 @@ type DevServerFlags struct {
 // containing the webpack configuration. Context, command and args are passed to
 // exec.CommandContext. A typical usage would be:
 //
-//    NewDevServer(ctx, "./frontend", "webpack", "serve", "-c", "webpack.dev.js")
+//	NewDevServer(ctx, "./frontend", "webpack", "serve", "-c", "webpack.dev.js")
 //
 // Additional, optional configuration is possible via the Configure method.
 func NewDevServer(ctx context.Context, dir string, command string, args ...string) *DevServer {

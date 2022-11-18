@@ -270,3 +270,28 @@ world
 	}
 
 }
+
+const (
+	upArrow       rune = 0x2191 // utf8 up arrow
+	leftArrow     rune = 0x2190 // utf8 left arrow
+	diagonalArrow rune = 0x2196 // utf8 diagonal arrow
+	space         rune = 0x20   // utf8 space
+)
+
+func firstArrow(v uint8) rune {
+	if v == left || v == upAndLeft {
+		return leftArrow
+	}
+	return space
+}
+
+func secondArrow(v uint8) rune {
+	switch v {
+	case up, upAndLeft:
+		return upArrow
+	case diagonal:
+		return diagonalArrow
+	default:
+		return space
+	}
+}

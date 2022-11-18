@@ -34,15 +34,15 @@ const (
 // An EditScript that can be trivially 'replayed' to create the new slice
 // from the original one.
 //
-//  var b []uint8
-//   for _, action := range actions {
-//     switch action.Op {
-//     case Insert:
-//       b = append(b, action.Val.(int64))
-//     case Identical:
-//       b = append(b, a[action.A])
-//     }
-//   }
+//	var b []uint8
+//	 for _, action := range actions {
+//	   switch action.Op {
+//	   case Insert:
+//	     b = append(b, action.Val.(int64))
+//	   case Identical:
+//	     b = append(b, a[action.A])
+//	   }
+//	 }
 type Edit[T comparable] struct {
 	Op   EditOp
 	A, B int
@@ -136,11 +136,11 @@ func verticalFormatFor(a interface{}) string {
 
 // FormatVertical prints a representation of the edit script with one
 // item per line, eg:
-//   -  6864772235558415538
+//   - 6864772235558415538
 //     -8997218578518345818
-//   + -6615550055289275125
+//   - -6615550055289275125
 //   - -7192184552745107772
-//      5717881983045765875
+//     5717881983045765875
 func (es *EditScript[T]) FormatVertical(out io.Writer, a []T) {
 	format := verticalFormatFor(a)
 	for _, op := range *es {
@@ -171,9 +171,10 @@ func horizontalFormatFor(a interface{}) string {
 // three lines, with the top line showing the result of applying the
 // edit, the middle line the operations applied and the bottom line
 // any items deleted, eg:
-//   CB AB AC
-//  -+|-||-|+
-//  A  C  B
+//
+//	 CB AB AC
+//	-+|-||-|+
+//	A  C  B
 func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T) {
 	format := horizontalFormatFor(a)
 	displaySizes := []int{}

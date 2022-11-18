@@ -46,9 +46,9 @@ func TestSignal(t *testing.T) {
 	go func() {
 		// Make sure that multiple signals in quick succession do not
 		// cause the process to exit.
-		syscall.Kill(pid, syscall.SIGINT)
-		syscall.Kill(pid, syscall.SIGINT)
-		syscall.Kill(pid, syscall.SIGINT)
+		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
+		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
+		syscall.Kill(pid, syscall.SIGINT) //nolint:errcheck
 		wg.Done()
 	}()
 

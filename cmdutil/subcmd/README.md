@@ -29,8 +29,8 @@ without requiring that flag.Parse or any of its global state be used.
 Flags are represented by a FlagSet which encapsulates an underlying
 flag.FlagSet but with flag variables provided via cloudeng.io/cmdutil/flags.
 
-The Command type associates a FlagSet with the function that implements that
-command as well as documenting the command. This 'runner' takes as an
+The Command type associates a FlagSet with the function that implements
+that command as well as documenting the command. This 'runner' takes as an
 argument the struct used to store its flag values as well as the command
 line arguments; thus avoiding the need for global flag variables at the cost
 of a type assertion. A CommandSet is used to create the command hierarchy
@@ -41,6 +41,7 @@ command functions via cmdset.Dispatch or DispatchWithArgs.
       From int `subcmd:"from,1,start value for a range"`
       To   int `subcmd:"to,2,end value for a range "`
     }
+
     func printRange(ctx context.Context, values interface{}, args []string) error {
       r := values.(*rangeFlags)
       fmt.Printf("%v..%v\n", r.From, r.To)
@@ -49,8 +50,7 @@ command functions via cmdset.Dispatch or DispatchWithArgs.
 
     func main() {
       ctx := context.Background()
-      fs := subcmd.NewFlagSet()
-      fs.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
+      fs := subcmd.MustRegisteredFlags(&rangeFlags{})
       // Subcommands are created using subcmd.NewCommandLevel.
       cmd := subcmd.NewCommand("ranger", fs, printRange, subcmd.WithoutArguments())
       cmd.Document("print an integer range")
@@ -60,9 +60,60 @@ command functions via cmdset.Dispatch or DispatchWithArgs.
 
 In addition it is possible to register 'global' flags that may be specified
 before any sub commands on invocation and also to wrap calls to any
-subcommand's runner function. The former is useful for setting common flags
-and the latter for acting on those flags and/or implementing common
+subcommand's runner function. The former is useful for setting common
+flags and the latter for acting on those flags and/or implementing common
 functionality such as profiling or initializing logging etc.
+
+The FromYAML function provides a more convenient and readable means of
+creating a command tree than using the NewCommand and NewCommandSet
+functions directly. FromYAML reads a yaml specification of a command tree,
+its summary documentation and argument specification and calls NewCommand
+and NewCommandSet internally.
+
+The returned CommandSetYAML type can then be used to 'decorate' the command
+tree with the runner functions and flag value instances. The YAML mechanism
+provides identical functionality to calling the functions directly.
+
+The YAML specification is show below and reflects the tree structure of the
+command tree to be created.
+
+    	name: command-name
+    	summary: description of the command
+    	arguments:
+    	commands:
+    	  - name:
+    	    summary:
+    	    arguments:
+    	    commands:
+       - name:
+         summary:
+         ...
+
+The summary and argument values are used in calls in the Command.Document.
+The arguments: field is a list of the expected arguments that also defines
+the number of expected arguments.
+
+ 1. If the field is missing or the list is empty then no arguments are
+    allowed.
+
+ 2. If the list contains n arguments then exactly that number of arguments
+    is expected, unless, the last argument in the list is '...' in which
+    case at least that number is expected.
+
+ 3. If there is a single item in the list and it is enclosed in [] (in a
+    quoted string), then 0 or 1 arguments are expected.
+
+To define a simple command line, with no sub-commands, specify only the
+name:, summary: and arguments: fields.
+
+CommandSet.Dispatch implements support for requesting help information
+on the top level and subcommands. Running a command with sub-commands
+without specifying one of those sub-commands results in a 'usage' message
+showing summary information and the available subcommands. Help on a
+specific subcommand is available via '<command> help <sub-command>' or for
+multi-level commands '<command> <sub-command> help <next-sub-command>'.
+The --help flag can be used to display information on a commands flags and
+arguments, eg: '<command> --help' or "<command> <sub-command> --help".
 
 Note that this package will never call flag.Parse and will not associate any
 flags with flag.CommandLine.
@@ -103,9 +154,9 @@ its arguments.
 ```go
 func (cmd *Command) Usage() string
 ```
-Usage returns a string containing a 'usage' message for the command. It
-includes a summary of the command (including a list of any sub commands) its
-flags and arguments and the flag defaults.
+Usage returns a string containing a 'usage' message for the command.
+It includes a summary of the command (including a list of any sub commands)
+its flags and arguments and the flag defaults.
 
 
 
@@ -153,8 +204,8 @@ type CommandSet struct {
 	// contains filtered or unexported fields
 }
 ```
-CommandSet represents a set of commands that are peers to each other, that
-is, the command line must specificy one of them.
+CommandSet represents a set of commands that are peers to each other,
+that is, the command line must specificy one of them.
 
 ### Functions
 
@@ -224,6 +275,11 @@ documentation and a list of its sub-commands.
 
 
 ```go
+func (cmds *CommandSet) TopLevel(cmd *Command)
+```
+
+
+```go
 func (cmds *CommandSet) Usage(name string) string
 ```
 Usage returns the usage message for the command set.
@@ -232,8 +288,8 @@ Usage returns the usage message for the command set.
 ```go
 func (cmds *CommandSet) WithGlobalFlags(global *FlagSet)
 ```
-WithGlobalFlags adds top-level/global flags that apply to all commands. They
-must be specified before a subcommand, ie: command <global-flags>*
+WithGlobalFlags adds top-level/global flags that apply to all commands.
+They must be specified before a subcommand, ie: command <global-flags>*
 sub-command <sub-command-pflags>* args
 
 
@@ -271,6 +327,16 @@ within init functions.
 
 
 ```go
+func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *FlagSet
+```
+MustRegisteredFlagSet is a convenience function that creates a new FlagSet
+and calls RegisterFlagStruct on it. The valueDefaults and usageDefaults
+are extracted from the defaults variadic parameter. MustRegisteredFlagSet
+will panic if defaults contains inappopriate types for the value and usage
+defaults.
+
+
+```go
 func NewFlagSet() *FlagSet
 ```
 NewFlagSet returns a new instance of FlagSet.
@@ -294,7 +360,7 @@ to RegisterFlagStruct.
 
 
 ```go
-func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string)
+func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet
 ```
 MustRegisterFlagStruct is like RegisterFlagStruct except that it panics on
 encountering an error. Its use is encouraged over RegisterFlagStruct from
@@ -305,8 +371,8 @@ within init functions.
 func (cf *FlagSet) RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
 ```
 RegisterFlagStruct registers a struct, using
-flags.RegisterFlagsInStructWithSetMap. The struct tag must be 'subcomd'. The
-returned SetMap can be queried by the IsSet method.
+flags.RegisterFlagsInStructWithSetMap. The struct tag must be 'subcomd'.
+The returned SetMap can be queried by the IsSet method.
 
 
 

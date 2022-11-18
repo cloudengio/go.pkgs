@@ -20,8 +20,8 @@ DevServer represents a webpack dev server.
 ```go
 func NewDevServer(ctx context.Context, dir string, command string, args ...string) *DevServer
 ```
-NewDevServer creates a new instance of DevServer. Note, that the server is
-not started at this point. The dir argument specifies the directory
+NewDevServer creates a new instance of DevServer. Note, that the server
+is not started at this point. The dir argument specifies the directory
 containing the webpack configuration. Context, command and args are passed
 to exec.CommandContext. A typical usage would be:
 

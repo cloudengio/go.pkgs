@@ -91,7 +91,9 @@ func resizedNeeded(used, available int, percent int) bool {
 
 // resize will allocate new underlying storage and copy the contents of
 // slice to it if the ratio of wasted to used, ie:
-//   (cap(slice) - len(slice)) / len(slice))
+//
+//	(cap(slice) - len(slice)) / len(slice))
+//
 // exceeds the specified percentage.
 func resize[T any](slice []T, percent int) []T {
 	if resizedNeeded(len(slice), cap(slice), percent) {

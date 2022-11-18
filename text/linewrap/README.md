@@ -18,8 +18,8 @@ Block wraps the supplied text to width indented by indent spaces.
 ```go
 func Comment(indent, width int, comment, text string) string
 ```
-Comment wraps the supplied text to width indented by indent spaces with each
-line starting with the supplied comment string. It is intended for
+Comment wraps the supplied text to width indented by indent spaces with
+each line starting with the supplied comment string. It is intended for
 formatting source code comments.
 
 ### Func Paragraph

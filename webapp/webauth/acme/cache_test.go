@@ -55,7 +55,9 @@ func TestCacheFactory(t *testing.T) {
 		t.Fatalf("missing or unexpected error: %v", err)
 	}
 
-	dc.Delete(ctx, "my.domain")
+	if err := dc.Delete(ctx, "my.domain"); err != nil {
+		t.Fatal(err)
+	}
 	_, err = store.Get(ctx, "my.domain")
 	if err == nil || !strings.Contains(err.Error(), "cache miss") {
 		t.Fatalf("missing or unexpected error: %v", err)

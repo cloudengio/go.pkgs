@@ -42,9 +42,10 @@ type Delta struct {
 }
 
 // String implements stringer. The format is as follows:
-//   deletions:    < (from, to]
-//   insertions:   > @pos#<num bytes>
-//   replacements: ~ @pos#<num-bytes>/<num-bytes>
+//
+//	deletions:    < (from, to]
+//	insertions:   > @pos#<num bytes>
+//	replacements: ~ @pos#<num-bytes>/<num-bytes>
 func (d Delta) String() string {
 	switch d.op {
 	case deleteOp:
@@ -151,10 +152,11 @@ func overwrite(a, b []byte) []byte {
 }
 
 // Do applies the supplied deltas to contents as follows:
-//   1. Deltas are sorted by their start position, then at each position,
-//   2. deletions are applied, then
-//   3. replacements are applied, then,
-//   4. insertions are applied.
+//  1. Deltas are sorted by their start position, then at each position,
+//  2. deletions are applied, then
+//  3. replacements are applied, then,
+//  4. insertions are applied.
+//
 // Sorting is stable with respect the order specified in the function invocation.
 // Multiple deletions and replacements overwrite each other, whereas insertions
 // are concatenated.
