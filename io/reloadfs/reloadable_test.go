@@ -54,9 +54,6 @@ func createMirror(t *testing.T, tmpDir string) func() {
 	writeFile("open-will-fail.txt", "can-read-me", 0000)
 
 	return func() {
-		if err := os.Chmod(ud, 0700); err != nil {
-			panic(err)
-		}
 		if err := win32testutil.MakeAccessibleToOwner(ud); err != nil {
 			panic(err)
 		}
