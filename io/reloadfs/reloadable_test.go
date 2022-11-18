@@ -49,9 +49,7 @@ func createMirror(t *testing.T, tmpDir string) func() {
 		t.Fatal(err)
 	}
 	// Chmod only works for rw on windows.
-	if err := win32testutil.MakeInaccessibleToOwner(ud); err != nil {
-		t.Fatal(err)
-	}
+	_ = win32testutil.MakeInaccessibleToOwner(ud)
 
 	writeFile("open-will-fail.txt", "can-read-me", 0000)
 
