@@ -186,7 +186,7 @@ func secondArrow(v uint8) rune {
 	}
 }
 
-func (dp *DP[T]) print(out io.Writer) {
+func (dp *DP[T]) Fprint(out io.Writer) {
 	mx, my := len(dp.a), len(dp.b)
 	row := &strings.Builder{}
 	for y := 0; y < my; y++ {
@@ -195,7 +195,7 @@ func (dp *DP[T]) print(out io.Writer) {
 			row.WriteString(fmt.Sprintf("  %c%c ", firstArrow(dir), secondArrow(dir)))
 		}
 		row.WriteString("\n")
-		out.Write([]byte(row.String()))
+		out.Write([]byte(row.String())) //nolint:errcheck
 		row.Reset()
 	}
 }

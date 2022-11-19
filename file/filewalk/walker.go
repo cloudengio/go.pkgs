@@ -167,12 +167,11 @@ func (e *Error) Error() string {
 
 // recordError will record the specified error if it is not nil; ie.
 // its safe to call it with a nil error.
-func (w *Walker) recordError(path, op string, err error) error {
+func (w *Walker) recordError(path, op string, err error) {
 	if err == nil {
-		return nil
+		return
 	}
 	w.errs.Append(&Error{path, op, err})
-	return err
 }
 
 func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *Info) []Info {

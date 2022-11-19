@@ -301,7 +301,9 @@ func ExampleT_pipeline() {
 	}
 
 	go func() {
-		g.Wait()
+		if err := g.Wait(); err != nil {
+			panic(err)
+		}
 		close(numCh)
 	}()
 

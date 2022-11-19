@@ -33,28 +33,29 @@ func (ire ErrInvalidRange) Is(target error) bool {
 //
 // Each range is of the general form:
 //
-//    <from>[-<to>] | -<from>[-<to>|-] | <from>-
+//	<from>[-<to>] | -<from>[-<to>|-] | <from>-
 //
 // which allows for the following:
-//   <from>        : a single item
-//   <from>-<to>   : a range of one or more items
-//   -<from>       : a single item, relative to the end
-//   -<from>-<to>  : a range, whose start and end are indexed relative the end
-//   -<from>-      : a range, relative to the end that extends to the end
-//   <from>-       : a range that extends to the end
+//
+//	<from>        : a single item
+//	<from>-<to>   : a range of one or more items
+//	-<from>       : a single item, relative to the end
+//	-<from>-<to>  : a range, whose start and end are indexed relative the end
+//	-<from>-      : a range, relative to the end that extends to the end
+//	<from>-       : a range that extends to the end
 //
 // Note that the interpretation of these ranges is left to users of this
 // type. For example, intepreting these values as pages in a document could
 // lead to the following:
 //
-//   3      : page 3
-//  2-4     : pages 2 through 4
-//  4-2     : pages 4 through 2
-//   -2     : second to last page
-//  -4-2    : fourth from last to second from last
-//  -2-4    : second from last to fourth from last
-//  -2-     : second to last and all following pages
-//  2-      : page 2 and all following pages.
+//	 3      : page 3
+//	2-4     : pages 2 through 4
+//	4-2     : pages 4 through 2
+//	 -2     : second to last page
+//	-4-2    : fourth from last to second from last
+//	-2-4    : second from last to fourth from last
+//	-2-     : second to last and all following pages
+//	2-      : page 2 and all following pages.
 type RangeSpec struct {
 	From, To      string
 	RelativeToEnd bool

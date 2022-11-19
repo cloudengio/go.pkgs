@@ -116,8 +116,8 @@ the logging function and the location of the call (ie. caller stackframes).
 ```go
 func CallTraceFrom(ctx context.Context) *CallTrace
 ```
-CallTraceFrom extracts a CallTrace from the supplied context. It returns an
-empty, unused trace (i.e. its ID() method will return 0) if no trace is
+CallTraceFrom extracts a CallTrace from the supplied context. It returns
+an empty, unused trace (i.e. its ID() method will return 0) if no trace is
 found.
 
 
@@ -127,16 +127,16 @@ found.
 ```go
 func (ct *CallTrace) GoLog(skip int, args ...interface{}) *CallTrace
 ```
-GoLog logs the current call site and returns a new CallTrace, that is a
-child of the existing one, to be used in a goroutine started from the
+GoLog logs the current call site and returns a new CallTrace, that is
+a child of the existing one, to be used in a goroutine started from the
 current one. Skip is the number of callers to skip, as per runtime.Callers.
 
 
 ```go
 func (ct *CallTrace) GoLogf(skip int, format string, args ...interface{}) *CallTrace
 ```
-GoLogf logs the current call site and returns a new CallTrace, that is a
-child of the existing one, to be used in a goroutine started from the
+GoLogf logs the current call site and returns a new CallTrace, that is
+a child of the existing one, to be used in a goroutine started from the
 current one. Skip is the number of callers to skip, as per runtime.Callers.
 
 
@@ -158,9 +158,9 @@ number of callers to skip, as per runtime.Callers.
 ```go
 func (ct *CallTrace) Logf(skip int, format string, args ...interface{})
 ```
-Logf logs the current call site with its arguments being immediately used to
-create a string (using fmt.Sprintf) that is stored within the trace. Skip is
-the number of callers to skip, as per runtime.Callers.
+Logf logs the current call site with its arguments being immediately used
+to create a string (using fmt.Sprintf) that is stored within the trace.
+Skip is the number of callers to skip, as per runtime.Callers.
 
 
 ```go
@@ -291,8 +291,8 @@ call (ie. caller stackframes).
 ```go
 func MessageTraceFrom(ctx context.Context) *MessageTrace
 ```
-MessageTraceFrom extracts a MessageTrace from the supplied context. It
-returns an empty, unused trace (i.e. its ID() method will return 0) if no
+MessageTraceFrom extracts a MessageTrace from the supplied context.
+It returns an empty, unused trace (i.e. its ID() method will return 0) if no
 trace is found.
 
 
@@ -302,23 +302,23 @@ trace is found.
 ```go
 func (mt *MessageTrace) Flatten(tag string) MessageRecords
 ```
-Flatten returns a slice of MessageRecords sorted by level, rootID, ID, time
-and finally by message status (in order of Waiting, Sent and Received).
+Flatten returns a slice of MessageRecords sorted by level, rootID, ID,
+time and finally by message status (in order of Waiting, Sent and Received).
 
 
 ```go
 func (mt *MessageTrace) GoLog(skip int, args ...interface{}) *MessageTrace
 ```
-GoLog logs the current call site and returns a new MessageTrace, that is a
-child of the existing one, to be used in a goroutine started from the
+GoLog logs the current call site and returns a new MessageTrace, that is
+a child of the existing one, to be used in a goroutine started from the
 current one. Skip is the number of callers to skip, as per runtime.Callers.
 
 
 ```go
 func (mt *MessageTrace) GoLogf(skip int, format string, args ...interface{}) *MessageTrace
 ```
-GoLogf logs the current call site and returns a new MessageTrace, that is a
-child of the existing one, to be used in a goroutine started from the
+GoLogf logs the current call site and returns a new MessageTrace, that is
+a child of the existing one, to be used in a goroutine started from the
 current one. Skip is the number of callers to skip, as per runtime.Callers.
 
 
@@ -340,9 +340,9 @@ number of callers to skip, as per runtime.Callers.
 ```go
 func (mt *MessageTrace) Logf(skip int, status MessagePrimitive, local, remote net.Addr, format string, args ...interface{})
 ```
-Logf logs the current call site with its arguments being immediately used to
-create a string (using fmt.Sprintf) that is stored within the trace. Skip is
-the number of callers to skip, as per runtime.Callers.
+Logf logs the current call site with its arguments being immediately used
+to create a string (using fmt.Sprintf) that is stored within the trace.
+Skip is the number of callers to skip, as per runtime.Callers.
 
 
 ```go

@@ -5,13 +5,13 @@
 import cloudeng.io/cmdutil/flags
 ```
 
-Package flags provides support for working with flag variables, and for
-managing flag variables by embedding them in structs. A field in a struct
-can be annotated with a tag that is used to identify it as a variable to be
-registered with a flag that contains the name of the flag, an initial
-default value and the usage message. This makes it convenient to colocate
-flags with related data structures and to avoid large numbers of global
-variables as are often encountered with complex, multi-level command
+Package flags provides support for working with flag variables,
+and for managing flag variables by embedding them in structs. A field
+in a struct can be annotated with a tag that is used to identify it as a
+variable to be registered with a flag that contains the name of the flag,
+an initial default value and the usage message. This makes it convenient to
+colocate flags with related data structures and to avoid large numbers of
+global variables as are often encountered with complex, multi-level command
 structures.
 
 ## Functions
@@ -35,9 +35,8 @@ func ExactlyOneSet(args ...interface{}) bool
 ```
 ExactlyOneSet will return true if exactly one of its arguments is 'set',
 where 'set' means:
-
-    1. for strings, the length is > 0.
-    2. fo slices, arrays and maps, their length is > 0.
+ 1. for strings, the length is > 0.
+ 2. fo slices, arrays and maps, their length is > 0.
 
 ExactlyOneSet will panic if any of the arguments are not one of the above
 types.
@@ -56,8 +55,8 @@ $Path respectively. On Windows /'s are replaced with \'s.
 ```go
 func ParseFlagTag(t string) (name, value, usage string, err error)
 ```
-ParseFlagTag parses the supplied string into a flag name, default literal
-value and description components. It is used by
+ParseFlagTag parses the supplied string into a flag name,
+default literal value and description components. It is used by
 CreatenAndRegisterFlagsInStruct to parse the field tags.
 
 The tag format is:
@@ -69,22 +68,22 @@ default value for the flag and <usage> the detailed description for the
 flag. <default-value> may be left empty, but <name> and <usage> must be
 supplied. All fields can be quoted if they need to contain a comma.
 
-Default values may contain shell variables as per flags.ExpandEnv. So
-$HOME/.configdir may be used on both UNIX and Windows for example.
+Default values may contain shell variables as per flags.ExpandEnv.
+So $HOME/.configdir may be used on both UNIX and Windows for example.
 
 ### Func RegisterFlagsInStruct
 ```go
 func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
 ```
-RegisterFlagsInStruct will selectively register fields in the supplied
-struct as flags of the appropriate type with the supplied flag.FlagSet.
-Fields are selected if they have tag of the form
-`cmdline:"name::<literal>,<usage>"` associated with them, as defined by
-ParseFlagTag above. In addition to literal default values specified in the
-tag it is possible to provide computed default values via the
-valuesDefaults, and also defaults that will appear in the usage string for
-help messages that override the actual default value. The latter is useful
-for flags that have a default that is system dependent that is not
+RegisterFlagsInStruct will selectively register fields in the
+supplied struct as flags of the appropriate type with the supplied
+flag.FlagSet. Fields are selected if they have tag of the form
+`cmdline:"name::<literal>,<usage>"` associated with them, as defined
+by ParseFlagTag above. In addition to literal default values specified
+in the tag it is possible to provide computed default values via the
+valuesDefaults, and also defaults that will appear in the usage string
+for help messages that override the actual default value. The latter is
+useful for flags that have a default that is system dependent that is not
 informative in the usage statement. For example --home-dir which should
 default to /home/user but the usage message would more usefully say
 --home-dir=$HOME. Both maps are keyed by the name of the flag, not the
@@ -93,19 +92,15 @@ field.
 Embedded (anonymous) structs may be used provided that they are not
 themselves tagged. For example:
 
-type CommonFlags struct {
+    type CommonFlags struct {
+      A int `cmdline:"a,,use a"`
+      B int `cmdline:"b,,use b"`
+    }
 
-    A int `cmdline:"a,,use a"`
-    B int `cmdline:"b,,use b"`
-
-}
-
-flagSet := struct{
-
-    CommonFlags
-    C bool `cmdline:"c,,use c"`
-
-}
+    flagSet := struct{
+      CommonFlags
+      C bool `cmdline:"c,,use c"`
+    }
 
 will result in three flags, --a, --b and --c. Note that embedding as a
 pointer is not supported.
@@ -191,8 +186,8 @@ type ErrInvalidRange struct {
 	// contains filtered or unexported fields
 }
 ```
-ErrInvalidRange represents the error generated for an invalid range. Use
-errors.Is to test for it.
+ErrInvalidRange represents the error generated for an invalid range.
+Use errors.Is to test for it.
 
 ### Methods
 
@@ -287,8 +282,8 @@ type Map struct {
 	// contains filtered or unexported fields
 }
 ```
-Map represents a mapping of strings to values that implements flag.Value and
-can be used for command line flag values. It must be appropriately
+Map represents a mapping of strings to values that implements flag.Value
+and can be used for command line flag values. It must be appropriately
 initialized with name, value pairs and a default value using its Register
 and Default methods.
 
@@ -463,8 +458,8 @@ someone been set.
 ```go
 func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*SetMap, error)
 ```
-RegisterFlagsInStructWithSetMap is like RegisterFlagsInStruct but returns a
-SetMap which can be used to determine which flag variables have been
+RegisterFlagsInStructWithSetMap is like RegisterFlagsInStruct but returns
+a SetMap which can be used to determine which flag variables have been
 initialized either with a literal in the struct tag or via the valueDefaults
 argument.
 

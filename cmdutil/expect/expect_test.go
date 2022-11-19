@@ -27,11 +27,11 @@ func ExampleLines() {
 		fmt.Fprintf(wr, "A\nready\nC\n")
 		wr.Close()
 	}()
-	st.ExpectEventually(ctx, "ready")
+	_ = st.ExpectEventually(ctx, "ready")
 	fmt.Println(st.LastMatch())
-	st.ExpectNext(ctx, "C")
+	_ = st.ExpectNext(ctx, "C")
 	fmt.Println(st.LastMatch())
-	st.ExpectEOF(ctx)
+	_ = st.ExpectEOF(ctx)
 	if err := st.Err(); err != nil {
 		panic(err)
 	}
@@ -50,8 +50,12 @@ func newLineStream(t *testing.T) (*expect.Lines, *os.File) {
 
 func writeLines(wr io.Writer, lines ...string) {
 	for _, l := range lines {
-		wr.Write([]byte(l))
-		wr.Write([]byte{'\n'})
+		if _, err := wr.Write([]byte(l)); err != nil {
+			panic(err)
+		}
+		if _, err := wr.Write([]byte{'\n'}); err != nil {
+			panic(err)
+		}
 	}
 }
 

@@ -124,7 +124,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,7 +144,7 @@ type FlagSet struct {
 func NewFlagSet() *FlagSet {
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	fs.Usage = func() {}
-	fs.SetOutput(ioutil.Discard)
+	fs.SetOutput(io.Discard)
 	return &FlagSet{flagSet: fs}
 }
 
@@ -166,7 +165,9 @@ func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *Fla
 			usageDefaults = v
 		}
 	}
-	fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
+	if err := fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults); err != nil {
+		panic(err)
+	}
 	return fs
 }
 
@@ -394,7 +395,7 @@ func (cmds *CommandSet) TopLevel(cmd *Command) {
 }
 
 // defaults returns the value of Defaults for each command in commands.
-func (cmds *CommandSet) defaults() string {
+func (cmds *CommandSet) defaults() string { //nolint:unused
 	out := &strings.Builder{}
 	out.WriteString(cmds.globalDefaults())
 	for i, cmd := range cmds.cmds {
@@ -525,7 +526,7 @@ func (cmds *CommandSet) MustDispatch(ctx context.Context) {
 func GlobalFlagSet() *FlagSet {
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	flag.CommandLine.Usage = func() {}
-	flag.CommandLine.SetOutput(ioutil.Discard)
+	flag.CommandLine.SetOutput(io.Discard)
 	return &FlagSet{flagSet: flag.CommandLine}
 }
 

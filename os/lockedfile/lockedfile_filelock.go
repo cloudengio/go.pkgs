@@ -10,6 +10,7 @@ package lockedfile
 import (
 	"os"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/os/lockedfile/internal/filelock"
 )
 
@@ -42,7 +43,9 @@ func openFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 			// We'll treat regular files (and symlinks to regular files) as “possible”
 			// and ignore errors for the rest.
 			if fi, statErr := f.Stat(); statErr != nil || fi.Mode().IsRegular() {
-				filelock.Unlock(f)
+				if uerr := filelock.Unlock(f); uerr != nil {
+					err = errors.NewM(err, uerr)
+				}
 				f.Close()
 				return nil, err
 			}

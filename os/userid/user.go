@@ -199,7 +199,9 @@ func (idm *IDManager) LookupGroup(id string) (user.Group, error) {
 
 	// run id for the current user in the hope that it discovers the
 	// group.
-	idm.LookupUser("")
+	if _, err := idm.LookupUser(""); err != nil {
+		return user.Group{}, err
+	}
 	if id, exists := idm.groupExists(id); exists {
 		return id, nil
 	}

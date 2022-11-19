@@ -12,19 +12,19 @@ import cloudeng.io/webapp/webassets
 func NewAssets(prefix string, fsys fs.FS, opts ...AssetsOption) fs.FS
 ```
 NewAssets returns an fs.FS that is configured to be optional reloaded from
-the local filesystem or to be served directly from the supplied fs.FS. The
-EnableReloading option is used to enable reloading. Prefix is prepended to
-all names passed to the supplied fs.FS, which is typically obtained via
+the local filesystem or to be served directly from the supplied fs.FS.
+The EnableReloading option is used to enable reloading. Prefix is prepended
+to all names passed to the supplied fs.FS, which is typically obtained via
 go:embed. See RelativeFS for more details.
 
 ### Func RelativeFS
 ```go
 func RelativeFS(prefix string, fs fs.FS) fs.FS
 ```
-RelativeFS wraps the supplied FS so that prefix is prepended to all of the
-paths fetched from it. This is generally useful when working with webservers
-where the FS containing files is created from 'assets/...' but the URL path
-to access them is at the root. So /index.html can be mapped to
+RelativeFS wraps the supplied FS so that prefix is prepended to all of
+the paths fetched from it. This is generally useful when working with
+webservers where the FS containing files is created from 'assets/...' but
+the URL path to access them is at the root. So /index.html can be mapped to
 assets/index.html.
 
 ### Func ServeFile
@@ -75,9 +75,9 @@ EnableLogging enables logging using a built in logging function.
 ```go
 func EnableReloading(location string, after time.Time, loadNew bool) AssetsOption
 ```
-EnableReloading enables reloading of assets from the specified location if
-they have changed since 'after'; loadNew controls whether new files, ie.
-those that exist only in location, are loaded as opposed. See
+EnableReloading enables reloading of assets from the specified location
+if they have changed since 'after'; loadNew controls whether new files,
+ie. those that exist only in location, are loaded as opposed. See
 cloudeng.io/io/reloadfs.
 
 

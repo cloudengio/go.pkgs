@@ -64,8 +64,10 @@ func IsDir(path string) bool {
 // filesystem hierarchy. The arguments must both refer to directories.
 // A trailing slash (/) for the fromDir copies the contents of fromDir rather
 // than fromDir itself. Thus:
-//   CopyAll("a/b", "c") is the same as CopyAll("a/b/", "c/b")
-//   and both create an exact copy of the tree a/b rooted at c/b.
+//
+//	CopyAll("a/b", "c") is the same as CopyAll("a/b/", "c/b")
+//	and both create an exact copy of the tree a/b rooted at c/b.
+//
 // If overwrite is set any existing files will be overwritten. Existing
 // directories will always have their contents updated.
 // It is suitable for very large directory trees since it uses filepath.Walk.

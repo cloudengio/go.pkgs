@@ -77,7 +77,9 @@ type Description struct {
 }
 
 // FormatFields formats the supplied fields as follows:
-//   <prefix><name>:<padding><text>
+//
+//	<prefix><name>:<padding><text>
+//
 // where padding is calculated so as to line up the text. Prefix sets the
 // number of spaces to be prefixed and indent increases the prefix for each
 // sub field.

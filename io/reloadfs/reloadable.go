@@ -212,12 +212,12 @@ func (a Action) String() string {
 // are prepended to obtain the name to be used in the newly returned FS,
 // typically a local file system. For example, given:
 //
-//    //go:embed assets/*.html
-//    var htmlAssets embed.FS
+//	//go:embed assets/*.html
+//	var htmlAssets embed.FS
 //
 // With the reloadable assets in /tmp/overrides, then New should be called as:
 //
-//    New("/tmp/overrides", "assets", htmlAssets)
+//	New("/tmp/overrides", "assets", htmlAssets)
 //
 // Currently files are reloaded when Open'ed, in the future support may be
 // provided to watch for changes and reload (or update metdata) those

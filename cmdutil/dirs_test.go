@@ -7,7 +7,6 @@ package cmdutil_test
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -39,7 +38,7 @@ func list(t *testing.T, root string) ([]string, []string, []string) {
 			shas = append(shas, hex.EncodeToString(s[:]))
 			return err
 		}
-		buf, err := ioutil.ReadFile(path)
+		buf, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -72,7 +71,7 @@ func cmplists(t *testing.T, a, b []string, suffix bool) {
 }
 
 func TestMirrorDirTree(t *testing.T) {
-	td, err := ioutil.TempDir("", "test-mirror")
+	td, err := os.MkdirTemp("", "test-mirror")
 	t.Logf("testdir: %v", td)
 	if err != nil {
 		t.Fatalf("TempDir: %v", err)
@@ -217,7 +216,7 @@ func randContents(t *testing.T, n int) []byte {
 }
 
 func TestCopyFile(t *testing.T) {
-	td, err := ioutil.TempDir("", "test-mirror")
+	td, err := os.MkdirTemp("", "test-mirror")
 	t.Logf("testdir: %v", td)
 	if err != nil {
 		t.Fatalf("TempDir: %v", err)
@@ -230,7 +229,7 @@ func TestCopyFile(t *testing.T) {
 	newFromFile := func(name string) string {
 		buf := randContents(t, 576)
 		tmp := sha1.Sum(buf)
-		if err := ioutil.WriteFile(name, buf, 0677); err != nil {
+		if err := os.WriteFile(name, buf, 0677); err != nil {
 			t.Fatalf("failed to create source file")
 		}
 		return hex.EncodeToString(tmp[:])
