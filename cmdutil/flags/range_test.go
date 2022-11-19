@@ -216,7 +216,9 @@ func TestRangeFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	flagSet.Parse([]string{"--strings=a:b,c:d", "--ints=-3,6-7"})
+	if err := flagSet.Parse([]string{"--strings=a:b,c:d", "--ints=-3,6-7"}); err != nil {
+		t.Fatal(err)
+	}
 	if got, want := rangeFlags.A.String(), "a:b,c:d"; got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}

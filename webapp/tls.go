@@ -15,7 +15,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net"
 	"os"
@@ -245,7 +244,7 @@ func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error) {
 	}
 	rootCAs := x509.NewCertPool()
 	for _, pemFile := range pemFiles {
-		certs, err := ioutil.ReadFile(pemFile)
+		certs, err := os.ReadFile(pemFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", pemFile, err)
 		}

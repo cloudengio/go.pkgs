@@ -245,7 +245,7 @@ func ExampleT_pipeline() {
 	// A pipeline to generate random numbers and measure the  uniformity of
 	// their distribution. The pipeline runs for 1 second.
 	// The use of errgroup.T ensures that on return all of the goroutines
-	// have completed and the chanels used are closed.
+	// have completed and the channels used are closed.
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	g := errgroup.WithCancel(cancel)
@@ -301,7 +301,9 @@ func ExampleT_pipeline() {
 	}
 
 	go func() {
-		g.Wait()
+		if err := g.Wait(); err != nil {
+			panic(err)
+		}
 		close(numCh)
 	}()
 

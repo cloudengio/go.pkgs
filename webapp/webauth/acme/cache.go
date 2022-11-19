@@ -35,7 +35,9 @@ var ErrCacheMiss = autocert.ErrCacheMiss
 // be used instead.
 func NewDirCache(dir string, readonly bool) autocert.Cache {
 	if !readonly {
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			panic(err)
+		}
 	}
 	return &dircache{
 		lock:     lockedfile.MutexAt(filepath.Join(dir, "dir.lock")),

@@ -14,11 +14,10 @@ insert, delete and replace operations.
 func Do(contents []byte, deltas ...Delta) []byte
 ```
 Do applies the supplied deltas to contents as follows:
-
-    1. Deltas are sorted by their start position, then at each position,
-    2. deletions are applied, then
-    3. replacements are applied, then,
-    4. insertions are applied.
+ 1. Deltas are sorted by their start position, then at each position,
+ 2. deletions are applied, then
+ 3. replacements are applied, then,
+ 4. insertions are applied.
 
 Sorting is stable with respect the order specified in the function
 invocation. Multiple deletions and replacements overwrite each other,
@@ -72,8 +71,8 @@ InsertString is like Insert but for a string.
 ```go
 func Replace(pos, size int, data []byte) Delta
 ```
-Replace creates a Delta to replace size bytes starting at pos with text. The
-string may be shorter or longer than size.
+Replace creates a Delta to replace size bytes starting at pos with text.
+The string may be shorter or longer than size.
 
 
 ```go

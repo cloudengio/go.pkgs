@@ -61,8 +61,8 @@ func (lf *linefilter) readlines() {
 		if lf.re.Match(buf) {
 			send(lf.ch, buf)
 		}
-		lf.forward.Write(buf)
-		lf.forward.Write([]byte{'\n'})
+		lf.forward.Write(buf)          //nolint:errcheck
+		lf.forward.Write([]byte{'\n'}) //nolint:errcheck
 	}
 	lf.errCh <- sc.Err()
 }

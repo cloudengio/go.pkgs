@@ -24,8 +24,8 @@ ErrNotSupported = errors.New("operation not supported")
 func IsNotSupported(err error) bool
 ```
 IsNotSupported returns a boolean indicating whether the error is known to
-report that a function is not supported (possibly for a specific input). It
-is satisfied by ErrNotSupported as well as some syscall errors.
+report that a function is not supported (possibly for a specific input).
+It is satisfied by ErrNotSupported as well as some syscall errors.
 
 ### Func Lock
 ```go

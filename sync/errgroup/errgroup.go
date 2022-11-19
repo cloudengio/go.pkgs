@@ -29,7 +29,6 @@ import (
 // behaves like WithContext but allows both the context and cancel function
 // to be supplied which is required for working with context.WithDeadline
 // and context.WithTimeout.
-//
 type T struct {
 	wg         sync.WaitGroup
 	cancelFunc func()

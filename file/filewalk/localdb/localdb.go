@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"expvar"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -116,7 +115,7 @@ type lockFileContents struct {
 }
 
 func readLockerInfo(filename string) (lockFileContents, error) {
-	buf, err := ioutil.ReadFile(filename)
+	buf, err := os.ReadFile(filename)
 	if err != nil {
 		return lockFileContents{}, err
 	}
@@ -139,7 +138,7 @@ func writeLockerInfo(filename string) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filename, buf, 0666)
+	return os.WriteFile(filename, buf, 0666)
 }
 
 func newDB(dir string) *Database {
@@ -152,7 +151,9 @@ func newDB(dir string) *Database {
 		groupStats:         newPerItemStats(groupsListKey),
 	}
 	db.opts.lockRetryDelay = time.Second * 5
-	os.MkdirAll(dir, 0770)
+	if err := os.MkdirAll(dir, 0770); err != nil {
+		panic(err)
+	}
 	db.dbMutex = lockedfile.MutexAt(db.dbLockFilename)
 	return db
 }
@@ -197,7 +198,7 @@ func (db *Database) acquireLock(ctx context.Context, readOnly bool, tryDelay tim
 		case <-ctx.Done():
 			if unlock != nil {
 				db.setUnlockFn(unlock)
-				db.unlock()
+				db.unlock() //nolint:errcheck
 			}
 		}
 	}()
@@ -317,7 +318,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		})
 	}
 	if err := gdb.Wait(); err != nil {
-		db.closeAll(ctx)
+		db.closeAll(ctx) //nolint:errcheck
 		return nil, err
 	}
 	if db.opts.errorsOnly {
@@ -346,7 +347,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		return nil
 	})
 	if err := gstats.Wait(); err != nil {
-		db.closeAll(ctx)
+		db.closeAll(ctx) //nolint:errcheck
 		return nil, err
 	}
 	return db, nil
@@ -364,11 +365,11 @@ func (db *Database) closeAll(ctx context.Context) error {
 	closer(db.errordb)
 	closer(db.userdb)
 	closer(db.groupdb)
-	db.unlock()
+	db.unlock() //nolint:errcheck
 	return errs.Err()
 }
 
-func (db *Database) saveStats() error {
+func (db *Database) saveStats() error { //nolint:unused
 	if db.opts.readOnly {
 		return ErrReadonly
 	}
@@ -396,7 +397,7 @@ func (db *Database) CompactAndClose(ctx context.Context) error {
 		return db.errordb.CompactAndClose()
 	})
 	err := g.Wait()
-	db.unlock()
+	db.unlock() //nolint:errcheck
 	return err
 }
 

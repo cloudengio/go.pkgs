@@ -8,9 +8,9 @@ import cloudeng.io/sync/errgroup
 Package errgroup simplifies common patterns of goroutine use, in particular
 making it straightforward to reliably wait on parallel or pipelined
 goroutines, exiting either when the first error is encountered or waiting
-for all goroutines to finish regardless of error outcome. Contexts are used
-to control cancelation. It is modeled on golang.org/x/sync/errgroup and
-other similar packages. It makes use of cloudeng.io/errors to simplify
+for all goroutines to finish regardless of error outcome. Contexts are
+used to control cancelation. It is modeled on golang.org/x/sync/errgroup
+and other similar packages. It makes use of cloudeng.io/errors to simplify
 collecting multiple errors.
 
 ## Types
@@ -23,13 +23,13 @@ type T struct {
 T represents a set of goroutines working on some common coordinated sets of
 tasks.
 
-T may be instantiated directly, in which case, all go routines will run to
-completion and all errors will be collected and made available vie the
+T may be instantiated directly, in which case, all go routines will run
+to completion and all errors will be collected and made available vie the
 Errors field and the return value of Wait. Alternatively WithContext can be
 used to create Group with an embedded cancel function that will be called
 once either when the first error occurs or when Wait is called. WithCancel
-behaves like WithContext but allows both the context and cancel function to
-be supplied which is required for working with context.WithDeadline and
+behaves like WithContext but allows both the context and cancel function
+to be supplied which is required for working with context.WithDeadline and
 context.WithTimeout.
 
 ### Functions
@@ -45,8 +45,8 @@ on either a first non-nil error being returned or when Wait is called.
 func WithConcurrency(g *T, n int) *T
 ```
 WithConcurrency returns a new Group that will limit the number of goroutines
-to n. Note that the Go method will block when this limit is reached. A value
-of 0 for n implies no limit on the number of goroutines to use.
+to n. Note that the Go method will block when this limit is reached.
+A value of 0 for n implies no limit on the number of goroutines to use.
 
 
 ```go

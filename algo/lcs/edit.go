@@ -34,15 +34,15 @@ const (
 // An EditScript that can be trivially 'replayed' to create the new slice
 // from the original one.
 //
-//  var b []uint8
-//   for _, action := range actions {
-//     switch action.Op {
-//     case Insert:
-//       b = append(b, action.Val.(int64))
-//     case Identical:
-//       b = append(b, a[action.A])
-//     }
-//   }
+//	var b []uint8
+//	 for _, action := range actions {
+//	   switch action.Op {
+//	   case Insert:
+//	     b = append(b, action.Val.(int64))
+//	   case Identical:
+//	     b = append(b, a[action.A])
+//	   }
+//	 }
 type Edit[T comparable] struct {
 	Op   EditOp
 	A, B int
@@ -136,24 +136,24 @@ func verticalFormatFor(a interface{}) string {
 
 // FormatVertical prints a representation of the edit script with one
 // item per line, eg:
-//   -  6864772235558415538
+//   - 6864772235558415538
 //     -8997218578518345818
-//   + -6615550055289275125
+//   - -6615550055289275125
 //   - -7192184552745107772
-//      5717881983045765875
+//     5717881983045765875
 func (es *EditScript[T]) FormatVertical(out io.Writer, a []T) {
 	format := verticalFormatFor(a)
 	for _, op := range *es {
 		switch op.Op {
 		case Identical:
 			f := fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(fmt.Sprintf("  %s\n", f)))
+			_, _ = out.Write([]byte(fmt.Sprintf("  %s\n", f)))
 		case Delete:
 			f := fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(fmt.Sprintf("- %s\n", f)))
+			_, _ = out.Write([]byte(fmt.Sprintf("- %s\n", f)))
 		case Insert:
 			f := fmt.Sprintf(format, op.Val)
-			out.Write([]byte(fmt.Sprintf("+ %s\n", f)))
+			_, _ = out.Write([]byte(fmt.Sprintf("+ %s\n", f)))
 		}
 	}
 }
@@ -171,9 +171,10 @@ func horizontalFormatFor(a interface{}) string {
 // three lines, with the top line showing the result of applying the
 // edit, the middle line the operations applied and the bottom line
 // any items deleted, eg:
-//   CB AB AC
-//  -+|-||-|+
-//  A  C  B
+//
+//	 CB AB AC
+//	-+|-||-|+
+//	A  C  B
 func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T) {
 	format := horizontalFormatFor(a)
 	displaySizes := []int{}
@@ -182,25 +183,25 @@ func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T) {
 		switch op.Op {
 		case Identical:
 			f = fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(f))
+			_, _ = out.Write([]byte(f))
 		case Delete:
 			f = fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(strings.Repeat(" ", len(f))))
+			_, _ = out.Write([]byte(strings.Repeat(" ", len(f))))
 		case Insert:
 			f = fmt.Sprintf(format, op.Val)
-			out.Write([]byte(f))
+			_, _ = out.Write([]byte(f))
 		}
 		displaySizes = append(displaySizes, len(f))
 	}
-	out.Write([]byte{'\n'})
+	_, _ = out.Write([]byte{'\n'})
 
 	pad := func(o string, i int) {
 		totalPadding := displaySizes[i] - len(o)
 		prePad := totalPadding / 2
 		postPad := totalPadding - prePad
-		out.Write([]byte(strings.Repeat(" ", prePad)))
-		out.Write([]byte(o))
-		out.Write([]byte(strings.Repeat(" ", postPad)))
+		_, _ = out.Write([]byte(strings.Repeat(" ", prePad)))
+		_, _ = out.Write([]byte(o))
+		_, _ = out.Write([]byte(strings.Repeat(" ", postPad)))
 	}
 
 	for i, op := range *es {
@@ -213,15 +214,15 @@ func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T) {
 			pad("+", i)
 		}
 	}
-	out.Write([]byte{'\n'})
+	_, _ = out.Write([]byte{'\n'})
 	for i, op := range *es {
 		switch op.Op {
 		case Delete:
 			f := fmt.Sprintf(format, a[op.A])
-			out.Write([]byte(f))
+			_, _ = out.Write([]byte(f))
 		default:
 			pad("", i)
 		}
 	}
-	out.Write([]byte{'\n'})
+	_, _ = out.Write([]byte{'\n'})
 }

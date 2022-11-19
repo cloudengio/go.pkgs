@@ -213,7 +213,9 @@ func BenchmarkGobDecode(b *testing.B) {
 	fillrand(kh, 1000*1000)
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
-	enc.Encode(kh)
+	if err := enc.Encode(kh); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dec := gob.NewDecoder(bytes.NewReader(buf.Bytes()))
@@ -241,7 +243,9 @@ func BenchmarkJSONDecode(b *testing.B) {
 	fillrand(kh, 1000*1000)
 	buf := &bytes.Buffer{}
 	enc := json.NewEncoder(buf)
-	enc.Encode(kh)
+	if err := enc.Encode(kh); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dec := json.NewDecoder(bytes.NewReader(buf.Bytes()))

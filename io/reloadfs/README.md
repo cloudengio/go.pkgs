@@ -17,13 +17,13 @@ assets.
 func New(root, prefix string, embedded fs.FS, opts ...ReloadableOption) fs.FS
 ```
 New returns a new fs.FS that will dynamically reload files that have either
-been changed, or optionally only exist, in the filesystem as compared to the
-embedded files. See ReloadAfter and LoadNewFiles. If ReloadAfter is not
+been changed, or optionally only exist, in the filesystem as compared to
+the embedded files. See ReloadAfter and LoadNewFiles. If ReloadAfter is not
 specified the current time is assumed, that is, files whose modification
 time is after that will be reloaded. For a file to be reloaded either its
 modification time or size have to differ. Comparing sizes can catch cases
-where the file system time granularity is coarse. This leaves the one corner
-case of a file being modified without changing either its size or
+where the file system time granularity is coarse. This leaves the one
+corner case of a file being modified without changing either its size or
 modification time.
 
 The prefix is prepended to the argument supplied to Open to obtain the full

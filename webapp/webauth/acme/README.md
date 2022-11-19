@@ -47,8 +47,8 @@ ErrCacheMiss is the same as autocert.ErrCacheMiss
 func NewDirCache(dir string, readonly bool) autocert.Cache
 ```
 NewDirCache returns an instance of a local filesystem based cache for
-certificates and the acme account key but with file system locking. Set the
-readonly argument for readonly access via the 'Get' method, this will
+certificates and the acme account key but with file system locking. Set
+the readonly argument for readonly access via the 'Get' method, this will
 typically be used to safely extract keys for use by other servers. However,
 ideally, a secure shared services such as Amazon's secrets manager should be
 used instead.
@@ -57,8 +57,8 @@ used instead.
 ```go
 func NewManagerFromFlags(ctx context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error)
 ```
-NewManagerFromFlags creates a new autocert.Manager from the flag values. The
-cache may be not be nil.
+NewManagerFromFlags creates a new autocert.Manager from the flag values.
+The cache may be not be nil.
 
 ### Func NewNullCache
 ```go

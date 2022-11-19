@@ -6,8 +6,8 @@
 // across both local and distributed storage systems. The set of schemes
 // supported can be extended by providing additional implementations of
 // the Matcher function. A cloudpath encodes two types of information:
-//   1. the path name itself which can be used to access the data it names.
-//   2. metadata about the where that filename is hosted.
+//  1. the path name itself which can be used to access the data it names.
+//  2. metadata about the where that filename is hosted.
 //
 // For example, s3://my-bucket/a/b, contains the path '/my-bucket/a/b' as
 // well the indication that this path is hosted on S3. Most cloud storage
@@ -35,27 +35,27 @@ import (
 
 // T represents a cloudpath. Instances of T are created from native storage
 // system paths and/or URLs and are designed to retain the following information.
-//   1. the path was absolute vs relative.
-//   2. the path was a prefix or a filepath.
-//   3. a path of zero length is represented as a nil slice and not an empty slice.
+//  1. the path was absolute vs relative.
+//  2. the path was a prefix or a filepath.
+//  3. a path of zero length is represented as a nil slice and not an empty slice.
 //
 // Redundant information is discarded:
-//   1. multiple consecutive instances of separator are treated as a single separator.
+//  1. multiple consecutive instances of separator are treated as a single separator.
 //
 // The resulting format is as follows:
-//   1. a relative path, ie. one that does not start with a separator has an
-//      empty string as the first item in the slice
-//   2. a path that ends with a separator has an empty string as the final component
-//      of the path
+//  1. a relative path, ie. one that does not start with a separator has an
+//     empty string as the first item in the slice
+//  2. a path that ends with a separator has an empty string as the final component
+//     of the path
 //
 // For example:
 //
-//   ""         => []                 // empty
-//   "/"        => ["", ""]           // absolute, prefix, IsRoot is true
-//   "/abc"     => ["", "abc"]        // absolute, filepath
-//   "abc"      => ["abc"]            // relative, filepath
-//   "/abc/"    => ["", "abc", ""]    // absolute, prefix, IsRoot is false
-//   "abc/"     => ["abc", ""]        // relative, prefix
+//	""         => []                 // empty
+//	"/"        => ["", ""]           // absolute, prefix, IsRoot is true
+//	"/abc"     => ["", "abc"]        // absolute, filepath
+//	"abc"      => ["abc"]            // relative, filepath
+//	"/abc/"    => ["", "abc", ""]    // absolute, prefix, IsRoot is false
+//	"abc/"     => ["abc", ""]        // relative, prefix
 //
 // T is defined as a type rather than using []string directly to avoid clients
 // of this package misinterpreting the above rules and incorrectly manipulating
@@ -108,7 +108,8 @@ func SplitPath(path string) T {
 // Join creates a string path from the supplied components. It follows
 // the rules specified for Join. It is the inverse of Split, that is,
 // newPath == origPath for:
-//   newPath = Join(sep, Split(origPath,sep)...)
+//
+//	newPath = Join(sep, Split(origPath,sep)...)
 func (path T) Join(separator rune) string {
 	sep := string(separator)
 	switch len(path) {

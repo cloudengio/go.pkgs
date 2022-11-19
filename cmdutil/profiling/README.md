@@ -16,13 +16,11 @@ func Start(name, filename string) (func() error, error)
 Start enables the named profile and returns a function that can be used to
 save its contents to the specified file. Typical usage is as follows:
 
-save, err := profiling.Start("cpu", "cpu.out")
-
+    save, err := profiling.Start("cpu", "cpu.out")
     if err != nil {
        panic(err)
     }
-
-defer save()
+    defer save()
 
 For a heap profile simply use Start("heap", "heap.out"). Note that the
 returned save function cannot be used more than once and that Start must be

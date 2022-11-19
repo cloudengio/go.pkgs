@@ -66,8 +66,8 @@ func Edit(name string) (*File, error)
 Edit creates the named file with mode 0666 (before umask), but does not
 truncate existing contents.
 
-If Edit succeeds, methods on the returned File can be used for I/O. The
-associated file descriptor has mode O_RDWR and the file is write-locked.
+If Edit succeeds, methods on the returned File can be used for I/O.
+The associated file descriptor has mode O_RDWR and the file is write-locked.
 
 
 ```go
@@ -105,13 +105,13 @@ type Mutex struct {
 	// contains filtered or unexported fields
 }
 ```
-A Mutex provides mutual exclusion within and across processes by locking a
-well-known file. Such a file generally guards some other part of the
+A Mutex provides mutual exclusion within and across processes by locking
+a well-known file. Such a file generally guards some other part of the
 filesystem: for example, a Mutex file in a directory might guard access to
 the entire tree rooted in that directory.
 
-Mutex does not implement sync.Locker: unlike a sync.Mutex, a
-lockedfile.Mutex can fail to lock (e.g. if there is a permission error in
+Mutex does not implement sync.Locker: unlike a sync.Mutex,
+a lockedfile.Mutex can fail to lock (e.g. if there is a permission error in
 the filesystem).
 
 Like a sync.Mutex, a Mutex may be included as a field of a larger struct but

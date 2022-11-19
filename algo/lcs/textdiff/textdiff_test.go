@@ -6,7 +6,6 @@ package textdiff_test
 
 import (
 	"bufio"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,11 +105,11 @@ var (
 
 func TestTextDiff(t *testing.T) {
 	f1, f2 := filepath.Join("testdata", "textdiff.go.a"), filepath.Join("testdata", "textdiff.go.b")
-	a, err := ioutil.ReadFile(f1)
+	a, err := os.ReadFile(f1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := ioutil.ReadFile(f2)
+	b, err := os.ReadFile(f2)
 	if err != nil {
 		t.Fatal(err)
 	}

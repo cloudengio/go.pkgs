@@ -9,53 +9,25 @@ Package lcs provides implementations of algorithms to find the longest
 common subsequence/shortest edit script (LCS/SES) between two slices
 suitable for use with unicode/utf8 and other alphabets.
 
-## Functions
-### Func FormatHorizontal
-```go
-func FormatHorizontal(out io.Writer, a interface{}, script EditScript)
-```
-FormatVertical prints a representation of the edit script across three
-lines, with the top line showing the result of applying the edit, the middle
-line the operations applied and the bottom line any items deleted, eg:
-
-     CB AB AC
-    -+|-||-|+
-    A  C  B
-
-### Func FormatVertical
-```go
-func FormatVertical(out io.Writer, a interface{}, script EditScript)
-```
-FormatVertical prints a representation of the edit script with one item per
-line, eg:
-
-    -  6864772235558415538
-      -8997218578518345818
-    + -6615550055289275125
-    - -7192184552745107772
-       5717881983045765875
-
-
-
 ## Types
 ### Type DP
 ```go
-type DP struct {
+type DP[T comparable] struct {
 	// contains filtered or unexported fields
 }
 ```
-DP represents a dynamic programming based implementation for finding the
-longest common subsequence and shortest edit script (LCS/SES) for
-transforming A to B. See
-https://en.wikipedia.org/wiki/Longest_common_subsequence_problem. This
-implementation can return all LCS and SES rather than just the first one
-found. If a single LCS or SES is sufficient then the Myer's algorithm
+DP represents a dynamic programming based implementation
+for finding the longest common subsequence and shortest
+edit script (LCS/SES) for transforming A to B. See
+https://en.wikipedia.org/wiki/Longest_common_subsequence_problem.
+This implementation can return all LCS and SES rather than just the first
+one found. If a single LCS or SES is sufficient then the Myer's algorithm
 implementation is lilkey a better choice.
 
 ### Functions
 
 ```go
-func NewDP(a, b interface{}) *DP
+func NewDP[T comparable](a, b []T) *DP[T]
 ```
 NewDP creates a new instance of DP. The implementation supports slices of
 bytes/uint8, rune/int32 and int64s.
@@ -65,19 +37,24 @@ bytes/uint8, rune/int32 and int64s.
 ### Methods
 
 ```go
-func (dp *DP) AllLCS() interface{}
+func (dp *DP[T]) AllLCS() [][]T
 ```
 AllLCS returns all of the the longest common subsquences.
 
 
 ```go
-func (dp *DP) LCS() interface{}
+func (dp *DP[T]) Fprint(out io.Writer)
+```
+
+
+```go
+func (dp *DP[T]) LCS() []T
 ```
 LCS returns the longest common subsquence.
 
 
 ```go
-func (dp *DP) SES() EditScript
+func (dp *DP[T]) SES() *EditScript[T]
 ```
 SES returns the shortest edit script.
 
@@ -86,10 +63,10 @@ SES returns the shortest edit script.
 
 ### Type Edit
 ```go
-type Edit struct {
+type Edit[T comparable] struct {
 	Op   EditOp
 	A, B int
-	Val  interface{}
+	Val  T
 }
 ```
 Edit represents a single edit. For deletions, an edit specifies the index in
@@ -136,31 +113,50 @@ Values for EditOP.
 
 ### Type EditScript
 ```go
-type EditScript []Edit
+type EditScript[T comparable] []Edit[T]
 ```
 EditScript represents a series of Edits.
 
-### Functions
+### Methods
 
 ```go
-func Reverse(es EditScript) EditScript
+func (es *EditScript[T]) Apply(a []T) []T
+```
+Apply transforms the original slice to the new slice by applying the SES.
+
+
+```go
+func (es *EditScript[T]) FormatHorizontal(out io.Writer, a []T)
+```
+FormatVertical prints a representation of the edit script across three
+lines, with the top line showing the result of applying the edit, the middle
+line the operations applied and the bottom line any items deleted, eg:
+
+     CB AB AC
+    -+|-||-|+
+    A  C  B
+
+
+```go
+func (es *EditScript[T]) FormatVertical(out io.Writer, a []T)
+```
+FormatVertical prints a representation of the edit script with one item per
+line, eg:
+  - 6864772235558415538 -8997218578518345818
+  - -6615550055289275125
+  - -7192184552745107772 5717881983045765875
+
+
+```go
+func (es *EditScript[T]) Reverse() *EditScript[T]
 ```
 Reverse returns a new edit script that is the inverse of the one supplied.
 That is, of the original script would transform A to B, then the results of
 this function will transform B to A.
 
 
-
-### Methods
-
 ```go
-func (es EditScript) Apply(a interface{}) interface{}
-```
-Apply transforms the original slice to the new slice by applying the SES.
-
-
-```go
-func (es EditScript) String() string
+func (es *EditScript[T]) String() string
 ```
 String implements stringer.
 
@@ -169,18 +165,18 @@ String implements stringer.
 
 ### Type Myers
 ```go
-type Myers struct {
+type Myers[T comparable] struct {
 	// contains filtered or unexported fields
 }
 ```
-Myers represents an implementation of Myer's longest common subsequence and
-shortest edit script algorithm as as documented in: An O(ND) Difference
+Myers represents an implementation of Myer's longest common subsequence
+and shortest edit script algorithm as as documented in: An O(ND) Difference
 Algorithm and Its Variations, 1986.
 
 ### Functions
 
 ```go
-func NewMyers(a, b interface{}) *Myers
+func NewMyers[T comparable](a, b []T) *Myers[T]
 ```
 NewMyers returns a new instance of Myers. The implementation supports slices
 of bytes/uint8, rune/int32 and int64s.
@@ -190,13 +186,13 @@ of bytes/uint8, rune/int32 and int64s.
 ### Methods
 
 ```go
-func (m *Myers) LCS() interface{}
+func (m *Myers[T]) LCS() []T
 ```
 LCS returns the longest common subsquence.
 
 
 ```go
-func (m *Myers) SES() EditScript
+func (m *Myers[T]) SES() *EditScript[T]
 ```
 SES returns the shortest edit script.
 

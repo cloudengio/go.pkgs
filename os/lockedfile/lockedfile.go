@@ -10,9 +10,10 @@ package lockedfile
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"runtime"
+
+	"cloudeng.io/errors"
 )
 
 // A File is a locked *os.File.
@@ -104,7 +105,7 @@ func Read(name string) ([]byte, error) {
 	}
 	defer f.Close()
 
-	return ioutil.ReadAll(f)
+	return io.ReadAll(f)
 }
 
 // Write opens the named file (creating it with the given permissions if needed),
@@ -136,7 +137,7 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 	}
 	defer f.Close()
 
-	old, err := ioutil.ReadAll(f)
+	old, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}
@@ -152,7 +153,9 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 		// failure before we have overwritten the original contents.
 		if _, err := f.WriteAt(new[len(old):], int64(len(old))); err != nil {
 			// Make a best effort to remove the incomplete tail.
-			f.Truncate(int64(len(old)))
+			if nerr := f.Truncate(int64(len(old))); nerr != nil {
+				return errors.NewM(err, nerr)
+			}
 			return err
 		}
 	}
@@ -162,7 +165,7 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 	defer func() {
 		if err != nil {
 			if _, err := f.WriteAt(old, 0); err == nil {
-				f.Truncate(int64(len(old)))
+				_ = f.Truncate(int64(len(old)))
 			}
 		}
 	}()
