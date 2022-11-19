@@ -302,6 +302,61 @@ requested RunnerFunc.
 
 
 
+### Type CommandSetYAML
+```go
+type CommandSetYAML struct {
+	*CommandSet
+	// contains filtered or unexported fields
+}
+```
+
+### Functions
+
+```go
+func FromYAML(spec []byte) (*CommandSetYAML, error)
+```
+FromYAML parses a YAML specification of the command tree.
+
+
+```go
+func MustFromYAML(spec string) *CommandSetYAML
+```
+MustFromYAML is like FromYAML but will panic if the YAML spec is incorrectly
+defined.
+
+
+
+### Methods
+
+```go
+func (c *CommandSetYAML) Set(names ...string) *CurrentCommand
+```
+Set looks up the command specified by names. Each sub-command in a
+multi-level command should be specified separately. The returned
+CurrentCommand should be used to set the Runner and FlagSet to associate
+with that command.
+
+
+
+
+### Type CurrentCommand
+```go
+type CurrentCommand struct {
+	// contains filtered or unexported fields
+}
+```
+
+### Methods
+
+```go
+func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error
+```
+RunnerAndFlags specifies the Runner and FlagSet for the currently 'set'
+command as returned by CommandSetYAML.Set.
+
+
+
+
 ### Type FlagSet
 ```go
 type FlagSet struct {
@@ -396,6 +451,10 @@ Runner is the type of the function to be called to run a particular command.
 
 ## Examples
 ### [ExampleCommandSet](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSet)
+
+### [ExampleCommandSetYAML_multiple](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSetYAML_multiple)
+
+### [ExampleCommandSetYAML_toplevel](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSetYAML_toplevel)
 
 
 
