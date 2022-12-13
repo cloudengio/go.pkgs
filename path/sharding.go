@@ -7,7 +7,6 @@ package path
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"fmt"
 )
 
 // Sharder is the interface for assigning and managing pathnames to shards.
@@ -47,9 +46,11 @@ type sha1Sharder struct {
 	prefix int
 }
 
+// Assign assigns the supplied path to a shard and returns the
+// name (prefix) and filename (suffix) to be used for storing/accessing
+// the file.
 func (s *sha1Sharder) Assign(p string) (prefix, suffix string) {
 	sum := sha1.Sum([]byte(p))
 	hexsum := hex.EncodeToString(sum[:])
-	fmt.Printf(">>> %v\n", hexsum)
 	return hexsum[:s.prefix], hexsum[s.prefix:]
 }
