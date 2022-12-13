@@ -25,7 +25,9 @@ func RedirectToHTTPSHandlerFunc(tlsPort string, acmeRedirectHost *url.URL) http.
 		tlsPort = "443"
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("http %v: %v: %v", r.Host, r.URL.Path, acmeRedirectHost != nil)
+		escaped := strings.Replace(r.URL.Path, "\n", "", -1)
+		escaped = strings.Replace(escaped, "\r", "", -1)
+		log.Printf("http %v: %v: %v", r.Host, escaped, acmeRedirectHost != nil)
 		if acmeRedirectHost != nil && strings.HasPrefix(r.URL.Path, "/.well-known/acme-challenge/") {
 			nrl := url.URL{
 				Scheme: "http",
