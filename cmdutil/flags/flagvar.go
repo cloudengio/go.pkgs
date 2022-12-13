@@ -176,7 +176,11 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 		value = tmp
 	case "uint":
 		utmp, err = strconv.ParseUint(literal, 10, 64)
-		value = uint(utmp)
+		if utmp > math.MaxUint {
+			value = utmp
+		} else {
+			value = uint(utmp)
+		}
 	case "uint64":
 		utmp, err = strconv.ParseUint(literal, 10, 64)
 		value = utmp
