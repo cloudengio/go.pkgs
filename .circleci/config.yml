@@ -5,6 +5,7 @@ orbs:
 
 jobs:
   test-linux:
+    parallism: 4
     parameters:
       go:
         type: string
@@ -19,6 +20,7 @@ jobs:
             go run .circleci/runner.go --prep --test
 
   test-windows:
+    parallism: 4
     parameters:
       go:
         type: string
@@ -42,6 +44,7 @@ jobs:
             go run .circleci\runner.go --prep --test
 
   lint:
+    parallism: 4
     parameters:
       go:
         type: string
@@ -64,6 +67,7 @@ jobs:
             done
 
   vulnerabilities:
+    parallism: 4
     resource_class: large
     parameters:
       go:
@@ -83,7 +87,7 @@ jobs:
             done
 
 workflows:
-  build-test-lint:
+  build-test-lint-vuln:
     jobs:
       - test-linux:
           matrix:
