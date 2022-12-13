@@ -76,7 +76,11 @@ jobs:
           name: vulnerabilities
           command: |
             go install golang.org/x/vuln/cmd/govulncheck@latest
-            govulncheck ./...
+            for pkg in $(go run .circleci/runner --modules); do \
+              cd $$pkg; \
+              govulncheck ./...; \
+              cd ..; \
+            done
 
 workflows:
   build-test-lint:
