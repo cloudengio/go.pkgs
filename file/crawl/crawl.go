@@ -10,36 +10,62 @@ import (
 	"io/fs"
 )
 
-// Item represents a item to be crawled.
-type Item struct {
+// Request represents a request for an item to be fetched.
+type Request struct {
 	Container fs.FS
 	Name      string
 }
 
-// Crawled represents a item that has been crawled.
-type Crawled struct {
-	Item
+// Downloaded represents a item that has been Downloaded.
+type Downloaded struct {
+	Request
 	Retries int
 	Err     error
 }
 
 // Progress is used to communicate the progress of a crawl run.
 type Progress struct {
-	Crawled     int64
+	Downloaded  int64
 	Outstanding int64
 }
 
 // Creator provides a means of creating a new file.
 type Creator interface {
-	New(name string) (io.WriteCloser, Item, error)
+	New(name string) (io.WriteCloser, Request, error)
 }
 
-// T represents the interface to a generic crawler.
-type T interface {
-	// Run initiates a crawl run.
+// Downloader represents the interface to a downloader that is used
+// to download content.
+type Downloader interface {
+	// Run initiates a fetch run.
 	Run(ctx context.Context,
 		creator Creator,
 		progress chan<- Progress,
-		input <-chan []Item,
-		output chan<- []Crawled) error
+		input <-chan []Request,
+		output chan<- []Downloaded) error
 }
+
+// Extractor represents the interface to a link extractor, that is,
+// an entity which determines additional items to download based on
+// already downloaded ones.
+type Extractor interface {
+	Run(ctx context.Context,
+		input <-chan []Downloaded,
+		output chan<- []Request) error
+}
+
+/*
+type T struct {
+}
+
+func NewCrawler(fetcher Fetcher, extractor Links) (*T, error) {
+	return &T{}, nil
+}
+
+func (c *T) Run(ctx context.Context,
+	creator Creator,
+	progress chan<- Progress,
+	input <-chan []Request,
+	output chan<- []Downloaded) {
+}
+*/

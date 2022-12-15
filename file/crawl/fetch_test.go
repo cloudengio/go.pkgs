@@ -53,11 +53,11 @@ func (c *collector) Open(name string) (fs.File, error) {
 	return filetestutil.NewFile(rdc, fi), nil
 }
 
-func (c *collector) New(name string) (io.WriteCloser, crawl.Item, error) {
-	return &contents{collector: c, name: name}, crawl.Item{c, name}, nil
+func (c *collector) New(name string) (io.WriteCloser, crawl.Request, error) {
+	return &contents{collector: c, name: name}, crawl.Request{c, name}, nil
 }
 
-func runCrawler(ctx context.Context, crawler crawl.T, writer crawl.Creator, reader fs.FS, progress chan crawl.Progress, input chan []crawl.Item, output chan []crawl.Crawled) ([]crawl.Crawled, error) {
+func runCrawler(ctx context.Context, crawler crawl.Fetcher, writer crawl.Creator, reader fs.FS, progress chan crawl.Progress, input chan []crawl.Request, output chan []crawl.Downloaded) ([]crawl.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -73,7 +73,7 @@ func runCrawler(ctx context.Context, crawler crawl.T, writer crawl.Creator, read
 		wg.Done()
 	}()
 
-	crawled := []crawl.Crawled{}
+	crawled := []crawl.Downloaded{}
 	for outs := range output {
 		crawled = append(crawled, outs...)
 	}
@@ -82,10 +82,10 @@ func runCrawler(ctx context.Context, crawler crawl.T, writer crawl.Creator, read
 	return crawled, err
 }
 
-func crawlItems(ctx context.Context, nItems int, input chan<- []crawl.Item, reader fs.FS) {
+func crawlItems(ctx context.Context, nItems int, input chan<- []crawl.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- []crawl.Item{{reader, fmt.Sprintf("%v", i)}}:
+		case input <- []crawl.Request{{reader, fmt.Sprintf("%v", i)}}:
 		case <-ctx.Done():
 			break
 		}
@@ -93,7 +93,7 @@ func crawlItems(ctx context.Context, nItems int, input chan<- []crawl.Item, read
 	close(input)
 }
 
-func sha1Sums(t *testing.T, crawled []crawl.Crawled) map[string]string {
+func sha1Sums(t *testing.T, crawled []crawl.Downloaded) map[string]string {
 	_, _, line, _ := runtime.Caller(1)
 	s := map[string]string{}
 	for _, c := range crawled {
@@ -110,7 +110,7 @@ func sha1Sums(t *testing.T, crawled []crawl.Crawled) map[string]string {
 	}
 	return s
 }
-func checkForCrawlErrors(t *testing.T, crawled []crawl.Crawled) {
+func checkForCrawlErrors(t *testing.T, crawled []crawl.Downloaded) {
 	_, _, line, _ := runtime.Caller(1)
 	for k, v := range crawled {
 		if v.Err != nil {
@@ -142,11 +142,11 @@ func TestCrawl(t *testing.T) {
 
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Item, 10)
-	output := make(chan []crawl.Crawled, 10)
+	input := make(chan []crawl.Request, 10)
+	output := make(chan []crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
-	crawler := crawl.NewGeneric()
+	crawler := crawl.NewFetcher()
 
 	crawled, err := runCrawler(ctx, crawler, writeFS, readFS, nil, input, output)
 	if err != nil {
@@ -165,11 +165,11 @@ func TestCancel(t *testing.T) {
 	src := rand.NewSource(time.Now().UnixMicro())
 
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Item, 10)
-	output := make(chan []crawl.Crawled, 10)
+	input := make(chan []crawl.Request, 10)
+	output := make(chan []crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
-	crawler := crawl.NewGeneric(crawl.WithRequestsPerMinute(60))
+	crawler := crawl.NewFetcher(crawl.WithRequestsPerMinute(60))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
@@ -194,11 +194,11 @@ func TestRetries(t *testing.T) {
 	numRetries := 2
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContentsAfterRetry(src, 8192, numRetries, &retryError{}))
-	input := make(chan []crawl.Item, 10)
-	output := make(chan []crawl.Crawled, 10)
+	input := make(chan []crawl.Request, 10)
+	output := make(chan []crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
-	crawler := crawl.NewGeneric(crawl.WithBackoffParameters(&retryError{},
+	crawler := crawl.NewFetcher(crawl.WithBackoffParameters(&retryError{},
 		time.Microsecond, 10))
 
 	crawled, err := runCrawler(ctx, crawler, writeFS, readFS, nil, input, output)
@@ -223,11 +223,11 @@ func TestProgress(t *testing.T) {
 	progressCh := make(chan crawl.Progress, 1)
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Item, 10)
-	output := make(chan []crawl.Crawled, 10)
+	input := make(chan []crawl.Request, 10)
+	output := make(chan []crawl.Downloaded, 10)
 	errCh := make(chan error, 1)
 	writeFS := &collector{files: map[string][]byte{}}
-	crawler := crawl.NewGeneric(crawl.WithProgress(time.Millisecond, progressCh))
+	crawler := crawl.NewFetcher(crawl.WithProgress(time.Millisecond, progressCh))
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
@@ -251,10 +251,10 @@ func TestProgress(t *testing.T) {
 	lastCrawled := 0
 	nUpdates := 0
 	for update := range progressCh {
-		lastCrawled = int(update.Crawled)
+		lastCrawled = int(update.Downloaded)
 		nUpdates++
 	}
-	if got, want := lastCrawled, nItems-20; got < want {
+	if got, want := lastCrawled, nItems-100; got < want {
 		t.Errorf("got %v, want >= %v\n", got, want)
 	}
 	if got, want := nUpdates, 10; got < want {
