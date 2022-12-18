@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -53,18 +54,18 @@ func (c *collector) Open(name string) (fs.File, error) {
 	return filetestutil.NewFile(rdc, fi), nil
 }
 
-func (c *collector) New(name string) (io.WriteCloser, crawl.Request, error) {
-	return &contents{collector: c, name: name}, crawl.Request{c, name}, nil
+func (c *collector) New(name string) (io.WriteCloser, crawl.Object, error) {
+	return &contents{collector: c, name: name}, crawl.Object{c, name}, nil
 }
 
-func runCrawler(ctx context.Context, crawler crawl.Fetcher, writer crawl.Creator, reader fs.FS, progress chan crawl.Progress, input chan []crawl.Request, output chan []crawl.Downloaded) ([]crawl.Downloaded, error) {
+func runDownloader(ctx context.Context, crawler crawl.Downloader, writer crawl.Creator, reader fs.FS, input chan []crawl.Request, output chan []crawl.Downloaded) ([]crawl.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
-		errCh <- crawler.Run(ctx, writer, progress, input, output)
+		errCh <- crawler.Run(ctx, writer, input, output)
 		wg.Done()
 	}()
 
@@ -85,7 +86,7 @@ func runCrawler(ctx context.Context, crawler crawl.Fetcher, writer crawl.Creator
 func crawlItems(ctx context.Context, nItems int, input chan<- []crawl.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- []crawl.Request{{reader, fmt.Sprintf("%v", i)}}:
+		case input <- []crawl.Request{{Object: crawl.Object{reader, fmt.Sprintf("%v", i)}}}:
 		case <-ctx.Done():
 			break
 		}
@@ -137,7 +138,7 @@ func validSHA1Sums(t *testing.T, crawled map[string]string, contents map[string]
 	}
 }
 
-func TestCrawl(t *testing.T) {
+func TestDownload(t *testing.T) {
 	ctx := context.Background()
 
 	src := rand.NewSource(time.Now().UnixMicro())
@@ -146,19 +147,19 @@ func TestCrawl(t *testing.T) {
 	output := make(chan []crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
-	crawler := crawl.NewFetcher()
+	downloader := crawl.NewDownloader()
 
-	crawled, err := runCrawler(ctx, crawler, writeFS, readFS, nil, input, output)
+	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	checkForCrawlErrors(t, crawled)
+	checkForCrawlErrors(t, downloaded)
 	contents := filetestutil.Contents(readFS)
-	validSHA1Sums(t, sha1Sums(t, crawled), contents)
+	validSHA1Sums(t, sha1Sums(t, downloaded), contents)
 }
 
-func TestCancel(t *testing.T) {
+func TestDownloadCancel(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -169,13 +170,13 @@ func TestCancel(t *testing.T) {
 	output := make(chan []crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
-	crawler := crawl.NewFetcher(crawl.WithRequestsPerMinute(60))
+	downloader := crawl.NewDownloader(crawl.WithRequestsPerMinute(60))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 	}()
-	_, err := runCrawler(ctx, crawler, writeFS, readFS, nil, input, output)
+	_, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
 
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("missing or unexpected error: %v", err)
@@ -188,7 +189,7 @@ func (e *retryError) Error() string {
 	return "retry"
 }
 
-func TestRetries(t *testing.T) {
+func TestDownloadRetries(t *testing.T) {
 	ctx := context.Background()
 
 	numRetries := 2
@@ -198,42 +199,42 @@ func TestRetries(t *testing.T) {
 	output := make(chan []crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
-	crawler := crawl.NewFetcher(crawl.WithBackoffParameters(&retryError{},
-		time.Microsecond, 10))
+	downloader := crawl.NewDownloader(
+		crawl.WithBackoffParameters(&retryError{}, time.Microsecond, 10))
 
-	crawled, err := runCrawler(ctx, crawler, writeFS, readFS, nil, input, output)
+	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	checkForCrawlErrors(t, crawled)
+	checkForCrawlErrors(t, downloaded)
 	contents := filetestutil.Contents(readFS)
-	validSHA1Sums(t, sha1Sums(t, crawled), contents)
+	validSHA1Sums(t, sha1Sums(t, downloaded), contents)
 
-	for _, c := range crawled {
+	for _, c := range downloaded {
 		if got, want := c.Retries, numRetries; got != want {
 			t.Fatalf("%v: got %v, want %v", c.Name, got, want)
 		}
 	}
 }
 
-func TestProgress(t *testing.T) {
+func TestDownloadProgress(t *testing.T) {
 	ctx := context.Background()
 
-	progressCh := make(chan crawl.Progress, 1)
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan []crawl.Request, 10)
 	output := make(chan []crawl.Downloaded, 10)
 	errCh := make(chan error, 1)
 	writeFS := &collector{files: map[string][]byte{}}
-	crawler := crawl.NewFetcher(crawl.WithProgress(time.Millisecond, progressCh))
+	progressCh := make(chan crawl.DownloadProgress, 1)
+	downloader := crawl.NewDownloader(crawl.WithDownloadProgress(time.Millisecond, progressCh))
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
-		errCh <- crawler.Run(ctx, writeFS, progressCh, input, output)
+		errCh <- downloader.Run(ctx, writeFS, input, output)
 		wg.Done()
 	}()
 
@@ -263,5 +264,29 @@ func TestProgress(t *testing.T) {
 	wg.Wait()
 	if err := <-errCh; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDownloadErrors(t *testing.T) {
+	ctx := context.Background()
+
+	errFailed := errors.New("failed")
+	readFS := filetestutil.NewMockFS(filetestutil.FSErrorOnly(errFailed))
+	input := make(chan []crawl.Request, 10)
+	output := make(chan []crawl.Downloaded, 10)
+	writeFS := &collector{files: map[string][]byte{}}
+
+	downloader := crawl.NewDownloader(crawl.WithBackoffParameters(&retryError{},
+		time.Microsecond, 10))
+
+	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dl := range downloaded {
+		if !errors.Is(dl.Err, errFailed) {
+			t.Fatalf("unexpected error: %v", dl.Err)
+		}
 	}
 }

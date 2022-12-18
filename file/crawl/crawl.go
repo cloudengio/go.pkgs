@@ -10,28 +10,38 @@ import (
 	"io/fs"
 )
 
-// Request represents a request for an item to be fetched.
-type Request struct {
+// Change Object -> Objects
+// Container + slice of names.
+type Object struct {
 	Container fs.FS
 	Name      string
 }
 
+// Request represents a request for an item to be fetched.
+type Request struct {
+	Object
+}
+
 // Downloaded represents a item that has been Downloaded.
 type Downloaded struct {
-	Request
+	Object
+	Request Object
 	Retries int
 	Err     error
 }
 
-// Progress is used to communicate the progress of a crawl run.
-type Progress struct {
-	Downloaded  int64
+// DownloadProgress is used to communicate the progress of a download run.
+type DownloadProgress struct {
+	// Downloaded is the total number of items downloaded so far.
+	Downloaded int64
+	// Outstanding is the current size of the input channel for items to
+	// be downloaded.
 	Outstanding int64
 }
 
 // Creator provides a means of creating a new file.
 type Creator interface {
-	New(name string) (io.WriteCloser, Request, error)
+	New(name string) (io.WriteCloser, Object, error)
 }
 
 // Downloader represents the interface to a downloader that is used
@@ -40,32 +50,26 @@ type Downloader interface {
 	// Run initiates a fetch run.
 	Run(ctx context.Context,
 		creator Creator,
-		progress chan<- Progress,
 		input <-chan []Request,
 		output chan<- []Downloaded) error
 }
 
-// Extractor represents the interface to a link extractor, that is,
-// an entity which determines additional items to download based on
-// already downloaded ones.
-type Extractor interface {
+// Outlinks represents the interface to an 'outlink' extractor, that is, an
+// entity that determines additional items to be downloaded based on the
+// contents of an already downloaded one. Generally these will references
+// to external documents/files.
+type Outlinks interface {
+	Extract(ctx context.Context, item []Downloaded) []Request
+}
+
+// T represents the interface to a crawler. The crawler will download
+// the requested items and in addition, determine further items to be crawled,
+// based on their contents, using the supplied link extractor.
+type T interface {
 	Run(ctx context.Context,
-		input <-chan []Downloaded,
-		output chan<- []Request) error
+		extractor Outlinks,
+		downloader Downloader,
+		creator Creator,
+		input <-chan []Request,
+		output chan<- []Downloaded) error
 }
-
-/*
-type T struct {
-}
-
-func NewCrawler(fetcher Fetcher, extractor Links) (*T, error) {
-	return &T{}, nil
-}
-
-func (c *T) Run(ctx context.Context,
-	creator Creator,
-	progress chan<- Progress,
-	input <-chan []Request,
-	output chan<- []Downloaded) {
-}
-*/

@@ -32,6 +32,7 @@ type fsOptions struct {
 	random     bool
 	numRetries int
 	retryErr   error
+	returnErr  error
 }
 
 func FSWithRandomContents(src rand.Source, maxSize int) FSOption {
@@ -51,6 +52,12 @@ func FSWithRandomContentsAfterRetry(src rand.Source, maxSize, numRetries int, er
 	}
 }
 
+func FSErrorOnly(err error) FSOption {
+	return func(o *fsOptions) {
+		o.returnErr = err
+	}
+}
+
 func NewMockFS(opts ...FSOption) fs.FS {
 	var options fsOptions
 	for _, opt := range opts {
@@ -64,6 +71,9 @@ func NewMockFS(opts ...FSOption) fs.FS {
 			randFS:  randFS{fsOptions: options, contents: map[string][]byte{}},
 			retries: map[string]int{},
 		}
+	}
+	if err := options.returnErr; err != nil {
+		return &errorFs{err: err}
 	}
 	return nil
 }
@@ -112,4 +122,12 @@ func (mfs *randAfteRetryFS) Open(name string) (fs.File, error) {
 	}
 	mfs.Unlock()
 	return mfs.randFS.Open(name)
+}
+
+type errorFs struct {
+	err error
+}
+
+func (mfs *errorFs) Open(name string) (fs.File, error) {
+	return nil, mfs.err
 }
