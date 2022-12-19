@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"runtime"
 	"strings"
 	"sync"
@@ -17,6 +18,15 @@ import (
 
 	"cloudeng.io/sync/errgroup"
 )
+
+// DownloadProgress is used to communicate the progress of a download run.
+type DownloadProgress struct {
+	// Downloaded is the total number of items downloaded so far.
+	Downloaded int64
+	// Outstanding is the current size of the input channel for items to
+	// be downloaded.
+	Outstanding int64
+}
 
 type loggerOpts struct {
 	logEnabled bool
@@ -109,8 +119,8 @@ func NewDownloader(opts ...DownloaderOption) Downloader {
 
 func (dl *downloader) Run(ctx context.Context,
 	creator Creator,
-	input <-chan []Request,
-	output chan<- []Downloaded) error {
+	input <-chan Request,
+	output chan<- Downloaded) error {
 	dl.log(0, "Run starting: concurrency: %v", dl.concurrency)
 
 	var grp errgroup.T
@@ -155,95 +165,102 @@ func (dl *downloader) updateProgess(downloaded, outstanding int) {
 }
 
 func (dl *downloader) runner(ctx context.Context, id int, creator Creator, progress chan<- DownloadProgress,
-	input <-chan []Request,
-	output chan<- []Downloaded) error {
+	input <-chan Request,
+	output chan<- Downloaded) error {
 
 	for {
-		var items []Request
+		var request Request
 		var ok bool
 		dl.log(1, "id: %v: waiting for input", id)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case items, ok = <-input:
+		case request, ok = <-input:
 			if !ok {
 				return nil
 			}
 		}
-		dl.log(1, "id: %v: downloading: #%v objects", id, len(items))
-		fetched, err := dl.fetchItems(ctx, id, creator, items)
-		dl.log(0, "id: %v: downloaded: #%v objects, err: %v", id, len(fetched), err)
+		if len(request.Names) == 0 {
+			// ignore empty requests.
+			continue
+		}
+		dl.log(1, "id: %v: downloading: #%v objects", id, len(request.Names))
+		downloaded, err := dl.downloadObjects(ctx, id, creator, request)
+		dl.log(0, "id: %v: downloaded: #%v objects, err: %v", id, len(downloaded.Downloads), err)
 		if err != nil {
 			return err
 		}
-		dl.updateProgess(len(fetched), len(input))
+		dl.updateProgess(len(downloaded.Downloads), len(input))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case output <- fetched:
+		case output <- downloaded:
 		}
-		dl.log(1, "id: %v: objects downloaded: #%v", id, len(fetched))
 	}
 }
 
-func (dl *downloader) fetchItems(ctx context.Context, id int, creator Creator, items []Request) ([]Downloaded, error) {
-	fetched := make([]Downloaded, 0, len(items))
-	for _, item := range items {
-		dl.log(1, "id: %v: downloading: %v", id, item.Name)
-		item, err := dl.fetchItem(ctx, creator, item)
-		dl.log(1, "id: %v: downloaded: %v, err: %v", id, item.Name, err)
+func (dl *downloader) downloadObjects(ctx context.Context, id int, creator Creator, request Request) (Downloaded, error) {
+	download := Downloaded{
+		Request:   request,
+		Container: creator.Container(),
+		Downloads: make([]DownloadStatus, 0, len(request.Names)),
+	}
+	for _, name := range request.Names {
+		dl.log(1, "id: %v: downloading: %v", id, name)
+		status, err := dl.downloadObject(ctx, creator, request.Container, name)
+		dl.log(1, "id: %v: downloaded: %v, err: %v", id, name, err)
 		if err != nil {
-			return fetched, nil
+			return download, err
 		}
-		fetched = append(fetched, item)
+		download.Downloads = append(download.Downloads, status)
 	}
-	return fetched, nil
+	return download, nil
 }
 
-func (dl *downloader) fetchItem(ctx context.Context, creator Creator, item Request) (Downloaded, error) {
+func (dl *downloader) downloadObject(ctx context.Context, creator Creator, container fs.FS, name string) (DownloadStatus, error) {
+	status := DownloadStatus{}
 	if dl.ticker.C == nil {
 		select {
 		case <-ctx.Done():
-			return Downloaded{}, ctx.Err()
+			return status, ctx.Err()
 		default:
 		}
 	} else {
 		select {
 		case <-ctx.Done():
-			return Downloaded{}, ctx.Err()
+			return status, ctx.Err()
 		case <-dl.ticker.C:
 		}
 	}
 	delay := dl.backOffStart
 	steps := 0
-	dlr := Downloaded{Request: item.Object}
 	for {
-		rd, err := item.Container.Open(item.Name)
-		dlr.Retries = steps
-		dlr.Err = err
+		rd, err := container.Open(name)
+		status.Retries = steps
+		status.Err = err
 		if err != nil {
 			if !errors.Is(err, dl.backOffErr) || steps >= dl.backoffSteps {
-				return dlr, nil
+				return status, nil
 			}
 			select {
 			case <-ctx.Done():
-				return Downloaded{}, ctx.Err()
+				return status, ctx.Err()
 			case <-time.After(delay):
 			}
 			delay *= 2
 			steps++
 			continue
 		}
-		wr, ni, err := creator.New(item.Name)
+		wr, ni, err := creator.New(name)
 		if err != nil {
-			dlr.Err = err
-			return dlr, nil
+			status.Err = err
+			return status, nil
 		}
 		if _, err := io.Copy(wr, rd); err != nil {
-			dlr.Err = err
-			return dlr, nil
+			status.Err = err
+			return status, nil
 		}
-		dlr.Object = ni
-		return dlr, nil
+		status.Name = ni
+		return status, nil
 	}
 }

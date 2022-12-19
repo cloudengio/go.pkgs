@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,50 +17,39 @@ import (
 	"cloudeng.io/file/filetestutil"
 )
 
-/*
-for _, dl := range downloaded {
-	rdc, err := dl.Container.Open(dl.Name)
-	if err != nil {
-		cr.extractorErrors.append(dl.Name, err)
-		continue
-	}
-*/
-
 type extractor struct {
 	sync.Mutex
 	names map[string]bool
 }
 
-func (e *extractor) Extract(ctx context.Context, downloaded []crawl.Downloaded) []crawl.Request {
+func (e *extractor) Extract(ctx context.Context, downloaded crawl.Downloaded) []crawl.Request {
 	e.Lock()
 	defer e.Unlock()
-	outlinks := []crawl.Request{}
-	for _, dl := range downloaded {
+	outlinks := crawl.Request{Container: downloaded.Container}
+	for _, dl := range downloaded.Downloads {
 		if !e.names[dl.Name] {
-			outlinks = append(outlinks, crawl.Request{Object: dl.Request})
+			outlinks.Names = append(outlinks.Names, dl.Name)
 		}
 		e.names[dl.Name] = true
 	}
-	fmt.Printf("len outlinks: %v\n", len(outlinks))
-	return outlinks
+	fmt.Printf("test extractor return # outlinks: %v\n", len(outlinks.Names))
+	return []crawl.Request{outlinks}
 }
 
 func TestCrawler(t *testing.T) {
 	ctx := context.Background()
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Request, 10)
-	output := make(chan []crawl.Downloaded, 10)
+	input := make(chan crawl.Request, 10)
+	output := make(chan crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 	progressCh := make(chan crawl.DownloadProgress, 1)
 
 	downloader := crawl.NewDownloader(
 		crawl.WithDownloadProgress(time.Millisecond, progressCh),
-		crawl.WithNumDownloaders(1),
-		crawl.WithNumExtractors(1))
-	//		crawl.WithDownloadLogging(1, os.Stdout))
+		crawl.WithNumDownloaders(1))
 
-	crawler := crawl.New() //crawl.WithCrawlerLogging(1, os.Stdout))
+	crawler := crawl.New(crawl.WithNumExtractors(1), crawl.WithCrawlerLogging(1, os.Stdout))
 
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -75,14 +65,15 @@ func TestCrawler(t *testing.T) {
 	go func() {
 		crawlItems(ctx, 1000, input, readFS)
 		wg.Done()
-		fmt.Printf("DONE .... crawlItems.....\n")
 	}()
 
 	crawled := []crawl.Downloaded{}
+	total := 0
 	go func() {
 		for outs := range output {
-			crawled = append(crawled, outs...)
-			fmt.Printf("output: %v .. %v\n", len(crawled), len(outs))
+			crawled = append(crawled, outs)
+			total += len(outs.Downloads)
+			fmt.Printf("test received: %v/%v\n", len(outs.Downloads), total)
 		}
 		fmt.Printf("output: done...\n")
 		wg.Done()

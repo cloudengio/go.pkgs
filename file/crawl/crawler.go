@@ -20,8 +20,8 @@ type crawlerOptions struct {
 	concurrency int
 }
 
-func WithNumExtractors(concurrency int) DownloaderOption {
-	return func(o *downloaderOptions) {
+func WithNumExtractors(concurrency int) CrawlerOption {
+	return func(o *crawlerOptions) {
 		o.concurrency = concurrency
 	}
 }
@@ -54,96 +54,112 @@ func (cr *crawler) Run(ctx context.Context,
 	extractor Outlinks,
 	downloader Downloader,
 	creator Creator,
-	input <-chan []Request,
-	output chan<- []Downloaded) error {
+	input <-chan Request,
+	output chan<- Downloaded) error {
 
 	cr.log(0, "Run starting")
 
-	userInputDone := make(chan struct{})
-	downloadInput := make(chan []Request, cap(input))
-	downloadOutput := make(chan []Downloaded, cap(output))
+	inputClosed := make(chan struct{})
+	downloadInput := make(chan Request, cap(input))
+	downloadOutput := make(chan Downloaded, cap(output))
+	extractorInput := make(chan Downloaded, cap(output)+1)
 	extractorStop := make(chan struct{})
-	errCh := make(chan error, 1)
+	downloaderErrCh := make(chan error, 1)
 
 	go func() {
-		// Forward passes all user crawl requests to the downloaded, it will
-		// return when input is closed.
-		cr.forward(ctx, input, downloadInput)
+		// forwardRequests will return when input is closed.
+		cr.forwardRequests(ctx, input, downloadInput)
 		// Signal that there is no more user input.
-		close(userInputDone)
-		fmt.Printf("forward DONE.......\n")
+		close(inputClosed)
+		cr.log(1, "input forwarding goroutine done")
 	}()
 
 	go func() {
-		// Run will return when downloadInput is closed, it will then close downloadOutput.
-		errCh <- downloader.Run(ctx, creator, downloadInput, downloadOutput)
+		// downloadsTee will return when downloadOutput is closed.
+		cr.downloadsTee(ctx, downloadOutput, output, extractorInput)
+		cr.log(1, "output forwarding goroutine done")
+	}()
+
+	go func() {
+		// Run will return when downloadInput is closed and when it has
+		// processed all outstanding downloads it will close downloadOutput.
+		downloaderErrCh <- downloader.Run(ctx, creator, downloadInput, downloadOutput)
 	}()
 
 	var grp errgroup.T
 	for i := 0; i < cr.concurrency; i++ {
 		i := i
 		grp.Go(func() error {
-			cr.runExtractor(ctx, i, extractorStop, extractor, downloadOutput, output, downloadInput)
+			cr.runExtractor(ctx, i, extractorStop, extractor, extractorInput, downloadInput)
 			return nil
 		})
 	}
 
-	/*
-		select {
-		case <-ctx.Done():
-			// Need to clean up all goroutines.
-			// It's left to the user to close the input channel.
-			close(extractorStop)
-			close(output)
-			return ctx.Err()
-		case <-userInputDone:
-		}
-
-		// Close the done channel to signal to the extractor goroutines that
-		// they should finish.
+	select {
+	case <-ctx.Done():
+		// Need to clean up all goroutines.
+		// It's left to the user to close the input channel.
 		close(extractorStop)
-		if err := grp.Wait(); err != nil {
-			return err
-		}
+		close(output)
+		return ctx.Err()
+	case <-inputClosed:
+		cr.log(1, "input closed, drain remaining requests/outlinks")
+	}
 
-		// Extractors are no longer running, but there may be some more downloaded
-		// documents in the process of being downloaded or being sent over
-		// the downloader's output channel.
+	// There are no more new external/user crawl requests to processed.
+	// However, there are still crawl requests in the process of being
+	// downloaded, having links extracted and those downloaded etc.
 
-		if err := cr.drain(ctx, extractor, downloadInput, downloadOutput, output); err != nil {
-			return err
-		}
-		fmt.Printf("closed download input...\n")
-		close(downloadInput)*/
+	// First, stop all of the currently running extractors.
+	close(extractorStop)
+	if err := grp.Wait(); err != nil {
+		close(output)
+		return err
+	}
+
+	cr.drain(ctx, extractor, downloadOutput, output, downloadInput)
 
 	close(output)
-	err := <-errCh
+	err := <-downloaderErrCh
 	cr.log(0, "Run done: err: %v", err)
 	return err
 }
 
 // Drain any remaining downloaded documents, that is, continuing downloading
-// and extracting until the extractor returns no links.
-func (cr *crawler) drain(ctx context.Context, outlinks Outlinks, downloadInput chan<- []Request, downloadOutput <-chan []Downloaded, output chan<- []Downloaded) error {
-	var extracted []Request
-	for remaining := range downloadOutput {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case output <- remaining:
-		case downloadInput <- extracted:
+// and extracting until there are no outlinks left. Determining when there
+// are no outlinks is awkward.
+func (cr *crawler) drain(ctx context.Context, outlinks Outlinks,
+	downloadOutput <-chan Downloaded,
+	output chan<- Downloaded,
+	downloadInput chan<- Request) {
+
+	doneCh := make(chan struct{})
+	closed := false
+	for {
+		nlinks, done := cr.handleOutlinks(ctx, -1, doneCh, outlinks, downloadOutput, downloadInput)
+		if done {
+			break
 		}
-		extracted = outlinks.Extract(ctx, remaining)
-		if len(extracted) == 0 {
-			return nil
+		if nlinks == 0 && !closed {
+			close(downloadInput)
+			closed = true
 		}
 	}
-	return nil
+	return
 }
 
-func (cr *crawler) forward(ctx context.Context, input <-chan []Request, output chan<- []Request) {
-	// Forward all client inputs directly to the downloader.
-	for req := range input {
+func (cr *crawler) forwardRequests(ctx context.Context, input <-chan Request, output chan<- Request) {
+	for {
+		var req Request
+		var ok bool
+		select {
+		case <-ctx.Done():
+			return
+		case req, ok = <-input:
+			if !ok {
+				return
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -152,36 +168,86 @@ func (cr *crawler) forward(ctx context.Context, input <-chan []Request, output c
 	}
 }
 
-func (cr *crawler) runExtractor(ctx context.Context,
-	id int,
-	doneCh chan struct{},
-	outlinks Outlinks,
-	downloadedCh <-chan []Downloaded,
-	outputCh chan<- []Downloaded,
-	downloaderInput chan<- []Request) {
-
+// forward downloads to both the user output and the extractor.
+func (cr *crawler) downloadsTee(ctx context.Context, input <-chan Downloaded, outputA, outputB chan<- Downloaded) {
 	for {
-		cr.log(1, "id: %v: extractor: waiting for downloads", id)
-		// Wait for newly downloaded items.
-		var downloaded []Downloaded
+		var downloaded Downloaded
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return
-		case <-doneCh:
-			return
-		case downloaded, ok = <-downloadedCh:
+		case downloaded, ok = <-input:
 			if !ok {
 				return
 			}
 		}
-		// Extract outlinks and add them to the downloader's queue.
-		extracted := outlinks.Extract(ctx, downloaded)
-		cr.log(0, "id: %v: extractor: outlinks found: #%v, from downloads: #%v", id, len(extracted), len(downloaded))
 		select {
 		case <-ctx.Done():
 			return
-		case downloaderInput <- extracted:
+		case outputA <- downloaded:
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case outputB <- downloaded:
 		}
 	}
+}
+
+func (cr *crawler) runExtractor(ctx context.Context,
+	id int,
+	doneCh chan struct{},
+	outlinks Outlinks,
+	downloaderOutput <-chan Downloaded,
+	downloaderInput chan<- Request) {
+	for {
+		nlinks, done := cr.handleOutlinks(ctx, id, doneCh, outlinks, downloaderOutput, downloaderInput)
+		cr.log(0, "runExtractor: links extracted: %v, done: %v", nlinks, done)
+		if done {
+			return
+		}
+	}
+}
+
+func (cr *crawler) handleOutlinks(ctx context.Context,
+	id int,
+	doneCh chan struct{},
+	outlinks Outlinks,
+	downloaderOutput <-chan Downloaded,
+	downloaderInput chan<- Request) (int, bool) {
+
+	// Wait for newly downloaded items.
+	var downloaded Downloaded
+	var ok bool
+	select {
+	case <-ctx.Done():
+		return 0, true
+	case <-doneCh:
+		return 0, true
+	case downloaded, ok = <-downloaderOutput:
+		if !ok {
+			return 0, true
+		}
+	}
+	// Extract outlinks and add them to the downloader's queue.
+	extracted := outlinks.Extract(ctx, downloaded)
+	nlinks := 0
+	for _, outlinks := range extracted {
+		if len(outlinks.Names) == 0 {
+			continue
+		}
+		nlinks += len(outlinks.Names)
+		select {
+		case <-ctx.Done():
+			return 0, true
+		case downloaderInput <- outlinks:
+		}
+	}
+	// Check to see if the extractor should stop.
+	select {
+	case <-doneCh:
+		return nlinks, true
+	default:
+	}
+	return nlinks, false
 }

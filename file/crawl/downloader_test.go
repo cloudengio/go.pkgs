@@ -54,11 +54,15 @@ func (c *collector) Open(name string) (fs.File, error) {
 	return filetestutil.NewFile(rdc, fi), nil
 }
 
-func (c *collector) New(name string) (io.WriteCloser, crawl.Object, error) {
-	return &contents{collector: c, name: name}, crawl.Object{c, name}, nil
+func (c *collector) Container() fs.FS {
+	return c
 }
 
-func runDownloader(ctx context.Context, crawler crawl.Downloader, writer crawl.Creator, reader fs.FS, input chan []crawl.Request, output chan []crawl.Downloaded) ([]crawl.Downloaded, error) {
+func (c *collector) New(name string) (io.WriteCloser, string, error) {
+	return &contents{collector: c, name: name}, name, nil
+}
+
+func runDownloader(ctx context.Context, crawler crawl.Downloader, writer crawl.Creator, reader fs.FS, input chan crawl.Request, output chan crawl.Downloaded) ([]crawl.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -76,17 +80,17 @@ func runDownloader(ctx context.Context, crawler crawl.Downloader, writer crawl.C
 
 	crawled := []crawl.Downloaded{}
 	for outs := range output {
-		crawled = append(crawled, outs...)
+		crawled = append(crawled, outs)
 	}
 	err := <-errCh
 	wg.Wait()
 	return crawled, err
 }
 
-func crawlItems(ctx context.Context, nItems int, input chan<- []crawl.Request, reader fs.FS) {
+func crawlItems(ctx context.Context, nItems int, input chan<- crawl.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- []crawl.Request{{Object: crawl.Object{reader, fmt.Sprintf("%v", i)}}}:
+		case input <- crawl.Request{Container: reader, Names: []string{fmt.Sprintf("%v", i)}}:
 		case <-ctx.Done():
 			break
 		}
@@ -97,25 +101,29 @@ func crawlItems(ctx context.Context, nItems int, input chan<- []crawl.Request, r
 func sha1Sums(t *testing.T, crawled []crawl.Downloaded) map[string]string {
 	_, _, line, _ := runtime.Caller(1)
 	s := map[string]string{}
-	for _, c := range crawled {
-		f, err := c.Container.Open(c.Name)
-		if err != nil {
-			t.Fatalf("line: %v, %v", line, err)
+	for _, d := range crawled {
+		for _, c := range d.Downloads {
+			f, err := d.Container.Open(c.Name)
+			if err != nil {
+				t.Fatalf("line: %v, %v", line, err)
+			}
+			buf, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatalf("line: %v, %v", line, err)
+			}
+			sum := sha1.Sum(buf)
+			s[c.Name] = hex.EncodeToString(sum[:])
 		}
-		buf, err := io.ReadAll(f)
-		if err != nil {
-			t.Fatalf("line: %v, %v", line, err)
-		}
-		sum := sha1.Sum(buf)
-		s[c.Name] = hex.EncodeToString(sum[:])
 	}
 	return s
 }
 func checkForCrawlErrors(t *testing.T, crawled []crawl.Downloaded) {
 	_, _, line, _ := runtime.Caller(1)
-	for k, v := range crawled {
-		if v.Err != nil {
-			t.Errorf("line: %v: %v: %v", line, k, v)
+	for _, c := range crawled {
+		for _, d := range c.Downloads {
+			if d.Err != nil {
+				t.Errorf("line: %v: %v: %v", line, d.Name, d.Err)
+			}
 		}
 	}
 }
@@ -143,8 +151,8 @@ func TestDownload(t *testing.T) {
 
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Request, 10)
-	output := make(chan []crawl.Downloaded, 10)
+	input := make(chan crawl.Request, 10)
+	output := make(chan crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
 	downloader := crawl.NewDownloader()
@@ -166,8 +174,8 @@ func TestDownloadCancel(t *testing.T) {
 	src := rand.NewSource(time.Now().UnixMicro())
 
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Request, 10)
-	output := make(chan []crawl.Downloaded, 10)
+	input := make(chan crawl.Request, 10)
+	output := make(chan crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
 	downloader := crawl.NewDownloader(crawl.WithRequestsPerMinute(60))
@@ -195,8 +203,8 @@ func TestDownloadRetries(t *testing.T) {
 	numRetries := 2
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContentsAfterRetry(src, 8192, numRetries, &retryError{}))
-	input := make(chan []crawl.Request, 10)
-	output := make(chan []crawl.Downloaded, 10)
+	input := make(chan crawl.Request, 10)
+	output := make(chan crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
 	downloader := crawl.NewDownloader(
@@ -211,9 +219,11 @@ func TestDownloadRetries(t *testing.T) {
 	contents := filetestutil.Contents(readFS)
 	validSHA1Sums(t, sha1Sums(t, downloaded), contents)
 
-	for _, c := range downloaded {
-		if got, want := c.Retries, numRetries; got != want {
-			t.Fatalf("%v: got %v, want %v", c.Name, got, want)
+	for _, d := range downloaded {
+		for _, c := range d.Downloads {
+			if got, want := c.Retries, numRetries; got != want {
+				t.Fatalf("%v: got %v, want %v", c.Name, got, want)
+			}
 		}
 	}
 }
@@ -223,8 +233,8 @@ func TestDownloadProgress(t *testing.T) {
 
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan []crawl.Request, 10)
-	output := make(chan []crawl.Downloaded, 10)
+	input := make(chan crawl.Request, 10)
+	output := make(chan crawl.Downloaded, 10)
 	errCh := make(chan error, 1)
 	writeFS := &collector{files: map[string][]byte{}}
 	progressCh := make(chan crawl.DownloadProgress, 1)
@@ -272,8 +282,8 @@ func TestDownloadErrors(t *testing.T) {
 
 	errFailed := errors.New("failed")
 	readFS := filetestutil.NewMockFS(filetestutil.FSErrorOnly(errFailed))
-	input := make(chan []crawl.Request, 10)
-	output := make(chan []crawl.Downloaded, 10)
+	input := make(chan crawl.Request, 10)
+	output := make(chan crawl.Downloaded, 10)
 	writeFS := &collector{files: map[string][]byte{}}
 
 	downloader := crawl.NewDownloader(crawl.WithBackoffParameters(&retryError{},
@@ -284,9 +294,11 @@ func TestDownloadErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, dl := range downloaded {
-		if !errors.Is(dl.Err, errFailed) {
-			t.Fatalf("unexpected error: %v", dl.Err)
+	for _, d := range downloaded {
+		for _, c := range d.Downloads {
+			if !errors.Is(c.Err, errFailed) {
+				t.Fatalf("unexpected error: %v", c.Err)
+			}
 		}
 	}
 }
