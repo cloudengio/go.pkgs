@@ -5,12 +5,12 @@ orbs:
 
 jobs:
   test-linux:
-    parallism: 4
     parameters:
       go:
         type: string
     docker:
       - image: cimg/go:<< parameters.go >>
+    parallelism: 4
     steps:
       - checkout
       - run:
@@ -20,12 +20,12 @@ jobs:
             go run .circleci/runner.go --prep --test
 
   test-windows:
-    parallism: 4
     parameters:
       go:
         type: string
     executor:
       name: win/default
+    parallelism: 4
     steps:
       - run: git config --global core.autocrlf false
       - checkout
@@ -44,12 +44,12 @@ jobs:
             go run .circleci\runner.go --prep --test
 
   lint:
-    parallism: 4
     parameters:
       go:
         type: string
     docker:
       - image: cimg/go:<< parameters.go >>
+    parallelism: 4
     steps:
       - checkout
       - run:
@@ -67,13 +67,13 @@ jobs:
             done
 
   vulnerabilities:
-    parallism: 4
     resource_class: large
     parameters:
       go:
         type: string
     docker:
       - image: cimg/go:<< parameters.go >>
+    parallelism: 4
     steps:
       - checkout
       - run:
