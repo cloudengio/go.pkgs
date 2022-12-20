@@ -18,6 +18,7 @@ type CrawlerOption func(o *crawlerOptions)
 type crawlerOptions struct {
 	loggerOpts
 	concurrency int
+	depth       int
 }
 
 func WithNumExtractors(concurrency int) CrawlerOption {
@@ -28,9 +29,14 @@ func WithNumExtractors(concurrency int) CrawlerOption {
 
 func WithCrawlerLogging(level uint32, out io.Writer) CrawlerOption {
 	return func(o *crawlerOptions) {
-		o.logEnabled = true
 		o.logLevel = int(level)
 		o.logOut = out
+	}
+}
+
+func WithCrawlDepth(depth int) CrawlerOption {
+	return func(o *crawlerOptions) {
+		o.depth = depth
 	}
 }
 
@@ -52,77 +58,128 @@ type crawler struct {
 
 func (cr *crawler) Run(ctx context.Context,
 	extractor Outlinks,
-	downloader Downloader,
+	downloader, outlinkDownloader Downloader,
 	creator Creator,
 	input <-chan Request,
 	output chan<- Downloaded) error {
 
 	cr.log(0, "Run starting")
 
-	inputClosed := make(chan struct{})
-	downloadInput := make(chan Request, cap(input))
-	downloadOutput := make(chan Downloaded, cap(output))
-	extractorInput := make(chan Downloaded, cap(output)+1)
-	extractorStop := make(chan struct{})
 	downloaderErrCh := make(chan error, 1)
+	outlinkdownloaderErrCh := make(chan error, 1)
+	downloadOutput := make(chan Downloaded, cap(output))
+	extractorInput := make(chan Downloaded, cap(output))
+	outlinkDownloadInput := make(chan Request, cap(input))
+	outlinkDownloadOutput := make(chan Downloaded, cap(output))
+	extractorStop := make(chan struct{})
 
+	// primary downloader.
 	go func() {
-		// forwardRequests will return when input is closed.
-		cr.forwardRequests(ctx, input, downloadInput)
-		// Signal that there is no more user input.
-		close(inputClosed)
-		cr.log(1, "input forwarding goroutine done")
+		// returns when input is closed.
+		err := downloader.Run(ctx, creator, input, downloadOutput)
+		cr.log(1, "downloader.Run: error: %v", err)
+		downloaderErrCh <- err
+	}()
+
+	fmt.Printf("download output ch: %v\n", downloadOutput)
+	// outlink downloader.
+	go func() {
+		// returns when input is closed.
+		err := outlinkDownloader.Run(ctx, creator, outlinkDownloadInput, outlinkDownloadOutput)
+		cr.log(1, "outlink downloader.Run: error: %v", err)
+		outlinkdownloaderErrCh <- err
 	}()
 
 	go func() {
-		// downloadsTee will return when downloadOutput is closed.
 		cr.downloadsTee(ctx, downloadOutput, output, extractorInput)
 		cr.log(1, "output forwarding goroutine done")
-	}()
-
-	go func() {
-		// Run will return when downloadInput is closed and when it has
-		// processed all outstanding downloads it will close downloadOutput.
-		downloaderErrCh <- downloader.Run(ctx, creator, downloadInput, downloadOutput)
 	}()
 
 	var grp errgroup.T
 	for i := 0; i < cr.concurrency; i++ {
 		i := i
 		grp.Go(func() error {
-			cr.runExtractor(ctx, i, extractorStop, extractor, extractorInput, downloadInput)
+			cr.runExtractor(ctx, i, extractorStop, extractor,
+				extractorInput, outlinkDownloadInput)
 			return nil
 		})
 	}
-
-	select {
-	case <-ctx.Done():
-		// Need to clean up all goroutines.
-		// It's left to the user to close the input channel.
-		close(extractorStop)
-		close(output)
-		return ctx.Err()
-	case <-inputClosed:
-		cr.log(1, "input closed, drain remaining requests/outlinks")
-	}
-
-	// There are no more new external/user crawl requests to processed.
-	// However, there are still crawl requests in the process of being
-	// downloaded, having links extracted and those downloaded etc.
-
-	// First, stop all of the currently running extractors.
-	close(extractorStop)
 	if err := grp.Wait(); err != nil {
-		close(output)
 		return err
 	}
+	return nil
 
-	cr.drain(ctx, extractor, downloadOutput, output, downloadInput)
+	/*
+		inputClosed := make(chan struct{})
+		downloadInput := make(chan Request, cap(input))
+		downloadOutput := make(chan Downloaded, cap(output))
+		extractorStop := make(chan struct{})
+		downloaderErrCh := make(chan error, 1)
 
-	close(output)
-	err := <-downloaderErrCh
-	cr.log(0, "Run done: err: %v", err)
-	return err
+		/*
+		   	go func() {
+		   		// forwardRequests will return when input is closed.
+		   		cr.forwardRequests(ctx, input, downloadInput)
+		   		// Signal that there is no more user input.
+		   		close(inputClosed)
+		   		cr.log(1, "input forwarding goroutine done")
+		   	}()
+
+		   	go func() {
+		   		// downloadsTee will return when downloadOutput is closed.
+		   		cr.downloadsTee(ctx, downloadOutput, output, extractorInput)
+		   		cr.log(1, "output forwarding goroutine done")
+		   	}()
+
+		   	go func() {
+		   		// Run will return when downloadInput is closed and when it has
+		   		// processed all outstanding downloads it will close downloadOutput.
+		   		downloaderErrCh <- downloader.Run(ctx, creator, downloadInput, downloadOutput)
+		   	}()
+
+		   var grp errgroup.T
+
+		   	for i := 0; i < cr.concurrency; i++ {
+		   		i := i
+		   		grp.Go(func() error {
+		   			cr.runExtractor(ctx, i, extractorStop, extractor, extractorInput, downloadInput)
+		   			return nil
+		   		})
+		   	}
+
+		   select {
+		   case <-ctx.Done():
+
+		   	// Need to clean up all goroutines.
+		   	// It's left to the user to close the input channel.
+		   	close(extractorStop)
+		   	close(output)
+		   	return ctx.Err()
+
+		   case <-inputClosed:
+
+		   		cr.log(1, "input closed, drain remaining requests/outlinks")
+		   	}
+
+		   // There are no more new external/user crawl requests to processed.
+		   // However, there are still crawl requests in the process of being
+		   // downloaded, having links extracted and those downloaded etc.
+
+		   // First, stop all of the currently running extractors.
+		   close(extractorStop)
+
+		   	if err := grp.Wait(); err != nil {
+		   		close(output)
+		   		return err
+		   	}
+
+		   cr.drain(ctx, extractor, downloadOutput, output, downloadInput)
+
+		   close(output)
+		   err := <-downloaderErrCh
+		   cr.log(0, "Run done: err: %v", err)
+		   return err
+	*/
 }
 
 // Drain any remaining downloaded documents, that is, continuing downloading
@@ -234,6 +291,10 @@ func (cr *crawler) handleOutlinks(ctx context.Context,
 	nlinks := 0
 	for _, outlinks := range extracted {
 		if len(outlinks.Names) == 0 {
+			continue
+		}
+		outlinks.Depth = downloaded.Request.Depth + 1
+		if outlinks.Depth > cr.depth {
 			continue
 		}
 		nlinks += len(outlinks.Names)

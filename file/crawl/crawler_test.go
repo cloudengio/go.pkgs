@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -32,7 +31,7 @@ func (e *extractor) Extract(ctx context.Context, downloaded crawl.Downloaded) []
 		}
 		e.names[dl.Name] = true
 	}
-	fmt.Printf("test extractor return # outlinks: %v\n", len(outlinks.Names))
+	//fmt.Printf("test extractor return # outlinks: %v\n", len(outlinks.Names))
 	return []crawl.Request{outlinks}
 }
 
@@ -46,10 +45,19 @@ func TestCrawler(t *testing.T) {
 	progressCh := make(chan crawl.DownloadProgress, 1)
 
 	downloader := crawl.NewDownloader(
-		crawl.WithDownloadProgress(time.Millisecond, progressCh),
+		crawl.WithDownloadProgress(time.Millisecond, progressCh, false),
+		//crawl.WithDownloadLogging(1, os.Stdout),
 		crawl.WithNumDownloaders(1))
 
-	crawler := crawl.New(crawl.WithNumExtractors(1), crawl.WithCrawlerLogging(1, os.Stdout))
+	outlinkDownloader := crawl.NewDownloader(
+		crawl.WithDownloadProgress(time.Millisecond, progressCh, false),
+		//crawl.WithDownloadLogging(1, os.Stdout),
+		crawl.WithNumDownloaders(1))
+
+	fmt.Printf("object downloader: %p, outlinks %p\n", downloader, outlinkDownloader)
+	crawler := crawl.New(crawl.WithNumExtractors(1),
+		//crawl.WithCrawlerLogging(1, os.Stdout),
+		crawl.WithCrawlDepth(1))
 
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -58,7 +66,7 @@ func TestCrawler(t *testing.T) {
 	outlinks := &extractor{names: map[string]bool{}}
 
 	go func() {
-		errCh <- crawler.Run(ctx, outlinks, downloader, writeFS, input, output)
+		errCh <- crawler.Run(ctx, outlinks, downloader, outlinkDownloader, writeFS, input, output)
 		wg.Done()
 	}()
 
@@ -73,14 +81,18 @@ func TestCrawler(t *testing.T) {
 		for outs := range output {
 			crawled = append(crawled, outs)
 			total += len(outs.Downloads)
-			fmt.Printf("test received: %v/%v\n", len(outs.Downloads), total)
+			//fmt.Printf("test received: %v/%v\n", len(outs.Downloads), total)
 		}
 		fmt.Printf("output: done...\n")
 		wg.Done()
 	}()
 
-	for p := range progressCh {
-		fmt.Printf("progress: %v\n", p)
+	// Need to merge these?
+	for {
+		select {
+		case p := <-progressCh:
+			fmt.Printf("object progress: %v\n", p)
+		}
 	}
 	wg.Wait()
 

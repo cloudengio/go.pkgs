@@ -29,14 +29,13 @@ type DownloadProgress struct {
 }
 
 type loggerOpts struct {
-	logEnabled bool
-	logLevel   int
-	logOut     io.Writer
-	logPrefix  string
+	logLevel  int
+	logOut    io.Writer
+	logPrefix string
 }
 
 func (l *loggerOpts) log(level int, format string, args ...interface{}) {
-	if l.logEnabled && l.logLevel >= level {
+	if l.logLevel >= level && l.logOut != nil {
 		fmt.Fprintf(l.logOut, l.logPrefix+strings.TrimSuffix(format, "\n")+"\n", args...)
 	}
 }
@@ -51,6 +50,7 @@ type downloaderOptions struct {
 	concurrency      int
 	progressInterval time.Duration
 	progressCh       chan<- DownloadProgress
+	progressClose    bool
 	loggerOpts
 }
 
@@ -87,16 +87,16 @@ func WithNumDownloaders(concurrency int) DownloaderOption {
 	}
 }
 
-func WithDownloadProgress(interval time.Duration, ch chan<- DownloadProgress) DownloaderOption {
+func WithDownloadProgress(interval time.Duration, ch chan<- DownloadProgress, close bool) DownloaderOption {
 	return func(o *downloaderOptions) {
 		o.progressInterval = interval
 		o.progressCh = ch
+		o.progressClose = close
 	}
 }
 
 func WithDownloadLogging(level uint32, out io.Writer) DownloaderOption {
 	return func(o *downloaderOptions) {
-		o.logEnabled = true
 		o.logLevel = int(level)
 		o.logOut = out
 	}
@@ -134,7 +134,7 @@ func (dl *downloader) Run(ctx context.Context,
 
 	dl.ticker.Stop()
 	close(output)
-	if dl.progressCh != nil {
+	if dl.progressCh != nil && dl.progressClose {
 		close(dl.progressCh)
 	}
 	dl.log(0, "Run done: err: %v", err)
@@ -190,12 +190,12 @@ func (dl *downloader) runner(ctx context.Context, id int, creator Creator, progr
 		if err != nil {
 			return err
 		}
-		dl.updateProgess(len(downloaded.Downloads), len(input))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case output <- downloaded:
 		}
+		dl.updateProgess(len(downloaded.Downloads), len(input))
 	}
 }
 

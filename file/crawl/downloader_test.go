@@ -238,7 +238,7 @@ func TestDownloadProgress(t *testing.T) {
 	errCh := make(chan error, 1)
 	writeFS := &collector{files: map[string][]byte{}}
 	progressCh := make(chan crawl.DownloadProgress, 1)
-	downloader := crawl.NewDownloader(crawl.WithDownloadProgress(time.Millisecond, progressCh))
+	downloader := crawl.NewDownloader(crawl.WithDownloadProgress(time.Millisecond, progressCh, true))
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)

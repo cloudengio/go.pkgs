@@ -15,6 +15,7 @@ import (
 type Request struct {
 	Container fs.FS
 	Names     []string
+	Depth     int
 }
 
 // DownloadStatus represents the result of the download for a single
@@ -63,7 +64,7 @@ type Outlinks interface {
 type T interface {
 	Run(ctx context.Context,
 		extractor Outlinks,
-		downloader Downloader,
+		downloader, outlinkDownloader Downloader,
 		creator Creator,
 		input <-chan Request,
 		output chan<- Downloaded) error
