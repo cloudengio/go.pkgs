@@ -152,7 +152,7 @@ func (dl *downloader) runner(ctx context.Context, id int, creator Creator, progr
 				return nil
 			}
 		}
-		if len(request.Names) == 0 {
+		if len(request.Names()) == 0 {
 			// ignore empty requests.
 			continue
 		}
@@ -173,10 +173,10 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, creator Creat
 	download := Downloaded{
 		Request:   request,
 		Container: creator.Container(),
-		Downloads: make([]Result, 0, len(request.Names)),
+		Downloads: make([]Result, 0, len(request.Names())),
 	}
-	for _, name := range request.Names {
-		status, err := dl.downloadObject(ctx, creator, request.Container, name)
+	for _, name := range request.Names() {
+		status, err := dl.downloadObject(ctx, creator, request.Container(), name)
 		if err != nil {
 			return download, err
 		}

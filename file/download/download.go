@@ -10,12 +10,11 @@ import (
 	"io/fs"
 )
 
-// Request represents a request for a list of objects stored in the
-// same container to be downloaded.
-type Request struct {
-	Container fs.FS
-	Names     []string
-	Depth     int
+// Request represents a request for a list of objects, stored in the same
+// container, to be downloaded.
+type Request interface {
+	Container() fs.FS
+	Names() []string
 }
 
 // Result represents the result of the download for a single object.
