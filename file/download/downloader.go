@@ -2,6 +2,12 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+// Package download provides a simple download mechanism that uses the
+// fs.FS container API to implement the actual download. This allows
+// rate control, retries and download management to be separated from the
+// mechanism of the actual download. Downloaders can be provided for
+// http/https, AWS S3 or any other local or cloud storage system for which
+// an fs.FS implementation exists.
 package download
 
 import (
@@ -26,6 +32,7 @@ type Progress struct {
 	Outstanding int64
 }
 
+// Option is used to configure the behaviour of a newly created Downloader.
 type Option func(*options)
 
 type options struct {
@@ -48,6 +55,8 @@ type downloader struct {
 	progressLast time.Time // GUARDED_BY(progressMu)
 }
 
+// WithRequestsPerMinute sets the rate for download requests. If not
+// specified downloads will be initiated immediately.
 func WithRequestsPerMinute(rpm int) Option {
 	return func(o *options) {
 		if rpm > 60 {
@@ -58,20 +67,33 @@ func WithRequestsPerMinute(rpm int) Option {
 	}
 }
 
-func WithBackoffParameters(err error, start time.Duration, steps int) Option {
+// WithBackoffParameters enables an exponential backoff algorithm that
+// is triggered when the download fails in a way that is retryable. The
+// container (fs.FS) implementation must return an error that returns
+// true for errors.Is(err, retryErr). First defines the first backoff delay,
+// which is then doubled for every consecutive matching error until the
+// download either succeeds or the specified number of steps (attempted
+// downloads) is exceeded (the download is then deemed to have failed).
+func WithBackoffParameters(retryErr error, first time.Duration, steps int) Option {
 	return func(o *options) {
-		o.backOffErr = err
-		o.backOffStart = start
+		o.backOffErr = retryErr
+		o.backOffStart = first
 		o.backoffSteps = steps
 	}
 }
 
+// WithNumDownloaders controls the number of concurrent downloads used.
+// If not specified the default of runtime.GOMAXPROCS(0) is used.
 func WithNumDownloaders(concurrency int) Option {
 	return func(o *options) {
 		o.concurrency = concurrency
 	}
 }
 
+// WithProgress requests that progress messages are sent over the
+// supplid channel. If close is true the progress channel will be closed
+// when the downloader has finished. Close should be set to false if the same
+// channel is shared across multipled downloader instances.
 func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option {
 	return func(o *options) {
 		o.progressInterval = interval
@@ -80,6 +102,7 @@ func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option
 	}
 }
 
+// New creates a new instance of a download.T.
 func New(opts ...Option) T {
 	dl := &downloader{}
 	for _, opt := range opts {
@@ -94,6 +117,7 @@ func New(opts ...Option) T {
 	return dl
 }
 
+// Run implements T.Run.
 func (dl *downloader) Run(ctx context.Context,
 	creator Creator,
 	input <-chan Request,

@@ -41,7 +41,11 @@ type Creator interface {
 // T represents the interface to a downloader that is used
 // to download content.
 type T interface {
-	// Run initiates a fetch run.
+	// Run initiates a download run. It reads Requests from the specified
+	// input channel and writes the results of those downloads to the output
+	// channel. Closing the input channel indicates to Run that it should
+	// complete all outstanding download requests. Run will close the output
+	// channel when all requests have been processed.
 	Run(ctx context.Context,
 		creator Creator,
 		input <-chan Request,
