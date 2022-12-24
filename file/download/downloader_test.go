@@ -1,7 +1,6 @@
 package download_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -16,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 	"cloudeng.io/file/filetestutil"
 )
@@ -33,49 +33,11 @@ func (dlr dlRequest) Names() []string {
 	return dlr.names
 }
 
-type collector struct {
-	sync.Mutex
-	files map[string][]byte
+func (dlr dlRequest) FileMode() fs.FileMode {
+	return fs.FileMode(0600)
 }
 
-func (c *collector) append(file string, buf []byte) {
-	c.Lock()
-	defer c.Unlock()
-	c.files[file] = append(c.files[file], buf...)
-}
-
-type contents struct {
-	name      string
-	collector *collector
-}
-
-func (c *contents) Write(buf []byte) (int, error) {
-	c.collector.append(c.name, buf)
-	return len(buf), nil
-}
-
-func (c *contents) Close() error {
-	return nil
-}
-
-func (c *collector) Open(name string) (fs.File, error) {
-	c.Lock()
-	defer c.Unlock()
-	contents := c.files[name]
-	rdc := &filetestutil.BufferCloser{Buffer: bytes.NewBuffer(contents)}
-	fi := filetestutil.NewInfo(name, len(contents), 0600, time.Now(), false, nil)
-	return filetestutil.NewFile(rdc, fi), nil
-}
-
-func (c *collector) Container() fs.FS {
-	return c
-}
-
-func (c *collector) New(name string) (io.WriteCloser, string, error) {
-	return &contents{collector: c, name: name}, name, nil
-}
-
-func runDownloader(ctx context.Context, downloader download.T, writer download.Creator, reader fs.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
+func runDownloader(ctx context.Context, downloader download.T, writer file.WriteFS, reader fs.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -166,7 +128,7 @@ func TestDownload(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := &collector{files: map[string][]byte{}}
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New()
 
@@ -189,7 +151,7 @@ func TestDownloadCancel(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := &collector{files: map[string][]byte{}}
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New(download.WithRequestsPerMinute(60))
 
@@ -218,7 +180,7 @@ func TestDownloadRetries(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContentsAfterRetry(src, 8192, numRetries, &retryError{}))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := &collector{files: map[string][]byte{}}
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New(
 		download.WithBackoffParameters(&retryError{}, time.Microsecond, 10))
@@ -249,7 +211,7 @@ func TestDownloadProgress(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 	errCh := make(chan error, 1)
-	writeFS := &collector{files: map[string][]byte{}}
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 	progressCh := make(chan download.Progress, 1)
 	downloader := download.New(download.WithProgress(time.Millisecond, progressCh, true))
 
@@ -297,7 +259,7 @@ func TestDownloadErrors(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSErrorOnly(errFailed))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := &collector{files: map[string][]byte{}}
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New(download.WithBackoffParameters(&retryError{},
 		time.Microsecond, 10))

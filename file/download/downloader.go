@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/sync/errgroup"
 )
 
@@ -119,7 +120,7 @@ func New(opts ...Option) T {
 
 // Run implements T.Run.
 func (dl *downloader) Run(ctx context.Context,
-	creator Creator,
+	writeFS file.WriteFS,
 	input <-chan Request,
 	output chan<- Downloaded) error {
 
@@ -127,7 +128,7 @@ func (dl *downloader) Run(ctx context.Context,
 	for i := 0; i < dl.concurrency; i++ {
 		i := i
 		grp.Go(func() error {
-			return dl.runner(ctx, i, creator, dl.progressCh, input, output)
+			return dl.runner(ctx, i, writeFS, dl.progressCh, input, output)
 		})
 	}
 	err := grp.Wait()
@@ -163,8 +164,7 @@ func (dl *downloader) updateProgess(downloaded, outstanding int) {
 	}
 }
 
-func (dl *downloader) runner(ctx context.Context, id int, creator Creator, progress chan<- Progress, input <-chan Request, output chan<- Downloaded) error {
-
+func (dl *downloader) runner(ctx context.Context, id int, writeFS file.WriteFS, progress chan<- Progress, input <-chan Request, output chan<- Downloaded) error {
 	for {
 		var request Request
 		var ok bool
@@ -180,7 +180,7 @@ func (dl *downloader) runner(ctx context.Context, id int, creator Creator, progr
 			// ignore empty requests.
 			continue
 		}
-		downloaded, err := dl.downloadObjects(ctx, id, creator, request)
+		downloaded, err := dl.downloadObjects(ctx, id, writeFS, request)
 		if err != nil {
 			return err
 		}
@@ -193,14 +193,14 @@ func (dl *downloader) runner(ctx context.Context, id int, creator Creator, progr
 	}
 }
 
-func (dl *downloader) downloadObjects(ctx context.Context, id int, creator Creator, request Request) (Downloaded, error) {
+func (dl *downloader) downloadObjects(ctx context.Context, id int, writeFS file.WriteFS, request Request) (Downloaded, error) {
 	download := Downloaded{
 		Request:   request,
-		Container: creator.Container(),
+		Container: writeFS,
 		Downloads: make([]Result, 0, len(request.Names())),
 	}
 	for _, name := range request.Names() {
-		status, err := dl.downloadObject(ctx, creator, request.Container(), name)
+		status, err := dl.downloadObject(ctx, writeFS, request.Container(), name, request.FileMode())
 		if err != nil {
 			return download, err
 		}
@@ -209,7 +209,7 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, creator Creat
 	return download, nil
 }
 
-func (dl *downloader) downloadObject(ctx context.Context, creator Creator, container fs.FS, name string) (Result, error) {
+func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, downloadFS fs.FS, name string, mode fs.FileMode) (Result, error) {
 	result := Result{}
 	if dl.ticker.C == nil {
 		select {
@@ -227,7 +227,7 @@ func (dl *downloader) downloadObject(ctx context.Context, creator Creator, conta
 	delay := dl.backOffStart
 	steps := 0
 	for {
-		rd, err := container.Open(name)
+		rd, err := downloadFS.Open(name)
 		result.Retries = steps
 		result.Err = err
 		if err != nil {
@@ -243,7 +243,7 @@ func (dl *downloader) downloadObject(ctx context.Context, creator Creator, conta
 			steps++
 			continue
 		}
-		wr, ni, err := creator.New(name)
+		wr, ni, err := writeFS.Create(name, mode)
 		if err != nil {
 			result.Err = err
 			return result, nil

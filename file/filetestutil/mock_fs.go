@@ -7,10 +7,14 @@ package filetestutil
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
+
+	"cloudeng.io/file"
 )
 
 // Contents returns the contents stored in the mock fs.FS.
@@ -20,10 +24,13 @@ func Contents(fs fs.FS) map[string][]byte {
 		return mfs.contents
 	case *randAfteRetryFS:
 		return mfs.contents
+	case *writeFS:
+		return mfs.contents
 	}
 	panic(fmt.Sprintf("%T is not a mock fs.FS", fs))
 }
 
+// FSOption represents an option to configure a new mock instance of fs.FS.
 type FSOption func(o *fsOptions)
 
 type fsOptions struct {
@@ -33,8 +40,11 @@ type fsOptions struct {
 	numRetries int
 	retryErr   error
 	returnErr  error
+	writeFS    bool
 }
 
+// FSWithRandomContents requests a mock FS that will return files of a random
+// size (up to maxSize) with random contents.
 func FSWithRandomContents(src rand.Source, maxSize int) FSOption {
 	return func(o *fsOptions) {
 		o.random = true
@@ -43,6 +53,8 @@ func FSWithRandomContents(src rand.Source, maxSize int) FSOption {
 	}
 }
 
+// FSWithRandomContentsAfterRetry is like FSWithRandomContents but will
+// return err, numRetries times before succeeding.
 func FSWithRandomContentsAfterRetry(src rand.Source, maxSize, numRetries int, err error) FSOption {
 	return func(o *fsOptions) {
 		o.numRetries = numRetries
@@ -52,12 +64,21 @@ func FSWithRandomContentsAfterRetry(src rand.Source, maxSize, numRetries int, er
 	}
 }
 
+// FSErrorOnly requests a mock FS that always returns err.
 func FSErrorOnly(err error) FSOption {
 	return func(o *fsOptions) {
 		o.returnErr = err
 	}
 }
 
+// FSWriteFS requests a mock that implements file.WriteFS.
+func FSWriteFS() FSOption {
+	return func(o *fsOptions) {
+		o.writeFS = true
+	}
+}
+
+// NewMockFS returns an new mock instance of fs.FS as per the specified options.
 func NewMockFS(opts ...FSOption) fs.FS {
 	var options fsOptions
 	for _, opt := range opts {
@@ -74,6 +95,9 @@ func NewMockFS(opts ...FSOption) fs.FS {
 	}
 	if err := options.returnErr; err != nil {
 		return &errorFs{err: err}
+	}
+	if options.writeFS {
+		return newWriteFS()
 	}
 	return nil
 }
@@ -130,4 +154,72 @@ type errorFs struct {
 
 func (mfs *errorFs) Open(name string) (fs.File, error) {
 	return nil, mfs.err
+}
+
+type writeFSEntry struct {
+	contents []byte
+	mode     fs.FileMode
+	update   time.Time
+}
+
+type writeFS struct {
+	sync.Mutex
+	entries  map[string]writeFSEntry
+	contents map[string][]byte
+}
+
+func newWriteFS() file.WriteFS {
+	return &writeFS{
+		entries:  map[string]writeFSEntry{},
+		contents: map[string][]byte{},
+	}
+}
+
+func (wfs *writeFS) Create(name string, filemode fs.FileMode) (io.WriteCloser, string, error) {
+	wfs.Lock()
+	defer wfs.Unlock()
+	if _, ok := wfs.entries[name]; ok {
+		return nil, "", os.ErrExist
+	}
+	entry := writeFSEntry{mode: filemode, update: time.Now()}
+	wfs.entries[name] = entry
+	wfs.contents[name] = nil
+	return &writeCloser{wfs: wfs, name: name}, name, nil
+}
+
+func (wfs *writeFS) Open(name string) (fs.File, error) {
+	wfs.Lock()
+	defer wfs.Unlock()
+	entry, ok := wfs.entries[name]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	contents := wfs.contents[name]
+	cpy := make([]byte, len(contents))
+	copy(cpy, contents)
+	info := NewInfo(name, len(cpy), entry.mode, entry.update, false, nil)
+	return NewFile(&BufferCloser{bytes.NewBuffer(cpy)}, info), nil
+}
+
+func (wfs *writeFS) append(file string, buf []byte) {
+	wfs.Lock()
+	defer wfs.Unlock()
+	entry := wfs.entries[file]
+	entry.update = time.Now()
+	wfs.entries[file] = entry
+	wfs.contents[file] = append(wfs.contents[file], buf...)
+}
+
+type writeCloser struct {
+	wfs  *writeFS
+	name string
+}
+
+func (wc *writeCloser) Write(buf []byte) (int, error) {
+	wc.wfs.append(wc.name, buf)
+	return len(buf), nil
+}
+
+func (wc *writeCloser) Close() error {
+	return nil
 }

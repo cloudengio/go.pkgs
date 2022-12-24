@@ -15,3 +15,5 @@ github.com/cosnicolaou/pudge v1.0.6/go.mod h1:PSbC4eylkssiQ+gAE+AWaMQSo41g/otqfl
 golang.org/x/sys v0.0.0-20211029165221-6e7872819dc8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.2.0 h1:ljd4t30dBnAvMZaQCevtY0xLLD0A+bRZXbgLMLU1F/A=
 golang.org/x/sys v0.2.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+v.io v0.1.21 h1:p+tki04n9QUhhESU9SOGFBBLN7V89Y6Rfvku6qCAwxk=
+v.io v0.1.21/go.mod h1:iVzQ9O0wfm38tP74JfSejmDPtCoZVtAhKpoe4YMzdEI=

@@ -6,48 +6,17 @@ package crawl
 
 import (
 	"context"
-	"io"
-	"io/fs"
+
+	"cloudeng.io/file"
+	"cloudeng.io/file/download"
 )
 
 // Request represents a request for a list of objects stored in the
 // same container to be downloaded/crawled.
-type Request struct {
-	Container fs.FS
-	Names     []string
-	Depth     int
-}
-
-// DownloadStatus represents the result of the download for a single
-// object.
-type DownloadStatus struct {
-	Name    string
-	Retries int
-	Err     error
-}
-
-// Downloadeded represents all of the downloads in response
-// to a given request.
-type Downloaded struct {
-	Request   Request
-	Container fs.FS
-	Downloads []DownloadStatus
-}
-
-// Creator provides a means of creating a new file.
-type Creator interface {
-	Container() fs.FS
-	New(name string) (io.WriteCloser, string, error)
-}
-
-// Downloader represents the interface to a downloader that is used
-// to download content.
-type Downloader interface {
-	// Run initiates a fetch run.
-	Run(ctx context.Context,
-		creator Creator,
-		input <-chan Request,
-		output chan<- Downloaded) error
+type Request interface {
+	download.Request
+	Depth() int
+	IncDepth()
 }
 
 // Outlinks represents the interface to an 'outlink' extractor, that is, an
@@ -55,7 +24,7 @@ type Downloader interface {
 // contents of an already downloaded one. Generally these will references
 // to external documents/files.
 type Outlinks interface {
-	Extract(ctx context.Context, item Downloaded) []Request
+	Extract(ctx context.Context, item download.Downloaded) []Request
 }
 
 // T represents the interface to a crawler. The crawler will download
@@ -64,8 +33,8 @@ type Outlinks interface {
 type T interface {
 	Run(ctx context.Context,
 		extractor Outlinks,
-		downloader, outlinkDownloader Downloader,
-		creator Creator,
+		downloader download.T,
+		writeFS file.WriteFS,
 		input <-chan Request,
-		output chan<- Downloaded) error
+		output chan<- download.Downloaded) error
 }

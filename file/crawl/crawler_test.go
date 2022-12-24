@@ -7,32 +7,75 @@ package crawl_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/crawl"
+	"cloudeng.io/file/download"
 	"cloudeng.io/file/filetestutil"
 )
 
-type extractor struct {
-	sync.Mutex
-	names map[string]bool
+type crawlRequest struct {
+	container fs.FS
+	names     []string
+	depth     int
 }
 
-func (e *extractor) Extract(ctx context.Context, downloaded crawl.Downloaded) []crawl.Request {
+func (cr *crawlRequest) Container() fs.FS {
+	return cr.container
+}
+
+func (cr *crawlRequest) Names() []string {
+	return cr.names
+}
+
+func (cr crawlRequest) FileMode() fs.FileMode {
+	return fs.FileMode(0600)
+}
+
+func (cr *crawlRequest) Depth() int {
+	return cr.depth
+}
+
+func (cr *crawlRequest) IncDepth() {
+	cr.depth++
+}
+
+type extractor struct {
+	sync.Mutex
+	// test with a fanout ...
+	fanOut int
+	names  map[string]bool
+}
+
+func (e *extractor) Extract(ctx context.Context, downloaded download.Downloaded) []crawl.Request {
 	e.Lock()
 	defer e.Unlock()
-	outlinks := crawl.Request{Container: downloaded.Container}
-	for _, dl := range downloaded.Downloads {
-		if !e.names[dl.Name] {
-			outlinks.Names = append(outlinks.Names, dl.Name)
+	outlinks := &crawlRequest{container: downloaded.Container}
+	for _, dlr := range downloaded.Downloads {
+		if e.names[dlr.Name] {
+			continue
 		}
-		e.names[dl.Name] = true
+		outlinks.names = append(outlinks.names, dlr.Name)
+		e.names[dlr.Name] = true
 	}
 	//fmt.Printf("test extractor return # outlinks: %v\n", len(outlinks.Names))
 	return []crawl.Request{outlinks}
+}
+
+func crawlItems(ctx context.Context, nItems int, input chan<- crawl.Request, reader fs.FS) {
+	for i := 0; i < nItems; i++ {
+		select {
+		case input <- &crawlRequest{container: reader, names: []string{fmt.Sprintf("%v", i)}}:
+		case <-ctx.Done():
+			break
+		}
+	}
+	close(input)
 }
 
 func TestCrawler(t *testing.T) {
@@ -40,23 +83,16 @@ func TestCrawler(t *testing.T) {
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan crawl.Request, 10)
-	output := make(chan crawl.Downloaded, 10)
-	writeFS := &collector{files: map[string][]byte{}}
-	progressCh := make(chan crawl.DownloadProgress, 1)
+	output := make(chan download.Downloaded, 10)
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+	progressCh := make(chan download.Progress, 1)
 
-	downloader := crawl.NewDownloader(
-		crawl.WithDownloadProgress(time.Millisecond, progressCh, false),
-		//crawl.WithDownloadLogging(1, os.Stdout),
-		crawl.WithNumDownloaders(1))
+	downloader := download.New(
+		download.WithProgress(time.Millisecond, progressCh, false),
+		download.WithNumDownloaders(1))
 
-	outlinkDownloader := crawl.NewDownloader(
-		crawl.WithDownloadProgress(time.Millisecond, progressCh, false),
-		//crawl.WithDownloadLogging(1, os.Stdout),
-		crawl.WithNumDownloaders(1))
-
-	fmt.Printf("object downloader: %p, outlinks %p\n", downloader, outlinkDownloader)
+	fmt.Printf("object downloader: %p\n", downloader)
 	crawler := crawl.New(crawl.WithNumExtractors(1),
-		//crawl.WithCrawlerLogging(1, os.Stdout),
 		crawl.WithCrawlDepth(1))
 
 	errCh := make(chan error, 1)
@@ -66,7 +102,7 @@ func TestCrawler(t *testing.T) {
 	outlinks := &extractor{names: map[string]bool{}}
 
 	go func() {
-		errCh <- crawler.Run(ctx, outlinks, downloader, outlinkDownloader, writeFS, input, output)
+		errCh <- crawler.Run(ctx, outlinks, downloader, writeFS, input, output)
 		wg.Done()
 	}()
 
@@ -75,7 +111,7 @@ func TestCrawler(t *testing.T) {
 		wg.Done()
 	}()
 
-	crawled := []crawl.Downloaded{}
+	crawled := []download.Downloaded{}
 	total := 0
 	go func() {
 		for outs := range output {
