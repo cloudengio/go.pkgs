@@ -54,43 +54,19 @@ func (cr *crawler) Run(ctx context.Context,
 	extractor Outlinks,
 	downloader download.T,
 	writeFS file.WriteFS,
-	input <-chan Request,
+	input <-chan download.Request,
 	output chan<- Crawled) error {
 
 	errCh := make(chan error, 1)
-	dlIn := make(chan download.Request, cap(input))
 	dlOut := make(chan download.Downloaded, cap(output))
 
-	teeStop := make(chan struct{})
 	extractorStop := make(chan struct{})
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(1)
 
 	go func() {
-		// The downloader runs until dlIn is closed and any requests
-		// buffered in dlIn are downloaded, at which point dlOut is
-		// closed. When crawling, dlIn must not be closed until
-		// all extracted links have processed to the requested depth.
-		errCh <- downloader.Run(ctx, writeFS, dlIn, dlOut)
-		fmt.Printf("downloader done\n")
-		wg.Done()
-	}()
-
-	// Returns when input is closed and any buffered requests have been
-	// forwarded to the downloader.
-	go func() {
-		cr.forwardRequests(ctx, input, dlIn)
-		close(extractorStop)
-		fmt.Printf("forwarder done\n")
-		wg.Done()
-	}()
-
-	extractorIn := make(chan Crawled, cap(output))
-
-	// Returns when dlOut is closed.
-	go func() {
-		cr.downloadsTee(ctx, teeStop, dlOut, output, extractorIn)
+		errCh <- downloader.Run(ctx, writeFS, input, dlOut)
 		wg.Done()
 	}()
 
@@ -99,7 +75,7 @@ func (cr *crawler) Run(ctx context.Context,
 	for i := 0; i < cr.concurrency; i++ {
 		i := i
 		grp.Go(func() error {
-			cr.runExtractor(ctx, i, extractorStop, extractor, extractorIn, dlIn)
+			cr.runExtractor(ctx, i, extractorStop, extractor, dlOut, output)
 			return nil
 		})
 	}
@@ -109,13 +85,14 @@ func (cr *crawler) Run(ctx context.Context,
 		return err
 	}
 	fmt.Printf("extractors done\n")
-	close(dlIn)
-	close(teeStop)
+	//	close(dlIn)
+	//	close(teeStop)
 	wg.Wait()
 	close(output)
 	return <-errCh
 }
 
+/*
 func (cr *crawler) forwardRequests(ctx context.Context, input <-chan Request, output chan<- download.Request) {
 	for {
 		var req Request
@@ -185,67 +162,42 @@ func (cr *crawler) downloadsTee(ctx context.Context, doneCh chan struct{}, input
 				fmt.Printf("Loop after select: a/b: %v %v: %v/%v\n", a, b, aout, bout)
 			}
 			//		fmt.Printf("Loop done: a/b: %v %v: %v\n", aout, bout, aout+bout)
-		*/
-	}
+*/
+/*	}
 }
+*/
 
 func (cr *crawler) runExtractor(ctx context.Context,
 	id int,
 	doneCh chan struct{},
 	outlinks Outlinks,
-	dlOut <-chan Crawled,
-	dlIn chan<- download.Request) {
+	dlOut <-chan download.Downloaded,
+	output chan<- Crawled) {
 	for {
-		_, done := cr.handleOutlinks(ctx, id, doneCh, outlinks, dlOut, dlIn)
-		if done {
-			return
-		}
-	}
-}
-
-func (cr *crawler) handleOutlinks(ctx context.Context,
-	id int,
-	doneCh chan struct{},
-	outlinks Outlinks,
-	dlOut <-chan Crawled,
-	dlIn chan<- download.Request) (int, bool) {
-
-	// Wait for newly downloaded items.
-	var crawled Crawled
-	var ok bool
-	select {
-	case <-ctx.Done():
-		return 0, true
-	case <-doneCh:
-		return 0, true
-	case crawled, ok = <-dlOut:
-		if !ok {
-			return 0, true
-		}
-	}
-	// Extract outlinks and add them to the downloader's queue.
-	extracted := outlinks.Extract(ctx, crawled)
-	nlinks := 0
-	for _, outlinks := range extracted {
-		if len(outlinks.Names()) == 0 {
-			continue
-		}
-		outlinks.IncDepth()
-		if outlinks.Depth() > cr.depth {
-			continue
-		}
-		nlinks += len(outlinks.Names())
+		// Wait for newly downloaded items.
+		var crawled Crawled
+		var ok bool
 		select {
 		case <-ctx.Done():
-			return 0, true
-		case dlIn <- outlinks:
+			return
+		case <-doneCh:
+			return
+		case crawled.Downloaded, ok = <-dlOut:
+			if !ok {
+				return
+			}
+		}
+		// Extract outlinks and add them to the downloader's queue.
+		extracted := outlinks.Extract(ctx, crawled.Downloaded)
+		for _, outlinks := range extracted {
+			crawled.Outlinks = append(crawled.Outlinks, outlinks)
+		}
+		// Check to see if the extractor should stop.
+		select {
+		case output <- crawled:
+		case <-doneCh:
+			return
+		default:
 		}
 	}
-	// Check to see if the extractor should stop.
-	select {
-	case <-doneCh:
-		return nlinks, true
-	default:
-	}
-	return nlinks, false
 }
