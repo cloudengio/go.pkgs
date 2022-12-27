@@ -47,34 +47,30 @@ func (cr *crawlRequest) IncDepth() {
 
 type extractor struct {
 	sync.Mutex
-	// test with a fanout ...
 	fanOut int
-	names  map[string]bool
 }
 
-func (e *extractor) Extract(ctx context.Context, downloaded download.Downloaded) []crawl.Request {
+func (e *extractor) Extract(ctx context.Context, crawled crawl.Crawled) []crawl.Request {
 	e.Lock()
 	defer e.Unlock()
-	outlinks := &crawlRequest{container: downloaded.Container}
-	for _, dlr := range downloaded.Downloads {
-		if e.names[dlr.Name] {
-			continue
+	outlinks := crawled.Request.(*crawlRequest)
+	for _, dlr := range crawled.Downloads {
+		for nout := 0; nout < e.fanOut; nout++ {
+			outlinks.names = append(outlinks.names, dlr.Name+fmt.Sprintf("%v", nout))
 		}
-		outlinks.names = append(outlinks.names, dlr.Name)
-		e.names[dlr.Name] = true
 	}
-	//fmt.Printf("test extractor return # outlinks: %v\n", len(outlinks.Names))
 	return []crawl.Request{outlinks}
 }
 
-func crawlItems(ctx context.Context, nItems int, input chan<- crawl.Request, reader fs.FS) {
+func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- crawl.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- &crawlRequest{container: reader, names: []string{fmt.Sprintf("%v", i)}}:
+		case input <- &crawlRequest{container: reader, depth: 0, names: []string{fmt.Sprintf("%v", i)}}:
 		case <-ctx.Done():
 			break
 		}
 	}
+	fmt.Printf("sent %v items\n", nItems)
 	close(input)
 }
 
@@ -83,53 +79,56 @@ func TestCrawler(t *testing.T) {
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan crawl.Request, 10)
-	output := make(chan download.Downloaded, 10)
+	output := make(chan crawl.Crawled, 10)
 	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 	progressCh := make(chan download.Progress, 1)
 
 	downloader := download.New(
-		download.WithProgress(time.Millisecond, progressCh, false),
+		download.WithProgress(time.Millisecond, progressCh, true),
 		download.WithNumDownloaders(1))
 
-	fmt.Printf("object downloader: %p\n", downloader)
-	crawler := crawl.New(crawl.WithNumExtractors(1),
-		crawl.WithCrawlDepth(1))
+	crawler := crawl.New(crawl.WithNumExtractors(2), crawl.WithCrawlDepth(2))
 
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
 
-	outlinks := &extractor{names: map[string]bool{}}
+	outlinks := &extractor{fanOut: 2}
 
 	go func() {
 		errCh <- crawler.Run(ctx, outlinks, downloader, writeFS, input, output)
 		wg.Done()
 	}()
 
+	nItems := 10
 	go func() {
-		crawlItems(ctx, 1000, input, readFS)
+		issuseCrawlRequests(ctx, nItems, input, readFS)
 		wg.Done()
 	}()
 
-	crawled := []download.Downloaded{}
+	crawled := []crawl.Crawled{}
 	total := 0
 	go func() {
 		for outs := range output {
 			crawled = append(crawled, outs)
 			total += len(outs.Downloads)
-			//fmt.Printf("test received: %v/%v\n", len(outs.Downloads), total)
+			fmt.Printf("total/crawled: %v %v\n", total, len(outs.Downloads))
 		}
-		fmt.Printf("output: done...\n")
+		fmt.Printf("total/crawled: %v %v\n", total, len(crawled))
 		wg.Done()
 	}()
 
-	// Need to merge these?
-	for {
-		select {
-		case p := <-progressCh:
-			fmt.Printf("object progress: %v\n", p)
-		}
+	// Make sure the progress chan gets closed.
+	for range progressCh {
 	}
 	wg.Wait()
 
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("test done: ... %v: %v\n", total, len(crawled))
+	t.Fail()
 }

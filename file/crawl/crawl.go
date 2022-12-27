@@ -6,6 +6,7 @@ package crawl
 
 import (
 	"context"
+	"io/fs"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/download"
@@ -19,12 +20,19 @@ type Request interface {
 	IncDepth()
 }
 
+// Crawled represents all of the downloads in response to a given crawl request.
+type Crawled struct {
+	Request   Request
+	Container fs.FS
+	Downloads []download.Result
+	Outlinks  []Request
+}
+
 // Outlinks represents the interface to an 'outlink' extractor, that is, an
 // entity that determines additional items to be downloaded based on the
-// contents of an already downloaded one. Generally these will references
-// to external documents/files.
+// contents of an already downloaded one.
 type Outlinks interface {
-	Extract(ctx context.Context, item download.Downloaded) []Request
+	Extract(ctx context.Context, crawled Crawled) []Request
 }
 
 // T represents the interface to a crawler. The crawler will download
@@ -36,5 +44,5 @@ type T interface {
 		downloader download.T,
 		writeFS file.WriteFS,
 		input <-chan Request,
-		output chan<- download.Downloaded) error
+		output chan<- Crawled) error
 }

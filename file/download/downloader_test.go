@@ -2,11 +2,8 @@ package download_test
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"math/rand"
 	"runtime"
@@ -49,7 +46,7 @@ func runDownloader(ctx context.Context, downloader download.T, writer file.Write
 	}()
 
 	go func() {
-		crawlItems(ctx, nItems, input, reader)
+		issueDownloadRequests(ctx, nItems, input, reader)
 		wg.Done()
 	}()
 
@@ -62,7 +59,7 @@ func runDownloader(ctx context.Context, downloader download.T, writer file.Write
 	return downloaded, err
 }
 
-func crawlItems(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
+func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
 		case input <- dlRequest{container: reader, names: []string{fmt.Sprintf("%v", i)}}:
@@ -73,25 +70,6 @@ func crawlItems(ctx context.Context, nItems int, input chan<- download.Request, 
 	close(input)
 }
 
-func sha1Sums(t *testing.T, downloaded []download.Downloaded) map[string]string {
-	_, _, line, _ := runtime.Caller(1)
-	s := map[string]string{}
-	for _, d := range downloaded {
-		for _, c := range d.Downloads {
-			f, err := d.Container.Open(c.Name)
-			if err != nil {
-				t.Fatalf("line: %v, %v", line, err)
-			}
-			buf, err := io.ReadAll(f)
-			if err != nil {
-				t.Fatalf("line: %v, %v", line, err)
-			}
-			sum := sha1.Sum(buf)
-			s[c.Name] = hex.EncodeToString(sum[:])
-		}
-	}
-	return s
-}
 func checkForDownloadErrors(t *testing.T, downloaded []download.Downloaded) {
 	_, _, line, _ := runtime.Caller(1)
 	for _, c := range downloaded {
@@ -99,24 +77,6 @@ func checkForDownloadErrors(t *testing.T, downloaded []download.Downloaded) {
 			if d.Err != nil {
 				t.Errorf("line: %v: %v: %v", line, d.Name, d.Err)
 			}
-		}
-	}
-}
-
-func validSHA1Sums(t *testing.T, downloaded map[string]string, contents map[string][]byte) {
-	_, _, line, _ := runtime.Caller(1)
-	if got, want := len(downloaded), len(contents); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	for cname, csum := range downloaded {
-		if _, ok := contents[cname]; !ok {
-			t.Errorf("line: %v, %v was not downloaded", line, cname)
-			continue
-		}
-		sum := sha1.Sum(contents[cname])
-		if got, want := csum, hex.EncodeToString(sum[:]); got != want {
-			t.Errorf("line: %v, %v: got %v, want %v", line, cname, got, want)
 		}
 	}
 }
@@ -138,8 +98,9 @@ func TestDownload(t *testing.T) {
 	}
 
 	checkForDownloadErrors(t, downloaded)
-	contents := filetestutil.Contents(readFS)
-	validSHA1Sums(t, sha1Sums(t, downloaded), contents)
+	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestDownloadCancel(t *testing.T) {
@@ -191,8 +152,9 @@ func TestDownloadRetries(t *testing.T) {
 	}
 
 	checkForDownloadErrors(t, downloaded)
-	contents := filetestutil.Contents(readFS)
-	validSHA1Sums(t, sha1Sums(t, downloaded), contents)
+	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, d := range downloaded {
 		for _, c := range d.Downloads {
@@ -226,7 +188,7 @@ func TestDownloadProgress(t *testing.T) {
 	nItems := 1000
 
 	go func() {
-		crawlItems(ctx, nItems, input, readFS)
+		issueDownloadRequests(ctx, nItems, input, readFS)
 		wg.Done()
 	}()
 
