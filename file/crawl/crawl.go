@@ -32,9 +32,7 @@ type Outlinks interface {
 	Extract(ctx context.Context, download download.Downloaded) []download.Request
 }
 
-// T represents the interface to a crawler. The crawler will download
-// the requested items and in addition, determine further items to be crawled,
-// based on their contents, using the supplied link extractor.
+// T represents the interface to a crawler.
 type T interface {
 	Run(ctx context.Context,
 		extractor Outlinks,

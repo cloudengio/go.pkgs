@@ -50,19 +50,21 @@ type extractor struct {
 	fanOut int
 }
 
-func (e *extractor) Extract(ctx context.Context, crawled crawl.Crawled) []crawl.Request {
+func (e *extractor) Extract(ctx context.Context, downloaded download.Downloaded) []download.Request {
 	e.Lock()
 	defer e.Unlock()
-	outlinks := crawled.Request.(*crawlRequest)
-	for _, dlr := range crawled.Downloads {
+	outlinks := (*downloaded.Request.(*crawlRequest))
+	outlinks.names = nil
+	for _, dlr := range downloaded.Downloads {
 		for nout := 0; nout < e.fanOut; nout++ {
 			outlinks.names = append(outlinks.names, dlr.Name+fmt.Sprintf("%v", nout))
 		}
+		fmt.Printf("outlinks: %v\n", outlinks.names)
 	}
-	return []crawl.Request{outlinks}
+	return []download.Request{&outlinks}
 }
 
-func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- crawl.Request, reader fs.FS) {
+func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
 		case input <- &crawlRequest{container: reader, depth: 0, names: []string{fmt.Sprintf("%v", i)}}:
@@ -78,7 +80,7 @@ func TestCrawler(t *testing.T) {
 	ctx := context.Background()
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan crawl.Request, 10)
+	input := make(chan download.Request, 10)
 	output := make(chan crawl.Crawled, 10)
 	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 	progressCh := make(chan download.Progress, 1)
@@ -130,5 +132,10 @@ func TestCrawler(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("test done: ... %v: %v\n", total, len(crawled))
+	for _, c := range crawled {
+		for _, ol := range c.Outlinks {
+			fmt.Printf("%v/ %v\n", ol, len(ol.Names()))
+		}
+	}
 	t.Fail()
 }

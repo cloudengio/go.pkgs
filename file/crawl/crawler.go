@@ -47,10 +47,27 @@ func New(opts ...Option) T {
 	if cr.concurrency == 0 {
 		cr.concurrency = runtime.GOMAXPROCS(0)
 	}
+	if cr.depth == 0 {
+		cr.depth = 1
+	}
 	return cr
 }
 
 func (cr *crawler) Run(ctx context.Context,
+	extractor Outlinks,
+	downloader download.T,
+	writeFS file.WriteFS,
+	input <-chan download.Request,
+	output chan<- Crawled) error {
+
+	for depth := 0; depth < cr.depth; depth++ {
+		return cr.download(ctx, extractor, downloader, writeFS, input, output)
+
+	}
+
+}
+
+func (cr *crawler) download(ctx context.Context,
 	extractor Outlinks,
 	downloader download.T,
 	writeFS file.WriteFS,
@@ -91,81 +108,6 @@ func (cr *crawler) Run(ctx context.Context,
 	close(output)
 	return <-errCh
 }
-
-/*
-func (cr *crawler) forwardRequests(ctx context.Context, input <-chan Request, output chan<- download.Request) {
-	for {
-		var req Request
-		var ok bool
-		select {
-		case <-ctx.Done():
-			return
-		case req, ok = <-input:
-			if !ok {
-				return
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case output <- req:
-		}
-	}
-}
-
-// forward downloads to both the user output and the extractor.
-func (cr *crawler) downloadsTee(ctx context.Context, doneCh chan struct{}, input <-chan download.Downloaded, userOutput, extractorInput chan<- Crawled) {
-	//	var aout, bout int
-	for {
-		var downloaded download.Downloaded
-		var ok bool
-		select {
-		case <-ctx.Done():
-			return
-		case downloaded, ok = <-input:
-			if !ok {
-				return
-			}
-		}
-		crawled := Crawled{
-			Request:   downloaded.Request.(Request),
-			Container: downloaded.Container,
-			Downloads: downloaded.Downloads,
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case userOutput <- crawled:
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case extractorInput <- crawled:
-			//		case <-doneCh:
-		default:
-		}
-		/*
-			var a, b bool
-			//		fmt.Printf("\n\nLoop start: a/b: %v %v: %v\n", a, b, aout+bout)
-			for !a || !b {
-				//			fmt.Printf("Loop before select: a/b: %v %v: %v %v: %v\n", a, b, aout, bout, aout+bout)
-				select {
-				case <-ctx.Done():
-					return
-				case userOutput <- downloaded:
-					a = true
-					aout++
-				case extractorInput <- downloaded:
-					b = true
-					bout++
-				}
-				fmt.Printf("Loop after select: a/b: %v %v: %v/%v\n", a, b, aout, bout)
-			}
-			//		fmt.Printf("Loop done: a/b: %v %v: %v\n", aout, bout, aout+bout)
-*/
-/*	}
-}
-*/
 
 func (cr *crawler) runExtractor(ctx context.Context,
 	id int,
