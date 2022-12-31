@@ -135,8 +135,6 @@ func TestGetIgnore(t *testing.T) {
 	if _, ok := bycreator[pkgPath+"runGoC"]; !ok {
 		t.Errorf("%v should have been recorded", "runGoC")
 	}
-
-	fmt.Printf("%v\n", bycreator)
 }
 
 func TestFormat(t *testing.T) {
