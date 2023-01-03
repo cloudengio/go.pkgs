@@ -10,18 +10,19 @@ import (
 )
 
 var (
+	// https://github.com/flytam/filenamify
 	reControl           = regexp.MustCompile("[\u0000-\u001f\u0080-\u009f]")
-	reRelative          = regexp.MustCompile(`^\.+`)
 	reRelativeComponets = regexp.MustCompile(`\.+`)
-	reFilenameLinux     = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
-	reFilenameWindows   = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])$`)
+
+	// https://github.com/sindresorhus/filename-reserved-regex/blob/master/index.js
+	reFilenameLinux   = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+	reFilenameWindows = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])$`)
 
 	rules = []struct {
 		re  *regexp.Regexp
 		err string
 	}{
 		{reControl, "contains control characters"},
-		{reRelative, "relative path"},
 		{reRelativeComponets, "contains relative path components"},
 		{reFilenameLinux, "contains unix reserved characters"},
 		{reFilenameWindows, "contains windows reserved characters"},

@@ -15,8 +15,8 @@ func TestSafePaths(t *testing.T) {
 		path string
 		err  string
 	}{
-		{"../y", "relative path"},
-		{"./y", "relative path"},
+		{"../y", "contains relative path components"},
+		{"./y", "contains relative path components"},
 		{"x/../y", "contains relative path components"},
 		{"x/./y", "contains relative path components"},
 		{"x/?/y", "contains unix reserved characters"},
