@@ -70,13 +70,13 @@ func TestSignal(t *testing.T) {
 	cmd, pid, st = runCmd("--debounce=250ms")
 	go func() {
 		_ = syscall.Kill(pid, syscall.SIGINT)
-		time.Sleep(time.Millisecond * 250)
+		time.Sleep(time.Millisecond * 500)
 		_ = syscall.Kill(pid, syscall.SIGINT)
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.ExpectNextRE(ctx, regexp.MustCompile("^exit status 1$|^interrupt$")); err != nil {
+	if err := st.ExpectNext(ctx, "exit status 1"); err != nil {
 		t.Fatal(err)
 	}
 	err := cmd.Wait()
