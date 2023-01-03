@@ -13,12 +13,10 @@ import (
 
 type fakeErrorf struct {
 	calls int
-	extra int
 }
 
 func (f *fakeErrorf) Errorf(format string, args ...interface{}) {
 	f.calls++
-	f.extra = args[0].(int)
 }
 
 func TestNoLeaks(t *testing.T) {
