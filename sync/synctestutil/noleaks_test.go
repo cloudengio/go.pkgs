@@ -12,9 +12,8 @@ import (
 )
 
 type fakeErrorf struct {
-	calls     int
-	extra     int
-	formatted string
+	calls int
+	extra int
 }
 
 func (f *fakeErrorf) Errorf(format string, args ...interface{}) {
