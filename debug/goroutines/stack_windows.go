@@ -6,7 +6,11 @@
 
 package goroutines
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+	"strconv"
+)
 
 var (
 	stackFileVolumeRE = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+)?)`)
