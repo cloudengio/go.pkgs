@@ -70,18 +70,17 @@ func TestSignal(t *testing.T) {
 	cmd, pid, st = runCmd("--debounce=250ms")
 	go func() {
 		_ = syscall.Kill(pid, syscall.SIGINT)
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 300)
 		_ = syscall.Kill(pid, syscall.SIGINT)
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.ExpectNext(ctx, "exit status 1"); err != nil {
+	if err := st.ExpectNextRE(ctx, regexp.MustCompile("^exit status 1$")); err != nil {
 		t.Fatal(err)
 	}
 	err := cmd.Wait()
 	if err == nil || err.Error() != "exit status 1" {
 		t.Errorf("unexpected error: %v", err)
 	}
-
 }

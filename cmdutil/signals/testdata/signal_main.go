@@ -2,6 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:build igore
 // +build igore
 
 package main
@@ -32,6 +33,6 @@ func main() {
 	})
 	fmt.Printf("PID=%v\n", os.Getpid())
 	sig := handler.WaitForSignal()
-	time.Sleep(signals.DebounceDuration * 2)
+	time.Sleep(signals.DebounceDuration * 4)
 	fmt.Println(sig.String())
 }
