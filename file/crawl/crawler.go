@@ -54,17 +54,55 @@ func New(opts ...Option) T {
 }
 
 func (cr *crawler) Run(ctx context.Context,
+	factory DownloaderFactory,
 	extractor Outlinks,
-	downloader download.T,
 	writeFS file.WriteFS,
 	input <-chan download.Request,
 	output chan<- Crawled) error {
-
 	for depth := 0; depth < cr.depth; depth++ {
-		return cr.download(ctx, extractor, downloader, writeFS, input, output)
-
+		if err := cr.crawlAtDepth(ctx, depth, factory, extractor, writeFS, input, output); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
+func (cr *crawler) crawlAtDepth(ctx context.Context,
+	depth int,
+	factory DownloaderFactory,
+	extractor Outlinks,
+	writeFS file.WriteFS,
+	input <-chan download.Request,
+	output chan<- Crawled) error {
+	dl, dlIn, dlOut := factory(ctx)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		cr.pipeInput(ctx, input, dlIn)
+		wg.Done()
+	}()
+
+}
+
+func (cr *crawler) pipeInput(ctx context.Context, input <-chan download.Request, dlIn chan<- download.Request) {
+	for {
+		var req download.Request
+		var ok bool
+		select {
+		case <-ctx.Done():
+			return
+		case req, ok = <-input:
+			if !ok {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case dlIn <- req:
+		}
+	}
 }
 
 func (cr *crawler) download(ctx context.Context,

@@ -29,14 +29,21 @@ type Crawled struct {
 // entity that determines additional items to be downloaded based on the
 // contents of an already downloaded one.
 type Outlinks interface {
+	// Note that the implementation of Extract is responsible for removing
+	// duplicates from the set of extracted links returned.
 	Extract(ctx context.Context, download download.Downloaded) []download.Request
 }
+
+type DownloaderFactory func(context.Context) (
+	downloader download.T,
+	input chan<- download.Request,
+	output <-chan download.Downloaded)
 
 // T represents the interface to a crawler.
 type T interface {
 	Run(ctx context.Context,
+		factory DownloaderFactory,
 		extractor Outlinks,
-		downloader download.T,
 		writeFS file.WriteFS,
 		input <-chan download.Request,
 		output chan<- Crawled) error
