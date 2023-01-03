@@ -13,29 +13,41 @@ import (
 )
 
 var (
-	stackFileVolumeRE = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+)?)`)
-	stackFileRE       = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
+	stackFileVolumeRE   = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+)?)`)
+	stackFileRE         = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
+	stackFileNoOffsetRE = regexp.MustCompile(`^\s+([^:]+):(\d+)$`)
 )
+
+func parseNoOffset(matches []string) (file string, line int64, err error) {
+	file = string(matches[1])
+	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
+	return
+}
+
+func parseAll(matches []string) (file string, line int64, err error) {
+	file = string(matches[1])
+	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
+	if err != nil {
+		return
+	}
+	offset, err = strconv.ParseInt(string(matches[3]), 16, 64)
+	return
+}
 
 func parseFileLine(input []byte) (file string, line, offset int64, err error) {
 	matches := stackFileVolumeRE.FindSubmatch(input)
 	if len(matches) == 0 {
 		matches = stackFileRE.FindSubmatch(input)
 	}
-	if len(matches) < 4 {
+	if len(matches) == 4 {
+		file, line, offset, err = parseAll(matches)
+		return
+	}
+	matches = stackFileNoOffsetRE.FindSubmatch(input)
+	if len(matches) < 3 {
 		err = fmt.Errorf("Could not parse file reference from %s", string(input))
 		return
 	}
-	file = string(matches[1])
-	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
-	if err != nil {
-		return
-	}
-	if len(matches[3]) > 0 {
-		offset, err = strconv.ParseInt(string(matches[3]), 16, 64)
-		if err != nil {
-			return
-		}
-	}
+	file, line, err = parseNoOffset(matches)
 	return
 }
