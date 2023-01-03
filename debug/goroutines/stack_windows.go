@@ -8,4 +8,30 @@ package goroutines
 
 import "regexp"
 
-var stackFileRE = regexp.MustCompile(`^\s+[A-Za-z]+:([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
+var (
+	stackFileVolumeRE = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+)?)`)
+	stackFileRE       = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
+)
+
+func parseFileLine(input []byte) (file string, line, offset int64, err error) {
+	matches := stackFileVolumeRE.FindSubmatch(input)
+	if len(matches) == 0 {
+		matches = stackFileRE.FindSubmatch(input)
+	}
+	if len(matches) < 4 {
+		err = fmt.Errorf("Could not parse file reference from %s", string(input))
+		return
+	}
+	file = string(matches[1])
+	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
+	if err != nil {
+		return
+	}
+	if len(matches[3]) > 0 {
+		offset, err = strconv.ParseInt(string(matches[3]), 16, 64)
+		if err != nil {
+			return
+		}
+	}
+	return
+}

@@ -131,22 +131,10 @@ func parseFrame(scanner *bufio.Scanner) (*Frame, error) {
 	if !scanner.Scan() {
 		return nil, fmt.Errorf("Frame lacked a second line %s", f.Call)
 	}
-	matches := stackFileRE.FindSubmatch(scanner.Bytes())
-	if len(matches) < 4 {
-		return nil, fmt.Errorf("Could not parse file reference from %s (using %v on %s)", scanner.Text(), stackFileRE.String(), scanner.Bytes())
-	}
-	f.File = string(matches[1])
-	line, err := strconv.ParseInt(string(matches[2]), 10, 64)
+	var err error
+	f.File, f.Line, f.Offset, err = parseFileLine(scanner.Bytes())
 	if err != nil {
 		return nil, err
-	}
-	f.Line = line
-	if len(matches[3]) > 0 {
-		offset, err := strconv.ParseInt(string(matches[3]), 16, 64)
-		if err != nil {
-			return nil, err
-		}
-		f.Offset = offset
 	}
 	return f, nil
 }
