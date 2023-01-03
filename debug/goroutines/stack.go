@@ -133,7 +133,7 @@ func parseFrame(scanner *bufio.Scanner) (*Frame, error) {
 	}
 	matches := stackFileRE.FindSubmatch(scanner.Bytes())
 	if len(matches) < 4 {
-		return nil, fmt.Errorf("Could not parse file reference from %s", scanner.Text())
+		return nil, fmt.Errorf("Could not parse file reference from %s (using %v)", scanner.Text(), stackFileRE.String())
 	}
 	f.File = string(matches[1])
 	line, err := strconv.ParseInt(string(matches[2]), 10, 64)
