@@ -16,7 +16,6 @@ import (
 )
 
 var goroutineHeaderRE = regexp.MustCompile(`^goroutine (\d+) \[([^\]]+)\]:$`)
-var stackFileRE = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
 
 // Goroutine represents a single goroutine.
 type Goroutine struct {
