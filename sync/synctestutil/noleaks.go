@@ -51,7 +51,7 @@ func AssertNoGoroutines(t Errorf) func() {
 		left := compare(bycreator, cbycreator)
 		if len(left) != 0 {
 			t.Errorf("%d extra Goroutines outstanding:\n %s",
-				len(left), string(goroutines.Format(left...)))
+				len(left), goroutines.Format(left...))
 		}
 
 	}
@@ -81,7 +81,7 @@ func AssertNoGoroutinesRacy(t Errorf, wait time.Duration) func() {
 			}
 			if time.Now().After(until) {
 				t.Errorf("%d extra Goroutines outstanding after %v:\n %s",
-					len(left), wait, string(goroutines.Format(left...)))
+					len(left), wait, goroutines.Format(left...))
 				return
 			}
 			time.Sleep(backoff)

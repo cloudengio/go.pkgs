@@ -10,13 +10,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"cloudeng.io/debug/goroutines"
 	"cloudeng.io/path/gopkgpath"
 )
-
-const leakWaitTime = 2 * time.Second
 
 func wrappedWaitForIt(wg *sync.WaitGroup, wait chan struct{}, n int64) {
 	if n == 0 {
@@ -155,6 +152,6 @@ func TestFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if formatted := goroutines.Format(gs...); string(buf) != formatted {
-		t.Errorf("got:\n%s\nwanted:\n%s\n", string(formatted), string(buf))
+		t.Errorf("got:\n%s\nwanted:\n%s\n", formatted, buf)
 	}
 }
