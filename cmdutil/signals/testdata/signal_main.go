@@ -17,10 +17,15 @@ import (
 	"cloudeng.io/cmdutil/signals"
 )
 
-var debounceFlag time.Duration
+var (
+	debounceFlag time.Duration
+	sleepFlag    time.Duration
+)
 
 func init() {
 	flag.DurationVar(&debounceFlag, "debounce", time.Second, "signal debouce delay")
+	flag.DurationVar(&sleepFlag, "sleep", time.Second, "post signal sleep duration")
+
 }
 
 func main() {
@@ -33,6 +38,6 @@ func main() {
 	})
 	fmt.Printf("PID=%v\n", os.Getpid())
 	sig := handler.WaitForSignal()
-	time.Sleep(signals.DebounceDuration * 4)
+	time.Sleep(sleepFlag)
 	fmt.Println(sig.String())
 }

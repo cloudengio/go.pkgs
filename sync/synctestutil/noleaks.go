@@ -6,6 +6,7 @@ package synctestutil
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"cloudeng.io/debug/goroutines"
@@ -122,9 +123,9 @@ func compare(before, after map[string]*goroutines.Goroutine) []*goroutines.Gorou
 	for k, g := range after {
 		if _, ok := before[k]; !ok {
 			left = append(left, g)
-			fmt.Printf("\nLEFT: key %v: %v\n", k, goroutines.Format(g))
-			fmt.Printf("BEFORE: %v\n\n", goroutines.Format(tolist(before)...))
-			fmt.Printf("AFTER: %v\n\n", goroutines.Format(tolist(before)...))
+			fmt.Fprintf(os.Stderr, "\nLEFT: key %v: %v\n", k, goroutines.Format(g))
+			fmt.Fprintf(os.Stderr, "BEFORE: %v\n\n", goroutines.Format(tolist(before)...))
+			fmt.Fprintf(os.Stderr, "AFTER: %v\n\n", goroutines.Format(tolist(before)...))
 		}
 	}
 	return left
