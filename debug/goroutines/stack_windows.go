@@ -24,7 +24,7 @@ func parseNoOffset(matches []string) (file string, line int64, err error) {
 	return
 }
 
-func parseAll(matches []string) (file string, line int64, err error) {
+func parseAll(matches []string) (file string, line, offset int64, err error) {
 	file = string(matches[1])
 	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
 	if err != nil {
