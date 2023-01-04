@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/debug/goroutines"
 	"cloudeng.io/sync/synctestutil"
 )
 
@@ -23,10 +24,14 @@ func TestNoLeaks(t *testing.T) {
 	er := &fakeErrorf{}
 
 	// Simple case with no goroutines.
+	before, _ := goroutines.Get()
 	fn := synctestutil.AssertNoGoroutines(er)
 	fn()
 	if got, want := er.calls, 0; got != want {
-		t.Errorf("got %v, want %v", got, want)
+		after, _ := goroutines.Get()
+		t.Logf("before: %v", goroutines.Format(before...))
+		t.Logf("after: %v", goroutines.Format(after...))
+		t.Fatalf("got %v, want %v", got, want)
 	}
 
 	stop := make(chan struct{})

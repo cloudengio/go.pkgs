@@ -5,8 +5,6 @@
 package synctestutil
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"cloudeng.io/debug/goroutines"
@@ -110,22 +108,11 @@ func getGoroutines() (map[string]*goroutines.Goroutine, error) {
 	return bycreator, nil
 }
 
-func tolist(m map[string]*goroutines.Goroutine) []*goroutines.Goroutine {
-	l := []*goroutines.Goroutine{}
-	for _, g := range m {
-		l = append(l, g)
-	}
-	return l
-}
-
 func compare(before, after map[string]*goroutines.Goroutine) []*goroutines.Goroutine {
 	var left []*goroutines.Goroutine
 	for k, g := range after {
 		if _, ok := before[k]; !ok {
 			left = append(left, g)
-			fmt.Fprintf(os.Stderr, "\nLEFT: key %v: %v\n", k, goroutines.Format(g))
-			fmt.Fprintf(os.Stderr, "BEFORE: %v\n\n", goroutines.Format(tolist(before)...))
-			fmt.Fprintf(os.Stderr, "AFTER: %v\n\n", goroutines.Format(tolist(before)...))
 		}
 	}
 	return left
