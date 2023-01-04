@@ -8,7 +8,6 @@ package goroutines
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 )

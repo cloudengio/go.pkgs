@@ -5,6 +5,8 @@
 package synctestutil
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"cloudeng.io/debug/goroutines"
@@ -96,8 +98,8 @@ func getGoroutines() (map[string]*goroutines.Goroutine, error) {
 	gs, err := goroutines.Get()
 	if err != nil {
 		return nil, err
-
 	}
+	fmt.Fprintf(os.Stderr, "getGoroutines: %v\n", goroutines.Format(gs...))
 	bycreator := map[string]*goroutines.Goroutine{}
 	for _, g := range gs {
 		key := ""
