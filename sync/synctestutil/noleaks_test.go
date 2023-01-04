@@ -20,17 +20,25 @@ func (f *fakeErrorf) Errorf(format string, args ...interface{}) {
 	f.calls++
 }
 
+func mustGet(t *testing.T) []*goroutines.Goroutine {
+	gs, err := goroutines.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gs
+}
+
 func TestNoLeaks(t *testing.T) {
 	er := &fakeErrorf{}
 
 	// Simple case with no goroutines.
-	before, _ := goroutines.Get()
+	before := mustGet(t)
 	fn := synctestutil.AssertNoGoroutines(er)
 	fn()
+	after := mustGet(t)
 	if got, want := er.calls, 0; got != want {
-		after, _ := goroutines.Get()
-		t.Logf("before: %v", goroutines.Format(before...))
-		t.Logf("after: %v", goroutines.Format(after...))
+		t.Logf("before: %v: %v", len(before), goroutines.Format(before...))
+		t.Logf("after: %v: %v", len(after), goroutines.Format(after...))
 		t.Fatalf("got %v, want %v", got, want)
 	}
 
