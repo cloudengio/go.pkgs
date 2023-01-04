@@ -8,6 +8,7 @@ package goroutines
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 )
@@ -15,7 +16,7 @@ import (
 var (
 	stackFileVolumeRE   = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+)?)`)
 	stackFileRE         = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
-	stackFileNoOffsetRE = regexp.MustCompile(`^\s+([^:]+):(\d+)$`)
+	stackFileNoOffsetRE = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)$`)
 )
 
 func parseNoOffset(matches [][]byte) (file string, line int64, err error) {
