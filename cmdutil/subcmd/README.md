@@ -349,6 +349,12 @@ type CurrentCommand struct {
 ### Methods
 
 ```go
+func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet)
+```
+MustRunnerAndFlags is like RunnerAndFlags but will panic on error.
+
+
+```go
 func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error
 ```
 RunnerAndFlags specifies the Runner and FlagSet for the currently 'set'

@@ -94,7 +94,7 @@ func WithNumDownloaders(concurrency int) Option {
 // WithProgress requests that progress messages are sent over the
 // supplid channel. If close is true the progress channel will be closed
 // when the downloader has finished. Close should be set to false if the same
-// channel is shared across multipled downloader instances.
+// channel is shared across multiplied downloader instances.
 func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option {
 	return func(o *options) {
 		o.progressInterval = interval
