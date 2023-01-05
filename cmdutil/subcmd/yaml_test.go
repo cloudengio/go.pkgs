@@ -102,7 +102,7 @@ func TestYAMLCommands(t *testing.T) {
 	tl := &runner{name: "toplevel-example", out: out}
 
 	cs := fromYaml(toplevel)
-	cs.Set("toplevel").RunnerAndFlags(tl.cmd,
+	cs.Set("toplevel").MustRunnerAndFlags(tl.cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 	assertUsage(cs, "toplevel", "overall documentation for toplevel")
 	dispatch(cs)
@@ -111,7 +111,7 @@ func TestYAMLCommands(t *testing.T) {
 	cs = fromYaml(oneLevel)
 	for _, cmd := range []string{"l0.1", "l0.2", "l0.3", "l0.4", "l0.5"} {
 		r := &runner{name: cmd, out: out}
-		cs.Set(cmd).RunnerAndFlags(r.cmd,
+		cs.Set(cmd).MustRunnerAndFlags(r.cmd,
 			subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 	}
 
@@ -133,10 +133,9 @@ arguments:
 
 	out := &strings.Builder{}
 
-	cmdSet.Set("toplevel").RunnerAndFlags(
+	cmdSet.Set("toplevel").MustRunnerAndFlags(
 		(&runner{name: "toplevel", out: out}).cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
-
 	if err := cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "-flag1=32", "single-arg"); err != nil {
 		panic(err)
 	}
@@ -166,19 +165,19 @@ commands:
 `)
 
 	out := &strings.Builder{}
-	cmdSet.Set("l0.1").RunnerAndFlags(
+	cmdSet.Set("l0.1").MustRunnerAndFlags(
 		(&runner{name: "l0.1", out: out}).cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 
-	cmdSet.Set("l0.2").RunnerAndFlags(
+	cmdSet.Set("l0.2").MustRunnerAndFlags(
 		(&runner{name: "l0.2", out: out}).cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 
-	cmdSet.Set("l1", "l1.1").RunnerAndFlags(
+	cmdSet.Set("l1", "l1.1").MustRunnerAndFlags(
 		(&runner{name: "l1.2", out: out}).cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 
-	cmdSet.Set("l1", "l1.2").RunnerAndFlags(
+	cmdSet.Set("l1", "l1.2").MustRunnerAndFlags(
 		(&runner{name: "l1.2", out: out}).cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 
@@ -222,7 +221,7 @@ commands:
 
 	out := &strings.Builder{}
 	for _, name := range []string{"c1", "c2", "c3", "c4", "c5", "c6"} {
-		cmdSet.Set(name).RunnerAndFlags(
+		cmdSet.Set(name).MustRunnerAndFlags(
 			(&runner{name: name, out: out}).cmd,
 			subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 	}

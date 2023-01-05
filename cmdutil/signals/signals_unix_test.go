@@ -9,6 +9,7 @@ package signals_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -28,7 +29,7 @@ func TestSignal(t *testing.T) {
 
 	runCmd := func(args ...string) (*exec.Cmd, int, *expect.Lines) {
 		cmd, rd := runSubprocess(t, args)
-		st := expect.NewLineStream(rd)
+		st := expect.NewLineStream(rd, expect.TraceInput(os.Stderr))
 		if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`PID=\d+`)); err != nil {
 			t.Fatal(err)
 		}
@@ -67,21 +68,21 @@ func TestSignal(t *testing.T) {
 
 	// Make sure that a second signal after the debounce period leads to
 	// an exit.
-	cmd, pid, st = runCmd("--debounce=250ms")
+	cmd, pid, st = runCmd("--debounce=250ms", "--sleep=1m")
 	go func() {
 		_ = syscall.Kill(pid, syscall.SIGINT)
-		time.Sleep(time.Millisecond * 250)
+		// Send a signal while the process is sleeping.
+		time.Sleep(time.Second)
 		_ = syscall.Kill(pid, syscall.SIGINT)
 	}()
 	if err := st.ExpectEventuallyRE(ctx, regexp.MustCompile(`CANCEL PID=\d+`)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.ExpectNext(ctx, "exit status 1"); err != nil {
+	if err := st.ExpectNextRE(ctx, regexp.MustCompile("^exit status 1$")); err != nil {
 		t.Fatal(err)
 	}
 	err := cmd.Wait()
 	if err == nil || err.Error() != "exit status 1" {
 		t.Errorf("unexpected error: %v", err)
 	}
-
 }

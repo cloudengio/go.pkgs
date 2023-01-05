@@ -16,7 +16,6 @@ import (
 )
 
 var goroutineHeaderRE = regexp.MustCompile(`^goroutine (\d+) \[([^\]]+)\]:$`)
-var stackFileRE = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
 
 // Goroutine represents a single goroutine.
 type Goroutine struct {
@@ -54,7 +53,7 @@ func Parse(buf []byte, ignore ...string) ([]*Goroutine, error) {
 		}
 		g, err := parseGoroutine(scanner)
 		if err != nil {
-			return out, fmt.Errorf("Error %v parsing trace:\n%s", err, string(buf))
+			return out, fmt.Errorf("Error parsing trace: %v\n%s", err, string(buf))
 		}
 		if !shouldIgnore(g, ignore) {
 			out = append(out, g)
@@ -132,22 +131,10 @@ func parseFrame(scanner *bufio.Scanner) (*Frame, error) {
 	if !scanner.Scan() {
 		return nil, fmt.Errorf("Frame lacked a second line %s", f.Call)
 	}
-	matches := stackFileRE.FindSubmatch(scanner.Bytes())
-	if len(matches) < 4 {
-		return nil, fmt.Errorf("Could not parse file reference from %s", scanner.Text())
-	}
-	f.File = string(matches[1])
-	line, err := strconv.ParseInt(string(matches[2]), 10, 64)
+	var err error
+	f.File, f.Line, f.Offset, err = parseFileLine(scanner.Bytes())
 	if err != nil {
 		return nil, err
-	}
-	f.Line = line
-	if len(matches[3]) > 0 {
-		offset, err := strconv.ParseInt(string(matches[3]), 16, 64)
-		if err != nil {
-			return nil, err
-		}
-		f.Offset = offset
 	}
 	return f, nil
 }

@@ -80,6 +80,13 @@ func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error {
 	return nil
 }
 
+// MustRunnerAndFlags is like RunnerAndFlags but will panic on error.
+func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet) {
+	if err := c.RunnerAndFlags(runner, fs); err != nil {
+		panic(fmt.Sprintf("%v", err))
+	}
+}
+
 // FromYAML parses a YAML specification of the command tree.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	var yamlCmd commandDef
