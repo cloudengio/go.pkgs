@@ -50,7 +50,7 @@ type extractor struct {
 	fanOut int
 }
 
-func (e *extractor) Extract(ctx context.Context, downloaded download.Downloaded) []download.Request {
+func (e *extractor) Extract(ctx context.Context, depth int, downloaded download.Downloaded) []download.Request {
 	e.Lock()
 	defer e.Unlock()
 	outlinks := (*downloaded.Request.(*crawlRequest))
@@ -76,18 +76,33 @@ func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.
 	close(input)
 }
 
+type dlFactory struct {
+	progressCh     chan download.Progress
+	numDownloaders int
+}
+
+func (df dlFactory) create(ctx context.Context, depth int) (
+	downloader download.T,
+	inputCh chan download.Request,
+	outputCh chan download.Downloaded) {
+	inputCh = make(chan download.Request, 10)
+	outputCh = make(chan download.Downloaded, 10)
+	downloader = download.New(
+		download.WithProgress(time.Millisecond, df.progressCh, false),
+		download.WithNumDownloaders(df.numDownloaders))
+	return
+}
+
 func TestCrawler(t *testing.T) {
 	ctx := context.Background()
 	src := rand.NewSource(time.Now().UnixMicro())
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
-	input := make(chan download.Request, 10)
-	output := make(chan crawl.Crawled, 10)
+
 	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 	progressCh := make(chan download.Progress, 1)
 
-	downloader := download.New(
-		download.WithProgress(time.Millisecond, progressCh, true),
-		download.WithNumDownloaders(1))
+	inputCh := make(chan download.Request, 10)
+	outputCh := make(chan crawl.Crawled, 10)
 
 	crawler := crawl.New(crawl.WithNumExtractors(2), crawl.WithCrawlDepth(2))
 
@@ -97,21 +112,25 @@ func TestCrawler(t *testing.T) {
 
 	outlinks := &extractor{fanOut: 2}
 
+	df := &dlFactory{
+		progressCh:     progressCh,
+		numDownloaders: 1,
+	}
 	go func() {
-		errCh <- crawler.Run(ctx, outlinks, downloader, writeFS, input, output)
+		errCh <- crawler.Run(ctx, df.create, outlinks, writeFS, inputCh, outputCh)
 		wg.Done()
 	}()
 
 	nItems := 10
 	go func() {
-		issuseCrawlRequests(ctx, nItems, input, readFS)
+		issuseCrawlRequests(ctx, nItems, inputCh, readFS)
 		wg.Done()
 	}()
 
 	crawled := []crawl.Crawled{}
 	total := 0
 	go func() {
-		for outs := range output {
+		for outs := range outputCh {
 			crawled = append(crawled, outs)
 			total += len(outs.Downloads)
 			fmt.Printf("total/crawled: %v %v\n", total, len(outs.Downloads))

@@ -23,6 +23,7 @@ import (
 type Crawled struct {
 	download.Downloaded
 	Outlinks []download.Request
+	Depth    int
 }
 
 // Outlinks represents the interface to an 'outlink' extractor, that is, an
@@ -31,13 +32,13 @@ type Crawled struct {
 type Outlinks interface {
 	// Note that the implementation of Extract is responsible for removing
 	// duplicates from the set of extracted links returned.
-	Extract(ctx context.Context, download download.Downloaded) []download.Request
+	Extract(ctx context.Context, depth int, download download.Downloaded) []download.Request
 }
 
-type DownloaderFactory func(context.Context) (
+type DownloaderFactory func(ctx context.Context, depth int) (
 	downloader download.T,
-	input chan<- download.Request,
-	output <-chan download.Downloaded)
+	input chan download.Request,
+	output chan download.Downloaded)
 
 // T represents the interface to a crawler.
 type T interface {

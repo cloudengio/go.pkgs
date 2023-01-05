@@ -6,13 +6,11 @@ package crawl
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/download"
-	"cloudeng.io/sync/errgroup"
 )
 
 // Option is used to configure the behaviour of a newly created Crawler.
@@ -47,9 +45,6 @@ func New(opts ...Option) T {
 	if cr.concurrency == 0 {
 		cr.concurrency = runtime.GOMAXPROCS(0)
 	}
-	if cr.depth == 0 {
-		cr.depth = 1
-	}
 	return cr
 }
 
@@ -59,40 +54,85 @@ func (cr *crawler) Run(ctx context.Context,
 	writeFS file.WriteFS,
 	input <-chan download.Request,
 	output chan<- Crawled) error {
-	for depth := 0; depth < cr.depth; depth++ {
-		if err := cr.crawlAtDepth(ctx, depth, factory, extractor, writeFS, input, output); err != nil {
-			return err
-		}
+
+	dlCurrent, dlRequests, dlDownloaded := factory(ctx, 0)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		dlCurrent.Run(ctx, writeFS, dlRequests, dlDownloaded)
+		wg.Done()
+	}()
+
+	if cr.depth == 0 {
+		err := cr.crawlAtDepth(ctx, 0, extractor, writeFS, input, dlDownloaded, dlRequests, nil, output)
+		return err
 	}
+
+	/*
+		dlNext, dlcnextIn, dlcNextOut := factory(ctx, 1)
+
+		for depth := 0; depth < cr.depth; depth++ {
+
+			if err := cr.crawlAtDepth(ctx, depth, x, extractor, writeFS, input, output); err != nil {
+				return err
+			}
+		}*/
 	return nil
 }
 
 func (cr *crawler) crawlAtDepth(ctx context.Context,
 	depth int,
-	factory DownloaderFactory,
 	extractor Outlinks,
 	writeFS file.WriteFS,
 	input <-chan download.Request,
+	dlOutput <-chan download.Downloaded,
+	dlInput, dlExtractedInput chan<- download.Request,
 	output chan<- Crawled) error {
-	dl, dlIn, dlOut := factory(ctx)
 
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(4)
 	go func() {
-		cr.pipeInput(ctx, input, dlIn)
+		pipe(ctx, input, dlInput)
 		wg.Done()
 	}()
 
+	extractorErrCh := make(chan error, 1)
+
+	ep := newExtractorPool(extractor, depth, cr.concurrency)
+	epIn := make(chan download.Downloaded, cap(output))
+	epOut := make(chan Crawled, cap(output))
+	go func() {
+		extractorErrCh <- ep.run(ctx, epIn, epOut)
+		wg.Done()
+	}()
+
+	go func() {
+		// Pipe output of download pool to extractor pool.
+		pipe(ctx, dlOutput, epIn)
+		wg.Done()
+	}()
+
+	go func() {
+		cr.handleExtractedLinks(ctx, epOut, dlInput, output)
+		wg.Done()
+	}()
+
+	ep.stop()
+	err := <-extractorErrCh
+	wg.Wait()
+	return err
 }
 
-func (cr *crawler) pipeInput(ctx context.Context, input <-chan download.Request, dlIn chan<- download.Request) {
+func pipe[T any](ctx context.Context, inputCh <-chan T, outputCh chan<- T) {
 	for {
-		var req download.Request
+		var in T
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return
-		case req, ok = <-input:
+		case in, ok = <-inputCh:
 			if !ok {
 				return
 			}
@@ -100,84 +140,38 @@ func (cr *crawler) pipeInput(ctx context.Context, input <-chan download.Request,
 		select {
 		case <-ctx.Done():
 			return
-		case dlIn <- req:
+		case outputCh <- in:
 		}
 	}
 }
 
-func (cr *crawler) download(ctx context.Context,
-	extractor Outlinks,
-	downloader download.T,
-	writeFS file.WriteFS,
-	input <-chan download.Request,
-	output chan<- Crawled) error {
-
-	errCh := make(chan error, 1)
-	dlOut := make(chan download.Downloaded, cap(output))
-
-	extractorStop := make(chan struct{})
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		errCh <- downloader.Run(ctx, writeFS, input, dlOut)
-		wg.Done()
-	}()
-
-	// Extractors return when extractorStop is closed.
-	var grp errgroup.T
-	for i := 0; i < cr.concurrency; i++ {
-		i := i
-		grp.Go(func() error {
-			cr.runExtractor(ctx, i, extractorStop, extractor, dlOut, output)
-			return nil
-		})
-	}
-	if err := grp.Wait(); err != nil {
-		// sort out closing conditions...
-		close(output)
-		return err
-	}
-	fmt.Printf("extractors done\n")
-	//	close(dlIn)
-	//	close(teeStop)
-	wg.Wait()
-	close(output)
-	return <-errCh
-}
-
-func (cr *crawler) runExtractor(ctx context.Context,
-	id int,
-	doneCh chan struct{},
-	outlinks Outlinks,
-	dlOut <-chan download.Downloaded,
-	output chan<- Crawled) {
+func (cr *crawler) handleExtractedLinks(ctx context.Context, crawledCh <-chan Crawled, downloaderCh chan<- download.Request, output chan<- Crawled) {
 	for {
-		// Wait for newly downloaded items.
 		var crawled Crawled
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return
-		case <-doneCh:
-			return
-		case crawled.Downloaded, ok = <-dlOut:
-			if !ok {
+		case crawled, ok = <-crawledCh:
+			if ok {
 				return
 			}
 		}
-		// Extract outlinks and add them to the downloader's queue.
-		extracted := outlinks.Extract(ctx, crawled.Downloaded)
-		for _, outlinks := range extracted {
-			crawled.Outlinks = append(crawled.Outlinks, outlinks)
-		}
-		// Check to see if the extractor should stop.
+		// Forward crawled downloads to the user.
 		select {
-		case output <- crawled:
-		case <-doneCh:
+		case <-ctx.Done():
 			return
-		default:
+		case output <- crawled:
+		}
+		if downloaderCh == nil {
+			continue
+		}
+		for _, ol := range crawled.Outlinks {
+			select {
+			case <-ctx.Done():
+				return
+			case downloaderCh <- ol:
+			}
 		}
 	}
 }
