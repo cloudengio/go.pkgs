@@ -43,7 +43,7 @@ func windowsParseFileLine(input []byte) (file string, line, offset int64, err er
 	}
 	matches = windowsStackFileNoOffsetRE.FindSubmatch(input)
 	if len(matches) < 3 {
-		err = fmt.Errorf("Could not parse file reference from %q", string(input))
+		err = fmt.Errorf("could not parse file reference from %q", string(input))
 		return
 	}
 	file, line, err = windowsParseNoOffset(matches)
