@@ -6,48 +6,6 @@
 
 package goroutines
 
-import (
-	"fmt"
-	"regexp"
-	"strconv"
-)
+var parseFileLine = windowsParseFileLine
 
-var (
-	stackFileVolumeRE   = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+)?)`)
-	stackFileRE         = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
-	stackFileNoOffsetRE = regexp.MustCompile(`^\s+([A-Za-z]+:[^:]+):(\d+)$`)
-)
-
-func parseNoOffset(matches [][]byte) (file string, line int64, err error) {
-	file = string(matches[1])
-	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
-	return
-}
-
-func parseAll(matches [][]byte) (file string, line, offset int64, err error) {
-	file = string(matches[1])
-	line, err = strconv.ParseInt(string(matches[2]), 10, 64)
-	if err != nil {
-		return
-	}
-	offset, err = strconv.ParseInt(string(matches[3]), 16, 64)
-	return
-}
-
-func parseFileLine(input []byte) (file string, line, offset int64, err error) {
-	matches := stackFileVolumeRE.FindSubmatch(input)
-	if len(matches) == 0 {
-		matches = stackFileRE.FindSubmatch(input)
-	}
-	if len(matches) == 4 {
-		file, line, offset, err = parseAll(matches)
-		return
-	}
-	matches = stackFileNoOffsetRE.FindSubmatch(input)
-	if len(matches) < 3 {
-		err = fmt.Errorf("Could not parse file reference from %s", string(input))
-		return
-	}
-	file, line, err = parseNoOffset(matches)
-	return
-}
+//C:/Users/circleci/go/pkg/mod/cloudeng.io/debug@v0.0.0-20230102232444-1226f47ebbea/goroutines/stack.go:36 +0x85

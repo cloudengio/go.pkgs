@@ -17,7 +17,7 @@ var stackFileRE = regexp.MustCompile(`^\s+([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$
 func parseFileLine(input []byte) (file string, line, offset int64, err error) {
 	matches := stackFileRE.FindSubmatch(input)
 	if len(matches) < 4 {
-		err = fmt.Errorf("Could not parse file reference from %s", string(input))
+		err = fmt.Errorf("Could not parse file reference from %q", string(input))
 		return
 	}
 	file = string(matches[1])

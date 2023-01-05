@@ -53,7 +53,7 @@ func Parse(buf []byte, ignore ...string) ([]*Goroutine, error) {
 		}
 		g, err := parseGoroutine(scanner)
 		if err != nil {
-			return out, fmt.Errorf("Error %v parsing trace:\n%s", err, string(buf))
+			return out, fmt.Errorf("Error parsing trace: %v\n%s", err, string(buf))
 		}
 		if !shouldIgnore(g, ignore) {
 			out = append(out, g)
