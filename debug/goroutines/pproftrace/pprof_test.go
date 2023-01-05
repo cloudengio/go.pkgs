@@ -12,8 +12,11 @@ import (
 	"cloudeng.io/debug/goroutines/pproftrace"
 )
 
+var spawned = make(chan struct{})
+
 func runner(ctx context.Context, ch, dch chan struct{}) {
 	go func() {
+		close(spawned)
 		<-ch
 		close(dch)
 	}()
@@ -28,6 +31,7 @@ func TestRunAndFormat(t *testing.T) {
 	pproftrace.Run(ctx, key, value, func(ctx context.Context) {
 		runner(ctx, ch, dch)
 	})
+	<-spawned
 
 	exists, err := pproftrace.LabelExists(key, value)
 	if err != nil {
@@ -36,7 +40,7 @@ func TestRunAndFormat(t *testing.T) {
 	if got, want := exists, true; got != want {
 		output, _ := pproftrace.Format(key, value)
 		t.Errorf("got %v, want %v", got, want)
-		t.Logf("error: %v %v does not exist in %v", key, value, output)
+		t.Logf("error: %v %v does not exist in: %v", key, value, output)
 	}
 	output, err := pproftrace.Format(key, value)
 	if err != nil {
