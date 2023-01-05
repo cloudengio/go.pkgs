@@ -6,6 +6,4 @@
 
 package goroutines
 
-import "regexp"
-
-var stackFileRE = regexp.MustCompile(`^\s+[A-Za-z]+:([^:]+):(\d+)(?: \+0x([0-9A-Fa-f]+))?$`)
+var parseFileLine = windowsParseFileLine

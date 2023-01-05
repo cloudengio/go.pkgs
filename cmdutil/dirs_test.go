@@ -66,6 +66,8 @@ func cmplists(t *testing.T, a, b []string, suffix bool) {
 		}
 		if got, want := a[i], b[i]; got != want {
 			t.Errorf("%v: %v: got %v, want %v", errors.Caller(2, 1), i, got, want)
+			t.Logf("%v: %v: list a: %v", errors.Caller(2, 1), i, a)
+			t.Logf("%v: %v: list b: %v", errors.Caller(2, 1), i, b)
 		}
 	}
 }

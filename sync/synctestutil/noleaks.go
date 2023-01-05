@@ -96,7 +96,6 @@ func getGoroutines() (map[string]*goroutines.Goroutine, error) {
 	gs, err := goroutines.Get()
 	if err != nil {
 		return nil, err
-
 	}
 	bycreator := map[string]*goroutines.Goroutine{}
 	for _, g := range gs {
