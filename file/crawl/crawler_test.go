@@ -17,6 +17,7 @@ import (
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/download"
 	"cloudeng.io/file/filetestutil"
+	"cloudeng.io/sync/synctestutil"
 )
 
 type crawlRequest struct {
@@ -59,7 +60,6 @@ func (e *extractor) Extract(ctx context.Context, depth int, downloaded download.
 		for nout := 0; nout < e.fanOut; nout++ {
 			outlinks.names = append(outlinks.names, dlr.Name+fmt.Sprintf("%v", nout))
 		}
-		fmt.Printf("outlinks: %v\n", outlinks.names)
 	}
 	return []download.Request{&outlinks}
 }
@@ -85,76 +85,115 @@ func (df dlFactory) create(ctx context.Context, depth int) (
 	downloader download.T,
 	inputCh chan download.Request,
 	outputCh chan download.Downloaded) {
-	inputCh = make(chan download.Request, 10)
-	outputCh = make(chan download.Downloaded, 10)
+	concurrency := 0
+	chanCap := 0
+	// Use conservative channel capacities to ensure that blocking
+	// is encountered within the crawler.
+	switch {
+	case depth == 0:
+		concurrency = 2
+		chanCap = 1
+	case depth < 6:
+		concurrency = depth * 2
+		chanCap = depth
+	default:
+		chanCap = 100
+	}
+	inputCh = make(chan download.Request, chanCap)
+	outputCh = make(chan download.Downloaded, chanCap)
 	downloader = download.New(
+		download.WithNumDownloaders(concurrency),
 		download.WithProgress(time.Millisecond, df.progressCh, false),
 		download.WithNumDownloaders(df.numDownloaders))
 	return
 }
 
 func TestCrawler(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
+
 	ctx := context.Background()
 	src := rand.NewSource(time.Now().UnixMicro())
-	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
-	progressCh := make(chan download.Progress, 1)
+	nItems := 100
+	fanOut := 2 // number of outlinks per download.
 
-	inputCh := make(chan download.Request, 10)
-	outputCh := make(chan crawl.Crawled, 10)
+	for _, depth := range []int{1, 4, 0} {
+		readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
+		writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
-	crawler := crawl.New(crawl.WithNumExtractors(2), crawl.WithCrawlDepth(2))
+		progressCh := make(chan download.Progress, 1)
+		inputCh := make(chan download.Request, 10)
+		outputCh := make(chan crawl.Crawled, 10)
 
-	errCh := make(chan error, 1)
-	wg := &sync.WaitGroup{}
-	wg.Add(3)
+		crawler := crawl.New(
+			crawl.WithNumExtractors(2),
+			crawl.WithCrawlDepth(depth))
 
-	outlinks := &extractor{fanOut: 2}
+		errCh := make(chan error, 1)
+		wg := &sync.WaitGroup{}
+		wg.Add(3)
 
-	df := &dlFactory{
-		progressCh:     progressCh,
-		numDownloaders: 1,
-	}
-	go func() {
-		errCh <- crawler.Run(ctx, df.create, outlinks, writeFS, inputCh, outputCh)
-		wg.Done()
-	}()
+		outlinks := &extractor{fanOut: fanOut}
 
-	nItems := 10
-	go func() {
-		issuseCrawlRequests(ctx, nItems, inputCh, readFS)
-		wg.Done()
-	}()
-
-	crawled := []crawl.Crawled{}
-	total := 0
-	go func() {
-		for outs := range outputCh {
-			crawled = append(crawled, outs)
-			total += len(outs.Downloads)
-			fmt.Printf("total/crawled: %v %v\n", total, len(outs.Downloads))
+		df := &dlFactory{
+			progressCh:     progressCh,
+			numDownloaders: 1,
 		}
-		fmt.Printf("total/crawled: %v %v\n", total, len(crawled))
-		wg.Done()
-	}()
+		go func() {
+			errCh <- crawler.Run(ctx, df.create, outlinks, writeFS, inputCh, outputCh)
+			wg.Done()
+		}()
 
-	// Make sure the progress chan gets closed.
-	for range progressCh {
-	}
-	wg.Wait()
+		go func() {
+			issuseCrawlRequests(ctx, nItems, inputCh, readFS)
+			wg.Done()
+		}()
 
-	if err := <-errCh; err != nil {
-		t.Fatal(err)
-	}
-	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
-		t.Fatal(err)
-	}
-	fmt.Printf("test done: ... %v: %v\n", total, len(crawled))
-	for _, c := range crawled {
-		for _, ol := range c.Outlinks {
-			fmt.Printf("%v/ %v\n", ol, len(ol.Names()))
+		crawled := []crawl.Crawled{}
+		nDownloads := 0
+		nOutlinks := 0
+		go func() {
+			for outs := range outputCh {
+				crawled = append(crawled, outs)
+				nDownloads += len(outs.Downloads)
+				for _, ol := range outs.Outlinks {
+					nOutlinks += len(ol.Names())
+				}
+				fmt.Printf("total/crawled: %v %v %v \n", nDownloads, len(outs.Downloads), len(outs.Outlinks))
+			}
+			fmt.Printf("total/crawled: %v -> %v: %v\n", nDownloads, nOutlinks, len(crawled))
+			wg.Done()
+		}()
+
+		// test progress.
+
+		// Make sure the progress chan gets closed.
+		//		for p := range progressCh {
+		//			fmt.Printf("progress; %v\n", p)
+		//		}
+
+		wg.Wait()
+
+		if err := <-errCh; err != nil {
+			t.Fatal(err)
 		}
+
+		//		expected := nItems + (fanOut << depth)
+
+		if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
+			t.Fatal(err)
+		}
+
+		fmt.Printf("test done: ... %v: %v\n", nDownloads, len(crawled))
+		for _, c := range crawled {
+			for _, ol := range c.Outlinks {
+				fmt.Printf("%v/ %v\n", ol, len(ol.Names()))
+			}
+		}
+
+		fmt.Printf("DONE DEPTH: %v\n", depth)
+		break
+
+		// test invariants based on depth.
 	}
-	t.Fail()
 }

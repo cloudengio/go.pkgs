@@ -6,6 +6,7 @@ package crawl
 
 import (
 	"context"
+	"fmt"
 
 	"cloudeng.io/file/download"
 	"cloudeng.io/sync/errgroup"
@@ -48,21 +49,24 @@ func (ep *extractorPool) runExtractor(ctx context.Context,
 	id int,
 	downloadedCh <-chan download.Downloaded,
 	crawledCh chan<- Crawled) {
+	fmt.Printf("extractor: %v\n", id)
+	defer fmt.Printf("DONE: extractor: %v\n", id)
 	for {
 		// Wait for newly downloaded items.
-		var crawled Crawled
-		crawled.Depth = ep.depth
+		var downloaded download.Downloaded
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return
 		case <-ep.stopCh:
 			return
-		case crawled.Downloaded, ok = <-downloadedCh:
+		case downloaded, ok = <-downloadedCh:
+			fmt.Printf("extractor got %v\n", len(downloaded.Downloads))
 			if !ok {
 				return
 			}
 		}
+		crawled := Crawled{Depth: ep.depth, Downloaded: downloaded}
 		// Extract outlinks.
 		extracted := ep.outlinks.Extract(ctx, ep.depth, crawled.Downloaded)
 		for _, outlinks := range extracted {
