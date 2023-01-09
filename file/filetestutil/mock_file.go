@@ -11,11 +11,12 @@ import (
 	"time"
 )
 
+// BufferCloser adds an io.Closer to bytes.Buffer.
 type BufferCloser struct {
 	*bytes.Buffer
 }
 
-func (rc *BufferCloser) Close() error {
+func (bc *BufferCloser) Close() error {
 	return nil
 }
 
@@ -63,26 +64,26 @@ func NewInfo(name string, size int, mode fs.FileMode, mod time.Time, dir bool, s
 	}
 }
 
-type file struct {
+type mockFile struct {
 	rd   io.ReadCloser
 	info fs.FileInfo
 }
 
 func NewFile(rd io.ReadCloser, info fs.FileInfo) fs.File {
-	return &file{
+	return &mockFile{
 		rd:   rd,
 		info: info,
 	}
 }
 
-func (f *file) Stat() (fs.FileInfo, error) {
+func (f *mockFile) Stat() (fs.FileInfo, error) {
 	return f.info, nil
 }
 
-func (f *file) Read(buf []byte) (int, error) {
+func (f *mockFile) Read(buf []byte) (int, error) {
 	return f.rd.Read(buf)
 }
 
-func (f *file) Close() error {
+func (f *mockFile) Close() error {
 	return f.rd.Close()
 }
