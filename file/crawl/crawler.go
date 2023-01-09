@@ -23,12 +23,14 @@ type options struct {
 	depth       int
 }
 
+// WithNumExtractors sets the number of extractors to run.
 func WithNumExtractors(concurrency int) Option {
 	return func(o *options) {
 		o.concurrency = concurrency
 	}
 }
 
+// WithCrawlDepth sets the depth of the crawl.
 func WithCrawlDepth(depth int) Option {
 	return func(o *options) {
 		o.depth = depth
@@ -39,6 +41,10 @@ type crawler struct {
 	options
 }
 
+// New creates a new instance of T that implements a multilevel, concurrent
+// crawl. The crawl is implemented as a chain of downloaders and extractors,
+// one per depth requested. This allows for concurrency within each level
+// of the crawl as well as across each level.
 func New(opts ...Option) T {
 	cr := &crawler{}
 	for _, opt := range opts {

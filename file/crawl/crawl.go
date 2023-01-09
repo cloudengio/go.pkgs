@@ -36,7 +36,11 @@ type Outlinks interface {
 }
 
 // DownloaderFactory is used to create a new downloader for each 'depth'
-// in a multilevel crawl.
+// in a multilevel crawl. The depth argument can be used to create different
+// configurations of the downloader tailored to the depth of the crawl.
+// For example, lower depths would use less concurrency in the downloader
+// since there are very likely fewer files to be downloaded than at higher
+// ones (since more links will have extracted).
 type DownloaderFactory func(ctx context.Context, depth int) (
 	downloader download.T,
 	input chan download.Request,
