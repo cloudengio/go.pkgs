@@ -2,6 +2,13 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+// Package crawl provides a framework for multilevel/recursive crawling files.
+// As files are downloaded, they may be processed by an outlinks extractor which
+// yields more files to crawled. Typically such a multilevel crawl is limited
+// to a set number of iterations referred to as the depth of the crawl.
+// The interface to a crawler is channel based to allow for concurrency.
+// The outlink extractor is called for all downloaded files and should
+// implement duplicate detection and removal.
 package crawl
 
 import (
@@ -11,22 +18,15 @@ import (
 	"cloudeng.io/file/download"
 )
 
-// Request represents a request for a list of objects stored in the
-// same container to be downloaded/crawled.
-//type Request interface {
-//	download.Request
-//	Depth() int
-//	IncDepth()
-//}
-
-// Crawled represents all of the downloads in response to a given crawl request.
+// Crawled represents all of the downloaded content in response to a given crawl
+// request.
 type Crawled struct {
 	download.Downloaded
 	Outlinks []download.Request
-	Depth    int
+	Depth    int // The depth at which the document was crawled.
 }
 
-// Outlinks represents the interface to an 'outlink' extractor, that is, an
+// Outlinks is the interface to an 'outlink' extractor, that is, an
 // entity that determines additional items to be downloaded based on the
 // contents of an already downloaded one.
 type Outlinks interface {
@@ -35,6 +35,8 @@ type Outlinks interface {
 	Extract(ctx context.Context, depth int, download download.Downloaded) []download.Request
 }
 
+// DownloaderFactory is used to create a new downloader for each 'depth'
+// in a multilevel crawl.
 type DownloaderFactory func(ctx context.Context, depth int) (
 	downloader download.T,
 	input chan download.Request,
