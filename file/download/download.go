@@ -6,14 +6,16 @@ package download
 
 import (
 	"context"
-	"io"
 	"io/fs"
+
+	"cloudeng.io/file"
 )
 
 // Request represents a request for a list of objects, stored in the same
 // container, to be downloaded.
 type Request interface {
 	Container() fs.FS
+	FileMode() fs.FileMode // FileMode to use for the downloaded contents.
 	Names() []string
 }
 
@@ -32,12 +34,6 @@ type Downloaded struct {
 	Downloads []Result
 }
 
-// Creator provides a means of creating a new file.
-type Creator interface {
-	Container() fs.FS
-	New(name string) (io.WriteCloser, string, error)
-}
-
 // T represents the interface to a downloader that is used
 // to download content.
 type T interface {
@@ -47,7 +43,7 @@ type T interface {
 	// complete all outstanding download requests. Run will close the output
 	// channel when all requests have been processed.
 	Run(ctx context.Context,
-		creator Creator,
+		writerFS file.WriteFS,
 		input <-chan Request,
 		output chan<- Downloaded) error
 }
