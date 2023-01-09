@@ -1,6 +1,6 @@
 module cloudeng.io/file
 
-go 1.16
+go 1.18
 
 require (
 	cloudeng.io/algo v0.0.0-20221118174443-5eef698118a6
