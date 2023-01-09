@@ -6,7 +6,6 @@ package extractors
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 
 	"cloudeng.io/file/crawl"
@@ -46,8 +45,19 @@ func (ho *htmlOutlinks) Extract(ctx context.Context, depth int, downloaded downl
 	return out
 }
 
-func (ho *htmlOutlinks) findlinks(n *html.Node) []string {
-	return nil
+func findlinks(n *html.Node) []string {
+	out := []string{}
+	if n.Type == html.ElementNode && n.DataAtom == atom.A {
+		for _, a := range n.Attr {
+			if a.Key == "href" {
+				out = append(out, a.Val)
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		out = append(out, findlinks(c)...)
+	}
+	return out
 }
 
 func (ho *htmlOutlinks) extract(ctx context.Context, req download.Request, container fs.FS, depth int, result download.Result) ([]download.Request, error) {
@@ -60,11 +70,8 @@ func (ho *htmlOutlinks) extract(ctx context.Context, req download.Request, conta
 		return nil, err
 	}
 	var requests []download.Request
-	extractor := func(n *html.Node) {
-		if n.Type == html.ElementNode && n.DataAtom == atom.Href {
-			fmt.Printf("XXX %v\n", n.Data)
-		}
+	for _, out := range findlinks(doc) {
+		requests = append(requests, &crawlRequest{})
 	}
-	extractor(doc)
 	return requests, nil
 }

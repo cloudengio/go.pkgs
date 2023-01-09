@@ -6,10 +6,27 @@ package extractors_test
 
 import (
 	"context"
+	"embed"
+	"reflect"
 	"testing"
 
 	"cloudeng.io/file/crawl/extractors"
+	"cloudeng.io/file/download"
 )
+
+//go:embed testdata/*.html
+var htmlExamples embed.FS
+
+func downloadsFromTestdata() download.Downloaded {
+	return download.Downloaded{
+		Container: htmlExamples,
+		Downloads: []download.Result{
+			{
+				Name: "testdata/simple.html",
+			},
+		},
+	}
+}
 
 func TestHTML(t *testing.T) {
 	ctx := context.Background()
@@ -23,6 +40,13 @@ func TestHTML(t *testing.T) {
 			errs = append(errs, err)
 		}
 	}()
-
-	he.Extract()
+	extracted := he.Extract(ctx, 1, downloadsFromTestdata())
+	if got, want := extracted, []string{
+		"https://www.w3.org/",
+		"https://www.google.com/",
+		"html_images.asp",
+		"/css/default.asp",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
