@@ -164,8 +164,12 @@ func (dl *downloader) updateProgess(downloaded, outstanding int) {
 	}
 }
 
+var iter int64
+
 func (dl *downloader) runner(ctx context.Context, id int, writeFS file.WriteFS, progress chan<- Progress, input <-chan Request, output chan<- Downloaded) error {
 	for {
+		c := atomic.AddInt64(&iter, 1)
+		c--
 		var request Request
 		var ok bool
 		select {
@@ -175,6 +179,7 @@ func (dl *downloader) runner(ctx context.Context, id int, writeFS file.WriteFS, 
 			if !ok {
 				return nil
 			}
+			//fmt.Printf("downloader: req %v\n", c)
 		}
 		if len(request.Names()) == 0 {
 			// ignore empty requests.

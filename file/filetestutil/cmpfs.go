@@ -15,7 +15,6 @@ import (
 // the same files and file contents.
 func CompareFS(a, b fs.FS) error {
 	ca, cb := Contents(a), Contents(b)
-	fmt.Printf("CompareFS .... %v %v\n", len(ca), len(cb))
 	if got, want := len(ca), len(cb); got != want {
 		return fmt.Errorf("got %v, want %v", got, want)
 	}

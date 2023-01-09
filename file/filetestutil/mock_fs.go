@@ -22,6 +22,8 @@ func Contents(fs fs.FS) map[string][]byte {
 	switch mfs := fs.(type) {
 	case *randFS:
 		return mfs.contents
+	case *constantFS:
+		return mfs.contents
 	case *randAfteRetryFS:
 		return mfs.contents
 	case *writeFS:
@@ -35,8 +37,10 @@ type FSOption func(o *fsOptions)
 
 type fsOptions struct {
 	rnd        *rand.Rand
+	val        []byte
 	maxSize    int
 	random     bool
+	constant   bool
 	numRetries int
 	retryErr   error
 	returnErr  error
@@ -50,6 +54,16 @@ func FSWithRandomContents(src rand.Source, maxSize int) FSOption {
 		o.random = true
 		o.rnd = rand.New(src)
 		o.maxSize = maxSize
+	}
+}
+
+// FSWithConstantContents requests a mock FS that will return files of a random
+// size (up to maxSize) with random contents.
+func FSWithConstantContents(val []byte, repeat int) FSOption {
+	return func(o *fsOptions) {
+		o.constant = true
+		o.val = val
+		o.maxSize = repeat
 	}
 }
 
@@ -86,6 +100,9 @@ func NewMockFS(opts ...FSOption) fs.FS {
 	}
 	if options.random {
 		return &randFS{fsOptions: options, contents: map[string][]byte{}}
+	}
+	if options.constant {
+		return &constantFS{fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.numRetries > 0 {
 		return &randAfteRetryFS{
@@ -154,6 +171,23 @@ type errorFs struct {
 
 func (mfs *errorFs) Open(name string) (fs.File, error) {
 	return nil, mfs.err
+}
+
+type constantFS struct {
+	sync.Mutex
+	fsOptions
+	val      []byte
+	contents map[string][]byte
+}
+
+// Open implements fs.FS.
+func (cfs *constantFS) Open(name string) (fs.File, error) {
+	cfs.Lock()
+	defer cfs.Unlock()
+	contents := bytes.Repeat(cfs.val, cfs.maxSize)
+	cfs.contents[name] = contents
+	return NewFile(&BufferCloser{bytes.NewBuffer(contents)},
+		NewInfo(name, len(contents), 0666, time.Now(), false, nil)), nil
 }
 
 type writeFSEntry struct {

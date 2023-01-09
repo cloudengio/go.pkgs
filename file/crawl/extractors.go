@@ -6,14 +6,12 @@ package crawl
 
 import (
 	"context"
-	"fmt"
 
 	"cloudeng.io/file/download"
 	"cloudeng.io/sync/errgroup"
 )
 
 type extractorPool struct {
-	stopCh             chan struct{}
 	outlinks           Outlinks
 	depth, concurrency int
 }
@@ -21,15 +19,10 @@ type extractorPool struct {
 // export this when everything is working.
 func newExtractorPool(outlinks Outlinks, depth, concurrency int) *extractorPool {
 	return &extractorPool{
-		stopCh:      make(chan struct{}),
 		outlinks:    outlinks,
 		depth:       depth,
 		concurrency: concurrency,
 	}
-}
-
-func (ep *extractorPool) stop() {
-	close(ep.stopCh)
 }
 
 func (ep *extractorPool) run(ctx context.Context, downloadedCh <-chan download.Downloaded, crawledCh chan<- Crawled) error {
@@ -49,8 +42,6 @@ func (ep *extractorPool) runExtractor(ctx context.Context,
 	id int,
 	downloadedCh <-chan download.Downloaded,
 	crawledCh chan<- Crawled) {
-	fmt.Printf("extractor: %v\n", id)
-	defer fmt.Printf("DONE: extractor: %v\n", id)
 	for {
 		// Wait for newly downloaded items.
 		var downloaded download.Downloaded
@@ -58,10 +49,7 @@ func (ep *extractorPool) runExtractor(ctx context.Context,
 		select {
 		case <-ctx.Done():
 			return
-		case <-ep.stopCh:
-			return
 		case downloaded, ok = <-downloadedCh:
-			fmt.Printf("extractor got %v\n", len(downloaded.Downloads))
 			if !ok {
 				return
 			}
@@ -73,10 +61,9 @@ func (ep *extractorPool) runExtractor(ctx context.Context,
 			crawled.Outlinks = append(crawled.Outlinks, outlinks)
 		}
 		select {
-		case crawledCh <- crawled: // Forward crawled items, i.e. with outlinks.
-		case <-ep.stopCh: // Check to see if the extractor should stop.
+		case <-ctx.Done():
 			return
-		default:
+		case crawledCh <- crawled:
 		}
 	}
 }

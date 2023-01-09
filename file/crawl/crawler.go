@@ -6,7 +6,6 @@ package crawl
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 
@@ -77,33 +76,25 @@ func (cr *crawler) Run(ctx context.Context,
 	}
 
 	crlgrp := errgroup.T{}
-	nextInput := input
-	fmt.Printf("input ch: %v\n", nextInput)
+	chainedInput := input
 	for depth := 0; depth <= cr.depth; depth++ {
-		reqs, dld := downloaders[depth].requests, downloaders[depth].downloaded
-		var nextReqs chan download.Request
-		if depth < cr.depth {
-			nextReqs = downloaders[depth+1].requests
-		}
-		// capture current values for use by the closure below.
-		ni := nextInput
 		depth := depth
+		reqs, dld := downloaders[depth].requests, downloaders[depth].downloaded
+		currentInput := chainedInput
+		var nextInput chan download.Request
+		if depth < cr.depth {
+			nextInput = make(chan download.Request, cap(reqs))
+		}
 		crlgrp.Go(func() error {
-			return cr.crawlAtDepth(ctx, depth, extractor, writeFS, ni, dld, reqs, nextReqs, output)
+			return cr.crawlAtDepth(ctx, depth, extractor, writeFS, currentInput, dld, reqs, nextInput, output)
 		})
-		nextInput = nextReqs
+		chainedInput = nextInput
 	}
 
 	var errs errors.M
-
-	fmt.Printf("# downloaders: %v\n", len(downloaders))
-
-	/*	time.Sleep(time.Second)
-		gs, _ := goroutines.Get()
-		fmt.Printf("RUNNING... %v\n", goroutines.Format(gs...))*/
-
 	errs.Append(dlgrp.Wait())
 	errs.Append(crlgrp.Wait())
+	close(output)
 	return errs.Err()
 }
 
@@ -136,8 +127,6 @@ func (cr *crawler) crawlAtDepth(ctx context.Context,
 	dlInput, dlExtractedInput chan<- download.Request,
 	output chan<- Crawled) error {
 
-	fmt.Printf("crawl at depth: %v: starting\n", depth)
-	defer fmt.Printf("crawl at depth: %v: done\n", depth)
 	wg := &sync.WaitGroup{}
 	wg.Add(4)
 	go func() {
@@ -153,36 +142,26 @@ func (cr *crawler) crawlAtDepth(ctx context.Context,
 	epIn := make(chan download.Downloaded, cap(output))
 	epOut := make(chan Crawled, cap(output))
 
-	crawlCompleteCh := make(chan struct{})
-
 	go func() {
 		// Pipe output of download pool to extractor pool.
 		pipe(ctx, "downloader output", depth, dlOutput, epIn)
-		// The crawl is complete when dlOutput is closed.
-		close(crawlCompleteCh)
+		close(epIn)
 		wg.Done()
 	}()
 
 	go func() {
 		extractorErrCh <- ep.run(ctx, epIn, epOut)
-		fmt.Printf("extractors done\n")
 		close(epOut)
 		wg.Done()
 	}()
 
 	go func() {
 		cr.handleExtractedLinks(ctx, epOut, dlExtractedInput, output)
-		fmt.Printf("handle extracted links done\n")
 		wg.Done()
 	}()
 
-	fmt.Printf("crawl at %v ... waiting\n", depth)
-	<-crawlCompleteCh
-	fmt.Printf("crawl complete....\n")
-	ep.stop()
 	wg.Wait()
 	if dlExtractedInput != nil {
-		fmt.Printf("CLOSING: %v\n", dlExtractedInput)
 		close(dlExtractedInput)
 	}
 	err := <-extractorErrCh
@@ -190,8 +169,6 @@ func (cr *crawler) crawlAtDepth(ctx context.Context,
 }
 
 func pipe[T any](ctx context.Context, purpose string, depth int, inputCh <-chan T, outputCh chan<- T) {
-	fmt.Printf("pipe(%v@%v): %v -> %v: %T: starting\n", purpose, depth, inputCh, outputCh, inputCh)
-	defer fmt.Printf("pipe(%v@%v): %v -> %v: %T: done\n", purpose, depth, inputCh, outputCh, inputCh)
 	for {
 		var in T
 		var ok bool
@@ -199,7 +176,6 @@ func pipe[T any](ctx context.Context, purpose string, depth int, inputCh <-chan 
 		case <-ctx.Done():
 			return
 		case in, ok = <-inputCh:
-			fmt.Printf("pipe(%v@%v): <- : %v: %T\n", purpose, depth, inputCh, in)
 			if !ok {
 				return
 			}
@@ -208,7 +184,6 @@ func pipe[T any](ctx context.Context, purpose string, depth int, inputCh <-chan 
 		case <-ctx.Done():
 			return
 		case outputCh <- in:
-			fmt.Printf("pipe(%v@%v): -> : %v: %T (%v/%v)\n", purpose, depth, outputCh, in, len(outputCh), cap(outputCh))
 		}
 	}
 }
@@ -221,7 +196,6 @@ func (cr *crawler) handleExtractedLinks(ctx context.Context, crawledCh <-chan Cr
 		case <-ctx.Done():
 			return
 		case crawled, ok = <-crawledCh:
-			fmt.Printf("crawled... %v\n", len(crawled.Downloads))
 			if !ok {
 				return
 			}
