@@ -21,23 +21,6 @@ import (
 	"cloudeng.io/file/filetestutil"
 )
 
-type dlRequest struct {
-	container fs.FS
-	names     []string
-}
-
-func (dlr dlRequest) Container() fs.FS {
-	return dlr.container
-}
-
-func (dlr dlRequest) Names() []string {
-	return dlr.names
-}
-
-func (dlr dlRequest) FileMode() fs.FileMode {
-	return fs.FileMode(0600)
-}
-
 func runDownloader(ctx context.Context, downloader download.T, writer file.WriteFS, reader fs.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
@@ -66,7 +49,7 @@ func runDownloader(ctx context.Context, downloader download.T, writer file.Write
 func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- dlRequest{container: reader, names: []string{fmt.Sprintf("%v", i)}}:
+		case input <- download.SimpleRequest{FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%v", i)}}:
 		case <-ctx.Done():
 			break
 		}
