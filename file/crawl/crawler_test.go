@@ -7,7 +7,6 @@ package crawl_test
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"math/rand"
 	"sync"
 	"testing"
@@ -39,7 +38,7 @@ func (e *extractor) Extract(ctx context.Context, depth int, downloaded download.
 	return []download.Request{&outlinks}
 }
 
-func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
+func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
 	for i := 0; i < nItems; i++ {
 		req := crawl.SimpleRequest{}
 		req.FS = reader

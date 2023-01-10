@@ -7,23 +7,31 @@ package outlinks
 import (
 	"context"
 	"io"
-	"io/fs"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/download"
 )
 
+// Download represents a single downloaded file, as opposed to download.Downloaded
+// which represents multiple files in the same container. It's a convenience
+// for use by the Extractor interface.
 type Download struct {
 	Request   download.Request
-	Container fs.FS
+	Container file.FS
 	Download  download.Result
 }
 
+// Extractor is a lower level interface for outlink extractors that allows
+// for the separation of extracting outlinks and creating new download requests
+// to retrieve them. This allows for easier customization of the crawl process,
+// for example, to rewrite or otherwise manipulate the link names.
 type Extractor interface {
 	Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error)
 	Request(depth int, download Download, outlinks []string) download.Request
 }
 
+// Extract implements crawl.Outlinks.Extract.
 func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Downloaded) []download.Request {
 	var out []download.Request
 	errs := Errors{
@@ -36,7 +44,7 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 	}
 	for _, dl := range downloaded.Downloads {
 		single.Download = dl
-		rd, err := downloaded.Container.Open(dl.Name)
+		rd, err := downloaded.Container.Open(ctx, dl.Name)
 		if err != nil {
 			errs.Errors = append(errs.Errors, ErrorDetail{
 				Result: dl,
@@ -66,6 +74,8 @@ type generic struct {
 	errCh chan<- Errors
 }
 
+// NewExtractor creates a crawl.Outlinks.Extractor given an instance of
+// the lower level Extractor interface.
 func NewExtractor(extractor Extractor, errCh chan<- Errors) crawl.Outlinks {
 	return &generic{
 		Extractor: extractor,

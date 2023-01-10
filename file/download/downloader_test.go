@@ -21,7 +21,7 @@ import (
 	"cloudeng.io/file/filetestutil"
 )
 
-func runDownloader(ctx context.Context, downloader download.T, writer file.WriteFS, reader fs.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
+func runDownloader(ctx context.Context, downloader download.T, writer file.WriteFS, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -46,7 +46,7 @@ func runDownloader(ctx context.Context, downloader download.T, writer file.Write
 	return downloaded, err
 }
 
-func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
+func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
 		case input <- download.SimpleRequest{FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%v", i)}}:

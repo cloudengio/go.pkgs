@@ -6,16 +6,18 @@ package download
 
 import (
 	"io/fs"
+
+	"cloudeng.io/file"
 )
 
 // SimpleRequest is a simple implementation of Request.
 type SimpleRequest struct {
-	FS        fs.FS
+	FS        file.FS
 	Filenames []string
 	Mode      fs.FileMode
 }
 
-func (cr SimpleRequest) Container() fs.FS {
+func (cr SimpleRequest) Container() file.FS {
 	return cr.FS
 }
 
