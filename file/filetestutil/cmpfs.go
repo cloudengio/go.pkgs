@@ -8,12 +8,13 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io/fs"
+
+	"cloudeng.io/file"
 )
 
 // CompareFS returns nil if the two instances of fs.FS contain exactly
 // the same files and file contents.
-func CompareFS(a, b fs.FS) error {
+func CompareFS(a, b file.FS) error {
 	ca, cb := Contents(a), Contents(b)
 	if got, want := len(ca), len(cb); got != want {
 		return fmt.Errorf("got %v, want %v", got, want)

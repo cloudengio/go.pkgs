@@ -5,12 +5,31 @@
 package file
 
 import (
+	"context"
 	"io"
 	"io/fs"
 )
 
-// WriteFS extends fs.FS to add a Create method.
+// FS is like fs.FS but with a context parameter.
+type FS interface {
+	Open(ctx context.Context, name string) (fs.File, error)
+}
+
+// WriteFS extends FS to add a Create method.
 type WriteFS interface {
-	fs.FS
-	Create(name string, mode fs.FileMode) (io.WriteCloser, string, error)
+	FS
+	Create(ctx context.Context, name string, mode fs.FileMode) (io.WriteCloser, string, error)
+}
+
+// FSFromFS wraps an fs.FS to implement file.FS.
+func FSFromFS(fs fs.FS) FS {
+	return &fsFromFS{fs}
+}
+
+type fsFromFS struct {
+	fs fs.FS
+}
+
+func (f *fsFromFS) Open(ctx context.Context, name string) (fs.File, error) {
+	return f.fs.Open(name)
 }

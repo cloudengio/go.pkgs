@@ -5,8 +5,7 @@
 package outlinks
 
 import (
-	"io/fs"
-
+	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 )
 
@@ -17,6 +16,6 @@ type ErrorDetail struct {
 
 type Errors struct {
 	Request   download.Request
-	Container fs.FS
+	Container file.FS
 	Errors    []ErrorDetail
 }

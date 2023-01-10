@@ -14,7 +14,7 @@ import (
 // Request represents a request for a list of objects, stored in the same
 // container, to be downloaded.
 type Request interface {
-	Container() fs.FS
+	Container() file.FS
 	FileMode() fs.FileMode // FileMode to use for the downloaded contents.
 	Names() []string
 }
@@ -30,7 +30,7 @@ type Result struct {
 // to a given request.
 type Downloaded struct {
 	Request   Request
-	Container fs.FS
+	Container file.FS
 	Downloads []Result
 }
 
