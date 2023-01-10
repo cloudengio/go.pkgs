@@ -40,7 +40,7 @@ func TestRunAndFormat(t *testing.T) {
 	if got, want := exists, true; got != want {
 		output, _ := pproftrace.Format(key, value)
 		t.Errorf("got %v, want %v", got, want)
-		t.Logf("error: %v %v does not exist in: %v", key, value, output)
+		t.Logf("error: %v %v does not exist in: %q", key, value, output)
 	}
 	output, err := pproftrace.Format(key, value)
 	if err != nil {
