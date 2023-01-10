@@ -209,7 +209,7 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, writeFS file.
 	return download, nil
 }
 
-func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, downloadFS fs.FS, name string, mode fs.FileMode) (Result, error) {
+func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
 	result := Result{}
 	if dl.ticker.C == nil {
 		select {
@@ -227,7 +227,7 @@ func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, 
 	delay := dl.backOffStart
 	steps := 0
 	for {
-		rd, err := downloadFS.Open(name)
+		rd, err := downloadFS.Open(ctx, name)
 		result.Retries = steps
 		result.Err = err
 		if err != nil {
@@ -243,7 +243,7 @@ func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, 
 			steps++
 			continue
 		}
-		wr, ni, err := writeFS.Create(name, mode)
+		wr, ni, err := writeFS.Create(ctx, name, mode)
 		if err != nil {
 			result.Err = err
 			return result, nil

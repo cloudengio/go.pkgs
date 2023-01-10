@@ -6,6 +6,7 @@ package filetestutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -18,7 +19,7 @@ import (
 )
 
 // Contents returns the contents stored in the mock fs.FS.
-func Contents(fs fs.FS) map[string][]byte {
+func Contents(fs file.FS) map[string][]byte {
 	switch mfs := fs.(type) {
 	case *randFS:
 		return mfs.contents
@@ -92,8 +93,8 @@ func FSWriteFS() FSOption {
 	}
 }
 
-// NewMockFS returns an new mock instance of fs.FS as per the specified options.
-func NewMockFS(opts ...FSOption) fs.FS {
+// NewMockFS returns an new mock instance of file.FS as per the specified options.
+func NewMockFS(opts ...FSOption) file.FS {
 	var options fsOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -125,7 +126,7 @@ type randFS struct {
 	contents map[string][]byte
 }
 
-func newRandomFileCreator(name string, rnd *rand.Rand, maxSize int) ([]byte, fs.File, error) {
+func newRandomFileCreator(ctx context.Context, name string, rnd *rand.Rand, maxSize int) ([]byte, fs.File, error) {
 	size := rnd.Intn(maxSize)
 	contents := make([]byte, size)
 	size, err := rnd.Read(contents)
@@ -137,10 +138,10 @@ func newRandomFileCreator(name string, rnd *rand.Rand, maxSize int) ([]byte, fs.
 }
 
 // Open implements fs.FS.
-func (mfs *randFS) Open(name string) (fs.File, error) {
+func (mfs *randFS) Open(ctx context.Context, name string) (fs.File, error) {
 	mfs.Lock()
 	defer mfs.Unlock()
-	contents, f, err := newRandomFileCreator(name, mfs.rnd, mfs.maxSize)
+	contents, f, err := newRandomFileCreator(ctx, name, mfs.rnd, mfs.maxSize)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +154,8 @@ type randAfteRetryFS struct {
 	retries map[string]int
 }
 
-// Open implements fs.FS.
-func (mfs *randAfteRetryFS) Open(name string) (fs.File, error) {
+// Open implements file.FS.
+func (mfs *randAfteRetryFS) Open(ctx context.Context, name string) (fs.File, error) {
 	mfs.Lock()
 	mfs.retries[name]++
 	if mfs.retries[name] <= mfs.numRetries {
@@ -162,14 +163,14 @@ func (mfs *randAfteRetryFS) Open(name string) (fs.File, error) {
 		return nil, mfs.retryErr
 	}
 	mfs.Unlock()
-	return mfs.randFS.Open(name)
+	return mfs.randFS.Open(ctx, name)
 }
 
 type errorFs struct {
 	err error
 }
 
-func (mfs *errorFs) Open(name string) (fs.File, error) {
+func (mfs *errorFs) Open(ctx context.Context, name string) (fs.File, error) {
 	return nil, mfs.err
 }
 
@@ -181,7 +182,7 @@ type constantFS struct {
 }
 
 // Open implements fs.FS.
-func (cfs *constantFS) Open(name string) (fs.File, error) {
+func (cfs *constantFS) Open(ctx context.Context, name string) (fs.File, error) {
 	cfs.Lock()
 	defer cfs.Unlock()
 	contents := bytes.Repeat(cfs.val, cfs.maxSize)
@@ -209,7 +210,7 @@ func newWriteFS() file.WriteFS {
 	}
 }
 
-func (wfs *writeFS) Create(name string, filemode fs.FileMode) (io.WriteCloser, string, error) {
+func (wfs *writeFS) Create(ctx context.Context, name string, filemode fs.FileMode) (io.WriteCloser, string, error) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	if _, ok := wfs.entries[name]; ok {
@@ -221,7 +222,7 @@ func (wfs *writeFS) Create(name string, filemode fs.FileMode) (io.WriteCloser, s
 	return &writeCloser{wfs: wfs, name: name}, name, nil
 }
 
-func (wfs *writeFS) Open(name string) (fs.File, error) {
+func (wfs *writeFS) Open(ctx context.Context, name string) (fs.File, error) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	entry, ok := wfs.entries[name]
