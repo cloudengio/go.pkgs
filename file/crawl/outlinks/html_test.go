@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"testing"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
 )
@@ -28,7 +29,7 @@ func loadTestdata(name string) fs.File {
 
 func downloadFromTestdata(name string) download.Downloaded {
 	return download.Downloaded{
-		Container: fs.FS(htmlExamples),
+		Container: file.FSFromFS(htmlExamples),
 		Downloads: []download.Result{
 			{Name: path.Join("testdata", name)},
 		},

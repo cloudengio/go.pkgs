@@ -7,8 +7,8 @@ package outlinks
 import (
 	"context"
 	"io"
-	"io/fs"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/download"
 )
@@ -18,7 +18,7 @@ import (
 // for use by the Extractor interface.
 type Download struct {
 	Request   download.Request
-	Container fs.FS
+	Container file.FS
 	Download  download.Result
 }
 
@@ -44,7 +44,7 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 	}
 	for _, dl := range downloaded.Downloads {
 		single.Download = dl
-		rd, err := downloaded.Container.Open(dl.Name)
+		rd, err := downloaded.Container.Open(ctx, dl.Name)
 		if err != nil {
 			errs.Errors = append(errs.Errors, ErrorDetail{
 				Result: dl,
