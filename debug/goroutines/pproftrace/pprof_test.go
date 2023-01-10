@@ -8,6 +8,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/debug/goroutines/pproftrace"
 )
@@ -17,6 +18,7 @@ var spawned = make(chan struct{})
 func runner(ctx context.Context, ch, dch chan struct{}) {
 	go func() {
 		close(spawned)
+		time.Sleep(time.Second)
 		<-ch
 		close(dch)
 	}()
