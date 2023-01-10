@@ -6,19 +6,52 @@
 package s3fs
 
 import (
+	"context"
 	"io/fs"
 	"time"
+
+	"cloudeng.io/path/cloudpath"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/services/s3"
 )
 
-type s3fs struct {
+type Option func(o *options)
+
+type options struct {
+	s3options s3.Options
 }
 
-func NewS3FS() fs.FS {
+func WithS3Options(opts ...s3.Options) Option {
+	return func(o *options) {
+		for _, fn := range opts {
+			fn(&o.s3options)
+		}
+	}
+}
 
+type s3fs struct {
+	client  *s3.Client
+	options options
+}
+
+func NewS3FS(ctx context.Context, cfg aws.Config, options ...Option) fs.FS {
+	fs := &s3fs{}
+	for _, fn := range options {
+		fn(&fs.options)
+	}
+	fs.client = s3.NewFromConfig(cfg)
+	return fs
 }
 
 func (fs *s3fs) Open(name string) (fs.File, error) {
-
+	matcher := cloudpath.AWSS3Matcher(name)
+	bucket := matcher.Volume
+	path := matcher.Path
+	get := s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &path,
+	}
+	obj, err := fs.client.GetObject(context.Background(), &get, fs.options.s3options...)
 }
 
 type s3file struct {
