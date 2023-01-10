@@ -20,24 +20,6 @@ import (
 	"cloudeng.io/sync/synctestutil"
 )
 
-type crawlRequest struct {
-	container fs.FS
-	names     []string
-	depth     int
-}
-
-func (cr *crawlRequest) Container() fs.FS {
-	return cr.container
-}
-
-func (cr *crawlRequest) Names() []string {
-	return cr.names
-}
-
-func (cr crawlRequest) FileMode() fs.FileMode {
-	return fs.FileMode(0600)
-}
-
 type extractor struct {
 	sync.Mutex
 	fanOut int
@@ -46,11 +28,12 @@ type extractor struct {
 func (e *extractor) Extract(ctx context.Context, depth int, downloaded download.Downloaded) []download.Request {
 	e.Lock()
 	defer e.Unlock()
-	outlinks := (*downloaded.Request.(*crawlRequest))
-	outlinks.names = nil
+	outlinks := (*downloaded.Request.(*crawl.SimpleRequest))
+	outlinks.Filenames = nil
+	outlinks.Depth = depth
 	for _, dlr := range downloaded.Downloads {
 		for nout := 0; nout < e.fanOut; nout++ {
-			outlinks.names = append(outlinks.names, dlr.Name+fmt.Sprintf("-%02v", nout))
+			outlinks.Filenames = append(outlinks.Filenames, dlr.Name+fmt.Sprintf("-%02v", nout))
 		}
 	}
 	return []download.Request{&outlinks}
@@ -58,8 +41,11 @@ func (e *extractor) Extract(ctx context.Context, depth int, downloaded download.
 
 func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader fs.FS) {
 	for i := 0; i < nItems; i++ {
+		req := crawl.SimpleRequest{}
+		req.FS = reader
+		req.Filenames = []string{fmt.Sprintf("%08v", i)}
 		select {
-		case input <- &crawlRequest{container: reader, depth: 0, names: []string{fmt.Sprintf("%08v", i)}}:
+		case input <- &req:
 		case <-ctx.Done():
 			break
 		}

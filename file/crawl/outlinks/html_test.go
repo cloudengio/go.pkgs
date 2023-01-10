@@ -2,45 +2,47 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package extractors_test
+package outlinks_test
 
 import (
-	"context"
 	"embed"
+	"io/fs"
+	"path"
 	"reflect"
 	"testing"
 
-	"cloudeng.io/file/crawl/extractors"
+	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
 )
 
 //go:embed testdata/*.html
 var htmlExamples embed.FS
 
-func downloadsFromTestdata() download.Downloaded {
+func loadTestdata(name string) fs.File {
+	f, err := htmlExamples.Open(path.Join("testdata", name))
+	if err != nil {
+		panic(err)
+	}
+	return f
+}
+
+func downloadFromTestdata(name string) download.Downloaded {
 	return download.Downloaded{
-		Container: htmlExamples,
+		Container: fs.FS(htmlExamples),
 		Downloads: []download.Result{
-			{
-				Name: "testdata/simple.html",
-			},
+			{Name: path.Join("testdata", name)},
 		},
 	}
 }
 
 func TestHTML(t *testing.T) {
-	ctx := context.Background()
-	errCh := make(chan extractors.Errors, 10)
-	he := extractors.NewHTML(errCh)
-
-	errs := []extractors.Errors{}
-
-	go func() {
-		for err := range errCh {
-			errs = append(errs, err)
-		}
-	}()
-	extracted := he.Extract(ctx, 1, downloadsFromTestdata())
+	var he outlinks.HTML
+	rd := loadTestdata("simple.html")
+	defer rd.Close()
+	extracted, err := he.HREFs(rd)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got, want := extracted, []string{
 		"https://www.w3.org/",
 		"https://www.google.com/",
