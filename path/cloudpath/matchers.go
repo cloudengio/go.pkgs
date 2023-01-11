@@ -6,7 +6,6 @@ package cloudpath
 
 import (
 	"net/url"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -39,6 +38,11 @@ type Match struct {
 	// Path is the filesystem path or filename to the data. It may be a prefix
 	// on a cloud based system or a directory on a local one.
 	Path string
+	// Key is like Path except without the volume for systems where the volume
+	// can appear in the path name.
+	Key string
+	// Region is the region for cloud based systems.
+	Region string
 	// Separator is the filesystem separator (e.g / or \ for windows).
 	Separator rune
 	// Parameters are any parameters encoded in a URL/URI based name.
@@ -79,6 +83,16 @@ func Host(path string) string {
 // Path calls DefaultMatchers.Path(path).
 func Path(path string) (string, rune) {
 	return DefaultMatchers.Path(path)
+}
+
+// Key calls DefaultMatchers.Key(path).
+func Key(path string) (string, rune) {
+	return DefaultMatchers.Key(path)
+}
+
+// Region calls DefaultMatchers.Region(path).
+func Region(url string) string {
+	return DefaultMatchers.Region(url)
 }
 
 // Parameters calls DefaultMatchers.Parameters(path).
@@ -135,6 +149,22 @@ func (ms MatcherSpec) Path(path string) (string, rune) {
 	return "", utf8.RuneError
 }
 
+// Key returns the key component of path and the separator to use for it.
+func (ms MatcherSpec) Key(path string) (string, rune) {
+	if m := ms.Match(path); m != nil {
+		return m.Key, m.Separator
+	}
+	return "", utf8.RuneError
+}
+
+// Region returns the region component for cloud based systems.
+func (ms MatcherSpec) Region(url string) string {
+	if m := ms.Match(url); m != nil {
+		return m.Region
+	}
+	return ""
+}
+
 var emptyValues = map[string][]string{}
 
 // Parameters returns the parameters in path, if any. If no parameters
@@ -167,14 +197,4 @@ func parametersFromQuery(u *url.URL) map[string][]string {
 		r[i] = c
 	}
 	return r
-}
-
-// return the first non-empty path component in a / separate path.
-func firstPathComponent(path string) string {
-	for _, p := range strings.Split(path, "/") {
-		if len(p) > 0 {
-			return p
-		}
-	}
-	return ""
 }
