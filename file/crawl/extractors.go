@@ -57,9 +57,7 @@ func (ep *extractorPool) runExtractor(ctx context.Context,
 		crawled := Crawled{Depth: ep.depth, Downloaded: downloaded}
 		// Extract outlinks.
 		extracted := ep.outlinks.Extract(ctx, ep.depth, crawled.Downloaded)
-		for _, outlinks := range extracted {
-			crawled.Outlinks = append(crawled.Outlinks, outlinks)
-		}
+		crawled.Outlinks = append(crawled.Outlinks, extracted...)
 		select {
 		case <-ctx.Done():
 			return
