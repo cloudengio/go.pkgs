@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20230112010627-65d1c6240ae0 // indirect
-	cloudeng.io/errors v0.0.8 // indirect
 	cloudeng.io/file v0.0.0-20230112005246-0bf6f4251760
 	cloudeng.io/os v0.0.0-20230112010627-65d1c6240ae0 // indirect
 	cloudeng.io/path v0.0.5
