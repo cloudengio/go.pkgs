@@ -6,5 +6,3 @@ require (
 	cloudeng.io/debug v0.0.0-20230105021008-948d22470af5
 	cloudeng.io/errors v0.0.8
 )
-
-require cloudeng.io/path v0.0.4 // indirect

@@ -85,6 +85,11 @@ func RegisteredCertStores() []string
 RegisteredCertStores returns the list of currently registered certificate
 stores.
 
+### Func SafePath
+```go
+func SafePath(path string) error
+```
+
 ### Func SelfSignedCertCommand
 ```go
 func SelfSignedCertCommand(name string) *subcmd.Command
