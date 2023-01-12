@@ -22,14 +22,16 @@ func ExampleScheme() {
 		host := cloudpath.Host(example)
 		volume := cloudpath.Volume(example)
 		path, sep := cloudpath.Path(example)
+		key, _ := cloudpath.Key(example)
+		region := cloudpath.Region(example)
 		parameters := cloudpath.Parameters(example)
-		fmt.Printf("%v %q %q %q %q %c %v\n", local, scheme, host, volume, path, sep, parameters)
+		fmt.Printf("%v %q %q %q %q %q %q %c %v\n", local, scheme, host, region, volume, path, key, sep, parameters)
 	}
 	// Output:
-	// false "s3" "" "my-bucket" "/my-bucket/object" / map[]
-	// false "GoogleCloudStorage" "storage.cloud.google.com" "bucket" "/bucket/obj" / map[]
-	// false "GoogleCloudStorage" "" "my-bucket" "/my-bucket" / map[]
-	// true "windows" "localhost" "c" "c:\\root\\file" \ map[]
+	// false "s3" "" "" "my-bucket" "my-bucket/object" "/object" / map[]
+	// false "GoogleCloudStorage" "storage.cloud.google.com" "" "bucket" "/bucket/obj" "/obj" / map[]
+	// false "GoogleCloudStorage" "" "" "my-bucket" "my-bucket" "" / map[]
+	// true "windows" "" "" "c" "c:\\root\\file" "\\root\\file" \ map[]
 }
 
 func ExampleT_Prefix() {

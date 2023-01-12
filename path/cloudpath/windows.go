@@ -5,11 +5,13 @@
 package cloudpath
 
 import (
-	"net/url"
 	"strings"
 )
 
 func isWindowsDrive(p string) (string, bool) {
+	if len(p) == 0 {
+		return "", false
+	}
 	drive := p[0]
 	if drive >= 'A' && drive <= 'Z' || drive >= 'a' && drive <= 'z' {
 		if len(p) >= 2 && p[1] == ':' {
@@ -17,6 +19,25 @@ func isWindowsDrive(p string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func fileURIWindows(p string) *Match {
+	if len(p) == 0 {
+		return nil
+	}
+	host, rest, drive := parseFileURI(p)
+	if len(drive) == 0 || len(rest) == 0 {
+		return nil
+	}
+	return &Match{
+		Scheme:    WindowsFileSystem,
+		Separator: '/',
+		Host:      host,
+		Volume:    drive,
+		Path:      rest,
+		Key:       rest[2:],
+		Local:     true,
+	}
 }
 
 // WindowsMatcher implements Matcher for Windows filenames. It returns
@@ -27,21 +48,13 @@ func WindowsMatcher(p string) *Match {
 	}
 	m := &Match{
 		Scheme:    WindowsFileSystem,
-		Host:      "localhost",
+		Host:      "",
 		Separator: '\\',
 		Local:     true,
 	}
 
-	// Handle file:// uris.
-	if u, err := url.Parse(p); err == nil && u.Scheme == "file" {
-		wp := strings.TrimPrefix(u.Path, "/")
-		if drive, ok := isWindowsDrive(wp); ok && len(wp) > 2 && wp[2] == '/' {
-			m.Volume = drive
-			m.Separator = '/'
-			m.Path = wp
-			return m
-		}
-		return nil
+	if len(p) >= 7 && p[:7] == "file://" {
+		return fileURIWindows(p[7:])
 	}
 
 	// extended length names
@@ -49,6 +62,7 @@ func WindowsMatcher(p string) *Match {
 	if drive, ok := isWindowsDrive(p); ok {
 		m.Volume = drive
 		m.Path = p
+		m.Key = p[2:]
 		return m
 	}
 	if len(p) < 2 || strings.Index(p, `\`) < -1 {
@@ -70,5 +84,6 @@ func WindowsMatcher(p string) *Match {
 	case 1:
 		m.Host = parts[0]
 	}
+	m.Key = m.Path
 	return m
 }

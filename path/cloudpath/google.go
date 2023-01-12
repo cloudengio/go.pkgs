@@ -9,40 +9,27 @@ import (
 	"strings"
 )
 
-func stripStorageURLPrefix(p string) (bool, string) {
-	for _, prefix := range []string{
-		"/storage/v1/b",
-		"/upload/storage/v1/b",
-		"/batch/storage/v1/b",
-	} {
-		if s := strings.TrimPrefix(p, prefix); len(s) < len(p) {
-			return true, s
-		}
-	}
-	return false, p
-}
-
 // GoogleCloudStorageMatcher implements Matcher for Google Cloud Storage
 // object names. It returns GoogleCloudStorage for its scheme result.
 func GoogleCloudStorageMatcher(p string) *Match {
+	m := &Match{
+		Scheme:    GoogleCloudStorage,
+		Separator: '/',
+	}
+	if len(p) >= 5 && p[0:5] == "gs://" {
+		m.Path = p[5:]
+		m.Volume, m.Key = bucketAndKey(m.Path)
+		return m
+	}
 	u, err := url.Parse(p)
 	if err != nil {
 		return nil
 	}
-	m := &Match{
-		Scheme:     GoogleCloudStorage,
-		Separator:  '/',
-		Parameters: parametersFromQuery(u),
-	}
+	m.Parameters = parametersFromQuery(u)
 	switch u.Scheme {
+	case "http", "https":
 	default:
 		return nil
-	case "gs":
-		// gs://[BUCKET_NAME]/[OBJECT_NAME]
-		m.Volume = u.Host
-		m.Path = pathFromHostAndPath(u)
-		return m
-	case "http", "https":
 	}
 	m.Host = u.Host
 	m.Path = u.Path
@@ -51,16 +38,44 @@ func GoogleCloudStorageMatcher(p string) *Match {
 		return nil
 	case "storage.cloud.google.com":
 		// https://storage.cloud.google.com/[BUCKET_NAME]/[OBJECT_NAME]
-		m.Volume = firstPathComponent(u.Path)
+		m.Volume, m.Key = bucketAndKey(u.Path)
 		return m
-	case "storage.googleapis.com", "www.googleapis.com":
-		// https://storage.googleapis.com/storage/v1/[PATH_TO_RESOURCE]
-		// https://storage.googleapis.com/upload/storage/v1/b/[BUCKET_NAME]/o
-		// https://storage.googleapis.com/batch/storage/v1/[PATH_TO_RESOURCE]
+	case "storage.googleapis.com":
+		/*
+			https://storage.googleapis.com/storage/v1/PATH_TO_RESOURCE
+			https://storage.googleapis.com/batch/storage/v1/PATH_TO_RESOURCE
+			https://storage.googleapis.com/download/storage/v1/b/BUCKET_NAME/o/OBJECT_NAME?alt=media
+			https://storage.googleapis.com/upload/storage/v1/b/BUCKET_NAME/o?name=OBJECT_NAME
+		*/
+		endpoint := "storage/v1/b"
+		idx := strings.Index(u.Path, endpoint)
+		if idx < 0 {
+			return nil
+		}
+		m.Path = u.Path[idx+len(endpoint):]
+		op := u.Path[:idx]
+		switch op {
+		default:
+			return nil
+		case "/":
+			m.Volume, m.Key = bucketAndKey(m.Path)
+		case "/download/":
+			oidx := strings.Index(m.Path, "/o/")
+			if oidx < 0 {
+				return nil
+			}
+			m.Volume = m.Path[1:oidx]
+			m.Key = m.Path[oidx+2:]
+		case "/upload/":
+			oidx := strings.Index(m.Path, "/o")
+			if oidx < 0 {
+				return nil
+			}
+			m.Volume = m.Path[1:oidx]
+			m.Key = u.Query().Get("name")
+		case "/batch/":
+			return m
+		}
+		return m
 	}
-	if prefix, stripped := stripStorageURLPrefix(u.Path); prefix {
-		m.Volume = firstPathComponent(stripped)
-		m.Path = stripped
-	}
-	return m
 }

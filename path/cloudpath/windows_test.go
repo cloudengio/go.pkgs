@@ -14,55 +14,55 @@ func TestWindows(t *testing.T) {
 	data := []matcherTestSpec{
 		{
 			"c:",
-			cloudpath.WindowsFileSystem, "localhost", "c", "c:", '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "c", "c:", "", '\\', nil,
 		},
 		{
 			`c:\`,
-			cloudpath.WindowsFileSystem, "localhost", "c", `c:\`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "c", `c:\`, `\`, '\\', nil,
 		},
 		{
 			`c:\a\b`,
-			cloudpath.WindowsFileSystem, "localhost", "c", `c:\a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "c", `c:\a\b`, `\a\b`, '\\', nil,
 		},
 		{
 			`Z:a\b`,
-			cloudpath.WindowsFileSystem, "localhost", "Z", `Z:a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "Z", `Z:a\b`, `a\b`, '\\', nil,
 		},
 		{
 			`\\host`,
-			cloudpath.WindowsFileSystem, "host", "", "", '\\', nil,
+			cloudpath.WindowsFileSystem, "host", "", "", "", "", '\\', nil,
 		},
 		{
 			`\\host\`,
-			cloudpath.WindowsFileSystem, "host", "", "", '\\', nil,
+			cloudpath.WindowsFileSystem, "host", "", "", "", "", '\\', nil,
 		},
 		{
 			`\\host\server`,
-			cloudpath.WindowsFileSystem, "host", "server", "", '\\', nil,
+			cloudpath.WindowsFileSystem, "host", "", "server", "", "", '\\', nil,
 		},
 		{
 			`\\host\server\`,
-			cloudpath.WindowsFileSystem, "host", "server", "", '\\', nil,
+			cloudpath.WindowsFileSystem, "host", "", "server", "", "", '\\', nil,
 		},
 		{
 			`\\host\server\a\b`,
-			cloudpath.WindowsFileSystem, "host", "server", `\a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "host", "", "server", `\a\b`, `\a\b`, '\\', nil,
 		},
 		{
 			`\\?c:\a\b`,
-			cloudpath.WindowsFileSystem, "localhost", "c", `c:\a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "c", `c:\a\b`, `\a\b`, '\\', nil,
 		},
 		{
 			`\\?Z:a\b`,
-			cloudpath.WindowsFileSystem, "localhost", "Z", `Z:a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "Z", `Z:a\b`, `a\b`, '\\', nil,
 		},
 		{
 			"file:///c:/a/b/c/",
-			cloudpath.WindowsFileSystem, "localhost", "c", "c:/a/b/c/", '/', nil,
+			cloudpath.WindowsFileSystem, "", "", "c", "c:/a/b/c/", "/a/b/c/", '/', nil,
 		},
 		{
-			`file://ignored/c:/a/b/c/`,
-			cloudpath.WindowsFileSystem, "localhost", "c", "c:/a/b/c/", '/', nil,
+			`file://host/c:/a/b/c/`,
+			cloudpath.WindowsFileSystem, "host", "", "c", "c:/a/b/c/", "/a/b/c/", '/', nil,
 		},
 	}
 	if err := testMatcher(cloudpath.WindowsMatcher, data); err != nil {
@@ -77,6 +77,7 @@ func TestWindows(t *testing.T) {
 		"gs://bucket/object",
 		"https://storage.cloud.google.com/bucket/",
 		"/a/b/c",
+		"file://a/b/c",
 	}); err != nil {
 		t.Errorf("%v", err)
 	}

@@ -9,8 +9,8 @@ cloudeng.io/os v0.0.0-20221118174443-5eef698118a6 h1:Yd89iUpY6ym0nvtu3o4/ND52pcB
 cloudeng.io/os v0.0.0-20221118174443-5eef698118a6/go.mod h1:hhGubbGRTXGbe6T0ZU2RSXfCo1Ktvzfb0BcpkK4xqvY=
 cloudeng.io/path v0.0.4 h1:KpOFr1623yu/pyvxKUnpnXBBMuACxYB0VwhYhyH/0Ok=
 cloudeng.io/path v0.0.4/go.mod h1:HTU24UoiQVjzSjN+K2kD8hpkBnoLGZh0OITJr3kfxUk=
-cloudeng.io/sync v0.0.7 h1:RBjrrHrxhqAZwPA8NLosrk+F+g8LMQNq9eKhBFEEn2E=
-cloudeng.io/sync v0.0.7/go.mod h1:76qdZzMQSN+iPeQxY9MSbnSELKQmcd9E6pnfRgWgN8s=
+cloudeng.io/sync v0.0.8 h1:N8o5Qo5sjxwDktWIW/7rfK14O74jGS3pprefjF3EFKA=
+cloudeng.io/sync v0.0.8/go.mod h1:76qdZzMQSN+iPeQxY9MSbnSELKQmcd9E6pnfRgWgN8s=
 cloudeng.io/sys v0.0.0-20211030052257-ec4c6f8b878e/go.mod h1:fNIWqX26NzdShrH3lBfxzPhP1jju7JOt7Rg8PxBvYvA=
 cloudeng.io/sys v0.0.0-20221118174443-5eef698118a6 h1:REVV5IfL6llykxSIeNDiLVo5gzJyRCgrK6lfgXWLVzM=
 cloudeng.io/sys v0.0.0-20221118174443-5eef698118a6/go.mod h1:fNIWqX26NzdShrH3lBfxzPhP1jju7JOt7Rg8PxBvYvA=
@@ -34,8 +34,6 @@ golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5h
 golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20211029165221-6e7872819dc8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.2.0 h1:ljd4t30dBnAvMZaQCevtY0xLLD0A+bRZXbgLMLU1F/A=
-golang.org/x/sys v0.2.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.4.0 h1:Zr2JFtRQNX3BCZ8YtxRE9hNJYC8J6I1MVbMg6owUp18=
 golang.org/x/sys v0.4.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=

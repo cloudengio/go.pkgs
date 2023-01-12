@@ -14,70 +14,66 @@ func TestGoogleCloudStorage(t *testing.T) {
 	data := []matcherTestSpec{
 		{
 			"gs://",
-			cloudpath.GoogleCloudStorage, "", "", "", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "", "", "", '/', nil,
 		},
 		{
 			"gs://bucket",
-			cloudpath.GoogleCloudStorage, "", "bucket", "/bucket", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket", "", '/', nil,
 		},
 		{
 			"gs://bucket/",
-			cloudpath.GoogleCloudStorage, "", "bucket", "/bucket/", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/", "/", '/', nil,
 		},
 		{
 			"gs://bucket/object",
-			cloudpath.GoogleCloudStorage, "", "bucket", "/bucket/object", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object", "/object", '/', nil,
 		},
 		{
 			"gs://bucket/object/",
-			cloudpath.GoogleCloudStorage, "", "bucket", "/bucket/object/", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object/", "/object/", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/bucket/path",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "bucket", "/bucket/path", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/path", "/path", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/bucket/path?a=b&c=d",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "bucket", "/bucket/path", '/', exampleParameters,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/path", "/path", '/', exampleParameters,
 		},
 		{
 			"https://storage.cloud.google.com",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "", "", "", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "/", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "", "/", "", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/bucket",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "bucket", "/bucket", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket", "", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/bucket/",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "bucket", "/bucket/", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/", "/", '/', nil,
 		},
 		{
 			"https://storage.googleapis.com/storage/v1/b/bucket/path",
-			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "bucket", "/bucket/path", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "bucket", "/bucket/path", "/path", '/', nil,
 		},
 		{
-			"https://storage.googleapis.com/upload/storage/v1/b/bucket/path",
-			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "bucket", "/bucket/path", '/', nil,
+			"https://storage.googleapis.com/download/storage/v1/b/bucket/o/path",
+			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "bucket", "/bucket/o/path", "/path", '/', nil,
 		},
 		{
-			"https://storage.googleapis.com/batch/storage/v1/b/bucket/path",
-			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "bucket", "/bucket/path", '/', nil,
+			"https://storage.googleapis.com/upload/storage/v1/b/bucket/o?name=/path",
+			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "bucket", "/bucket/o", "/path", '/', map[string][]string{"name": {"/path"}},
 		},
 		{
-			"https://storage.googleapis.com",
-			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "", '/', nil,
-		},
-		{
-			"https://storage.googleapis.com/wrong/prefix",
-			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "/wrong/prefix", '/', nil,
+			"https://storage.googleapis.com/batch/storage/v1/b/",
+			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "", "/", "", '/', nil,
 		},
 	}
-	if err := testMatcher(cloudpath.GoogleCloudStorageMatcher, data); err != nil {
+	if err := testMatcher(cloudpath.GoogleCloudStorageMatcher, data[14:]); err != nil {
 		t.Errorf("%v", err)
 	}
 
@@ -91,6 +87,8 @@ func TestGoogleCloudStorage(t *testing.T) {
 		`c:\`,
 		`\\?c:`,
 		`\\host\share\a`,
+		"https://storage.googleapis.com",
+		"https://storage.googleapis.com/wrong/prefix",
 	}); err != nil {
 		t.Errorf("%v", err)
 	}
