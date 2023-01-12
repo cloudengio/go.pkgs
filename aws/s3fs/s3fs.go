@@ -64,12 +64,11 @@ func (fs *s3fs) Open(ctx context.Context, name string) (fs.File, error) {
 	if matcher == nil {
 		return nil, fmt.Errorf("invalid s3 path: %v", name)
 	}
-	fmt.Printf("... %#v\n", matcher)
 	bucket := matcher.Volume
-	path := matcher.Path
+	key := matcher.Key
 	get := s3.GetObjectInput{
 		Bucket: &bucket,
-		Key:    &path,
+		Key:    &key,
 	}
 	obj, err := fs.client.GetObject(ctx, &get)
 	if err != nil {

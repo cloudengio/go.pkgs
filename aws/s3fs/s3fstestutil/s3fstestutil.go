@@ -6,22 +6,54 @@ package s3fstestutil
 
 import (
 	"context"
+	"fmt"
 
 	"cloudeng.io/aws/s3fs"
 	"cloudeng.io/file"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-func NewMockFS(fs file.FS) s3fs.Client {
-	return &mfs{fs: fs}
+type Option func(o *options)
+
+type options struct {
+	bucket            string
+	stripLeadingSlash bool
+}
+
+func WithBucket(b string) Option {
+	return func(o *options) {
+		o.bucket = b
+	}
+}
+
+func WithLeadingSlashStripped() Option {
+	return func(o *options) {
+		o.stripLeadingSlash = true
+	}
+}
+
+func NewMockFS(fs file.FS, opts ...Option) s3fs.Client {
+	m := &mfs{fs: fs}
+	for _, fn := range opts {
+		fn(&m.options)
+	}
+	return m
 }
 
 type mfs struct {
-	fs file.FS
+	options options
+	fs      file.FS
 }
 
 func (m *mfs) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-	file, err := m.fs.Open(ctx, *params.Key)
+	if b := m.options.bucket; len(b) > 0 && *params.Bucket != b {
+		return nil, fmt.Errorf("unknown bucket %q", *params.Bucket)
+	}
+	key := *params.Key
+	if m.options.stripLeadingSlash && key[0] == '/' {
+		key = key[1:]
+	}
+	file, err := m.fs.Open(ctx, key)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,9 @@ var testdata embed.FS
 func TestS3FS(t *testing.T) {
 	ctx := context.Background()
 
-	mfs := s3fstestutil.NewMockFS(file.FSFromFS(testdata))
+	mfs := s3fstestutil.NewMockFS(file.FSFromFS(testdata),
+		s3fstestutil.WithBucket("bucket"),
+		s3fstestutil.WithLeadingSlashStripped())
 	fs := s3fs.New(aws.Config{}, s3fs.WithS3Client(mfs))
 
 	name := "example.html"
