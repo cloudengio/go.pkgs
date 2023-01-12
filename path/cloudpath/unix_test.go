@@ -14,38 +14,52 @@ func TestUnix(t *testing.T) {
 	data := []matcherTestSpec{
 		{
 			"/",
-			cloudpath.UnixFileSystem, "localhost", "", "/", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "/", "/", '/', nil,
 		},
 		{
 			"./",
-			cloudpath.UnixFileSystem, "localhost", "", "./", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "./", "./", '/', nil,
 		},
 		{
 			".",
-			cloudpath.UnixFileSystem, "localhost", "", ".", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", ".", ".", '/', nil,
 		},
 		{
 			"..",
-			cloudpath.UnixFileSystem, "localhost", "", "..", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "..", "..", '/', nil,
 		},
 		{
 			"/a/b",
-			cloudpath.UnixFileSystem, "localhost", "", "/a/b", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "/a/b", "/a/b", '/', nil,
 		},
 		{
 			"file:///a/b/c/",
-			cloudpath.UnixFileSystem, "localhost", "", "/a/b/c/", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "/a/b/c/", "/a/b/c/", '/', nil,
 		},
 		{
-			"file://ignored/a/b/c/",
-			cloudpath.UnixFileSystem, "localhost", "", "/a/b/c/", '/', nil,
+			"file://host/",
+			cloudpath.UnixFileSystem, "host", "", "", "/", "/", '/', nil,
+		},
+		{
+			"file://host/a/b/c/",
+			cloudpath.UnixFileSystem, "host", "", "", "/a/b/c/", "/a/b/c/", '/', nil,
+		},
+		{
+			"file:",
+			cloudpath.UnixFileSystem, "", "", "", "file:", "file:", '/', nil,
+		},
+		{
+			"file://a:/c",
+			cloudpath.UnixFileSystem, "a:", "", "", "/c", "/c", '/', nil,
 		},
 	}
 	if err := testMatcher(cloudpath.UnixMatcher, data); err != nil {
 		t.Errorf("%v", err)
 	}
 	if err := testNoMatch(cloudpath.UnixMatcher, []string{
-		"",
+		"file://",
+		"file://..",
+		"file:///a:/c",
 	}); err != nil {
 		t.Errorf("%v", err)
 	}
