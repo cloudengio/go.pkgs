@@ -139,6 +139,8 @@ func testConcurrency(t *testing.T, concurrency int) {
 	g = errgroup.WithConcurrency(g, concurrency)
 
 	var started int64
+	var wg sync.WaitGroup
+	wg.Add(1)
 	intCh := make(chan int64, 1)
 
 	go func() {
@@ -148,6 +150,7 @@ func testConcurrency(t *testing.T, concurrency int) {
 		time.Sleep(time.Second)
 		intCh <- atomic.LoadInt64(&started)
 		cancel()
+		wg.Done()
 	}()
 
 	invocations := 50
@@ -181,6 +184,8 @@ func testConcurrency(t *testing.T, concurrency int) {
 	if got, want := atomic.LoadInt64(&started), int64(invocations); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	wg.Wait()
 }
 
 func TestLimit(t *testing.T) {
