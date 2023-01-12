@@ -140,7 +140,7 @@ func newRandomFileCreator(ctx context.Context, name string, rnd *rand.Rand, maxS
 
 // Open implements fs.FS.
 func (mfs *randFS) Open(name string) (fs.File, error) {
-	return mfs.OpenCtx(nil, name)
+	return mfs.OpenCtx(context.Background(), name)
 }
 
 // Open implements file.FS.
@@ -178,7 +178,7 @@ type errorFs struct {
 
 // Open implements fs.FS.
 func (mfs *errorFs) Open(name string) (fs.File, error) {
-	return mfs.OpenCtx(nil, name)
+	return mfs.OpenCtx(context.Background(), name)
 }
 
 func (mfs *errorFs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
@@ -194,7 +194,7 @@ type constantFS struct {
 
 // Open implements fs.FS.
 func (mfs *constantFS) Open(name string) (fs.File, error) {
-	return mfs.OpenCtx(nil, name)
+	return mfs.OpenCtx(context.Background(), name)
 }
 
 func (mfs *constantFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
@@ -237,7 +237,7 @@ func (wfs *writeFS) Create(ctx context.Context, name string, filemode fs.FileMod
 }
 
 func (wfs *writeFS) Open(name string) (fs.File, error) {
-	return wfs.OpenCtx(nil, name)
+	return wfs.OpenCtx(context.Background(), name)
 }
 
 func (wfs *writeFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
