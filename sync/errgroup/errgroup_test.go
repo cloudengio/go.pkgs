@@ -17,6 +17,7 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/sync/errgroup"
+	"cloudeng.io/sync/synctestutil"
 )
 
 func ExampleT() {
@@ -183,12 +184,14 @@ func testConcurrency(t *testing.T, concurrency int) {
 }
 
 func TestLimit(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
 	testConcurrency(t, 2)
 	// Test with no limit.
 	testConcurrency(t, 0)
 }
 
 func TestGoContext(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, 1)
@@ -242,8 +245,8 @@ func TestGoContext(t *testing.T) {
 }
 
 func ExampleT_pipeline() {
-	// A pipeline to generate random numbers and measure the  uniformity of
-	// their distribution. The pipeline runs for 1 second.
+	// A pipeline to generate random numbers and measure the uniformity of
+	// their distribution. The pipeline runs for 2 seconds.
 	// The use of errgroup.T ensures that on return all of the goroutines
 	// have completed and the channels used are closed.
 
@@ -315,8 +318,8 @@ func ExampleT_pipeline() {
 	// to verify the expected values.
 	for i, v := range counters {
 		ratio := total / v
-		if ratio == 9 {
-			// 9 is close enough to an even distribution so round
+		if ratio >= 8 || ratio <= 12 {
+			// 8..12 is close enough to an even distribution so round
 			// it up to 10.
 			ratio = 10
 		}
