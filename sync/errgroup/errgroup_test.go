@@ -244,6 +244,21 @@ func TestGoContext(t *testing.T) {
 
 }
 
+type randGen struct {
+	sync.Mutex
+	src *rand.Rand
+}
+
+func newRandGen() *randGen {
+	return &randGen{src: rand.New(rand.NewSource(1234))}
+}
+
+func (r *randGen) Int63n(n int64) int64 {
+	r.Lock()
+	defer r.Unlock()
+	return r.src.Int63n(n)
+}
+
 func ExampleT_pipeline() {
 	// A pipeline to generate random numbers and measure the uniformity of
 	// their distribution. The pipeline runs for 2 seconds.
@@ -255,24 +270,16 @@ func ExampleT_pipeline() {
 	numGenerators, numCounters := 4, 8
 
 	numCh := make(chan int64)
-	src := rand.New(rand.NewSource(1234))
-	var srcMu sync.Mutex
+	src := newRandGen()
 
 	// numGenerators goroutines produce random numbers in the range of 0..99.
 	for i := 0; i < numGenerators; i++ {
 		g.Go(func() error {
 			for {
-				srcMu.Lock()
-				n := src.Int63n(100)
-				srcMu.Unlock()
 				select {
-				case numCh <- n:
+				case numCh <- src.Int63n(100):
 				case <-ctx.Done():
-					err := ctx.Err()
-					if errors.Is(err, context.DeadlineExceeded) {
-						return nil
-					}
-					return err
+					return nil
 				default:
 					break
 				}
@@ -293,11 +300,7 @@ func ExampleT_pipeline() {
 					atomic.AddInt64(&counters[num%10], 1)
 					atomic.AddInt64(&total, 1)
 				case <-ctx.Done():
-					err := ctx.Err()
-					if errors.Is(err, context.DeadlineExceeded) {
-						return nil
-					}
-					return err
+					return nil
 				}
 			}
 		})

@@ -111,8 +111,7 @@ func TestCrawler(t *testing.T) {
 	fanOut := 2 // number of outlinks per download.
 
 	for _, depth := range []int{0, 1, 4} {
-		readFS := filetestutil.NewMockFS(filetestutil.FSWithConstantContents([]byte{'a', 'b'}, 100))
-		readFS = filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
+		readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
 		writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 		inputCh := make(chan download.Request, 10)
@@ -162,7 +161,7 @@ func TestCrawler(t *testing.T) {
 		expectedDownloads := nItems
 		prev := nItems
 		for d := 0; d < depth; d++ {
-			prev = prev * fanOut
+			prev *= fanOut
 			expectedDownloads += prev
 		}
 		expectedOutlinks := expectedDownloads * fanOut

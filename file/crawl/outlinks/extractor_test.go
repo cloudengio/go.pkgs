@@ -11,13 +11,7 @@ import (
 	"testing"
 
 	"cloudeng.io/file/crawl/outlinks"
-	"cloudeng.io/file/download"
 )
-
-type htmlExtractor struct {
-	outlinks.HTML
-	requests []download.Request
-}
 
 func collectErrors(ch <-chan outlinks.Errors) []outlinks.Errors {
 	errs := []outlinks.Errors{}

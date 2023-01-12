@@ -192,9 +192,8 @@ func (cfs *constantFS) Open(ctx context.Context, name string) (fs.File, error) {
 }
 
 type writeFSEntry struct {
-	contents []byte
-	mode     fs.FileMode
-	update   time.Time
+	mode   fs.FileMode
+	update time.Time
 }
 
 type writeFS struct {
