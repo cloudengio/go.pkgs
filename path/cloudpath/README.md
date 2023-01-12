@@ -66,6 +66,12 @@ func IsLocal(path string) bool
 ```
 IsLocal calls DefaultMatchers.IsLocal(path).
 
+### Func Key
+```go
+func Key(path string) (string, rune)
+```
+Key calls DefaultMatchers.Key(path).
+
 ### Func Parameters
 ```go
 func Parameters(path string) map[string][]string
@@ -77,6 +83,12 @@ Parameters calls DefaultMatchers.Parameters(path).
 func Path(path string) (string, rune)
 ```
 Path calls DefaultMatchers.Path(path).
+
+### Func Region
+```go
+func Region(url string) string
+```
+Region calls DefaultMatchers.Region(path).
 
 ### Func Scheme
 ```go
@@ -109,6 +121,11 @@ type Match struct {
 	// Path is the filesystem path or filename to the data. It may be a prefix
 	// on a cloud based system or a directory on a local one.
 	Path string
+	// Key is like Path except without the volume for systems where the volume
+	// can appear in the path name.
+	Key string
+	// Region is the region for cloud based systems.
+	Region string
 	// Separator is the filesystem separator (e.g / or \ for windows).
 	Separator rune
 	// Parameters are any parameters encoded in a URL/URI based name.
@@ -137,7 +154,7 @@ names. It returns GoogleCloudStorage for its scheme result.
 func UnixMatcher(p string) *Match
 ```
 UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
-for its scheme result.
+for its scheme result. It will match on file://[HOST]/[PATH].
 
 
 ```go
@@ -198,6 +215,12 @@ IsLocal returns true if the path is for a local filesystem.
 
 
 ```go
+func (ms MatcherSpec) Key(path string) (string, rune)
+```
+Key returns the key component of path and the separator to use for it.
+
+
+```go
 func (ms MatcherSpec) Match(p string) *Match
 ```
 Match applies all of the matchers in turn to match the supplied path.
@@ -214,6 +237,12 @@ present an empty (rather than nil), map is returned.
 func (ms MatcherSpec) Path(path string) (string, rune)
 ```
 Path returns the path component of path and the separator to use for it.
+
+
+```go
+func (ms MatcherSpec) Region(url string) string
+```
+Region returns the region component for cloud based systems.
 
 
 ```go

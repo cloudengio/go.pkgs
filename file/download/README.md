@@ -13,21 +13,11 @@ any other local or cloud storage system for which an fs.FS implementation
 exists.
 
 ## Types
-### Type Creator
-```go
-type Creator interface {
-	Container() fs.FS
-	New(name string) (io.WriteCloser, string, error)
-}
-```
-Creator provides a means of creating a new file.
-
-
 ### Type Downloaded
 ```go
 type Downloaded struct {
 	Request   Request
-	Container fs.FS
+	Container file.FS
 	Downloads []Result
 }
 ```
@@ -95,7 +85,8 @@ Progress is used to communicate the progress of a download run.
 ### Type Request
 ```go
 type Request interface {
-	Container() fs.FS
+	Container() file.FS
+	FileMode() fs.FileMode // FileMode to use for the downloaded contents.
 	Names() []string
 }
 ```
@@ -114,6 +105,35 @@ type Result struct {
 Result represents the result of the download for a single object.
 
 
+### Type SimpleRequest
+```go
+type SimpleRequest struct {
+	FS        file.FS
+	Filenames []string
+	Mode      fs.FileMode
+}
+```
+SimpleRequest is a simple implementation of Request.
+
+### Methods
+
+```go
+func (cr SimpleRequest) Container() file.FS
+```
+
+
+```go
+func (cr SimpleRequest) FileMode() fs.FileMode
+```
+
+
+```go
+func (cr SimpleRequest) Names() []string
+```
+
+
+
+
 ### Type T
 ```go
 type T interface {
@@ -123,7 +143,7 @@ type T interface {
 	// complete all outstanding download requests. Run will close the output
 	// channel when all requests have been processed.
 	Run(ctx context.Context,
-		creator Creator,
+		writerFS file.WriteFS,
 		input <-chan Request,
 		output chan<- Downloaded) error
 }
