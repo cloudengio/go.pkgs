@@ -11,8 +11,10 @@
 package download
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"runtime"
@@ -45,7 +47,6 @@ type options struct {
 	progressInterval time.Duration
 	progressCh       chan<- Progress
 	progressClose    bool
-	writeFS          WriteFS
 }
 
 type downloader struct {
@@ -101,12 +102,6 @@ func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option
 		o.progressInterval = interval
 		o.progressCh = ch
 		o.progressClose = close
-	}
-}
-
-func WithWriteFS(writeFS WriteFS) Option {
-	return func(o *options) {
-		o.writeFS = writeFS
 	}
 }
 
@@ -202,7 +197,6 @@ func (dl *downloader) runner(ctx context.Context, id int, progress chan<- Progre
 func (dl *downloader) downloadObjects(ctx context.Context, id int, request Request) (Downloaded, error) {
 	download := Downloaded{
 		Request:   request,
-		Container: dl.writeFS,
 		Downloads: make([]Result, 0, len(request.Names())),
 	}
 	for _, name := range request.Names() {
@@ -249,17 +243,24 @@ func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, na
 			steps++
 			continue
 		}
-		if dl.writeFS != nil {
-			wr, err := dl.writeFS.Create(ctx, name, mode)
-			if err != nil {
-				result.Err = err
-				return result, nil
-			}
-			if _, err := io.Copy(wr, rd); err != nil {
-				result.Err = err
-				return result, nil
-			}
+		fi, err := rd.Stat()
+		if err != nil {
+			result.Err = err
+			return result, err
 		}
+		result.FileInfo = fi
+		buf := make([]byte, 0, int(fi.Size()))
+		wr := bytes.NewBuffer(buf)
+		n, err := io.Copy(wr, rd)
+		if err != nil {
+			result.Err = err
+			return result, nil
+		}
+		if n != fi.Size() {
+			result.Err = fmt.Errorf("short copy of downloaded object: %v: %v != %v:", name, n, fi.Size())
+			return result, nil
+		}
+		result.Contents = wr.Bytes()
 		result.Name = name
 		return result, nil
 	}

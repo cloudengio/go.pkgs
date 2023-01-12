@@ -6,7 +6,6 @@ package download
 
 import (
 	"context"
-	"io"
 	"io/fs"
 
 	"cloudeng.io/file"
@@ -22,23 +21,23 @@ type Request interface {
 
 // Result represents the result of the download for a single object.
 type Result struct {
-	Name    string
+	// Contents of the download, nil on error.
+	Contents []byte
+	// FileInfo for the downloaded file.
+	FileInfo fs.FileInfo
+	// Name of the downloaded file.
+	Name string
+	// Number of retries that were required to download the file.
 	Retries int
-	Err     error
+	// Error encountered during the download.
+	Err error
 }
 
 // Downloaded represents all of the downloads in response
 // to a given request.
 type Downloaded struct {
 	Request   Request
-	Container file.FS
 	Downloads []Result
-}
-
-// WriteFS extends file.FS to add a Create method.
-type WriteFS interface {
-	file.FS
-	Create(ctx context.Context, name string, mode fs.FileMode) (io.WriteCloser, error)
 }
 
 // T represents the interface to a downloader that is used

@@ -5,10 +5,10 @@
 package filetestutil
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
+	"bytes"
 	"fmt"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/file"
 )
 
@@ -19,6 +19,7 @@ func CompareFS(a, b file.FS) error {
 	if got, want := len(ca), len(cb); got != want {
 		return fmt.Errorf("got %v, want %v", got, want)
 	}
+	errs := errors.M{}
 	for name, contents := range ca {
 		if _, ok := cb[name]; !ok {
 			return fmt.Errorf("%v was not downloaded", name)
@@ -26,11 +27,13 @@ func CompareFS(a, b file.FS) error {
 		if got, want := len(contents), len(cb[name]); got != want {
 			return fmt.Errorf("%v: mismatched sizes: got %v, want %v", name, got, want)
 		}
-		sumA := sha1.Sum(contents)
-		sumB := sha1.Sum(cb[name])
-		if got, want := hex.EncodeToString(sumA[:]), hex.EncodeToString(sumB[:]); got != want {
-			return fmt.Errorf("%v: mismatched contents (sha1): got %v, want %v", name, got, want)
+		if !bytes.Equal(contents, cb[name]) {
+			n := 10
+			if n > len(contents) {
+				n = len(contents)
+			}
+			errs.Append(fmt.Errorf("mismatched contents (sha1) for %v (%v): %02x -- %02x", name, len(contents), contents[:n], cb[name]))
 		}
 	}
-	return nil
+	return errs.Err()
 }
