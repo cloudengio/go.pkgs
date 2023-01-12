@@ -21,14 +21,14 @@ import (
 	"cloudeng.io/file/filetestutil"
 )
 
-func runDownloader(ctx context.Context, downloader download.T, writer file.WriteFS, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
+func runDownloader(ctx context.Context, downloader download.T, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
-		errCh <- downloader.Run(ctx, writer, input, output)
+		errCh <- downloader.Run(ctx, input, output)
 		wg.Done()
 	}()
 
@@ -75,11 +75,11 @@ func TestDownload(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(download.WriteFS)
 
-	downloader := download.New()
+	downloader := download.New(download.WithWriteFS(writeFS))
 
-	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,15 +99,17 @@ func TestDownloadCancel(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(download.WriteFS)
 
-	downloader := download.New(download.WithRequestsPerMinute(60))
+	downloader := download.New(
+		download.WithWriteFS(writeFS),
+		download.WithRequestsPerMinute(60))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 	}()
-	_, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	_, err := runDownloader(ctx, downloader, readFS, input, output)
 
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("missing or unexpected error: %v", err)
@@ -128,12 +130,13 @@ func TestDownloadRetries(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContentsAfterRetry(src, 8192, numRetries, &retryError{}))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(download.WriteFS)
 
 	downloader := download.New(
+		download.WithWriteFS(writeFS),
 		download.WithBackoffParameters(&retryError{}, time.Microsecond, 10))
 
-	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,15 +163,17 @@ func TestDownloadProgress(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 	errCh := make(chan error, 1)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(download.WriteFS)
 	progressCh := make(chan download.Progress, 1)
-	downloader := download.New(download.WithProgress(time.Millisecond, progressCh, true))
+	downloader := download.New(
+		download.WithProgress(time.Millisecond, progressCh, true),
+		download.WithWriteFS(writeFS))
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
-		errCh <- downloader.Run(ctx, writeFS, input, output)
+		errCh <- downloader.Run(ctx, input, output)
 		wg.Done()
 	}()
 
@@ -208,12 +213,14 @@ func TestDownloadErrors(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSErrorOnly(errFailed))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(download.WriteFS)
 
-	downloader := download.New(download.WithBackoffParameters(&retryError{},
-		time.Microsecond, 10))
+	downloader := download.New(
+		download.WithWriteFS(writeFS),
+		download.WithBackoffParameters(&retryError{},
+			time.Microsecond, 10))
 
-	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}

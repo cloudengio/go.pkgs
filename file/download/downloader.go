@@ -45,6 +45,7 @@ type options struct {
 	progressInterval time.Duration
 	progressCh       chan<- Progress
 	progressClose    bool
+	writeFS          WriteFS
 }
 
 type downloader struct {
@@ -103,6 +104,12 @@ func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option
 	}
 }
 
+func WithWriteFS(writeFS WriteFS) Option {
+	return func(o *options) {
+		o.writeFS = writeFS
+	}
+}
+
 // New creates a new instance of a download.T.
 func New(opts ...Option) T {
 	dl := &downloader{}
@@ -120,7 +127,6 @@ func New(opts ...Option) T {
 
 // Run implements T.Run.
 func (dl *downloader) Run(ctx context.Context,
-	writeFS file.WriteFS,
 	input <-chan Request,
 	output chan<- Downloaded) error {
 
@@ -128,7 +134,7 @@ func (dl *downloader) Run(ctx context.Context,
 	for i := 0; i < dl.concurrency; i++ {
 		i := i
 		grp.Go(func() error {
-			return dl.runner(ctx, i, writeFS, dl.progressCh, input, output)
+			return dl.runner(ctx, i, dl.progressCh, input, output)
 		})
 	}
 	err := grp.Wait()
@@ -164,7 +170,7 @@ func (dl *downloader) updateProgess(downloaded, outstanding int) {
 	}
 }
 
-func (dl *downloader) runner(ctx context.Context, id int, writeFS file.WriteFS, progress chan<- Progress, input <-chan Request, output chan<- Downloaded) error {
+func (dl *downloader) runner(ctx context.Context, id int, progress chan<- Progress, input <-chan Request, output chan<- Downloaded) error {
 	for {
 		var request Request
 		var ok bool
@@ -180,7 +186,7 @@ func (dl *downloader) runner(ctx context.Context, id int, writeFS file.WriteFS, 
 			// ignore empty requests.
 			continue
 		}
-		downloaded, err := dl.downloadObjects(ctx, id, writeFS, request)
+		downloaded, err := dl.downloadObjects(ctx, id, request)
 		if err != nil {
 			return err
 		}
@@ -193,14 +199,14 @@ func (dl *downloader) runner(ctx context.Context, id int, writeFS file.WriteFS, 
 	}
 }
 
-func (dl *downloader) downloadObjects(ctx context.Context, id int, writeFS file.WriteFS, request Request) (Downloaded, error) {
+func (dl *downloader) downloadObjects(ctx context.Context, id int, request Request) (Downloaded, error) {
 	download := Downloaded{
 		Request:   request,
-		Container: writeFS,
+		Container: dl.writeFS,
 		Downloads: make([]Result, 0, len(request.Names())),
 	}
 	for _, name := range request.Names() {
-		status, err := dl.downloadObject(ctx, writeFS, request.Container(), name, request.FileMode())
+		status, err := dl.downloadObject(ctx, request.Container(), name, request.FileMode())
 		if err != nil {
 			return download, err
 		}
@@ -209,7 +215,7 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, writeFS file.
 	return download, nil
 }
 
-func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
+func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
 	result := Result{}
 	if dl.ticker.C == nil {
 		select {
@@ -227,7 +233,7 @@ func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, 
 	delay := dl.backOffStart
 	steps := 0
 	for {
-		rd, err := downloadFS.Open(ctx, name)
+		rd, err := downloadFS.OpenCtx(ctx, name)
 		result.Retries = steps
 		result.Err = err
 		if err != nil {
@@ -243,16 +249,18 @@ func (dl *downloader) downloadObject(ctx context.Context, writeFS file.WriteFS, 
 			steps++
 			continue
 		}
-		wr, ni, err := writeFS.Create(ctx, name, mode)
-		if err != nil {
-			result.Err = err
-			return result, nil
+		if dl.writeFS != nil {
+			wr, err := dl.writeFS.Create(ctx, name, mode)
+			if err != nil {
+				result.Err = err
+				return result, nil
+			}
+			if _, err := io.Copy(wr, rd); err != nil {
+				result.Err = err
+				return result, nil
+			}
 		}
-		if _, err := io.Copy(wr, rd); err != nil {
-			result.Err = err
-			return result, nil
-		}
-		result.Name = ni
+		result.Name = name
 		return result, nil
 	}
 }

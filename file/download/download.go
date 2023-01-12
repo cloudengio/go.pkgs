@@ -6,6 +6,7 @@ package download
 
 import (
 	"context"
+	"io"
 	"io/fs"
 
 	"cloudeng.io/file"
@@ -34,6 +35,12 @@ type Downloaded struct {
 	Downloads []Result
 }
 
+// WriteFS extends file.FS to add a Create method.
+type WriteFS interface {
+	file.FS
+	Create(ctx context.Context, name string, mode fs.FileMode) (io.WriteCloser, error)
+}
+
 // T represents the interface to a downloader that is used
 // to download content.
 type T interface {
@@ -43,7 +50,6 @@ type T interface {
 	// complete all outstanding download requests. Run will close the output
 	// channel when all requests have been processed.
 	Run(ctx context.Context,
-		writerFS file.WriteFS,
 		input <-chan Request,
 		output chan<- Downloaded) error
 }

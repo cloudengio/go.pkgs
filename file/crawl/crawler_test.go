@@ -54,6 +54,7 @@ func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.
 
 type dlFactory struct {
 	numDownloaders int
+	writeFS        download.WriteFS
 }
 
 func (df dlFactory) create(ctx context.Context, depth int) (
@@ -78,6 +79,7 @@ func (df dlFactory) create(ctx context.Context, depth int) (
 	outputCh = make(chan download.Downloaded, chanCap)
 	downloader = download.New(
 		download.WithNumDownloaders(concurrency),
+		download.WithWriteFS(df.writeFS),
 		download.WithNumDownloaders(df.numDownloaders))
 	return
 }
@@ -112,7 +114,7 @@ func TestCrawler(t *testing.T) {
 
 	for _, depth := range []int{0, 1, 4} {
 		readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
-		writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
+		writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(download.WriteFS)
 
 		inputCh := make(chan download.Request, 10)
 		outputCh := make(chan crawl.Crawled, 10)
@@ -127,9 +129,9 @@ func TestCrawler(t *testing.T) {
 
 		outlinks := &extractor{fanOut: fanOut}
 
-		df := &dlFactory{numDownloaders: 1}
+		df := &dlFactory{numDownloaders: 1, writeFS: writeFS}
 		go func() {
-			errCh <- crawler.Run(ctx, df.create, outlinks, writeFS, inputCh, outputCh)
+			errCh <- crawler.Run(ctx, df.create, outlinks, inputCh, outputCh)
 			wg.Done()
 		}()
 

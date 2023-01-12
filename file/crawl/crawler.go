@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"cloudeng.io/errors"
-	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 	"cloudeng.io/sync/errgroup"
 )
@@ -65,16 +64,15 @@ type downloaderState struct {
 func (cr *crawler) Run(ctx context.Context,
 	factory DownloaderFactory,
 	extractor Outlinks,
-	writeFS file.WriteFS,
 	input <-chan download.Request,
 	output chan<- Crawled) error {
 
-	downloaders, dlgrp := cr.createAndRunDownloaders(ctx, factory, writeFS)
+	downloaders, dlgrp := cr.createAndRunDownloaders(ctx, factory)
 
 	if cr.depth == 0 {
 		var errs errors.M
 		reqs, dld := downloaders[0].requests, downloaders[0].downloaded
-		err := cr.crawlAtDepth(ctx, 0, extractor, writeFS, input, dld, reqs, nil, output)
+		err := cr.crawlAtDepth(ctx, 0, extractor, input, dld, reqs, nil, output)
 		errs.Append(err)
 		errs.Append(dlgrp.Wait())
 		close(output)
@@ -92,7 +90,7 @@ func (cr *crawler) Run(ctx context.Context,
 			nextInput = make(chan download.Request, cap(reqs))
 		}
 		crlgrp.Go(func() error {
-			return cr.crawlAtDepth(ctx, depth, extractor, writeFS, currentInput, dld, reqs, nextInput, output)
+			return cr.crawlAtDepth(ctx, depth, extractor, currentInput, dld, reqs, nextInput, output)
 		})
 		chainedInput = nextInput
 	}
@@ -104,7 +102,7 @@ func (cr *crawler) Run(ctx context.Context,
 	return errs.Err()
 }
 
-func (cr *crawler) createAndRunDownloaders(ctx context.Context, factory DownloaderFactory, writeFS file.WriteFS) ([]*downloaderState, *errgroup.T) {
+func (cr *crawler) createAndRunDownloaders(ctx context.Context, factory DownloaderFactory) ([]*downloaderState, *errgroup.T) {
 	downloaders := make([]*downloaderState, cr.depth+1)
 	for i := range downloaders {
 		dl, reqs, dled := factory(ctx, i)
@@ -118,7 +116,7 @@ func (cr *crawler) createAndRunDownloaders(ctx context.Context, factory Download
 	for _, dls := range downloaders {
 		dls := dls
 		grp.Go(func() error {
-			return dls.dl.Run(ctx, writeFS, dls.requests, dls.downloaded)
+			return dls.dl.Run(ctx, dls.requests, dls.downloaded)
 		})
 	}
 	return downloaders, grp
@@ -127,7 +125,6 @@ func (cr *crawler) createAndRunDownloaders(ctx context.Context, factory Download
 func (cr *crawler) crawlAtDepth(ctx context.Context,
 	depth int,
 	extractor Outlinks,
-	writeFS file.WriteFS,
 	input <-chan download.Request,
 	dlOutput <-chan download.Downloaded,
 	dlInput, dlExtractedInput chan<- download.Request,
