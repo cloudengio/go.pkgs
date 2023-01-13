@@ -10,7 +10,7 @@ import (
 	"cloudeng.io/text/textutil"
 )
 
-func TestRewrite(t *testing.T) {
+func TestRewriteParsing(t *testing.T) {
 	for _, tc := range []struct {
 		input, match, replacement string
 	}{
@@ -48,5 +48,15 @@ func TestRewrite(t *testing.T) {
 			continue
 		}
 	}
-	t.Fail()
+}
+
+func TestRewrite(t *testing.T) {
+	repl, err := textutil.NewRewriteRule("s%(?:^s3://)(.*?)(/.*)%$1 -- $2%")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := repl.ReplaceAllString("s3://bucket/file/key.pdf")
+	if got, want := out, "bucket -- /file/key.pdf"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
