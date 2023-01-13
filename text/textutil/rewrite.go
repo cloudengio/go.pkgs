@@ -11,7 +11,7 @@ import (
 )
 
 // RewriteRule represents a rewrite rule of the form s/<match>/<replace>/ or
-// s%<match>%<replace>%.
+// s%<match>%<replace>%. Separators can be escpaed using a \.
 type RewriteRule struct {
 	Match       *regexp.Regexp
 	Replacement string
@@ -46,7 +46,7 @@ func toSep(input string, sep rune) (string, string, bool) {
 
 // NewReplacement accepts a string of the form s/<match-re>/<replacement>/
 // or s%<match-re>%<replacement>% and returns a RewriteRule that can be used
-// to perform the rewquested rewrite.
+// to perform the rewquested rewrite. Separators can be escpaed using a \.
 func NewRewriteRule(rule string) (RewriteRule, error) {
 	if len(rule) <= 2 {
 		return RewriteRule{}, fmt.Errorf("rule must be at least 3 characters long")
