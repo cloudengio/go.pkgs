@@ -33,7 +33,7 @@ func TestGenericExtractor(t *testing.T) {
 		wg.Done()
 	}()
 
-	downloaded := downloadFromTestdata("simple.html")
+	downloaded := downloadFromTestdata(t, "simple.html")
 
 	ext := outlinks.NewExtractor(outlinks.NewHTML(), errCh)
 	reqs := ext.Extract(ctx, 0, downloaded)

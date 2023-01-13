@@ -10,29 +10,20 @@ import cloudeng.io/file
 ### Type FS
 ```go
 type FS interface {
-	Open(ctx context.Context, name string) (fs.File, error)
+	fs.FS
+	OpenCtx(ctx context.Context, name string) (fs.File, error)
 }
 ```
-FS is like fs.FS but with a context parameter.
+FS extends fs.FS with OpenCtx.
 
 ### Functions
 
 ```go
-func FSFromFS(fs fs.FS) FS
+func WrapFS(fs fs.FS) FS
 ```
-FSFromFS wraps an fs.FS to implement file.FS.
+WrapFS wraps an fs.FS to implement file.FS.
 
 
-
-
-### Type WriteFS
-```go
-type WriteFS interface {
-	FS
-	Create(ctx context.Context, name string, mode fs.FileMode) (io.WriteCloser, string, error)
-}
-```
-WriteFS extends FS to add a Create method.
 
 
 

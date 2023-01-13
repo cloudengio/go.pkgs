@@ -17,8 +17,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+// Option represents an option to New.
 type Option func(o *options)
 
+// Client represents the set of AWS S3 client methods used by s3fs.
 type Client interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
@@ -28,6 +30,7 @@ type options struct {
 	client    Client
 }
 
+// WithS3Options wraps s3.Options for use when creating an s3.Client.
 func WithS3Options(opts ...func(*s3.Options)) Option {
 	return func(o *options) {
 		for _, fn := range opts {
@@ -36,6 +39,7 @@ func WithS3Options(opts ...func(*s3.Options)) Option {
 	}
 }
 
+// WithS3Client specifies the s3.Client to use. If not specified, a new is created.
 func WithS3Client(client Client) Option {
 	return func(o *options) {
 		o.client = client
@@ -47,6 +51,7 @@ type s3fs struct {
 	options options
 }
 
+// New creates a new instance of file.FS backed by S3.
 func New(cfg aws.Config, options ...Option) file.FS {
 	fs := &s3fs{}
 	for _, fn := range options {
@@ -59,7 +64,13 @@ func New(cfg aws.Config, options ...Option) file.FS {
 	return fs
 }
 
-func (fs *s3fs) Open(ctx context.Context, name string) (fs.File, error) {
+// Open implements fs.FS.
+func (fs *s3fs) Open(name string) (fs.File, error) {
+	return fs.OpenCtx(context.Background(), name)
+}
+
+// OpenCtx implements file.FS.
+func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	matcher := cloudpath.AWSS3Matcher(name)
 	if matcher == nil {
 		return nil, fmt.Errorf("invalid s3 path: %v", name)

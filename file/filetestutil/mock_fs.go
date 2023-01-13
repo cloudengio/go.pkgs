@@ -27,7 +27,7 @@ func Contents(fs file.FS) map[string][]byte {
 		return mfs.contents
 	case *randAfteRetryFS:
 		return mfs.contents
-	case *writeFS:
+	case *WriteFS:
 		return mfs.contents
 	}
 	panic(fmt.Sprintf("%T is not a mock fs.FS", fs))
@@ -86,13 +86,6 @@ func FSErrorOnly(err error) FSOption {
 	}
 }
 
-// FSWriteFS requests a mock that implements file.WriteFS.
-func FSWriteFS() FSOption {
-	return func(o *fsOptions) {
-		o.writeFS = true
-	}
-}
-
 // NewMockFS returns an new mock instance of file.FS as per the specified options.
 func NewMockFS(opts ...FSOption) file.FS {
 	var options fsOptions
@@ -113,9 +106,6 @@ func NewMockFS(opts ...FSOption) file.FS {
 	}
 	if err := options.returnErr; err != nil {
 		return &errorFs{err: err}
-	}
-	if options.writeFS {
-		return newWriteFS()
 	}
 	return nil
 }
@@ -138,7 +128,12 @@ func newRandomFileCreator(ctx context.Context, name string, rnd *rand.Rand, maxS
 }
 
 // Open implements fs.FS.
-func (mfs *randFS) Open(ctx context.Context, name string) (fs.File, error) {
+func (mfs *randFS) Open(name string) (fs.File, error) {
+	return mfs.OpenCtx(context.Background(), name)
+}
+
+// Open implements file.FS.
+func (mfs *randFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	mfs.Lock()
 	defer mfs.Unlock()
 	contents, f, err := newRandomFileCreator(ctx, name, mfs.rnd, mfs.maxSize)
@@ -155,7 +150,7 @@ type randAfteRetryFS struct {
 }
 
 // Open implements file.FS.
-func (mfs *randAfteRetryFS) Open(ctx context.Context, name string) (fs.File, error) {
+func (mfs *randAfteRetryFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	mfs.Lock()
 	mfs.retries[name]++
 	if mfs.retries[name] <= mfs.numRetries {
@@ -163,14 +158,19 @@ func (mfs *randAfteRetryFS) Open(ctx context.Context, name string) (fs.File, err
 		return nil, mfs.retryErr
 	}
 	mfs.Unlock()
-	return mfs.randFS.Open(ctx, name)
+	return mfs.randFS.OpenCtx(ctx, name)
 }
 
 type errorFs struct {
 	err error
 }
 
-func (mfs *errorFs) Open(ctx context.Context, name string) (fs.File, error) {
+// Open implements fs.FS.
+func (mfs *errorFs) Open(name string) (fs.File, error) {
+	return mfs.OpenCtx(context.Background(), name)
+}
+
+func (mfs *errorFs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	return nil, mfs.err
 }
 
@@ -182,11 +182,15 @@ type constantFS struct {
 }
 
 // Open implements fs.FS.
-func (cfs *constantFS) Open(ctx context.Context, name string) (fs.File, error) {
-	cfs.Lock()
-	defer cfs.Unlock()
-	contents := bytes.Repeat(cfs.val, cfs.maxSize)
-	cfs.contents[name] = contents
+func (mfs *constantFS) Open(name string) (fs.File, error) {
+	return mfs.OpenCtx(context.Background(), name)
+}
+
+func (mfs *constantFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+	mfs.Lock()
+	defer mfs.Unlock()
+	contents := bytes.Repeat(mfs.val, mfs.maxSize)
+	mfs.contents[name] = contents
 	return NewFile(&BufferCloser{bytes.NewBuffer(contents)},
 		NewInfo(name, len(contents), 0666, time.Now(), false, nil)), nil
 }
@@ -196,32 +200,36 @@ type writeFSEntry struct {
 	update time.Time
 }
 
-type writeFS struct {
+type WriteFS struct {
 	sync.Mutex
 	entries  map[string]writeFSEntry
 	contents map[string][]byte
 }
 
-func newWriteFS() file.WriteFS {
-	return &writeFS{
+func NewWriteFS() *WriteFS {
+	return &WriteFS{
 		entries:  map[string]writeFSEntry{},
 		contents: map[string][]byte{},
 	}
 }
 
-func (wfs *writeFS) Create(ctx context.Context, name string, filemode fs.FileMode) (io.WriteCloser, string, error) {
+func (wfs *WriteFS) Create(ctx context.Context, name string, filemode fs.FileMode) (io.WriteCloser, error) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	if _, ok := wfs.entries[name]; ok {
-		return nil, "", os.ErrExist
+		return nil, os.ErrExist
 	}
 	entry := writeFSEntry{mode: filemode, update: time.Now()}
 	wfs.entries[name] = entry
 	wfs.contents[name] = nil
-	return &writeCloser{wfs: wfs, name: name}, name, nil
+	return &writeCloser{wfs: wfs, name: name}, nil
 }
 
-func (wfs *writeFS) Open(ctx context.Context, name string) (fs.File, error) {
+func (wfs *WriteFS) Open(name string) (fs.File, error) {
+	return wfs.OpenCtx(context.Background(), name)
+}
+
+func (wfs *WriteFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	entry, ok := wfs.entries[name]
@@ -235,7 +243,7 @@ func (wfs *writeFS) Open(ctx context.Context, name string) (fs.File, error) {
 	return NewFile(&BufferCloser{bytes.NewBuffer(cpy)}, info), nil
 }
 
-func (wfs *writeFS) append(file string, buf []byte) {
+func (wfs *WriteFS) append(file string, buf []byte) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	entry := wfs.entries[file]
@@ -245,7 +253,7 @@ func (wfs *writeFS) append(file string, buf []byte) {
 }
 
 type writeCloser struct {
-	wfs  *writeFS
+	wfs  *WriteFS
 	name string
 }
 

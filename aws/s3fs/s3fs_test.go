@@ -26,13 +26,13 @@ var testdata embed.FS
 func TestS3FS(t *testing.T) {
 	ctx := context.Background()
 
-	mfs := s3fstestutil.NewMockFS(file.FSFromFS(testdata),
+	mfs := s3fstestutil.NewMockFS(file.WrapFS(testdata),
 		s3fstestutil.WithBucket("bucket"),
 		s3fstestutil.WithLeadingSlashStripped())
 	fs := s3fs.New(aws.Config{}, s3fs.WithS3Client(mfs))
 
 	name := "example.html"
-	fi, err := fs.Open(ctx, "s3://"+path.Join("bucket", "testdata", name))
+	fi, err := fs.OpenCtx(ctx, "s3://"+path.Join("bucket", "testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}

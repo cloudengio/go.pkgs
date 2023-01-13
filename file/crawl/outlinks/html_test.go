@@ -5,13 +5,14 @@
 package outlinks_test
 
 import (
+	"bytes"
 	"embed"
+	"io"
 	"io/fs"
 	"path"
 	"reflect"
 	"testing"
 
-	"cloudeng.io/file"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
 )
@@ -19,26 +20,27 @@ import (
 //go:embed testdata/*.html
 var htmlExamples embed.FS
 
-func loadTestdata(name string) fs.File {
+func loadTestdata(t *testing.T, name string) fs.File {
 	f, err := htmlExamples.Open(path.Join("testdata", name))
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return f
 }
 
-func downloadFromTestdata(name string) download.Downloaded {
+func downloadFromTestdata(t *testing.T, name string) download.Downloaded {
+	buf := &bytes.Buffer{}
+	io.Copy(buf, loadTestdata(t, name))
 	return download.Downloaded{
-		Container: file.FSFromFS(htmlExamples),
 		Downloads: []download.Result{
-			{Name: path.Join("testdata", name)},
+			{Name: path.Join("testdata", name), Contents: buf.Bytes()},
 		},
 	}
 }
 
 func TestHTML(t *testing.T) {
 	var he outlinks.HTML
-	rd := loadTestdata("simple.html")
+	rd := loadTestdata(t, "simple.html")
 	defer rd.Close()
 	extracted, err := he.HREFs(rd)
 	if err != nil {
