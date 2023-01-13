@@ -5,9 +5,11 @@
 package download_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/rand"
 	"runtime"
@@ -21,14 +23,14 @@ import (
 	"cloudeng.io/file/filetestutil"
 )
 
-func runDownloader(ctx context.Context, downloader download.T, writer file.WriteFS, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
+func runDownloader(ctx context.Context, downloader download.T, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
 	nItems := 1000
 	errCh := make(chan error, 1)
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
-		errCh <- downloader.Run(ctx, writer, input, output)
+		errCh <- downloader.Run(ctx, input, output)
 		wg.Done()
 	}()
 
@@ -46,10 +48,31 @@ func runDownloader(ctx context.Context, downloader download.T, writer file.Write
 	return downloaded, err
 }
 
+func copyDownloadsToFS(ctx context.Context, t *testing.T, downloaded []download.Downloaded) *filetestutil.WriteFS {
+	writeFS := filetestutil.NewWriteFS()
+	for _, c := range downloaded {
+		for _, d := range c.Downloads {
+			if d.Err != nil {
+				continue
+			}
+			f, err := writeFS.Create(ctx, d.Name, fs.FileMode(0600))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rd := bytes.NewBuffer(d.Contents)
+			if _, err := io.Copy(f, rd); err != nil {
+				t.Fatal(err)
+			}
+			f.Close()
+		}
+	}
+	return writeFS
+}
+
 func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- download.SimpleRequest{FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%v", i)}}:
+		case input <- download.SimpleRequest{FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%04v", i)}}:
 		case <-ctx.Done():
 			break
 		}
@@ -75,16 +98,16 @@ func TestDownload(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New()
 
-	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	checkForDownloadErrors(t, downloaded)
+	writeFS := copyDownloadsToFS(ctx, t, downloaded)
 	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
 		t.Fatal(err)
 	}
@@ -99,15 +122,15 @@ func TestDownloadCancel(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 8192))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
-	downloader := download.New(download.WithRequestsPerMinute(60))
+	downloader := download.New(
+		download.WithRequestsPerMinute(60))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 	}()
-	_, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	_, err := runDownloader(ctx, downloader, readFS, input, output)
 
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("missing or unexpected error: %v", err)
@@ -128,17 +151,17 @@ func TestDownloadRetries(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContentsAfterRetry(src, 8192, numRetries, &retryError{}))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New(
 		download.WithBackoffParameters(&retryError{}, time.Microsecond, 10))
 
-	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	checkForDownloadErrors(t, downloaded)
+	writeFS := copyDownloadsToFS(ctx, t, downloaded)
 	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +183,6 @@ func TestDownloadProgress(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 	errCh := make(chan error, 1)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 	progressCh := make(chan download.Progress, 1)
 	downloader := download.New(download.WithProgress(time.Millisecond, progressCh, true))
 
@@ -168,7 +190,7 @@ func TestDownloadProgress(t *testing.T) {
 	wg.Add(2)
 
 	go func() {
-		errCh <- downloader.Run(ctx, writeFS, input, output)
+		errCh <- downloader.Run(ctx, input, output)
 		wg.Done()
 	}()
 
@@ -208,12 +230,11 @@ func TestDownloadErrors(t *testing.T) {
 	readFS := filetestutil.NewMockFS(filetestutil.FSErrorOnly(errFailed))
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
-	writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 	downloader := download.New(download.WithBackoffParameters(&retryError{},
 		time.Microsecond, 10))
 
-	downloaded, err := runDownloader(ctx, downloader, writeFS, readFS, input, output)
+	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
 	}

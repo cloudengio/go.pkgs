@@ -67,6 +67,11 @@ WithRequestsPerMinute sets the rate for download requests. If not specified
 downloads will be initiated immediately.
 
 
+```go
+func WithWriteFS(writeFS WriteFS) Option
+```
+
+
 
 
 ### Type Progress
@@ -143,7 +148,6 @@ type T interface {
 	// complete all outstanding download requests. Run will close the output
 	// channel when all requests have been processed.
 	Run(ctx context.Context,
-		writerFS file.WriteFS,
 		input <-chan Request,
 		output chan<- Downloaded) error
 }
@@ -158,6 +162,16 @@ func New(opts ...Option) T
 New creates a new instance of a download.T.
 
 
+
+
+### Type WriteFS
+```go
+type WriteFS interface {
+	file.FS
+	Create(ctx context.Context, name string, mode fs.FileMode) (io.WriteCloser, error)
+}
+```
+WriteFS extends file.FS to add a Create method.
 
 
 

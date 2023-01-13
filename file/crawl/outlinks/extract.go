@@ -5,6 +5,7 @@
 package outlinks
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -35,25 +36,14 @@ type Extractor interface {
 func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Downloaded) []download.Request {
 	var out []download.Request
 	errs := Errors{
-		Request:   downloaded.Request,
-		Container: downloaded.Container,
+		Request: downloaded.Request,
 	}
 	single := Download{
-		Request:   downloaded.Request,
-		Container: downloaded.Container,
+		Request: downloaded.Request,
 	}
 	for _, dl := range downloaded.Downloads {
 		single.Download = dl
-		rd, err := downloaded.Container.Open(ctx, dl.Name)
-		if err != nil {
-			errs.Errors = append(errs.Errors, ErrorDetail{
-				Result: dl,
-				Error:  err,
-			})
-			continue
-		}
-		links, err := g.Outlinks(ctx, depth, single, rd)
-		rd.Close()
+		links, err := g.Outlinks(ctx, depth, single, bytes.NewReader(dl.Contents))
 		if err != nil {
 			errs.Errors = append(errs.Errors, ErrorDetail{
 				Result: dl,

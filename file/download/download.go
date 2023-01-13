@@ -21,16 +21,22 @@ type Request interface {
 
 // Result represents the result of the download for a single object.
 type Result struct {
-	Name    string
+	// Contents of the download, nil on error.
+	Contents []byte
+	// FileInfo for the downloaded file.
+	FileInfo fs.FileInfo
+	// Name of the downloaded file.
+	Name string
+	// Number of retries that were required to download the file.
 	Retries int
-	Err     error
+	// Error encountered during the download.
+	Err error
 }
 
 // Downloaded represents all of the downloads in response
 // to a given request.
 type Downloaded struct {
 	Request   Request
-	Container file.FS
 	Downloads []Result
 }
 
@@ -43,7 +49,6 @@ type T interface {
 	// complete all outstanding download requests. Run will close the output
 	// channel when all requests have been processed.
 	Run(ctx context.Context,
-		writerFS file.WriteFS,
 		input <-chan Request,
 		output chan<- Downloaded) error
 }

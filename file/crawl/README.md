@@ -94,7 +94,6 @@ type T interface {
 	Run(ctx context.Context,
 		factory DownloaderFactory,
 		extractor Outlinks,
-		writeFS file.WriteFS,
 		input <-chan download.Request,
 		output chan<- Crawled) error
 }

@@ -53,7 +53,7 @@ func (m *mfs) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns .
 	if m.options.stripLeadingSlash && key[0] == '/' {
 		key = key[1:]
 	}
-	file, err := m.fs.Open(ctx, key)
+	file, err := m.fs.OpenCtx(ctx, key)
 	if err != nil {
 		return nil, err
 	}

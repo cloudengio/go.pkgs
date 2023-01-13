@@ -5,8 +5,11 @@
 package crawl_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"math/rand"
 	"sync"
 	"testing"
@@ -18,6 +21,27 @@ import (
 	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/sync/synctestutil"
 )
+
+func copyDownloadsToFS(ctx context.Context, t *testing.T, crawled []crawl.Crawled) *filetestutil.WriteFS {
+	writeFS := filetestutil.NewWriteFS()
+	for _, c := range crawled {
+		for _, d := range c.Downloads {
+			if d.Err != nil {
+				continue
+			}
+			f, err := writeFS.Create(ctx, d.Name, fs.FileMode(0600))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rd := bytes.NewBuffer(d.Contents)
+			if _, err := io.Copy(f, rd); err != nil {
+				t.Fatal(err)
+			}
+			f.Close()
+		}
+	}
+	return writeFS
+}
 
 type extractor struct {
 	sync.Mutex
@@ -112,7 +136,6 @@ func TestCrawler(t *testing.T) {
 
 	for _, depth := range []int{0, 1, 4} {
 		readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
-		writeFS := filetestutil.NewMockFS(filetestutil.FSWriteFS()).(file.WriteFS)
 
 		inputCh := make(chan download.Request, 10)
 		outputCh := make(chan crawl.Crawled, 10)
@@ -129,7 +152,7 @@ func TestCrawler(t *testing.T) {
 
 		df := &dlFactory{numDownloaders: 1}
 		go func() {
-			errCh <- crawler.Run(ctx, df.create, outlinks, writeFS, inputCh, outputCh)
+			errCh <- crawler.Run(ctx, df.create, outlinks, inputCh, outputCh)
 			wg.Done()
 		}()
 
@@ -175,6 +198,8 @@ func TestCrawler(t *testing.T) {
 		if got, want := nOutlinks, expectedOutlinks; got != want {
 			t.Errorf("depth %v: got %v, want %v", depth, got, want)
 		}
+
+		writeFS := copyDownloadsToFS(ctx, t, crawled)
 
 		crawledContents := filetestutil.Contents(writeFS)
 		if got, want := len(crawledContents), expectedDownloads; got != want {

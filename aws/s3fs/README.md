@@ -12,6 +12,7 @@ Package s3fs implements fs.FS for AWS S3.
 ```go
 func New(cfg aws.Config, options ...Option) file.FS
 ```
+New creates a new instance of file.FS backed by S3.
 
 
 
@@ -22,23 +23,28 @@ type Client interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 ```
+Client represents the set of AWS S3 client methods used by s3fs.
 
 
 ### Type Option
 ```go
 type Option func(o *options)
 ```
+Option represents an option to New.
 
 ### Functions
 
 ```go
 func WithS3Client(client Client) Option
 ```
+WithS3Client specifies the s3.Client to use. If not specified, a new is
+created.
 
 
 ```go
 func WithS3Options(opts ...func(*s3.Options)) Option
 ```
+WithS3Options wraps s3.Options for use when creating an s3.Client.
 
 
 
