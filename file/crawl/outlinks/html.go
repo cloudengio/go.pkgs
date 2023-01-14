@@ -28,6 +28,10 @@ func NewHTML() *HTML {
 	}
 }
 
+func (ho *HTML) MimeType() string {
+	return "text/html"
+}
+
 // IsDup returns true if link has been seen before (ie. has been used as an
 // argument to IsDup).
 func (ho *HTML) IsDup(link string) bool {

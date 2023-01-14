@@ -7,7 +7,11 @@ package outlinks
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"mime"
+	"path"
+	"strings"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/crawl"
@@ -28,8 +32,19 @@ type Download struct {
 // to retrieve them. This allows for easier customization of the crawl process,
 // for example, to rewrite or otherwise manipulate the link names.
 type Extractor interface {
+	// MimeType returns the mime type that this extractor is capable of handling.
+	MimeType() string
+	// Outlinks extracts outlinks from the specified downloaded file.
 	Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error)
 	Request(depth int, download Download, outlinks []string) download.Request
+}
+
+func mimeTypeForPath(p string) string {
+	mimeType := mime.TypeByExtension(path.Ext(p))
+	if idx := strings.Index(mimeType, ";"); idx > 0 {
+		return mimeType[:idx]
+	}
+	return mimeType
 }
 
 // Extract implements crawl.Outlinks.Extract.
@@ -43,7 +58,16 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 	}
 	for _, dl := range downloaded.Downloads {
 		single.Download = dl
-		links, err := g.Outlinks(ctx, depth, single, bytes.NewReader(dl.Contents))
+		mimeType := mimeTypeForPath(dl.Name)
+		ext, ok := g.extractors[mimeType]
+		if !ok {
+			errs.Errors = append(errs.Errors, ErrorDetail{
+				Result: dl,
+				Error:  fmt.Errorf("no extractor for %v", mimeType),
+			})
+			continue
+		}
+		links, err := ext.Outlinks(ctx, depth, single, bytes.NewReader(dl.Contents))
 		if err != nil {
 			errs.Errors = append(errs.Errors, ErrorDetail{
 				Result: dl,
@@ -51,7 +75,7 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 			})
 			continue
 		}
-		if req := g.Request(depth, single, links); len(req.Names()) > 0 {
+		if req := ext.Request(depth, single, links); len(req.Names()) > 0 {
 			out = append(out, req)
 		}
 	}
@@ -60,15 +84,20 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 }
 
 type generic struct {
-	Extractor
-	errCh chan<- Errors
+	extractors map[string]Extractor
+	errCh      chan<- Errors
 }
 
-// NewExtractor creates a crawl.Outlinks.Extractor given an instance of
-// the lower level Extractor interface.
-func NewExtractor(extractor Extractor, errCh chan<- Errors) crawl.Outlinks {
-	return &generic{
-		Extractor: extractor,
-		errCh:     errCh,
+// NewExtractors creates a crawl.Outlinks.Extractor given instances of
+// the lower level Extractor interface. The extractors are run in turn until
+// one returns a set
+func NewExtractors(errCh chan<- Errors, extractors ...Extractor) crawl.Outlinks {
+	ge := &generic{
+		extractors: map[string]Extractor{},
+		errCh:      errCh,
 	}
+	for _, ext := range extractors {
+		ge.extractors[ext.MimeType()] = ext
+	}
+	return ge
 }
