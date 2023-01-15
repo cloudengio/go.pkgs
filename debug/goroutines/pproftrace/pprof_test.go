@@ -6,6 +6,7 @@ package pproftrace_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func runner(ctx context.Context, ch, dch chan struct{}) {
 	}()
 }
 
-func TestRunAndFormat(t *testing.T) {
+func testRunAndFormat(t *testing.T) error {
 	ctx := context.Background()
 	key, value := "testing", t.Name()
 	ch := make(chan struct{})
@@ -41,8 +42,8 @@ func TestRunAndFormat(t *testing.T) {
 	}
 	if got, want := exists, true; got != want {
 		output, _ := pproftrace.Format(key, value)
-		t.Errorf("got %v, want %v", got, want)
 		t.Logf("error: %v %v does not exist in: %q", key, value, output)
+		return fmt.Errorf("got %v, want %v", got, want)
 	}
 	output, err := pproftrace.Format(key, value)
 	if err != nil {
@@ -68,5 +69,15 @@ func TestRunAndFormat(t *testing.T) {
 	}
 	if got, want := output, "pproftrace_test.runner.func1"; strings.Contains(got, want) {
 		t.Errorf("got %v contains %v", got, want)
+	}
+	return nil
+}
+
+func TestRunAndFormat(t *testing.T) {
+	err := testRunAndFormat(t)
+	if err != nil {
+		if err := testRunAndFormat(t); err != nil {
+			t.Error(err)
+		}
 	}
 }

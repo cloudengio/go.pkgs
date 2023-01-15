@@ -1,4 +1,4 @@
-name: windows
+name: linux
 
 on:
   push:
@@ -10,19 +10,14 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [1.19.x]
-        os: [windows-latest]
+        go-version: [1.18.x, 1.19.x]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
-
-      - name: Set git to use LF
-        run: |
-          git config --global core.autocrlf false
-          git config --global core.eol lf
 
       - name: Checkout code
         uses: actions/checkout@v3
@@ -31,8 +26,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            ~\AppData\Local\go-build
-            ~\go\pkg\mod
+            ~/.cache/go-build
+            ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
