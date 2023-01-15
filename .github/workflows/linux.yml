@@ -34,7 +34,9 @@ jobs:
 
       - name: Lint
         uses: golangci/golangci-lint-action@v3
-        run: go run .circleci/runner.go --prep --test
+        with:
+          version: latest
+          args: --config .golangci.yml ./... $(go run .circleci/runner.go --modules)
 
       - name: Test
         run: go run .circleci/runner.go --prep --test
