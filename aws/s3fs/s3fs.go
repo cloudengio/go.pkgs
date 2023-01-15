@@ -78,8 +78,8 @@ func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	bucket := matcher.Volume
 	key := matcher.Key
 	get := s3.GetObjectInput{
-		Bucket: &bucket,
-		Key:    &key,
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
 	}
 	obj, err := fs.client.GetObject(ctx, &get)
 	if err != nil {
@@ -98,7 +98,7 @@ func (f *s3file) Stat() (fs.FileInfo, error) {
 		name: f.path,
 		size: f.obj.ContentLength,
 		mode: 0400,
-		mod:  *f.obj.LastModified,
+		mod:  aws.ToTime(f.obj.LastModified),
 		dir:  false,
 		sys:  f.obj,
 	}, nil

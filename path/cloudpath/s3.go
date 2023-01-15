@@ -23,8 +23,9 @@ func s3Region(host string) string {
 
 // AWSS3Matcher implements Matcher for AWS S3 object names. It returns AWSS3
 // for its scheme result.
-func AWSS3Matcher(p string) *Match {
-	m := &Match{
+func AWSS3Matcher(p string) Match {
+	m := Match{
+		Matched:   p,
 		Scheme:    AWSS3,
 		Separator: '/',
 	}
@@ -35,19 +36,19 @@ func AWSS3Matcher(p string) *Match {
 	}
 	u, err := url.Parse(p)
 	if err != nil {
-		return nil
+		return Match{}
 	}
 	m.Parameters = parametersFromQuery(u)
 	switch u.Scheme {
 	case "http", "https":
 	default:
-		return nil
+		return Match{}
 	}
 	m.Host = u.Host
 	m.Path = u.Path
 	s3idx := strings.Index(u.Host, "s3.")
 	if s3idx < 0 {
-		return nil
+		return Match{}
 	}
 	m.Region = s3Region(u.Host[s3idx:])
 	if s3idx == 0 {

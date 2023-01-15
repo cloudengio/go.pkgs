@@ -4,15 +4,16 @@
 
 package cloudpath
 
-func fileURIUnix(p string) *Match {
+func fileURIUnix(o, p string) Match {
 	if len(p) == 0 {
-		return nil
+		return Match{}
 	}
 	host, rest, win := parseFileURI(p)
 	if len(win) > 0 || len(rest) == 0 {
-		return nil
+		return Match{}
 	}
-	return &Match{
+	return Match{
+		Matched:   o,
 		Scheme:    UnixFileSystem,
 		Separator: '/',
 		Host:      host,
@@ -24,12 +25,13 @@ func fileURIUnix(p string) *Match {
 
 // UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
 // for its scheme result. It will match on file://[HOST]/[PATH].
-func UnixMatcher(p string) *Match {
+func UnixMatcher(p string) Match {
 	if len(p) >= 7 && p[:7] == "file://" {
-		return fileURIUnix(p[7:])
+		return fileURIUnix(p, p[7:])
 	}
 	// Pretty much anything can be a unix filename, even a url.
-	return &Match{
+	return Match{
+		Matched:   p,
 		Scheme:    UnixFileSystem,
 		Separator: '/',
 		Host:      "",
