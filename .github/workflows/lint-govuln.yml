@@ -33,6 +33,7 @@ jobs:
 
       - name: Vulnerabilities
         run: |
+          set -x
           go install golang.org/x/vuln/cmd/govulncheck@latest
           for module in $(go run .circleci/runner.go --modules); do;
             cd $module;
