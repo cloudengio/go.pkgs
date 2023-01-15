@@ -36,7 +36,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
-          args: --config .golangci.yml ./... $(go run .circleci/runner.go --modules)
+          args: --config .golangci.yml $(for p in $(go run .circleci/runner.go --modules); do echo ./$p/...; done)
 
       - name: Test
         run: go run .circleci/runner.go --prep --test
