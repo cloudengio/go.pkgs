@@ -30,7 +30,9 @@ func loadTestdata(t *testing.T, name string) fs.File {
 
 func downloadFromTestdata(t *testing.T, name string) download.Downloaded {
 	buf := &bytes.Buffer{}
-	io.Copy(buf, loadTestdata(t, name))
+	if _, err := io.Copy(buf, loadTestdata(t, name)); err != nil {
+		t.Fatal(err)
+	}
 	return download.Downloaded{
 		Downloads: []download.Result{
 			{Name: path.Join("testdata", name), Contents: buf.Bytes()},

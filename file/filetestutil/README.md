@@ -92,10 +92,39 @@ FSWithRandomContentsAfterRetry is like FSWithRandomContents but will return
 err, numRetries times before succeeding.
 
 
+
+
+### Type WriteFS
 ```go
-func FSWriteFS() FSOption
+type WriteFS struct {
+	sync.Mutex
+	// contains filtered or unexported fields
+}
 ```
-FSWriteFS requests a mock that implements file.WriteFS.
+
+### Functions
+
+```go
+func NewWriteFS() *WriteFS
+```
+
+
+
+### Methods
+
+```go
+func (wfs *WriteFS) Create(ctx context.Context, name string, filemode fs.FileMode) (io.WriteCloser, error)
+```
+
+
+```go
+func (wfs *WriteFS) Open(name string) (fs.File, error)
+```
+
+
+```go
+func (wfs *WriteFS) OpenCtx(ctx context.Context, name string) (fs.File, error)
+```
 
 
 

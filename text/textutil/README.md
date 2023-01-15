@@ -41,4 +41,44 @@ https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
 
 
 
+## Types
+### Type RewriteRule
+```go
+type RewriteRule struct {
+	Match       *regexp.Regexp
+	Replacement string
+}
+```
+RewriteRule represents a rewrite rule of the form s/<match>/<replace>/ or
+s%<match>%<replace>%. Separators can be escpaed using a \.
+
+### Functions
+
+```go
+func NewRewriteRule(rule string) (RewriteRule, error)
+```
+NewReplacement accepts a string of the form s/<match-re>/<replacement>/ or
+s%<match-re>%<replacement>% and returns a RewriteRule that can be used to
+perform the rewquested rewrite. Separators can be escpaed using a \.
+
+
+
+### Methods
+
+```go
+func (rr RewriteRule) MatchString(input string) bool
+```
+Match applies regexp.MatchString.
+
+
+```go
+func (rr RewriteRule) ReplaceAllString(input string) string
+```
+ReplaceAllString(input string) applies regexp.ReplaceAllString.
+
+
+
+
+
+
 

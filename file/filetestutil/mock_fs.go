@@ -45,7 +45,6 @@ type fsOptions struct {
 	numRetries int
 	retryErr   error
 	returnErr  error
-	writeFS    bool
 }
 
 // FSWithRandomContents requests a mock FS that will return files of a random

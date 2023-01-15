@@ -108,6 +108,8 @@ Volume calls DefaultMatchers.Volume(path).
 ### Type Match
 ```go
 type Match struct {
+	// Original is the original string that was matched.
+	Matched string
 	// Scheme uniquely identifies the filesystem being used, eg. s3 or windows.
 	Scheme string
 	// Local is true for local filesystems.
@@ -137,28 +139,28 @@ Match is the result of a successful match.
 ### Functions
 
 ```go
-func AWSS3Matcher(p string) *Match
+func AWSS3Matcher(p string) Match
 ```
 AWSS3Matcher implements Matcher for AWS S3 object names. It returns AWSS3
 for its scheme result.
 
 
 ```go
-func GoogleCloudStorageMatcher(p string) *Match
+func GoogleCloudStorageMatcher(p string) Match
 ```
 GoogleCloudStorageMatcher implements Matcher for Google Cloud Storage object
 names. It returns GoogleCloudStorage for its scheme result.
 
 
 ```go
-func UnixMatcher(p string) *Match
+func UnixMatcher(p string) Match
 ```
 UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
 for its scheme result. It will match on file://[HOST]/[PATH].
 
 
 ```go
-func WindowsMatcher(p string) *Match
+func WindowsMatcher(p string) Match
 ```
 WindowsMatcher implements Matcher for Windows filenames. It returns
 WindowsFileSystem for its scheme result.
@@ -168,12 +170,12 @@ WindowsFileSystem for its scheme result.
 
 ### Type Matcher
 ```go
-type Matcher func(p string) *Match
+type Matcher func(p string) Match
 ```
-Matcher is the prototype for functions that parse the supplied path
-to determine if it matches a specific scheme and then breaks out the
-metadata encoded in the path. Matchers for local filesystems should return
-"localhost" for the host.
+Matcher is the prototype for functions that parse the supplied path to
+determine if it matches a specific scheme and then breaks out the metadata
+encoded in the path. If Match.Matched is empty then no match has been found.
+Matchers for local filesystems should return "" for the host.
 
 
 ### Type MatcherSpec
@@ -221,7 +223,7 @@ Key returns the key component of path and the separator to use for it.
 
 
 ```go
-func (ms MatcherSpec) Match(p string) *Match
+func (ms MatcherSpec) Match(p string) Match
 ```
 Match applies all of the matchers in turn to match the supplied path.
 

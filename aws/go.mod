@@ -3,11 +3,12 @@ module cloudeng.io/aws
 go 1.16
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20230112194833-bcb9fbe3fc75 // indirect
-	cloudeng.io/file v0.0.0-20230113011548-a42159df4fb0
-	cloudeng.io/os v0.0.0-20230112194833-bcb9fbe3fc75 // indirect
-	cloudeng.io/path v0.0.5
-	cloudeng.io/webapp v0.0.0-20230112194833-bcb9fbe3fc75
+	cloudeng.io/cmdutil v0.0.0-20230115025159-0f9e185e8a4f // indirect
+	cloudeng.io/file v0.0.0-20230115025159-0f9e185e8a4f
+	cloudeng.io/os v0.0.0-20230115025159-0f9e185e8a4f // indirect
+	cloudeng.io/path v0.0.6
+	cloudeng.io/text v0.0.10 // indirect
+	cloudeng.io/webapp v0.0.0-20230115025159-0f9e185e8a4f
 	github.com/aws/aws-sdk-go-v2 v1.17.3
 	github.com/aws/aws-sdk-go-v2/config v1.18.8
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.8

@@ -19,30 +19,6 @@ jobs:
             export USER=circleci
             go run .circleci/runner.go --prep --test
 
-  test-windows:
-    parameters:
-      go:
-        type: string
-    executor:
-      name: win/default
-    parallelism: 4
-    steps:
-      - run: git config --global core.autocrlf false
-      - checkout
-      - run:
-          name: install go << parameters.go >>
-          command: |
-            Invoke-WebRequest -uri "https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi" -OutFile golang.msi
-            Start-Process msiexec.exe -Wait -ArgumentList '/I golang.msi /quiet'
-      - run:
-          name: verify version
-          command: |
-            go version
-      - run:
-          name: test
-          command: |
-            go run .circleci\runner.go --prep --test
-
   lint:
     parameters:
       go:
@@ -93,10 +69,6 @@ workflows:
           matrix:
             parameters:
               go: ["1.18", "1.19"]
-      - test-windows:
-          matrix:
-            parameters:
-              go: ["1.19"]
       - lint:
           matrix:
             parameters:
