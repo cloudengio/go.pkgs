@@ -257,7 +257,7 @@ func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, na
 			return result, nil
 		}
 		if n != fi.Size() {
-			result.Err = fmt.Errorf("short copy of downloaded object: %v: %v != %v:", name, n, fi.Size())
+			result.Err = fmt.Errorf("short copy of downloaded object: %v: %v != %v", name, n, fi.Size())
 			return result, nil
 		}
 		result.Contents = wr.Bytes()

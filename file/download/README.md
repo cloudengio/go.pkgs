@@ -17,7 +17,6 @@ exists.
 ```go
 type Downloaded struct {
 	Request   Request
-	Container file.FS
 	Downloads []Result
 }
 ```
@@ -67,11 +66,6 @@ WithRequestsPerMinute sets the rate for download requests. If not specified
 downloads will be initiated immediately.
 
 
-```go
-func WithWriteFS(writeFS WriteFS) Option
-```
-
-
 
 
 ### Type Progress
@@ -102,9 +96,16 @@ container, to be downloaded.
 ### Type Result
 ```go
 type Result struct {
-	Name    string
+	// Contents of the download, nil on error.
+	Contents []byte
+	// FileInfo for the downloaded file.
+	FileInfo fs.FileInfo
+	// Name of the downloaded file.
+	Name string
+	// Number of retries that were required to download the file.
 	Retries int
-	Err     error
+	// Error encountered during the download.
+	Err error
 }
 ```
 Result represents the result of the download for a single object.
@@ -162,16 +163,6 @@ func New(opts ...Option) T
 New creates a new instance of a download.T.
 
 
-
-
-### Type WriteFS
-```go
-type WriteFS interface {
-	file.FS
-	Create(ctx context.Context, name string, mode fs.FileMode) (io.WriteCloser, error)
-}
-```
-WriteFS extends file.FS to add a Create method.
 
 
 

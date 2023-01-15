@@ -71,12 +71,12 @@ func (fs *s3fs) Open(name string) (fs.File, error) {
 
 // OpenCtx implements file.FS.
 func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
-	matcher := cloudpath.AWSS3Matcher(name)
-	if matcher == nil {
+	match := cloudpath.AWSS3Matcher(name)
+	if len(match.Matched) == 0 {
 		return nil, fmt.Errorf("invalid s3 path: %v", name)
 	}
-	bucket := matcher.Volume
-	key := matcher.Key
+	bucket := match.Volume
+	key := match.Key
 	get := s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
