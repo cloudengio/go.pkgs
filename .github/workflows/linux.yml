@@ -32,5 +32,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v3
+        run: go run .circleci/runner.go --prep --test
+
       - name: Test
         run: go run .circleci/runner.go --prep --test

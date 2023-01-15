@@ -19,6 +19,7 @@ var (
 	prepFlag    bool
 	testFlag    bool
 	modulesFlag bool
+	lintFlag    bool
 )
 
 func done(msg string, err error) {
@@ -31,6 +32,8 @@ func main() {
 	flag.BoolVar(&prepFlag, "prep", false, "prepare file system for tests")
 	flag.BoolVar(&modulesFlag, "modules", false, "print modules in this repo")
 	flag.BoolVar(&testFlag, "test", false, "run tests")
+	flag.BoolVar(&lintFlag, "lint", false, "run lint")
+
 	flag.Parse()
 
 	if !(modulesFlag || prepFlag || testFlag) {
@@ -64,6 +67,12 @@ func main() {
 	if testFlag {
 		if err := runTests(ctx, mods); err != nil {
 			done("tests", err)
+		}
+	}
+
+	if lintFlag {
+		if err := runLints(ctx, mods); err != nil {
+			done("lint", err)
 		}
 	}
 
@@ -118,6 +127,35 @@ func runTests(ctx context.Context, dirs []string) error {
 }
 
 func runTest(ctx context.Context, dir string) error {
+	fmt.Printf("%v...\n", dir)
+	cmd := exec.CommandContext(ctx, "go", "test", "-failfast", "--covermode=atomic", "--vet=off", "-race", "./...")
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err == nil {
+		fmt.Printf("%v... ok\n", dir)
+	} else {
+		fmt.Printf("%v... failed\n", dir)
+	}
+	return err
+}
+
+func runLints(ctx context.Context, dirs []string) error {
+	failed := false
+	for _, dir := range dirs {
+		if err := runLint(ctx, dir); err != nil {
+			fmt.Fprintf(os.Stderr, "%v: failed: %v\n", dir, err)
+			failed = true
+		}
+	}
+	if failed {
+		return fmt.Errorf("lint failed")
+	}
+	return nil
+}
+
+func runLint(ctx context.Context, dir string) error {
 	fmt.Printf("%v...\n", dir)
 	cmd := exec.CommandContext(ctx, "go", "test", "-failfast", "--covermode=atomic", "--vet=off", "-race", "./...")
 	cmd.Dir = dir
