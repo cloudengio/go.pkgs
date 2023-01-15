@@ -11,8 +11,9 @@ import (
 
 // GoogleCloudStorageMatcher implements Matcher for Google Cloud Storage
 // object names. It returns GoogleCloudStorage for its scheme result.
-func GoogleCloudStorageMatcher(p string) *Match {
-	m := &Match{
+func GoogleCloudStorageMatcher(p string) Match {
+	m := Match{
+		Matched:   p,
 		Scheme:    GoogleCloudStorage,
 		Separator: '/',
 	}
@@ -23,19 +24,19 @@ func GoogleCloudStorageMatcher(p string) *Match {
 	}
 	u, err := url.Parse(p)
 	if err != nil {
-		return nil
+		return Match{}
 	}
 	m.Parameters = parametersFromQuery(u)
 	switch u.Scheme {
 	case "http", "https":
 	default:
-		return nil
+		return Match{}
 	}
 	m.Host = u.Host
 	m.Path = u.Path
 	switch u.Host {
 	default:
-		return nil
+		return Match{}
 	case "storage.cloud.google.com":
 		// https://storage.cloud.google.com/[BUCKET_NAME]/[OBJECT_NAME]
 		m.Volume, m.Key = bucketAndKey(u.Path)
@@ -50,26 +51,26 @@ func GoogleCloudStorageMatcher(p string) *Match {
 		endpoint := "storage/v1/b"
 		idx := strings.Index(u.Path, endpoint)
 		if idx < 0 {
-			return nil
+			return Match{}
 		}
 		m.Path = u.Path[idx+len(endpoint):]
 		op := u.Path[:idx]
 		switch op {
 		default:
-			return nil
+			return Match{}
 		case "/":
 			m.Volume, m.Key = bucketAndKey(m.Path)
 		case "/download/":
 			oidx := strings.Index(m.Path, "/o/")
 			if oidx < 0 {
-				return nil
+				return Match{}
 			}
 			m.Volume = m.Path[1:oidx]
 			m.Key = m.Path[oidx+2:]
 		case "/upload/":
 			oidx := strings.Index(m.Path, "/o")
 			if oidx < 0 {
-				return nil
+				return Match{}
 			}
 			m.Volume = m.Path[1:oidx]
 			m.Key = u.Query().Get("name")

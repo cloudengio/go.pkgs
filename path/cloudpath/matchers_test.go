@@ -72,7 +72,7 @@ func TestMatch(t *testing.T) {
 
 func TestEmpty(t *testing.T) {
 	ms := cloudpath.MatcherSpec([]cloudpath.Matcher{})
-	if ms.Match("a/b") != nil {
+	if ms.Match("a/b").Matched != "" {
 		t.Errorf("unexpected  match")
 	}
 	if ms.Scheme("a/b") != "" {

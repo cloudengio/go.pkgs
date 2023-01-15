@@ -91,13 +91,24 @@ func testMatcherSpec(ms cloudpath.MatcherSpec, testSpecs []matcherTestSpec) erro
 		testSpecs[i] = tc
 	}
 	for i, tc := range testSpecs {
-		scheme := ms.Scheme(tc.input)
-		volume := ms.Volume(tc.input)
-		region := ms.Region(tc.input)
-		host := ms.Host(tc.input)
-		key, ksep := ms.Key(tc.input)
-		path, psep := ms.Path(tc.input)
-		parameters := ms.Parameters(tc.input)
+		match := cloudpath.DefaultMatchers.Match(tc.input)
+		if len(match.Matched) == 0 {
+			errs.Append(fmt.Errorf("%v: %v: no match", i, tc.input))
+			continue
+		}
+		scheme := match.Scheme
+		volume := match.Volume
+		region := match.Region
+		host := match.Host
+		key, ksep := match.Key, match.Separator
+		path := match.Path
+		parameters := match.Parameters
+		if parameters == nil {
+			parameters = map[string][]string{}
+		}
+		if got, want := match.Matched, tc.input; got != want {
+			errs.Append(fmt.Errorf("%v: %v: matched: got %v, want %v", i, tc.input, got, want))
+		}
 		if got, want := scheme, tc.scheme; got != want {
 			errs.Append(fmt.Errorf("%v: %v: scheme: got %v, want %v", i, tc.input, got, want))
 		}
@@ -112,9 +123,6 @@ func testMatcherSpec(ms cloudpath.MatcherSpec, testSpecs []matcherTestSpec) erro
 		}
 		if got, want := path, tc.path; got != want {
 			errs.Append(fmt.Errorf("%v: %v: path: got %v, want %v", i, tc.input, got, want))
-		}
-		if got, want := psep, tc.separator; got != want {
-			errs.Append(fmt.Errorf("%v: %v: path separator: got %v, want %v", i, tc.input, got, want))
 		}
 		if got, want := key, tc.key; got != want {
 			errs.Append(fmt.Errorf("%v: %v: key: got %v, want %v", i, tc.input, got, want))
@@ -132,7 +140,7 @@ func testMatcherSpec(ms cloudpath.MatcherSpec, testSpecs []matcherTestSpec) erro
 func testNoMatch(fn cloudpath.Matcher, testCases []string) error {
 	errs := &errors.M{}
 	for i, tc := range testCases {
-		if m := fn(tc); m != nil {
+		if m := fn(tc); len(m.Matched) > 0 {
 			errs.Append(fmt.Errorf("%v: unexpected match for %q: %v", i, tc, m.Scheme))
 		}
 	}

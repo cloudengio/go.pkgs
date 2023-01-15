@@ -21,15 +21,16 @@ func isWindowsDrive(p string) (string, bool) {
 	return "", false
 }
 
-func fileURIWindows(p string) *Match {
+func fileURIWindows(o, p string) Match {
 	if len(p) == 0 {
-		return nil
+		return Match{}
 	}
 	host, rest, drive := parseFileURI(p)
 	if len(drive) == 0 || len(rest) == 0 {
-		return nil
+		return Match{}
 	}
-	return &Match{
+	return Match{
+		Matched:   o,
 		Scheme:    WindowsFileSystem,
 		Separator: '/',
 		Host:      host,
@@ -42,11 +43,12 @@ func fileURIWindows(p string) *Match {
 
 // WindowsMatcher implements Matcher for Windows filenames. It returns
 // WindowsFileSystem for its scheme result.
-func WindowsMatcher(p string) *Match {
+func WindowsMatcher(p string) Match {
 	if len(p) == 0 {
-		return nil
+		return Match{}
 	}
-	m := &Match{
+	m := Match{
+		Matched:   p,
 		Scheme:    WindowsFileSystem,
 		Host:      "",
 		Separator: '\\',
@@ -54,7 +56,7 @@ func WindowsMatcher(p string) *Match {
 	}
 
 	if len(p) >= 7 && p[:7] == "file://" {
-		return fileURIWindows(p[7:])
+		return fileURIWindows(p, p[7:])
 	}
 
 	// extended length names
@@ -67,10 +69,10 @@ func WindowsMatcher(p string) *Match {
 	}
 	if len(p) < 2 || strings.Index(p, `\`) < -1 {
 		// no backslashes so there's no way to tell.
-		return nil
+		return Match{}
 	}
 	if !strings.HasPrefix(p, `\\`) {
-		return nil
+		return Match{}
 	}
 	// UNC format: \\server\share\path
 	parts := strings.Split(strings.TrimSuffix(p[2:], `\`), `\`)
