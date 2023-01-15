@@ -17,6 +17,7 @@ import (
 type AWSFlags struct {
 	AWS            bool   `subcmd:"aws,false,set to enable AWS functionality"`
 	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication"`
+	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'"`
 	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
 }
 
@@ -43,8 +44,11 @@ func ConfigOptionsFromFlags(ctx context.Context, cl AWSFlags) []ConfigOption {
 	}
 	if len(cl.AWSProfile) > 0 {
 		opts = append(opts,
-			WithConfigOptions(config.WithSharedConfigProfile(cl.AWSProfile)),
-		)
+			WithConfigOptions(config.WithSharedConfigProfile(cl.AWSProfile)))
+	}
+	if len(cl.AWSRegion) > 0 {
+		opts = append(opts,
+			WithConfigOptions(config.WithRegion(cl.AWSRegion)))
 	}
 	opts = append(opts, WithConfigOptions(
 		config.WithEC2IMDSRegion(),
