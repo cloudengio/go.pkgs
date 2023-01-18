@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"testing"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
 )
@@ -34,6 +35,9 @@ func downloadFromTestdata(t *testing.T, name string) download.Downloaded {
 		t.Fatal(err)
 	}
 	return download.Downloaded{
+		Request: download.SimpleRequest{
+			FS: file.WrapFS(htmlExamples),
+		},
 		Downloads: []download.Result{
 			{Name: path.Join("testdata", name), Contents: buf.Bytes()},
 		},
@@ -53,6 +57,7 @@ func TestHTML(t *testing.T) {
 		"https://www.google.com/",
 		"html_images.asp",
 		"/css/default.asp",
+		"https://sample.css",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}

@@ -230,6 +230,7 @@ func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, na
 		rd, err := downloadFS.OpenCtx(ctx, name)
 		result.Retries = steps
 		result.Err = err
+		result.Name = name
 		if err != nil {
 			if !errors.Is(err, dl.backOffErr) || steps >= dl.backoffSteps {
 				return result, nil
@@ -261,7 +262,6 @@ func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, na
 			return result, nil
 		}
 		result.Contents = wr.Bytes()
-		result.Name = name
 		return result, nil
 	}
 }

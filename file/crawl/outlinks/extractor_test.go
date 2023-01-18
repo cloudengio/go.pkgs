@@ -35,7 +35,7 @@ func TestGenericExtractor(t *testing.T) {
 
 	downloaded := downloadFromTestdata(t, "simple.html")
 
-	ext := outlinks.NewExtractors(errCh, outlinks.NewHTML())
+	ext := outlinks.NewExtractors(errCh, &outlinks.PassthroughProcessor{}, outlinks.NewHTML())
 	reqs := ext.Extract(ctx, 0, downloaded)
 	reqs2 := ext.Extract(ctx, 0, downloaded)
 	close(errCh)
@@ -58,6 +58,7 @@ func TestGenericExtractor(t *testing.T) {
 		"https://www.google.com/",
 		"html_images.asp",
 		"/css/default.asp",
+		"https://sample.css",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"strings"
 	"time"
 
 	"cloudeng.io/file"
@@ -76,7 +77,7 @@ func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		return nil, fmt.Errorf("invalid s3 path: %v", name)
 	}
 	bucket := match.Volume
-	key := match.Key
+	key := strings.TrimPrefix(match.Key, "/")
 	get := s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),

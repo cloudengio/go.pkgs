@@ -7,6 +7,7 @@ package outlinks
 import (
 	"context"
 	"io"
+	"net/url"
 	"sync"
 
 	"cloudeng.io/file/crawl"
@@ -45,25 +46,42 @@ func (ho *HTML) IsDup(link string) bool {
 }
 
 // HREFs returns the hrefs found in the provided HTML document.
-func (ho *HTML) HREFs(rd io.Reader) ([]string, error) {
+func (ho *HTML) HREFs(base string, rd io.Reader) ([]string, error) {
 	parsed, err := html.Parse(rd)
 	if err != nil {
 		return nil, err
 	}
-	return ho.hrefs(parsed), nil
+	return ho.hrefs(base, parsed), nil
 }
 
-func (ho *HTML) hrefs(n *html.Node) []string {
+func (ho *HTML) resolveReference(base *url.URL, href string) string {
+	if base == nil || len(href) == 0 || href[0] == '#' {
+		return href
+	}
+	vu, err := url.Parse(href)
+	if err != nil || vu.IsAbs() {
+		return href
+	}
+	if abs := base.ResolveReference(&url.URL{Path: href}); abs != nil {
+		return abs.String()
+	}
+	return href
+}
+
+func (ho *HTML) hrefs(base string, n *html.Node) []string {
 	var out []string
-	if n.Type == html.ElementNode && n.DataAtom == atom.A {
-		for _, a := range n.Attr {
-			if a.Key == "href" {
-				out = append(out, a.Val)
+	u, _ := url.Parse(base)
+	if n.Type == html.ElementNode {
+		if n.DataAtom == atom.A || n.DataAtom == atom.Link {
+			for _, a := range n.Attr {
+				if a.Key == "href" {
+					out = append(out, ho.resolveReference(u, a.Val))
+				}
 			}
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		out = append(out, ho.hrefs(c)...)
+		out = append(out, ho.hrefs(base, c)...)
 	}
 	return out
 }
@@ -73,13 +91,14 @@ func (ho *HTML) Outlinks(ctx context.Context, depth int, download Download, cont
 	if download.Download.Err != nil {
 		return nil, nil
 	}
-	return ho.HREFs(contents)
+	return ho.HREFs(download.Download.Name, contents)
 }
 
 // Request implements Extractor.Request.
 func (ho *HTML) Request(depth int, download Download, outlinks []string) download.Request {
 	var request crawl.SimpleRequest
 	request.Depth = depth
+	request.FS = download.Request.Container()
 	for _, out := range outlinks {
 		if ho.IsDup(out) {
 			continue
