@@ -17,6 +17,7 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/sync/errgroup"
+	"cloudeng.io/sync/synctestutil"
 )
 
 func ExampleT() {
@@ -138,6 +139,8 @@ func testConcurrency(t *testing.T, concurrency int) {
 	g = errgroup.WithConcurrency(g, concurrency)
 
 	var started int64
+	var wg sync.WaitGroup
+	wg.Add(1)
 	intCh := make(chan int64, 1)
 
 	go func() {
@@ -147,6 +150,7 @@ func testConcurrency(t *testing.T, concurrency int) {
 		time.Sleep(time.Second)
 		intCh <- atomic.LoadInt64(&started)
 		cancel()
+		wg.Done()
 	}()
 
 	invocations := 50
@@ -180,15 +184,19 @@ func testConcurrency(t *testing.T, concurrency int) {
 	if got, want := atomic.LoadInt64(&started), int64(invocations); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	wg.Wait()
 }
 
 func TestLimit(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
 	testConcurrency(t, 2)
 	// Test with no limit.
 	testConcurrency(t, 0)
 }
 
 func TestGoContext(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, 1)
@@ -241,9 +249,24 @@ func TestGoContext(t *testing.T) {
 
 }
 
+type randGen struct {
+	sync.Mutex
+	src *rand.Rand
+}
+
+func newRandGen() *randGen {
+	return &randGen{src: rand.New(rand.NewSource(1234))}
+}
+
+func (r *randGen) Int63n(n int64) int64 {
+	r.Lock()
+	defer r.Unlock()
+	return r.src.Int63n(n)
+}
+
 func ExampleT_pipeline() {
-	// A pipeline to generate random numbers and measure the  uniformity of
-	// their distribution. The pipeline runs for 1 second.
+	// A pipeline to generate random numbers and measure the uniformity of
+	// their distribution. The pipeline runs for 2 seconds.
 	// The use of errgroup.T ensures that on return all of the goroutines
 	// have completed and the channels used are closed.
 
@@ -252,24 +275,16 @@ func ExampleT_pipeline() {
 	numGenerators, numCounters := 4, 8
 
 	numCh := make(chan int64)
-	src := rand.New(rand.NewSource(1234))
-	var srcMu sync.Mutex
+	src := newRandGen()
 
 	// numGenerators goroutines produce random numbers in the range of 0..99.
 	for i := 0; i < numGenerators; i++ {
 		g.Go(func() error {
 			for {
-				srcMu.Lock()
-				n := src.Int63n(100)
-				srcMu.Unlock()
 				select {
-				case numCh <- n:
+				case numCh <- src.Int63n(100):
 				case <-ctx.Done():
-					err := ctx.Err()
-					if errors.Is(err, context.DeadlineExceeded) {
-						return nil
-					}
-					return err
+					return nil
 				default:
 					break
 				}
@@ -290,11 +305,7 @@ func ExampleT_pipeline() {
 					atomic.AddInt64(&counters[num%10], 1)
 					atomic.AddInt64(&total, 1)
 				case <-ctx.Done():
-					err := ctx.Err()
-					if errors.Is(err, context.DeadlineExceeded) {
-						return nil
-					}
-					return err
+					return nil
 				}
 			}
 		})
@@ -315,8 +326,8 @@ func ExampleT_pipeline() {
 	// to verify the expected values.
 	for i, v := range counters {
 		ratio := total / v
-		if ratio == 9 {
-			// 9 is close enough to an even distribution so round
+		if ratio >= 8 || ratio <= 12 {
+			// 8..12 is close enough to an even distribution so round
 			// it up to 10.
 			ratio = 10
 		}

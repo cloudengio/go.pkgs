@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"cloudeng.io/cmdutil"
 	"cloudeng.io/errors"
@@ -66,6 +65,8 @@ func cmplists(t *testing.T, a, b []string, suffix bool) {
 		}
 		if got, want := a[i], b[i]; got != want {
 			t.Errorf("%v: %v: got %v, want %v", errors.Caller(2, 1), i, got, want)
+			t.Logf("%v: %v: list a: %v", errors.Caller(2, 1), i, a)
+			t.Logf("%v: %v: list b: %v", errors.Caller(2, 1), i, b)
 		}
 	}
 }
@@ -204,13 +205,15 @@ func TestMirrorDirTree(t *testing.T) {
 	}
 }
 
-func randContents(t *testing.T, n int) []byte {
-	src := rand.NewSource(time.Now().Unix())
+func randContents(t *testing.T, src rand.Source, n int) []byte {
 	rnd := rand.New(src)
 	buf := make([]byte, n)
-	_, err := rnd.Read(buf)
+	n, err := rnd.Read(buf)
 	if err != nil {
 		t.Fatalf("math.Rand: %v", err)
+	}
+	if n != len(buf) {
+		t.Fatalf("math.Rand: short read: %v %v", n, len(buf))
 	}
 	return buf
 }
@@ -223,18 +226,19 @@ func TestCopyFile(t *testing.T) {
 	}
 	defer os.RemoveAll(td)
 
+	src := rand.NewSource(12345)
 	from := filepath.Join(td, "from")
 	to := filepath.Join(td, "to")
 
-	newFromFile := func(name string) string {
-		buf := randContents(t, 576)
+	newRandFile := func(name string) string {
+		buf := randContents(t, src, 576)
 		tmp := sha1.Sum(buf)
 		if err := os.WriteFile(name, buf, 0677); err != nil {
 			t.Fatalf("failed to create source file")
 		}
 		return hex.EncodeToString(tmp[:])
 	}
-	fromSha := newFromFile(from)
+	fromSha := newRandFile(from)
 
 	assert := func(err error) {
 		if err != nil {
@@ -282,7 +286,7 @@ func TestCopyFile(t *testing.T) {
 
 	// Test overwrite.
 	fromNew := filepath.Join(td, "from-new")
-	fromNewSha := newFromFile(fromNew)
+	fromNewSha := newRandFile(fromNew)
 
 	assert(cmdutil.CopyFile(from, to, 0644, true))
 
@@ -291,8 +295,9 @@ func TestCopyFile(t *testing.T) {
 	if isWindows() {
 		expectedPerms = []string{"-rw-rw-rw-", "-rw-rw-rw-", "-rw-rw-rw-"}
 	}
-	expectedShas = []string{fromSha, fromNewSha, fromNewSha}
+	expectedShas = []string{fromSha, fromNewSha, fromSha}
 	paths, perms, shas = list(t, td)
+
 	cmplists(t, paths, expectedPaths, true)
 	cmplists(t, perms, expectedPerms, false)
 	cmplists(t, shas, expectedShas, false)
@@ -318,7 +323,7 @@ func TestCopyFile(t *testing.T) {
 
 	// No file permissions.
 	assert(os.Chmod(forbidden, 0777))
-	newFromFile(forbiddenFile)
+	newRandFile(forbiddenFile)
 	assert(os.Chmod(forbiddenFile, 0000))
 	err = cmdutil.CopyFile(from, forbiddenFile, 0677, true)
 	assertErr(err, "permission denied", "Access is denied")

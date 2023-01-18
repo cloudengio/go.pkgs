@@ -1,16 +1,13 @@
 version: 2.1
 
-orbs:
-  win: circleci/windows@4.1.1
-
 jobs:
   test-linux:
-    parallism: 4
     parameters:
       go:
         type: string
     docker:
       - image: cimg/go:<< parameters.go >>
+    parallelism: 4
     steps:
       - checkout
       - run:
@@ -19,37 +16,13 @@ jobs:
             export USER=circleci
             go run .circleci/runner.go --prep --test
 
-  test-windows:
-    parallism: 4
-    parameters:
-      go:
-        type: string
-    executor:
-      name: win/default
-    steps:
-      - run: git config --global core.autocrlf false
-      - checkout
-      - run:
-          name: install go << parameters.go >>
-          command: |
-            Invoke-WebRequest -uri "https://go.dev/dl/go<<parameters.go>>.windows-amd64.msi" -OutFile golang.msi
-            Start-Process msiexec.exe -Wait -ArgumentList '/I golang.msi /quiet'
-      - run:
-          name: verify version
-          command: |
-            go version
-      - run:
-          name: test
-          command: |
-            go run .circleci\runner.go --prep --test
-
   lint:
-    parallism: 4
     parameters:
       go:
         type: string
     docker:
       - image: cimg/go:<< parameters.go >>
+    parallelism: 4
     steps:
       - checkout
       - run:
@@ -67,13 +40,13 @@ jobs:
             done
 
   vulnerabilities:
-    parallism: 4
     resource_class: large
     parameters:
       go:
         type: string
     docker:
       - image: cimg/go:<< parameters.go >>
+    parallelism: 4
     steps:
       - checkout
       - run:
@@ -93,10 +66,6 @@ workflows:
           matrix:
             parameters:
               go: ["1.18", "1.19"]
-      - test-windows:
-          matrix:
-            parameters:
-              go: ["1.19"]
       - lint:
           matrix:
             parameters:

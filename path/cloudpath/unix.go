@@ -4,27 +4,39 @@
 
 package cloudpath
 
-import (
-	"net/url"
-	"strings"
-)
-
-// UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
-// for its scheme result.
-func UnixMatcher(p string) *Match {
-	// Handle file:// uris.
-	if u, err := url.Parse(p); err == nil && u.Scheme == "file" {
-		p = u.Path
+func fileURIUnix(o, p string) Match {
+	if len(p) == 0 {
+		return Match{}
 	}
-	if !strings.Contains(p, "/") && p != "." && p != ".." {
-		return nil
+	host, rest, win := parseFileURI(p)
+	if len(win) > 0 || len(rest) == 0 {
+		return Match{}
 	}
-	// Pretty much anything can be a unix filename, even a url.
-	return &Match{
+	return Match{
+		Matched:   o,
 		Scheme:    UnixFileSystem,
 		Separator: '/',
-		Host:      "localhost",
+		Host:      host,
+		Path:      rest,
+		Key:       rest,
+		Local:     true,
+	}
+}
+
+// UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
+// for its scheme result. It will match on file://[HOST]/[PATH].
+func UnixMatcher(p string) Match {
+	if len(p) >= 7 && p[:7] == "file://" {
+		return fileURIUnix(p, p[7:])
+	}
+	// Pretty much anything can be a unix filename, even a url.
+	return Match{
+		Matched:   p,
+		Scheme:    UnixFileSystem,
+		Separator: '/',
+		Host:      "",
 		Path:      p,
+		Key:       p,
 		Local:     true,
 	}
 }

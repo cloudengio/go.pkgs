@@ -1,8 +1,31 @@
-# file
+# Package [cloudeng.io/file](https://pkg.go.dev/cloudeng.io/file?tab=doc)
+[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file)](https://goreportcard.com/report/cloudeng.io/file)
 
-[![CircleCI](https://circleci.com/gh/cloudengio/go.pkgs.svg?style=svg)](https://circleci.com/gh/cloudengio/go.pkgs)
+```go
+import cloudeng.io/file
+```
 
-`file` provides support for working with files and filesystems, including cloud storage systems.
 
-- `file/filewalk`: support for traversing filesystems, including a database API to store metadata.
-- `file/diskusage`: support for calculating disk usage based on block sizes or striping.
+## Types
+### Type FS
+```go
+type FS interface {
+	fs.FS
+	OpenCtx(ctx context.Context, name string) (fs.File, error)
+}
+```
+FS extends fs.FS with OpenCtx.
+
+### Functions
+
+```go
+func WrapFS(fs fs.FS) FS
+```
+WrapFS wraps an fs.FS to implement file.FS.
+
+
+
+
+
+
+

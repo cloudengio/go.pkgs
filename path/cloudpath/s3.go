@@ -9,57 +9,56 @@ import (
 	"strings"
 )
 
-// pathFromHostAndPath will construct a / separated string from a h
-// and path that starts with a /.
-func pathFromHostAndPath(u *url.URL) string {
-	path := ""
-	if len(u.Host) > 0 {
-		path += "/" + u.Host
+// return 'Region' from s3.Region.amazonaws.com
+func s3Region(host string) string {
+	if len(host) < 3 || host[0:3] != "s3." {
+		return ""
 	}
-	if len(u.Path) > 0 {
-		path += u.Path
+	eidx := strings.Index(host, ".amazonaws.com")
+	if eidx < 0 {
+		return ""
 	}
-	return path
+	return host[3:eidx]
 }
 
 // AWSS3Matcher implements Matcher for AWS S3 object names. It returns AWSS3
 // for its scheme result.
-func AWSS3Matcher(p string) *Match {
+func AWSS3Matcher(p string) Match {
+	m := Match{
+		Matched:   p,
+		Scheme:    AWSS3,
+		Separator: '/',
+	}
+	if len(p) >= 5 && p[0:5] == "s3://" {
+		m.Path = p[5:]
+		m.Volume, m.Key = bucketAndKey(m.Path)
+		return m
+	}
 	u, err := url.Parse(p)
 	if err != nil {
-		return nil
+		return Match{}
 	}
-	m := &Match{
-		Scheme:     AWSS3,
-		Separator:  '/',
-		Parameters: parametersFromQuery(u),
-	}
+	m.Parameters = parametersFromQuery(u)
 	switch u.Scheme {
-	case "s3":
-		m.Volume = u.Host
-		m.Path = pathFromHostAndPath(u)
-		return m
 	case "http", "https":
-		m.Host = u.Host
-		m.Path = u.Path
 	default:
-		return nil
+		return Match{}
 	}
-	leading := strings.TrimSuffix(u.Host, ".amazonaws.com")
-	if len(leading) == len(u.Host) {
-		// not trimmed.
-		return nil
+	m.Host = u.Host
+	m.Path = u.Path
+	s3idx := strings.Index(u.Host, "s3.")
+	if s3idx < 0 {
+		return Match{}
 	}
-	parts := strings.Split(leading, ".")
-	if len(parts) == 2 && parts[0] == "s3" {
+	m.Region = s3Region(u.Host[s3idx:])
+	if s3idx == 0 {
 		// https://s3.Region.amazonaws.com/bucket-name/key
-		m.Volume = firstPathComponent(u.Path)
+		m.Volume, m.Key = bucketAndKey(u.Path)
 		return m
 	}
-	if len(parts) > 2 && parts[len(parts)-2] == "s3" {
-		// https://bucket.name.s3.Region.amazonaws.com/key
-		m.Volume = leading[:strings.Index(leading, "s3")-1]
-		return m
-	}
-	return nil
+	// https://bucket.name.s3.Region.amazonaws.com/key
+	m.Volume = u.Host[:s3idx-1]
+	m.Path = u.Path
+	m.Key = u.Path
+	return m
 }

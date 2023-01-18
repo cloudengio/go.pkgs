@@ -19,39 +19,39 @@ func TestS3(t *testing.T) {
 	data := []matcherTestSpec{
 		{
 			"https://s3.us-west-2.amazonaws.com",
-			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "", "", '/', nil,
+			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "us-west-2", "", "", "", '/', nil,
 		},
 		{
 			"https://s3.us-west-2.amazonaws.com?a=b&c=d",
-			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "", "", '/', exampleParameters,
+			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "us-west-2", "", "", "", '/', exampleParameters,
 		},
 		{
 			"https://s3.us-west-2.amazonaws.com/",
-			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "", "/", '/', nil,
+			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "us-west-2", "", "/", "", '/', nil,
 		},
 		{
 			"https://s3.us-west-2.amazonaws.com/mybucket/puppy.jpg",
-			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "mybucket", "/mybucket/puppy.jpg", '/', nil,
+			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "us-west-2", "mybucket", "/mybucket/puppy.jpg", "/puppy.jpg", '/', nil,
 		},
 		{
 			"https://my.bucket.s3.us-west-2.amazonaws.com/kitten.png",
-			cloudpath.AWSS3, "my.bucket.s3.us-west-2.amazonaws.com", "my.bucket", "/kitten.png", '/', nil,
+			cloudpath.AWSS3, "my.bucket.s3.us-west-2.amazonaws.com", "us-west-2", "my.bucket", "/kitten.png", "/kitten.png", '/', nil,
 		},
 		{
 			"s3://my-bucket/files-on-s3",
-			cloudpath.AWSS3, "", "my-bucket", "/my-bucket/files-on-s3", '/', nil,
+			cloudpath.AWSS3, "", "", "my-bucket", "my-bucket/files-on-s3", "/files-on-s3", '/', nil,
 		},
 		{
 			"s3://",
-			cloudpath.AWSS3, "", "", "", '/', nil,
+			cloudpath.AWSS3, "", "", "", "", "", '/', nil,
 		},
 		{
 			"s3://b",
-			cloudpath.AWSS3, "", "b", "/b", '/', nil,
+			cloudpath.AWSS3, "", "", "b", "b", "", '/', nil,
 		},
 		{
 			"s3://b/",
-			cloudpath.AWSS3, "", "b", "/b/", '/', nil,
+			cloudpath.AWSS3, "", "", "b", "b/", "/", '/', nil,
 		},
 	}
 	if err := testMatcher(cloudpath.AWSS3Matcher, data); err != nil {

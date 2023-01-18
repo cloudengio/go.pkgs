@@ -30,39 +30,39 @@ func TestMatch(t *testing.T) {
 	data := []matcherTestSpec{
 		{
 			"https://s3.us-west-2.amazonaws.com",
-			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "", "", '/', nil,
+			cloudpath.AWSS3, "s3.us-west-2.amazonaws.com", "us-west-2", "", "", "", '/', nil,
 		},
 		{
 			"s3://my-bucket/files-on-s3",
-			cloudpath.AWSS3, "", "my-bucket", "/my-bucket/files-on-s3", '/', nil,
+			cloudpath.AWSS3, "", "", "my-bucket", "my-bucket/files-on-s3", "/files-on-s3", '/', nil,
 		},
 		{
 			"/a/b",
-			cloudpath.UnixFileSystem, "localhost", "", "/a/b", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "/a/b", "/a/b", '/', nil,
 		},
 		{
 			`\\?Z:a\b`,
-			cloudpath.WindowsFileSystem, "localhost", "Z", `Z:a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "Z", `Z:a\b`, `a\b`, '\\', nil,
 		},
 		{
 			`Z:a\b`,
-			cloudpath.WindowsFileSystem, "localhost", "Z", `Z:a\b`, '\\', nil,
+			cloudpath.WindowsFileSystem, "", "", "Z", `Z:a\b`, `a\b`, '\\', nil,
 		},
 		{
 			"https://storage.cloud.google.com/",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "/", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "", "/", "", '/', nil,
 		},
 		{
 			"gs://bucket/object",
-			cloudpath.GoogleCloudStorage, "", "bucket", "/bucket/object", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object", "/object", '/', nil,
 		},
 		{
 			"file:///a/b/c/",
-			cloudpath.UnixFileSystem, "localhost", "", "/a/b/c/", '/', nil,
+			cloudpath.UnixFileSystem, "", "", "", "/a/b/c/", "/a/b/c/", '/', nil,
 		},
 		{
 			"file:///c:/a/b/c/",
-			cloudpath.WindowsFileSystem, "localhost", "c", "c:/a/b/c/", '/', nil,
+			cloudpath.WindowsFileSystem, "", "", "c", "c:/a/b/c/", "/a/b/c/", '/', nil,
 		},
 	}
 	if err := testMatcherSpec(cloudpath.DefaultMatchers, data); err != nil {
@@ -72,7 +72,7 @@ func TestMatch(t *testing.T) {
 
 func TestEmpty(t *testing.T) {
 	ms := cloudpath.MatcherSpec([]cloudpath.Matcher{})
-	if ms.Match("a/b") != nil {
+	if ms.Match("a/b").Matched != "" {
 		t.Errorf("unexpected  match")
 	}
 	if ms.Scheme("a/b") != "" {

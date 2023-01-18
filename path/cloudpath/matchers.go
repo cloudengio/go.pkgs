@@ -6,7 +6,6 @@ package cloudpath
 
 import (
 	"net/url"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -26,6 +25,8 @@ type MatcherSpec []Matcher
 
 // Match is the result of a successful match.
 type Match struct {
+	// Original is the original string that was matched.
+	Matched string
 	// Scheme uniquely identifies the filesystem being used, eg. s3 or windows.
 	Scheme string
 	// Local is true for local filesystems.
@@ -39,6 +40,11 @@ type Match struct {
 	// Path is the filesystem path or filename to the data. It may be a prefix
 	// on a cloud based system or a directory on a local one.
 	Path string
+	// Key is like Path except without the volume for systems where the volume
+	// can appear in the path name.
+	Key string
+	// Region is the region for cloud based systems.
+	Region string
 	// Separator is the filesystem separator (e.g / or \ for windows).
 	Separator rune
 	// Parameters are any parameters encoded in a URL/URI based name.
@@ -47,8 +53,9 @@ type Match struct {
 
 // Matcher is the prototype for functions that parse the supplied path to determine
 // if it matches a specific scheme and then breaks out the metadata encoded in the
-// path. Matchers for local filesystems should return "localhost" for the host.
-type Matcher func(p string) *Match
+// path. If Match.Matched is empty then no match has been found.
+// Matchers for local filesystems should return "" for the host.
+type Matcher func(p string) Match
 
 const (
 	// AWSS3 is the scheme for Amazon Web Service's S3 object store.
@@ -81,6 +88,16 @@ func Path(path string) (string, rune) {
 	return DefaultMatchers.Path(path)
 }
 
+// Key calls DefaultMatchers.Key(path).
+func Key(path string) (string, rune) {
+	return DefaultMatchers.Key(path)
+}
+
+// Region calls DefaultMatchers.Region(path).
+func Region(url string) string {
+	return DefaultMatchers.Region(url)
+}
+
 // Parameters calls DefaultMatchers.Parameters(path).
 func Parameters(path string) map[string][]string {
 	return DefaultMatchers.Parameters(path)
@@ -92,19 +109,19 @@ func IsLocal(path string) bool {
 }
 
 // Match applies all of the matchers in turn to match the supplied path.
-func (ms MatcherSpec) Match(p string) *Match {
+func (ms MatcherSpec) Match(p string) Match {
 	for _, fn := range ms {
-		if m := fn(p); m != nil {
+		if m := fn(p); len(m.Matched) > 0 {
 			return m
 		}
 	}
-	return nil
+	return Match{}
 }
 
 // Scheme returns the portion of the path that precedes a leading '//' or
 // "" otherwise.
 func (ms MatcherSpec) Scheme(path string) string {
-	if m := ms.Match(path); m != nil {
+	if m := ms.Match(path); len(m.Matched) > 0 {
 		return m.Scheme
 	}
 	return ""
@@ -112,7 +129,7 @@ func (ms MatcherSpec) Scheme(path string) string {
 
 // Host returns the host component of the path if there is one.
 func (ms MatcherSpec) Host(path string) string {
-	if m := ms.Match(path); m != nil {
+	if m := ms.Match(path); len(m.Matched) > 0 {
 		return m.Host
 	}
 	return ""
@@ -121,7 +138,7 @@ func (ms MatcherSpec) Host(path string) string {
 // Volume returns the filesystem specific volume, if any, encoded
 // in the path.
 func (ms MatcherSpec) Volume(path string) string {
-	if m := ms.Match(path); m != nil {
+	if m := ms.Match(path); len(m.Matched) > 0 {
 		return m.Volume
 	}
 	return ""
@@ -129,10 +146,26 @@ func (ms MatcherSpec) Volume(path string) string {
 
 // Path returns the path component of path and the separator to use for it.
 func (ms MatcherSpec) Path(path string) (string, rune) {
-	if m := ms.Match(path); m != nil {
+	if m := ms.Match(path); len(m.Matched) > 0 {
 		return m.Path, m.Separator
 	}
 	return "", utf8.RuneError
+}
+
+// Key returns the key component of path and the separator to use for it.
+func (ms MatcherSpec) Key(path string) (string, rune) {
+	if m := ms.Match(path); len(m.Matched) > 0 {
+		return m.Key, m.Separator
+	}
+	return "", utf8.RuneError
+}
+
+// Region returns the region component for cloud based systems.
+func (ms MatcherSpec) Region(url string) string {
+	if m := ms.Match(url); len(m.Matched) > 0 {
+		return m.Region
+	}
+	return ""
 }
 
 var emptyValues = map[string][]string{}
@@ -140,7 +173,7 @@ var emptyValues = map[string][]string{}
 // Parameters returns the parameters in path, if any. If no parameters
 // are present an empty (rather than nil), map is returned.
 func (ms *MatcherSpec) Parameters(path string) map[string][]string {
-	if m := ms.Match(path); m != nil && m.Parameters != nil {
+	if m := ms.Match(path); len(m.Matched) > 0 && m.Parameters != nil {
 		return m.Parameters
 	}
 	return emptyValues
@@ -148,7 +181,7 @@ func (ms *MatcherSpec) Parameters(path string) map[string][]string {
 
 // IsLocal returns true if the path is for a local filesystem.
 func (ms *MatcherSpec) IsLocal(path string) bool {
-	if m := ms.Match(path); m != nil {
+	if m := ms.Match(path); len(m.Matched) > 0 {
 		return m.Local
 	}
 	return false
@@ -167,14 +200,4 @@ func parametersFromQuery(u *url.URL) map[string][]string {
 		r[i] = c
 	}
 	return r
-}
-
-// return the first non-empty path component in a / separate path.
-func firstPathComponent(path string) string {
-	for _, p := range strings.Split(path, "/") {
-		if len(p) > 0 {
-			return p
-		}
-	}
-	return ""
 }

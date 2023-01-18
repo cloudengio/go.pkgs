@@ -1,0 +1,17 @@
+go 1.19
+
+use (
+	./algo
+	./aws
+	./cmdutil
+	./debug
+	./errors
+	./file
+	./io
+	./os
+	./path
+	./sync
+	./sys
+	./text
+	./webapp
+)

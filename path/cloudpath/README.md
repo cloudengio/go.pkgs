@@ -66,6 +66,12 @@ func IsLocal(path string) bool
 ```
 IsLocal calls DefaultMatchers.IsLocal(path).
 
+### Func Key
+```go
+func Key(path string) (string, rune)
+```
+Key calls DefaultMatchers.Key(path).
+
 ### Func Parameters
 ```go
 func Parameters(path string) map[string][]string
@@ -77,6 +83,12 @@ Parameters calls DefaultMatchers.Parameters(path).
 func Path(path string) (string, rune)
 ```
 Path calls DefaultMatchers.Path(path).
+
+### Func Region
+```go
+func Region(url string) string
+```
+Region calls DefaultMatchers.Region(path).
 
 ### Func Scheme
 ```go
@@ -96,6 +108,8 @@ Volume calls DefaultMatchers.Volume(path).
 ### Type Match
 ```go
 type Match struct {
+	// Original is the original string that was matched.
+	Matched string
 	// Scheme uniquely identifies the filesystem being used, eg. s3 or windows.
 	Scheme string
 	// Local is true for local filesystems.
@@ -109,6 +123,11 @@ type Match struct {
 	// Path is the filesystem path or filename to the data. It may be a prefix
 	// on a cloud based system or a directory on a local one.
 	Path string
+	// Key is like Path except without the volume for systems where the volume
+	// can appear in the path name.
+	Key string
+	// Region is the region for cloud based systems.
+	Region string
 	// Separator is the filesystem separator (e.g / or \ for windows).
 	Separator rune
 	// Parameters are any parameters encoded in a URL/URI based name.
@@ -120,28 +139,28 @@ Match is the result of a successful match.
 ### Functions
 
 ```go
-func AWSS3Matcher(p string) *Match
+func AWSS3Matcher(p string) Match
 ```
 AWSS3Matcher implements Matcher for AWS S3 object names. It returns AWSS3
 for its scheme result.
 
 
 ```go
-func GoogleCloudStorageMatcher(p string) *Match
+func GoogleCloudStorageMatcher(p string) Match
 ```
 GoogleCloudStorageMatcher implements Matcher for Google Cloud Storage object
 names. It returns GoogleCloudStorage for its scheme result.
 
 
 ```go
-func UnixMatcher(p string) *Match
+func UnixMatcher(p string) Match
 ```
 UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
-for its scheme result.
+for its scheme result. It will match on file://[HOST]/[PATH].
 
 
 ```go
-func WindowsMatcher(p string) *Match
+func WindowsMatcher(p string) Match
 ```
 WindowsMatcher implements Matcher for Windows filenames. It returns
 WindowsFileSystem for its scheme result.
@@ -151,12 +170,12 @@ WindowsFileSystem for its scheme result.
 
 ### Type Matcher
 ```go
-type Matcher func(p string) *Match
+type Matcher func(p string) Match
 ```
-Matcher is the prototype for functions that parse the supplied path
-to determine if it matches a specific scheme and then breaks out the
-metadata encoded in the path. Matchers for local filesystems should return
-"localhost" for the host.
+Matcher is the prototype for functions that parse the supplied path to
+determine if it matches a specific scheme and then breaks out the metadata
+encoded in the path. If Match.Matched is empty then no match has been found.
+Matchers for local filesystems should return "" for the host.
 
 
 ### Type MatcherSpec
@@ -198,7 +217,13 @@ IsLocal returns true if the path is for a local filesystem.
 
 
 ```go
-func (ms MatcherSpec) Match(p string) *Match
+func (ms MatcherSpec) Key(path string) (string, rune)
+```
+Key returns the key component of path and the separator to use for it.
+
+
+```go
+func (ms MatcherSpec) Match(p string) Match
 ```
 Match applies all of the matchers in turn to match the supplied path.
 
@@ -214,6 +239,12 @@ present an empty (rather than nil), map is returned.
 func (ms MatcherSpec) Path(path string) (string, rune)
 ```
 Path returns the path component of path and the separator to use for it.
+
+
+```go
+func (ms MatcherSpec) Region(url string) string
+```
+Region returns the region component for cloud based systems.
 
 
 ```go
