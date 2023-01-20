@@ -60,3 +60,32 @@ func TestRewrite(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestRewrites(t *testing.T) {
+	repls, err := textutil.NewRewriteRules("s/a/b/", "s/x/y/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := repls.ReplaceAllStringFirst("a"), "b"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := repls.ReplaceAllStringFirst("x"), "y"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := repls.ReplaceAllStringFirst("n"), "n"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	repls, err = textutil.NewRewriteRules("s/a/b/", "s/a/y/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := repls.ReplaceAllStringFirst("a"), "b"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+}
