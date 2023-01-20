@@ -45,9 +45,10 @@ specified flags.
 ### Type AWSFlags
 ```go
 type AWSFlags struct {
-	AWS            bool   `subcmd:"aws,false,set to enable AWS functionality"`
-	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication"`
-	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
+	AWS            bool   `subcmd:"aws,false,set to enable AWS functionality" yaml:"aws"`
+	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile"`
+	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region"`
+	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow"`
 }
 ```
 AWSFlags defines commonly used flags that control AWS behaviour.

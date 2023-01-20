@@ -25,11 +25,6 @@ Contents returns the contents stored in the mock fs.FS.
 func NewFile(rd io.ReadCloser, info fs.FileInfo) fs.File
 ```
 
-### Func NewInfo
-```go
-func NewInfo(name string, size int, mode fs.FileMode, mod time.Time, dir bool, sys interface{}) fs.FileInfo
-```
-
 ### Func NewMockFS
 ```go
 func NewMockFS(opts ...FSOption) file.FS
