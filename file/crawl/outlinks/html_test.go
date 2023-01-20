@@ -48,14 +48,14 @@ func TestHTML(t *testing.T) {
 	var he outlinks.HTML
 	rd := loadTestdata(t, "simple.html")
 	defer rd.Close()
-	extracted, err := he.HREFs(rd)
+	extracted, err := he.HREFs("", rd)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := extracted, []string{
 		"https://www.w3.org/",
 		"https://www.google.com/",
-		"html_images.asp",
+		"/html_images.asp",
 		"/css/default.asp",
 		"https://sample.css",
 	}; !reflect.DeepEqual(got, want) {
