@@ -9,7 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"time"
+	"strings"
 
 	"cloudeng.io/file"
 	"cloudeng.io/path/cloudpath"
@@ -76,7 +76,7 @@ func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		return nil, fmt.Errorf("invalid s3 path: %v", name)
 	}
 	bucket := match.Volume
-	key := match.Key
+	key := strings.TrimPrefix(match.Key, "/")
 	get := s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -94,14 +94,14 @@ type s3file struct {
 }
 
 func (f *s3file) Stat() (fs.FileInfo, error) {
-	return &fileinfo{
-		name: f.path,
-		size: f.obj.ContentLength,
-		mode: 0400,
-		mod:  aws.ToTime(f.obj.LastModified),
-		dir:  false,
-		sys:  f.obj,
-	}, nil
+	return file.NewInfo(
+		f.path,
+		f.obj.ContentLength,
+		0400,
+		aws.ToTime(f.obj.LastModified),
+		false,
+		f.obj,
+	), nil
 }
 
 func (f *s3file) Read(p []byte) (int, error) {
@@ -110,37 +110,4 @@ func (f *s3file) Read(p []byte) (int, error) {
 
 func (f *s3file) Close() error {
 	return f.obj.Body.Close()
-}
-
-type fileinfo struct {
-	name string
-	size int64
-	mode fs.FileMode
-	mod  time.Time
-	dir  bool
-	sys  interface{}
-}
-
-func (fi *fileinfo) Name() string {
-	return fi.name
-}
-
-func (fi *fileinfo) Size() int64 {
-	return fi.size
-}
-
-func (fi *fileinfo) Mode() fs.FileMode {
-	return fi.mode
-}
-
-func (fi *fileinfo) ModTime() time.Time {
-	return fi.mod
-}
-
-func (fi *fileinfo) IsDir() bool {
-	return fi.dir
-}
-
-func (fi *fileinfo) Sys() interface{} {
-	return fi.sys
 }
