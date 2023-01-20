@@ -75,3 +75,26 @@ func NewRewriteRule(rule string) (RewriteRule, error) {
 	}
 	return RewriteRule{Match: re, Replacement: repl}, nil
 }
+
+type RewriteRules []RewriteRule
+
+func NewRewriteRules(rules ...string) (RewriteRules, error) {
+	var rw []RewriteRule
+	for _, rule := range rules {
+		rr, err := NewRewriteRule(rule)
+		if err != nil {
+			return nil, err
+		}
+		rw = append(rw, rr)
+	}
+	return rw, nil
+}
+
+func (rw RewriteRules) ReplaceAllStringFirst(input string) string {
+	for _, r := range rw {
+		if r.MatchString(input) {
+			return r.ReplaceAllString(input)
+		}
+	}
+	return input
+}
