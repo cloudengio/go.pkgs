@@ -11,7 +11,7 @@ import (
 )
 
 func TestSharding(t *testing.T) {
-	s1s := path.NewSharder(path.SHA1PrefixLength(3))
+	s1s := path.NewSharder(path.WithSHA1PrefixLength(3))
 	p, s := s1s.Assign("abcded") // d550708ff9b78cac40527fdf4b237052d3a22f58
 	if got, want := p, "d55"; got != want {
 		t.Errorf("got %v, want %v", got, want)

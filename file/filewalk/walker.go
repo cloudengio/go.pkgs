@@ -24,6 +24,7 @@ import (
 	"cloudeng.io/sync/errgroup"
 )
 
+// TODO: Make these optional/configurable?
 var listingVar = expvar.NewMap("cloudeng.io/file/filewalk.listing")
 var walkingVar = expvar.NewMap("cloudeng.io/file/filewalk.walking")
 var syncVar = expvar.NewMap("cloudeng.io/file/filewalk.sync")
@@ -223,7 +224,7 @@ type ContentsFunc func(ctx context.Context, prefix string, info *Info, ch <-chan
 // If stop is true then traversal stops at this point, however if a list
 // of children is returned, they will be traversed directly rather than
 // obtaining the children from the filesystem. This allows for both
-// exclusions and incremental processing in conjunction with a database t
+// exclusions and incremental processing in conjunction with a database to
 // be implemented.
 type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (stop bool, children []Info, returnErr error)
 

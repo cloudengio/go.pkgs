@@ -21,8 +21,10 @@ type shardingOptions struct {
 // ShardingOption represents an option to NewPathSharder.
 type ShardingOption func(o *shardingOptions)
 
-// SHA1PrefixLength
-func SHA1PrefixLength(v int) ShardingOption {
+// WithSHA1PrefixLength requests that a SHA1 sharder with a prefix length
+// of v is used. Assigned filenames will be of the form:
+// sha1(path)[:v]/sha1(path)[v:]
+func WithSHA1PrefixLength(v int) ShardingOption {
 	return func(o *shardingOptions) {
 		o.sha1PrefixLen = v
 	}
@@ -30,7 +32,7 @@ func SHA1PrefixLength(v int) ShardingOption {
 
 // NewSharder returns an instance of Sharder according to the specified
 // options. If no options are provided it will behave as if the option
-// of SHA1PrefixLength(1) was used.
+// of WithSHA1PrefixLength(2) was used.
 func NewSharder(opts ...ShardingOption) Sharder {
 	var o shardingOptions
 	for _, fn := range opts {
@@ -39,7 +41,7 @@ func NewSharder(opts ...ShardingOption) Sharder {
 	if o.sha1PrefixLen > 0 {
 		return &sha1Sharder{o.sha1PrefixLen}
 	}
-	return &sha1Sharder{1}
+	return &sha1Sharder{2}
 }
 
 type sha1Sharder struct {
