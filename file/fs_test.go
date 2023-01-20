@@ -46,7 +46,7 @@ func TestEncodeDecode(t *testing.T) {
 
 	sysinfo := struct{ name string }{"foo"}
 
-	now := time.Now().Round(0) // strip the monotonic clock value.
+	now := time.Now()
 	fi := file.NewInfo("ab", 32, 0700, now, true, &sysinfo)
 
 	type roundTripper func(*testing.T, *file.Info) file.Info
