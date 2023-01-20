@@ -8,10 +8,7 @@ package file_test
 import (
 	"bytes"
 	"encoding/gob"
-<<<<<<< HEAD
-=======
 	"encoding/json"
->>>>>>> main
 	"io/fs"
 	"testing"
 	"time"
