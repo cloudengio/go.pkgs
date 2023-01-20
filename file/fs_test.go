@@ -8,6 +8,10 @@ package file_test
 import (
 	"bytes"
 	"encoding/gob"
+<<<<<<< HEAD
+=======
+	"encoding/json"
+>>>>>>> main
 	"io/fs"
 	"testing"
 	"time"
@@ -15,41 +19,62 @@ import (
 	"cloudeng.io/file"
 )
 
-func TestGob(t *testing.T) {
-
-	sysinfo := struct{ name string }{"foo"}
-
-	now := time.Now().Round(0) // strip the monotonic clock value.
-	fi := file.NewInfo("ab", 32, 0700, now, true, &sysinfo)
-
+func gobRoundTrip(t *testing.T, fi *file.Info) file.Info {
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
 	if err := enc.Encode(fi); err != nil {
 		t.Fatal(err)
 	}
-
 	var nfi file.Info
 	dec := gob.NewDecoder(buf)
 	if err := dec.Decode(&nfi); err != nil {
 		t.Fatal(err)
 	}
+	return nfi
+}
 
-	if got, want := nfi.Name(), "ab"; got != want {
-		t.Errorf("got %v, want %v", got, want)
+func jsonRoundTrip(t *testing.T, fi *file.Info) file.Info {
+	buf, err := json.Marshal(fi)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got, want := nfi.Size(), int64(32); got != want {
-		t.Errorf("got %v, want %v", got, want)
+	var nfi file.Info
+	if err := json.Unmarshal(buf, &nfi); err != nil {
+		t.Fatal(err)
 	}
-	if got, want := nfi.Mode(), fs.FileMode(0700); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := nfi.ModTime(), now; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := nfi.IsDir(), true; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := nfi.Sys(), any(nil); got != want {
-		t.Errorf("got %v, want %v", got, want)
+	return nfi
+}
+
+func TestEncodeDecode(t *testing.T) {
+
+	sysinfo := struct{ name string }{"foo"}
+
+	now := time.Now()
+	fi := file.NewInfo("ab", 32, 0700, now, true, &sysinfo)
+
+	type roundTripper func(*testing.T, *file.Info) file.Info
+
+	for _, fn := range []roundTripper{
+		jsonRoundTrip, gobRoundTrip,
+	} {
+		nfi := fn(t, fi)
+		if got, want := nfi.Name(), "ab"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.Size(), int64(32); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.Mode(), fs.FileMode(0700); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.ModTime(), now; !got.Equal(want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.IsDir(), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.Sys(), any(nil); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }
