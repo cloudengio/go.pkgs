@@ -123,7 +123,7 @@ func newRandomFileCreator(ctx context.Context, name string, rnd *rand.Rand, maxS
 		return nil, nil, err
 	}
 	return contents, NewFile(&BufferCloser{bytes.NewBuffer(contents)},
-		NewInfo(name, size, 0666, time.Now(), false, nil)), nil
+		file.NewInfo(name, int64(size), 0666, time.Now(), false, nil)), nil
 }
 
 // Open implements fs.FS.
@@ -191,7 +191,7 @@ func (mfs *constantFS) OpenCtx(ctx context.Context, name string) (fs.File, error
 	contents := bytes.Repeat(mfs.val, mfs.maxSize)
 	mfs.contents[name] = contents
 	return NewFile(&BufferCloser{bytes.NewBuffer(contents)},
-		NewInfo(name, len(contents), 0666, time.Now(), false, nil)), nil
+		file.NewInfo(name, int64(len(contents)), 0666, time.Now(), false, nil)), nil
 }
 
 type writeFSEntry struct {
@@ -238,7 +238,7 @@ func (wfs *WriteFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	contents := wfs.contents[name]
 	cpy := make([]byte, len(contents))
 	copy(cpy, contents)
-	info := NewInfo(name, len(cpy), entry.mode, entry.update, false, nil)
+	info := file.NewInfo(name, int64(len(cpy)), entry.mode, entry.update, false, nil)
 	return NewFile(&BufferCloser{bytes.NewBuffer(cpy)}, info), nil
 }
 

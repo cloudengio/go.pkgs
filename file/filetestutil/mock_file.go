@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"io"
 	"io/fs"
-	"time"
 )
 
 // BufferCloser adds an io.Closer to bytes.Buffer.
@@ -18,50 +17,6 @@ type BufferCloser struct {
 
 func (bc *BufferCloser) Close() error {
 	return nil
-}
-
-type fileinfo struct {
-	name string
-	size int64
-	mode fs.FileMode
-	mod  time.Time
-	dir  bool
-	sys  interface{}
-}
-
-func (fi *fileinfo) Name() string {
-	return fi.name
-}
-
-func (fi *fileinfo) Size() int64 {
-	return fi.size
-}
-
-func (fi *fileinfo) Mode() fs.FileMode {
-	return fi.mode
-}
-
-func (fi *fileinfo) ModTime() time.Time {
-	return fi.mod
-}
-
-func (fi *fileinfo) IsDir() bool {
-	return fi.dir
-}
-
-func (fi *fileinfo) Sys() interface{} {
-	return fi.sys
-}
-
-func NewInfo(name string, size int, mode fs.FileMode, mod time.Time, dir bool, sys interface{}) fs.FileInfo {
-	return &fileinfo{
-		name: name,
-		size: int64(size),
-		mode: mode,
-		mod:  mod,
-		dir:  dir,
-		sys:  sys,
-	}
 }
 
 type mockFile struct {
