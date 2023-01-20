@@ -79,6 +79,28 @@ ReplaceAllString(input string) applies regexp.ReplaceAllString.
 
 
 
+### Type RewriteRules
+```go
+type RewriteRules []RewriteRule
+```
+
+### Functions
+
+```go
+func NewRewriteRules(rules ...string) (RewriteRules, error)
+```
+
+
+
+### Methods
+
+```go
+func (rw RewriteRules) ReplaceAllStringFirst(input string) string
+```
+
+
+
+
 
 
 

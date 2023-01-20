@@ -26,6 +26,79 @@ WrapFS wraps an fs.FS to implement file.FS.
 
 
 
+### Type Info
+```go
+type Info struct {
+	// contains filtered or unexported fields
+}
+```
+Info implements fs.FileInfo with gob and json encoding/decoding. Note that
+the Sys value is not encoded/decode and is only avalilable within the
+process that originally created the info Instance.
+
+### Functions
+
+```go
+func NewInfo(name string, size int64, mode fs.FileMode, mod time.Time, dir bool, sys interface{}) *Info
+```
+NewInfo creates a new instance of Info.
+
+
+
+### Methods
+
+```go
+func (fi *Info) GobDecode(data []byte) error
+```
+
+
+```go
+func (fi *Info) GobEncode() ([]byte, error)
+```
+
+
+```go
+func (fi *Info) IsDir() bool
+```
+
+
+```go
+func (fi *Info) MarshalJSON() ([]byte, error)
+```
+
+
+```go
+func (fi *Info) ModTime() time.Time
+```
+
+
+```go
+func (fi *Info) Mode() fs.FileMode
+```
+
+
+```go
+func (fi *Info) Name() string
+```
+
+
+```go
+func (fi *Info) Size() int64
+```
+
+
+```go
+func (fi *Info) Sys() interface{}
+```
+
+
+```go
+func (fi *Info) UnmarshalJSON(data []byte) error
+```
+
+
+
+
 
 
 

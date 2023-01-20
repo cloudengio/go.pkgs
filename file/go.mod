@@ -8,6 +8,7 @@ require (
 	cloudeng.io/os v0.0.0-20221118174443-5eef698118a6
 	cloudeng.io/sync v0.0.8
 	cloudeng.io/sys v0.0.0-20221118174443-5eef698118a6
+	cloudeng.io/text v0.0.11
 	github.com/cosnicolaou/pudge v1.0.6
 	golang.org/x/net v0.5.0
 	golang.org/x/sys v0.4.0

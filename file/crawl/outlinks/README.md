@@ -9,11 +9,11 @@ import cloudeng.io/file/crawl/outlinks
 ## Functions
 ### Func NewExtractors
 ```go
-func NewExtractors(errCh chan<- Errors, extractors ...Extractor) crawl.Outlinks
+func NewExtractors(errCh chan<- Errors, processor Process, extractors ...Extractor) crawl.Outlinks
 ```
 NewExtractors creates a crawl.Outlinks.Extractor given instances of the
-lower level Extractor interface. The extractors are run in turn until one
-returns a set
+lower level Extractor interface. The extractors that match the downloaded
+content's mime type are run for that content.
 
 
 
@@ -21,9 +21,8 @@ returns a set
 ### Type Download
 ```go
 type Download struct {
-	Request   download.Request
-	Container file.FS
-	Download  download.Result
+	Request  download.Request
+	Download download.Result
 }
 ```
 Download represents a single downloaded file, as opposed to
@@ -55,15 +54,19 @@ type Errors struct {
 type Extractor interface {
 	// MimeType returns the mime type that this extractor is capable of handling.
 	MimeType() string
-	// Outlinks extracts outlinks from the specified downloaded file.
+	// Outlinks extracts outlinks from the specified downloaded file. This
+	// is generally specific to the mime type of the content being processed.
 	Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error)
+	// Request creates new download requests for the specified outlinks.
 	Request(depth int, download Download, outlinks []string) download.Request
 }
 ```
 Extractor is a lower level interface for outlink extractors that allows for
-the separation of extracting outlinks and creating new download requests to
-retrieve them. This allows for easier customization of the crawl process,
-for example, to rewrite or otherwise manipulate the link names.
+the separation of extracting outlinks, filtering/rewriting them and creating
+new download requests to retrieve them. This allows for easier customization
+of the crawl process, for example, to rewrite or otherwise manipulate the
+link names or create appropriate crawl requests for different types of
+outlink.
 
 
 ### Type HTML
@@ -86,7 +89,7 @@ func NewHTML() *HTML
 ### Methods
 
 ```go
-func (ho *HTML) HREFs(rd io.Reader) ([]string, error)
+func (ho *HTML) HREFs(base string, rd io.Reader) ([]string, error)
 ```
 HREFs returns the hrefs found in the provided HTML document.
 
@@ -113,6 +116,61 @@ Outlinks implements Extractor.Outlinks.
 func (ho *HTML) Request(depth int, download Download, outlinks []string) download.Request
 ```
 Request implements Extractor.Request.
+
+
+
+
+### Type PassthroughProcessor
+```go
+type PassthroughProcessor struct{}
+```
+PassthroughProcessor implements Process and simply returns its input.
+
+### Methods
+
+```go
+func (pp *PassthroughProcessor) Process(outlinks []string) []string
+```
+
+
+
+
+### Type Process
+```go
+type Process interface {
+	Process(outlink []string) []string
+}
+```
+Process is an interface for processing outlinks.
+
+
+### Type RegexpProcessor
+```go
+type RegexpProcessor struct {
+	NoFollow []string // regular expressions that match links that should be ignored.
+	Follow   []string // regular expressions that match links that should be followed. Follow overrides NoFollow.
+	Rewrite  []string // rewrite rules that are applied to links that are followed specified as textutil.RewriteRule strings
+	// contains filtered or unexported fields
+}
+```
+RegexpProcessor is an implementation of Process that uses regular
+expressions to determine whether a link should be ignored (nofollow),
+followed or rewritten. Follow overrides nofollow and only links that make
+it through both nofollow and follow are rewritten. Each of the rewrites is
+applied in turn and all of the rewritten values are returned.
+
+### Methods
+
+```go
+func (cfg *RegexpProcessor) Compile() error
+```
+Compile is called to compile all of the regular expressions contained within
+the processor. It must be called before Process.
+
+
+```go
+func (cfg *RegexpProcessor) Process(outlinks []string) []string
+```
 
 
 
