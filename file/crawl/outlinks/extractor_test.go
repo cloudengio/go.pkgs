@@ -56,7 +56,7 @@ func TestGenericExtractor(t *testing.T) {
 	if got, want := extracted, []string{
 		"https://www.w3.org/",
 		"https://www.google.com/",
-		"html_images.asp",
+		"/testdata/html_images.asp",
 		"/css/default.asp",
 		"https://sample.css",
 	}; !reflect.DeepEqual(got, want) {
