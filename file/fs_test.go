@@ -64,7 +64,7 @@ func TestEncodeDecode(t *testing.T) {
 		if got, want := nfi.Mode(), fs.FileMode(0700); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		if got, want := nfi.ModTime(), now; got != want {
+		if got, want := nfi.ModTime(), now; !got.Equal(want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 		if got, want := nfi.IsDir(), true; got != want {
