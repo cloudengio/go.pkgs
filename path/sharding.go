@@ -1,4 +1,4 @@
-// Copyright 2020 cloudeng llc. All rights reserved.
+// Copyright 2023 cloudeng llc. All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
@@ -41,7 +41,7 @@ func NewSharder(opts ...ShardingOption) Sharder {
 	if o.sha1PrefixLen > 0 {
 		return &sha1Sharder{o.sha1PrefixLen}
 	}
-	return &sha1Sharder{2}
+	return &sha1Sharder{1}
 }
 
 type sha1Sharder struct {
