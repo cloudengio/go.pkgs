@@ -41,7 +41,7 @@ func NewSharder(opts ...ShardingOption) Sharder {
 	if o.sha1PrefixLen > 0 {
 		return &sha1Sharder{o.sha1PrefixLen}
 	}
-	return &sha1Sharder{2}
+	return &sha1Sharder{1}
 }
 
 type sha1Sharder struct {
