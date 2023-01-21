@@ -17,9 +17,12 @@ func init() {
 	gob.Register(&Info{})
 }
 
-// FS extends fs.FS with OpenCtx.
+// FS extends fs.FS with Scheme and OpenCtx.
 type FS interface {
 	fs.FS
+	// Scheme returns the URI scheme that this FS supports. Scheme should
+	// be "file" for local file system access.
+	Scheme() string
 	OpenCtx(ctx context.Context, name string) (fs.File, error)
 }
 
@@ -32,6 +35,10 @@ type fsFromFS struct {
 	fs.FS
 }
 
+func (f *fsFromFS) Scheme() string {
+	return "file"
+}
+
 func (f *fsFromFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	return f.Open(name)
 }
@@ -39,12 +46,15 @@ func (f *fsFromFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 // Info implements fs.FileInfo with gob and json encoding/decoding. Note that
 // the Sys value is not encoded/decode and is only avalilable within the
 // process that originally created the info Instance.
+// It also users a User and Group methods.
 type Info struct {
 	name    string
 	size    int64
 	mode    fs.FileMode
 	modTime time.Time
 	isDir   bool
+	user    string
+	group   string
 	sysInfo interface{}
 }
 
@@ -60,28 +70,54 @@ func NewInfo(name string, size int64, mode fs.FileMode, mod time.Time, dir bool,
 	}
 }
 
+// Name implements fs.FileInfo.
 func (fi *Info) Name() string {
 	return fi.name
 }
 
+// Size implements fs.FileInfo.
 func (fi *Info) Size() int64 {
 	return fi.size
 }
 
+// Mode implements fs.FileInfo.
 func (fi *Info) Mode() fs.FileMode {
 	return fi.mode
 }
 
+// ModTime implements fs.FileInfo.
 func (fi *Info) ModTime() time.Time {
 	return fi.modTime
 }
 
+// IsDir implements fs.FileInfo.
 func (fi *Info) IsDir() bool {
 	return fi.isDir
 }
 
+// Sys implements fs.FileInfo.
 func (fi *Info) Sys() interface{} {
 	return fi.sysInfo
+}
+
+// User returns the user associated with the file.
+func (fi *Info) User() string {
+	return fi.user
+}
+
+// Group returns the group associated with the file.
+func (fi *Info) Group() string {
+	return fi.group
+}
+
+// SetUser sets the user associated with the file.
+func (fi *Info) SetUser(user string) {
+	fi.user = user
+}
+
+// SetGroup sets the group associated with the file.
+func (fi *Info) SetGroup(group string) {
+	fi.group = group
 }
 
 func (fi *Info) asInfo() info {
@@ -91,6 +127,8 @@ func (fi *Info) asInfo() info {
 		FileMode:    fi.mode,
 		FileModTime: fi.modTime,
 		FileIsDir:   fi.isDir,
+		User:        fi.user,
+		Group:       fi.group,
 	}
 }
 
@@ -143,4 +181,6 @@ type info struct {
 	FileMode    fs.FileMode
 	FileModTime time.Time
 	FileIsDir   bool
+	User        string
+	Group       string
 }

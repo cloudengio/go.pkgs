@@ -64,6 +64,11 @@ func New(cfg aws.Config, options ...Option) file.FS {
 	return fs
 }
 
+// Scheme implements fs.FS.
+func (fs *s3fs) Scheme() string {
+	return "s3"
+}
+
 // Open implements fs.FS.
 func (fs *s3fs) Open(name string) (fs.File, error) {
 	return fs.OpenCtx(context.Background(), name)
