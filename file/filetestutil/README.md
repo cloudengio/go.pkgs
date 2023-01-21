@@ -122,6 +122,11 @@ func (wfs *WriteFS) OpenCtx(ctx context.Context, name string) (fs.File, error)
 ```
 
 
+```go
+func (mfs *WriteFS) Scheme() string
+```
+
+
 
 
 

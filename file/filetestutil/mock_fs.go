@@ -109,8 +109,15 @@ func NewMockFS(opts ...FSOption) file.FS {
 	return nil
 }
 
+type localfs struct{}
+
+func (mfs *localfs) Scheme() string {
+	return "file"
+}
+
 type randFS struct {
 	sync.Mutex
+	localfs
 	fsOptions
 	contents map[string][]byte
 }
@@ -161,6 +168,7 @@ func (mfs *randAfteRetryFS) OpenCtx(ctx context.Context, name string) (fs.File, 
 }
 
 type errorFs struct {
+	localfs
 	err error
 }
 
@@ -175,6 +183,7 @@ func (mfs *errorFs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 
 type constantFS struct {
 	sync.Mutex
+	localfs
 	fsOptions
 	val      []byte
 	contents map[string][]byte
@@ -201,6 +210,7 @@ type writeFSEntry struct {
 
 type WriteFS struct {
 	sync.Mutex
+	localfs
 	entries  map[string]writeFSEntry
 	contents map[string][]byte
 }

@@ -11,10 +11,13 @@ import cloudeng.io/file
 ```go
 type FS interface {
 	fs.FS
+	// Scheme returns the URI scheme that this FS supports. Scheme should
+	// be "file" for local file system access.
+	Scheme() string
 	OpenCtx(ctx context.Context, name string) (fs.File, error)
 }
 ```
-FS extends fs.FS with OpenCtx.
+FS extends fs.FS with Scheme and OpenCtx.
 
 ### Functions
 
@@ -34,7 +37,8 @@ type Info struct {
 ```
 Info implements fs.FileInfo with gob and json encoding/decoding. Note that
 the Sys value is not encoded/decode and is only avalilable within the
-process that originally created the info Instance.
+process that originally created the info Instance. It also users a User and
+Group methods.
 
 ### Functions
 
@@ -58,8 +62,15 @@ func (fi *Info) GobEncode() ([]byte, error)
 
 
 ```go
+func (fi *Info) Group() string
+```
+Group returns the group associated with the file.
+
+
+```go
 func (fi *Info) IsDir() bool
 ```
+IsDir implements fs.FileInfo.
 
 
 ```go
@@ -70,31 +81,54 @@ func (fi *Info) MarshalJSON() ([]byte, error)
 ```go
 func (fi *Info) ModTime() time.Time
 ```
+ModTime implements fs.FileInfo.
 
 
 ```go
 func (fi *Info) Mode() fs.FileMode
 ```
+Mode implements fs.FileInfo.
 
 
 ```go
 func (fi *Info) Name() string
 ```
+Name implements fs.FileInfo.
+
+
+```go
+func (fi *Info) SetGroup(group string)
+```
+SetGroup sets the group associated with the file.
+
+
+```go
+func (fi *Info) SetUser(user string)
+```
+SetUser sets the user associated with the file.
 
 
 ```go
 func (fi *Info) Size() int64
 ```
+Size implements fs.FileInfo.
 
 
 ```go
 func (fi *Info) Sys() interface{}
 ```
+Sys implements fs.FileInfo.
 
 
 ```go
 func (fi *Info) UnmarshalJSON(data []byte) error
 ```
+
+
+```go
+func (fi *Info) User() string
+```
+User returns the user associated with the file.
 
 
 
