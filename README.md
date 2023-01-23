@@ -1,7 +1,7 @@
-![GithubActions](https://github.com/cosnicolaou/pbzip2/actions/workflows/linux.yml/badge.svg)
-![GithubActions](https://github.com/cosnicolaou/pbzip2/actions/workflows/macos.yml/badge.svg)
-![GithubActions](https://github.com/cosnicolaou/pbzip2/actions/workflows/windows.yml/badge.svg)
-![lint-govuln](https://github.com/cloudengio/go.pkgs/actions/workflows/lint-govuln.yml/badge.svg)]![CodeQL](https://github.com/cloudengio/go.pkgs/actions/workflows/codeql.yml/badge.svg)
+![linux](https://github.com/cloudengio/go.pkgs/actions/workflows/linux.yml/badge.svg)
+![macos](https://github.com/cloudengio/go.pkgs/actions/workflows/macos.yml/badge.svg)
+![windows](https://github.com/cloudengio/go.pkgs/actions/workflows/windows.yml/badge.svg)
+![lint-govuln](https://github.com/cloudengio/go.pkgs/actions/workflows/lint-govuln.yml/badge.svg)![CodeQL](https://github.com/cloudengio/go.pkgs/actions/workflows/codeql.yml/badge.svg)
 
 # go.pkgs contains a set of broadly useful go packages.
 
