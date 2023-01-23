@@ -104,8 +104,7 @@ func (f *s3file) Stat() (fs.FileInfo, error) {
 		f.obj.ContentLength,
 		0400,
 		aws.ToTime(f.obj.LastModified),
-		false,
-		f.obj,
+		file.InfoOption{SysInfo: f.obj},
 	), nil
 }
 
