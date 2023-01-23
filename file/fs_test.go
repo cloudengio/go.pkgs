@@ -47,8 +47,7 @@ func TestEncodeDecode(t *testing.T) {
 	sysinfo := struct{ name string }{"foo"}
 
 	now := time.Now()
-	fi := file.NewInfo("ab", 32, 0700, file.InfoOption{
-		ModTime: now,
+	fi := file.NewInfo("ab", 32, 0700, now, file.InfoOption{
 		User:    "user",
 		Group:   "group",
 		IsDir:   true,
