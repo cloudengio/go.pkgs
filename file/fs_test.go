@@ -47,14 +47,21 @@ func TestEncodeDecode(t *testing.T) {
 	sysinfo := struct{ name string }{"foo"}
 
 	now := time.Now()
-	fi := file.NewInfo("ab", 32, 0700, now, true, &sysinfo)
+	fi := file.NewInfo("ab", 32, 0700, file.InfoOption{
+		ModTime: now,
+		User:    "user",
+		Group:   "group",
+		IsDir:   true,
+		IsLink:  true,
+		SysInfo: &sysinfo,
+	})
 
 	type roundTripper func(*testing.T, *file.Info) file.Info
 
 	for _, fn := range []roundTripper{
 		jsonRoundTrip, gobRoundTrip,
 	} {
-		nfi := fn(t, fi)
+		nfi := fn(t, &fi)
 		if got, want := nfi.Name(), "ab"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
@@ -70,7 +77,16 @@ func TestEncodeDecode(t *testing.T) {
 		if got, want := nfi.IsDir(), true; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
+		if got, want := nfi.IsLink(), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 		if got, want := nfi.Sys(), any(nil); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.User(), "user"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := nfi.Group(), "group"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}

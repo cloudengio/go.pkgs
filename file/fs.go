@@ -23,6 +23,8 @@ type FS interface {
 	// Scheme returns the URI scheme that this FS supports. Scheme should
 	// be "file" for local file system access.
 	Scheme() string
+
+	// OpenCtx is like fs.Open but with a context.
 	OpenCtx(ctx context.Context, name string) (fs.File, error)
 }
 
@@ -35,38 +37,56 @@ type fsFromFS struct {
 	fs.FS
 }
 
+// Scheme returns the URI scheme that this FS supports, which in for an fs.FS
+// is always "file".
 func (f *fsFromFS) Scheme() string {
 	return "file"
 }
 
+// OpenCtx just calls fs.Open.
 func (f *fsFromFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	return f.Open(name)
 }
 
-// Info implements fs.FileInfo with gob and json encoding/decoding. Note that
-// the Sys value is not encoded/decode and is only avalilable within the
-// process that originally created the info Instance.
-// It also users a User and Group methods.
+// Info extends fs.FileInfo to provide additional information such as
+// user/group, symbolic link status etc, as well gob and json encoding/decoding.
+// Note that the Sys value is not encoded/decoded and is only avalilable within
+// the process that originally created the info Instance.
 type Info struct {
 	name    string
 	size    int64
 	mode    fs.FileMode
 	modTime time.Time
 	isDir   bool
+	isLink  bool
 	user    string
 	group   string
 	sysInfo interface{}
 }
 
+// InfoOption is used to provide additional fields when creating
+// an Info instance using NewInfo.
+type InfoOption struct {
+	ModTime time.Time
+	User    string
+	Group   string
+	IsDir   bool
+	IsLink  bool
+	SysInfo interface{}
+}
+
 // NewInfo creates a new instance of Info.
-func NewInfo(name string, size int64, mode fs.FileMode, mod time.Time, dir bool, sys interface{}) *Info {
-	return &Info{
+func NewInfo(name string, size int64, mode fs.FileMode, options InfoOption) Info {
+	return Info{
 		name:    name,
 		size:    size,
 		mode:    mode,
-		modTime: mod,
-		isDir:   dir,
-		sysInfo: sys,
+		modTime: options.ModTime,
+		isDir:   options.IsDir,
+		isLink:  options.IsLink,
+		user:    options.User,
+		group:   options.Group,
+		sysInfo: options.SysInfo,
 	}
 }
 
@@ -110,34 +130,45 @@ func (fi *Info) Group() string {
 	return fi.group
 }
 
-// SetUser sets the user associated with the file.
-func (fi *Info) SetUser(user string) {
-	fi.user = user
+// IsLink returns true if the file is a symbolic link.
+func (fi *Info) IsLink() bool {
+	return fi.isLink
 }
 
-// SetGroup sets the group associated with the file.
-func (fi *Info) SetGroup(group string) {
-	fi.group = group
+// info is like Info but without the Sys field.
+type info struct {
+	Name    string      `json:"name"`
+	Size    int64       `json:"size"`
+	Mode    fs.FileMode `json:"mode"`
+	ModTime time.Time   `json:"modTime"`
+	IsDir   bool        `json:"isDir"`
+	IsLink  bool        `json:"isLink"`
+	User    string      `json:"user"`
+	Group   string      `json:"group"`
 }
 
 func (fi *Info) asInfo() info {
 	return info{
-		Filename:    fi.name,
-		FileSize:    fi.size,
-		FileMode:    fi.mode,
-		FileModTime: fi.modTime,
-		FileIsDir:   fi.isDir,
-		User:        fi.user,
-		Group:       fi.group,
+		Name:    fi.name,
+		Size:    fi.size,
+		Mode:    fi.mode,
+		ModTime: fi.modTime,
+		IsDir:   fi.isDir,
+		IsLink:  fi.isLink,
+		User:    fi.user,
+		Group:   fi.group,
 	}
 }
 
 func (fi *Info) fromInfo(i info) {
-	fi.name = i.Filename
-	fi.size = i.FileSize
-	fi.mode = i.FileMode
-	fi.modTime = i.FileModTime
-	fi.isDir = i.FileIsDir
+	fi.name = i.Name
+	fi.size = i.Size
+	fi.mode = i.Mode
+	fi.modTime = i.ModTime
+	fi.isDir = i.IsDir
+	fi.isLink = i.IsLink
+	fi.user = i.User
+	fi.group = i.Group
 }
 
 func (fi *Info) GobEncode() ([]byte, error) {
@@ -172,15 +203,4 @@ func (fi *Info) UnmarshalJSON(data []byte) error {
 	}
 	fi.fromInfo(tmp)
 	return nil
-}
-
-// info is like Info but without the Sys field.
-type info struct {
-	Filename    string
-	FileSize    int64
-	FileMode    fs.FileMode
-	FileModTime time.Time
-	FileIsDir   bool
-	User        string
-	Group       string
 }
