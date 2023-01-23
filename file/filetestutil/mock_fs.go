@@ -129,7 +129,7 @@ func newRandomFileCreator(ctx context.Context, name string, rnd *rand.Rand, maxS
 	if err != nil {
 		return nil, nil, err
 	}
-	info := file.NewInfo(name, int64(len(contents)), 0666, time.Now().Round(0), file.InfoOption{})
+	info := file.NewInfo(name, int64(size), 0666, time.Now().Round(0), file.InfoOption{})
 	return contents, NewFile(&BufferCloser{bytes.NewBuffer(contents)}, info), nil
 }
 
