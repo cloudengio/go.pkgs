@@ -10,16 +10,18 @@ import (
 )
 
 // Registry provides a means of registering and looking up handlers for
-// converting between content types.
-type Registry struct {
-	mu sync.Mutex
-	db map[string]map[string]interface{}
+// processing content types and for converting between content types.
+type Registry[T any] struct {
+	mu         sync.Mutex
+	converters map[string]map[string][]T
+	handlers   map[Type][]T
 }
 
 // NewRegistry returns a new instance of Registry.
-func NewRegistry() *Registry {
-	return &Registry{
-		db: make(map[string]map[string]interface{}),
+func NewRegistry[T any]() *Registry[T] {
+	return &Registry[T]{
+		converters: make(map[string]map[string][]T),
+		handlers:   make(map[Type][]T),
 	}
 }
 
@@ -32,44 +34,73 @@ func fromTo(from, to Type) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return ft, tt, nil
+	return string(Clean(Type(ft))), string(Clean(Type(tt))), nil
 }
 
-// Lookup returns the handler registered for converting from one content type
-// to another, and the parameter and value associated with the to type. The
-// parameter to the from type is ignored.
-func (c *Registry) Lookup(from, to Type) (parameter, value string, handler interface{}, err error) {
+// LookupConverters returns the converters registered for converting the 'from'
+// content type to the 'to' content type. The returned handlers are in the same
+// order as that registered via RegisterConverter.
+func (c *Registry[T]) LookupConverters(from, to Type) ([]T, error) {
 	ft, err := ParseType(from)
 	if err != nil {
-		return "", "", nil, err
+		return nil, err
 	}
-	tt, parameter, value, err := ParseTypeFull(to)
+	tt, err := ParseType(to)
 	if err != nil {
-		return "", "", nil, err
+		return nil, err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	handler, ok := c.db[ft][tt]
+	handler, ok := c.converters[ft][tt]
 	if !ok {
-		return "", "", nil, fmt.Errorf("no handler for %v to %v", from, to)
+		return nil, fmt.Errorf("no handler for %v to %v", from, to)
 	}
-	return parameter, value, handler, nil
+	return handler, nil
 }
 
-// Register registers a handler for converting from one content type to another.
-func (c *Registry) Register(from, to Type, handler interface{}) error {
+// RegisterConverters registers a lust of handlers for converting from one
+// content type to another. The caller of LookupConverter must decide which
+// converter to use.
+func (c *Registry[T]) RegisterConverters(from, to Type, converters ...T) error {
 	ft, tt, err := fromTo(from, to)
 	if err != nil {
 		return err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.db[ft] == nil {
-		c.db[ft] = make(map[string]interface{})
+	if c.converters[ft] == nil {
+		c.converters[ft] = make(map[string][]T)
 	}
-	if _, ok := c.db[ft][tt]; ok {
-		return fmt.Errorf("handler already registered for %v to %v", from, to)
+	if _, ok := c.converters[ft][tt]; ok {
+		return fmt.Errorf("converter already registered for %v to %v", from, to)
 	}
-	c.db[ft][tt] = handler
+	c.converters[ft][tt] = converters
+	return nil
+}
+
+// LookupHandlers returns the list handler registered for the given content type.
+func (c *Registry[T]) LookupHandlers(ctype Type) ([]T, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	handlers, ok := c.handlers[Clean(ctype)]
+	if !ok {
+		return nil, fmt.Errorf("no handler for %v", ctype)
+	}
+	return handlers, nil
+}
+
+// RegisterHandlers registers a handler for a given content type. The caller of
+// LookupHandlers must decide which converter to use.
+func (c *Registry[T]) RegisterHandlers(ctype Type, handlers ...T) error {
+	_, _, _, err := ParseTypeFull(ctype)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.handlers[ctype]; ok {
+		return fmt.Errorf("handler already registered for %v", ctype)
+	}
+	c.handlers[Clean(ctype)] = handlers
 	return nil
 }

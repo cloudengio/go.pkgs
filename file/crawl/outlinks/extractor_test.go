@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl/outlinks"
 )
 
@@ -35,7 +36,12 @@ func TestGenericExtractor(t *testing.T) {
 
 	downloaded := downloadFromTestdata(t, "simple.html")
 
-	ext := outlinks.NewExtractors(errCh, &outlinks.PassthroughProcessor{}, outlinks.NewHTML())
+	reg := content.NewRegistry[outlinks.Extractor]()
+	if err := reg.RegisterHandlers("text/html;charset=utf-8", outlinks.NewHTML()); err != nil {
+		t.Fatal(err)
+	}
+
+	ext := outlinks.NewExtractors(errCh, &outlinks.PassthroughProcessor{}, reg)
 	reqs := ext.Extract(ctx, 0, downloaded)
 	reqs2 := ext.Extract(ctx, 0, downloaded)
 	close(errCh)

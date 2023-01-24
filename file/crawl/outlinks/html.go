@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sync"
 
+	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/download"
 	"golang.org/x/net/html"
@@ -29,7 +30,7 @@ func NewHTML() *HTML {
 	}
 }
 
-func (ho *HTML) MimeType() string {
+func (ho *HTML) ContentType() content.Type {
 	return "text/html"
 }
 
