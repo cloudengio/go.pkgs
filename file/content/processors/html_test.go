@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package outlinks_test
+package processors_test
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"cloudeng.io/file"
-	"cloudeng.io/file/crawl/outlinks"
+	"cloudeng.io/file/content/processors"
 	"cloudeng.io/file/download"
 )
 
@@ -45,10 +45,14 @@ func downloadFromTestdata(t *testing.T, name string) download.Downloaded {
 }
 
 func TestHTML(t *testing.T) {
-	var he outlinks.HTML
+	var he processors.HTML
 	rd := loadTestdata(t, "simple.html")
 	defer rd.Close()
-	extracted, err := he.HREFs("", rd)
+	doc, err := he.Parse(rd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extracted, err := doc.HREFs("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +63,10 @@ func TestHTML(t *testing.T) {
 		"/css/default.asp",
 		"https://sample.css",
 	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := doc.Title(), "My Title"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
