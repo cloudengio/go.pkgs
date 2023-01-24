@@ -7,14 +7,12 @@ package outlinks
 import (
 	"context"
 	"io"
-	"net/url"
 	"sync"
 
 	"cloudeng.io/file/content"
+	"cloudeng.io/file/content/processors"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/download"
-	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
 )
 
 // HTML is an outlink extractor for HTML documents. It implements
@@ -48,43 +46,11 @@ func (ho *HTML) IsDup(link string) bool {
 
 // HREFs returns the hrefs found in the provided HTML document.
 func (ho *HTML) HREFs(base string, rd io.Reader) ([]string, error) {
-	parsed, err := html.Parse(rd)
+	doc, err := processors.HTML{}.Parse(rd)
 	if err != nil {
 		return nil, err
 	}
-	return ho.hrefs(base, parsed), nil
-}
-
-func (ho *HTML) resolveReference(base *url.URL, href string) string {
-	if base == nil || len(href) == 0 || href[0] == '#' {
-		return href
-	}
-	vu, err := url.Parse(href)
-	if err != nil || vu.IsAbs() {
-		return href
-	}
-	if abs := base.ResolveReference(&url.URL{Path: href}); abs != nil {
-		return abs.String()
-	}
-	return href
-}
-
-func (ho *HTML) hrefs(base string, n *html.Node) []string {
-	var out []string
-	u, _ := url.Parse(base)
-	if n.Type == html.ElementNode {
-		if n.DataAtom == atom.A || n.DataAtom == atom.Link {
-			for _, a := range n.Attr {
-				if a.Key == "href" {
-					out = append(out, ho.resolveReference(u, a.Val))
-				}
-			}
-		}
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		out = append(out, ho.hrefs(base, c)...)
-	}
-	return out
+	return doc.HREFs(base)
 }
 
 // Outlinks implements Extractor.Outlinks.

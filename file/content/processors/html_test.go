@@ -2,20 +2,16 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package outlinks_test
+package processors_test
 
 import (
-	"bytes"
 	"embed"
-	"io"
 	"io/fs"
 	"path"
 	"reflect"
 	"testing"
 
-	"cloudeng.io/file"
-	"cloudeng.io/file/crawl/outlinks"
-	"cloudeng.io/file/download"
+	"cloudeng.io/file/content/processors"
 )
 
 //go:embed testdata/*.html
@@ -29,26 +25,15 @@ func loadTestdata(t *testing.T, name string) fs.File {
 	return f
 }
 
-func downloadFromTestdata(t *testing.T, name string) download.Downloaded {
-	buf := &bytes.Buffer{}
-	if _, err := io.Copy(buf, loadTestdata(t, name)); err != nil {
-		t.Fatal(err)
-	}
-	return download.Downloaded{
-		Request: download.SimpleRequest{
-			FS: file.WrapFS(htmlExamples),
-		},
-		Downloads: []download.Result{
-			{Name: path.Join("testdata", name), Contents: buf.Bytes()},
-		},
-	}
-}
-
 func TestHTML(t *testing.T) {
-	var he outlinks.HTML
+	var he processors.HTML
 	rd := loadTestdata(t, "simple.html")
 	defer rd.Close()
-	extracted, err := he.HREFs("", rd)
+	doc, err := he.Parse(rd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extracted, err := doc.HREFs("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +44,10 @@ func TestHTML(t *testing.T) {
 		"/css/default.asp",
 		"https://sample.css",
 	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := doc.Title(), "My Title"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
