@@ -2,9 +2,6 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package content provides support for working with different content types.
-// In particular it defines a mean of specifiying content types and a registry
-// for matching content types against handlers
 package content
 
 import (

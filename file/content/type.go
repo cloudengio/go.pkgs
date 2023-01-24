@@ -2,7 +2,9 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package content provides support for working with content types.
+// Package content provides support for working with different content types.
+// In particular it defines a mean of specifying content types and a registry
+// for matching content types against handlerspackage content
 package content
 
 import (
@@ -34,7 +36,7 @@ func ParseTypeFull(ctype Type) (typ, par, value string, err error) {
 		return "", "", "", fmt.Errorf("invalid content type: %v", ctype)
 	}
 	par, value = head(tmp, '=')
-	if strings.IndexRune(value, '=') >= 0 {
+	if strings.ContainsRune(value, '=') {
 		return "", "", "", fmt.Errorf("invalid parameter value: %v", ctype)
 	}
 	return
