@@ -9,6 +9,8 @@ package content
 
 import (
 	"fmt"
+	"mime"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,10 +37,13 @@ func ParseTypeFull(ctype Type) (typ, par, value string, err error) {
 	if strings.Count(typ, "/") != 1 {
 		return "", "", "", fmt.Errorf("invalid content type: %v", ctype)
 	}
+	typ = strings.TrimSpace(typ)
 	par, value = head(tmp, '=')
 	if strings.ContainsRune(value, '=') {
 		return "", "", "", fmt.Errorf("invalid parameter value: %v", ctype)
 	}
+	par = strings.TrimSpace(par)
+	value = strings.TrimSpace(value)
 	return
 }
 
@@ -48,5 +53,18 @@ func ParseType(ctype Type) (string, error) {
 	if strings.Count(typ, ";") >= 1 {
 		return "", fmt.Errorf("invalid content type: %v", ctype)
 	}
-	return typ, nil
+	return strings.TrimSpace(typ), nil
+}
+
+// TypeForPath returns the Type for the given path. The Type is determined by
+// obtaining the extension of the path and looking up the corresponding mime
+// type.
+func TypeForPath(path string) Type {
+	ext := filepath.Ext(path)
+	return Type(mime.TypeByExtension(ext))
+}
+
+// Clean removes any spaces from the content Type.
+func Clean(ctype Type) Type {
+	return Type(strings.ReplaceAll(string(ctype), " ", ""))
 }
