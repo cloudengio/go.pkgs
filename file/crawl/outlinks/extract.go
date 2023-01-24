@@ -9,9 +9,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"mime"
-	"path"
-	"strings"
 
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
@@ -40,14 +37,6 @@ type Extractor interface {
 	Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error)
 	// Request creates new download requests for the specified outlinks.
 	Request(depth int, download Download, outlinks []string) download.Request
-}
-
-func mimeTypeForPath(p string) string {
-	mimeType := mime.TypeByExtension(path.Ext(p))
-	if idx := strings.Index(mimeType, ";"); idx > 0 {
-		return mimeType[:idx]
-	}
-	return mimeType
 }
 
 // Extract implements crawl.Outlinks.Extract.
