@@ -20,7 +20,7 @@ import (
 // ParseYAMLConfig will parse the yaml config in spec into the requested
 // type. It provides improved error reporting by mixing in the actual
 // yaml input (from the spec) into the error messages.
-func ParseYAMLConfig[T any](spec []byte, cfg T) error {
+func ParseYAMLConfig(spec []byte, cfg interface{}) error {
 	if err := yaml.Unmarshal(spec, cfg); err != nil {
 		return YAMLErrorWithSource(spec, err)
 	}
@@ -28,12 +28,12 @@ func ParseYAMLConfig[T any](spec []byte, cfg T) error {
 }
 
 // ParseYAMLConfigString is like ParseYAMLConfig but for a string.
-func ParseYAMLConfigString[T any](spec string, cfg T) error {
+func ParseYAMLConfigString(spec string, cfg interface{}) error {
 	return ParseYAMLConfig([]byte(spec), cfg)
 }
 
 // ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig.
-func ParseYAMLConfigFile[T any](file string, cfg T) error {
+func ParseYAMLConfigFile(file string, cfg interface{}) error {
 	spec, err := os.ReadFile(file)
 	if err != nil {
 		return err
