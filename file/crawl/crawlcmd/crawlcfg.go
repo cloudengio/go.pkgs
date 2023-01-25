@@ -8,12 +8,16 @@
 package crawlcmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/content"
+	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
+	"cloudeng.io/file/download"
 	"cloudeng.io/path/cloudpath"
 )
 
@@ -96,4 +100,39 @@ func (c Config) SeedsByScheme(matchers cloudpath.MatcherSpec) (map[string][]clou
 		matches[scheme] = append(matches[scheme], match)
 	}
 	return matches, rejected
+}
+
+func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error) {
+	requests := []download.Request{}
+	for scheme, matched := range seeds {
+		container, err := factories[scheme].New(ctx, scheme)
+		if err != nil {
+			return nil, err
+		}
+		var req crawl.SimpleRequest
+		req.FS = container
+		req.Mode = 0600
+		req.Depth = 0
+		for _, match := range matched {
+			req.Filenames = append(req.Filenames, match.Matched)
+		}
+		requests = append(requests, req)
+	}
+	return requests, nil
+}
+
+// ExtractorRegistry returns a content.Registry containing for outlinks.Extractor
+// that can be used with outlinks.Extract.
+func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*content.Registry[outlinks.Extractor], error) {
+	reg := content.NewRegistry[outlinks.Extractor]()
+	for _, ctype := range c.Extractors {
+		_, _, _, err := content.ParseTypeFull(ctype)
+		if err != nil {
+			return nil, err
+		}
+		if extractor, ok := avail[ctype]; ok {
+			reg.RegisterHandlers(ctype, extractor)
+		}
+	}
+	return reg, nil
 }
