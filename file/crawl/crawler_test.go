@@ -80,7 +80,7 @@ type dlFactory struct {
 	numDownloaders int
 }
 
-func (df dlFactory) create(ctx context.Context, depth int) (
+func (df dlFactory) New(ctx context.Context, depth int) (
 	downloader download.T,
 	inputCh chan download.Request,
 	outputCh chan download.Downloaded) {
@@ -152,7 +152,7 @@ func TestCrawler(t *testing.T) {
 
 		df := &dlFactory{numDownloaders: 1}
 		go func() {
-			errCh <- crawler.Run(ctx, df.create, outlinks, inputCh, outputCh)
+			errCh <- crawler.Run(ctx, df, outlinks, inputCh, outputCh)
 			wg.Done()
 		}()
 

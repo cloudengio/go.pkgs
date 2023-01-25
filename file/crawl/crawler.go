@@ -105,7 +105,7 @@ func (cr *crawler) Run(ctx context.Context,
 func (cr *crawler) createAndRunDownloaders(ctx context.Context, factory DownloaderFactory) ([]*downloaderState, *errgroup.T) {
 	downloaders := make([]*downloaderState, cr.depth+1)
 	for i := range downloaders {
-		dl, reqs, dled := factory(ctx, i)
+		dl, reqs, dled := factory.New(ctx, i)
 		downloaders[i] = &downloaderState{
 			dl:         dl,
 			requests:   reqs,

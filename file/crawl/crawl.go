@@ -40,10 +40,12 @@ type Outlinks interface {
 // For example, lower depths would use less concurrency in the downloader
 // since there are very likely fewer files to be downloaded than at higher
 // ones (since more links will have extracted).
-type DownloaderFactory func(ctx context.Context, depth int) (
-	downloader download.T,
-	input chan download.Request,
-	output chan download.Downloaded)
+type DownloaderFactory interface {
+	New(ctx context.Context, depth int) (
+		downloader download.T,
+		input chan download.Request,
+		output chan download.Downloaded)
+}
 
 // T represents the interface to a crawler.
 type T interface {
