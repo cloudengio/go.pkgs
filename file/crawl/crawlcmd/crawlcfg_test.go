@@ -5,13 +5,17 @@
 package crawlcmd_test
 
 import (
+	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
+	"cloudeng.io/cmdutil"
+	"cloudeng.io/file"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl/crawlcmd"
+	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/path/cloudpath"
-	"gopkg.in/yaml.v3"
 )
 
 const crawlsSpec = `
@@ -20,6 +24,7 @@ const crawlsSpec = `
   seeds:
     - s3://foo/bar
     - https://yahoo.com
+    - s3://baz
 
   download:
     default_concurrency: 4 # 0 will default to all available CPUs
@@ -32,7 +37,7 @@ const crawlsSpec = `
 
 func TestCrawlConfig(t *testing.T) {
 	var crawl crawlcmd.Config
-	if err := yaml.Unmarshal([]byte(crawlsSpec), &crawl); err != nil {
+	if err := cmdutil.ParseYAMLConfigString(crawlsSpec, &crawl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -40,7 +45,7 @@ func TestCrawlConfig(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := len(crawl.Seeds), 2; got != want {
+	if got, want := len(crawl.Seeds), 3; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -65,7 +70,23 @@ func TestCrawlConfig(t *testing.T) {
 	}
 }
 
-func TestSeedSorting(t *testing.T) {
+type dummyFSFactory struct {
+	called string
+}
+
+func (d *dummyFSFactory) New(ctx context.Context, scheme string) (file.FS, error) {
+	d.called = scheme
+	return filetestutil.NewMockFS(
+		filetestutil.FSScheme(scheme),
+		filetestutil.FSWithConstantContents([]byte{'a'}, 10)), nil
+}
+
+func (d *dummyFSFactory) NewFromMatch(ctx context.Context, match cloudpath.Match) (file.FS, error) {
+	return d.New(ctx, match.Scheme)
+}
+
+func TestCrawlSeeds(t *testing.T) {
+	ctx := context.Background()
 	var crawl crawlcmd.Config
 	crawl.Seeds = []string{"https://yahoo.com", "s3://foo/bar", "s3://baz", "c:/foo/bar"}
 
@@ -91,4 +112,45 @@ func TestSeedSorting(t *testing.T) {
 	if got, want := rejected, []string{"https://yahoo.com", "c:/foo/bar"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	s3HTTP := []cloudpath.Matcher{cloudpath.AWSS3Matcher, cloudpath.URLMatcher}
+	byScheme, rejected = crawl.SeedsByScheme(s3HTTP)
+	if got, want := len(byScheme), 2; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	factories := map[string]file.FSFactory{
+		"s3":    &dummyFSFactory{},
+		"https": &dummyFSFactory{},
+	}
+
+	requests, err := crawl.CreateSeedCrawlRequests(ctx, factories, byScheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(requests), 2; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	for _, req := range requests {
+		fmt.Printf("container... %v\n", req.Container().Scheme())
+		if req.Container().Scheme() == "s3" {
+			if got, want := req.Names(), []string{"s3://foo/bar", "s3://baz"}; !reflect.DeepEqual(got, want) {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		}
+		if req.Container().Scheme() == "https" {
+			if got, want := req.Names(), []string{"https://yahoo.com"}; !reflect.DeepEqual(got, want) {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		}
+	}
+
+	if got, want := factories["s3"].(*dummyFSFactory).called, "s3"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := factories["https"].(*dummyFSFactory).called, "https"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }

@@ -105,7 +105,11 @@ func (c Config) SeedsByScheme(matchers cloudpath.MatcherSpec) (map[string][]clou
 func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error) {
 	requests := []download.Request{}
 	for scheme, matched := range seeds {
-		container, err := factories[scheme].New(ctx, scheme)
+		factory, ok := factories[scheme]
+		if !ok {
+			return nil, fmt.Errorf("no file.FSFactory for scheme: %v", scheme)
+		}
+		container, err := factory.New(ctx, scheme)
 		if err != nil {
 			return nil, err
 		}
