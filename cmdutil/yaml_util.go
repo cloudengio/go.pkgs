@@ -63,7 +63,6 @@ func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
 	var newError strings.Builder
 	for sc.Scan() {
 		errLine := sc.Text()
-		fmt.Printf("ErrLine: %q\n", errLine)
 		matches := yamlPanicErrsRE.FindStringSubmatch(errLine)
 		if len(matches) != 4 {
 			newError.WriteString(errLine)
