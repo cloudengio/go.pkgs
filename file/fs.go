@@ -76,8 +76,8 @@ type InfoOption struct {
 
 // NewInfo creates a new instance of Info.
 func NewInfo(name string, size int64, mode fs.FileMode, modTime time.Time,
-	options InfoOption) Info {
-	return Info{
+	options InfoOption) *Info {
+	return &Info{
 		name:    name,
 		size:    size,
 		mode:    mode,
@@ -91,47 +91,47 @@ func NewInfo(name string, size int64, mode fs.FileMode, modTime time.Time,
 }
 
 // Name implements fs.FileInfo.
-func (fi Info) Name() string {
+func (fi *Info) Name() string {
 	return fi.name
 }
 
 // Size implements fs.FileInfo.
-func (fi Info) Size() int64 {
+func (fi *Info) Size() int64 {
 	return fi.size
 }
 
 // Mode implements fs.FileInfo.
-func (fi Info) Mode() fs.FileMode {
+func (fi *Info) Mode() fs.FileMode {
 	return fi.mode
 }
 
 // ModTime implements fs.FileInfo.
-func (fi Info) ModTime() time.Time {
+func (fi *Info) ModTime() time.Time {
 	return fi.modTime
 }
 
 // IsDir implements fs.FileInfo.
-func (fi Info) IsDir() bool {
+func (fi *Info) IsDir() bool {
 	return fi.isDir
 }
 
 // Sys implements fs.FileInfo.
-func (fi Info) Sys() interface{} {
+func (fi *Info) Sys() interface{} {
 	return fi.sysInfo
 }
 
 // User returns the user associated with the file.
-func (fi Info) User() string {
+func (fi *Info) User() string {
 	return fi.user
 }
 
 // Group returns the group associated with the file.
-func (fi Info) Group() string {
+func (fi *Info) Group() string {
 	return fi.group
 }
 
 // IsLink returns true if the file is a symbolic link.
-func (fi Info) IsLink() bool {
+func (fi *Info) IsLink() bool {
 	return fi.isLink
 }
 

@@ -18,12 +18,7 @@ import (
 )
 
 // ParseYAMLConfig will parse the yaml config in spec into the requested
-// type. It provides improved error reporting by mixing in the actual
-// yaml input (from the spec) into the error messages.
-// Note that the errors reported for the yaml parser may be inaccurate
-// in terms of the lines the error is reported on. This seems to be particularly
-// true for lists where errors with use of tabs to indent are often reported
-// against the previous line rather than the offending one.
+// type. It provides improved error reporting via YAMLErrorWithSource.
 func ParseYAMLConfig(spec []byte, cfg interface{}) error {
 	if err := yaml.Unmarshal(spec, cfg); err != nil {
 		return YAMLErrorWithSource(spec, err)
@@ -48,6 +43,13 @@ func ParseYAMLConfigFile(file string, cfg interface{}) error {
 	return nil
 }
 
+// YAMLErrorWithSource returns an error that includes the yaml source
+// code that was the cause of the error to help with debugging YAML
+// errors.
+// Note that the errors reported for the yaml parser may be inaccurate
+// in terms of the lines the error is reported on. This seems to be particularly
+// true for lists where errors with use of tabs to indent are often reported
+// against the previous line rather than the offending one.
 func YAMLErrorWithSource(spec []byte, err error) error {
 	specLines := bytes.Split(spec, []byte{'\n'})
 	if yerr, ok := err.(*yaml.TypeError); ok {
