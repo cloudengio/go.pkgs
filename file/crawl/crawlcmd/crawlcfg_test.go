@@ -6,7 +6,6 @@ package crawlcmd_test
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -86,7 +85,6 @@ func (d *dummyFSFactory) NewFromMatch(ctx context.Context, match cloudpath.Match
 }
 
 func TestCrawlSeeds(t *testing.T) {
-	ctx := context.Background()
 	var crawl crawlcmd.Config
 	crawl.Seeds = []string{"https://yahoo.com", "s3://foo/bar", "s3://baz", "c:/foo/bar"}
 
@@ -113,9 +111,20 @@ func TestCrawlSeeds(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+}
+
+func TestCrawlRequests(t *testing.T) {
+	ctx := context.Background()
+	var crawl crawlcmd.Config
+	crawl.Seeds = []string{"https://yahoo.com", "s3://foo/bar", "s3://baz", "c:/foo/bar"}
+
 	s3HTTP := []cloudpath.Matcher{cloudpath.AWSS3Matcher, cloudpath.URLMatcher}
-	byScheme, rejected = crawl.SeedsByScheme(s3HTTP)
+	byScheme, rejected := crawl.SeedsByScheme(s3HTTP)
 	if got, want := len(byScheme), 2; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := len(rejected), 1; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -133,7 +142,6 @@ func TestCrawlSeeds(t *testing.T) {
 	}
 
 	for _, req := range requests {
-		fmt.Printf("container... %v\n", req.Container().Scheme())
 		if req.Container().Scheme() == "s3" {
 			if got, want := req.Names(), []string{"s3://foo/bar", "s3://baz"}; !reflect.DeepEqual(got, want) {
 				t.Errorf("got %v, want %v", got, want)

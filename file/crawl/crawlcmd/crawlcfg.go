@@ -135,7 +135,9 @@ func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*c
 			return nil, err
 		}
 		if extractor, ok := avail[ctype]; ok {
-			reg.RegisterHandlers(ctype, extractor)
+			if err := reg.RegisterHandlers(ctype, extractor); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return reg, nil
