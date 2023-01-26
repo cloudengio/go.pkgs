@@ -67,6 +67,10 @@ const (
 	UnixFileSystem = "unix"
 	// WindowsFileSystem is the scheme for msdos and windows filesystems.
 	WindowsFileSystem = "windows"
+	// HTTP is the scheme for http.
+	HTTP = "http"
+	// HTTPS is the scheme for https.
+	HTTPS = "https"
 )
 
 // Scheme calls DefaultMatchers.Scheme(path).
