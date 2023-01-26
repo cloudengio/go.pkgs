@@ -91,7 +91,7 @@ func testMatcherSpec(ms cloudpath.MatcherSpec, testSpecs []matcherTestSpec) erro
 		testSpecs[i] = tc
 	}
 	for i, tc := range testSpecs {
-		match := cloudpath.DefaultMatchers.Match(tc.input)
+		match := ms.Match(tc.input)
 		if len(match.Matched) == 0 {
 			errs.Append(fmt.Errorf("%v: %v: no match", i, tc.input))
 			continue
