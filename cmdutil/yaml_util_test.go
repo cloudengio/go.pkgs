@@ -21,14 +21,34 @@ func TestYAMLErrors(t *testing.T) {
 		input, errMsg string
 	}{
 		{`xxx: - err`, "yaml: block sequence entries are not allowed in this context"},
+
 		{`
 xxx: - err
 `, `yaml: line 2: "xxx: - err": block sequence entries are not allowed in this context`},
+
 		{`
 	tab: 2`, `yaml: line 2: "\ttab: 2": found character that cannot start any token`},
+
+		{`notab: 2
+	tab: 3`, `yaml: line 2: "\ttab: 3": found a tab character that violates indentation`},
+
+		{`	notab: 2`, `yaml: found character that cannot start any token`},
+
+		{`
+
+	tab: 2`, `yaml: line 3: "\ttab: 2": found character that cannot start any token`},
+
 		{`
 field:
   ts1: [1,2]`, "yaml: unmarshal errors:\n" + `  line 3: "  ts1: [1,2]": cannot unmarshal !!map into []int`},
+
+		// Note that the yaml parser does not always get the line number correct!
+		// It seems to be wrong for lists in particular.
+		{`
+list:
+  - a
+	  - b
+`, `yaml: line 3: "  - a": found a tab character that violates indentation`},
 	} {
 		err := cmdutil.ParseYAMLConfigString(tc.input, &ts)
 		if err == nil || strings.TrimSpace(err.Error()) != tc.errMsg {
