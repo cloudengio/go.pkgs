@@ -13,6 +13,7 @@ import (
 var DefaultMatchers MatcherSpec = []Matcher{
 	AWSS3Matcher,
 	GoogleCloudStorageMatcher,
+	URLMatcher,
 	WindowsMatcher,
 	UnixMatcher,
 }
