@@ -38,6 +38,7 @@ type FSOption func(o *fsOptions)
 
 type fsOptions struct {
 	rnd        *rand.Rand
+	scheme     string
 	val        []byte
 	maxSize    int
 	random     bool
@@ -85,21 +86,30 @@ func FSErrorOnly(err error) FSOption {
 	}
 }
 
+func FSScheme(s string) FSOption {
+	return func(o *fsOptions) {
+		o.scheme = s
+	}
+}
+
 // NewMockFS returns an new mock instance of file.FS as per the specified options.
 func NewMockFS(opts ...FSOption) file.FS {
 	var options fsOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
+	if len(options.scheme) == 0 {
+		options.scheme = "file"
+	}
 	if options.random {
-		return &randFS{fsOptions: options, contents: map[string][]byte{}}
+		return &randFS{localfs: localfs{scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.constant {
-		return &constantFS{fsOptions: options, contents: map[string][]byte{}}
+		return &constantFS{localfs: localfs{scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.numRetries > 0 {
 		return &randAfteRetryFS{
-			randFS:  randFS{fsOptions: options, contents: map[string][]byte{}},
+			randFS:  randFS{localfs: localfs{scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}},
 			retries: map[string]int{},
 		}
 	}
@@ -109,10 +119,10 @@ func NewMockFS(opts ...FSOption) file.FS {
 	return nil
 }
 
-type localfs struct{}
+type localfs struct{ scheme string }
 
 func (mfs *localfs) Scheme() string {
-	return "file"
+	return mfs.scheme
 }
 
 type randFS struct {
