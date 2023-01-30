@@ -60,7 +60,7 @@ func TestEncodeDecode(t *testing.T) {
 	for _, fn := range []roundTripper{
 		jsonRoundTrip, gobRoundTrip,
 	} {
-		nfi := fn(t, &fi)
+		nfi := fn(t, fi)
 		if got, want := nfi.Name(), "ab"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}

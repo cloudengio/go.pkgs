@@ -13,47 +13,29 @@ import (
 // processing content types and for converting between content types.
 type Registry[T any] struct {
 	mu         sync.Mutex
-	converters map[string]map[string][]T
+	converters map[Type]map[Type]T
 	handlers   map[Type][]T
 }
 
 // NewRegistry returns a new instance of Registry.
 func NewRegistry[T any]() *Registry[T] {
 	return &Registry[T]{
-		converters: make(map[string]map[string][]T),
+		converters: make(map[Type]map[Type]T),
 		handlers:   make(map[Type][]T),
 	}
-}
-
-func fromTo(from, to Type) (string, string, error) {
-	ft, err := ParseType(from)
-	if err != nil {
-		return "", "", err
-	}
-	tt, err := ParseType(to)
-	if err != nil {
-		return "", "", err
-	}
-	return string(Clean(Type(ft))), string(Clean(Type(tt))), nil
 }
 
 // LookupConverters returns the converters registered for converting the 'from'
 // content type to the 'to' content type. The returned handlers are in the same
 // order as that registered via RegisterConverter.
-func (c *Registry[T]) LookupConverters(from, to Type) ([]T, error) {
-	ft, err := ParseType(from)
-	if err != nil {
-		return nil, err
-	}
-	tt, err := ParseType(to)
-	if err != nil {
-		return nil, err
-	}
+func (c *Registry[T]) LookupConverters(from, to Type) (T, error) {
+	from, to = Clean(from), Clean(to)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	handler, ok := c.converters[ft][tt]
+	handler, ok := c.converters[from][to]
 	if !ok {
-		return nil, fmt.Errorf("no handler for %v to %v", from, to)
+		var t T
+		return t, fmt.Errorf("no converter for %v to %v", from, to)
 	}
 	return handler, nil
 }
@@ -61,25 +43,23 @@ func (c *Registry[T]) LookupConverters(from, to Type) ([]T, error) {
 // RegisterConverters registers a lust of handlers for converting from one
 // content type to another. The caller of LookupConverter must decide which
 // converter to use.
-func (c *Registry[T]) RegisterConverters(from, to Type, converters ...T) error {
-	ft, tt, err := fromTo(from, to)
-	if err != nil {
-		return err
-	}
+func (c *Registry[T]) RegisterConverters(from, to Type, converter T) error {
+	from, to = Clean(from), Clean(to)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.converters[ft] == nil {
-		c.converters[ft] = make(map[string][]T)
+	if c.converters[from] == nil {
+		c.converters[from] = make(map[Type]T)
 	}
-	if _, ok := c.converters[ft][tt]; ok {
+	if _, ok := c.converters[from][to]; ok {
 		return fmt.Errorf("converter already registered for %v to %v", from, to)
 	}
-	c.converters[ft][tt] = converters
+	c.converters[from][to] = converter
 	return nil
 }
 
 // LookupHandlers returns the list handler registered for the given content type.
 func (c *Registry[T]) LookupHandlers(ctype Type) ([]T, error) {
+	ctype = Clean(ctype)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	handlers, ok := c.handlers[Clean(ctype)]
@@ -92,6 +72,7 @@ func (c *Registry[T]) LookupHandlers(ctype Type) ([]T, error) {
 // RegisterHandlers registers a handler for a given content type. The caller of
 // LookupHandlers must decide which converter to use.
 func (c *Registry[T]) RegisterHandlers(ctype Type, handlers ...T) error {
+	ctype = Clean(ctype)
 	_, _, _, err := ParseTypeFull(ctype)
 	if err != nil {
 		return err

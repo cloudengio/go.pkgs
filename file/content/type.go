@@ -42,8 +42,7 @@ func ParseTypeFull(ctype Type) (typ, par, value string, err error) {
 	if strings.ContainsRune(value, '=') {
 		return "", "", "", fmt.Errorf("invalid parameter value: %v", ctype)
 	}
-	par = strings.TrimSpace(par)
-	value = strings.TrimSpace(value)
+	par = strings.TrimLeft(par, " ")
 	return
 }
 
@@ -53,7 +52,7 @@ func ParseType(ctype Type) (string, error) {
 	if strings.Count(typ, ";") >= 1 {
 		return "", fmt.Errorf("invalid content type: %v", ctype)
 	}
-	return strings.TrimSpace(typ), nil
+	return clean(typ), nil
 }
 
 // TypeForPath returns the Type for the given path. The Type is determined by
@@ -64,7 +63,20 @@ func TypeForPath(path string) Type {
 	return Type(mime.TypeByExtension(ext))
 }
 
-// Clean removes any spaces from the content Type.
+func clean(ctype string) string {
+	return strings.ReplaceAll(ctype, " ", "")
+}
+
+// Clean removes any spaces around the ; separator if present.
+// That is, "text/plain ; charset=utf-8" becomes "text/plain;charset=utf-8".
 func Clean(ctype Type) Type {
-	return Type(strings.ReplaceAll(string(ctype), " ", ""))
+	c := string(ctype)
+	idx := strings.IndexRune(c, ';')
+	if idx < 0 {
+		return ctype
+	}
+	prefix, suffix := c[:idx], c[idx+1:]
+	prefix = strings.TrimRight(prefix, " \t")
+	suffix = strings.TrimLeft(suffix, " \t")
+	return Type(prefix + ";" + suffix)
 }

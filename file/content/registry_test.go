@@ -20,38 +20,40 @@ func TestRegistryConverter(t *testing.T) {
 	reg := content.NewRegistry[*handlerType]()
 	var err error
 
-	register := func(from, to string, handlers []*handlerType) {
-		if err = reg.RegisterConverters(content.Type(from), content.Type(to), handlers...); err != nil {
+	register := func(from, to string, handler *handlerType) {
+		if err = reg.RegisterConverters(content.Type(from), content.Type(to), handler); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	lookup := func(from, to string, handlers []*handlerType) {
+	lookup := func(from, to string, handler *handlerType) {
 		got, err := reg.LookupConverters(content.Type(from), content.Type(to))
 		if err != nil {
 			t.Error(err)
+			return
 		}
-		if want := handlers; !reflect.DeepEqual(got, want) {
+		if want := handler; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		if got, want := got[0].name, handlers[0].name; got != want {
+		if got, want := got.name, handler.name; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
-	handler := []*handlerType{{name: "my/type"}}
+	handler := &handlerType{name: "my/type"}
 	register("text/html", "text/plain", handler)
+	register("text/html;charset=utf-8", "text/plain", handler)
 	lookup("text/html", "text/plain", handler)
 	lookup("text/html;charset=utf-8", "text/plain", handler)
+	lookup("text/html ;charset=utf-8", "text/plain", handler)
 	lookup("text/html; charset=utf-8", "text/plain", handler)
 	lookup("text/html ; charset=utf-8", "text/plain", handler)
-	lookup("text/html", "text/plain;charset=utf-8", handler)
 
 	_, err = reg.LookupConverters("text/html", "text/plainx")
-	if err == nil || !strings.Contains(err.Error(), "no handler for") {
+	if err == nil || !strings.Contains(err.Error(), "no converter for") {
 		t.Fatal(err)
 	}
-	err = reg.RegisterConverters("text/html", "text/plain", handler...)
+	err = reg.RegisterConverters("text/html", "text/plain", handler)
 	if err == nil || !strings.Contains(err.Error(), "already registered") {
 		t.Fatal(err)
 	}
