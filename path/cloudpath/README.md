@@ -32,7 +32,7 @@ All of the metadata for a path is represented using the Match type.
 For manipulation, the path is converted to a cloudpath.T.
 
 ## Constants
-### AWSS3, GoogleCloudStorage, UnixFileSystem, WindowsFileSystem
+### AWSS3, GoogleCloudStorage, UnixFileSystem, WindowsFileSystem, HTTP, HTTPS
 ```go
 // AWSS3 is the scheme for Amazon Web Service's S3 object store.
 AWSS3 = "s3"
@@ -42,6 +42,10 @@ GoogleCloudStorage = "GoogleCloudStorage"
 UnixFileSystem = "unix"
 // WindowsFileSystem is the scheme for msdos and windows filesystems.
 WindowsFileSystem = "windows"
+// HTTP is the scheme for http.
+HTTP = "http"
+// HTTPS is the scheme for https.
+HTTPS = "https"
 
 ```
 
@@ -153,6 +157,12 @@ names. It returns GoogleCloudStorage for its scheme result.
 
 
 ```go
+func URLMatcher(p string) Match
+```
+URLMatcher implements Matcher for http and https paths.
+
+
+```go
 func UnixMatcher(p string) Match
 ```
 UnixMatcher implements Matcher for unix filenames. It returns UnixFileSystem
@@ -193,6 +203,7 @@ since the latter can accept filenames in Windows format.
 DefaultMatchers MatcherSpec = []Matcher{
 	AWSS3Matcher,
 	GoogleCloudStorageMatcher,
+	URLMatcher,
 	WindowsMatcher,
 	UnixMatcher,
 }

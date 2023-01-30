@@ -7,6 +7,8 @@ import cloudeng.io/aws/s3fs
 
 Package s3fs implements fs.FS for AWS S3.
 
+Package s3fs implements fs.FS for AWS S3.
+
 ## Functions
 ### Func New
 ```go
@@ -24,6 +26,29 @@ type Client interface {
 }
 ```
 Client represents the set of AWS S3 client methods used by s3fs.
+
+
+### Type Factory
+```go
+type Factory struct {
+	Config awsconfig.AWSFlags
+}
+```
+Factory implements file.FSFactory for AWS S3.
+
+### Methods
+
+```go
+func (d Factory) New(ctx context.Context, scheme string) (file.FS, error)
+```
+New implements file.FSFactory.
+
+
+```go
+func (d Factory) NewFromMatch(ctx context.Context, match cloudpath.Match) (file.FS, error)
+```
+
+
 
 
 ### Type Option

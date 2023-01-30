@@ -1,5 +1,7 @@
 cloudeng.io/algo v0.0.0-20221118174443-5eef698118a6 h1:fteWNX17heah4VT1nyD4Iyw6wWcK63qmsjkLM31+XUE=
 cloudeng.io/algo v0.0.0-20221118174443-5eef698118a6/go.mod h1:dgJhQ6JXLysnBQG09/5Q56rwJfgyKXlnDbKzko9MhdA=
+cloudeng.io/cmdutil v0.0.0-20230130231933-fe585c604aed h1:By11TLHfpvusmx/ODtBDdhZYVJa10R4+zIDk+IV6wyw=
+cloudeng.io/cmdutil v0.0.0-20230130231933-fe585c604aed/go.mod h1:nX3v2San8WLgYYmtom/+1GxmfKh3wWSyvnLvoxUz784=
 cloudeng.io/debug v0.0.0-20230105021008-948d22470af5 h1:zsKXQfoCtN7whSQIdpArUNxKTtQG3+vpd1XJ8qzcWBA=
 cloudeng.io/debug v0.0.0-20230105021008-948d22470af5/go.mod h1:UDKUtuaCh0+iaDe5+i70G3l3liexOPeU3h0lyUeAt+o=
 cloudeng.io/errors v0.0.7/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
@@ -44,3 +46,7 @@ golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8T
 golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 h1:go1bK/D/BFZV2I8cIQd1NKEZ+0owSTG1fDTci4IqFcE=
 golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
