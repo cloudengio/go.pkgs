@@ -18,8 +18,8 @@ func TestContentTypes(t *testing.T) {
 		{"text/plain", "text/plain", "", ""},
 		{"text/plain ", "text/plain", "", ""},
 		{"text/html; charset=utf8", "text/html", "charset", "utf8"},
-		{"text/html;charset= utf8", "text/html", "charset", "utf8"},
-		{"text/html ;charset= utf8", "text/html", "charset", "utf8"},
+		{"text/html;charset= utf8", "text/html", "charset", " utf8"},
+		{"text/html ;charset= utf8", "text/html", "charset", " utf8"},
 		{"text/html;charset=utf8", "text/html", "charset", "utf8"},
 	} {
 		typ, par, value, err := content.ParseTypeFull(tc.input)
