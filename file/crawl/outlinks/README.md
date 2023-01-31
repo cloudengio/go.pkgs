@@ -9,7 +9,7 @@ import cloudeng.io/file/crawl/outlinks
 ## Functions
 ### Func NewExtractors
 ```go
-func NewExtractors(errCh chan<- Errors, processor Process, extractors ...Extractor) crawl.Outlinks
+func NewExtractors(errCh chan<- Errors, processor Process, extractors *content.Registry[Extractor]) crawl.Outlinks
 ```
 NewExtractors creates a crawl.Outlinks.Extractor given instances of the
 lower level Extractor interface. The extractors that match the downloaded
@@ -52,8 +52,8 @@ type Errors struct {
 ### Type Extractor
 ```go
 type Extractor interface {
-	// MimeType returns the mime type that this extractor is capable of handling.
-	MimeType() string
+	// ContentType returns the mime type that this extractor is capable of handling.
+	ContentType() content.Type
 	// Outlinks extracts outlinks from the specified downloaded file. This
 	// is generally specific to the mime type of the content being processed.
 	Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error)
@@ -89,6 +89,11 @@ func NewHTML() *HTML
 ### Methods
 
 ```go
+func (ho *HTML) ContentType() content.Type
+```
+
+
+```go
 func (ho *HTML) HREFs(base string, rd io.Reader) ([]string, error)
 ```
 HREFs returns the hrefs found in the provided HTML document.
@@ -99,11 +104,6 @@ func (ho *HTML) IsDup(link string) bool
 ```
 IsDup returns true if link has been seen before (ie. has been used as an
 argument to IsDup).
-
-
-```go
-func (ho *HTML) MimeType() string
-```
 
 
 ```go

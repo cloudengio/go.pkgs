@@ -66,6 +66,36 @@ func ListRegular(dir string) ([]string, error)
 ListRegular returns the lexicographically ordered regular files that lie
 beneath dir.
 
+### Func ParseYAMLConfig
+```go
+func ParseYAMLConfig(spec []byte, cfg interface{}) error
+```
+ParseYAMLConfig will parse the yaml config in spec into the requested type.
+It provides improved error reporting via YAMLErrorWithSource.
+
+### Func ParseYAMLConfigFile
+```go
+func ParseYAMLConfigFile(file string, cfg interface{}) error
+```
+ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig.
+
+### Func ParseYAMLConfigString
+```go
+func ParseYAMLConfigString(spec string, cfg interface{}) error
+```
+ParseYAMLConfigString is like ParseYAMLConfig but for a string.
+
+### Func YAMLErrorWithSource
+```go
+func YAMLErrorWithSource(spec []byte, err error) error
+```
+YAMLErrorWithSource returns an error that includes the yaml source code that
+was the cause of the error to help with debugging YAML errors. Note that the
+errors reported for the yaml parser may be inaccurate in terms of the lines
+the error is reported on. This seems to be particularly true for lists where
+errors with use of tabs to indent are often reported against the previous
+line rather than the offending one.
+
 
 
 

@@ -67,6 +67,11 @@ FSErrorOnly requests a mock FS that always returns err.
 
 
 ```go
+func FSScheme(s string) FSOption
+```
+
+
+```go
 func FSWithConstantContents(val []byte, repeat int) FSOption
 ```
 FSWithConstantContents requests a mock FS that will return files of a random

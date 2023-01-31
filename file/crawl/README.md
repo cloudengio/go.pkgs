@@ -28,10 +28,12 @@ crawl request.
 
 ### Type DownloaderFactory
 ```go
-type DownloaderFactory func(ctx context.Context, depth int) (
-	downloader download.T,
-	input chan download.Request,
-	output chan download.Downloaded)
+type DownloaderFactory interface {
+	New(ctx context.Context, depth int) (
+		downloader download.T,
+		input chan download.Request,
+		output chan download.Downloaded)
+}
 ```
 DownloaderFactory is used to create a new downloader for each 'depth' in
 a multilevel crawl. The depth argument can be used to create different
