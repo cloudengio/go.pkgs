@@ -1,4 +1,4 @@
-name: linux
+name: linux-test-lint-vuln
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
     strategy:
       matrix:
         go-version: [1.18.x, 1.19.x]
@@ -32,5 +32,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: install citools
+        run: |
+          go install github.com/cloudengio/citools/mulitmod@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin 
+          golangci-lint --version
+
       - name: Test
-        run: go run .circleci/runner.go --prep --test
+        run: multimod --config=.multmod.yml --test
+
+      - name: Lint
+        run: multimod --config=.multmod.yml --lint
+
+      - name: Vulnerability
+        run: multimod --config=.multmod.yml --lint
