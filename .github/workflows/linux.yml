@@ -1,4 +1,4 @@
-name: linux-test-lint-vuln
+name: linux
 
 on:
   push:
