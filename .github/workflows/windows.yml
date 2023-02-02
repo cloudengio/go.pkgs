@@ -37,5 +37,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Install tools
+        run: |
+          go install cloudeng.io/citools/multimod@latest
+
       - name: Test
-        run: go run .circleci/runner.go --prep --test
+        run: multimod --config=.multimod.yml --test
