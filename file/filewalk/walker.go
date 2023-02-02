@@ -234,14 +234,14 @@ type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) 
 // are provided.
 func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn ContentsFunc, roots ...string) error {
 	rootCtx := ctx
-	listers, ctx := errgroup.WithContext(rootCtx)
+	listers, _ := errgroup.WithContext(rootCtx)
 	if w.opts.concurrency <= 0 {
 		w.opts.concurrency = runtime.GOMAXPROCS(-1)
 	}
 
 	listers = errgroup.WithConcurrency(listers, w.opts.concurrency)
 
-	walkers, ctx := errgroup.WithContext(rootCtx)
+	walkers, _ := errgroup.WithContext(rootCtx)
 	walkers = errgroup.WithConcurrency(walkers, w.opts.concurrency)
 
 	w.prefixFn = prefixFn

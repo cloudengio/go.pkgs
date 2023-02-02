@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
     strategy:
       matrix:
         go-version: [1.19.x]
@@ -37,5 +37,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Install tools
+        run: |
+          go install cloudeng.io/citools/multimod@latest
+
       - name: Test
-        run: go run .circleci/runner.go --prep --test
+        run: multimod --config=.multimod.yml --test
