@@ -24,7 +24,7 @@ func TestHTTPFS(t *testing.T) {
 	defer srv.Close()
 
 	client := http.DefaultClient
-	hfs := httpfs.New(client)
+	hfs := httpfs.New(client, httpfs.WithHTTPScheme())
 
 	fetch := func(name string) string {
 		f, err := hfs.Open(srv.URL + name)
