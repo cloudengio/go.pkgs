@@ -6,6 +6,7 @@ package httpfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -57,6 +58,9 @@ func (fs *httpfs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	req, err := http.NewRequest("GET", name, nil)
 	if err != nil {
 		return nil, err
+	}
+	if req.URL.Scheme != fs.scheme {
+		return nil, fmt.Errorf("unsupported scheme: %v", req.URL.Scheme)
 	}
 	req = req.WithContext(ctx)
 	resp, err := fs.client.Do(req)

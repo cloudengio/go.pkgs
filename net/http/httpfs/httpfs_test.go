@@ -57,3 +57,27 @@ func TestHTTPFS(t *testing.T) {
 		t.Fatalf("expected a 404 error, but got %v\n", err)
 	}
 }
+
+func TestScheme(t *testing.T) {
+	client := http.DefaultClient
+	hfs := httpfs.New(client)
+	if got, want := hfs.Scheme(), "https"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	_, err := hfs.Open("http://foo")
+	if err == nil || err.Error() != "unsupported scheme: http" {
+		t.Fatal(err)
+	}
+
+	hfs = httpfs.New(client, httpfs.WithHTTPScheme())
+	if got, want := hfs.Scheme(), "http"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	_, err = hfs.Open("https://foo")
+	if err == nil || err.Error() != "unsupported scheme: https" {
+		t.Fatal(err)
+	}
+
+}
