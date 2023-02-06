@@ -14,7 +14,7 @@ import (
 	"cloudeng.io/debug/goroutines/pproftrace"
 )
 
-var spawned = make(chan struct{})
+var spawned chan struct{}
 
 func runner(ctx context.Context, ch, dch chan struct{}) {
 	go func() {
@@ -74,8 +74,10 @@ func testRunAndFormat(t *testing.T) error {
 }
 
 func TestRunAndFormat(t *testing.T) {
+	spawned = make(chan struct{})
 	err := testRunAndFormat(t)
 	if err != nil {
+		spawned = make(chan struct{})
 		if err := testRunAndFormat(t); err != nil {
 			t.Error(err)
 		}
