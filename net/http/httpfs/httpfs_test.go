@@ -39,7 +39,7 @@ func TestHTTPFS(t *testing.T) {
 	}
 
 	buf := fetch("/testdata/a.html")
-	if got, want := string(buf), `<html>
+	if got, want := buf, `<html>
 <title>A</title>
 </html>
 `; got != want {
@@ -47,7 +47,7 @@ func TestHTTPFS(t *testing.T) {
 	}
 
 	buf = fetch("/testdata/b")
-	if got, want := string(buf), `just a file
+	if got, want := buf, `just a file
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
