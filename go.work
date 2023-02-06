@@ -8,6 +8,7 @@ use (
 	./errors
 	./file
 	./io
+	./net
 	./os
 	./path
 	./sync

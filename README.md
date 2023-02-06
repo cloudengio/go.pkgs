@@ -1,7 +1,7 @@
 ![linux](https://github.com/cloudengio/go.pkgs/actions/workflows/linux.yml/badge.svg)
 ![macos](https://github.com/cloudengio/go.pkgs/actions/workflows/macos.yml/badge.svg)
 ![windows](https://github.com/cloudengio/go.pkgs/actions/workflows/windows.yml/badge.svg)
-![lint-govuln](https://github.com/cloudengio/go.pkgs/actions/workflows/lint-govuln.yml/badge.svg)![CodeQL](https://github.com/cloudengio/go.pkgs/actions/workflows/codeql.yml/badge.svg)
+![CodeQL](https://github.com/cloudengio/go.pkgs/actions/workflows/codeql.yml/badge.svg)
 
 # go.pkgs contains a set of broadly useful go packages.
 
@@ -15,6 +15,7 @@ versioned independently.
 - [errors](errors/README.md): support for working with go errors post go 1.13.
 - [file](file/README.md): support for working with files and filesystems, including cloud storage systems.
 - io: I/O related packages.
+- net: network/http related packages.
 - [os](os/README.md): os related and/or specific packages.
 - [path](path/README.md): support for working with paths and filenames, including cloud storage systems.
 - [sync](sync/README.md): easy to use patterns for working with goroutines and concurrency.
