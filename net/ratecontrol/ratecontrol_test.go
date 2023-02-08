@@ -44,9 +44,12 @@ func TestRequestRate(t *testing.T) {
 			t.Fatal(err)
 		}
 		since := time.Since(now)
-		lower, upper := 6*time.Millisecond, 14*time.Millisecond
+		// tighter lower bound than upper bound since the former
+		// will be due to clock granularity issues and the latter to
+		// a slow machine which is common on CI systems.
+		lower, upper := 7*time.Millisecond, 20*time.Millisecond
 		if got := since; got < lower || got > upper {
-			t.Errorf("wait returned too quickly: %v not in range %v..%v", got, lower, upper)
+			t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 		}
 	}
 	if got, want := clk.Called, 1; got != want {
