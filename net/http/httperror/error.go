@@ -10,7 +10,7 @@ import (
 	"net/http"
 )
 
-// T represents an error encountered in making an HTTP request of some
+// T represents an error encountered while making an HTTP request of some
 // form. The error may be the result of a failed local operation (in which
 // case Err will be non-nil), or an error returned by the remote server (in
 // which case Err will be nil but StatusCode will something other than
