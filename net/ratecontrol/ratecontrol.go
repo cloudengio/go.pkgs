@@ -75,7 +75,6 @@ func (c *Controller) Received(nBytes int) {
 	}
 	c.curTick = ctick
 	c.curBytesPerTick = 0
-	return
 }
 
 // Wait returns when a request can be made. Rate limiting of requests
