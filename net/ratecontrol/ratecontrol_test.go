@@ -38,19 +38,20 @@ func TestRequestRate(t *testing.T) {
 	clk := &ratecontrol.TestClock{TickValue: 10 * time.Millisecond}
 	c := ratecontrol.New(ratecontrol.WithClock(clk),
 		ratecontrol.WithRequestsPerTick(1))
+	now := time.Now()
 	for i := 0; i < 10; i++ {
-		now := time.Now()
+		time.Sleep(time.Millisecond * 9)
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		since := time.Since(now)
-		// tighter lower bound than upper bound since the former
-		// will be due to clock granularity issues and the latter to
-		// a slow machine which is common on CI systems.
-		lower, upper := 7*time.Millisecond, 20*time.Millisecond
-		if got := since; got < lower || got > upper {
-			t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
-		}
+	}
+	since := time.Since(now)
+	// tighter lower bound than upper bound since the former
+	// will be due to clock granularity issues and the latter to
+	// a slow machine which is common on CI systems.
+	lower, upper := 90*time.Millisecond, 150*time.Millisecond
+	if got := since; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
 	if got, want := clk.Called, 1; got != want {
 		t.Errorf("got %v, want %v", got, want)
