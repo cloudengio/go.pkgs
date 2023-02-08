@@ -35,7 +35,7 @@ func TestNoop(t *testing.T) {
 
 func TestRequestRate(t *testing.T) {
 	ctx := context.Background()
-	clk := &ratecontrol.TestClock{TickValue: 10 * time.Millisecond}
+	clk := &ratecontrol.TestClock{TickDurationValue: 10 * time.Millisecond}
 	c := ratecontrol.New(ratecontrol.WithClock(clk),
 		ratecontrol.WithRequestsPerTick(1))
 	now := time.Now()
@@ -60,7 +60,7 @@ func TestRequestRate(t *testing.T) {
 
 func TestDataRate(t *testing.T) {
 	ctx := context.Background()
-	clk := &ratecontrol.TestClock{AfterValue: time.Millisecond, TickValue: 10 * time.Millisecond}
+	clk := &ratecontrol.TestClock{AfterValue: time.Millisecond, TickDurationValue: 10 * time.Millisecond}
 	c := ratecontrol.New(ratecontrol.WithClock(clk),
 		ratecontrol.WithBytesPerTick(10))
 	for i := 0; i < 10; i++ {
@@ -106,7 +106,7 @@ func TestBackoff(t *testing.T) {
 func TestCancel(t *testing.T) {
 	rootCtx := context.Background()
 	ctx, cancel := context.WithCancel(rootCtx)
-	clk := &ratecontrol.TestClock{AfterValue: time.Hour, TickValue: time.Hour}
+	clk := &ratecontrol.TestClock{AfterValue: time.Hour, TickDurationValue: time.Hour}
 	c := ratecontrol.New(ratecontrol.WithClock(clk),
 		ratecontrol.WithBackoffParameters(time.Hour, 10),
 		ratecontrol.WithBytesPerTick(10),

@@ -9,10 +9,10 @@ package ratecontrol
 import "time"
 
 type TestClock struct {
-	TickValue      time.Duration
-	AfterValue     time.Duration
-	Called         int
-	AfterDurations []time.Duration
+	TickDurationValue time.Duration
+	AfterValue        time.Duration
+	Called            int
+	AfterDurations    []time.Duration
 }
 
 func (c *TestClock) Tick() int {
@@ -22,7 +22,7 @@ func (c *TestClock) Tick() int {
 
 func (c *TestClock) TickDuration() time.Duration {
 	c.Called++
-	return c.TickValue
+	return c.TickDurationValue
 }
 
 func (c *TestClock) after(d time.Duration) <-chan time.Time {
