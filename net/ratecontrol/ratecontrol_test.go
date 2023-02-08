@@ -43,9 +43,10 @@ func TestRequestRate(t *testing.T) {
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		since := time.Since(now) + (time.Millisecond * 2)
-		if got, want := since > 10*time.Millisecond, true; got != want {
-			t.Errorf("%v: got %v, want %v", since, got, want)
+		since := time.Since(now)
+		lower, upper := 6*time.Millisecond, 14*time.Millisecond
+		if got := since; got < lower || got > upper {
+			t.Errorf("wait returned too quickly: %v not in range %v..%v", got, lower, upper)
 		}
 	}
 	if got, want := clk.Called, 1; got != want {
@@ -62,7 +63,7 @@ func TestDataRate(t *testing.T) {
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		c.Received(100)
+		c.BytesTransferred(100)
 		if got, want := len(clk.AfterDurations), i; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
@@ -127,7 +128,7 @@ func TestCancel(t *testing.T) {
 	c = ratecontrol.New(ratecontrol.WithClock(clk),
 		ratecontrol.WithBytesPerTick(10))
 	ctx, cancel = context.WithCancel(rootCtx)
-	c.Received(1000)
+	c.BytesTransferred(1000)
 	go cancel()
 
 	err = c.Wait(ctx)

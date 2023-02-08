@@ -3,12 +3,17 @@
 // license that can be found in the LICENSE file.
 
 // Package ratecontrol provides mechanisms for controlling the rate
-// at which requests are made.
+// at which requests are made and for backing off when the remote
+// service is unwilling to process requests.
 package ratecontrol
 
 import "time"
 
-// Clock represents a clock used for rate limiting.
+// Clock represents a clock used for rate limiting. It determines the current
+// time in 'ticks' and the wall-clock duration of a tick. This allows for
+// rates to be specified in terms of requests per tick or bytes per tick rather
+// than over a fixed duration. A default Clock implementation is provided
+// which uses time.Minute as the tick duration.
 type Clock interface {
 	Tick() int
 	TickDuration() time.Duration
@@ -29,7 +34,7 @@ func (c clock) TickDuration() time.Duration {
 	return time.Minute
 }
 
-// after returns a channel as per timer.After.
+// after returns a channel as per timer.After, it is used for testing.
 func (c clock) after(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }
@@ -37,25 +42,25 @@ func (c clock) after(d time.Duration) <-chan time.Time {
 // Option represents an option for configuring a ratecontrol Controller.
 type Option func(c *options)
 
-// WithRequestsPerTick sets the rate for download requests in requests
-// per tick, where tick is the smallest unit of time reported by the
-// Clock implementation in use. The default clock uses time.Now().Minute()
-// as the interval for rate limiting and hence the rate is in requests per
-// minute.
+// WithRequestsPerTick sets the rate for requests in requests per tick,
+// where tick is the unit of time reported by the Clock implementation in use.
+// The default clock uses time.Now().Minute() as the interval for rate limiting
+// and hence the rate is in requests per minute.
 func WithRequestsPerTick(rpt int) Option {
 	return func(o *options) {
 		o.reqsPerTick = rpt
 	}
 }
 
-// WithBytesPerTick sets the approximate rate for downloads in bytes per tick,
-// where tick is the smallest unit of time reported by the Clock implementation
+// WithBytesPerTick sets the approximate rate in bytes per tick, where
+// tick is the unit of time reported by the Clock implementation
 // in use. The default clock uses time.Now().Minute() and hence the rate
-// is in bytes per minute. The aglorithm used is very simply and will
-// wait for one tick if the limit is reached without taking into account
+// is in bytes per minute. The algorithm used is very simple and will
+// wait for a single tick if the limit is reached without taking into account
 // how long the tick is, nor how much excess data was sent over the
 // previous tick (ie. no attempt is made to smooth out the rate and for now
-// it's a simple start/stop model).
+// it's a simple start/stop model). The bytes to be accounted for are
+// reported to the Controller via its BytesTransferred method.
 func WithBytesPerTick(bpt int) Option {
 	return func(o *options) {
 		o.bytesPerTick = bpt
@@ -66,7 +71,7 @@ func WithBytesPerTick(bpt int) Option {
 // is triggered when the download fails in a way that is retryable. The
 // container (fs.FS) implementation must return an error that returns
 // true for errors.Is(err, retryErr). First defines the first backoff delay,
-// which is then doubled for every consecutive matching error until the
+// which is then doubled for every consecutive retry until the
 // download either succeeds or the specified number of steps (attempted
 // downloads) is exceeded (the download is then deemed to have failed).
 func WithBackoffParameters(first time.Duration, steps int) Option {

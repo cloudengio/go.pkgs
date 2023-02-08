@@ -12,8 +12,8 @@ import (
 )
 
 // Controller is used to control the rate at which requests are made and
-// to implement backoff when the remote server responds with a retriable
-// error.
+// to implement backoff when the remote server is unwilling to process a
+// request.
 type Controller struct {
 	opts             options
 	ticker           *time.Ticker
@@ -62,9 +62,10 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 	return nil
 }
 
-// Received notifies the controller that the specified number of bytes
-// have been received.
-func (c *Controller) Received(nBytes int) {
+// BytesTransferred notifies the controller that the specified number of bytes
+// have been transferred and is used when byte based rate control is configured
+// via WithBytesPerTick.
+func (c *Controller) BytesTransferred(nBytes int) {
 	if c.opts.bytesPerTick == 0 {
 		return
 	}
@@ -103,9 +104,9 @@ func (c *Controller) Retries() int {
 	return c.retries
 }
 
-// Backoff implements the backoff algorithm and will wait the appropriate
-// amount of time before a retry is appropriate. It will return true
-// when no more retries should be attempted.
+// Backoff implements an exponential backoff algorithm and will wait the
+// appropriate amount of time before a retry is appropriate. It will return
+// true when no more retries should be attempted (error is nil in this case).
 func (c *Controller) Backoff(ctx context.Context) (bool, error) {
 	if c.retries >= c.opts.backoffSteps {
 		return true, nil
