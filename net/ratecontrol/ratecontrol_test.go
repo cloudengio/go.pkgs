@@ -17,14 +17,15 @@ func TestNoop(t *testing.T) {
 	clk := &ratecontrol.TestClock{}
 	c := ratecontrol.New(ratecontrol.WithClock(clk))
 	for i := 0; i < 100; i++ {
+		backoff := c.Backoff()
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		done, err := c.Backoff(ctx)
+		done, err := backoff.Backoff(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got, want := done, true; got != want {
+		if got, want := done, false; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
@@ -75,14 +76,14 @@ func TestDataRate(t *testing.T) {
 }
 
 func backoff(ctx context.Context, t *testing.T, c *ratecontrol.Controller) int {
-	c.InitBackoff()
+	backoff := c.Backoff()
 	for {
-		done, err := c.Backoff(ctx)
+		done, err := backoff.Backoff(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if done {
-			return c.Retries()
+			return backoff.Retries()
 		}
 	}
 }
@@ -93,7 +94,7 @@ func TestBackoff(t *testing.T) {
 	clk := &ratecontrol.TestClock{AfterValue: time.Nanosecond}
 	numRetries := 10
 	c := ratecontrol.New(ratecontrol.WithClock(clk),
-		ratecontrol.WithBackoffParameters(time.Millisecond, numRetries),
+		ratecontrol.WithExponentialBackof(time.Millisecond, numRetries),
 	)
 	for i := 0; i < 3; i++ {
 		retries := backoff(ctx, t, c)
@@ -108,7 +109,7 @@ func TestCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(rootCtx)
 	clk := &ratecontrol.TestClock{AfterValue: time.Hour, TickDurationValue: time.Hour}
 	c := ratecontrol.New(ratecontrol.WithClock(clk),
-		ratecontrol.WithBackoffParameters(time.Hour, 10),
+		ratecontrol.WithExponentialBackof(time.Hour, 10),
 		ratecontrol.WithBytesPerTick(10),
 		ratecontrol.WithRequestsPerTick(1),
 	)
@@ -120,7 +121,7 @@ func TestCancel(t *testing.T) {
 
 	ctx, cancel = context.WithCancel(rootCtx)
 	go cancel()
-	last, err := c.Backoff(ctx)
+	last, err := c.Backoff().Backoff(ctx)
 
 	if got, want := last, true; got != want {
 		t.Errorf("got %v, want %v", got, want)
