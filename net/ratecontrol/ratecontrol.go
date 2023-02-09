@@ -110,45 +110,5 @@ func (c *Controller) Backoff() Backoff {
 	if c.opts.backoffStart == 0 {
 		return noBackoff{}
 	}
-	return NewExpontentialBackoff(c.opts.backoffStart, c.opts.backoffSteps)
+	return NewExpontentialBackoff(c.opts.clock, c.opts.backoffStart, c.opts.backoffSteps)
 }
-
-/*
-// InitBackoff resets the backoff state ready for a new request.
-func (c *Controller) InitBackoff() {
-	c.mu.Lock()
-	c.retries = 0
-	c.nextBackoffDelay = c.opts.backoffStart
-	c.mu.Unlock()
-}
-
-// Retries the number of retries that have been performed.
-func (c *Controller) Retries() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.retries
-}
-
-// Backoff implements an exponential backoff algorithm and will wait the
-// appropriate amount of time before a retry is appropriate. It will return
-// true when no more retries should be attempted (error is nil in this case).
-func (c *Controller) Backoff(ctx context.Context) (bool, error) {
-	c.mu.Lock()
-	if c.retries >= c.opts.backoffSteps {
-		c.mu.Unlock()
-		return true, nil
-	}
-	backoffDelay := c.nextBackoffDelay
-	c.mu.Unlock()
-	select {
-	case <-ctx.Done():
-		return true, ctx.Err()
-	case <-c.opts.clock.after(backoffDelay):
-	}
-	c.mu.Lock()
-	c.nextBackoffDelay *= 2
-	c.retries++
-	c.mu.Unlock()
-	return false, nil
-}
-*/
