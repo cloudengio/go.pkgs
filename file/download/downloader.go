@@ -40,14 +40,12 @@ type Progress struct {
 type Option func(*options)
 
 type options struct {
-	rateController        *ratecontrol.Controller
-	rateControllerOptions []ratecontrol.Option // backwards compatibility
-	rateContoller         ratecontrol.Controller
-	backoffErr            error
-	concurrency           int
-	progressInterval      time.Duration
-	progressCh            chan<- Progress
-	progressClose         bool
+	rateController   *ratecontrol.Controller
+	backoffErr       error
+	concurrency      int
+	progressInterval time.Duration
+	progressCh       chan<- Progress
+	progressClose    bool
 }
 
 type downloader struct {
@@ -97,7 +95,7 @@ func New(opts ...Option) T {
 		opt(&dl.options)
 	}
 	if dl.rateController == nil {
-		dl.rateController = ratecontrol.New(dl.rateControllerOptions...)
+		dl.rateController = ratecontrol.New()
 	}
 	return dl
 }
@@ -194,7 +192,9 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, request Reque
 
 func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
 	result := Result{}
-	dl.rateController.Wait(ctx)
+	if err := dl.rateController.Wait(ctx); err != nil {
+		return result, err
+	}
 	backoff := dl.rateController.Backoff()
 	for {
 		rd, err := downloadFS.OpenCtx(ctx, name)
