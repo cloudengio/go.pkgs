@@ -36,7 +36,6 @@ func New(opts ...Option) *Controller {
 	if c.opts.bytesPerTick > 0 {
 		c.curTick = c.opts.clock.Tick()
 	}
-	//c.InitBackoff()
 	return c
 }
 
