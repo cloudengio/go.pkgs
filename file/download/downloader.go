@@ -59,30 +59,6 @@ type downloader struct {
 	progressLast time.Time // GUARDED_BY(progressMu)
 }
 
-// WithRequestsPerMinute sets the rate for download requests. If not
-// specified downloads will be initiated immediately.
-func WithRequestsPerMinute(rpm int) Option {
-	return func(o *options) {
-		o.rateControllerOptions = append(o.rateControllerOptions,
-			ratecontrol.WithRequestsPerTick(rpm))
-	}
-}
-
-// WithBackoffParameters enables an exponential backoff algorithm that
-// is triggered when the download fails in a way that is retryable. The
-// container (fs.FS) implementation must return an error that returns
-// true for errors.Is(err, retryErr). First defines the first backoff delay,
-// which is then doubled for every consecutive matching error until the
-// download either succeeds or the specified number of steps (attempted
-// downloads) is exceeded (the download is then deemed to have failed).
-func WithBackoffParameters(retryErr error, first time.Duration, steps int) Option {
-	return func(o *options) {
-		o.backoffErr = retryErr
-		o.rateControllerOptions = append(o.rateControllerOptions,
-			ratecontrol.WithBackoffParameters(first, steps))
-	}
-}
-
 // WithNumDownloaders controls the number of concurrent downloads used.
 // If not specified the default of runtime.GOMAXPROCS(0) is used.
 func WithNumDownloaders(concurrency int) Option {
@@ -91,6 +67,9 @@ func WithNumDownloaders(concurrency int) Option {
 	}
 }
 
+// WithRateController sets the rate controller to use to enforce rate
+// control. Backoff will be triggered if the supplied error is returned
+// by the container (file.FS) implementation.
 func WithRateController(retryErr error, rc *ratecontrol.Controller) Option {
 	return func(o *options) {
 		o.backoffErr = retryErr
@@ -216,17 +195,15 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, request Reque
 func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
 	result := Result{}
 	dl.rateController.Wait(ctx)
-	dl.rateController.InitBackoff()
+	backoff := dl.rateController.Backoff()
 	for {
 		rd, err := downloadFS.OpenCtx(ctx, name)
-		result.Retries = dl.rateController.Retries()
-		//		fmt.Printf("RETRIES %v\n", result.Retries)
+		result.Retries = backoff.Retries()
 		result.Err = err
 		result.Name = name
 		if err != nil {
 			if errors.Is(err, dl.backoffErr) {
-				if done, err := dl.rateController.Backoff(ctx); done {
-					fmt.Printf(">>>>WTF\n")
+				if done, err := backoff.Wait(ctx); done {
 					return result, err
 				}
 				continue

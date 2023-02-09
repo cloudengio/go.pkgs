@@ -11,12 +11,12 @@ import (
 
 // Backoff represents the interface to a backoff algorithm.
 type Backoff interface {
-	// Backoff implements a backoff algorithm. It returns true if the backoff
+	// Wait implements a backoff algorithm. It returns true if the backoff
 	// should be terminated, i.e. no more requests should be attempted.
 	// The error returned is nil when the backoff algorithm has reached
 	// its limit and will generally only be non-nil for an internal error
 	// such as the context being cancelled.
-	Backoff(context.Context) (bool, error)
+	Wait(context.Context) (bool, error)
 
 	// Retries returns the number of retries that the backoff aglorithm
 	// has recorded, ie. the number of times that Backoff was called and
@@ -43,8 +43,8 @@ func (eb *ExponentialBackoff) Retries() int {
 	return eb.retries
 }
 
-// Backoff implements Backoff.
-func (eb *ExponentialBackoff) Backoff(ctx context.Context) (bool, error) {
+// Wait implements Backoff.
+func (eb *ExponentialBackoff) Wait(ctx context.Context) (bool, error) {
 	if eb.retries >= eb.steps {
 		return true, nil
 	}
@@ -64,6 +64,6 @@ func (nb noBackoff) Retries() int {
 	return 0
 }
 
-func (nb noBackoff) Backoff(ctx context.Context) (bool, error) {
+func (nb noBackoff) Wait(ctx context.Context) (bool, error) {
 	return false, nil
 }

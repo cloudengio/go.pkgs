@@ -21,6 +21,7 @@ import (
 	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 	"cloudeng.io/file/filetestutil"
+	"cloudeng.io/net/ratecontrol"
 )
 
 func runDownloader(ctx context.Context, downloader download.T, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
@@ -123,8 +124,8 @@ func TestDownloadCancel(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	downloader := download.New(
-		download.WithRequestsPerMinute(60))
+	rc := ratecontrol.New(ratecontrol.WithRequestsPerTick(60))
+	downloader := download.New(download.WithRateController(nil, rc))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
@@ -152,9 +153,8 @@ func TestDownloadRetries(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	downloader := download.New(
-		download.WithBackoffParameters(&retryError{}, time.Microsecond, 10))
-
+	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
+	downloader := download.New(download.WithRateController(&retryError{}, rc))
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
@@ -237,8 +237,8 @@ func TestDownloadErrors(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	downloader := download.New(download.WithBackoffParameters(&retryError{},
-		time.Microsecond, 10))
+	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
+	downloader := download.New(download.WithRateController(&retryError{}, rc))
 
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
