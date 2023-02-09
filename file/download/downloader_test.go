@@ -21,6 +21,7 @@ import (
 	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 	"cloudeng.io/file/filetestutil"
+	"cloudeng.io/net/ratecontrol"
 )
 
 func runDownloader(ctx context.Context, downloader download.T, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
@@ -123,8 +124,8 @@ func TestDownloadCancel(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	downloader := download.New(
-		download.WithRequestsPerMinute(60))
+	rc := ratecontrol.New(ratecontrol.WithRequestsPerTick(60))
+	downloader := download.New(download.WithRateController(nil, rc))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
@@ -152,9 +153,8 @@ func TestDownloadRetries(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	downloader := download.New(
-		download.WithBackoffParameters(&retryError{}, time.Microsecond, 10))
-
+	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
+	downloader := download.New(download.WithRateController(&retryError{}, rc))
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
@@ -187,7 +187,7 @@ func TestDownloadProgress(t *testing.T) {
 	downloader := download.New(download.WithProgress(time.Millisecond, progressCh, true))
 
 	wg := &sync.WaitGroup{}
-	wg.Add(2)
+	wg.Add(3)
 
 	go func() {
 		errCh <- downloader.Run(ctx, input, output)
@@ -201,9 +201,12 @@ func TestDownloadProgress(t *testing.T) {
 		wg.Done()
 	}()
 
+	nDownloads := 0
 	go func() {
-		for range output {
+		for dl := range output {
+			nDownloads += len(dl.Downloads)
 		}
+		wg.Done()
 	}()
 	lastdownloaded := 0
 	nUpdates := 0
@@ -211,13 +214,16 @@ func TestDownloadProgress(t *testing.T) {
 		lastdownloaded = int(update.Downloaded)
 		nUpdates++
 	}
-	if got, want := lastdownloaded, nItems-100; got < want {
-		t.Errorf("got %v, want >= %v\n", got, want)
-	}
-	if got, want := nUpdates, 10; got < want {
-		t.Errorf("got %v, want >= %v\n", got, want)
-	}
 	wg.Wait()
+	if got, want := nDownloads, nItems; got != want {
+		t.Errorf("got %v, want %v\n", got, want)
+	}
+	if got, want := lastdownloaded, nItems/2; got < want {
+		t.Errorf("got %v, want >= %v\n", got, want)
+	}
+	if got, want := nUpdates, nUpdates/2; got < want {
+		t.Errorf("got %v, want >= %v\n", got, want)
+	}
 	if err := <-errCh; err != nil {
 		t.Fatal(err)
 	}
@@ -231,8 +237,8 @@ func TestDownloadErrors(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	downloader := download.New(download.WithBackoffParameters(&retryError{},
-		time.Microsecond, 10))
+	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
+	downloader := download.New(download.WithRateController(&retryError{}, rc))
 
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {

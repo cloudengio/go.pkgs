@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"cloudeng.io/file"
+	"cloudeng.io/net/ratecontrol"
 	"cloudeng.io/sync/errgroup"
 )
 
@@ -39,10 +40,8 @@ type Progress struct {
 type Option func(*options)
 
 type options struct {
-	rateDelay        time.Duration
-	backOffErr       error
-	backOffStart     time.Duration
-	backoffSteps     int
+	rateController   *ratecontrol.Controller
+	backoffErr       error
 	concurrency      int
 	progressInterval time.Duration
 	progressCh       chan<- Progress
@@ -58,38 +57,21 @@ type downloader struct {
 	progressLast time.Time // GUARDED_BY(progressMu)
 }
 
-// WithRequestsPerMinute sets the rate for download requests. If not
-// specified downloads will be initiated immediately.
-func WithRequestsPerMinute(rpm int) Option {
-	return func(o *options) {
-		if rpm > 60 {
-			o.rateDelay = time.Second / time.Duration(rpm)
-			return
-		}
-		o.rateDelay = time.Minute / time.Duration(rpm)
-	}
-}
-
-// WithBackoffParameters enables an exponential backoff algorithm that
-// is triggered when the download fails in a way that is retryable. The
-// container (fs.FS) implementation must return an error that returns
-// true for errors.Is(err, retryErr). First defines the first backoff delay,
-// which is then doubled for every consecutive matching error until the
-// download either succeeds or the specified number of steps (attempted
-// downloads) is exceeded (the download is then deemed to have failed).
-func WithBackoffParameters(retryErr error, first time.Duration, steps int) Option {
-	return func(o *options) {
-		o.backOffErr = retryErr
-		o.backOffStart = first
-		o.backoffSteps = steps
-	}
-}
-
 // WithNumDownloaders controls the number of concurrent downloads used.
 // If not specified the default of runtime.GOMAXPROCS(0) is used.
 func WithNumDownloaders(concurrency int) Option {
 	return func(o *options) {
 		o.concurrency = concurrency
+	}
+}
+
+// WithRateController sets the rate controller to use to enforce rate
+// control. Backoff will be triggered if the supplied error is returned
+// by the container (file.FS) implementation.
+func WithRateController(retryErr error, rc *ratecontrol.Controller) Option {
+	return func(o *options) {
+		o.backoffErr = retryErr
+		o.rateController = rc
 	}
 }
 
@@ -108,14 +90,12 @@ func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option
 // New creates a new instance of a download.T.
 func New(opts ...Option) T {
 	dl := &downloader{}
+	dl.concurrency = runtime.GOMAXPROCS(0)
 	for _, opt := range opts {
 		opt(&dl.options)
 	}
-	if dl.concurrency == 0 {
-		dl.concurrency = runtime.GOMAXPROCS(0)
-	}
-	if dl.rateDelay > 0 {
-		dl.ticker = *time.NewTicker(dl.rateDelay)
+	if dl.rateController == nil {
+		dl.rateController = ratecontrol.New()
 	}
 	return dl
 }
@@ -145,8 +125,9 @@ func (dl *downloader) Run(ctx context.Context,
 func (dl *downloader) updateDue() bool {
 	dl.progressMu.Lock()
 	defer dl.progressMu.Unlock()
-	if time.Now().After(dl.progressLast.Add(dl.progressInterval)) {
-		dl.progressLast = time.Now()
+	now := time.Now()
+	if now.After(dl.progressLast.Add(dl.progressInterval)) {
+		dl.progressLast = now
 		return true
 	}
 	return false
@@ -211,38 +192,23 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, request Reque
 
 func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
 	result := Result{}
-	if dl.ticker.C == nil {
-		select {
-		case <-ctx.Done():
-			return result, ctx.Err()
-		default:
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			return result, ctx.Err()
-		case <-dl.ticker.C:
-		}
+	if err := dl.rateController.Wait(ctx); err != nil {
+		return result, err
 	}
-	delay := dl.backOffStart
-	steps := 0
+	backoff := dl.rateController.Backoff()
 	for {
 		rd, err := downloadFS.OpenCtx(ctx, name)
-		result.Retries = steps
+		result.Retries = backoff.Retries()
 		result.Err = err
 		result.Name = name
 		if err != nil {
-			if !errors.Is(err, dl.backOffErr) || steps >= dl.backoffSteps {
-				return result, nil
+			if errors.Is(err, dl.backoffErr) {
+				if done, err := backoff.Wait(ctx); done {
+					return result, err
+				}
+				continue
 			}
-			select {
-			case <-ctx.Done():
-				return result, ctx.Err()
-			case <-time.After(delay):
-			}
-			delay *= 2
-			steps++
-			continue
+			return result, nil
 		}
 		fi, err := rd.Stat()
 		if err != nil {

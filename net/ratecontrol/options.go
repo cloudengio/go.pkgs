@@ -67,11 +67,11 @@ func WithBytesPerTick(bpt int) Option {
 	}
 }
 
-// WithExponentialBackof enables an exponential backoff algorithm.
+// WithExponentialBackoff enables an exponential backoff algorithm.
 // First defines the first backoff delay, which is then doubled for every
 // consecutive retry until the download either succeeds or the specified
 // number of steps (attempted requests) is exceeded.
-func WithExponentialBackof(first time.Duration, steps int) Option {
+func WithExponentialBackoff(first time.Duration, steps int) Option {
 	return func(o *options) {
 		o.backoffStart = first
 		o.backoffSteps = steps
