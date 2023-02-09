@@ -12,14 +12,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
+	"cloudeng.io/net/ratecontrol"
 	"cloudeng.io/path/cloudpath"
 )
+
+// ExponentialBackoffConfig is the configuration for an exponential backoff
+// retry strategy for downloads.
+type ExponentialBackoff struct {
+	InitialDelay time.Duration `yaml:"initial_delay"`
+	Steps        int           `yaml:"steps"`
+}
+
+type Rate struct {
+	Tick            time.Duration `yaml:"tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick"`
+}
+
+// RateControl is the configuration for rate based control of download
+// requests.
+type RateControl struct {
+	Rate               Rate               `yaml:"rate"`
+	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff"`
+}
 
 // DownloadFactoryConfig is the configuration for a crawl.DownloaderFactory.
 type DownloadFactoryConfig struct {
@@ -41,16 +63,17 @@ type CrawlCacheConfig struct {
 
 // Confiug represents the configuration for a single crawl.
 type Config struct {
-	Name          string                `yaml:"name"`
-	Depth         int                   `yaml:"depth"`
-	Seeds         []string              `yaml:"seeds"`
-	NoFollowRules []string              `yaml:"nofollow"`
-	FollowRules   []string              `yaml:"follow"`
-	RewriteRules  []string              `yaml:"rewrite"`
-	Download      DownloadFactoryConfig `yaml:"download"`
-	NumExtractors int                   `yaml:"num_extractors"`
-	Extractors    []content.Type        `yaml:"extractors"`
-	Cache         CrawlCacheConfig      `yaml:"cache"`
+	Name              string                `yaml:"name"`
+	Depth             int                   `yaml:"depth"`
+	Seeds             []string              `yaml:"seeds"`
+	NoFollowRules     []string              `yaml:"nofollow"`
+	FollowRules       []string              `yaml:"follow"`
+	RewriteRules      []string              `yaml:"rewrite"`
+	Download          DownloadFactoryConfig `yaml:"download"`
+	NumExtractors     int                   `yaml:"num_extractors"`
+	Extractors        []content.Type        `yaml:"extractors"`
+	Cache             CrawlCacheConfig      `yaml:"cache"`
+	RateControlConfig RateControl           `yaml:"rate_control"`
 }
 
 // NewLinkProcessor creates a outlinks.RegexpProcessor using the
@@ -141,4 +164,32 @@ func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*c
 		}
 	}
 	return reg, nil
+}
+
+func (c RateControl) NewRateController() (*ratecontrol.Controller, error) {
+	opts := []ratecontrol.Option{}
+	if c.Rate.Tick != 0 {
+		var clock ratecontrol.Clock
+		switch c.Rate.Tick {
+		case time.Second:
+			clock = ratecontrol.SecondClock{}
+		case time.Minute:
+			clock = ratecontrol.MinuteClock{}
+		case time.Hour:
+			clock = ratecontrol.HourClock{}
+		default:
+			return nil, fmt.Errorf("unsupported tick duration (only seconds, minutes and hours are supported): %v", c.Rate.Tick)
+		}
+		opts = append(opts, ratecontrol.WithClock(clock))
+	}
+	if c.Rate.BytesPerTick > 0 {
+		opts = append(opts, ratecontrol.WithBytesPerTick(c.Rate.BytesPerTick))
+	}
+	if c.Rate.RequestsPerTick > 0 {
+		opts = append(opts, ratecontrol.WithRequestsPerTick(c.Rate.RequestsPerTick))
+	}
+	if c.ExponentialBackoff.InitialDelay > 0 {
+		opts = append(opts, ratecontrol.WithExponentialBackoff(c.ExponentialBackoff.InitialDelay, c.ExponentialBackoff.Steps))
+	}
+	return ratecontrol.New(opts...), nil
 }

@@ -22,20 +22,46 @@ type Clock interface {
 	after(d time.Duration) <-chan time.Time
 }
 
-type clock struct{}
+type afterClock struct{}
 
-// Tick returns the current tick which will increment every TickDuration()
-func (c clock) Tick() int {
+type MinuteClock struct {
+	afterClock
+}
+
+func (c MinuteClock) Tick() int {
 	return time.Now().Minute()
 }
 
-// TickDuration returns the duration of a tick.
-func (c clock) TickDuration() time.Duration {
+func (c MinuteClock) TickDuration() time.Duration {
 	return time.Minute
 }
 
+type SecondClock struct {
+	afterClock
+}
+
+func (c SecondClock) Tick() int {
+	return time.Now().Second()
+}
+
+func (c SecondClock) TickDuration() time.Duration {
+	return time.Second
+}
+
+type HourClock struct {
+	afterClock
+}
+
+func (c HourClock) Tick() int {
+	return time.Now().Hour()
+}
+
+func (c HourClock) TickDuration() time.Duration {
+	return time.Hour
+}
+
 // after returns a channel as per timer.After, it is used for testing.
-func (c clock) after(d time.Duration) <-chan time.Time {
+func (c afterClock) after(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"cloudeng.io/cmdutil"
 	"cloudeng.io/file"
@@ -67,6 +68,42 @@ func TestCrawlConfig(t *testing.T) {
 	if got, want := crawl.Extractors, []content.Type{"text/html;charset=utf-8", "text/plain;charset=utf-8"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+const crawlsRateControlSpec = `
+  name: test
+    rate_control:
+      rate:
+        tick: 1h
+        requests_per_tick: 100
+        bytes_per_tick: 200
+      exponential_backoff:
+        initial_delay: 1s
+        steps: 4
+`
+
+func TestRateControl(t *testing.T) {
+	var crawl crawlcmd.Config
+	if err := cmdutil.ParseYAMLConfigString(crawlsSpec, &crawl); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := crawlcmd.RateControl{
+		Rate: crawlcmd.Rate{
+			Tick:            time.Hour,
+			RequestsPerTick: 100,
+			BytesPerTick:    200,
+		},
+		ExponentialBackoff: crawlcmd.ExponentialBackoff{
+			InitialDelay: time.Second,
+			Steps:        4,
+		},
+	}
+
+	if got, want := crawl.RateControlConfig, expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }
 
 type dummyFSFactory struct {
