@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package ratecontrol provides mechanisms for controlling the rate
-// at which requests are made.
+// at which requests are made and for implementing backoff mechanisms.
 package ratecontrol
 
 import (

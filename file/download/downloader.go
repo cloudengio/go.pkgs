@@ -226,6 +226,7 @@ func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, na
 		if err != nil {
 			if errors.Is(err, dl.backoffErr) {
 				if done, err := dl.rateController.Backoff(ctx); done {
+					fmt.Printf(">>>>WTF\n")
 					return result, err
 				}
 				continue
