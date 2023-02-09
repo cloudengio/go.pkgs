@@ -67,14 +67,11 @@ func WithBytesPerTick(bpt int) Option {
 	}
 }
 
-// WithBackoffParameters enables an exponential backoff algorithm that
-// is triggered when the download fails in a way that is retryable. The
-// container (fs.FS) implementation must return an error that returns
-// true for errors.Is(err, retryErr). First defines the first backoff delay,
-// which is then doubled for every consecutive retry until the
-// download either succeeds or the specified number of steps (attempted
-// downloads) is exceeded (the download is then deemed to have failed).
-func WithBackoffParameters(first time.Duration, steps int) Option {
+// WithExponentialBackof enables an exponential backoff algorithm.
+// First defines the first backoff delay, which is then doubled for every
+// consecutive retry until the download either succeeds or the specified
+// number of steps (attempted requests) is exceeded.
+func WithExponentialBackof(first time.Duration, steps int) Option {
 	return func(o *options) {
 		o.backoffStart = first
 		o.backoffSteps = steps
