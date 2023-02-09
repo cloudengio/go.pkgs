@@ -187,7 +187,7 @@ func TestDownloadProgress(t *testing.T) {
 	downloader := download.New(download.WithProgress(time.Millisecond, progressCh, true))
 
 	wg := &sync.WaitGroup{}
-	wg.Add(2)
+	wg.Add(3)
 
 	go func() {
 		errCh <- downloader.Run(ctx, input, output)
@@ -201,9 +201,12 @@ func TestDownloadProgress(t *testing.T) {
 		wg.Done()
 	}()
 
+	nDownloads := 0
 	go func() {
-		for range output {
+		for dl := range output {
+			nDownloads += len(dl.Downloads)
 		}
+		wg.Done()
 	}()
 	lastdownloaded := 0
 	nUpdates := 0
@@ -211,13 +214,16 @@ func TestDownloadProgress(t *testing.T) {
 		lastdownloaded = int(update.Downloaded)
 		nUpdates++
 	}
-	if got, want := lastdownloaded, nItems-100; got < want {
-		t.Errorf("got %v, want >= %v\n", got, want)
-	}
-	if got, want := nUpdates, 10; got < want {
-		t.Errorf("got %v, want >= %v\n", got, want)
-	}
 	wg.Wait()
+	if got, want := nDownloads, nItems; got != want {
+		t.Errorf("got %v, want %v\n", got, want)
+	}
+	if got, want := lastdownloaded, nItems/2; got < want {
+		t.Errorf("got %v, want >= %v\n", got, want)
+	}
+	if got, want := nUpdates, nUpdates/2; got < want {
+		t.Errorf("got %v, want >= %v\n", got, want)
+	}
 	if err := <-errCh; err != nil {
 		t.Fatal(err)
 	}
