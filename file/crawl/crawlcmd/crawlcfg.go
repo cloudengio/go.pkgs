@@ -39,7 +39,7 @@ type Rate struct {
 // RateControl is the configuration for rate based control of download
 // requests.
 type RateControl struct {
-	Rate               Rate               `yaml:"rate"`
+	Rate               Rate               `yaml:"rate_control"`
 	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff"`
 }
 
@@ -53,6 +53,11 @@ type DownloadFactoryConfig struct {
 	PerDepthCrawledChanSizes []int `yaml:"per_depth_crawled_chan_sizes"`
 }
 
+type DownloadConfig struct {
+	DownloadFactoryConfig `yaml:",inline"`
+	RateControlConfig     RateControl `yaml:",inline"`
+}
+
 // Each crawl may specify its own cache directory and configuration. This
 // will be used to store the results of the crawl. The cache is intended
 // to be relative to the
@@ -63,17 +68,16 @@ type CrawlCacheConfig struct {
 
 // Confiug represents the configuration for a single crawl.
 type Config struct {
-	Name              string                `yaml:"name"`
-	Depth             int                   `yaml:"depth"`
-	Seeds             []string              `yaml:"seeds"`
-	NoFollowRules     []string              `yaml:"nofollow"`
-	FollowRules       []string              `yaml:"follow"`
-	RewriteRules      []string              `yaml:"rewrite"`
-	Download          DownloadFactoryConfig `yaml:"download"`
-	NumExtractors     int                   `yaml:"num_extractors"`
-	Extractors        []content.Type        `yaml:"extractors"`
-	Cache             CrawlCacheConfig      `yaml:"cache"`
-	RateControlConfig RateControl           `yaml:"rate_control"`
+	Name          string           `yaml:"name"`
+	Depth         int              `yaml:"depth"`
+	Seeds         []string         `yaml:"seeds"`
+	NoFollowRules []string         `yaml:"nofollow"`
+	FollowRules   []string         `yaml:"follow"`
+	RewriteRules  []string         `yaml:"rewrite"`
+	Download      DownloadConfig   `yaml:"download"`
+	NumExtractors int              `yaml:"num_extractors"`
+	Extractors    []content.Type   `yaml:"extractors"`
+	Cache         CrawlCacheConfig `yaml:"cache"`
 }
 
 // NewLinkProcessor creates a outlinks.RegexpProcessor using the

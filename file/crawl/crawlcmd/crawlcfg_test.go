@@ -71,20 +71,21 @@ func TestCrawlConfig(t *testing.T) {
 }
 
 const crawlsRateControlSpec = `
-  name: test
-    rate_control:
-      rate:
-        tick: 1h
-        requests_per_tick: 100
-        bytes_per_tick: 200
-      exponential_backoff:
-        initial_delay: 1s
-        steps: 4
+name: test
+download:
+  default_concurrency: 8
+  rate_control:
+    tick: 1h
+    requests_per_tick: 100
+    bytes_per_tick: 200
+  exponential_backoff:
+    initial_delay: 1s
+    steps: 4
 `
 
 func TestRateControl(t *testing.T) {
 	var crawl crawlcmd.Config
-	if err := cmdutil.ParseYAMLConfigString(crawlsSpec, &crawl); err != nil {
+	if err := cmdutil.ParseYAMLConfigString(crawlsRateControlSpec, &crawl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,8 +101,17 @@ func TestRateControl(t *testing.T) {
 		},
 	}
 
-	if got, want := crawl.RateControlConfig, expected; !reflect.DeepEqual(got, want) {
+	if got, want := crawl.Download.RateControlConfig, expected; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := crawl.Download.DefaultConcurrency, 8; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	_, err := crawl.Download.RateControlConfig.NewRateController()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 }
