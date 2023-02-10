@@ -68,7 +68,7 @@ func WithNumDownloaders(concurrency int) Option {
 // WithRateController sets the rate controller to use to enforce rate
 // control. Backoff will be triggered if the supplied error is returned
 // by the container (file.FS) implementation.
-func WithRateController(retryErr error, rc *ratecontrol.Controller) Option {
+func WithRateController(rc *ratecontrol.Controller, retryErr error) Option {
 	return func(o *options) {
 		o.backoffErr = retryErr
 		o.rateController = rc
