@@ -26,7 +26,7 @@ type Controller struct {
 // New returns a new Controller configuring using the specified options.
 func New(opts ...Option) *Controller {
 	c := &Controller{}
-	c.opts.clock = clock{}
+	c.opts.clock = MinuteClock{}
 	for _, fn := range opts {
 		fn(&c.opts)
 	}
