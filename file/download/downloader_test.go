@@ -125,7 +125,7 @@ func TestDownloadCancel(t *testing.T) {
 	output := make(chan download.Downloaded, 10)
 
 	rc := ratecontrol.New(ratecontrol.WithRequestsPerTick(60))
-	downloader := download.New(download.WithRateController(nil, rc))
+	downloader := download.New(download.WithRateController(rc, nil))
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
@@ -154,7 +154,7 @@ func TestDownloadRetries(t *testing.T) {
 	output := make(chan download.Downloaded, 10)
 
 	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
-	downloader := download.New(download.WithRateController(&retryError{}, rc))
+	downloader := download.New(download.WithRateController(rc, &retryError{}))
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +238,7 @@ func TestDownloadErrors(t *testing.T) {
 	output := make(chan download.Downloaded, 10)
 
 	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
-	downloader := download.New(download.WithRateController(&retryError{}, rc))
+	downloader := download.New(download.WithRateController(rc, &retryError{}))
 
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
