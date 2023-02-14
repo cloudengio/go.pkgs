@@ -15,7 +15,7 @@ markdown: ["gomarkdown", "-overwrite", "./..."]
 annotate:
   [
     "goannotate",
-    "--config=copyright-annotations.yaml",
+    "--config=${MULTIMOD_ROOT}/copyright-annotation.yaml",
     "--annotation=cloudeng-copyright",
   ]
 usage: ["gousage", "--overwrite", "./..."]
