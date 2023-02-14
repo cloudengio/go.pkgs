@@ -1,5 +1,4 @@
 # Package [cloudeng.io/os/lockedfile](https://pkg.go.dev/cloudeng.io/os/lockedfile?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/os/lockedfile)](https://goreportcard.com/report/cloudeng.io/os/lockedfile)
 
 ```go
 import cloudeng.io/os/lockedfile

@@ -1,5 +1,4 @@
 # Package [cloudeng.io/file/diskusage](https://pkg.go.dev/cloudeng.io/file/diskusage?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file/diskusage)](https://goreportcard.com/report/cloudeng.io/file/diskusage)
 
 ```go
 import cloudeng.io/file/diskusage

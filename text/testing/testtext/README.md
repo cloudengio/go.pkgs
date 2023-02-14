@@ -1,5 +1,4 @@
 # Package [cloudeng.io/text/testing/testtext](https://pkg.go.dev/cloudeng.io/text/testing/testtext?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/text/testing/testtext)](https://goreportcard.com/report/cloudeng.io/text/testing/testtext)
 
 ```go
 import cloudeng.io/text/testing/testtext

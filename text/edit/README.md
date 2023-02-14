@@ -1,5 +1,4 @@
 # Package [cloudeng.io/text/edit](https://pkg.go.dev/cloudeng.io/text/edit?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/text/edit)](https://goreportcard.com/report/cloudeng.io/text/edit)
 
 ```go
 import cloudeng.io/text/edit

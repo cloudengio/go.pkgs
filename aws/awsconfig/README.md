@@ -1,5 +1,4 @@
 # Package [cloudeng.io/aws/awsconfig](https://pkg.go.dev/cloudeng.io/aws/awsconfig?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/aws/awsconfig)](https://goreportcard.com/report/cloudeng.io/aws/awsconfig)
 
 ```go
 import cloudeng.io/aws/awsconfig

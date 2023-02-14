@@ -1,5 +1,4 @@
 # Package [cloudeng.io/path](https://pkg.go.dev/cloudeng.io/path?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/path)](https://goreportcard.com/report/cloudeng.io/path)
 
 ```go
 import cloudeng.io/path

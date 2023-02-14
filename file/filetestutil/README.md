@@ -1,5 +1,4 @@
 # Package [cloudeng.io/file/filetestutil](https://pkg.go.dev/cloudeng.io/file/filetestutil?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file/filetestutil)](https://goreportcard.com/report/cloudeng.io/file/filetestutil)
 
 ```go
 import cloudeng.io/file/filetestutil

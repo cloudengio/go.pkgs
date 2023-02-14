@@ -1,5 +1,4 @@
 # Package [cloudeng.io/file/download](https://pkg.go.dev/cloudeng.io/file/download?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file/download)](https://goreportcard.com/report/cloudeng.io/file/download)
 
 ```go
 import cloudeng.io/file/download
@@ -32,18 +31,6 @@ Option is used to configure the behaviour of a newly created Downloader.
 ### Functions
 
 ```go
-func WithBackoffParameters(retryErr error, first time.Duration, steps int) Option
-```
-WithBackoffParameters enables an exponential backoff algorithm that
-is triggered when the download fails in a way that is retryable. The
-container (fs.FS) implementation must return an error that returns true for
-errors.Is(err, retryErr). First defines the first backoff delay, which is
-then doubled for every consecutive matching error until the download either
-succeeds or the specified number of steps (attempted downloads) is exceeded
-(the download is then deemed to have failed).
-
-
-```go
 func WithNumDownloaders(concurrency int) Option
 ```
 WithNumDownloaders controls the number of concurrent downloads used.
@@ -60,10 +47,11 @@ shared across multiplied downloader instances.
 
 
 ```go
-func WithRequestsPerMinute(rpm int) Option
+func WithRateController(rc *ratecontrol.Controller, retryErr error) Option
 ```
-WithRequestsPerMinute sets the rate for download requests. If not specified
-downloads will be initiated immediately.
+WithRateController sets the rate controller to use to enforce rate control.
+Backoff will be triggered if the supplied error is returned by the container
+(file.FS) implementation.
 
 
 

@@ -1,5 +1,4 @@
 # Package [cloudeng.io/file/content/processors](https://pkg.go.dev/cloudeng.io/file/content/processors?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file/content/processors)](https://goreportcard.com/report/cloudeng.io/file/content/processors)
 
 ```go
 import cloudeng.io/file/content/processors

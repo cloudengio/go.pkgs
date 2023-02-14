@@ -1,5 +1,4 @@
 # Package [cloudeng.io/cmdutil/structdoc](https://pkg.go.dev/cloudeng.io/cmdutil/structdoc?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/cmdutil/structdoc)](https://goreportcard.com/report/cloudeng.io/cmdutil/structdoc)
 
 ```go
 import cloudeng.io/cmdutil/structdoc

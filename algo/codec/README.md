@@ -1,5 +1,4 @@
 # Package [cloudeng.io/algo/codec](https://pkg.go.dev/cloudeng.io/algo/codec?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/algo/codec)](https://goreportcard.com/report/cloudeng.io/algo/codec)
 
 ```go
 import cloudeng.io/algo/codec
