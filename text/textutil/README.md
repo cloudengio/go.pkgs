@@ -1,5 +1,4 @@
 # Package [cloudeng.io/text/textutil](https://pkg.go.dev/cloudeng.io/text/textutil?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/text/textutil)](https://goreportcard.com/report/cloudeng.io/text/textutil)
 
 ```go
 import cloudeng.io/text/textutil

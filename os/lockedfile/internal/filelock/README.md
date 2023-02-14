@@ -1,5 +1,4 @@
 # Package [cloudeng.io/os/lockedfile/internal/filelock](https://pkg.go.dev/cloudeng.io/os/lockedfile/internal/filelock?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/os/lockedfile/internal/filelock)](https://goreportcard.com/report/cloudeng.io/os/lockedfile/internal/filelock)
 
 ```go
 import cloudeng.io/os/lockedfile/internal/filelock

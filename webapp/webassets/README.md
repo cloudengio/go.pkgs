@@ -1,5 +1,4 @@
 # Package [cloudeng.io/webapp/webassets](https://pkg.go.dev/cloudeng.io/webapp/webassets?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/webapp/webassets)](https://goreportcard.com/report/cloudeng.io/webapp/webassets)
 
 ```go
 import cloudeng.io/webapp/webassets

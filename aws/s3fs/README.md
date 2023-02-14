@@ -1,5 +1,4 @@
 # Package [cloudeng.io/aws/s3fs](https://pkg.go.dev/cloudeng.io/aws/s3fs?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/aws/s3fs)](https://goreportcard.com/report/cloudeng.io/aws/s3fs)
 
 ```go
 import cloudeng.io/aws/s3fs

@@ -1,5 +1,4 @@
 # Package [cloudeng.io/file/crawl/crawlcmd](https://pkg.go.dev/cloudeng.io/file/crawl/crawlcmd?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file/crawl/crawlcmd)](https://goreportcard.com/report/cloudeng.io/file/crawl/crawlcmd)
 
 ```go
 import cloudeng.io/file/crawl/crawlcmd
@@ -13,16 +12,16 @@ of a crawl via yaml.
 ### Type Config
 ```go
 type Config struct {
-	Name          string                `yaml:"name"`
-	Depth         int                   `yaml:"depth"`
-	Seeds         []string              `yaml:"seeds"`
-	NoFollowRules []string              `yaml:"nofollow"`
-	FollowRules   []string              `yaml:"follow"`
-	RewriteRules  []string              `yaml:"rewrite"`
-	Download      DownloadFactoryConfig `yaml:"download"`
-	NumExtractors int                   `yaml:"num_extractors"`
-	Extractors    []content.Type        `yaml:"extractors"`
-	Cache         CrawlCacheConfig      `yaml:"cache"`
+	Name          string           `yaml:"name"`
+	Depth         int              `yaml:"depth"`
+	Seeds         []string         `yaml:"seeds"`
+	NoFollowRules []string         `yaml:"nofollow"`
+	FollowRules   []string         `yaml:"follow"`
+	RewriteRules  []string         `yaml:"rewrite"`
+	Download      DownloadConfig   `yaml:"download"`
+	NumExtractors int              `yaml:"num_extractors"`
+	Extractors    []content.Type   `yaml:"extractors"`
+	Cache         CrawlCacheConfig `yaml:"cache"`
 }
 ```
 Confiug represents the configuration for a single crawl.
@@ -78,6 +77,15 @@ will be used to store the results of the crawl. The cache is intended to be
 relative to the
 
 
+### Type DownloadConfig
+```go
+type DownloadConfig struct {
+	DownloadFactoryConfig `yaml:",inline"`
+	RateControlConfig     RateControl `yaml:",inline"`
+}
+```
+
+
 ### Type DownloadFactoryConfig
 ```go
 type DownloadFactoryConfig struct {
@@ -106,6 +114,46 @@ func (df DownloadFactoryConfig) NewFactory(ch chan<- download.Progress) crawl.Do
 ```
 NewFactory returns a new instance of a crawl.DownloaderFactory which is
 parametised via its DownloadFactoryConfig receiver.
+
+
+
+
+### Type ExponentialBackoff
+```go
+type ExponentialBackoff struct {
+	InitialDelay time.Duration `yaml:"initial_delay"`
+	Steps        int           `yaml:"steps"`
+}
+```
+ExponentialBackoffConfig is the configuration for an exponential backoff
+retry strategy for downloads.
+
+
+### Type Rate
+```go
+type Rate struct {
+	Tick            time.Duration `yaml:"tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick"`
+}
+```
+
+
+### Type RateControl
+```go
+type RateControl struct {
+	Rate               Rate               `yaml:"rate_control"`
+	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff"`
+}
+```
+RateControl is the configuration for rate based control of download
+requests.
+
+### Methods
+
+```go
+func (c RateControl) NewRateController() (*ratecontrol.Controller, error)
+```
 
 
 

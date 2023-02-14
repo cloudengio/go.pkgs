@@ -1,5 +1,4 @@
 # Package [cloudeng.io/sync/errgroup](https://pkg.go.dev/cloudeng.io/sync/errgroup?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/sync/errgroup)](https://goreportcard.com/report/cloudeng.io/sync/errgroup)
 
 ```go
 import cloudeng.io/sync/errgroup

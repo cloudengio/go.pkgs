@@ -1,5 +1,4 @@
 # Package [cloudeng.io/cmdutil/expect](https://pkg.go.dev/cloudeng.io/cmdutil/expect?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/cmdutil/expect)](https://goreportcard.com/report/cloudeng.io/cmdutil/expect)
 
 ```go
 import cloudeng.io/cmdutil/expect

@@ -1,5 +1,4 @@
 # Package [cloudeng.io/debug/goroutines/pproftrace](https://pkg.go.dev/cloudeng.io/debug/goroutines/pproftrace?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/debug/goroutines/pproftrace)](https://goreportcard.com/report/cloudeng.io/debug/goroutines/pproftrace)
 
 ```go
 import cloudeng.io/debug/goroutines/pproftrace

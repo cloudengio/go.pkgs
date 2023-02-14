@@ -1,5 +1,4 @@
 # Package [cloudeng.io/file/filewalk/localdb](https://pkg.go.dev/cloudeng.io/file/filewalk/localdb?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/file/filewalk/localdb)](https://goreportcard.com/report/cloudeng.io/file/filewalk/localdb)
 
 ```go
 import cloudeng.io/file/filewalk/localdb

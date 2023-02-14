@@ -1,5 +1,4 @@
 # Package [cloudeng.io/algo/lcs](https://pkg.go.dev/cloudeng.io/algo/lcs?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/algo/lcs)](https://goreportcard.com/report/cloudeng.io/algo/lcs)
 
 ```go
 import cloudeng.io/algo/lcs

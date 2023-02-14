@@ -1,5 +1,4 @@
 # Package [cloudeng.io/io/reloadfs](https://pkg.go.dev/cloudeng.io/io/reloadfs?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/io/reloadfs)](https://goreportcard.com/report/cloudeng.io/io/reloadfs)
 
 ```go
 import cloudeng.io/io/reloadfs
