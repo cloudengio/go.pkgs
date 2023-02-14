@@ -37,7 +37,7 @@ jobs:
           go install cloudeng.io/citools/multimod@latest
 
       - name: Test
-        run: multimod --config=.multimod.yml --test
+        run: multimod --config=.multimod.yaml test
 
   linting:
     runs-on: ubuntu-latest
