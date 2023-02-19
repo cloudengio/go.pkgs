@@ -1,6 +1,6 @@
 module cloudeng.io/aws
 
-go 1.16
+go 1.19
 
 require (
 	cloudeng.io/file v0.0.0-20230131001623-0f9cc3f76915
