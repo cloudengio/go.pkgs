@@ -162,6 +162,11 @@ commands:
         summary: describe l1.1
       - name: l1.2
         summary: describe l1.2
+  - name: l2
+    commands:
+      - name: l2.1
+        commands:
+          - name: l2.1.1
 `)
 
 	out := &strings.Builder{}
@@ -178,6 +183,10 @@ commands:
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 
 	cmdSet.Set("l1", "l1.2").MustRunnerAndFlags(
+		(&runner{name: "l1.2", out: out}).cmd,
+		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+
+	cmdSet.Set("l2", "l2.1", "l2.1.1").MustRunnerAndFlags(
 		(&runner{name: "l1.2", out: out}).cmd,
 		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
 
