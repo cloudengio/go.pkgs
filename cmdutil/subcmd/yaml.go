@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"cloudeng.io/cmdutil"
 )
 
 // use to separate command names at different levels.
@@ -31,7 +31,7 @@ func buildTree(cmdDict map[string]*Command, parent string, defs []commandDef) []
 			cmds[i] = cmd
 			continue
 		}
-		cmdSet := NewCommandSet(buildTree(cmdDict, def.Name, def.Commands)...)
+		cmdSet := NewCommandSet(buildTree(cmdDict, parent+levelSep+def.Name, def.Commands)...)
 		cmds[i] = NewCommandLevel(def.Name, cmdSet)
 		cmds[i].Document(def.Summary, def.Arguments...)
 		cmdDict[pathName] = cmds[i]
@@ -90,7 +90,7 @@ func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet) {
 // FromYAML parses a YAML specification of the command tree.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	var yamlCmd commandDef
-	if err := yaml.Unmarshal(spec, &yamlCmd); err != nil {
+	if err := cmdutil.ParseYAMLConfig(spec, &yamlCmd); err != nil {
 		return nil, err
 	}
 	cmdSet := &CommandSetYAML{
