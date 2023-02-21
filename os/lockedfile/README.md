@@ -5,7 +5,7 @@ import cloudeng.io/os/lockedfile
 ```
 
 Package lockedfile creates and manipulates files whose contents should only
-change atomically. This package is forked from the go compilers internal
+change atomically. This package is forked from the go compiler's internal
 packages.
 
 ## Functions
