@@ -4,7 +4,7 @@
 
 // Package lockedfile creates and manipulates files whose contents should only
 // change atomically.
-// This package is forked from the go compilers internal packages.
+// This package is forked from the go compiler's internal packages.
 package lockedfile
 
 import (
