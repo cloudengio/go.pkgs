@@ -49,7 +49,8 @@ type commandDef struct {
 type CommandSetYAML struct {
 	*CommandSet
 
-	cmdDict map[string]*Command
+	extensions []Extension
+	cmdDict    map[string]*Command
 }
 
 type CurrentCommand struct {
