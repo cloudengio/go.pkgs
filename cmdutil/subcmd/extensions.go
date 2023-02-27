@@ -139,3 +139,43 @@ func MustFromYAMLTemplate(specTpl string, exts ...Extension) (*CommandSetYAML, [
 	}
 	return cmds, expanded
 }
+
+type mergedExtension struct {
+	name string
+	exts []Extension
+	body string
+}
+
+func (me *mergedExtension) Name() string {
+	return me.name
+}
+
+func (me *mergedExtension) YAML() string {
+	return me.body
+}
+
+func (me *mergedExtension) Set(cmdSet *CommandSetYAML) error {
+	for _, ext := range me.exts {
+		if err := ext.Set(cmdSet); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MergeExtensions returns an extension that merges the supplied extensions.
+// Calling the Set method on the returned extension will call the Set method
+// on each of the supplied extensions. The YAML method returns the concatenation
+// of the YAML methods of the supplied extensions in the order that they are
+// specified.
+func MergeExtensions(name string, exts ...Extension) Extension {
+	var body strings.Builder
+	for _, ext := range exts {
+		body.WriteString(ext.YAML())
+	}
+	return &mergedExtension{
+		name: name,
+		exts: exts,
+		body: body.String(),
+	}
+}
