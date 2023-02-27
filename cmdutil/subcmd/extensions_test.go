@@ -115,3 +115,43 @@ func TestExtensions(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+const (
+	m1Spec = "- name: m1\n"
+	m2Spec = "- name: m2\n"
+	m3Spec = "- name: m3\n"
+
+	mergedSpec = `name: cli
+commands:
+  {{range subcmdExtension "merged"}}{{.}}
+  {{end}}
+`
+	expandedMergedSpec = `name: cli
+commands:
+  - name: m1
+  - name: m2
+  - name: m3
+`
+)
+
+func TestMergeExtensions(t *testing.T) {
+	appendFunc := &extType{}
+	m1 := subcmd.NewExtension("m1", m1Spec, appendFunc.Set)
+	m2 := subcmd.NewExtension("m2", m2Spec, appendFunc.Set)
+	m3 := subcmd.NewExtension("m3", m3Spec, appendFunc.Set)
+	merged := subcmd.MergeExtensions("merged", m1, m2, m3)
+	cs, expanded, err := subcmd.FromYAMLTemplate(mergedSpec, merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cs.AddExtensions(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := appendFunc.count, 3; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := strings.TrimSpace(string(expanded)), strings.TrimSpace(expandedMergedSpec); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
