@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"io"
+	"os"
 )
 
 // Object represents an object/file that has been downloaded/crawled or is the
@@ -51,6 +52,24 @@ func (o *Object[V, R]) Write(wr io.Writer) error {
 
 func (o *Object[V, R]) Read(rd io.Reader) error {
 	return gob.NewDecoder(rd).Decode(o)
+}
+
+func WriteObject[V, R any](path string, object Object[V, R]) error {
+	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer wr.Close()
+	return object.Write(wr)
+}
+
+func ReadObject[V, R any](path string, object *Object[V, R]) error {
+	rd, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer rd.Close()
+	return object.Read(rd)
 }
 
 // Error is an implementation of error that is registered with the gob
