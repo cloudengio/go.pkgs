@@ -4,7 +4,7 @@
 
 // Package content provides support for working with different content types.
 // In particular it defines a mean of specifying content types and a registry
-// for matching content types against handlerspackage content
+// for matching content types against handlers for processing those types.
 package content
 
 import (
