@@ -7,84 +7,31 @@ package content
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/json"
-	"fmt"
 	"io"
-	"time"
 )
 
-// Encoding represents the encoding used for the raw bytes of an Object,
-// that is the original encoding used when the object was downloaded.
-type Encoding int
-
-const (
-	ByteEncoding Encoding = iota
-	JSONEncoding
-)
-
-// Object represents an object that has been downloded/crawled or read from a
-// persistent store (after having been written to persistent storage following
-// being crawled/downloaded). RawObject contains the raw bytes that the
-// Object was created from and metadata.
-type Object[T any] struct {
-	Object T
-	RawObject
+// Object represents an object/file that has been downloaded/crawled or is the
+// result of an API invocation. The Value field represents the typed value
+// of the result of the download or API operation. The Response field
+// is the actual response for the download, API call etc. The Response
+// may include additional metadata.
+//
+// Object should be used whenever generic operations over either downloaded
+// content or API responses are required. Gob encoding is supported, but
+// care must be taken to ensure that any interface fields are appropriately
+// registered with the gob package. error is a common case that may be
+// probelmatic in which case the GobError function can be used to replace
+// the existing error with a wrapper that implements the error interface
+// and is registered with the gob package. Canonical usage is:
+//
+//	response.Err = content.GobError(object.Err)
+type Object[Value, Response any] struct {
+	Value    Value
+	Response Response
+	Type     Type
 }
 
-func unmarshallByteEncoding(data []byte, obj any) error {
-	if o, ok := obj.(*[]byte); ok {
-		*o = data
-		return nil
-	}
-	return fmt.Errorf("byte encoding not compatible for type: %T", obj)
-}
-
-func (o *Object[T]) Encode() ([]byte, error) {
-	return o.RawObject.Encode()
-}
-
-func (o *Object[T]) Decode(data []byte) error {
-	if err := o.RawObject.Decode(data); err != nil {
-		return err
-	}
-	switch o.RawObject.Encoding {
-	case JSONEncoding:
-		return json.Unmarshal(o.RawObject.Bytes, &o.Object)
-	case ByteEncoding:
-		return unmarshallByteEncoding(o.RawObject.Bytes, &o.Object)
-	}
-	return fmt.Errorf("unsupported encoding used for the raw object: %v", o.RawObject.Encoding)
-}
-
-func (o *Object[T]) Write(wr io.Writer) error {
-	return o.RawObject.Write(wr)
-}
-
-func (o *Object[T]) Read(rd io.Reader) error {
-	if err := o.RawObject.Read(rd); err != nil {
-		return err
-	}
-	switch o.RawObject.Encoding {
-	case JSONEncoding:
-		return json.Unmarshal(o.RawObject.Bytes, &o.Object)
-	case ByteEncoding:
-		return unmarshallByteEncoding(o.RawObject.Bytes, &o.Object)
-	}
-	return fmt.Errorf("unsupported encoding used for the raw object: %v", o.RawObject.Encoding)
-}
-
-// RawObject represents the raw data for an Object, that is, the original
-// bytes the Object was created from and metadata such as its content.Type,
-// original encoding, when it was created, any errors encountered when it was
-// crawled/downloaded etc.
-type RawObject struct {
-	Type       Type
-	CreateTime time.Time
-	Encoding   Encoding
-	Bytes      []byte
-}
-
-func (o *RawObject) Encode() ([]byte, error) {
+func (o *Object[V, R]) Encode() ([]byte, error) {
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
 	if err := enc.Encode(o); err != nil {
@@ -93,16 +40,36 @@ func (o *RawObject) Encode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (o *RawObject) Decode(data []byte) error {
-	buf := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buf)
+func (o *Object[V, R]) Decode(data []byte) error {
+	dec := gob.NewDecoder(bytes.NewReader(data))
 	return dec.Decode(o)
 }
 
-func (o *RawObject) Write(wr io.Writer) error {
+func (o *Object[V, R]) Write(wr io.Writer) error {
 	return gob.NewEncoder(wr).Encode(o)
 }
 
-func (o *RawObject) Read(rd io.Reader) error {
+func (o *Object[V, R]) Read(rd io.Reader) error {
 	return gob.NewDecoder(rd).Decode(o)
+}
+
+// GobError is an implementation of error that is registered with the gob
+// package and marshals the error as the string value returned by its Error()
+// method. It will return nil if the specified error is nil. Common usage
+// is:
+//
+//	response.Err = content.GobError(object.Err)
+func GobError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &errorString{Err: err.Error()}
+}
+
+type errorString struct{ Err string }
+
+func (e *errorString) Error() string { return e.Err }
+
+func init() {
+	gob.Register(&errorString{})
 }

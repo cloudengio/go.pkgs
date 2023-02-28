@@ -9,6 +9,7 @@ import (
 	"io/fs"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/content"
 )
 
 // Request represents a request for a list of objects, stored in the same
@@ -51,4 +52,19 @@ type T interface {
 	Run(ctx context.Context,
 		input <-chan Request,
 		output chan<- Downloaded) error
+}
+
+// AsObjects returns the specified downloaded results as a slice
+// of content.Object.
+func AsObjects(downloaded []Result) (objs []content.Object[[]byte, Result]) {
+	for _, dl := range downloaded {
+		var obj content.Object[[]byte, Result]
+		obj.Value = dl.Contents
+		obj.Response = dl
+		obj.Response.Contents = nil
+		obj.Response.Err = content.GobError(dl.Err)
+		obj.Type = content.TypeForPath(dl.Name)
+		objs = append(objs, obj)
+	}
+	return objs
 }
