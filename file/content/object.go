@@ -24,7 +24,7 @@ import (
 // with a wrapper that implements the error interface and is registered
 // with the gob package. Canonical usage is:
 //
-//	response.Err = content.GobError(object.Err)
+//	response.Err = content.Error(object.Err)
 type Object[Value, Response any] struct {
 	Value    Value
 	Response Response
@@ -53,13 +53,13 @@ func (o *Object[V, R]) Read(rd io.Reader) error {
 	return gob.NewDecoder(rd).Decode(o)
 }
 
-// GobError is an implementation of error that is registered with the gob
+// Error is an implementation of error that is registered with the gob
 // package and marshals the error as the string value returned by its Error()
 // method. It will return nil if the specified error is nil. Common usage
 // is:
 //
-//	response.Err = content.GobError(object.Err)
-func GobError(err error) error {
+//	response.Err = content.Error(object.Err)
+func Error(err error) error {
 	if err == nil {
 		return nil
 	}

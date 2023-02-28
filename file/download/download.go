@@ -62,7 +62,7 @@ func AsObjects(downloaded []Result) (objs []content.Object[[]byte, Result]) {
 		obj.Value = dl.Contents
 		obj.Response = dl
 		obj.Response.Contents = nil
-		obj.Response.Err = content.GobError(dl.Err)
+		obj.Response.Err = content.Error(dl.Err)
 		obj.Type = content.TypeForPath(dl.Name)
 		objs = append(objs, obj)
 	}
