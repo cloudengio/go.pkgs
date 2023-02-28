@@ -32,12 +32,11 @@ type Object[T any] struct {
 }
 
 func unmarshallByteEncoding(data []byte, obj any) error {
-	switch obj := obj.(type) {
-	case *[]byte:
-		*obj = data
+	if o, ok := obj.(*[]byte); ok {
+		*o = data
 		return nil
 	}
-	return fmt.Errorf("byte encoding not compatibile for type: %T", obj)
+	return fmt.Errorf("byte encoding not compatible for type: %T", obj)
 }
 
 func (o *Object[T]) Encode() ([]byte, error) {
