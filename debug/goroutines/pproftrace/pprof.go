@@ -15,7 +15,7 @@ import (
 )
 
 // Run uses pprof's label support to attach the specified key/value
-// label to all goroutines spawed by the supplied runner. RunUnderPprof returns
+// label to all goroutines spawed by the supplied runner. Run returns
 // when runner returns.
 func Run(ctx context.Context, key, value string, runner func(context.Context)) {
 	pprof.Do(ctx, pprof.Labels(key, value), runner)
