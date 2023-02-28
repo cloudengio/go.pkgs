@@ -18,11 +18,11 @@ import (
 //
 // Object should be used whenever generic operations over either downloaded
 // content or API responses are required. Gob encoding is supported, but
-// care must be taken to ensure that any interface fields are appropriately
-// registered with the gob package. error is a common case that may be
-// probelmatic in which case the GobError function can be used to replace
-// the existing error with a wrapper that implements the error interface
-// and is registered with the gob package. Canonical usage is:
+// care must be taken to ensure that any fields that are interface types
+// are appropriately registered with the gob package. error is a common
+// case and the GobError function can be used to replace the existing error
+// with a wrapper that implements the error interface and is registered
+// with the gob package. Canonical usage is:
 //
 //	response.Err = content.GobError(object.Err)
 type Object[Value, Response any] struct {
