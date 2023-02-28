@@ -34,7 +34,6 @@ func TestObject(t *testing.T) {
 		CreateTime: now,
 		Encoding:   content.JSONEncoding,
 		Bytes:      buf,
-		Error:      "oops",
 	}
 	obj := content.Object[testObject]{
 		Object:    tobj,
@@ -81,7 +80,6 @@ func TestByteEncoding(t *testing.T) {
 		CreateTime: now,
 		Encoding:   content.ByteEncoding,
 		Bytes:      tobj,
-		Error:      "oops",
 	}
 	obj := content.Object[[]byte]{
 		Object:    tobj,

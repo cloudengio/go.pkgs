@@ -82,7 +82,6 @@ type RawObject struct {
 	CreateTime time.Time
 	Encoding   Encoding
 	Bytes      []byte
-	Error      string
 }
 
 func (o *RawObject) Encode() ([]byte, error) {
