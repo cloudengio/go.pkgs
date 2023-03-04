@@ -132,12 +132,13 @@ func FromYAMLTemplate(specTpl string, exts ...Extension) (*CommandSetYAML, []byt
 
 // MustFromYAMLTemplate is like FromYAMLTemplate except that it panics
 // on error.
-func MustFromYAMLTemplate(specTpl string, exts ...Extension) (*CommandSetYAML, []byte) {
+func MustFromYAMLTemplate(specTpl string, exts ...Extension) *CommandSetYAML {
 	cmds, expanded, err := FromYAMLTemplate(specTpl, exts...)
 	if err != nil {
+		fmt.Printf("%s", expanded)
 		panic(fmt.Sprintf("%v", err))
 	}
-	return cmds, expanded
+	return cmds
 }
 
 type mergedExtension struct {

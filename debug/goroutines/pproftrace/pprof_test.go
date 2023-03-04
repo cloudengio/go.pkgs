@@ -16,23 +16,23 @@ import (
 
 var spawned chan struct{}
 
-func runner(ctx context.Context, ch, dch chan struct{}) {
+func runner(ctx context.Context, delay time.Duration, ch, dch chan struct{}) {
 	go func() {
 		close(spawned)
-		time.Sleep(time.Second)
+		time.Sleep(delay)
 		<-ch
 		close(dch)
 	}()
 }
 
-func testRunAndFormat(t *testing.T) error {
+func testRunAndFormat(t *testing.T, delay time.Duration) error {
 	ctx := context.Background()
 	key, value := "testing", t.Name()
 	ch := make(chan struct{})
 	dch := make(chan struct{})
 
 	pproftrace.Run(ctx, key, value, func(ctx context.Context) {
-		runner(ctx, ch, dch)
+		runner(ctx, delay, ch, dch)
 	})
 	<-spawned
 
@@ -74,12 +74,17 @@ func testRunAndFormat(t *testing.T) error {
 }
 
 func TestRunAndFormat(t *testing.T) {
-	spawned = make(chan struct{})
-	err := testRunAndFormat(t)
-	if err != nil {
+	var err error
+	delay := time.Second
+	for i := 0; i < 3; i++ {
 		spawned = make(chan struct{})
-		if err := testRunAndFormat(t); err != nil {
-			t.Error(err)
+		err = testRunAndFormat(t, delay)
+		if err == nil {
+			return
 		}
+		delay += time.Second
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 }
