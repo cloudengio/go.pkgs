@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
@@ -92,5 +93,43 @@ func roundtrip[V, R any](t *testing.T, obj content.Object[V, R]) {
 	}
 	if got, want := obj, obj2; !reflect.DeepEqual(got, want) {
 		t.Errorf("%v: got: %v, want: %v", loc, got, want)
+	}
+}
+
+func TestBinaryEncoding(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctype := content.Type("bar")
+	obj := content.Object[int, string]{
+		Value:    3,
+		Response: "anything",
+		Type:     ctype,
+	}
+	path := filepath.Join(tmpDir, "obj")
+
+	data, _ := obj.Encode()
+
+	if err := content.WriteBinary(path, ctype, data); err != nil {
+		t.Fatal(err)
+	}
+	ctype1, data1, err := content.ReadBinary(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := ctype1, ctype; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := data1, data; !bytes.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	var obj1 content.Object[int, string]
+	if err := obj1.Decode(data1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := obj, obj1; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
