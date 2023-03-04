@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/checkpoint"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
@@ -28,8 +29,11 @@ import (
 type ExponentialBackoff struct {
 	InitialDelay time.Duration `yaml:"initial_delay"`
 	Steps        int           `yaml:"steps"`
+	StatusCodes  []int         `yaml:"status_codes,flow"`
 }
 
+// Rate specifies a rate in one of several forms, only one should
+// be used.
 type Rate struct {
 	Tick            time.Duration `yaml:"tick"`
 	RequestsPerTick int           `yaml:"requests_per_tick"`
@@ -62,8 +66,32 @@ type DownloadConfig struct {
 // will be used to store the results of the crawl. The cache is intended
 // to be relative to the
 type CrawlCacheConfig struct {
-	Prefix           string `yaml:"cache_prefix"`
-	ClearBeforeCrawl bool   `yaml:"cache_clear_before_crawl"`
+	Prefix            string `yaml:"cache_prefix"`
+	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl"`
+	Checkpoint        string `yaml:"cache_checkpoint"`
+	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len"`
+}
+
+func (c CrawlCacheConfig) Initialize() (string, checkpoint.Operation, error) {
+	if c.ClearBeforeCrawl {
+		if err := os.RemoveAll(c.Prefix); err != nil {
+			return "", nil, err
+		}
+		if len(c.Checkpoint) > 0 {
+			if err := os.RemoveAll(c.Checkpoint); err != nil {
+				return "", nil, err
+			}
+		}
+	}
+	var cp checkpoint.Operation
+	var err error
+	if len(c.Checkpoint) > 0 {
+		cp, err = checkpoint.NewDirectoryOperation(c.Checkpoint)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+	return os.ExpandEnv(c.Prefix), cp, os.MkdirAll(c.Prefix, 0700)
 }
 
 // Confiug represents the configuration for a single crawl.
