@@ -121,6 +121,9 @@ func (d *dirop) Latest(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(existing) == 0 {
+		return nil, nil
+	}
 	prev := existing[len(existing)-1]
 	return os.ReadFile(filepath.Join(d.dir, prev))
 }
@@ -140,7 +143,7 @@ func readDirSorted(ctx context.Context, path string) ([]string, error) {
 		}
 		infos, err := f.ReadDir(scanSize)
 		for _, info := range infos {
-			if n := info.Name(); !info.IsDir() && strings.HasSuffix(n, checkpointSuffix) && len(n) > (checkpointNumFormatSize+1+len(checkpointSuffix)) {
+			if n := info.Name(); !info.IsDir() && strings.HasSuffix(n, checkpointSuffix) && len(n) >= (checkpointNumFormatSize+len(checkpointSuffix)) {
 				files = append(files, n)
 			}
 		}
@@ -165,5 +168,5 @@ const (
 )
 
 func formatFilename(n int, label string) string {
-	return fmt.Sprintf(checkpointNumFormat+"-%s"+checkpointSuffix, n, label)
+	return fmt.Sprintf(checkpointNumFormat+"%s"+checkpointSuffix, n, label)
 }
