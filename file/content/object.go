@@ -11,10 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-<<<<<<< HEAD
 	"path/filepath"
-=======
->>>>>>> main
 )
 
 // Object represents an object/file that has been downloaded/crawled or is the
