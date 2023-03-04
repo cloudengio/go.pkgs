@@ -25,7 +25,7 @@ func NewRegistry[T any]() *Registry[T] {
 	}
 }
 
-// LookupConverters returns the converters registered for converting the 'from'
+// LookupConverters returns the converter registered for converting the 'from'
 // content type to the 'to' content type. The returned handlers are in the same
 // order as that registered via RegisterConverter.
 func (c *Registry[T]) LookupConverters(from, to Type) (T, error) {
@@ -57,7 +57,7 @@ func (c *Registry[T]) RegisterConverters(from, to Type, converter T) error {
 	return nil
 }
 
-// LookupHandlers returns the list handler registered for the given content type.
+// LookupHandlers returns the handler registered for the given content type.
 func (c *Registry[T]) LookupHandlers(ctype Type) ([]T, error) {
 	ctype = Clean(ctype)
 	c.mu.Lock()
