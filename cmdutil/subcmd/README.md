@@ -318,14 +318,40 @@ FromYAML parses a YAML specification of the command tree.
 
 
 ```go
+func FromYAMLTemplate(specTpl string, exts ...Extension) (*CommandSetYAML, []byte, error)
+```
+FromYAMLTemplate returns a CommandSetYAML using the expanded value of the
+supplied template and the supplied extensions.
+
+
+```go
 func MustFromYAML(spec string) *CommandSetYAML
 ```
 MustFromYAML is like FromYAML but will panic if the YAML spec is incorrectly
 defined.
 
 
+```go
+func MustFromYAMLTemplate(specTpl string, exts ...Extension) *CommandSetYAML
+```
+MustFromYAMLTemplate is like FromYAMLTemplate except that it panics on
+error.
+
+
 
 ### Methods
+
+```go
+func (c *CommandSetYAML) AddExtensions() error
+```
+AddExtensions calls the Set method on each of the extensions.
+
+
+```go
+func (c *CommandSetYAML) MustAddExtensions()
+```
+MustAddExtensions is like AddExtensions but panics on error.
+
 
 ```go
 func (c *CommandSetYAML) Set(names ...string) *CurrentCommand
@@ -358,6 +384,56 @@ func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error
 ```
 RunnerAndFlags specifies the Runner and FlagSet for the currently 'set'
 command as returned by CommandSetYAML.Set.
+
+
+
+
+### Type Extension
+```go
+type Extension interface {
+	Name() string
+	YAML() string
+	Set(cmdSet *CommandSetYAML) error
+}
+```
+Extension allows for extending a YAMLCommandSet with additional commands
+at runtime. Implementations of extension are used in conjunction with a
+templated version of the YAML command tree spec. The template can refer to
+an extension using the subcmdExtension function in a template pipeline:
+
+  - name: command commands: {{range subcmdExtension "exensionName"}}{{.}}
+    {{end}}
+
+The extensionName is the name of the extension as returned by the Name
+method, and . refers to results of the YAML method split into single lines.
+Thus for the above example, the YAML method can return:
+
+`- name: c3.1 - name: c3.2`
+
+The template expansion ensures the correct indentation in the final YAML
+that's used to create the command tree.
+
+In addition to adding the extension to the YAML used to create the command
+tree, the Set method is also used to add the extension's commands to the
+command set. The Set method is called by CommandSetYAML.AddExtensions which
+should itself be called before the command set is used.
+
+### Functions
+
+```go
+func MergeExtensions(name string, exts ...Extension) Extension
+```
+MergeExtensions returns an extension that merges the supplied extensions.
+Calling the Set method on the returned extension will call the Set method on
+each of the supplied extensions. The YAML method returns the concatenation
+of the YAML methods of the supplied extensions in the order that they are
+specified.
+
+
+```go
+func NewExtension(name, spec string, appendFn func(cmdSet *CommandSetYAML) error) Extension
+```
+NewExtension
 
 
 

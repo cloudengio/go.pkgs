@@ -12,6 +12,16 @@ The interface to a crawler is channel based to allow for concurrency. The
 outlink extractor is called for all downloaded files and should implement
 duplicate detection and removal.
 
+## Functions
+### Func CrawledObjects
+```go
+func CrawledObjects(crawled Crawled) (objs []content.Object[[]byte, download.Result])
+```
+CrawledObjects returns the downloaded objects as a slice of content.Objects
+using the download.AsObjects function.
+
+
+
 ## Types
 ### Type Crawled
 ```go

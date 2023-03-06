@@ -24,9 +24,9 @@ exists.
 ```go
 func Run(ctx context.Context, key, value string, runner func(context.Context))
 ```
-Run uses pprof's label support to attach the specified key/value label to
-all goroutines spawed by the supplied runner. RunUnderPprof returns when
-runner returns.
+Run uses pprof's label support to attach the specified key/value label
+to all goroutines spawed by the supplied runner. Run returns when runner
+returns.
 
 
 

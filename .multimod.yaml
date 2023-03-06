@@ -19,4 +19,4 @@ annotate:
     "--annotation=cloudeng-copyright",
   ]
 usage: ["gousage", "--overwrite", "./..."]
-update: ["go", "get", "-u", "./..."]
+update: ["go", "get", "-u", "./...", ";", "go", "mod", "tidy"]
