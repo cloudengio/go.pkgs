@@ -1,5 +1,4 @@
 # Package [cloudeng.io/webapp/webauth/auth0](https://pkg.go.dev/cloudeng.io/webapp/webauth/auth0?tab=doc)
-[![CircleCI](https://circleci.com/gh/cloudengio/go.gotools.svg?style=svg)](https://circleci.com/gh/cloudengio/go.gotools) [![Go Report Card](https://goreportcard.com/badge/cloudeng.io/webapp/webauth/auth0)](https://goreportcard.com/report/cloudeng.io/webapp/webauth/auth0)
 
 ```go
 import cloudeng.io/webapp/webauth/auth0

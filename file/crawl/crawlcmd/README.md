@@ -68,13 +68,23 @@ that are not recognised by the supplied cloudpath.MatcherSpec.
 ### Type CrawlCacheConfig
 ```go
 type CrawlCacheConfig struct {
-	Prefix           string `yaml:"cache_prefix"`
-	ClearBeforeCrawl bool   `yaml:"cache_clear_before_crawl"`
+	Prefix            string `yaml:"cache_prefix"`
+	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl"`
+	Checkpoint        string `yaml:"cache_checkpoint"`
+	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len"`
 }
 ```
 Each crawl may specify its own cache directory and configuration. This
 will be used to store the results of the crawl. The cache is intended to be
 relative to the
+
+### Methods
+
+```go
+func (c CrawlCacheConfig) Initialize() (string, checkpoint.Operation, error)
+```
+
+
 
 
 ### Type DownloadConfig
@@ -123,6 +133,7 @@ parametised via its DownloadFactoryConfig receiver.
 type ExponentialBackoff struct {
 	InitialDelay time.Duration `yaml:"initial_delay"`
 	Steps        int           `yaml:"steps"`
+	StatusCodes  []int         `yaml:"status_codes,flow"`
 }
 ```
 ExponentialBackoffConfig is the configuration for an exponential backoff
@@ -137,6 +148,7 @@ type Rate struct {
 	BytesPerTick    int           `yaml:"bytes_per_tick"`
 }
 ```
+Rate specifies a rate in one of several forms, only one should be used.
 
 
 ### Type RateControl

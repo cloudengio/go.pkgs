@@ -11,6 +11,16 @@ actual download. Downloaders can be provided for http/https, AWS S3 or
 any other local or cloud storage system for which an fs.FS implementation
 exists.
 
+## Functions
+### Func AsObjects
+```go
+func AsObjects(downloaded []Result) (objs []content.Object[[]byte, Result])
+```
+AsObjects returns the specified downloaded results as a slice of
+content.Object.
+
+
+
 ## Types
 ### Type Downloaded
 ```go
