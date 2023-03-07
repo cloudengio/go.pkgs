@@ -17,7 +17,6 @@ import (
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
-	"cloudeng.io/glean/crawlindex/config"
 	"cloudeng.io/path"
 	"cloudeng.io/path/cloudpath"
 )
@@ -27,7 +26,7 @@ import (
 type Crawler struct {
 	Config
 	Extractors      func() map[content.Type]outlinks.Extractor
-	FSForCrawl      func(config.Crawl) map[string]file.FSFactory
+	FSForCrawl      func(Config) map[string]file.FSFactory
 	crawlCachePath  string
 	displayOutlinks bool
 	displayProgress bool
