@@ -147,6 +147,9 @@ func (c Config) SeedsByScheme(matchers cloudpath.MatcherSpec) (map[string][]clou
 	return matches, rejected
 }
 
+// CreateSeedCrawlRequests creates a set of crawl requests for the supplied
+// seeds. It use the factories to create a file.FS for the URI scheme of
+// each seed.
 func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error) {
 	requests := []download.Request{}
 	for scheme, matched := range seeds {

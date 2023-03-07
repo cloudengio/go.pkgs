@@ -26,20 +26,22 @@ import (
 type Crawler struct {
 	Config
 	Extractors      func() map[content.Type]outlinks.Extractor
-	FSForCrawl      func(Config) map[string]file.FSFactory
 	crawlCachePath  string
 	displayOutlinks bool
 	displayProgress bool
+	fsMap           map[string]file.FSFactory
 }
 
-func (c *Crawler) Run(ctx context.Context, root string, displayOutlinks, displayProgress bool) error {
-	crawlCache, _, err := c.Cache.Initialize(root)
+// Run runs the crawler.
+func (c *Crawler) Run(ctx context.Context, fsMap map[string]file.FSFactory, cacheRoot string, displayOutlinks, displayProgress bool) error {
+	crawlCache, _, err := c.Cache.Initialize(cacheRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize crawl cache: %v: %v", c.Cache, err)
 	}
 	c.crawlCachePath = crawlCache
 	c.displayOutlinks = displayOutlinks
 	c.displayProgress = displayProgress
+	c.fsMap = fsMap
 	return c.run(ctx)
 }
 
@@ -60,7 +62,7 @@ func (c *Crawler) run(ctx context.Context) error {
 		return fmt.Errorf("unable to determine a file system for seeds: %v", rejected)
 	}
 
-	requests, err := c.CreateSeedCrawlRequests(ctx, c.FSForCrawl(c.Config), seedsByScheme)
+	requests, err := c.CreateSeedCrawlRequests(ctx, c.fsMap, seedsByScheme)
 	if err != nil {
 		return err
 	}
