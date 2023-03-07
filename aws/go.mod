@@ -3,9 +3,9 @@ module cloudeng.io/aws
 go 1.19
 
 require (
-	cloudeng.io/file v0.0.0-20230306215119-e71b407605cc
+	cloudeng.io/file v0.0.0-20230307023515-8a194fbc7867
 	cloudeng.io/path v0.0.8
-	cloudeng.io/webapp v0.0.0-20230306215119-e71b407605cc
+	cloudeng.io/webapp v0.0.0-20230307023515-8a194fbc7867
 	github.com/aws/aws-sdk-go-v2 v1.17.5
 	github.com/aws/aws-sdk-go-v2/config v1.18.15
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.15
@@ -16,9 +16,9 @@ require (
 )
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20230306215119-e71b407605cc // indirect
+	cloudeng.io/cmdutil v0.0.0-20230307023515-8a194fbc7867 // indirect
 	cloudeng.io/errors v0.0.8 // indirect
-	cloudeng.io/os v0.0.0-20230306215119-e71b407605cc // indirect
+	cloudeng.io/os v0.0.0-20230307023515-8a194fbc7867 // indirect
 	cloudeng.io/text v0.0.11 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.23 // indirect
