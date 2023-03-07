@@ -72,13 +72,21 @@ type CrawlCacheConfig struct {
 	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len"`
 }
 
-func (c CrawlCacheConfig) Initialize() (string, checkpoint.Operation, error) {
+// Initialize creates the cache and checkpoint directories relative to the
+// specified root, and optionally clears them before the crawl (if
+// Cache.ClearBeforeCrawl is true). Any environment variables in the
+// root or Cache.Prefix will be expanded.
+func (c CrawlCacheConfig) Initialize(root string) (string, checkpoint.Operation, error) {
+	root = os.ExpandEnv(root)
+	cachePath, checkpointPath := os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
+	cachePath = filepath.Join(root, cachePath)
+	checkpointPath = filepath.Join(root, checkpointPath)
 	if c.ClearBeforeCrawl {
-		if err := os.RemoveAll(c.Prefix); err != nil {
+		if err := os.RemoveAll(cachePath); err != nil {
 			return "", nil, err
 		}
 		if len(c.Checkpoint) > 0 {
-			if err := os.RemoveAll(c.Checkpoint); err != nil {
+			if err := os.RemoveAll(checkpointPath); err != nil {
 				return "", nil, err
 			}
 		}
@@ -86,12 +94,12 @@ func (c CrawlCacheConfig) Initialize() (string, checkpoint.Operation, error) {
 	var cp checkpoint.Operation
 	var err error
 	if len(c.Checkpoint) > 0 {
-		cp, err = checkpoint.NewDirectoryOperation(c.Checkpoint)
+		cp, err = checkpoint.NewDirectoryOperation(checkpointPath)
 		if err != nil {
 			return "", nil, err
 		}
 	}
-	return os.ExpandEnv(c.Prefix), cp, os.MkdirAll(c.Prefix, 0700)
+	return cachePath, cp, os.MkdirAll(cachePath, 0700)
 }
 
 // Confiug represents the configuration for a single crawl.
@@ -122,24 +130,6 @@ func (c Config) NewLinkProcessor() (*outlinks.RegexpProcessor, error) {
 	return linkProcessor, nil
 }
 
-// CreateAndCleanCache creates the cache directory for the crawl, relative
-// to the specified root, and optionally clears it before the crawl (if
-// Cache.ClearBeforeCrawl is true). Any environment variables in the
-// root or Cache.Prefix will be expanded.
-func (c Config) CreateAndCleanCache(root string) error {
-	if len(c.Cache.Prefix) == 0 {
-		return nil
-	}
-	root = os.ExpandEnv(root)
-	crawlCache := filepath.Join(root, os.ExpandEnv(c.Cache.Prefix))
-	if c.Cache.ClearBeforeCrawl {
-		if err := os.RemoveAll(crawlCache); err != nil {
-			return fmt.Errorf("failed to remove %v: %v", crawlCache, err)
-		}
-	}
-	return nil
-}
-
 // SeedsByScheme returns the crawl seeds grouped by their scheme and any seeds
 // that are not recognised by the supplied cloudpath.MatcherSpec.
 func (c Config) SeedsByScheme(matchers cloudpath.MatcherSpec) (map[string][]cloudpath.Match, []string) {
@@ -157,6 +147,9 @@ func (c Config) SeedsByScheme(matchers cloudpath.MatcherSpec) (map[string][]clou
 	return matches, rejected
 }
 
+// CreateSeedCrawlRequests creates a set of crawl requests for the supplied
+// seeds. It use the factories to create a file.FS for the URI scheme of
+// each seed.
 func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error) {
 	requests := []download.Request{}
 	for scheme, matched := range seeds {
