@@ -3,14 +3,14 @@ module cloudeng.io/file
 go 1.18
 
 require (
-	cloudeng.io/algo v0.0.0-20230304024356-5d6b315e83f0
+	cloudeng.io/algo v0.0.0-20230306215119-e71b407605cc
 	cloudeng.io/cmdutil v0.0.0-20230130231933-fe585c604aed
 	cloudeng.io/errors v0.0.8
-	cloudeng.io/net v0.0.0-20230304024356-5d6b315e83f0
-	cloudeng.io/os v0.0.0-20230304024356-5d6b315e83f0
+	cloudeng.io/net v0.0.0-20230306215119-e71b407605cc
+	cloudeng.io/os v0.0.0-20230306215119-e71b407605cc
 	cloudeng.io/path v0.0.8
 	cloudeng.io/sync v0.0.8
-	cloudeng.io/sys v0.0.0-20230304024356-5d6b315e83f0
+	cloudeng.io/sys v0.0.0-20230306215119-e71b407605cc
 	cloudeng.io/text v0.0.11
 	github.com/cosnicolaou/pudge v1.0.6
 	golang.org/x/net v0.8.0
