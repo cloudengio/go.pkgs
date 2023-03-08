@@ -140,7 +140,7 @@ func writeSlice(wr io.Writer, data []byte) error {
 	return binary.Write(wr, binary.LittleEndian, data)
 }
 
-const limit = 1 << 20
+const limit = 1 << 23 // 8MB seems large enough
 
 func readSlice(rd io.Reader) ([]byte, error) {
 	var l int64
