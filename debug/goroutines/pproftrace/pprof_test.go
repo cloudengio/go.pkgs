@@ -7,6 +7,7 @@ package pproftrace_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,9 @@ var spawned chan struct{}
 
 func runner(ctx context.Context, delay time.Duration, ch, dch chan struct{}) {
 	go func() {
+		for i := 1; i < 10000; i++ {
+			_ = rand.Int63n(int64(i))
+		}
 		close(spawned)
 		time.Sleep(delay)
 		<-ch
