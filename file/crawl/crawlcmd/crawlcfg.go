@@ -81,6 +81,7 @@ func (c CrawlCacheConfig) Initialize(root string) (string, checkpoint.Operation,
 	cachePath, checkpointPath := os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
 	cachePath = filepath.Join(root, cachePath)
 	checkpointPath = filepath.Join(root, checkpointPath)
+
 	if c.ClearBeforeCrawl {
 		if err := os.RemoveAll(cachePath); err != nil {
 			return "", nil, err
@@ -102,7 +103,7 @@ func (c CrawlCacheConfig) Initialize(root string) (string, checkpoint.Operation,
 	return cachePath, cp, os.MkdirAll(cachePath, 0700)
 }
 
-// Confiug represents the configuration for a single crawl.
+// Config represents the configuration for a single crawl.
 type Config struct {
 	Name          string           `yaml:"name"`
 	Depth         int              `yaml:"depth"`

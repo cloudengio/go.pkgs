@@ -25,7 +25,10 @@ const crawlsSpec = `
     - s3://foo/bar
     - https://yahoo.com
     - s3://baz
-
+  cache:
+    cache_prefix: "static"
+    cache_clear_before_crawl: true
+    cache_sharding_prefix_len: 1
   download:
     default_concurrency: 4 # 0 will default to all available CPUs
     default_request_chan_size: 100
@@ -62,6 +65,10 @@ func TestCrawlConfig(t *testing.T) {
 	}
 
 	if got, want := crawl.NumExtractors, 3; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := crawl.Cache.ClearBeforeCrawl, true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
