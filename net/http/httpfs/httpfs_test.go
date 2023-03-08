@@ -7,6 +7,7 @@ package httpfs_test
 import (
 	"embed"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func TestHTTPFS(t *testing.T) {
 	client := http.DefaultClient
 	hfs := httpfs.New(client, httpfs.WithHTTPScheme())
 
-	fetch := func(name string) string {
+	fetch := func(name string) (string, fs.FileInfo) {
 		f, err := hfs.Open(srv.URL + name)
 		if err != nil {
 			t.Fatal(err)
@@ -35,20 +36,35 @@ func TestHTTPFS(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return string(buf)
+		fi, err := f.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(buf), fi
 	}
 
-	buf := fetch("/testdata/a.html")
+	buf, fi := fetch("/testdata/a.html")
 	if got, want := buf, `<html>
 <title>A</title>
 </html>
 `; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	if got, want := fi.Name(), srv.URL+"/testdata/a.html"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	si := fi.Sys().(*httpfs.Response)
+	if got, want := si.ContentLength, int64(len(buf)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 
-	buf = fetch("/testdata/b")
+	buf, fi = fetch("/testdata/b")
 	if got, want := buf, `just a file
 `; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	si = fi.Sys().(*httpfs.Response)
+	if got, want := si.ContentLength, int64(len(buf)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
