@@ -67,13 +67,38 @@ func (fs *httpfs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	if err := httperror.CheckResponse(err, resp); err != nil {
 		return nil, err
 	}
-	return &httpFile{ReadCloser: resp.Body}, nil
+	return &httpFile{ReadCloser: resp.Body, name: name, resp: resp}, nil
 }
 
 type httpFile struct {
 	io.ReadCloser
 	name string
 	resp *http.Response
+}
+
+// Response is a redacted version of http.Response that can be marshaled
+// using gob.
+type Response struct {
+	// When the response was received.
+	When time.Time
+
+	// Fields copied from the http.Response.
+	Headers                http.Header
+	Trailers               http.Header
+	ContentLength          int64
+	StatusCode             int
+	ProtoMajor, ProtoMinir int
+	TransferEncoding       []string
+}
+
+func (r *Response) fromHTTPResponse(hr *http.Response) {
+	r.Headers = hr.Header
+	r.Trailers = hr.Trailer
+	r.ContentLength = hr.ContentLength
+	r.StatusCode = hr.StatusCode
+	r.ProtoMajor = hr.ProtoMajor
+	r.ProtoMinir = hr.ProtoMinor
+	r.TransferEncoding = hr.TransferEncoding
 }
 
 func (f *httpFile) Stat() (fs.FileInfo, error) {
@@ -84,11 +109,15 @@ func (f *httpFile) Stat() (fs.FileInfo, error) {
 			return nil, err
 		}
 	}
+	resp := &Response{}
+	resp.fromHTTPResponse(f.resp)
 	fi := file.NewInfo(f.name,
 		f.resp.ContentLength,
 		0666,
 		lmt,
-		file.InfoOption{},
+		file.InfoOption{
+			SysInfo: resp,
+		},
 	)
 	return fi, nil
 }
