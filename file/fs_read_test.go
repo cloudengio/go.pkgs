@@ -7,7 +7,7 @@ package file_test
 import (
 	"bytes"
 	"context"
-	"embed"
+	_ "embed"
 	"io/fs"
 	"path"
 	"testing"
@@ -30,9 +30,6 @@ func (c *container) ReadFile(name string) ([]byte, error) {
 func (c *container) Open(name string) (fs.File, error) {
 	return nil, nil
 }
-
-//go:embed testdata/hello.txt
-var testFS embed.FS
 
 //go:embed testdata/hello.txt
 var testFSBytes []byte
