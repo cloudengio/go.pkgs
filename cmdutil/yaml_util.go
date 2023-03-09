@@ -7,13 +7,14 @@ package cmdutil
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"cloudeng.io/file"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,14 +32,18 @@ func ParseYAMLConfigString(spec string, cfg interface{}) error {
 	return ParseYAMLConfig([]byte(spec), cfg)
 }
 
-// ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig.
-func ParseYAMLConfigFile(file string, cfg interface{}) error {
-	spec, err := os.ReadFile(file)
+// ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig
+// using file.FSReadFile to read the file. The use of FSReadFile allows
+// for the configuration file to be read from storage system, including
+// from embed.FS, instead of the local filesystem if an instance of fs.ReadFileFS
+// is stored in the context.
+func ParseYAMLConfigFile(ctx context.Context, filename string, cfg interface{}) error {
+	spec, err := file.FSReadFile(ctx, filename)
 	if err != nil {
 		return err
 	}
 	if err := ParseYAMLConfig(spec, cfg); err != nil {
-		return fmt.Errorf("failed to parse %s: %w", file, err)
+		return fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 	return nil
 }
