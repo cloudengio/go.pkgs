@@ -20,6 +20,7 @@ var (
 	accountIDErr  error
 )
 
+// AccountID returns the account id from the aws.Config.
 func AccountID(ctx context.Context, cfg aws.Config) (string, error) {
 	accountIDOnce.Do(func() {
 		accountID, accountIDErr = awsconfig.AccountID(ctx, cfg)
@@ -27,10 +28,13 @@ func AccountID(ctx context.Context, cfg aws.Config) (string, error) {
 	return accountID, accountIDErr
 }
 
+// IsArn returns true if the supplied string is an ARN.
 func IsARN(name string) bool {
 	return strings.HasPrefix(name, "arn:aws:")
 }
 
+// Region obtains the AWS region either from the supplied config or from
+// the environment.
 func Region(ctx context.Context, cfg aws.Config) string {
 	if len(cfg.Region) > 0 {
 		return cfg.Region
