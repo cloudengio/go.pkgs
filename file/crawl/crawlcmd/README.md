@@ -24,22 +24,16 @@ type Config struct {
 	Cache         CrawlCacheConfig `yaml:"cache"`
 }
 ```
-Confiug represents the configuration for a single crawl.
+Config represents the configuration for a single crawl.
 
 ### Methods
 
 ```go
-func (c Config) CreateAndCleanCache(root string) error
-```
-CreateAndCleanCache creates the cache directory for the crawl, relative
-to the specified root, and optionally clears it before the crawl (if
-Cache.ClearBeforeCrawl is true). Any environment variables in the root or
-Cache.Prefix will be expanded.
-
-
-```go
 func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error)
 ```
+CreateSeedCrawlRequests creates a set of crawl requests for the supplied
+seeds. It use the factories to create a file.FS for the URI scheme of each
+seed.
 
 
 ```go
@@ -81,8 +75,33 @@ relative to the
 ### Methods
 
 ```go
-func (c CrawlCacheConfig) Initialize() (string, checkpoint.Operation, error)
+func (c CrawlCacheConfig) Initialize(root string) (string, checkpoint.Operation, error)
 ```
+Initialize creates the cache and checkpoint directories relative to
+the specified root, and optionally clears them before the crawl (if
+Cache.ClearBeforeCrawl is true). Any environment variables in the root or
+Cache.Prefix will be expanded.
+
+
+
+
+### Type Crawler
+```go
+type Crawler struct {
+	Config
+	Extractors func() map[content.Type]outlinks.Extractor
+	// contains filtered or unexported fields
+}
+```
+Crawler represents a crawler instance that contains global configuration
+information.
+
+### Methods
+
+```go
+func (c *Crawler) Run(ctx context.Context, fsMap map[string]file.FSFactory, cacheRoot string, displayOutlinks, displayProgress bool) error
+```
+Run runs the crawler.
 
 
 

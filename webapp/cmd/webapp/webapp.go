@@ -113,8 +113,7 @@ func prodServe(ctx context.Context, values interface{}, args []string) error {
 
 	assets := webassets.NewAssets(webpackedAssetPrefix, webpackedAssets)
 	router.ServeFiles("/*filepath", http.FS(assets))
-	webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
-	return nil
+	return webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 }
 
 func devServe(ctx context.Context, values interface{}, args []string) error {
@@ -158,9 +157,7 @@ func devServe(ctx context.Context, values interface{}, args []string) error {
 	}
 
 	log.Printf("running on %s", ln.Addr())
-	webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
-
-	return nil
+	return webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 }
 
 func configureAPIEndpoints(router *httprouter.Router) {
@@ -183,7 +180,9 @@ func runWebpackDevServer(ctx context.Context, webpackDir, address string) (*url.
 	wpsrv := webpack.NewDevServer(ctx, webpackDir, "yarn", "start", "--public", address)
 	wpsrv.Configure(webpack.SetSdoutStderr(os.Stdout, os.Stdout),
 		webpack.AddrRegularExpression(regexp.MustCompile("Local:")))
-	wpsrv.Start()
+	if err := wpsrv.Start(); err != nil {
+		return nil, err
+	}
 	return wpsrv.WaitForURL(ctx)
 }
 

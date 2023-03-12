@@ -4,5 +4,5 @@ go 1.16
 
 require (
 	cloudeng.io/errors v0.0.8
-	cloudeng.io/sys v0.0.0-20230307023515-8a194fbc7867
+	cloudeng.io/sys v0.0.0-20230309184059-9263072b1423
 )

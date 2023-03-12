@@ -1,33 +1,27 @@
-// Copyright 2021 cloudeng llc. All rights reserved.
-// Use of this source code is governed by the Apache-2.0
-// license that can be found in the LICENSE file.
-
 // Usage of webapp
 //
-//  Run a webapp server. Two modes are supported: production anddevelopment.
+//	Run a webapp server. Two modes are supported: production anddevelopment.
 //
-//  For production, all assets are built into the production server's binary.
+//	For production, all assets are built into the production server's binary.
 //
-//  For development, the front-end code/assets can be managed in two ways:
+//	For development, the front-end code/assets can be managed in two ways:
 //
-//  1. with embedded assets that can be overridden with newer or new files found on
-//  the local filesystem. This is generally used when the javascript/webapp tooling
-//  only supports generating new assets rather than any form of dynamic update. The
-//  user must reload the site/page to see the new version.
+//	1. with embedded assets that can be overridden with newer or new files found on
+//	the local filesystem. This is generally used when the javascript/webapp tooling
+//	only supports generating new assets rather than any form of dynamic update. The
+//	user must reload the site/page to see the new version.
 //
-//  2. with a development server, such as that provided by webpack, that dynamically
-//  monitors the javascript/webapp code and dynamically rebuilds the assets. To use
-//  this mode, this application will proxy all of the urls that it doesn't itself
-//  implement to the running development server. The dev server may be started by
-//  this server via the --webpack-dir option. Alternatively, a running dev server
-//  may be used via the --webpack-server option.
+//	2. with a development server, such as that provided by webpack, that dynamically
+//	monitors the javascript/webapp code and dynamically rebuilds the assets. To use
+//	this mode, this application will proxy all of the urls that it doesn't itself
+//	implement to the running development server. The dev server may be started by
+//	this server via the --webpack-dir option. Alternatively, a running dev server
+//	may be used via the --webpack-server option.
 //
-//  If a self-signed cerificate is required, the cert command can be used to generate
-//  one.
+//	If a self-signed cerificate is required, the cert command can be used to generate
+//	one.
 //
-//              prod - run a production server.
-//               dev - run a development server.
-//  self-signed-cert - create a self signed certificate
-//
-// flag: help requested
+//	            prod - run a production server.
+//	             dev - run a development server.
+//	self-signed-cert - create a self signed certificate
 package main

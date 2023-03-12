@@ -74,9 +74,13 @@ It provides improved error reporting via YAMLErrorWithSource.
 
 ### Func ParseYAMLConfigFile
 ```go
-func ParseYAMLConfigFile(file string, cfg interface{}) error
+func ParseYAMLConfigFile(ctx context.Context, filename string, cfg interface{}) error
 ```
-ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig.
+ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig using
+file.FSReadFile to read the file. The use of FSReadFile allows for the
+configuration file to be read from storage system, including from embed.FS,
+instead of the local filesystem if an instance of fs.ReadFileFS is stored in
+the context.
 
 ### Func ParseYAMLConfigString
 ```go

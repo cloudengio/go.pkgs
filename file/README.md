@@ -5,6 +5,37 @@ import cloudeng.io/file
 ```
 
 
+## Functions
+### Func ContextWithFS
+```go
+func ContextWithFS(ctx context.Context, container fs.ReadFileFS) context.Context
+```
+ContextWithFS returns a new context that contains the provided instance of
+fs.ReadFileFS stored with as a valye within it.
+
+### Func FSFromContext
+```go
+func FSFromContext(ctx context.Context) (fs.ReadFileFS, bool)
+```
+FSFromContext returns the fs.ReadFileFS instance, if any, stored within the
+context.
+
+### Func FSOpen
+```go
+func FSOpen(ctx context.Context, name string) (fs.File, error)
+```
+FSOpen will open name using the context's fs.ReadFileFS instance if one is
+present, otherwise it will use os.Open.
+
+### Func FSReadFile
+```go
+func FSReadFile(ctx context.Context, name string) ([]byte, error)
+```
+FSreadAll will read name using the context's fs.ReadFileFS instance if one
+is present, otherwise it will use os.ReadFile.
+
+
+
 ## Types
 ### Type FS
 ```go
