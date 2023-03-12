@@ -13,9 +13,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
-	"cloudeng.io/aws/awsconfig"
+	"cloudeng.io/aws/awsutil"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/webauth/acme"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -25,19 +24,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"golang.org/x/crypto/acme/autocert"
 )
-
-var (
-	accountIDOnce sync.Once
-	accountID     string
-	accountIDErr  error
-)
-
-func getAccountIDOnce(ctx context.Context, cfg aws.Config) (string, error) {
-	accountIDOnce.Do(func() {
-		accountID, accountIDErr = awsconfig.AccountID(ctx, cfg)
-	})
-	return accountID, accountIDErr
-}
 
 var (
 	// ErrUnsupportedOperation is returned for any unsupported operations.
@@ -131,7 +117,7 @@ func (ac *awscache) newClient(ctx context.Context, name string, readonly bool) (
 	if !ac.hasConfig {
 		return nil, fmt.Errorf("no aws.Config was specified, use WithAWSConfig when creating the store")
 	}
-	accountID, err := getAccountIDOnce(ctx, ac.config)
+	accountID, err := awsutil.AccountID(ctx, ac.config)
 	if err != nil {
 		return nil, err
 	}
