@@ -20,7 +20,8 @@ var (
 	accountIDErr  error
 )
 
-// AccountID returns the account id from the aws.Config.
+// AccountID returns the account id from the aws.Config and caches it
+// locally.
 func AccountID(ctx context.Context, cfg aws.Config) (string, error) {
 	accountIDOnce.Do(func() {
 		accountID, accountIDErr = awsconfig.AccountID(ctx, cfg)
