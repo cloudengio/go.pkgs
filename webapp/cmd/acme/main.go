@@ -230,6 +230,7 @@ func refreshCertificates(ctx context.Context, interval time.Duration, acmeClient
 	for {
 		for _, host := range hosts {
 			pingHost(client, host)
+
 		}
 		select {
 		case <-ctx.Done():
@@ -257,7 +258,7 @@ func customTLSConfig(rootCAPemFile string) *tls.Config {
 	return &tls.Config{}
 }
 
-func pingHost(client *http.Client, hostName string) error {
+func pingHost(client *http.Client, hostName string) {
 	u := url.URL{
 		Scheme: "https",
 		Host:   hostName,
@@ -269,5 +270,4 @@ func pingHost(client *http.Client, hostName string) error {
 	} else {
 		log.Printf("%v: error %v\n", u.String(), err)
 	}
-	return err
 }

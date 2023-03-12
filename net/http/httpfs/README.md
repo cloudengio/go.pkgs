@@ -29,6 +29,25 @@ func WithHTTPScheme() Option
 
 
 
+### Type Response
+```go
+type Response struct {
+	// When the response was received.
+	When time.Time
+
+	// Fields copied from the http.Response.
+	Headers                http.Header
+	Trailers               http.Header
+	ContentLength          int64
+	StatusCode             int
+	ProtoMajor, ProtoMinir int
+	TransferEncoding       []string
+}
+```
+Response is a redacted version of http.Response that can be marshaled using
+gob.
+
+
 
 
 

@@ -28,9 +28,7 @@ Usage of `webapp`
                  dev - run a development server.
     self-signed-cert - create a self signed certificate
 
-flag: help requested
-
 This command is an example of how to create a simple `webapp` that uses react
-for the browser-side app and serves API endpoints for use by that app. See
-the comments and command line flag/help messages.
+for the browser-side app and serves API endpoints for use by that app.
+See the comments and command line flag/help messages.
 

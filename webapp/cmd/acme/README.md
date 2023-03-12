@@ -49,5 +49,3 @@ Usage of `acme`
        cert-store - store and retrieve certificates directly from a certificate store.
          validate - validate the certificates for a host/domain
 
-flag: help requested
-
