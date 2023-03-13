@@ -38,6 +38,9 @@ func ParseYAMLConfigString(spec string, cfg interface{}) error {
 // from embed.FS, instead of the local filesystem if an instance of fs.ReadFileFS
 // is stored in the context.
 func ParseYAMLConfigFile(ctx context.Context, filename string, cfg interface{}) error {
+	if len(filename) == 0 {
+		return fmt.Errorf("no config file specified")
+	}
 	spec, err := file.FSReadFile(ctx, filename)
 	if err != nil {
 		return err
