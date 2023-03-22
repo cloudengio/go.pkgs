@@ -194,15 +194,14 @@ func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*c
 
 func (c RateControl) NewRateController() (*ratecontrol.Controller, error) {
 	opts := []ratecontrol.Option{}
-	fmt.Printf("rate: %v\n", c.Rate.Tick)
 	if c.Rate.Tick != 0 {
 		var clock ratecontrol.Clock
-		switch {
-		case c.Rate.Tick < time.Minute:
+		switch c.Rate.Tick {
+		case time.Second:
 			clock = ratecontrol.SecondClock{}
-		case c.Rate.Tick < time.Hour:
+		case time.Minute:
 			clock = ratecontrol.MinuteClock{}
-		case c.Rate.Tick == time.Hour:
+		case time.Hour:
 			clock = ratecontrol.HourClock{}
 		default:
 			return nil, fmt.Errorf("unsupported tick duration (only seconds, minutes and hours are supported): %v", c.Rate.Tick)
