@@ -8,7 +8,7 @@ package ratecontrol
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,60 +16,64 @@ import (
 // to implement backoff when the remote server is unwilling to process a
 // request. Controller is safe to use concurrently.
 type Controller struct {
-	opts            options
-	mu              sync.Mutex
-	ticker          *time.Ticker
-	curTick         int
-	curBytesPerTick int
+	opts         options
+	reqsTicker   *time.Ticker
+	reqsPerTick  atomic.Int64
+	bytesTicker  *time.Ticker
+	bytesPerTick atomic.Int64
 }
 
 // New returns a new Controller configuring using the specified options.
 func New(opts ...Option) *Controller {
 	c := &Controller{}
-	c.opts.clock = MinuteClock{}
 	for _, fn := range opts {
 		fn(&c.opts)
 	}
 	if c.opts.reqsPerTick > 0 {
-		c.ticker = time.NewTicker(c.opts.clock.TickDuration() / time.Duration(c.opts.reqsPerTick))
+		c.reqsTicker = time.NewTicker(c.opts.reqsInterval / time.Duration(c.opts.reqsPerTick))
 	}
 	if c.opts.bytesPerTick > 0 {
-		c.curTick = c.opts.clock.Tick()
+		c.bytesTicker = time.NewTicker(c.opts.bytesInterval)
 	}
 	return c
 }
 
-// updateBytesPerTick updates the current bytes per tick value and returns
-// true if the current rate is within bounds and hence the caller need not
-// wait.
-func (c *Controller) updateBytesPerTick() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	ctick := c.opts.clock.Tick()
-	if ctick != c.curTick {
-		c.curTick = ctick
-		c.curBytesPerTick = 0
+func (c *Controller) remaining(current *atomic.Int64, allowed int) bool {
+	if allowed == 0 {
 		return true
 	}
-	if c.curBytesPerTick <= c.opts.bytesPerTick {
-		return true
-	}
-	return false
+	return current.Load() < int64(allowed)
 }
 
 func (c *Controller) waitBytesPerTick(ctx context.Context) error {
-	if c.opts.bytesPerTick == 0 {
-		return nil
-	}
-	if c.updateBytesPerTick() {
+	if c.remaining(&c.bytesPerTick, c.opts.bytesPerTick) {
 		return nil
 	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-c.opts.clock.after(c.opts.clock.TickDuration()):
+	case <-c.bytesTicker.C:
+		// reset the bytesPerTick counter.
+		c.bytesPerTick.Store(0)
 	}
 	return nil
+}
+
+// Wait returns when a request can be made. Rate limiting of requests
+// takes priority over rate limiting of bytes. That is, bytes are
+// only considered when a new request can be made.
+func (c *Controller) Wait(ctx context.Context) error {
+	c.reqsPerTick.Add(1)
+	if c.remaining(&c.reqsPerTick, c.opts.reqsPerTick) {
+		return c.waitBytesPerTick(ctx)
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.reqsTicker.C:
+		c.reqsPerTick.Store(0)
+		return c.waitBytesPerTick(ctx)
+	}
 }
 
 // BytesTransferred notifies the controller that the specified number of bytes
@@ -79,35 +83,12 @@ func (c *Controller) BytesTransferred(nBytes int) {
 	if c.opts.bytesPerTick == 0 {
 		return
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	ctick := c.opts.clock.Tick()
-	if ctick == c.curTick {
-		c.curBytesPerTick += nBytes
-		return
-	}
-	c.curTick = ctick
-	c.curBytesPerTick = 0
-}
-
-// Wait returns when a request can be made. Rate limiting of requests
-// takes priority over rate limiting of bytes. That is, bytes are
-// only considered when a new request can be made.
-func (c *Controller) Wait(ctx context.Context) error {
-	if c.ticker == nil || c.ticker.C == nil {
-		return c.waitBytesPerTick(ctx)
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-c.ticker.C:
-		return c.waitBytesPerTick(ctx)
-	}
+	c.bytesPerTick.Add(int64(nBytes))
 }
 
 func (c *Controller) Backoff() Backoff {
 	if c.opts.backoffStart == 0 {
 		return noBackoff{}
 	}
-	return NewExpontentialBackoff(c.opts.clock, c.opts.backoffStart, c.opts.backoffSteps)
+	return NewExpontentialBackoff(c.opts.backoffStart, c.opts.backoffSteps)
 }

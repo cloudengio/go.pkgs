@@ -25,7 +25,6 @@ type Backoff interface {
 }
 
 type ExponentialBackoff struct {
-	clock     Clock
 	steps     int
 	retries   int
 	nextDelay time.Duration
@@ -34,8 +33,8 @@ type ExponentialBackoff struct {
 // NewExpontentialBackoff returns a instance of Backoff that implements
 // an exponential backoff algorithm starting with the specified initial
 // delay and continuing for the specified number of steps.
-func NewExpontentialBackoff(clock Clock, initial time.Duration, steps int) Backoff {
-	return &ExponentialBackoff{clock: clock, nextDelay: initial, steps: steps}
+func NewExpontentialBackoff(initial time.Duration, steps int) Backoff {
+	return &ExponentialBackoff{nextDelay: initial, steps: steps}
 }
 
 // Retries implements Backoff.
@@ -51,7 +50,7 @@ func (eb *ExponentialBackoff) Wait(ctx context.Context) (bool, error) {
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()
-	case <-eb.clock.after(eb.nextDelay):
+	case <-time.After(eb.nextDelay):
 	}
 	eb.nextDelay *= 2
 	eb.retries++
