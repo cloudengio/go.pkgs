@@ -118,8 +118,8 @@ func TestDataRate(t *testing.T) {
 
 func TestDataAndReqRate(t *testing.T) {
 	ctx := context.Background()
-	reqTick := time.Millisecond * 100
-	dataTick := time.Millisecond * 10
+	reqTick := time.Millisecond * 1000
+	dataTick := time.Millisecond * 100
 	c := ratecontrol.New(
 		ratecontrol.WithBytesPerTick(dataTick, 10),
 	)
