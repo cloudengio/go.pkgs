@@ -52,7 +52,7 @@ func isOneOf[T comparable](got []T, want [][]T) bool {
 	return false
 }
 
-func lcsFromEdits[T comparable](typ interface{}, script *lcs.EditScript[T]) interface{} {
+func lcsFromEdits[T comparable](script *lcs.EditScript[T]) interface{} {
 	r := []T{}
 	for _, op := range *script {
 		if op.Op == lcs.Identical {
@@ -77,7 +77,7 @@ func testLCSImpl[T comparable](t *testing.T, i int, lcs []T, edit *lcs.EditScrip
 	if got, want := lcs, all; !isOneOf(got, want) {
 		t.Errorf("%v: got %v is not one of %v", i, got, want)
 	}
-	if got, want := lcsFromEdits(int32(0), edit), lcs; !reflect.DeepEqual(got, want) {
+	if got, want := lcsFromEdits(edit), lcs; !reflect.DeepEqual(got, want) {
 		t.Errorf("%v: got %v, want %v", i, got, want)
 	}
 

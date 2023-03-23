@@ -13,7 +13,7 @@ import (
 	"syscall"
 )
 
-func getUserAndGroupID(path string, info os.FileInfo) (string, string) {
+func getUserAndGroupID(_ string, info os.FileInfo) (string, string) {
 	si, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return "", ""

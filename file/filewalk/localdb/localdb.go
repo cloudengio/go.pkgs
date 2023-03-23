@@ -318,7 +318,7 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		})
 	}
 	if err := gdb.Wait(); err != nil {
-		db.closeAll(ctx) //nolint:errcheck
+		db.closeAll() //nolint:errcheck
 		return nil, err
 	}
 	if db.opts.errorsOnly {
@@ -347,13 +347,13 @@ func Open(ctx context.Context, dir string, ifcOpts []filewalk.DatabaseOption, op
 		return nil
 	})
 	if err := gstats.Wait(); err != nil {
-		db.closeAll(ctx) //nolint:errcheck
+		db.closeAll() //nolint:errcheck
 		return nil, err
 	}
 	return db, nil
 }
 
-func (db *Database) closeAll(ctx context.Context) error {
+func (db *Database) closeAll() error {
 	errs := errors.M{}
 	closer := func(db *pudge.Db) {
 		if db != nil {
@@ -376,7 +376,7 @@ func (db *Database) saveStats() error { //nolint:unused
 	return db.globalStats.save(db.statsdb, globalStatsKey)
 }
 
-func (db *Database) CompactAndClose(ctx context.Context) error {
+func (db *Database) CompactAndClose(_ context.Context) error {
 	if db.opts.readOnly {
 		return fmt.Errorf("database is readonly")
 	}
@@ -405,10 +405,10 @@ func (db *Database) Close(ctx context.Context) error {
 	if !db.opts.readOnly {
 		return db.Save(ctx)
 	}
-	return db.closeAll(ctx)
+	return db.closeAll()
 }
 
-func (db *Database) Save(ctx context.Context) error {
+func (db *Database) Save(_ context.Context) error {
 	if db.opts.readOnly {
 		return ErrReadonly
 	}
@@ -425,10 +425,10 @@ func (db *Database) Save(ctx context.Context) error {
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	return db.closeAll(ctx)
+	return db.closeAll()
 }
 
-func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.PrefixInfo) error {
+func (db *Database) Set(_ context.Context, prefix string, info *filewalk.PrefixInfo) error {
 	if db.opts.readOnly {
 		return ErrReadonly
 	}
@@ -458,7 +458,7 @@ func (db *Database) Set(ctx context.Context, prefix string, info *filewalk.Prefi
 	return errs.Err()
 }
 
-func (db *Database) Get(ctx context.Context, prefix string, info *filewalk.PrefixInfo) (bool, error) {
+func (db *Database) Get(_ context.Context, prefix string, info *filewalk.PrefixInfo) (bool, error) {
 	if err := db.prefixdb.Get(prefix, info); err != nil {
 		if err == pudge.ErrKeyNotFound {
 			return false, nil
@@ -483,7 +483,7 @@ func (db *Database) Delete(ctx context.Context, separator string, prefixes []str
 	return deleted, errs.Err()
 }
 
-func (db *Database) DeleteErrors(ctx context.Context, prefixes []string) (int, error) {
+func (db *Database) DeleteErrors(_ context.Context, prefixes []string) (int, error) {
 	deletions := make([]interface{}, 0, len(prefixes))
 	for _, prefix := range prefixes {
 		deletions = append(deletions, prefix)
@@ -515,11 +515,11 @@ func (db *Database) NewScanner(prefix string, limit int, opts ...filewalk.Scanne
 	return NewScanner(db, prefix, limit, opts)
 }
 
-func (db *Database) UserIDs(ctx context.Context) ([]string, error) {
+func (db *Database) UserIDs(_ context.Context) ([]string, error) {
 	return db.userStats.itemKeys, nil
 }
 
-func (db *Database) GroupIDs(ctx context.Context) ([]string, error) {
+func (db *Database) GroupIDs(_ context.Context) ([]string, error) {
 	return db.groupStats.itemKeys, nil
 }
 
@@ -598,7 +598,7 @@ func (db *Database) statsCollectionForOption(o filewalk.MetricOptions) (*statsCo
 	return nil, fmt.Errorf("unrecognised options %#v", o)
 }
 
-func (db *Database) Total(ctx context.Context, name filewalk.MetricName, opts ...filewalk.MetricOption) (int64, error) {
+func (db *Database) Total(_ context.Context, name filewalk.MetricName, opts ...filewalk.MetricOption) (int64, error) {
 	o := metricOptions(opts)
 	sc, err := db.statsCollectionForOption(o)
 	if err != nil {
@@ -621,7 +621,7 @@ func (sc *statsCollection) total(name filewalk.MetricName) (int64, error) {
 	return -1, fmt.Errorf("unsupported metric: %v", name)
 }
 
-func (db *Database) TopN(ctx context.Context, name filewalk.MetricName, n int, opts ...filewalk.MetricOption) ([]filewalk.Metric, error) {
+func (db *Database) TopN(_ context.Context, name filewalk.MetricName, n int, opts ...filewalk.MetricOption) ([]filewalk.Metric, error) {
 	o := metricOptions(opts)
 	sc, err := db.statsCollectionForOption(o)
 	if err != nil {

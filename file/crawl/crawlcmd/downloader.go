@@ -35,7 +35,7 @@ func (df DownloadFactoryConfig) depthOrDefault(depth int, values []int, def int)
 // New implements download.DownloaderFactory.
 // New creates a new instance of a download.T and the associated input and output
 // channels appropriate for the depth of the crawl.
-func (df *downloaderFactory) New(ctx context.Context, depth int) (
+func (df *downloaderFactory) New(_ context.Context, depth int) (
 	downloader download.T,
 	inputCh chan download.Request,
 	outputCh chan download.Downloaded) {

@@ -64,6 +64,6 @@ func (nb noBackoff) Retries() int {
 	return 0
 }
 
-func (nb noBackoff) Wait(ctx context.Context) (bool, error) {
+func (nb noBackoff) Wait(_ context.Context) (bool, error) {
 	return false, nil
 }

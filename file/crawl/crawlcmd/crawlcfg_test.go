@@ -127,7 +127,7 @@ type dummyFSFactory struct {
 	called string
 }
 
-func (d *dummyFSFactory) New(ctx context.Context, scheme string) (file.FS, error) {
+func (d *dummyFSFactory) New(_ context.Context, scheme string) (file.FS, error) {
 	d.called = scheme
 	return filetestutil.NewMockFS(
 		filetestutil.FSScheme(scheme),

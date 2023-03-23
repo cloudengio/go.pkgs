@@ -228,7 +228,7 @@ func SelfSignedCertCommand(name string) *subcmd.Command {
 	return certCmd
 }
 
-func certCmd(ctx context.Context, values interface{}, args []string) error {
+func certCmd(_ context.Context, values interface{}, _ []string) error {
 	cl := values.(*selfSignedCertFlags)
 	return NewSelfSignedCert(cl.CertificateFile,
 		cl.KeyFile,

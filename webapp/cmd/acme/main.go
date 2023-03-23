@@ -129,7 +129,7 @@ func newAutoCertCacheFromFlags(ctx context.Context, cl webapp.TLSCertStoreFlags,
 	return cache, nil
 }
 
-func manageCerts(ctx context.Context, values interface{}, args []string) error {
+func manageCerts(ctx context.Context, values interface{}, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*certManagerFlags)
@@ -186,7 +186,7 @@ func manageCerts(ctx context.Context, values interface{}, args []string) error {
 	}
 	log.Printf("certificate refresh interval is %v", refreshInterval)
 
-	waitForServers(ctx)
+	waitForServers()
 	go func() {
 		refreshCertificates(ctx, time.Hour*6, cl.AcmeClientHost, cl.Hosts.Values, cl.TestingCAPem)
 		stopped.Done()
@@ -196,7 +196,7 @@ func manageCerts(ctx context.Context, values interface{}, args []string) error {
 	return errs.Err()
 }
 
-func waitForServers(ctx context.Context) {
+func waitForServers() {
 	for {
 		time.Sleep(time.Second)
 		_, err := net.DialTimeout("tcp", "127.0.0.1:80", time.Second)

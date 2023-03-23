@@ -20,7 +20,7 @@ type Factory struct {
 }
 
 // New implements file.FSFactory.
-func (d Factory) New(ctx context.Context, scheme string) (file.FS, error) {
+func (d Factory) New(ctx context.Context, _ string) (file.FS, error) {
 	if !d.Config.AWS {
 		return nil, fmt.Errorf("AWS authentication must be enabled to use S3")
 	}

@@ -142,16 +142,16 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 		return err
 	}
 
-	new, err := t(old)
+	newData, err := t(old)
 	if err != nil {
 		return err
 	}
 
-	if len(new) > len(old) {
+	if len(newData) > len(old) {
 		// The overall file size is increasing, so write the tail first: if we're
 		// about to run out of space on the disk, we would rather detect that
 		// failure before we have overwritten the original contents.
-		if _, err := f.WriteAt(new[len(old):], int64(len(old))); err != nil {
+		if _, err := f.WriteAt(newData[len(old):], int64(len(old))); err != nil {
 			// Make a best effort to remove the incomplete tail.
 			if nerr := f.Truncate(int64(len(old))); nerr != nil {
 				return errors.NewM(err, nerr)
@@ -170,19 +170,19 @@ func Transform(name string, t func([]byte) ([]byte, error)) (err error) {
 		}
 	}()
 
-	if len(new) >= len(old) {
-		if _, err := f.WriteAt(new[:len(old)], 0); err != nil {
+	if len(newData) >= len(old) {
+		if _, err := f.WriteAt(newData[:len(old)], 0); err != nil {
 			return err
 		}
 	} else {
-		if _, err := f.WriteAt(new, 0); err != nil {
+		if _, err := f.WriteAt(newData, 0); err != nil {
 			return err
 		}
 		// The overall file size is decreasing, so shrink the file to its final size
 		// after writing. We do this after writing (instead of before) so that if
 		// the write fails, enough filesystem space will likely still be reserved
 		// to contain the previous contents.
-		if err := f.Truncate(int64(len(new))); err != nil {
+		if err := f.Truncate(int64(len(newData))); err != nil {
 			return err
 		}
 	}

@@ -33,7 +33,7 @@ func (l *logger) appendLine(s string) {
 	l.linesMu.Unlock()
 }
 
-func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.Info, ch <-chan filewalk.Contents) ([]filewalk.Info, error) {
+func (l *logger) filesFunc(_ context.Context, prefix string, _ *filewalk.Info, ch <-chan filewalk.Contents) ([]filewalk.Info, error) {
 	prefix = strings.TrimPrefix(prefix, l.prefix)
 	children := make([]filewalk.Info, 0, 10)
 	for results := range ch {
@@ -56,7 +56,7 @@ func (l *logger) filesFunc(ctx context.Context, prefix string, info *filewalk.In
 	return children, nil
 }
 
-func (l *logger) dirsFunc(ctx context.Context, prefix string, info *filewalk.Info, err error) (bool, []filewalk.Info, error) {
+func (l *logger) dirsFunc(_ context.Context, prefix string, _ *filewalk.Info, err error) (bool, []filewalk.Info, error) {
 	if err != nil {
 		l.appendLine(fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
 		return true, nil, nil
@@ -278,7 +278,7 @@ func TestFunctionErrors(t *testing.T) {
 
 type infiniteScanner struct{}
 
-func (is *infiniteScanner) List(ctx context.Context, path string, ch chan<- filewalk.Contents) {
+func (is *infiniteScanner) List(_ context.Context, _ string, ch chan<- filewalk.Contents) {
 	time.Sleep(time.Millisecond * 1000)
 	ch <- filewalk.Contents{
 		Path: "infinite",
@@ -298,7 +298,7 @@ func (is *infiniteScanner) List(ctx context.Context, path string, ch chan<- file
 	}
 }
 
-func (is *infiniteScanner) Stat(ctx context.Context, path string) (filewalk.Info, error) {
+func (is *infiniteScanner) Stat(_ context.Context, _ string) (filewalk.Info, error) {
 	info, err := os.Lstat(localTestTree)
 	if err != nil {
 		return filewalk.Info{}, err

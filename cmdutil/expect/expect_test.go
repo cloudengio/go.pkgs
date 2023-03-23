@@ -79,7 +79,7 @@ func assertMatch(t *testing.T, st *expect.Lines, input string, line int) {
 
 type errorReader struct{}
 
-func (er *errorReader) Read(buf []byte) (int, error) {
+func (er *errorReader) Read(_ []byte) (int, error) {
 	return 0, fmt.Errorf("an error")
 }
 

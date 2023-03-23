@@ -59,7 +59,7 @@ type runner struct {
 	out  *strings.Builder
 }
 
-func (r *runner) cmd(ctx context.Context, values interface{}, args []string) error {
+func (r *runner) cmd(_ context.Context, values interface{}, args []string) error {
 	fmt.Fprintf(r.out, "%v: flag: %v, args: %v\n", r.name, values.(*exampleFlags).Flag1, args)
 	return nil
 }

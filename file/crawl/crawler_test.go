@@ -48,7 +48,7 @@ type extractor struct {
 	fanOut int
 }
 
-func (e *extractor) Extract(ctx context.Context, depth int, downloaded download.Downloaded) []download.Request {
+func (e *extractor) Extract(_ context.Context, depth int, downloaded download.Downloaded) []download.Request {
 	e.Lock()
 	defer e.Unlock()
 	outlinks := (*downloaded.Request.(*crawl.SimpleRequest))
@@ -80,7 +80,7 @@ type dlFactory struct {
 	numDownloaders int
 }
 
-func (df dlFactory) New(ctx context.Context, depth int) (
+func (df dlFactory) New(_ context.Context, depth int) (
 	downloader download.T,
 	inputCh chan download.Request,
 	outputCh chan download.Downloaded) {
