@@ -9,86 +9,28 @@ package ratecontrol
 
 import "time"
 
-// Clock represents a clock used for rate limiting. It determines the current
-// time in 'ticks' and the wall-clock duration of a tick. This allows for
-// rates to be specified in terms of requests per tick or bytes per tick rather
-// than over a fixed duration. A default Clock implementation is provided
-// which uses time.Minute as the tick duration.
-type Clock interface {
-	Tick() int
-	TickDuration() time.Duration
-
-	// for testing.
-	after(d time.Duration) <-chan time.Time
-}
-
-type afterClock struct{}
-
-type MinuteClock struct {
-	afterClock
-}
-
-func (c MinuteClock) Tick() int {
-	return time.Now().Minute()
-}
-
-func (c MinuteClock) TickDuration() time.Duration {
-	return time.Minute
-}
-
-type SecondClock struct {
-	afterClock
-}
-
-func (c SecondClock) Tick() int {
-	return time.Now().Second()
-}
-
-func (c SecondClock) TickDuration() time.Duration {
-	return time.Second
-}
-
-type HourClock struct {
-	afterClock
-}
-
-func (c HourClock) Tick() int {
-	return time.Now().Hour()
-}
-
-func (c HourClock) TickDuration() time.Duration {
-	return time.Hour
-}
-
-// after returns a channel as per timer.After, it is used for testing.
-func (c afterClock) after(d time.Duration) <-chan time.Time {
-	return time.After(d)
-}
-
 // Option represents an option for configuring a ratecontrol Controller.
 type Option func(c *options)
 
-// WithRequestsPerTick sets the rate for requests in requests per tick,
-// where tick is the unit of time reported by the Clock implementation in use.
-// The default clock uses time.Now().Minute() as the interval for rate limiting
-// and hence the rate is in requests per minute.
-func WithRequestsPerTick(rpt int) Option {
+// WithRequestsPerTick sets the rate for requests in requests per tick.
+func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option {
 	return func(o *options) {
+		o.reqsInterval = tickInterval
 		o.reqsPerTick = rpt
 	}
 }
 
-// WithBytesPerTick sets the approximate rate in bytes per tick, where
-// tick is the unit of time reported by the Clock implementation
-// in use. The default clock uses time.Now().Minute() and hence the rate
-// is in bytes per minute. The algorithm used is very simple and will
+// WithBytesPerTick sets the approximate rate in bytes per tick
+
+// The algorithm used is very simple and will simply stop sending data
 // wait for a single tick if the limit is reached without taking into account
 // how long the tick is, nor how much excess data was sent over the
 // previous tick (ie. no attempt is made to smooth out the rate and for now
 // it's a simple start/stop model). The bytes to be accounted for are
 // reported to the Controller via its BytesTransferred method.
-func WithBytesPerTick(bpt int) Option {
+func WithBytesPerTick(tickInterval time.Duration, bpt int) Option {
 	return func(o *options) {
+		o.bytesInterval = tickInterval
 		o.bytesPerTick = bpt
 	}
 }
@@ -104,17 +46,11 @@ func WithExponentialBackoff(first time.Duration, steps int) Option {
 	}
 }
 
-// WithClock sets the clock implementation to use.
-func WithClock(c Clock) Option {
-	return func(o *options) {
-		o.clock = c
-	}
-}
-
 type options struct {
-	reqsPerTick  int
-	bytesPerTick int
-	backoffStart time.Duration
-	backoffSteps int
-	clock        Clock
+	reqsInterval  time.Duration
+	reqsPerTick   int
+	bytesInterval time.Duration
+	bytesPerTick  int
+	backoffStart  time.Duration
+	backoffSteps  int
 }
