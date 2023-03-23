@@ -132,7 +132,7 @@ type randFS struct {
 	contents map[string][]byte
 }
 
-func newRandomFileCreator(ctx context.Context, name string, rnd *rand.Rand, maxSize int) ([]byte, fs.File, error) {
+func newRandomFileCreator(_ context.Context, name string, rnd *rand.Rand, maxSize int) ([]byte, fs.File, error) {
 	size := rnd.Intn(maxSize)
 	contents := make([]byte, size)
 	size, err := rnd.Read(contents)
@@ -187,7 +187,7 @@ func (mfs *errorFs) Open(name string) (fs.File, error) {
 	return mfs.OpenCtx(context.Background(), name)
 }
 
-func (mfs *errorFs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (mfs *errorFs) OpenCtx(_ context.Context, _ string) (fs.File, error) {
 	return nil, mfs.err
 }
 
@@ -204,7 +204,7 @@ func (mfs *constantFS) Open(name string) (fs.File, error) {
 	return mfs.OpenCtx(context.Background(), name)
 }
 
-func (mfs *constantFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (mfs *constantFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	mfs.Lock()
 	defer mfs.Unlock()
 	contents := bytes.Repeat(mfs.val, mfs.maxSize)
@@ -234,7 +234,7 @@ func NewWriteFS() *WriteFS {
 	}
 }
 
-func (wfs *WriteFS) Create(ctx context.Context, name string, filemode fs.FileMode) (io.WriteCloser, error) {
+func (wfs *WriteFS) Create(_ context.Context, name string, filemode fs.FileMode) (io.WriteCloser, error) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	if _, ok := wfs.entries[name]; ok {
@@ -250,7 +250,7 @@ func (wfs *WriteFS) Open(name string) (fs.File, error) {
 	return wfs.OpenCtx(context.Background(), name)
 }
 
-func (wfs *WriteFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (wfs *WriteFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	wfs.Lock()
 	defer wfs.Unlock()
 	entry, ok := wfs.entries[name]

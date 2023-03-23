@@ -54,7 +54,7 @@ func (ho *HTML) HREFs(base string, rd io.Reader) ([]string, error) {
 }
 
 // Outlinks implements Extractor.Outlinks.
-func (ho *HTML) Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error) {
+func (ho *HTML) Outlinks(_ context.Context, _ int, download Download, contents io.Reader) ([]string, error) {
 	if download.Download.Err != nil {
 		return nil, nil
 	}

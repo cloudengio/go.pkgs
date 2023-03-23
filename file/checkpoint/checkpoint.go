@@ -106,7 +106,7 @@ func (d *dirop) Checkpoint(ctx context.Context, label string, data []byte) (id s
 	return next, err
 }
 
-func (d *dirop) Load(ctx context.Context, id string) ([]byte, error) {
+func (d *dirop) Load(_ context.Context, id string) ([]byte, error) {
 	// No need to lock the directory.
 	return os.ReadFile(filepath.Join(d.dir, id))
 }

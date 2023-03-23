@@ -44,7 +44,7 @@ type CertFlags struct {
 
 // NewManagerFromFlags creates a new autocert.Manager from the flag values.
 // The cache may be not be nil.
-func NewManagerFromFlags(ctx context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error) {
+func NewManagerFromFlags(_ context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error) {
 	if cache == nil {
 		return nil, fmt.Errorf("no cache provided")
 	}

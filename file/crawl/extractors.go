@@ -29,9 +29,8 @@ func (ep *extractorPool) run(ctx context.Context, downloadedCh <-chan download.D
 	// Extractors return when extractorStop is closed.
 	var grp errgroup.T
 	for i := 0; i < ep.concurrency; i++ {
-		i := i
 		grp.Go(func() error {
-			ep.runExtractor(ctx, i, downloadedCh, crawledCh)
+			ep.runExtractor(ctx, downloadedCh, crawledCh)
 			return nil
 		})
 	}
@@ -39,7 +38,6 @@ func (ep *extractorPool) run(ctx context.Context, downloadedCh <-chan download.D
 }
 
 func (ep *extractorPool) runExtractor(ctx context.Context,
-	id int,
 	downloadedCh <-chan download.Downloaded,
 	crawledCh chan<- Crawled) {
 	for {

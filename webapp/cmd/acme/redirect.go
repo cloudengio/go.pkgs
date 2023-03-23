@@ -31,7 +31,7 @@ func redirectCmd() *subcmd.Command {
 	return testRedirectCmd
 }
 
-func testACMERedirect(ctx context.Context, values interface{}, args []string) error {
+func testACMERedirect(ctx context.Context, values interface{}, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*testRedirectFlags)

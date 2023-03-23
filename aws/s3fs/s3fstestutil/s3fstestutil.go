@@ -45,7 +45,7 @@ type mfs struct {
 	fs      file.FS
 }
 
-func (m *mfs) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+func (m *mfs) GetObject(ctx context.Context, params *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	if b := m.options.bucket; len(b) > 0 && *params.Bucket != b {
 		return nil, fmt.Errorf("unknown bucket %q", *params.Bucket)
 	}

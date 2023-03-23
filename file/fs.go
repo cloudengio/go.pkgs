@@ -44,7 +44,7 @@ func (f *fsFromFS) Scheme() string {
 }
 
 // OpenCtx just calls fs.Open.
-func (f *fsFromFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (f *fsFromFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	return f.Open(name)
 }
 

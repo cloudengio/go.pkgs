@@ -97,17 +97,17 @@ func NewNullCache() autocert.Cache {
 type nullcache struct{}
 
 // Delete implements autocert.Cache.
-func (nc *nullcache) Delete(ctx context.Context, name string) error {
+func (nc *nullcache) Delete(_ context.Context, _ string) error {
 	return nil
 }
 
 // Get implements autocert.Cache.
-func (nc *nullcache) Get(ctx context.Context, name string) ([]byte, error) {
+func (nc *nullcache) Get(_ context.Context, _ string) ([]byte, error) {
 	return nil, ErrCacheMiss
 }
 
 // Put implements autocert.Cache.
-func (nc *nullcache) Put(ctx context.Context, name string, data []byte) error {
+func (nc *nullcache) Put(_ context.Context, _ string, _ []byte) error {
 	return nil
 }
 
@@ -143,7 +143,7 @@ func unsupported(typ string) string {
 }
 
 // New implements webapp.CertStoreFactory.
-func (f CertStoreFactory) New(ctx context.Context, dir string, opts ...interface{}) (webapp.CertStore, error) {
+func (f CertStoreFactory) New(_ context.Context, dir string, _ ...interface{}) (webapp.CertStore, error) {
 	switch f.typ {
 	case dirCacheName:
 		return NewDirCache(dir, true), nil

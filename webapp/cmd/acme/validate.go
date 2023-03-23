@@ -33,7 +33,7 @@ func validateCmd() *subcmd.Command {
 	return validateCmd
 }
 
-func validateCerts(ctx context.Context, cl *validateFlags, host string, addrs []string) error {
+func validateCerts(_ context.Context, cl *validateFlags, host string, addrs []string) error {
 	var serial *big.Int
 	var serialFrom string
 	expiry := time.Now().Add(cl.ValidFor)
@@ -47,7 +47,7 @@ func validateCerts(ctx context.Context, cl *validateFlags, host string, addrs []
 		regexps = append(regexps, re)
 	}
 	for _, addr := range addrs {
-		certs, err := downloadCert(ctx, cl.CustomROOTCA, host, addr)
+		certs, err := downloadCert(cl.CustomROOTCA, host, addr)
 		if err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func ignoreIPv6(addrs []string) []string {
 	return ipv4
 }
 
-func downloadCert(ctx context.Context, pemfile, host, addr string) ([]*x509.Certificate, error) {
+func downloadCert(pemfile, host, addr string) ([]*x509.Certificate, error) {
 	cfg := customTLSConfig(pemfile)
 	cfg.ServerName = host
 	conn, err := tls.Dial("tcp", net.JoinHostPort(addr, "443"), cfg)
