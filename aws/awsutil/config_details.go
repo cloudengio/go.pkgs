@@ -36,7 +36,7 @@ func IsARN(name string) bool {
 
 // Region obtains the AWS region either from the supplied config or from
 // the environment.
-func Region(ctx context.Context, cfg aws.Config) string {
+func Region(_ context.Context, cfg aws.Config) string {
 	if len(cfg.Region) > 0 {
 		return cfg.Region
 	}

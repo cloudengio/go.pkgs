@@ -82,7 +82,7 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 	}
 }
 
-func (l *local) Stat(ctx context.Context, path string) (Info, error) {
+func (l *local) Stat(_ context.Context, path string) (Info, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Info{}, err

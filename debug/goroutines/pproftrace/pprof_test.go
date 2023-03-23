@@ -17,7 +17,7 @@ import (
 
 var spawned chan struct{}
 
-func runner(ctx context.Context, delay time.Duration, ch, dch chan struct{}) {
+func runner(delay time.Duration, ch, dch chan struct{}) {
 	go func() {
 		for i := 1; i < 10000; i++ {
 			_ = rand.Int63n(int64(i))
@@ -36,7 +36,7 @@ func testRunAndFormat(t *testing.T, delay time.Duration) error {
 	dch := make(chan struct{})
 
 	pproftrace.Run(ctx, key, value, func(ctx context.Context) {
-		runner(ctx, delay, ch, dch)
+		runner(delay, ch, dch)
 	})
 	<-spawned
 

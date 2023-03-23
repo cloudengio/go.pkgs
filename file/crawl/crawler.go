@@ -133,7 +133,7 @@ func (cr *crawler) crawlAtDepth(ctx context.Context,
 	wg := &sync.WaitGroup{}
 	wg.Add(4)
 	go func() {
-		pipe(ctx, "downloader input", depth, input, dlInput)
+		pipe(ctx, input, dlInput)
 		close(dlInput)
 		wg.Done()
 	}()
@@ -147,7 +147,7 @@ func (cr *crawler) crawlAtDepth(ctx context.Context,
 
 	go func() {
 		// Pipe output of download pool to extractor pool.
-		pipe(ctx, "downloader output", depth, dlOutput, epIn)
+		pipe(ctx, dlOutput, epIn)
 		close(epIn)
 		wg.Done()
 	}()
@@ -171,7 +171,7 @@ func (cr *crawler) crawlAtDepth(ctx context.Context,
 	return err
 }
 
-func pipe[T any](ctx context.Context, purpose string, depth int, inputCh <-chan T, outputCh chan<- T) {
+func pipe[T any](ctx context.Context, inputCh <-chan T, outputCh chan<- T) {
 	for {
 		var in T
 		var ok bool

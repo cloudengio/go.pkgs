@@ -23,11 +23,11 @@ func (c *container) New() fs.ReadFileFS {
 	return &container{}
 }
 
-func (c *container) ReadFile(name string) ([]byte, error) {
+func (c *container) ReadFile(_ string) ([]byte, error) {
 	return c.contents, nil
 }
 
-func (c *container) Open(name string) (fs.File, error) {
+func (c *container) Open(_ string) (fs.File, error) {
 	return nil, nil
 }
 

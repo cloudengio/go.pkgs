@@ -27,14 +27,14 @@ func LoadUsingFlags(ctx context.Context, cl AWSFlags) (aws.Config, error) {
 	if !cl.AWS {
 		return aws.Config{}, fmt.Errorf("aws not requested")
 	}
-	return Load(ctx, ConfigOptionsFromFlags(ctx, cl)...)
+	return Load(ctx, ConfigOptionsFromFlags(cl)...)
 }
 
 // ConfigOptionsFromFlags returns the ConfigOptions implied by the flags.
 // NOTE: it always includes config.WithEC2IMDSRegion so that the region
 // information is retrieved from EC2 IMDS when it's not found by other
 // means.
-func ConfigOptionsFromFlags(ctx context.Context, cl AWSFlags) []ConfigOption {
+func ConfigOptionsFromFlags(cl AWSFlags) []ConfigOption {
 	opts := []ConfigOption{}
 	if len(cl.AWSConfigFiles) > 0 {
 		files := strings.Split(cl.AWSConfigFiles, ",")

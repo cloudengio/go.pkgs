@@ -86,7 +86,7 @@ func main() {
 	cmdSet.MustDispatch(context.Background())
 }
 
-func prodServe(ctx context.Context, values interface{}, args []string) error {
+func prodServe(ctx context.Context, values interface{}, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*ProdServerFlags)
@@ -116,7 +116,7 @@ func prodServe(ctx context.Context, values interface{}, args []string) error {
 	return webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 }
 
-func devServe(ctx context.Context, values interface{}, args []string) error {
+func devServe(ctx context.Context, values interface{}, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*DevServerFlags)
@@ -186,7 +186,9 @@ func runWebpackDevServer(ctx context.Context, webpackDir, address string) (*url.
 	return wpsrv.WaitForURL(ctx)
 }
 
-func routeToProxy(router *httprouter.Router, publicPath string, url *url.URL) {
+func routeToProxy(router *httprouter.Router, _ string, url *url.URL) {
+	// TODO: understand what publicPath (now _), was intended for, since
+	// it's set to /build/ on the call sites, but overridden to / here.
 	proxy := httputil.NewSingleHostReverseProxy(url)
 	// Proxy websockets to allow for fast refresh - ie. changes made
 	// in the javascript react code is immediately reflected in the UI

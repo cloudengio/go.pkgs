@@ -146,7 +146,7 @@ func translateError(err error) error {
 
 // Delete implements autocert.Cache.
 // Note that currently deletions of aws stored keys are not allowed.
-func (ac *awscache) Delete(ctx context.Context, name string) error {
+func (ac *awscache) Delete(_ context.Context, name string) error {
 	name = strings.ReplaceAll(name, ".", "_")
 	_ = name
 	return ErrUnsupportedOperation
@@ -237,7 +237,7 @@ func captureOpts(opts []interface{}) []AWSCacheOption {
 }
 
 // New implements webapp.CertStoreFactory.
-func (f CertStoreFactory) New(ctx context.Context, name string, opts ...interface{}) (webapp.CertStore, error) {
+func (f CertStoreFactory) New(_ context.Context, _ string, opts ...interface{}) (webapp.CertStore, error) {
 	if f.typ == awsCacheName {
 		return NewAWSCache(captureOpts(opts)...), nil
 	}

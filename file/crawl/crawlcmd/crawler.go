@@ -134,7 +134,7 @@ func (c *Crawler) run(ctx context.Context) error {
 	return errs.Err()
 }
 
-func (c Crawler) saveCrawled(ctx context.Context, name string, crawledCh chan crawl.Crawled) error {
+func (c Crawler) saveCrawled(_ context.Context, name string, crawledCh chan crawl.Crawled) error {
 	sharder := path.NewSharder(path.WithSHA1PrefixLength(c.Cache.ShardingPrefixLen))
 
 	for crawled := range crawledCh {

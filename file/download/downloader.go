@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -107,9 +106,8 @@ func (dl *downloader) Run(ctx context.Context,
 
 	var grp errgroup.T
 	for i := 0; i < dl.concurrency; i++ {
-		i := i
 		grp.Go(func() error {
-			return dl.runner(ctx, i, dl.progressCh, input, output)
+			return dl.runner(ctx, input, output)
 		})
 	}
 	err := grp.Wait()
@@ -146,7 +144,7 @@ func (dl *downloader) updateProgess(downloaded, outstanding int) {
 	}
 }
 
-func (dl *downloader) runner(ctx context.Context, id int, progress chan<- Progress, input <-chan Request, output chan<- Downloaded) error {
+func (dl *downloader) runner(ctx context.Context, input <-chan Request, output chan<- Downloaded) error {
 	for {
 		var request Request
 		var ok bool
@@ -162,7 +160,7 @@ func (dl *downloader) runner(ctx context.Context, id int, progress chan<- Progre
 			// ignore empty requests.
 			continue
 		}
-		downloaded, err := dl.downloadObjects(ctx, id, request)
+		downloaded, err := dl.downloadObjects(ctx, request)
 		if err != nil {
 			return err
 		}
@@ -175,13 +173,13 @@ func (dl *downloader) runner(ctx context.Context, id int, progress chan<- Progre
 	}
 }
 
-func (dl *downloader) downloadObjects(ctx context.Context, id int, request Request) (Downloaded, error) {
+func (dl *downloader) downloadObjects(ctx context.Context, request Request) (Downloaded, error) {
 	download := Downloaded{
 		Request:   request,
 		Downloads: make([]Result, 0, len(request.Names())),
 	}
 	for _, name := range request.Names() {
-		status, err := dl.downloadObject(ctx, request.Container(), name, request.FileMode())
+		status, err := dl.downloadObject(ctx, request.Container(), name)
 		if err != nil {
 			return download, err
 		}
@@ -190,7 +188,7 @@ func (dl *downloader) downloadObjects(ctx context.Context, id int, request Reque
 	return download, nil
 }
 
-func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, name string, mode fs.FileMode) (Result, error) {
+func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, name string) (Result, error) {
 	result := Result{}
 	if err := dl.rateController.Wait(ctx); err != nil {
 		return result, err
