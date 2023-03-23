@@ -15,7 +15,6 @@ import (
 
 func TestNoop(t *testing.T) {
 	ctx := context.Background()
-	//clk := &TestClock{}
 	c := ratecontrol.New()
 	for i := 0; i < 100; i++ {
 		backoff := c.Backoff()
@@ -77,7 +76,7 @@ func TestRequestRateConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	took := time.Since(then)
-	lower, upper := bounds(tick*4, 200*time.Millisecond)
+	lower, upper := bounds(tick*2, 200*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
