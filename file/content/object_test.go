@@ -46,7 +46,7 @@ func TestAPIObject(t *testing.T) {
 		Bytes      []byte
 	}
 
-	//now := time.Now().Truncate(0)
+	now := time.Now()
 	val := testValue{
 		A: 1, B: "two",
 	}
@@ -55,9 +55,9 @@ func TestAPIObject(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := testResponse{
-		Type: content.Type("testObject"),
-		//CreateTime: now,
-		Bytes: buf,
+		Type:       content.Type("testObject"),
+		CreateTime: now,
+		Bytes:      buf,
 	}
 	obj := content.Object[testValue, testResponse]{
 		Value:    val,
