@@ -21,7 +21,7 @@ import (
 	"cloudeng.io/path/cloudpath"
 )
 
-// Crawler represents a crawler instance that contains global configuration
+// Crawler represents a crawler instance and contains global configuration
 // information.
 type Crawler struct {
 	Config
@@ -156,7 +156,7 @@ func (c Crawler) saveCrawled(_ context.Context, name string, crawledCh chan craw
 			}
 			prefix, suffix := sharder.Assign(name + dld.Name)
 			path := filepath.Join(c.crawlCachePath, prefix, suffix)
-			if err := obj.WriteObjectBinary(path); err != nil {
+			if err := obj.WriteObjectFile(path, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
 				fmt.Printf("failed to write: %v as %v: %v\n", dld.Name, path, err)
 				continue
 			}

@@ -27,7 +27,7 @@ import (
 // encoded data. The format chosen for the serialized data is intended to allow
 // for dealing with the different sources of both Value and Response and allows
 // for each to be encoded using a different encoding. For example, a response
-// from a rest API may be only encodable as json. Similary responses generated
+// from a rest API may be only encodable as json. Similarly responses generated
 // by native go code are likely most conveniently encoded as gob.
 // The serialized format is:
 //
@@ -165,6 +165,9 @@ func (o *Object[V, R]) Decode(data []byte) error {
 	default:
 		return fmt.Errorf("unsupported value encoding: %v", valueEncoding)
 	}
+	if err != nil {
+		return err
+	}
 	switch responseEncoding {
 	case GOBObjectEncoding:
 		err = gob.NewDecoder(bytes.NewBuffer(rbuf)).Decode(&o.Response)
@@ -173,7 +176,7 @@ func (o *Object[V, R]) Decode(data []byte) error {
 	default:
 		return fmt.Errorf("unsupported value encoding: %v", responseEncoding)
 	}
-	return nil
+	return err
 }
 
 // WriteObject will encode the object using the requested encoding to the specified file.
