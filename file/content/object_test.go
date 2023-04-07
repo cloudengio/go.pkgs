@@ -46,7 +46,7 @@ func TestAPIObject(t *testing.T) {
 		Bytes      []byte
 	}
 
-	now := time.Now()
+	now := time.Now().UTC().Truncate(0)
 	val := testValue{
 		A: 1, B: "two",
 	}
