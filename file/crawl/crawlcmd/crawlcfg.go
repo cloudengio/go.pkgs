@@ -192,27 +192,15 @@ func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*c
 	return reg, nil
 }
 
+// NewRateController creates a new rate controller based on the values
+// contained in RateControl.
 func (c RateControl) NewRateController() (*ratecontrol.Controller, error) {
 	opts := []ratecontrol.Option{}
-	if c.Rate.Tick != 0 {
-		var clock ratecontrol.Clock
-		switch c.Rate.Tick {
-		case time.Second:
-			clock = ratecontrol.SecondClock{}
-		case time.Minute:
-			clock = ratecontrol.MinuteClock{}
-		case time.Hour:
-			clock = ratecontrol.HourClock{}
-		default:
-			return nil, fmt.Errorf("unsupported tick duration (only seconds, minutes and hours are supported): %v", c.Rate.Tick)
-		}
-		opts = append(opts, ratecontrol.WithClock(clock))
-	}
 	if c.Rate.BytesPerTick > 0 {
-		opts = append(opts, ratecontrol.WithBytesPerTick(c.Rate.BytesPerTick))
+		opts = append(opts, ratecontrol.WithBytesPerTick(c.Rate.Tick, c.Rate.BytesPerTick))
 	}
 	if c.Rate.RequestsPerTick > 0 {
-		opts = append(opts, ratecontrol.WithRequestsPerTick(c.Rate.RequestsPerTick))
+		opts = append(opts, ratecontrol.WithRequestsPerTick(c.Rate.Tick, c.Rate.RequestsPerTick))
 	}
 	if c.ExponentialBackoff.InitialDelay > 0 {
 		opts = append(opts, ratecontrol.WithExponentialBackoff(c.ExponentialBackoff.InitialDelay, c.ExponentialBackoff.Steps))
