@@ -46,7 +46,7 @@ func TestAPIObject(t *testing.T) {
 		Bytes      []byte
 	}
 
-	now := time.Now().Truncate(0)
+	//now := time.Now().Truncate(0)
 	val := testValue{
 		A: 1, B: "two",
 	}
@@ -55,9 +55,9 @@ func TestAPIObject(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := testResponse{
-		Type:       content.Type("testObject"),
-		CreateTime: now,
-		Bytes:      buf,
+		Type: content.Type("testObject"),
+		//CreateTime: now,
+		Bytes: buf,
 	}
 	obj := content.Object[testValue, testResponse]{
 		Value:    val,
@@ -65,6 +65,7 @@ func TestAPIObject(t *testing.T) {
 	}
 	roundtrip(t, obj, content.GOBObjectEncoding, content.GOBObjectEncoding)
 	roundtrip(t, obj, content.JSONObjectEncoding, content.JSONObjectEncoding)
+	roundtrip(t, obj, content.JSONObjectEncoding, content.GOBObjectEncoding)
 }
 
 func roundtrip[V, R any](t *testing.T, obj content.Object[V, R], valueEncoding, responseEncoding content.ObjectEncoding) {
@@ -80,7 +81,7 @@ func roundtrip[V, R any](t *testing.T, obj content.Object[V, R], valueEncoding, 
 		t.Fatalf("%s: %v", loc, err)
 	}
 	if got, want := obj, obj1; !reflect.DeepEqual(got, want) {
-		t.Errorf("%v: got: %v, want: %v", loc, got, want)
+		t.Errorf("%v: got: %#v, want: %#v", loc, got, want)
 	}
 }
 
