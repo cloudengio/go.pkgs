@@ -6,7 +6,7 @@ require (
 	cloudeng.io/algo v0.0.0-20230309184059-9263072b1423
 	cloudeng.io/cmdutil v0.0.0-20230130231933-fe585c604aed
 	cloudeng.io/errors v0.0.8
-	cloudeng.io/net v0.0.0-20230309184059-9263072b1423
+	cloudeng.io/net v0.0.0-20230323174002-73014ceab7ea
 	cloudeng.io/os v0.0.0-20230309184059-9263072b1423
 	cloudeng.io/path v0.0.8
 	cloudeng.io/sync v0.0.8
