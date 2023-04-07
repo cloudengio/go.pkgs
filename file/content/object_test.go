@@ -5,7 +5,6 @@
 package content_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -31,7 +30,8 @@ func TestCrawledObject(t *testing.T) {
 		Err:      fmt.Errorf("oops"),
 	}}
 	objs := download.AsObjects(dl)
-	roundtrip(t, objs[0])
+	roundtrip(t, objs[0], content.GOBObjectEncoding, content.GOBObjectEncoding)
+	roundtrip(t, objs[0], content.JSONObjectEncoding, content.GOBObjectEncoding)
 }
 
 func TestAPIObject(t *testing.T) {
@@ -63,40 +63,50 @@ func TestAPIObject(t *testing.T) {
 		Value:    val,
 		Response: resp,
 	}
-	roundtrip(t, obj)
+	roundtrip(t, obj, content.GOBObjectEncoding, content.GOBObjectEncoding)
+	roundtrip(t, obj, content.JSONObjectEncoding, content.JSONObjectEncoding)
 }
 
-func roundtrip[V, R any](t *testing.T, obj content.Object[V, R]) {
+func roundtrip[V, R any](t *testing.T, obj content.Object[V, R], valueEncoding, responseEncoding content.ObjectEncoding) {
 	_, _, line, _ := runtime.Caller(1)
 	loc := fmt.Sprintf("line: %v", line)
 	// Test encode/decode
-	enc, err := obj.Encode()
+	data, err := obj.Encode(valueEncoding, responseEncoding)
 	if err != nil {
 		t.Fatalf("%s: %v", loc, err)
 	}
 	var obj1 content.Object[V, R]
-	if err := obj1.Decode(enc); err != nil {
+	if err := obj1.Decode(data); err != nil {
 		t.Fatalf("%s: %v", loc, err)
 	}
 	if got, want := obj, obj1; !reflect.DeepEqual(got, want) {
 		t.Errorf("%v: got: %v, want: %v", loc, got, want)
 	}
+}
 
-	// Test write/read.
-	rt := &bytes.Buffer{}
-	if err := obj.Write(rt); err != nil {
-		t.Fatalf("%s: %v", loc, err)
+func roundTripFile[V, R any](t *testing.T, obj content.Object[V, R], path string, ctype content.Type, valueEncoding, responseEncoding content.ObjectEncoding) {
+	if err := obj.WriteObjectFile(path, valueEncoding, responseEncoding); err != nil {
+		t.Fatal(err)
 	}
-	var obj2 content.Object[V, R]
-	if err := obj2.Read(rt); err != nil {
-		t.Fatalf("%s: %v", loc, err)
+	ctype1, data1, err := content.ReadObjectFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got, want := obj, obj2; !reflect.DeepEqual(got, want) {
-		t.Errorf("%v: got: %v, want: %v", loc, got, want)
+	if got, want := ctype1, ctype; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	var obj1 content.Object[V, R]
+	if err := obj1.Decode(data1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := obj, obj1; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
-func TestBinaryEncoding(t *testing.T) {
+func TestObjectEncoding(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctype := content.Type("bar")
 	obj := content.Object[int, string]{
@@ -106,30 +116,7 @@ func TestBinaryEncoding(t *testing.T) {
 	}
 	path := filepath.Join(tmpDir, "obj")
 
-	data, _ := obj.Encode()
+	roundTripFile(t, obj, path, ctype, content.GOBObjectEncoding, content.GOBObjectEncoding)
+	roundTripFile(t, obj, path, ctype, content.JSONObjectEncoding, content.JSONObjectEncoding)
 
-	if err := content.WriteBinary(path, ctype, data); err != nil {
-		t.Fatal(err)
-	}
-	ctype1, data1, err := content.ReadBinary(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got, want := ctype1, ctype; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	if got, want := data1, data; !bytes.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	var obj1 content.Object[int, string]
-	if err := obj1.Decode(data1); err != nil {
-		t.Fatal(err)
-	}
-
-	if got, want := obj, obj1; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
 }

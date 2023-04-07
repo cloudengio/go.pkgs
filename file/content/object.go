@@ -8,25 +8,40 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 )
 
-// Object represents an object/file that has been downloaded/crawled or is the
-// result of an API invocation. The Value field represents the typed value
-// of the result of the download or API operation. The Response field
-// is the actual response for the download, API call etc. The Response
-// may include additional metadata.
+// Object represents the result of object/file download/crawl operation. As such
+// it contains both the value that was downloaded and the result of the operation.
+// The Value field represents the typed value of the result of the download
+// or API operation. The Response field is the actual response for the download,
+// API call and may include additional metadata such as object size, ownership
+// etc. The content.Type is used by a reader to determine the type of the Value
+// and Response fields and in this sense an object is a union.
 //
-// Object supports encoding/decoding either in binary or gob format.
+// Objects are intended to be serialized to/from storage with the reader
+// needing to determine the types of the serialized Value and Response from the
+// encoded data. The format chosen for the serialized data is intended to allow
+// for dealing with the different sources of both Value and Response and allows
+// for each to be encoded using a different encoding. For example, a response
+// from a rest API may be only encodable as json. Similary responses generated
+// by native go code are likely most conveniently encoded as gob.
+// The serialized format is:
+//
+//	type []byte
+//	valueEncoding uint8
+//	responseEncoding uint8
+//	value []byte
+//	response []byte
+//
 // The gob format assumes that the decoder knows the type of the previously
-// encoded binary. The binary format encodes the content.Type and a byte
-// slice in separately. This allows for reading the encoded data without
-// necessarily knowing the type of the encoded object.
+// encoded binary data, including interface types. JSON cannot readily
+// handle interface types.
 //
-// When gob encoding is supported care must be taken to ensure that any
+// When gob encoding is used care must be taken to ensure that any
 // fields that are interface types are appropriately registered with the
 // gob package. error is a common such case and the Error function can be
 // used to replace the existing error with a wrapper that implements the
@@ -40,98 +55,15 @@ type Object[Value, Response any] struct {
 	Response Response
 }
 
-// Encode encodes the object using gob.
-func (o *Object[V, R]) Encode() ([]byte, error) {
-	buf := &bytes.Buffer{}
-	enc := gob.NewEncoder(buf)
-	if err := enc.Encode(o); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
+// ObjectEncoding represents the encoding to be used for the object's Value
+// and Response fields.
+type ObjectEncoding int
 
-// Decode decodes the object in data using gob.
-func (o *Object[V, R]) Decode(data []byte) error {
-	dec := gob.NewDecoder(bytes.NewReader(data))
-	return dec.Decode(o)
-}
-
-// Write encodes the object using gob to the specified writer.
-func (o *Object[V, R]) Write(wr io.Writer) error {
-	return gob.NewEncoder(wr).Encode(o)
-}
-
-// Read decodes the object using gob from the specified reader.
-func (o *Object[V, R]) Read(rd io.Reader) error {
-	return gob.NewDecoder(rd).Decode(o)
-}
-
-// EncodeBinary will encode the object using the binary encoding format.
-func (o *Object[V, R]) EncodeBinary(wr io.Writer) error {
-	data, err := o.Encode()
-	if err != nil {
-		return err
-	}
-	return EncodeBinary(wr, o.Type, data)
-}
-
-// DecodeBinary will decode the object using the binary encoding format.
-func (o *Object[V, R]) DecodeBinary(rd io.Reader) error {
-	ctype, data, err := DecodeBinary(rd)
-	if err != nil {
-		return err
-	}
-	if err := o.Decode(data); err != nil {
-		if ctype != o.Type {
-			return fmt.Errorf("content types not match: %v != %v", ctype, o.Type)
-		}
-	}
-	return nil
-}
-
-// WriteObjectBinary will encode the object using the binary encoding format
-// to the specified file.
-func (o *Object[V, R]) WriteObjectBinary(path string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	return o.EncodeBinary(wr)
-}
-
-// ReadObjectBinary will decode the object using the binary encoding format
-// from the specified file.
-func (o *Object[V, R]) ReadObjectBinary(path string) error {
-	rd, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer rd.Close()
-	return o.DecodeBinary(rd)
-}
-
-// WriteObject will encode the object using gob to the specified file.
-func (o *Object[V, R]) WriteObject(path string) error {
-	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	defer wr.Close()
-	return o.Write(wr)
-}
-
-func (o *Object[V, R]) ReadObject(path string) error {
-	rd, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer rd.Close()
-	return o.Read(rd)
-}
+const (
+	InvalidObjectEncoding ObjectEncoding = iota
+	GOBObjectEncoding                    = iota
+	JSONObjectEncoding
+)
 
 func writeSlice(wr io.Writer, data []byte) error {
 	if err := binary.Write(wr, binary.LittleEndian, int64(len(data))); err != nil {
@@ -157,34 +89,97 @@ func readSlice(rd io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-// EncodeBinary encodes the specified content.Type and byte slice as binary data.
-func EncodeBinary(wr io.Writer, ctype Type, data []byte) error {
-	if err := writeSlice(wr, []byte(ctype)); err != nil {
+// Encode encodes the object using the requested encodings.
+func (o *Object[V, R]) Encode(valueEncoding, responseEncoding ObjectEncoding) ([]byte, error) {
+	buf := bytes.Buffer{}
+	if err := writeSlice(&buf, []byte(o.Type)); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(&buf, binary.LittleEndian, uint8(valueEncoding)); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(&buf, binary.LittleEndian, uint8(responseEncoding)); err != nil {
+		return nil, err
+	}
+	var err error
+	var vbuf, rbuf bytes.Buffer
+	switch valueEncoding {
+	case GOBObjectEncoding:
+		err = gob.NewEncoder(&vbuf).Encode(o.Value)
+	case JSONObjectEncoding:
+		err = json.NewEncoder(&vbuf).Encode(o.Value)
+	default:
+		return nil, fmt.Errorf("unsupported value encoding: %v", valueEncoding)
+	}
+	if err != nil {
+		return nil, err
+	}
+	switch responseEncoding {
+	case GOBObjectEncoding:
+		err = gob.NewEncoder(&rbuf).Encode(o.Response)
+	case JSONObjectEncoding:
+		err = json.NewEncoder(&rbuf).Encode(o.Response)
+	default:
+		return nil, fmt.Errorf("unsupported response encoding: %v", responseEncoding)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := writeSlice(&buf, vbuf.Bytes()); err != nil {
+		return nil, err
+	}
+	if err := writeSlice(&buf, rbuf.Bytes()); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Decode decodes the object in data.
+func (o *Object[V, R]) Decode(data []byte) error {
+	rd := bytes.NewReader(data)
+	data, err := readSlice(rd)
+	if err != nil {
 		return err
 	}
-	return writeSlice(wr, data)
+	o.Type = Type(data)
+	var valueEncoding, responseEncoding uint8
+	if err := binary.Read(rd, binary.LittleEndian, &valueEncoding); err != nil {
+		return err
+	}
+	if err := binary.Read(rd, binary.LittleEndian, &responseEncoding); err != nil {
+		return err
+	}
+	vbuf, err := readSlice(rd)
+	if err != nil {
+		return err
+	}
+	rbuf, err := readSlice(rd)
+	if err != nil {
+		return err
+	}
+	switch valueEncoding {
+	case GOBObjectEncoding:
+		err = gob.NewDecoder(bytes.NewBuffer(vbuf)).Decode(&o.Value)
+	case JSONObjectEncoding:
+		err = json.NewDecoder(bytes.NewBuffer(vbuf)).Decode(&o.Value)
+	default:
+		return fmt.Errorf("unsupported value encoding: %v", valueEncoding)
+	}
+	switch responseEncoding {
+	case GOBObjectEncoding:
+		err = gob.NewDecoder(bytes.NewBuffer(rbuf)).Decode(&o.Response)
+	case JSONObjectEncoding:
+		err = json.NewDecoder(bytes.NewBuffer(rbuf)).Decode(&o.Response)
+	default:
+		return fmt.Errorf("unsupported value encoding: %v", responseEncoding)
+	}
+	return nil
 }
 
-// DecodeBinary decodes the result of a previous call to EncodeBinary.
-func DecodeBinary(rd io.Reader) (ctype Type, data []byte, err error) {
-	tmp, err := readSlice(rd)
+// WriteObject will encode the object using the requested encoding to the specified file.
+func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncoding ObjectEncoding) error {
+	buf, err := o.Encode(valueEncoding, responseEncoding)
 	if err != nil {
-		return "", nil, err
-	}
-	ctype = Type(string(tmp))
-	tmp, err = readSlice(rd)
-	if err != nil {
-		return "", nil, err
-	}
-	data = tmp
-	return
-}
-
-// WriteBinary writes the results of EncodeBinary(cytpe, data) to the
-// specified file.
-func WriteBinary(path string, ctype Type, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
@@ -192,18 +187,24 @@ func WriteBinary(path string, ctype Type, data []byte) error {
 		return err
 	}
 	defer wr.Close()
-	return EncodeBinary(wr, ctype, data)
+	_, err = wr.Write(buf)
+	return err
 }
 
-// ReadBinary reads the contents of path and interprets them using
-// DecodeBinary.
-func ReadBinary(path string) (ctype Type, data []byte, err error) {
-	rd, err := os.Open(path)
+// ReadObjectFile will read the specified file and return the object type, encoding and the
+// the contents of that file. The returned byte slice can be used to decode the object using
+// its Decode method.
+func ReadObjectFile(path string) (Type, []byte, error) {
+	buf, err := os.ReadFile(path)
 	if err != nil {
 		return "", nil, err
 	}
-	defer rd.Close()
-	return DecodeBinary(rd)
+	rd := bytes.NewReader(buf)
+	data, err := readSlice(rd)
+	if err != nil {
+		return "", nil, err
+	}
+	return Type(data), buf, err
 }
 
 // Error is an implementation of error that is registered with the gob
