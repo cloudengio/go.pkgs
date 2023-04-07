@@ -124,7 +124,7 @@ func TestDownloadCancel(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	rc := ratecontrol.New(ratecontrol.WithRequestsPerTick(60))
+	rc := ratecontrol.New(ratecontrol.WithRequestsPerTick(time.Minute, 60))
 	downloader := download.New(download.WithRateController(rc, nil))
 
 	go func() {
