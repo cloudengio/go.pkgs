@@ -201,7 +201,7 @@ func (dl *downloader) downloadObject(ctx context.Context, downloadFS file.FS, na
 		result.Name = name
 		if err != nil {
 			if errors.Is(err, dl.backoffErr) {
-				if done, err := backoff.Wait(ctx); done {
+				if done, err := backoff.Wait(ctx, nil); done {
 					return result, err
 				}
 				continue
