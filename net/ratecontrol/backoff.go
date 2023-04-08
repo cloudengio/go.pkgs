@@ -6,6 +6,7 @@ package ratecontrol
 
 import (
 	"context"
+	"net/http"
 	"time"
 )
 
@@ -16,7 +17,7 @@ type Backoff interface {
 	// The error returned is nil when the backoff algorithm has reached
 	// its limit and will generally only be non-nil for an internal error
 	// such as the context being cancelled.
-	Wait(context.Context) (bool, error)
+	Wait(context.Context, *http.Response) (bool, error)
 
 	// Retries returns the number of retries that the backoff aglorithm
 	// has recorded, ie. the number of times that Backoff was called and
@@ -43,7 +44,7 @@ func (eb *ExponentialBackoff) Retries() int {
 }
 
 // Wait implements Backoff.
-func (eb *ExponentialBackoff) Wait(ctx context.Context) (bool, error) {
+func (eb *ExponentialBackoff) Wait(ctx context.Context, _ *http.Response) (bool, error) {
 	if eb.retries >= eb.steps {
 		return true, nil
 	}
@@ -63,6 +64,6 @@ func (nb noBackoff) Retries() int {
 	return 0
 }
 
-func (nb noBackoff) Wait(_ context.Context) (bool, error) {
+func (nb noBackoff) Wait(_ context.Context, _ *http.Response) (bool, error) {
 	return false, nil
 }
