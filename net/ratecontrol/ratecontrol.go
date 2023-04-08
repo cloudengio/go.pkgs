@@ -87,6 +87,9 @@ func (c *Controller) BytesTransferred(nBytes int) {
 }
 
 func (c *Controller) Backoff() Backoff {
+	if c.opts.customBackoff != nil {
+		return c.opts.customBackoff()
+	}
 	if c.opts.backoffStart == 0 {
 		return noBackoff{}
 	}

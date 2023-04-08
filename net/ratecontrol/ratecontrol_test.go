@@ -6,6 +6,7 @@ package ratecontrol_test
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestNoop(t *testing.T) {
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		done, err := backoff.Wait(ctx)
+		done, err := backoff.Wait(ctx, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +164,7 @@ func TestDataAndReqRate(t *testing.T) {
 func backoff(ctx context.Context, t *testing.T, c *ratecontrol.Controller) int {
 	backoff := c.Backoff()
 	for {
-		done, err := backoff.Wait(ctx)
+		done, err := backoff.Wait(ctx, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -201,7 +202,7 @@ func TestCancel(t *testing.T) {
 
 	ctx, cancel = context.WithCancel(rootCtx)
 	go cancel()
-	last, err := c.Backoff().Wait(ctx)
+	last, err := c.Backoff().Wait(ctx, nil)
 
 	if got, want := last, true; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -218,5 +219,34 @@ func TestCancel(t *testing.T) {
 	err = c.Wait(ctx)
 	if err == nil || err != context.Canceled {
 		t.Errorf("got %v, want %v", err, context.Canceled)
+	}
+}
+
+type customBackoff struct {
+	resp *http.Response
+}
+
+func (b *customBackoff) Wait(_ context.Context, resp *http.Response) (bool, error) {
+	b.resp = resp
+	return false, nil
+}
+
+func (b *customBackoff) Retries() int {
+	return 33
+}
+
+func TestCustomBackoff(t *testing.T) {
+	ctx := context.Background()
+	backoff := &customBackoff{}
+	resp := &http.Response{}
+
+	c := ratecontrol.New(
+		ratecontrol.WithCustomBackoff(func() ratecontrol.Backoff {
+			return backoff
+		}),
+	)
+	_, _ = c.Backoff().Wait(ctx, resp)
+	if got, want := backoff.resp, resp; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }

@@ -46,6 +46,12 @@ func WithExponentialBackoff(first time.Duration, steps int) Option {
 	}
 }
 
+func WithCustomBackoff(backoff func() Backoff) Option {
+	return func(o *options) {
+		o.customBackoff = backoff
+	}
+}
+
 type options struct {
 	reqsInterval  time.Duration
 	reqsPerTick   int
@@ -53,4 +59,5 @@ type options struct {
 	bytesPerTick  int
 	backoffStart  time.Duration
 	backoffSteps  int
+	customBackoff func() Backoff
 }
