@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // Object represents the result of object/file download/crawl operation. As such
@@ -179,15 +180,25 @@ func (o *Object[V, R]) Decode(data []byte) error {
 	return err
 }
 
-// WriteObject will encode the object using the requested encoding to the specified file.
+// WriteObject will encode the object using the requested encoding to the
+// specified file. It will create the directory that the file is to be written
+// to if it does not exist.
 func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncoding ObjectEncoding) error {
 	buf, err := o.Encode(valueEncoding, responseEncoding)
 	if err != nil {
 		return err
 	}
-	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
+	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
+		// Try to create the directory that the file is to be written to.
+		os.MkdirAll(filepath.Dir(path), 0700) //nolint:errcheck
+		wr, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return err
+		}
 	}
 	defer wr.Close()
 	_, err = wr.Write(buf)

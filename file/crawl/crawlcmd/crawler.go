@@ -7,6 +7,7 @@ package crawlcmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -160,7 +161,7 @@ func (c Crawler) saveCrawled(_ context.Context, name string, crawledCh chan craw
 				fmt.Printf("failed to write: %v as %v: %v\n", dld.Name, path, err)
 				continue
 			}
-			fmt.Printf("%v -> %v\n", dld.Name, path)
+			log.Printf("%v -> %v\n", dld.Name, path)
 		}
 	}
 	return nil
