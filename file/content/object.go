@@ -194,7 +194,7 @@ func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncod
 			return err
 		}
 		// Try to create the directory that the file is to be written to.
-		os.MkdirAll(filepath.Dir(path), 0700)
+		os.MkdirAll(filepath.Dir(path), 0700) //nolint:errcheck
 		wr, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			return err
