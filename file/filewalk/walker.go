@@ -12,22 +12,16 @@ package filewalk
 
 import (
 	"context"
-	"expvar"
 	"fmt"
 	"os"
 	"runtime"
-	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/sync/errgroup"
 )
-
-// TODO: Make these optional/configurable?
-var listingVar = expvar.NewMap("cloudeng.io/file/filewalk.listing")
-var walkingVar = expvar.NewMap("cloudeng.io/file/filewalk.walking")
-var syncVar = expvar.NewMap("cloudeng.io/file/filewalk.sync")
 
 // Contents represents the contents of the filesystem at the level represented
 // by Path.
@@ -45,41 +39,60 @@ type Walker struct {
 	contentsFn ContentsFunc
 	prefixFn   PrefixFunc
 	errs       *errors.M
+	nSyncOps   int64
+	tk         *timekeeper
 }
 
 // Option represents options accepted by Walker.
 type Option func(o *options)
 
 type options struct {
-	concurrency int
-	scanSize    int
-	chanSize    int
+	concurrency    int
+	scanSize       int
+	reportCh       chan<- Status
+	reportInterval time.Duration
+	slowThreshold  time.Duration
 }
 
-// Concurreny can be used to change the degree of concurrency used. The
+// WithConcurrency can be used to change the degree of concurrency used. The
 // default is to use all available CPUs.
-func Concurrency(n int) Option {
+func WithConcurrency(n int) Option {
 	return func(o *options) {
 		o.concurrency = n
 	}
 }
 
-// ChanSize can be used to set the size of the channel used to send results
-// to ResultsFunc. It defaults to being unbuffered.
-func ChanSize(n int) Option {
+type Status struct {
+	// SynchronousOps is the number of Scans that were performed synchronously
+	// as a fallback when all available goroutines are already occupied.
+	SynchronousScans int64
+
+	// SlowPrefix is a prefix that took longer than a certain durection
+	// to scan. ScanDuration is the time spent scanning that prefix to
+	// date. A SlowPrefix may be reported as slow before it has completed
+	// scanning.
+	SlowPrefix   string
+	ScanDuration time.Duration
+
+	Prefixes int64
+	Files    int64
+}
+
+func WithReporting(ch chan<- Status, interval, slowThreshold time.Duration) Option {
 	return func(o *options) {
-		o.chanSize = n
+		o.reportCh = ch
+		o.slowThreshold = slowThreshold
+		o.reportInterval = interval
 	}
 }
 
 // New creates a new Walker instance.
 func New(filesystem Filesystem, opts ...Option) *Walker {
 	w := &Walker{fs: filesystem, errs: &errors.M{}}
-	w.opts.chanSize = 1000
-	w.opts.scanSize = 1000
 	for _, fn := range opts {
 		fn(&w.opts)
 	}
+	w.tk = newTimekeeper(w.opts)
 	return w
 }
 
@@ -176,13 +189,13 @@ func (w *Walker) recordError(path, op string, err error) {
 }
 
 func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *Info) []Info {
-	listingVar.Set(idx, jsonString(path))
-	defer listingVar.Delete(idx)
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
+		w.tk.add(path)
 		w.fs.List(ctx, path, ch)
 		close(ch)
+		w.tk.rm(path)
 	}(path)
 
 	children, err := w.contentsFn(ctx, path, info, ch)
@@ -197,13 +210,6 @@ func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *I
 		return nil
 	case <-ch:
 	}
-
-	sort.Slice(children, func(i, j int) bool {
-		if children[i].Name == children[j].Name {
-			return children[i].Size >= children[j].Size
-		}
-		return children[i].Name < children[j].Name
-	})
 	return children
 }
 
@@ -256,6 +262,21 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	var wg sync.WaitGroup
 	wg.Add(2)
 
+	var reportingDoneCh, reportingStopCh chan struct{}
+	if w.opts.reportCh != nil {
+		reportingDoneCh, reportingStopCh = make(chan struct{}), make(chan struct{})
+		go func() {
+			for {
+				if w.report(rootCtx, reportingStopCh) {
+					close(w.opts.reportCh)
+					close(reportingDoneCh)
+					return
+				}
+				time.Sleep(w.opts.reportInterval)
+			}
+		}()
+	}
+
 	for _, root := range roots {
 		root := root
 		walkers.Go(func() error {
@@ -285,6 +306,16 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 		w.errs.Append(rootCtx.Err())
 	case <-waitCh:
 	}
+
+	if w.opts.reportCh != nil {
+		close(reportingStopCh)
+		select {
+		case <-rootCtx.Done():
+			w.errs.Append(rootCtx.Err())
+		case <-reportingDoneCh:
+		}
+	}
+
 	return w.errs.Err()
 }
 
@@ -300,12 +331,11 @@ func (w *Walker) walkChildren(ctx context.Context, path string, children []Info,
 			return
 		default:
 			// no concurreny is available fallback to sync.
+			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name)
 			now := time.Now().Format(time.Stamp)
-			syncVar.Set(p, jsonString(now))
 			w.walker(ctx, now, p, limitCh)
 			wg.Done()
-			syncVar.Delete(p)
 			continue
 		}
 		go func() {
@@ -324,8 +354,6 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 	case <-ctx.Done():
 		return
 	}
-	walkingVar.Set(idx, jsonString(path))
-	defer walkingVar.Delete(idx)
 	info, err := w.fs.Stat(ctx, path)
 	stop, children, err := w.prefixFn(ctx, path, &info, err)
 	w.recordError(path, "stat", err)
@@ -340,4 +368,70 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 	if len(children) > 0 {
 		w.walkChildren(ctx, path, children, limitCh)
 	}
+}
+
+func (w *Walker) report(ctx context.Context, stopCh <-chan struct{}) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-stopCh:
+		return true
+	case w.opts.reportCh <- Status{
+		SynchronousScans: atomic.LoadInt64(&w.nSyncOps)}:
+	default:
+	}
+	return w.tk.report(ctx)
+}
+
+func newTimekeeper(opts options) *timekeeper {
+	if opts.reportCh == nil {
+		return &timekeeper{}
+	}
+	return &timekeeper{
+		prefixes: make(map[string]time.Time, opts.concurrency),
+		ch:       opts.reportCh,
+		slow:     opts.slowThreshold,
+	}
+}
+
+type timekeeper struct {
+	sync.Mutex
+	prefixes map[string]time.Time
+	ch       chan<- Status
+	slow     time.Duration
+}
+
+func (tk *timekeeper) add(prefix string) {
+	if tk.slow == 0 {
+		return
+	}
+	tk.Lock()
+	defer tk.Unlock()
+	tk.prefixes[prefix] = time.Now()
+}
+
+func (tk *timekeeper) rm(prefix string) {
+	if tk.slow == 0 {
+		return
+	}
+	tk.Lock()
+	defer tk.Unlock()
+	delete(tk.prefixes, prefix)
+}
+
+func (tk *timekeeper) report(ctx context.Context) bool {
+	if tk.slow == 0 {
+		return false
+	}
+	tk.Lock()
+	defer tk.Unlock()
+	for prefix, t := range tk.prefixes {
+		if since := time.Since(t); since > tk.slow {
+			select {
+			case tk.ch <- Status{SlowPrefix: prefix, ScanDuration: since}:
+			default:
+			}
+		}
+	}
+	return false
 }

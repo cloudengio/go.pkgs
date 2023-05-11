@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cloudeng.io/file/filewalk"
+	"cloudeng.io/sync/synctestutil"
 )
 
 type logger struct {
@@ -70,6 +71,7 @@ func (l *logger) dirsFunc(_ context.Context, prefix string, _ *filewalk.Info, er
 }
 
 func TestLocalWalk(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
 	sc := filewalk.LocalFilesystem(1)
 	wk := filewalk.New(sc)
@@ -81,11 +83,11 @@ func TestLocalWalk(t *testing.T) {
 	lg := nl()
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
-	wk = filewalk.New(sc, filewalk.Concurrency(10))
+	wk = filewalk.New(sc, filewalk.WithConcurrency(10))
 	lg = nl()
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
-	wk = filewalk.New(sc, filewalk.Concurrency(10))
+	wk = filewalk.New(sc, filewalk.WithConcurrency(10))
 	lg = nl()
 	lg.skip = strings.ReplaceAll("/b0/b0.1", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial1)
@@ -244,6 +246,7 @@ func init() {
 }
 
 func TestFunctionErrors(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
 	sc := filewalk.LocalFilesystem(1)
 	wk := filewalk.New(sc)
@@ -324,10 +327,11 @@ func (is *infiniteScanner) IsNotExist(err error) bool {
 }
 
 func TestCancel(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	is := &infiniteScanner{}
-	wk := filewalk.New(is, filewalk.Concurrency(4))
+	wk := filewalk.New(is, filewalk.WithConcurrency(4))
 	lg := &logger{}
 
 	ch := make(chan error)
@@ -351,5 +355,52 @@ func TestCancel(t *testing.T) {
 		}
 	default:
 		t.Fatalf("context was not canceld")
+	}
+}
+
+type slowScanner struct {
+	filewalk.Filesystem
+}
+
+func (s *slowScanner) List(ctx context.Context, prefix string, ch chan<- filewalk.Contents) {
+	time.Sleep(time.Millisecond * 1500)
+	s.Filesystem.List(ctx, prefix, ch)
+}
+
+func TestReporting(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
+	ctx := context.Background()
+	//	ctx, cancel := context.WithCancel(ctx)
+	//	defer cancel()
+	is := &slowScanner{filewalk.LocalFilesystem(1)}
+	ch := make(chan filewalk.Status, 100)
+	wk := filewalk.New(is, filewalk.WithConcurrency(2),
+		filewalk.WithReporting(ch, time.Millisecond*100, time.Millisecond*250))
+	lg := &logger{}
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, localTestTree)
+		wg.Done()
+	}()
+
+	nSlow := 0
+	nSync := int64(0)
+	for r := range ch {
+		if r.SlowPrefix != "" {
+			nSlow++
+			if r.ScanDuration < time.Millisecond*250 {
+				t.Errorf("scan duration too short: %v", r.ScanDuration)
+			}
+		}
+		nSync += r.SynchronousScans
+	}
+
+	if nSlow <= 40 {
+		t.Errorf("not enough slow scans: %v", nSlow)
+	}
+	if nSync == 0 {
+		t.Errorf("no synchronous scans: %v", nSync)
 	}
 }
