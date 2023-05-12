@@ -12,7 +12,6 @@ package filewalk
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -48,7 +47,6 @@ type Option func(o *options)
 
 type options struct {
 	concurrency    int
-	scanSize       int
 	reportCh       chan<- Status
 	reportInterval time.Duration
 	slowThreshold  time.Duration
@@ -139,7 +137,7 @@ func (w *Walker) recordError(path, op string, err error) {
 	w.errs.Append(&Error{path, op, err})
 }
 
-func (w *Walker) listLevel(ctx context.Context, idx string, path string, info file.Info) file.InfoList {
+func (w *Walker) listLevel(ctx context.Context, path string, info file.Info) file.InfoList {
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
@@ -162,12 +160,6 @@ func (w *Walker) listLevel(ctx context.Context, idx string, path string, info fi
 	case <-ch:
 	}
 	return children
-}
-
-type jsonString string
-
-func (s jsonString) String() string {
-	return `"` + string(s) + `"`
 }
 
 // ContentsFunc is the type of the function that is called to consume the results
@@ -205,9 +197,9 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	w.contentsFn = contentsFn
 
 	// create and prime the concurrency limiter for walking directories.
-	walkerLimitCh := make(chan string, w.opts.concurrency*2)
+	walkerLimitCh := make(chan struct{}, w.opts.concurrency*2)
 	for i := 0; i < cap(walkerLimitCh); i++ {
-		walkerLimitCh <- fmt.Sprintf("%04d", i)
+		walkerLimitCh <- struct{}{}
 	}
 
 	var wg sync.WaitGroup
@@ -231,7 +223,8 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	for _, root := range roots {
 		root := root
 		walkers.Go(func() error {
-			w.walker(ctx, <-walkerLimitCh, root, walkerLimitCh)
+			<-walkerLimitCh
+			w.walker(ctx, root, walkerLimitCh)
 			return nil
 		})
 	}
@@ -270,36 +263,35 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	return w.errs.Err()
 }
 
-func (w *Walker) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan string) {
+func (w *Walker) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
 	for _, child := range children {
 		child := child
-		var idx string
 		select {
-		case idx = <-limitCh:
+		case <-limitCh:
 		case <-ctx.Done():
 			return
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name())
-			now := time.Now().Format(time.Stamp)
-			w.walker(ctx, now, p, limitCh)
+
+			w.walker(ctx, p, limitCh)
 			wg.Done()
 			continue
 		}
 		go func() {
-			w.walker(ctx, idx, w.fs.Join(path, child.Name()), limitCh)
+			w.walker(ctx, w.fs.Join(path, child.Name()), limitCh)
 			wg.Done()
-			limitCh <- idx
+			limitCh <- struct{}{}
 		}()
 	}
 	wg.Wait()
 
 }
 
-func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh chan string) {
+func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{}) {
 	select {
 	default:
 	case <-ctx.Done():
@@ -315,7 +307,7 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 		w.walkChildren(ctx, path, children, limitCh)
 		return
 	}
-	children = w.listLevel(ctx, idx, path, info)
+	children = w.listLevel(ctx, path, info)
 	if len(children) > 0 {
 		w.walkChildren(ctx, path, children, limitCh)
 	}
@@ -331,7 +323,7 @@ func (w *Walker) report(ctx context.Context, stopCh <-chan struct{}) bool {
 		SynchronousScans: atomic.LoadInt64(&w.nSyncOps)}:
 	default:
 	}
-	return w.tk.report(ctx)
+	return w.tk.report()
 }
 
 func newTimekeeper(opts options) *timekeeper {
@@ -370,7 +362,7 @@ func (tk *timekeeper) rm(prefix string) {
 	delete(tk.prefixes, prefix)
 }
 
-func (tk *timekeeper) report(ctx context.Context) bool {
+func (tk *timekeeper) report() bool {
 	if tk.slow == 0 {
 		return false
 	}

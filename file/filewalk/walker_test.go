@@ -377,7 +377,7 @@ func TestReporting(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, localTestTree)
+		_ = wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, localTestTree)
 		wg.Done()
 	}()
 
