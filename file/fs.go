@@ -90,6 +90,22 @@ func NewInfo(name string, size int64, mode fs.FileMode, modTime time.Time,
 	}
 }
 
+// CreateInfo creates a new instance of Info without heap allocation.
+func CreateInfo(name string, size int64, mode fs.FileMode, modTime time.Time,
+	options InfoOption) Info {
+	return Info{
+		name:    name,
+		size:    size,
+		mode:    mode,
+		modTime: modTime,
+		isDir:   options.IsDir,
+		isLink:  options.IsLink,
+		user:    options.User,
+		group:   options.Group,
+		sysInfo: options.SysInfo,
+	}
+}
+
 // Name implements fs.FileInfo.
 func (fi *Info) Name() string {
 	return fi.name
@@ -203,4 +219,23 @@ func (fi *Info) UnmarshalJSON(data []byte) error {
 	}
 	fi.fromInfo(tmp)
 	return nil
+}
+
+// InfoList represents a list of Info instances without heap allocation.
+type InfoList []Info
+
+// Append appends an Info instance to the list and returns the updated list.
+func (il InfoList) Append(name string, size int64, mode fs.FileMode, modTime time.Time,
+	options InfoOption) InfoList {
+	return append(il, Info{
+		name:    name,
+		size:    size,
+		mode:    mode,
+		modTime: modTime,
+		isDir:   options.IsDir,
+		isLink:  options.IsLink,
+		user:    options.User,
+		group:   options.Group,
+		sysInfo: options.SysInfo,
+	})
 }
