@@ -139,7 +139,7 @@ func (w *Walker) recordError(path, op string, err error) {
 	w.errs.Append(&Error{path, op, err})
 }
 
-func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *file.Info) []file.Info {
+func (w *Walker) listLevel(ctx context.Context, idx string, path string, info file.Info) file.InfoList {
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
@@ -174,7 +174,7 @@ func (s jsonString) String() string {
 // of scanning a single level in the filesystem hierarchy. It should read
 // the contents of the supplied channel until that channel is closed.
 // Errors, such as failing to access the prefix, are delivered over the channel.
-type ContentsFunc func(ctx context.Context, prefix string, info *file.Info, ch <-chan Contents) ([]file.Info, error)
+type ContentsFunc func(ctx context.Context, prefix string, info file.Info, ch <-chan Contents) (file.InfoList, error)
 
 // PrefixFunc is the type of the function that is called to determine if a given
 // level in the filesystem hiearchy should be further examined or traversed.
@@ -183,7 +183,7 @@ type ContentsFunc func(ctx context.Context, prefix string, info *file.Info, ch <
 // obtaining the children from the filesystem. This allows for both
 // exclusions and incremental processing in conjunction with a database to
 // be implemented.
-type PrefixFunc func(ctx context.Context, prefix string, info *file.Info, err error) (stop bool, children []file.Info, returnErr error)
+type PrefixFunc func(ctx context.Context, prefix string, info file.Info, err error) (stop bool, children file.InfoList, returnErr error)
 
 // Walk traverses the hierarchies specified by each of the roots calling
 // prefixFn and contentsFn as it goes. prefixFn will always be called
@@ -306,7 +306,7 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 		return
 	}
 	info, err := w.fs.Stat(ctx, path)
-	stop, children, err := w.prefixFn(ctx, path, &info, err)
+	stop, children, err := w.prefixFn(ctx, path, info, err)
 	w.recordError(path, "stat", err)
 	if stop {
 		return
@@ -315,7 +315,7 @@ func (w *Walker) walker(ctx context.Context, idx string, path string, limitCh ch
 		w.walkChildren(ctx, path, children, limitCh)
 		return
 	}
-	children = w.listLevel(ctx, idx, path, &info)
+	children = w.listLevel(ctx, idx, path, info)
 	if len(children) > 0 {
 		w.walkChildren(ctx, path, children, limitCh)
 	}

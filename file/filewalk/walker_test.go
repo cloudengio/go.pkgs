@@ -26,7 +26,7 @@ type logger struct {
 	prefix   string
 	linesMu  sync.Mutex
 	lines    []string
-	children map[string][]file.Info
+	children map[string]file.InfoList
 	skip     string
 }
 
@@ -36,9 +36,9 @@ func (l *logger) appendLine(s string) {
 	l.linesMu.Unlock()
 }
 
-func (l *logger) filesFunc(_ context.Context, prefix string, _ *file.Info, ch <-chan filewalk.Contents) ([]file.Info, error) {
+func (l *logger) filesFunc(_ context.Context, prefix string, _ file.Info, ch <-chan filewalk.Contents) (file.InfoList, error) {
 	prefix = strings.TrimPrefix(prefix, l.prefix)
-	children := make([]file.Info, 0, 10)
+	children := make(file.InfoList, 0, 10)
 	for results := range ch {
 		results.Path = strings.TrimPrefix(results.Path, l.prefix)
 		if err := results.Err; err != nil {
@@ -59,7 +59,7 @@ func (l *logger) filesFunc(_ context.Context, prefix string, _ *file.Info, ch <-
 	return children, nil
 }
 
-func (l *logger) dirsFunc(_ context.Context, prefix string, _ *file.Info, err error) (bool, []file.Info, error) {
+func (l *logger) dirsFunc(_ context.Context, prefix string, _ file.Info, err error) (bool, file.InfoList, error) {
 	if err != nil {
 		l.appendLine(fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
 		return true, nil, nil
@@ -79,7 +79,7 @@ func TestLocalWalk(t *testing.T) {
 	wk := filewalk.New(sc)
 	nl := func() *logger {
 		return &logger{prefix: localTestTree,
-			children: map[string][]file.Info{},
+			children: map[string]file.InfoList{},
 		}
 	}
 	lg := nl()
@@ -103,7 +103,7 @@ func TestLocalWalk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] = []file.Info{b01}
+	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] = file.InfoList{b01}
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
 }
 
@@ -254,7 +254,7 @@ func TestFunctionErrors(t *testing.T) {
 	wk := filewalk.New(sc)
 
 	err := wk.Walk(ctx,
-		func(ctx context.Context, prefix string, info *file.Info, err error) (skip bool, children []file.Info, returnErr error) {
+		func(ctx context.Context, prefix string, info file.Info, err error) (skip bool, children file.InfoList, returnErr error) {
 			return true, nil, fmt.Errorf("oops")
 		},
 		nil,
@@ -265,10 +265,10 @@ func TestFunctionErrors(t *testing.T) {
 	}
 
 	err = wk.Walk(ctx,
-		func(ctx context.Context, prefix string, info *file.Info, err error) (skip bool, children []file.Info, returnErr error) {
+		func(ctx context.Context, prefix string, info file.Info, err error) (skip bool, children file.InfoList, returnErr error) {
 			return false, nil, err
 		},
-		func(ctx context.Context, prefix string, info *file.Info, ch <-chan filewalk.Contents) ([]file.Info, error) {
+		func(ctx context.Context, prefix string, info file.Info, ch <-chan filewalk.Contents) (file.InfoList, error) {
 			for c := range ch {
 				_ = c
 			}
@@ -287,10 +287,10 @@ func (is *infiniteScanner) List(_ context.Context, _ string, ch chan<- filewalk.
 	time.Sleep(time.Millisecond * 1000)
 	ch <- filewalk.Contents{
 		Path: "infinite",
-		Children: []file.Info{
+		Children: file.InfoList{
 			*file.NewInfo("child", 0, fs.ModeDir, time.Now(), file.InfoOption{}),
 		},
-		Files: []file.Info{
+		Files: file.InfoList{
 			*file.NewInfo("file", 0, 0, time.Now(), file.InfoOption{}),
 		},
 	}
