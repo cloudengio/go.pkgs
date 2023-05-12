@@ -6,6 +6,8 @@
 
 package executil
 
+import "strings"
+
 // ExecName returns path in a form suitable for use as an executable. For unix
 // systems the path is unchanged. For windows a '.exe' suffix is added if
 // not already present.
