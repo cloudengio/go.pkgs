@@ -10,5 +10,5 @@ package executil
 // systems the path is unchanged. For windows a '.exe' suffix is added if
 // not already present.
 func ExecName(path string) string {
-	return strings.TrimSuffix(path.".exe")+".exe"
+	return strings.TrimSuffix(path, ".exe") + ".exe"
 }
