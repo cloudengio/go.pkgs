@@ -5,13 +5,11 @@
 package filewalk
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
-	"sync"
+	"io/fs"
 	"time"
 
-	"cloudeng.io/errors"
+	"cloudeng.io/file"
 )
 
 // PrefixInfo represents information on a given prefix.
@@ -20,97 +18,11 @@ type PrefixInfo struct {
 	Size      int64
 	UserID    string
 	GroupID   string
-	Mode      FileMode
-	Children  []Info
-	Files     []Info
+	Mode      fs.FileMode
+	Children  file.InfoList
+	Files     file.InfoList
 	DiskUsage int64 // DiskUsage is the total amount of storage required for the files under this prefix taking the filesystem's layout/block size into account.
 	Err       string
-}
-
-var bufPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
-
-func gobEncodeInfo(enc *gob.Encoder, info []Info) error {
-	errs := errors.M{}
-	errs.Append(enc.Encode(len(info)))
-	for _, i := range info {
-		errs.Append(enc.Encode(i.Name))
-		errs.Append(enc.Encode(i.UserID))
-		errs.Append(enc.Encode(i.GroupID))
-		errs.Append(enc.Encode(i.Size))
-		errs.Append(enc.Encode(i.ModTime))
-		errs.Append(enc.Encode(i.Mode))
-	}
-	return errs.Err()
-}
-
-// GobEncode implements gob.Encoder.
-func (pi PrefixInfo) GobEncode() ([]byte, error) {
-	b := bufPool.Get().(*bytes.Buffer)
-	b.Reset()
-	errs := errors.M{}
-	enc := gob.NewEncoder(b)
-	errs.Append(enc.Encode(pi.ModTime))
-	errs.Append(enc.Encode(pi.Size))
-	errs.Append(enc.Encode(pi.UserID))
-	errs.Append(enc.Encode(pi.GroupID))
-	errs.Append(enc.Encode(pi.Mode))
-	errs.Append(enc.Encode(pi.DiskUsage))
-	errs.Append(enc.Encode(pi.Err))
-	errs.Append(gobEncodeInfo(enc, pi.Children))
-	errs.Append(gobEncodeInfo(enc, pi.Files))
-	buf := make([]byte, len(b.Bytes()))
-	copy(buf, b.Bytes())
-	bufPool.Put(b)
-	return buf, errs.Err()
-}
-
-const debugDecodeSize = 10 * 1024 * 1024
-
-func gobDecodeInfo(dec *gob.Decoder) ([]Info, error) {
-	errs := errors.M{}
-	var size int
-	err := dec.Decode(&size)
-	if err != nil {
-		return nil, err
-	}
-	if debugDecodeSize > 0 && size > debugDecodeSize {
-		if err := dumpMemStats(size); err != nil {
-			return nil, err
-		}
-	}
-	info := make([]Info, size)
-	for i := 0; i < size; i++ {
-		errs.Append(dec.Decode(&info[i].Name))
-		errs.Append(dec.Decode(&info[i].UserID))
-		errs.Append(dec.Decode(&info[i].GroupID))
-		errs.Append(dec.Decode(&info[i].Size))
-		errs.Append(dec.Decode(&info[i].ModTime))
-		errs.Append(dec.Decode(&info[i].Mode))
-	}
-	return info, errs.Err()
-}
-
-// GobDecode implements gob.Decoder.
-func (pi *PrefixInfo) GobDecode(buf []byte) error {
-	dec := gob.NewDecoder(bytes.NewBuffer(buf))
-	errs := errors.M{}
-	errs.Append(dec.Decode(&pi.ModTime))
-	errs.Append(dec.Decode(&pi.Size))
-	errs.Append(dec.Decode(&pi.UserID))
-	errs.Append(dec.Decode(&pi.GroupID))
-	errs.Append(dec.Decode(&pi.Mode))
-	errs.Append(dec.Decode(&pi.DiskUsage))
-	errs.Append(dec.Decode(&pi.Err))
-	var err error
-	pi.Children, err = gobDecodeInfo(dec)
-	errs.Append(err)
-	pi.Files, err = gobDecodeInfo(dec)
-	errs.Append(err)
-	return errs.Err()
 }
 
 // Metric represents a value associated with a prefix.

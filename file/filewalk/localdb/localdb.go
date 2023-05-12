@@ -502,7 +502,7 @@ func (db *Database) delete(ctx context.Context, separator, prefix string, recurs
 	if recurse {
 		deletions = make([]interface{}, 0, len(existing.Children))
 		for _, child := range existing.Children {
-			deletions = append(deletions, db.delete(ctx, separator, prefix+separator+child.Name, true, errs)...)
+			deletions = append(deletions, db.delete(ctx, separator, prefix+separator+child.Name(), true, errs)...)
 		}
 	}
 	db.globalStats.remove(prefix)

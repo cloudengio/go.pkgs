@@ -13,23 +13,23 @@ package filewalk
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"cloudeng.io/errors"
+	"cloudeng.io/file"
 	"cloudeng.io/sync/errgroup"
 )
 
 // Contents represents the contents of the filesystem at the level represented
 // by Path.
 type Contents struct {
-	Path     string `json:"p,omitempty"` // The name of the level being scanned.
-	Children []Info `json:"c,omitempty"` // Info on each of the next levels in the hierarchy.
-	Files    []Info `json:"f,omitempty"` // Info for the files at this level.
-	Err      error  `json:"e,omitempty"` // Non-nil if an error occurred.
+	Path     string      `json:"p,omitempty"` // The name of the level being scanned.
+	Children []file.Info `json:"c,omitempty"` // Info on each of the next levels in the hierarchy.
+	Files    []file.Info `json:"f,omitempty"` // Info for the files at this level.
+	Err      error       `json:"e,omitempty"` // Non-nil if an error occurred.
 }
 
 // Walker implements the filesyste walk.
@@ -96,60 +96,11 @@ func New(filesystem Filesystem, opts ...Option) *Walker {
 	return w
 }
 
-// FileMode represents meta data about a single file, including its
-// permissions. Not all underlying filesystems may support the full
-// set of UNIX-style permissions.
-type FileMode uint32
-
-// Valuese for FileMode.
-const (
-	ModePrefix FileMode = FileMode(os.ModeDir)
-	ModeLink   FileMode = FileMode(os.ModeSymlink)
-	ModePerm   FileMode = FileMode(os.ModePerm)
-)
-
-// String implements jsonString.
-func (fm FileMode) String() string {
-	return os.FileMode(fm).String()
-}
-
-// Info represents the information that can be retrieved for a single
-// file or prefix.
-type Info struct {
-	Name    string      // base name of the file
-	UserID  string      // user id as returned by the underlying system
-	GroupID string      // group id as returned by the underlying system
-	Size    int64       // length in bytes
-	ModTime time.Time   // modification time
-	Mode    FileMode    // permissions, directory or link.
-	sys     interface{} // underlying data source (can return nil)
-}
-
-// Sys returns the underlying, if available, data source.
-func (i Info) Sys() interface{} {
-	return i.sys
-}
-
-// IsPrefix returns true for a prefix.
-func (i Info) IsPrefix() bool {
-	return (i.Mode & ModePrefix) == ModePrefix
-}
-
-// IsLink returns true for a symbolic or other form of link.
-func (i Info) IsLink() bool {
-	return (i.Mode & ModeLink) == ModeLink
-}
-
-// Perms returns UNIX-style permissions.
-func (i Info) Perms() FileMode {
-	return (i.Mode & ModePerm)
-}
-
 // Filesystem represents the interface that is implemeted for filesystems to
 // be traversed/scanned.
 type Filesystem interface {
 	// Stat obtains Info for the specified path.
-	Stat(ctx context.Context, path string) (Info, error)
+	Stat(ctx context.Context, path string) (file.Info, error)
 
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
 	Join(components ...string) string
@@ -188,7 +139,7 @@ func (w *Walker) recordError(path, op string, err error) {
 	w.errs.Append(&Error{path, op, err})
 }
 
-func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *Info) []Info {
+func (w *Walker) listLevel(ctx context.Context, idx string, path string, info *file.Info) []file.Info {
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
@@ -223,7 +174,7 @@ func (s jsonString) String() string {
 // of scanning a single level in the filesystem hierarchy. It should read
 // the contents of the supplied channel until that channel is closed.
 // Errors, such as failing to access the prefix, are delivered over the channel.
-type ContentsFunc func(ctx context.Context, prefix string, info *Info, ch <-chan Contents) ([]Info, error)
+type ContentsFunc func(ctx context.Context, prefix string, info *file.Info, ch <-chan Contents) ([]file.Info, error)
 
 // PrefixFunc is the type of the function that is called to determine if a given
 // level in the filesystem hiearchy should be further examined or traversed.
@@ -232,7 +183,7 @@ type ContentsFunc func(ctx context.Context, prefix string, info *Info, ch <-chan
 // obtaining the children from the filesystem. This allows for both
 // exclusions and incremental processing in conjunction with a database to
 // be implemented.
-type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (stop bool, children []Info, returnErr error)
+type PrefixFunc func(ctx context.Context, prefix string, info *file.Info, err error) (stop bool, children []file.Info, returnErr error)
 
 // Walk traverses the hierarchies specified by each of the roots calling
 // prefixFn and contentsFn as it goes. prefixFn will always be called
@@ -319,7 +270,7 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	return w.errs.Err()
 }
 
-func (w *Walker) walkChildren(ctx context.Context, path string, children []Info, limitCh chan string) {
+func (w *Walker) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan string) {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
 	for _, child := range children {
@@ -332,14 +283,14 @@ func (w *Walker) walkChildren(ctx context.Context, path string, children []Info,
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
-			p := w.fs.Join(path, child.Name)
+			p := w.fs.Join(path, child.Name())
 			now := time.Now().Format(time.Stamp)
 			w.walker(ctx, now, p, limitCh)
 			wg.Done()
 			continue
 		}
 		go func() {
-			w.walker(ctx, idx, w.fs.Join(path, child.Name), limitCh)
+			w.walker(ctx, idx, w.fs.Join(path, child.Name()), limitCh)
 			wg.Done()
 			limitCh <- idx
 		}()

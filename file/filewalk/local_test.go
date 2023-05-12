@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"cloudeng.io/errors"
+	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/sys/windows/win32testutil"
 )
@@ -39,21 +40,21 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func scan(sc filewalk.Filesystem, ch chan filewalk.Contents, dir string) (dirNames, fileNames []string, errors []error, info map[string]filewalk.Info) {
+func scan(sc filewalk.Filesystem, ch chan filewalk.Contents, dir string) (dirNames, fileNames []string, errors []error, info map[string]file.Info) {
 	ctx := context.Background()
-	info = map[string]filewalk.Info{}
+	info = map[string]file.Info{}
 	go func() {
 		sc.List(ctx, dir, ch)
 		close(ch)
 	}()
 	for c := range ch {
 		for _, child := range c.Children {
-			dirNames = append(dirNames, child.Name)
-			info[child.Name] = child
+			dirNames = append(dirNames, child.Name())
+			info[child.Name()] = child
 		}
 		for _, file := range c.Files {
-			fileNames = append(fileNames, file.Name)
-			info[file.Name] = file
+			fileNames = append(fileNames, file.Name())
+			info[file.Name()] = file
 		}
 		if c.Err != nil {
 			errors = append(errors, c.Err)
@@ -86,27 +87,29 @@ func TestLocalFilesystem(t *testing.T) {
 	}
 
 	for _, d := range expectedDirNames {
-		if _, ok := info[d].Sys().(os.FileInfo); !ok {
-			t.Errorf("%v: wrong type for Sys %T", d, info[d].Sys)
+		i := info[d]
+		if _, ok := i.Sys().(os.FileInfo); !ok {
+			t.Errorf("%v: wrong type for Sys %T", d, i.Sys())
 		}
-		if got, want := info[d].IsPrefix(), true; got != want {
+		if got, want := i.IsDir(), true; got != want {
 			t.Errorf("%v: got %v, want %v", d, got, want)
 		}
-		if got, want := info[d].IsLink(), false; got != want {
+		if got, want := i.IsLink(), false; got != want {
 			t.Errorf("%v: got %v, want %v", d, got, want)
 		}
 	}
 
 	for _, f := range expectedFileNames {
-		if got, want := info[f].IsPrefix(), false; got != want {
+		i := info[f]
+		if got, want := i.IsDir(), false; got != want {
 			t.Errorf("%v: got %v, want %v", f, got, want)
 		}
 		if !strings.HasPrefix(f, "l") {
-			if got, want := info[f].Size, int64(3); got != want {
+			if got, want := i.Size(), int64(3); got != want {
 				t.Errorf("%v: got %v, want %v", f, got, want)
 			}
 		}
-		if got, want := info[f].IsLink(), strings.HasPrefix(f, "l"); got != want {
+		if got, want := i.IsLink(), strings.HasPrefix(f, "l"); got != want {
 			t.Errorf("%v: got %v, want %v", f, got, want)
 		}
 	}

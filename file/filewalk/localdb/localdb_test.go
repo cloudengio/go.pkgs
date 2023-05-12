@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/localdb"
 )
@@ -62,11 +63,11 @@ func TestDBSimple(t *testing.T) {
 	users, err = db.UserIDs(ctx)
 	assertUsers(1)
 	pi.DiskUsage = 40
-	pi.Files = []filewalk.Info{
+	pi.Files = file.InfoList{
 		{},
 		{},
 	}
-	pi.Children = []filewalk.Info{
+	pi.Children = file.InfoList{
 		{},
 	}
 	err = db.Set(ctx, "/a/b", &pi)

@@ -12,11 +12,12 @@ import (
 	"os"
 	"unsafe"
 
+	"cloudeng.io/file"
 	"golang.org/x/sys/unix"
 )
 
 func dumpMemStats(size int) error {
-	s := int(unsafe.Sizeof(Info{}))
+	s := int(unsafe.Sizeof(file.Info{}))
 	var rlim unix.Rlimit
 	var rusage unix.Rusage
 	if unix.Getrlimit(unix.RLIMIT_AS, &rlim) == nil && unix.Getrusage(0, &rusage) == nil {

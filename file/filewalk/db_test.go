@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 )
 
@@ -24,15 +25,15 @@ func TestCodec(t *testing.T) {
 		DiskUsage: 999,
 		Err:       "some err",
 	}
-	child := filewalk.Info{
-		Name:    "file1",
-		UserID:  "600",
-		Size:    3444,
-		ModTime: now,
-		Mode:    0666,
-	}
-	pi.Files = []filewalk.Info{child, child}
-	pi.Children = []filewalk.Info{child, child}
+	child := *file.NewInfo(
+		"file1",
+		3444,
+		0666,
+		now,
+		file.InfoOption{User: "600"},
+	)
+	pi.Files = []file.Info{child, child}
+	pi.Children = []file.Info{child, child}
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
 	if err := enc.Encode(pi); err != nil {
