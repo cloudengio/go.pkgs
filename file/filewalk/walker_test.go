@@ -7,6 +7,7 @@ package filewalk_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,14 +17,16 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
+	"cloudeng.io/sync/synctestutil"
 )
 
 type logger struct {
 	prefix   string
 	linesMu  sync.Mutex
 	lines    []string
-	children map[string][]filewalk.Info
+	children map[string]file.InfoList
 	skip     string
 }
 
@@ -33,9 +36,9 @@ func (l *logger) appendLine(s string) {
 	l.linesMu.Unlock()
 }
 
-func (l *logger) filesFunc(_ context.Context, prefix string, _ *filewalk.Info, ch <-chan filewalk.Contents) ([]filewalk.Info, error) {
+func (l *logger) filesFunc(_ context.Context, prefix string, _ file.Info, ch <-chan filewalk.Contents) (file.InfoList, error) {
 	prefix = strings.TrimPrefix(prefix, l.prefix)
-	children := make([]filewalk.Info, 0, 10)
+	children := make(file.InfoList, 0, 10)
 	for results := range ch {
 		results.Path = strings.TrimPrefix(results.Path, l.prefix)
 		if err := results.Err; err != nil {
@@ -44,19 +47,19 @@ func (l *logger) filesFunc(_ context.Context, prefix string, _ *filewalk.Info, c
 			continue
 		}
 		for _, info := range results.Files {
-			full := filepath.Join(prefix, info.Name)
+			full := filepath.Join(prefix, info.Name())
 			link := ""
 			if info.IsLink() {
 				link = "@"
 			}
-			l.appendLine(fmt.Sprintf("%v%s: %v\n", full, link, info.Size))
+			l.appendLine(fmt.Sprintf("%v%s: %v\n", full, link, info.Size()))
 		}
 		children = append(children, results.Children...)
 	}
 	return children, nil
 }
 
-func (l *logger) dirsFunc(_ context.Context, prefix string, _ *filewalk.Info, err error) (bool, []filewalk.Info, error) {
+func (l *logger) dirsFunc(_ context.Context, prefix string, _ file.Info, err error) (bool, file.InfoList, error) {
 	if err != nil {
 		l.appendLine(fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
 		return true, nil, nil
@@ -70,22 +73,23 @@ func (l *logger) dirsFunc(_ context.Context, prefix string, _ *filewalk.Info, er
 }
 
 func TestLocalWalk(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
 	sc := filewalk.LocalFilesystem(1)
 	wk := filewalk.New(sc)
 	nl := func() *logger {
 		return &logger{prefix: localTestTree,
-			children: map[string][]filewalk.Info{},
+			children: map[string]file.InfoList{},
 		}
 	}
 	lg := nl()
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
-	wk = filewalk.New(sc, filewalk.Concurrency(10))
+	wk = filewalk.New(sc, filewalk.WithConcurrency(10))
 	lg = nl()
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
-	wk = filewalk.New(sc, filewalk.Concurrency(10))
+	wk = filewalk.New(sc, filewalk.WithConcurrency(10))
 	lg = nl()
 	lg.skip = strings.ReplaceAll("/b0/b0.1", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial1)
@@ -99,7 +103,7 @@ func TestLocalWalk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] = []filewalk.Info{b01}
+	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] = file.InfoList{b01}
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
 }
 
@@ -244,12 +248,13 @@ func init() {
 }
 
 func TestFunctionErrors(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
 	sc := filewalk.LocalFilesystem(1)
 	wk := filewalk.New(sc)
 
 	err := wk.Walk(ctx,
-		func(ctx context.Context, prefix string, info *filewalk.Info, err error) (skip bool, children []filewalk.Info, returnErr error) {
+		func(ctx context.Context, prefix string, info file.Info, err error) (skip bool, children file.InfoList, returnErr error) {
 			return true, nil, fmt.Errorf("oops")
 		},
 		nil,
@@ -260,10 +265,10 @@ func TestFunctionErrors(t *testing.T) {
 	}
 
 	err = wk.Walk(ctx,
-		func(ctx context.Context, prefix string, info *filewalk.Info, err error) (skip bool, children []filewalk.Info, returnErr error) {
+		func(ctx context.Context, prefix string, info file.Info, err error) (skip bool, children file.InfoList, returnErr error) {
 			return false, nil, err
 		},
-		func(ctx context.Context, prefix string, info *filewalk.Info, ch <-chan filewalk.Contents) ([]filewalk.Info, error) {
+		func(ctx context.Context, prefix string, info file.Info, ch <-chan filewalk.Contents) (file.InfoList, error) {
 			for c := range ch {
 				_ = c
 			}
@@ -282,33 +287,27 @@ func (is *infiniteScanner) List(_ context.Context, _ string, ch chan<- filewalk.
 	time.Sleep(time.Millisecond * 1000)
 	ch <- filewalk.Contents{
 		Path: "infinite",
-		Children: []filewalk.Info{
-			{
-				Name:    "child",
-				ModTime: time.Now(),
-				Mode:    filewalk.ModePrefix,
-			},
+		Children: file.InfoList{
+			*file.NewInfo("child", 0, fs.ModeDir, time.Now(), file.InfoOption{}),
 		},
-		Files: []filewalk.Info{
-			{
-				Name:    "file",
-				ModTime: time.Now(),
-			},
+		Files: file.InfoList{
+			*file.NewInfo("file", 0, 0, time.Now(), file.InfoOption{}),
 		},
 	}
 }
 
-func (is *infiniteScanner) Stat(_ context.Context, _ string) (filewalk.Info, error) {
+func (is *infiniteScanner) Stat(_ context.Context, _ string) (file.Info, error) {
 	info, err := os.Lstat(localTestTree)
 	if err != nil {
-		return filewalk.Info{}, err
+		return file.Info{}, err
 	}
-	return filewalk.Info{
-		Name:    info.Name(),
-		Size:    info.Size(),
-		ModTime: info.ModTime(),
-		Mode:    filewalk.FileMode(info.Mode()),
-	}, nil
+	return *file.NewInfo(
+		info.Name(),
+		info.Size(),
+		info.Mode(),
+		info.ModTime(),
+		file.InfoOption{},
+	), nil
 }
 
 func (is *infiniteScanner) Join(components ...string) string {
@@ -324,10 +323,11 @@ func (is *infiniteScanner) IsNotExist(err error) bool {
 }
 
 func TestCancel(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	is := &infiniteScanner{}
-	wk := filewalk.New(is, filewalk.Concurrency(4))
+	wk := filewalk.New(is, filewalk.WithConcurrency(4))
 	lg := &logger{}
 
 	ch := make(chan error)
@@ -351,5 +351,52 @@ func TestCancel(t *testing.T) {
 		}
 	default:
 		t.Fatalf("context was not canceld")
+	}
+}
+
+type slowScanner struct {
+	filewalk.Filesystem
+}
+
+func (s *slowScanner) List(ctx context.Context, prefix string, ch chan<- filewalk.Contents) {
+	time.Sleep(time.Millisecond * 1500)
+	s.Filesystem.List(ctx, prefix, ch)
+}
+
+func TestReporting(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)
+	ctx := context.Background()
+	//	ctx, cancel := context.WithCancel(ctx)
+	//	defer cancel()
+	is := &slowScanner{filewalk.LocalFilesystem(1)}
+	ch := make(chan filewalk.Status, 100)
+	wk := filewalk.New(is, filewalk.WithConcurrency(2),
+		filewalk.WithReporting(ch, time.Millisecond*100, time.Millisecond*250))
+	lg := &logger{}
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		_ = wk.Walk(ctx, lg.dirsFunc, lg.filesFunc, localTestTree)
+		wg.Done()
+	}()
+
+	nSlow := 0
+	nSync := int64(0)
+	for r := range ch {
+		if r.SlowPrefix != "" {
+			nSlow++
+			if r.ScanDuration < time.Millisecond*250 {
+				t.Errorf("scan duration too short: %v", r.ScanDuration)
+			}
+		}
+		nSync += r.SynchronousScans
+	}
+
+	if nSlow <= 40 {
+		t.Errorf("not enough slow scans: %v", nSlow)
+	}
+	if nSync == 0 {
+		t.Errorf("no synchronous scans: %v", nSync)
 	}
 }

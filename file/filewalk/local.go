@@ -7,25 +7,37 @@ package filewalk
 import (
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+
+	"cloudeng.io/file"
 )
 
 type local struct {
 	scanSize int
 }
 
-func createInfo(path string, i os.FileInfo) Info {
-	info := Info{
-		Name:    i.Name(),
-		Size:    i.Size(),
-		ModTime: i.ModTime(),
-		sys:     i,
+func createInfo(path string, fi fs.FileInfo, symlinkSize int64) file.Info {
+	userID, groupID := getUserAndGroupID(path, fi)
+
+	size := fi.Size()
+	if size == 0 && symlinkSize > 0 {
+		size = symlinkSize
 	}
-	info.UserID, info.GroupID = getUserAndGroupID(path, i)
-	m := i.Mode()
-	info.Mode = FileMode(m&os.ModePerm | m&os.ModeSymlink | m&os.ModeDir)
-	return info
+	return *file.NewInfo(
+		fi.Name(),
+		size,
+		fi.Mode(),
+		fi.ModTime(),
+		file.InfoOption{
+			User:    userID,
+			Group:   groupID,
+			IsDir:   fi.IsDir(),
+			IsLink:  fi.Mode()&os.ModeSymlink == os.ModeSymlink,
+			SysInfo: fi,
+		},
+	)
 }
 
 func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
@@ -43,27 +55,26 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 		}
 		infos, err := f.Readdir(l.scanSize)
 		if len(infos) > 0 {
-			files := make([]Info, 0, len(infos))
-			dirs := make([]Info, 0, 10)
+			files := make([]file.Info, 0, len(infos))
+			dirs := make([]file.Info, 0, 10)
 			for _, info := range infos {
 				if info.IsDir() {
-					dirs = append(dirs, createInfo(path, info))
+					dirs = append(dirs, createInfo(path, info, -1))
 					continue
 				}
 				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
 					s, err := os.Readlink(filepath.Join(path, info.Name()))
 					if err == nil {
-						ni := createInfo(path, info)
-						ni.Size = int64(len(s))
+						ni := createInfo(path, info, int64(len(s)))
 						files = append(files, ni)
 						continue
 					}
 				}
-				ni := createInfo(path, info)
+				size := int64(-1)
 				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
-					ni.Size = symlinkSize(path, info)
+					size = symlinkSize(path, info)
 				}
-				files = append(files, ni)
+				files = append(files, createInfo(path, info, size))
 			}
 			ch <- Contents{
 				Path:     path,
@@ -82,12 +93,12 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 	}
 }
 
-func (l *local) Stat(_ context.Context, path string) (Info, error) {
+func (l *local) Stat(_ context.Context, path string) (file.Info, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
-		return Info{}, err
+		return file.Info{}, err
 	}
-	return createInfo(path, info), nil
+	return createInfo(path, info, -1), nil
 }
 
 func (l *local) Join(components ...string) string {
