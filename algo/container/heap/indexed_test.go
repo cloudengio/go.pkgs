@@ -5,8 +5,7 @@
 // Package heap contains various implementations of heap containers.
 package heap_test
 
-import "cloudeng.io/algo/container/heap"
-
+/*
 func NewNumericIndexedExample() {
 
 	idx := heap.MapIndex[string]{}
@@ -14,3 +13,4 @@ func NewNumericIndexedExample() {
 	_ = ni
 
 }
+*/
