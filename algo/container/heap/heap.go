@@ -4,6 +4,49 @@
 
 package heap
 
+/*
+// Mirror heap.Interface but using type constraints rather than runtime
+// types.
+type Interface[T any] interface {
+	sort.Interface
+	Push(T)
+	Pop() T
+}
+
+// Heapify reorders the elements of h into a heap.
+func Heapify[T any](h Interface[T]) {
+	n := h.Len()
+	for i := n/2 - 1; i >= 0; i-- {
+		siftDown(h, i, n)
+	}
+}
+
+func parent(i int) int { return (i - 1) / 2 }
+func left(i int) int   { return (2 * i) + 1 }
+func right(i int) int  { return (2 * i) + 2 }
+
+func siftDown[T any](h Interface[T], p, n int) bool {
+	i := p
+	for {
+		l := left(i)
+		if l >= n || l < 0 { // l < 0 guards against integer overflow
+			break
+		}
+		// chose the smaller of the left or right subtree.
+		t := l
+		if r := right(i); r < n && h.Less(r, l) {
+			t = r
+		}
+		if !h.Less(t, i) {
+			break
+		}
+		h.Swap(i, t)
+		i = t
+	}
+	return i > p
+}
+
+/*
 type Ordered interface {
 	~string | ~byte | ~int8 | ~int | ~int32 | ~int64 | ~uint | ~uint32 | ~uint64 | ~float32 | ~float64
 }
@@ -95,9 +138,7 @@ func (h *T[V]) heapify(i int) {
 	}
 }
 
-func parent(i int) int { return (i - 1) / 2 }
-func left(i int) int   { return (2 * i) + 1 }
-func right(i int) int  { return (2 * i) + 2 }
+
 
 func (h *T[V]) siftUp(i int) {
 	for {

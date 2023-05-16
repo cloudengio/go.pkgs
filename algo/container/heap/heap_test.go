@@ -4,6 +4,18 @@
 
 package heap_test
 
+import (
+	"container/heap"
+	"testing"
+
+	cheap "cloudeng.io/algo/container/heap"
+)
+
+func TestCHeap(t *testing.T) {
+	ch := &cheap.CompactUIntHeap{}
+	heap.Init(ch)
+}
+
 /*
 func TestHeap(t *testing.T) {
 	var min heap.MinHeap[int, int]
