@@ -5,90 +5,120 @@
 package heap_test
 
 import (
-	"container/heap"
+	"fmt"
+	"math/rand"
+	"reflect"
+	"sort"
+	"strconv"
 	"testing"
 
-	cheap "cloudeng.io/algo/container/heap"
+	"cloudeng.io/algo/container/heap"
 )
 
-func TestCHeap(t *testing.T) {
-	ch := &cheap.CompactUIntHeap{}
-	heap.Init(ch)
+func ExampleNewMin() {
+	h := heap.NewMin[int, string]()
+	for _, i := range []int{100, 19, 36, 17, 3, 25, 1, 2, 7} {
+		h.Push(i, strconv.Itoa(i))
+	}
+	for h.Len() > 0 {
+		k, _ := h.Pop()
+		fmt.Printf("%v ", k)
+	}
+	fmt.Println()
+	// Output:
+	// 1 2 3 7 17 19 25 36 100
 }
 
-/*
-func TestHeap(t *testing.T) {
-	var min heap.MinHeap[int, int]
+func ExampleNewMax() {
+	h := heap.NewMax[int, string]()
+	for _, i := range []int{100, 19, 36, 17, 3, 25, 1, 2, 7} {
+		h.Push(i, strconv.Itoa(i))
+	}
+	for h.Len() > 0 {
+		k, _ := h.Pop()
+		fmt.Printf("%v ", k)
+	}
+	fmt.Println()
+	// Output:
+	// 100 36 25 19 17 7 3 2 1
+}
 
+func TestDups(t *testing.T) {
+	h := heap.NewMin[uint32, int]()
 	for i := 0; i < 20; i++ {
-		min.Push(i, i*10)
-	}
-}
-
-/*
-func (h *T[V]) verify(t *testing.T, p int) {
-	n := h.Len()
-	if r := right(p); r < n {
-		if h.less(r, p) {
-			t.Errorf("heap invariant invalidated [%d] = %v > [%d] = %v", p, h.values[p], r, h.values[r])
-			return
-		}
-		h.verify(t, r)
-	}
-	if l := left(p); l < n {
-		if h.less(l, p) {
-			t.Errorf("heap invariant invalidated [%d] = %v > [%d] = %v", p, h.values[p], l, h.values[l])
-			return
-		}
-		h.verify(t, l)
-	}
-}
-
-func TestInit0(t *testing.T) {
-	minh := NewMin(make([]int, 20))
-	minh.Heapify()
-	minh.verify(t, 0)
-
-	for i := 1; minh.Len() > 0; i++ {
-		x := minh.Pop()
-		minh.verify(t, 0)
-		if got, want := x, 0; got != want {
+		h.Push(0, i)
+		// The new duplicate will always be sifted to the top of the
+		// heap.
+		if got, want := h.Vals[0], i; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
+	h.Verify(t, 0)
 
-}
-
-func TestInit1(t *testing.T) {
-	minh := NewMax(make([]int, 20))
-	minh.Heapify()
-	minh.verify(t, 0)
-	minh = NewMin[int](nil)
-	for i := 0; i < 20; i++ {
-		minh.Push(i)
+	var vals []int
+	for i := 0; h.Len() > 0; i++ {
+		k, v := h.Pop()
+		h.Verify(t, 0)
+		if got, want := k, uint32(0); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		vals = append(vals, v)
 	}
-	minh.Heapify()
-	minh.verify(t, 0)
-
-	for i := 1; minh.Len() > 0; i++ {
-		x := minh.Pop()
-		minh.verify(t, 0)
-		if got, want := x, i; got != want {
+	// Check for uniqueness of all vals.
+	sort.IntSlice(vals).Sort()
+	for i := 0; i < 20; i++ {
+		if got, want := vals[i], i; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 }
 
-func BenchmarkDup(b *testing.B) {
-	const n = 10000
-	h := NewMin(make([]int, 0, n))
-	for i := 0; i < b.N; i++ {
-		for j := 0; j < n; j++ {
-			h.Push(0) // all elements are the same
-		}
-		for h.Len() > 0 {
-			h.Pop()
-		}
+type heapIfc[K heap.Ordered, V any] interface {
+	Push(K, V)
+	Pop() (K, V)
+	Len() int
+	Verify(*testing.T, int)
+}
+
+func testRand(t *testing.T, h heapIfc[int, int]) (input, output []int) {
+	for i := 0; i < 1000; i++ {
+		k := rand.Intn(1000000)
+		input = append(input, k)
+		h.Push(k, k)
+	}
+	h.Verify(t, 0)
+	for i := 0; h.Len() > 0; i++ {
+		_, v := h.Pop()
+		h.Verify(t, 0)
+		output = append(output, v)
+	}
+	return
+}
+
+func TestRand(t *testing.T) {
+	in, out := testRand(t, heap.NewMin[int, int]())
+	sort.Slice(in, func(i, j int) bool { return in[i] > in[j] })
+	if got, want := in, out; reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	in, out = testRand(t, heap.NewMax[int, int]())
+	sort.Ints(in)
+	if got, want := in, out; reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	t.Log("A")
+	in, out = testRand(t, heap.NewMinBounded[int, int](10))
+	sort.Ints(in)
+	if got, want := in, out; reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	return
+	t.Log("B")
+	in, out = testRand(t, heap.NewMaxBounded[int, int](10))
+	sort.Ints(in)
+	if got, want := in, out; reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
-*/

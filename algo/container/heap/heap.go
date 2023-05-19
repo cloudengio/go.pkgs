@@ -4,332 +4,169 @@
 
 package heap
 
-/*
-// Mirror heap.Interface but using type constraints rather than runtime
-// types.
-type Interface[T any] interface {
-	sort.Interface
-	Push(T)
-	Pop() T
+import "fmt"
+
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | string
 }
 
-// Heapify reorders the elements of h into a heap.
-func Heapify[T any](h Interface[T]) {
-	n := h.Len()
-	for i := n/2 - 1; i >= 0; i-- {
-		siftDown(h, i, n)
+func NewMin[K Ordered, V any]() *T[K, V] {
+	h := newT[K, V](0)
+	h.less = func(a, b K) bool { return a < b }
+	return h
+}
+
+func NewMax[K Ordered, V any]() *T[K, V] {
+	h := newT[K, V](0)
+	h.less = func(a, b K) bool { return a > b }
+	return h
+}
+
+func newT[K Ordered, V any](size int) *T[K, V] {
+	return &T[K, V]{
+		Keys: make([]K, 0, size),
+		Vals: make([]V, 0, size),
 	}
+}
+
+type T[K Ordered, V any] struct {
+	Keys []K
+	Vals []V
+	less func(a, b K) bool
+}
+
+func (h *T[K, V]) Len() int {
+	return len(h.Keys)
+}
+
+func (h *T[K, V]) Push(k K, v V) {
+	h.Keys = append(h.Keys, k)
+	h.Vals = append(h.Vals, v)
+	h.siftUp(len(h.Keys) - 1)
+}
+
+func swap[K Ordered, V any](keys []K, vals []V, i, j int) {
+	keys[i], keys[j] = keys[j], keys[i]
+	vals[i], vals[j] = vals[j], vals[i]
+}
+
+func (h *T[K, V]) siftUp(i int) int {
+	for {
+		p := parent(i)
+		if i == p || h.less(h.Keys[p], h.Keys[i]) {
+			// Special case duplicates?
+			return i
+		}
+		swap(h.Keys, h.Vals, p, i)
+		i = p
+	}
+}
+
+func (h *T[K, V]) Pop() (K, V) {
+	k, v := h.Keys[0], h.Vals[0]
+	n := len(h.Keys) - 1
+	swap(h.Keys, h.Vals, 0, n)
+	h.siftDown(0)
+	// pop must come last so that there is room to move the last key all
+	// of the way back down to where it came from - ie. the special case
+	// where the last key needs to be sifted down to the exact same spot
+	// it came from.
+	h.Keys = h.Keys[:n]
+	h.Vals = h.Vals[:n]
+	return k, v
+}
+
+func (h *T[K, V]) siftDown(parent int) bool {
+	p := parent
+	n := len(h.Keys) - 1
+	for {
+		l := left(p)
+		if l >= n || l < 0 {
+			break
+		}
+		// If there are two subtrees to choose from, pick the "smaller"
+		// to compare against the value being sifted down.
+		s := l
+		if r := right(p); r < n && h.less(h.Keys[r], h.Keys[l]) {
+			s = r
+		}
+		if !h.less(h.Keys[s], h.Keys[p]) {
+			// Neither subtree is "smaller", so we're done.
+			break
+		}
+		swap(h.Keys, h.Vals, p, s)
+		p = s
+	}
+	return p > parent
 }
 
 func parent(i int) int { return (i - 1) / 2 }
 func left(i int) int   { return (2 * i) + 1 }
 func right(i int) int  { return (2 * i) + 2 }
 
-func siftDown[T any](h Interface[T], p, n int) bool {
-	i := p
-	for {
-		l := left(i)
-		if l >= n || l < 0 { // l < 0 guards against integer overflow
-			break
+type Bounded[K Ordered, V any] struct {
+	*T[K, V]
+	n        int
+	leastKey K
+	leastPos int
+}
+
+func newBounded[K Ordered, V any](size, n int) *Bounded[K, V] {
+	return &Bounded[K, V]{
+		T: &T[K, V]{
+			Keys: make([]K, 0, size),
+			Vals: make([]V, 0, size),
+		},
+		n: n,
+	}
+}
+
+func NewMinBounded[K Ordered, V any](n int) *Bounded[K, V] {
+	h := newBounded[K, V](0, n)
+	h.less = func(a, b K) bool { return a < b }
+	return h
+}
+
+func NewMaxBounded[K Ordered, V any](n int) *Bounded[K, V] {
+	h := newBounded[K, V](0, n)
+	h.less = func(a, b K) bool { return a > b }
+	return h
+}
+
+func (h *Bounded[K, V]) swap(i, j int) {
+	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
+	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
+	if j == h.leastPos {
+		h.leastPos = i
+		panic("x")
+	}
+}
+
+func (h *Bounded[K, V]) Push(k K, v V) {
+	switch {
+	case len(h.Keys) == 0:
+		h.leastKey = k
+		h.leastPos = 0
+	case len(h.Keys) >= h.n:
+		// Heap is full.
+		if h.less(h.leastKey, k) {
+			// Have a new 'least' key.
+			fmt.Printf("N0: %v at %v for %v: %v\n", k, h.leastPos, h.leastKey, h.Keys)
+			h.Keys[h.leastPos] = k
+			h.Vals[h.leastPos] = v
+			fmt.Printf("N: %v at %v for %v\n", k, h.leastPos, h.leastKey)
+			h.leastKey = k
+			fmt.Printf("%v\n", h.Keys)
 		}
-		// chose the smaller of the left or right subtree.
-		t := l
-		if r := right(i); r < n && h.Less(r, l) {
-			t = r
-		}
-		if !h.Less(t, i) {
-			break
-		}
-		h.Swap(i, t)
-		i = t
+		return
 	}
-	return i > p
-}
-
-/*
-type Ordered interface {
-	~string | ~byte | ~int8 | ~int | ~int32 | ~int64 | ~uint | ~uint32 | ~uint64 | ~float32 | ~float64
-}
-
-type T[V Ordered] struct {
-	values []V
-	max    bool
-}
-
-// options:
-// how much space to waste - cap() - len()
-// dups
-
-func newHeap[V Ordered](values []V, max bool) *T[V] {
-	if values == nil {
-		values = make([]V, 0)
-	}
-	return &T[V]{
-		values: values[:0],
-		max:    max,
+	h.Keys = append(h.Keys, k)
+	h.Vals = append(h.Vals, v)
+	at := h.siftUp(len(h.Keys) - 1)
+	if len(h.Keys) > 1 && h.less(h.leastKey, k) {
+		fmt.Printf("L: %v < %v, at: %v (%v): %v\n", k, h.leastKey, at, len(h.Keys), h.Keys)
+		h.leastKey = k
+		h.leastPos = at
 	}
 }
-
-func NewMin[V Ordered](values []V) *T[V] {
-	return newHeap(values, false)
-}
-
-func NewMax[V Ordered](values []V) *T[V] {
-	return newHeap(values, true)
-}
-
-func (h *T[V]) Heapify() {
-	h.heapify(0)
-}
-
-func (h *T[V]) Len() int { return len(h.values) }
-
-func (h *T[V]) Cap() int { return cap(h.values) }
-
-func (h *T[V]) Push(v V) {
-	l := len(h.values)
-	h.values = append(h.values, v)
-	h.siftUp(l)
-}
-
-func (h *T[V]) Peek() V {
-	return h.values[0]
-}
-
-func (h *T[V]) Pop() V {
-	v := h.values[0]
-	n := h.Len() - 1
-	h.swap(0, n)
-	h.siftDown(0)
-	h.values = h.values[0 : n-1]
-	return v
-}
-
-func (h *T[V]) Remove(i int) V {
-	n := h.Len() - 1
-	v := h.values[i]
-	if n == i {
-		h.values = h.values[0 : n-1]
-		return v
-	}
-	h.swap(i, n)
-	if !h.siftDown(i) {
-		h.siftUp(i)
-	}
-	h.values = h.values[0 : len(h.values)-1]
-	return v
-}
-
-func (h *T[V]) swap(i, j int) {
-	h.values[i], h.values[j] = h.values[j], h.values[i]
-}
-
-func (h *T[V]) less(i, j int) bool {
-	if h.max {
-		return h.values[i] > h.values[j]
-	}
-	return h.values[i] < h.values[j]
-}
-
-func (h *T[V]) heapify(i int) {
-	n := h.Len()
-	for i := n/2 - 1; i > 0; i-- {
-		h.siftDown(i)
-	}
-}
-
-
-
-func (h *T[V]) siftUp(i int) {
-	for {
-		p := parent(i)
-		if i == p || h.less(p, i) {
-			//if h.values[p] == h.values[i] {
-			//	fmt.Printf("duplicate: %v\n", h.values[p])
-			//}
-			break
-		}
-		h.swap(p, i)
-		i = p
-	}
-}
-
-func (h *T[V]) siftDown(p int) bool {
-	i := p
-	n := h.Len() - 1
-	for {
-		l := left(i)
-		if l >= n || l < 0 { // overflow
-			break
-		}
-		// chose either the left or right sub-tree, depending
-		// on which is smaller.
-		t := l
-		if r := right(i); r < n && h.less(r, l) {
-			t = r
-		}
-		if !h.less(t, i) {
-			break
-		}
-		h.swap(i, t)
-		i = t
-	}
-	return i > p
-}
-
-/*
-
-// dups...
-
-type Keyed[V comparable, D any] struct {
-	values []V
-	data   []D
-}
-
-func (h *Keyed[V, D]) Len() int { return len(h.data) }
-
-func (h *Keyed[V, D]) Push(v V, d D) {
-	h.values = append(h.values, v)
-	h.data = append(h.data, d)
-
-	// h.up(h.Len() - 1)
-}
-
-func (h *Keyed[V, D]) Pop() (V, D) {
-	n := h.Len() - 1
-	if n > 0 {
-		//h.swap(0, n)
-		//h.down()
-	}
-	v := h.values[n]
-	d := h.data[n]
-	h.values = h.values[0:n]
-	h.data = h.data[0:n]
-	return v, d
-}
-
-func (h *Keyed[V, D]) Peek() (V, D) {
-	return h.values[0], h.data[0]
-}
-
-func (h *Keyed[V, D]) PeekN(n int) ([]V, []D) {
-	vo := make([]V, n)
-	do := make([]D, n)
-
-	vo[0], do[0] = h.values[0], h.data[0]
-
-	return vo, do
-}
-
-/*
-type MapIndex[T comparable] map[T]int
-
-func (mi MapIndex[T]) Insert(k T, v int) {
-	mi[k] = v
-}
-
-func (mi MapIndex[T]) Lookup(k T) int {
-	return mi[k]
-}
-
-type Index[T comparable] interface {
-	Encode(T) int64
-	Insert(k T, v int)
-	Lookup(k T) (v int)
-}
-
-type Numeric[ValueT ArithmeticTypes, IndexT comparable] struct {
-	order  Order
-	total  ValueT
-	values []ValueT
-	index  Index[IndexT]
-}
-
-func NewNumericIndexed[ValueT ArithmeticTypes, IndexT comparable](order Order, index Index[IndexT]) *Numeric[ValueT, IndexT] {
-	return &Numeric[ValueT, IndexT]{
-		order:  order,
-		values: make([]ValueT, 0),
-		index:  index,
-	}
-}
-
-/*
-func NewNumeric[ValueT NumericTypes, DataT any](order Order) *Numeric[ValueT, DataT] {
-	return &Heap[ValueT, DataT]{
-		order:  order,
-		values: make([]ValueT, 0),
-		data:   make([]DataT, 0),
-	}
-}
-
-func (h *Heap[V, D]) swap(i, j int) {
-	h.values[i], h.values[j] = h.values[j], h.values[i]
-	h.data[i], h.data[j] = h.data[j], h.data[i]
-}
-
-func (h *Heap[V, D]) Len() int { return len(h.data) }
-
-func (h *Heap[V, D]) Push(v V, d D) {
-	h.total += v
-	h.values = append(h.values, v)
-	h.data = append(h.data, d)
-	h.up(h.Len() - 1)
-}
-
-func (h *Heap[V, D]) Pop() (V, D) {
-	n := h.Len() - 1
-	if n > 0 {
-		h.swap(0, n)
-		h.down()
-	}
-	v := h.values[n]
-	d := h.data[n]
-	h.values = h.values[0:n]
-	h.data = h.data[0:n]
-	return v, d
-}
-
-func (h *Heap[V, D]) Peek() (V, D) {
-	return h.values[0], h.data[0]
-}
-
-func (h *Heap[V, D]) PeekN(n int) (V, D) {
-	return h.values[0], h.data[0]
-}
-
-func (h *Heap[V, D]) up(jj int) {
-	for {
-		i := parent(jj)
-		if i == jj || !h.comp(h.data[jj], h.data[i]) {
-			break
-		}
-		h.swap(i, jj)
-		jj = i
-	}
-}
-
-func (h *Heap[V, D]) down() {
-	n := h.Len() - 1
-	i1 := 0
-	for {
-		j1 := left(i1)
-		if j1 >= n || j1 < 0 {
-			break
-		}
-		j := j1
-		j2 := right(i1)
-		if j2 < n && h.comp(h.data[j2], h.data[j1]) {
-			j = j2
-		}
-		if !h.comp(h.data[j], h.data[i1]) {
-			break
-		}
-		h.swap(i1, j)
-		i1 = j
-	}
-}
-
-func parent(i int) int { return (i - 1) / 2 }
-func left(i int) int   { return (i * 2) + 1 }
-func right(i int) int  { return left(i) + 1 }
-*/
