@@ -87,7 +87,7 @@ func testRand(t *testing.T, h heapIfc[int, int]) (input, output []int) {
 		h.Push(k, k)
 	}
 	h.Verify(t, 0)
-	for i := 0; h.Len() > 0; i++ {
+	for h.Len() > 0 {
 		_, v := h.Pop()
 		h.Verify(t, 0)
 		output = append(output, v)
@@ -97,28 +97,65 @@ func testRand(t *testing.T, h heapIfc[int, int]) (input, output []int) {
 
 func TestRand(t *testing.T) {
 	in, out := testRand(t, heap.NewMin[int, int]())
-	sort.Slice(in, func(i, j int) bool { return in[i] > in[j] })
-	if got, want := in, out; reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	in, out = testRand(t, heap.NewMax[int, int]())
 	sort.Ints(in)
-	if got, want := in, out; reflect.DeepEqual(got, want) {
+	if got, want := in, out; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	t.Log("A")
+	in, out = testRand(t, heap.NewMax[int, int]())
+	sort.Slice(in, func(i, j int) bool { return in[i] > in[j] })
+	if got, want := in, out; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 	in, out = testRand(t, heap.NewMinBounded[int, int](10))
 	sort.Ints(in)
-	if got, want := in, out; reflect.DeepEqual(got, want) {
+	if got, want := in[:10], out; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	return
-	t.Log("B")
 	in, out = testRand(t, heap.NewMaxBounded[int, int](10))
-	sort.Ints(in)
-	if got, want := in, out; reflect.DeepEqual(got, want) {
+	sort.Slice(in, func(i, j int) bool { return in[i] > in[j] })
+	if got, want := in[:10], out; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func testData(t *testing.T, h heapIfc[int, int], input []int) []int {
+	for _, k := range input {
+		h.Push(k, k)
+	}
+	h.Verify(t, 0)
+	output := make([]int, 0, len(input))
+	for h.Len() > 0 {
+		_, v := h.Pop()
+		h.Verify(t, 0)
+		output = append(output, v)
+	}
+	return output
+}
+
+func TestSimple(t *testing.T) {
+	in := []int{1, 2, 3, 4, 5}
+	out := testData(t, heap.NewMin[int, int](), in)
+	if got, want := in, out; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+	in = []int{5, 4, 3, 2, 1}
+	out = testData(t, heap.NewMin[int, int](), in)
+	sort.Ints(in)
+	if got, want := in, out; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+
+	in = []int{1, 2, 3, 4, 5}
+	out = testData(t, heap.NewMinBounded[int, int](3), in)
+	if got, want := out, []int{1, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
+	}
+	in = []int{5, 4, 3, 2, 1}
+	out = testData(t, heap.NewMaxBounded[int, int](3), in)
+	if got, want := out, []int{5, 4, 3}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }

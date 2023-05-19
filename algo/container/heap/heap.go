@@ -11,29 +11,36 @@ type Ordered interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | string
 }
 
+func swap[K Ordered, V any](keys []K, vals []V, i, j int) {
+	keys[i], keys[j] = keys[j], keys[i]
+	vals[i], vals[j] = vals[j], vals[i]
+}
+
 func NewMin[K Ordered, V any]() *T[K, V] {
 	h := newT[K, V](0)
-	h.less = func(a, b K) bool { return a < b }
+	h.ops.less = func(a, b K) bool { return a < b }
 	return h
 }
 
 func NewMax[K Ordered, V any]() *T[K, V] {
 	h := newT[K, V](0)
-	h.less = func(a, b K) bool { return a > b }
+	h.ops.less = func(a, b K) bool { return a > b }
 	return h
 }
 
 func newT[K Ordered, V any](size int) *T[K, V] {
-	return &T[K, V]{
+	n := &T[K, V]{
 		Keys: make([]K, 0, size),
 		Vals: make([]V, 0, size),
 	}
+	n.ops.swap = swap[K, V]
+	return n
 }
 
 type T[K Ordered, V any] struct {
 	Keys []K
 	Vals []V
-	less func(a, b K) bool
+	ops  operations[K, V]
 }
 
 func (h *T[K, V]) Len() int {
@@ -43,43 +50,34 @@ func (h *T[K, V]) Len() int {
 func (h *T[K, V]) Push(k K, v V) {
 	h.Keys = append(h.Keys, k)
 	h.Vals = append(h.Vals, v)
-	h.siftUp(len(h.Keys) - 1)
+	h.ops.siftUp(h.Keys, h.Vals, len(h.Keys)-1)
 }
 
-func swap[K Ordered, V any](keys []K, vals []V, i, j int) {
-	keys[i], keys[j] = keys[j], keys[i]
-	vals[i], vals[j] = vals[j], vals[i]
+func (h *T[K, V]) Pop() (k K, v V) {
+	k, v, h.Keys, h.Vals = h.ops.pop(h.Keys, h.Vals)
+	return
 }
 
-func (h *T[K, V]) siftUp(i int) int {
+type operations[K Ordered, V any] struct {
+	less func(a, b K) bool
+	swap func(keys []K, vals []V, i, j int)
+}
+
+func (o operations[K, V]) siftUp(keys []K, vals []V, i int) int {
 	for {
 		p := parent(i)
-		if i == p || h.less(h.Keys[p], h.Keys[i]) {
+		if i == p || o.less(keys[p], keys[i]) {
 			// Special case duplicates?
 			return i
 		}
-		swap(h.Keys, h.Vals, p, i)
+		o.swap(keys, vals, p, i)
 		i = p
 	}
 }
 
-func (h *T[K, V]) Pop() (K, V) {
-	k, v := h.Keys[0], h.Vals[0]
-	n := len(h.Keys) - 1
-	swap(h.Keys, h.Vals, 0, n)
-	h.siftDown(0)
-	// pop must come last so that there is room to move the last key all
-	// of the way back down to where it came from - ie. the special case
-	// where the last key needs to be sifted down to the exact same spot
-	// it came from.
-	h.Keys = h.Keys[:n]
-	h.Vals = h.Vals[:n]
-	return k, v
-}
-
-func (h *T[K, V]) siftDown(parent int) bool {
+func (o operations[K, V]) siftDown(keys []K, vals []V, parent int) bool {
 	p := parent
-	n := len(h.Keys) - 1
+	n := len(keys) - 1
 	for {
 		l := left(p)
 		if l >= n || l < 0 {
@@ -88,17 +86,29 @@ func (h *T[K, V]) siftDown(parent int) bool {
 		// If there are two subtrees to choose from, pick the "smaller"
 		// to compare against the value being sifted down.
 		s := l
-		if r := right(p); r < n && h.less(h.Keys[r], h.Keys[l]) {
+		if r := right(p); r < n && o.less(keys[r], keys[l]) {
 			s = r
 		}
-		if !h.less(h.Keys[s], h.Keys[p]) {
+		if !o.less(keys[s], keys[p]) {
 			// Neither subtree is "smaller", so we're done.
 			break
 		}
-		swap(h.Keys, h.Vals, p, s)
+		swap(keys, vals, p, s)
 		p = s
 	}
 	return p > parent
+}
+
+func (o operations[K, V]) pop(keys []K, vals []V) (K, V, []K, []V) {
+	k, v := keys[0], vals[0]
+	n := len(keys) - 1
+	swap(keys, vals, 0, n)
+	o.siftDown(keys, vals, 0)
+	// pop must come last so that there is room to move the last key all
+	// of the way back down to where it came from - ie. the special case
+	// where the last key needs to be sifted down to the exact same spot
+	// it came from.
+	return k, v, keys[:n], vals[:n]
 }
 
 func parent(i int) int { return (i - 1) / 2 }
@@ -106,41 +116,56 @@ func left(i int) int   { return (2 * i) + 1 }
 func right(i int) int  { return (2 * i) + 2 }
 
 type Bounded[K Ordered, V any] struct {
-	*T[K, V]
+	Keys     []K
+	Vals     []V
+	ops      operations[K, V]
 	n        int
 	leastKey K
 	leastPos int
 }
 
 func newBounded[K Ordered, V any](size, n int) *Bounded[K, V] {
-	return &Bounded[K, V]{
-		T: &T[K, V]{
-			Keys: make([]K, 0, size),
-			Vals: make([]V, 0, size),
-		},
-		n: n,
+	b := &Bounded[K, V]{
+		Keys: make([]K, 0, size),
+		Vals: make([]V, 0, size),
+		n:    n,
 	}
+	b.ops.swap = func(keys []K, vals []V, i, j int) {
+		keys[i], keys[j] = keys[j], keys[i]
+		vals[i], vals[j] = vals[j], vals[i]
+		if i == b.leastPos {
+			fmt.Printf("leastPos: %v\n", i)
+			fmt.Printf("%v\n", keys)
+			b.leastPos = j
+		}
+		if j == b.leastPos {
+			fmt.Printf("leastPos: %v\n", i)
+			fmt.Printf("%v\n", keys)
+			b.leastPos = i
+		}
+	}
+	return b
 }
 
 func NewMinBounded[K Ordered, V any](n int) *Bounded[K, V] {
 	h := newBounded[K, V](0, n)
-	h.less = func(a, b K) bool { return a < b }
+	h.ops.less = func(a, b K) bool { return a < b }
 	return h
 }
 
 func NewMaxBounded[K Ordered, V any](n int) *Bounded[K, V] {
 	h := newBounded[K, V](0, n)
-	h.less = func(a, b K) bool { return a > b }
+	h.ops.less = func(a, b K) bool { return a > b }
 	return h
 }
 
-func (h *Bounded[K, V]) swap(i, j int) {
-	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
-	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
-	if j == h.leastPos {
-		h.leastPos = i
-		panic("x")
-	}
+func (h *Bounded[K, V]) Len() int {
+	return len(h.Keys)
+}
+
+func (h *Bounded[K, V]) Pop() (k K, v V) {
+	k, v, h.Keys, h.Vals = h.ops.pop(h.Keys, h.Vals)
+	return
 }
 
 func (h *Bounded[K, V]) Push(k K, v V) {
@@ -150,22 +175,18 @@ func (h *Bounded[K, V]) Push(k K, v V) {
 		h.leastPos = 0
 	case len(h.Keys) >= h.n:
 		// Heap is full.
-		if h.less(h.leastKey, k) {
+		if h.ops.less(h.leastKey, k) {
 			// Have a new 'least' key.
-			fmt.Printf("N0: %v at %v for %v: %v\n", k, h.leastPos, h.leastKey, h.Keys)
 			h.Keys[h.leastPos] = k
 			h.Vals[h.leastPos] = v
-			fmt.Printf("N: %v at %v for %v\n", k, h.leastPos, h.leastKey)
 			h.leastKey = k
-			fmt.Printf("%v\n", h.Keys)
 		}
 		return
 	}
 	h.Keys = append(h.Keys, k)
 	h.Vals = append(h.Vals, v)
-	at := h.siftUp(len(h.Keys) - 1)
-	if len(h.Keys) > 1 && h.less(h.leastKey, k) {
-		fmt.Printf("L: %v < %v, at: %v (%v): %v\n", k, h.leastKey, at, len(h.Keys), h.Keys)
+	at := h.ops.siftUp(h.Keys, h.Vals, len(h.Keys)-1)
+	if len(h.Keys) > 1 && h.ops.less(h.leastKey, k) {
 		h.leastKey = k
 		h.leastPos = at
 	}
