@@ -75,29 +75,59 @@ func (o operations[K, V]) siftUp(keys []K, vals []V, i int) int {
 	}
 }
 
+func (o operations[K, V]) minChild(keys []K, i int) int {
+	n := len(keys) - 1
+	l, r := left(i), right(i)
+	if l >= n {
+		return -1
+	}
+	if r >= n {
+		return l
+	}
+	if o.less(keys[l], keys[r]) {
+		return l
+	}
+	return r
+}
+
 func (o operations[K, V]) siftDown(keys []K, vals []V, parent int) bool {
 	p := parent
-	n := len(keys) - 1
+	//	n := len(keys) - 1
 	for {
-		l := left(p)
-		if l >= n || l < 0 {
+		/*		l := left(p)
+				if l >= n || l < 0 {
+					break
+				}*/
+		mc := o.minChild(keys, p)
+		if mc == -1 {
 			break
 		}
 		// If there are two subtrees to choose from, pick the "smaller"
 		// to compare against the value being sifted down.
-		s := l
+		/*s := l
 		if r := right(p); r < n && o.less(keys[r], keys[l]) {
 			s = r
-		}
-		if !o.less(keys[s], keys[p]) {
+		}*/
+		if !o.less(keys[mc], keys[p]) {
 			// Neither subtree is "smaller", so we're done.
 			break
 		}
-		swap(keys, vals, p, s)
-		p = s
+		swap(keys, vals, p, mc)
+		p = mc
 	}
 	return p > parent
 }
+
+/*
+func (o operations[K, V]) last(keys []K, l i int) int {
+	for {
+		mc := o.minChild(keys, i)
+		if mc == -1 {
+			return i
+		}
+		i = mc
+	}
+}*/
 
 func (o operations[K, V]) pop(keys []K, vals []V) (K, V, []K, []V) {
 	k, v := keys[0], vals[0]
@@ -116,12 +146,12 @@ func left(i int) int   { return (2 * i) + 1 }
 func right(i int) int  { return (2 * i) + 2 }
 
 type Bounded[K Ordered, V any] struct {
-	Keys     []K
-	Vals     []V
-	ops      operations[K, V]
-	n        int
-	leastKey K
-	leastPos int
+	Keys      []K
+	Vals      []V
+	ops       operations[K, V]
+	n         int
+	lowestKey K
+	lowestPos int
 }
 
 func newBounded[K Ordered, V any](size, n int) *Bounded[K, V] {
@@ -133,15 +163,14 @@ func newBounded[K Ordered, V any](size, n int) *Bounded[K, V] {
 	b.ops.swap = func(keys []K, vals []V, i, j int) {
 		keys[i], keys[j] = keys[j], keys[i]
 		vals[i], vals[j] = vals[j], vals[i]
-		if i == b.leastPos {
-			fmt.Printf("leastPos: %v\n", i)
-			fmt.Printf("%v\n", keys)
-			b.leastPos = j
+		if i == b.lowestPos {
+			fmt.Printf("leastPos: I swap: %v: %v to %v: %v\n", b.lowestKey, i, j, b.Keys)
+			b.lowestPos = j
+			return
 		}
-		if j == b.leastPos {
-			fmt.Printf("leastPos: %v\n", i)
-			fmt.Printf("%v\n", keys)
-			b.leastPos = i
+		if j == b.lowestPos {
+			fmt.Printf("leastPos: J swap: %v: %v to %v: %v\n", b.lowestKey, j, i, b.Keys)
+			b.lowestPos = i
 		}
 	}
 	return b
@@ -168,26 +197,44 @@ func (h *Bounded[K, V]) Pop() (k K, v V) {
 	return
 }
 
+// But you can make this branchless by calculating the child index as (2*i)+1+(child1<child2), and then this will be fast.
+
 func (h *Bounded[K, V]) Push(k K, v V) {
 	switch {
-	case len(h.Keys) == 0:
-		h.leastKey = k
-		h.leastPos = 0
 	case len(h.Keys) >= h.n:
+		fmt.Printf("push: full: %v: %v (%v at %v)\n", k, h.Keys, h.lowestKey, h.lowestPos)
 		// Heap is full.
-		if h.ops.less(h.leastKey, k) {
-			// Have a new 'least' key.
-			h.Keys[h.leastPos] = k
-			h.Vals[h.leastPos] = v
-			h.leastKey = k
+		if h.ops.less(k, h.lowestKey) {
+			fmt.Printf("new least: %v < %v\n", k, h.lowestKey)
+			// Replace current least key.
+			h.Keys[h.lowestPos] = k
+			h.Vals[h.lowestPos] = v
+			//at := h.ops.siftUp(h.Keys, h.Vals, h.lowestPos)
+			//h.lowestPos = h.ops.last(h.Keys, at)
+			fmt.Printf("NL: %v\n", h.lowestPos)
+			h.lowestKey = h.Keys[h.lowestPos]
+			//
+
+			//--- heapify ---
+
+			//find new least key & pos
+			//			-- heapify
+
+			//h.lowestKey = k
+			//			.... err what about leastPos
 		}
 		return
+	case len(h.Keys) == 0:
+		h.lowestKey = k
+		h.lowestPos = 0
 	}
+	fmt.Printf("push: %v: %v (%v at %v)\n", k, h.Keys, h.lowestKey, h.lowestPos)
 	h.Keys = append(h.Keys, k)
 	h.Vals = append(h.Vals, v)
 	at := h.ops.siftUp(h.Keys, h.Vals, len(h.Keys)-1)
-	if len(h.Keys) > 1 && h.ops.less(h.leastKey, k) {
-		h.leastKey = k
-		h.leastPos = at
+	if len(h.Keys) > 1 && h.ops.less(h.lowestKey, k) {
+		h.lowestKey = k
+		h.lowestPos = at
 	}
+	fmt.Printf("push: done: %v: %v (%v at %v)\n", k, h.Keys, h.lowestKey, h.lowestPos)
 }
