@@ -215,7 +215,7 @@ func TestMinMaxBounded(t *testing.T) {
 func TestRemove(t *testing.T) {
 	for i := 1; i < 33; i++ {
 		minmax := heap.NewMinMax[int, int]()
-		for r := 0; r < i; r++ {
+		for r := 1; r < i; r++ {
 			input := ascending(i)
 			pushMinMax(t, minmax, input)
 
@@ -223,17 +223,18 @@ func TestRemove(t *testing.T) {
 			heap.Pretty(minmax.Keys)
 			rk, _ := minmax.Remove(r)
 			if !minmax.VerifyQ(t) {
-				fmt.Printf("RM: r %v, i %v, #keys %v, %v, rk: %v \n", r, i, len(minmax.Keys), minmax.Keys, rk)
-				heap.Pretty(minmax.Keys)
-				//				break
+				fmt.Printf("RM: remove %v, len %v, #keys %v, %v, rk: %v \n", r, i, len(minmax.Keys), minmax.Keys, rk)
 			}
+			heap.Pretty(minmax.Keys)
+			//				break
+
 			output := popMin(t, minmax)
 			idx := sort.SearchInts(input, rk)
 			expected := append(input[:idx], input[idx+1:]...)
 			//fmt.Printf("i: %v, r %v, input %v\nG: %v\nW: %v\n", i, r, input, output, expected)
 
 			if got, want := output, expected; !reflect.DeepEqual(got, want) {
-				t.Errorf("got %v, want %v", got, want)
+				t.Errorf("remove item %v, got %v, want %v", i, got, want)
 				//				break
 			}
 		}
