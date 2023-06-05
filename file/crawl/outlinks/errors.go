@@ -5,6 +5,9 @@
 package outlinks
 
 import (
+	"fmt"
+	"strings"
+
 	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 )
@@ -18,4 +21,12 @@ type Errors struct {
 	Request   download.Request
 	Container file.FS
 	Errors    []ErrorDetail
+}
+
+func (e Errors) String() string {
+	var out strings.Builder
+	for _, detail := range e.Errors {
+		fmt.Fprintf(&out, "%v: %v\n", detail.Result.Name, detail.Error.Error())
+	}
+	return out.String()
 }

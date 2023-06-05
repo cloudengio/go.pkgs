@@ -6,6 +6,7 @@ package outlinks
 
 import (
 	"regexp"
+	"strings"
 
 	"cloudeng.io/text/textutil"
 )
@@ -79,6 +80,14 @@ func matchRegexps(regexps []*regexp.Regexp, outlink string) bool {
 func (cfg *RegexpProcessor) Process(outlinks []string) []string {
 	out := make([]string, 0, len(outlinks))
 	for _, outlink := range outlinks {
+		if outlink[0] == '#' {
+			continue
+		}
+		for _, hashtag := range []string{"#", "%23"} {
+			if idx := strings.LastIndex(outlink, hashtag); idx != -1 {
+				outlink = outlink[:idx]
+			}
+		}
 		nofollow := matchRegexps(cfg.nofollow, outlink)
 		follow := matchRegexps(cfg.follow, outlink)
 		if nofollow && !follow {
