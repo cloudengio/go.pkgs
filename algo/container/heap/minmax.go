@@ -6,9 +6,10 @@ package heap
 
 import "fmt"
 
-// MinMax implements a min-max heap as described in:
+// MinMax represents a min-max heap as described in:
 // https://liacs.leidenuniv.nl/~stefanovtp/courses/StudentenSeminarium/Papers/AL/SMMH.pdf.
-// Note that this requires the use of a dummy root node.
+// Note that this requires the use of a dummy root node in the key and value
+// slices, ie. Keys[0] and Values[0] is always empty.
 type MinMax[K Ordered, V any] struct {
 	Keys []K
 	Vals []V

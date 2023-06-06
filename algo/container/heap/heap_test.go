@@ -6,6 +6,7 @@ package heap_test
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -213,5 +214,110 @@ func TestOptions(t *testing.T) {
 	}
 	if got, want := len(h.Vals), 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestUpdate(t *testing.T) {
+	h := heap.NewMin[int, int]()
+	push(t, h, ascending(20))
+
+	h.Update(0, 100, 100)
+	h.Verify(t)
+
+	output := pop(t, h)
+	expected := make([]int, 20)
+	for i := 1; i < 20; i++ {
+		expected[i-1] = i
+	}
+	expected[len(expected)-1] = 100
+	if got, want := output, expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	push(t, h, ascending(20))
+	for i := 100; i > 0; i-- {
+		elem := rand.Intn(h.Len())
+		if i&1 == 0 {
+			h.Update(elem, i*2, i*2)
+		} else {
+			h.Update(elem, i/2, i/2)
+		}
+		h.Verify(t)
+	}
+
+	pop(t, h)
+	r1 := make([]int, 20)
+	push(t, h, r1)
+	sort.Ints(r1)
+
+	used := []int{}
+	for _ = range r1 {
+		v := rand.Intn(100)
+		used = append(used, v)
+		h.Update(0, v, v)
+		h.Verify(t)
+	}
+
+	sort.Ints(used)
+	if got, want := pop(t, h), used; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+type removeIfc[K heap.Ordered, V any] interface {
+	Len() int
+	Remove(int) (K, V)
+	Verify(*testing.T)
+}
+
+func removeFrom(t *testing.T, h removeIfc[int, int], pos int) []int {
+	output := []int{}
+	for h.Len() > 0 {
+		p := pos
+		if pos < 0 {
+			p = h.Len() - 1
+		}
+		k, _ := h.Remove(p)
+		h.Verify(t)
+		output = append(output, k)
+	}
+	return output
+}
+
+func TestRemove(t *testing.T) {
+	h := heap.NewMin[int, int]()
+
+	// Remove the first element
+	push(t, h, ascending(20))
+	output := removeFrom(t, h, 0)
+	if got, want := output, ascending(20); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Remove the last element
+	push(t, h, ascending(20))
+	output = removeFrom(t, h, -1)
+	if got, want := output, descending(20); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Remove from the middle.
+	seen := map[int]int{}
+	push(t, h, ascending(20))
+	for h.Len() > 0 {
+		k, v := h.Remove(h.Len() - 1)
+		if got, want := k, v; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		seen[k] = v
+		h.Verify(t)
+	}
+	for v := range ascending(20) {
+		if _, ok := seen[v]; !ok {
+			t.Errorf("missing %v", v)
+		}
+		if got, want := seen[v], v; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }

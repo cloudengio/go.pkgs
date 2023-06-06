@@ -212,7 +212,7 @@ func TestMinMaxBounded(t *testing.T) {
 	}
 }
 
-func TestRemove(t *testing.T) {
+func TestMinMaxRemove(t *testing.T) {
 	for i := 1; i < 33; i++ {
 		minmax := heap.NewMinMax[int, int]()
 		for r := 1; r < i; r++ {

@@ -4,6 +4,7 @@
 
 package heap
 
+// Orderded represents the set of types that can be used as keys in a heap.
 type Ordered interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | string
@@ -16,14 +17,18 @@ type options[K Ordered, V any] struct {
 	bounded  int
 }
 
+// Option represents the options that can be passed to NewMin and NewMax.
 type Option[K Ordered, V any] func(*options[K, V])
 
+// WithSliceCap sets the initial capacity of the slices used to hold keys
+// and values.
 func WithSliceCap[K Ordered, V any](n int) Option[K, V] {
 	return func(o *options[K, V]) {
 		o.sliceCap = n
 	}
 }
 
+// WithData sets the initial data for the heap.
 func WithData[K Ordered, V any](keys []K, vals []V) Option[K, V] {
 	return func(o *options[K, V]) {
 		if len(keys) != len(vals) {
@@ -34,10 +39,12 @@ func WithData[K Ordered, V any](keys []K, vals []V) Option[K, V] {
 	}
 }
 
+// NewMin creates a new heap with ascending order.
 func NewMin[K Ordered, V any](opts ...Option[K, V]) *T[K, V] {
 	return newT(false, opts)
 }
 
+// NewMax creates a new heap with descending order.
 func NewMax[K Ordered, V any](opts ...Option[K, V]) *T[K, V] {
 	return newT(true, opts)
 }
@@ -65,6 +72,7 @@ func newT[K Ordered, V any](max bool, opts []Option[K, V]) *T[K, V] {
 	return n
 }
 
+// T represents a heap of keys and values.
 type T[K Ordered, V any] struct {
 	Keys []K
 	Vals []V
@@ -87,16 +95,19 @@ func (h *T[K, V]) less(i, j int) bool {
 	return h.Keys[i] < h.Keys[j]
 }
 
+// Len returns the number of elements in the heap.
 func (h *T[K, V]) Len() int {
 	return len(h.Keys)
 }
 
+// Push adds a new key and value to the heap.
 func (h *T[K, V]) Push(k K, v V) {
 	h.Keys = append(h.Keys, k)
 	h.Vals = append(h.Vals, v)
-	h.siftUp()
+	h.siftUp(len(h.Keys) - 1)
 }
 
+// Pop removes and returns the top element from the heap.
 func (h *T[K, V]) Pop() (K, V) {
 	k, v := h.Keys[0], h.Vals[0]
 	n := len(h.Keys) - 1
@@ -110,6 +121,30 @@ func (h *T[K, V]) Pop() (K, V) {
 	return k, v
 }
 
+// Remove removes the i'th element from the heap.
+func (h *T[K, V]) Remove(i int) (K, V) {
+	n := h.Len() - 1
+	if n != i {
+		h.swap(i, n)
+		if !h.siftDown(i, n) {
+			h.siftUp(i)
+		}
+	}
+	k, v := h.Keys[n], h.Vals[n]
+	h.Keys, h.Vals = h.Keys[:n], h.Vals[:n]
+	return k, v
+}
+
+// Update updates the key and value for the i'th element in the
+// heap. It is more efficient than Remove followed by Push.
+func (h *T[K, V]) Update(pos int, k K, v V) {
+	h.Keys[pos] = k
+	h.Vals[pos] = v
+	if !h.siftDown(pos, len(h.Keys)) {
+		h.siftUp(pos)
+	}
+}
+
 func (h *T[K, V]) swap(i, j int) {
 	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
 	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
@@ -120,8 +155,8 @@ func (h *T[K, V]) set(i, j int) {
 	h.Vals[i] = h.Vals[j]
 }
 
-func (h *T[K, V]) siftUp() {
-	i := len(h.Keys) - 1
+func (h *T[K, V]) siftUp(from int) {
+	i := from
 	for {
 		p := (i - 1) / 2 // parent
 		if (p == i) || !h.less(i, p) {
@@ -136,7 +171,9 @@ func (h *T[K, V]) siftUp() {
 	}
 }
 
-func (h *T[K, V]) siftDown(parent, limit int) {
+// siftDown returns true if the value was moved down the heap, returning
+// false means that it should be moved up the heap.
+func (h *T[K, V]) siftDown(parent, limit int) bool {
 	p := parent
 	for {
 		c := (p * 2) + 1 // left child
@@ -155,4 +192,5 @@ func (h *T[K, V]) siftDown(parent, limit int) {
 		h.swap(p, c)
 		p = c
 	}
+	return p > parent
 }
