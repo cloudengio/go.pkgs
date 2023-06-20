@@ -19,10 +19,56 @@ type MinMax[K Ordered, V any] struct {
 }
 
 // NewMinMax creates a new instance of MinMax.
-func NewMinMax[K Ordered, V any]() *MinMax[K, V] {
-	return &MinMax[K, V]{
-		Keys: make([]K, 1),
-		Vals: make([]V, 1),
+func NewMinMax[K Ordered, V any](opts ...Option[K, V]) *MinMax[K, V] {
+	var o options[K, V]
+	o.sliceCap = 1
+	for _, fn := range opts {
+		fn(&o)
+	}
+	if o.keys != nil && o.vals != nil {
+		h := &MinMax[K, V]{
+			Keys: o.keys,
+			Vals: o.vals,
+		}
+		h.heapify()
+		return h
+	}
+	mm := &MinMax[K, V]{
+		Keys: make([]K, 1, o.sliceCap),
+		Vals: make([]V, 1, o.sliceCap),
+	}
+	return mm
+}
+
+func (h *MinMax[K, V]) heapify() {
+	// Modified Floyd's algorithm to take account of the SMM's properties.
+	// The 'leaves' must be ordered into their sibling order, and rather
+	// than sifting down n/2, all of the nodes at the last level that does
+	// not contain a leaf must be considered and sifted down.
+	n := len(h.Keys)
+	li := 1
+	nn := n
+	for {
+		if nn >>= 1; nn == 1 {
+			break
+		}
+		li++
+	}
+	for i := 1 << li; i < n; i += 2 {
+		if h.Keys[i] < h.Keys[i-1] {
+			h.swap(i, i-1)
+		}
+	}
+	last := n - 1
+	for i := 1<<li - 1; i > 0; i-- {
+		if i%2 == 1 {
+			if i+1 <= last && h.Keys[i] > h.Keys[i+1] {
+				h.swap(i, i+1)
+			}
+			h.siftDownMin(i, last)
+			continue
+		}
+		h.siftDownMax(i, last)
 	}
 }
 
@@ -185,6 +231,7 @@ func (h *MinMax[K, V]) updateMax(i int, last int) {
 }
 
 func (h *MinMax[K, V]) swap(i, j int) {
+	//	fmt.Printf("swap [%d] %v, [%d] %v\n", i, h.Keys[i], j, h.Keys[j])
 	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
 	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
 }
@@ -266,7 +313,7 @@ func (h *MinMax[K, V]) siftDownMax(i, last int) bool {
 	for {
 
 		minMinTree := (2 * i) - 1
-		if minMinTree > last {
+		if minMinTree > last || minMinTree < 0 {
 			break
 		}
 

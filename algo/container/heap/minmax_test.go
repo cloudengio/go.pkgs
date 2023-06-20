@@ -116,7 +116,6 @@ func TestMinMaxHeap(t *testing.T) {
 		if got, want := output, descending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-
 	}
 
 	minmax := heap.NewMinMax[int, int]()
@@ -253,8 +252,6 @@ func testMinMaxUpdate(t *testing.T, h *heap.MinMax[int, int], pos, delta int, in
 
 	pushMinMax(t, h, input)
 
-	heap.Pretty(h.Keys)
-
 	// Find the actual value to be update and create a slice of the
 	// with that updated value.
 	val := h.Keys[pos]
@@ -269,7 +266,6 @@ func testMinMaxUpdate(t *testing.T, h *heap.MinMax[int, int], pos, delta int, in
 		heap.Pretty(h.Keys)
 		t.Fatal("heap invariant violated")
 	}
-	heap.Pretty(h.Keys)
 
 	output := popMin(t, h)
 	if got, want := output, expected; !reflect.DeepEqual(got, want) {
@@ -281,7 +277,6 @@ func TestMinMaxUpdate(t *testing.T) {
 	for i := 10; i < 33; i++ {
 		minmax := heap.NewMinMax[int, int]()
 		for r := 3; r <= i; r++ {
-			fmt.Printf("i %v, r %v\n", i, r)
 			testMinMaxUpdate(t, minmax, r, 2, ascending(i))
 			testMinMaxUpdate(t, minmax, r, -2, ascending(i))
 			testMinMaxUpdate(t, minmax, r, i/2, ascending(i))
@@ -290,4 +285,45 @@ func TestMinMaxUpdate(t *testing.T) {
 			testMinMaxUpdate(t, minmax, r, -1000, ascending(i))
 		}
 	}
+}
+
+func TestMinMaxOptions(t *testing.T) {
+	h := heap.NewMinMax(heap.WithSliceCap[int, int](100))
+	if got, want := cap(h.Keys), 100; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := cap(h.Vals), 100; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := len(h.Keys), 1; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := len(h.Vals), 1; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+}
+
+func testMinMaxHeapify(t *testing.T, keys []int) {
+	data := append([]int{0}, keys...)
+	vals := append([]int{0}, keys...)
+	h := heap.NewMinMax(heap.WithData(data, vals))
+	h.Verify(t)
+	if t.Failed() {
+		heap.Pretty(h.Keys)
+		return
+	}
+	output := popMin(t, h)
+	expected := make([]int, len(keys))
+	copy(expected, keys)
+	sort.Ints(expected)
+	if got, want := output, expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestMinMaxHeapify(t *testing.T) {
+	testMinMaxHeapify(t, descending(36))
+	testMinMaxHeapify(t, ascending(7))
+	testMinMaxHeapify(t, uniformRand(32, 25))
 }

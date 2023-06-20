@@ -14,7 +14,6 @@ type options[K Ordered, V any] struct {
 	sliceCap int
 	keys     []K
 	vals     []V
-	bounded  int
 }
 
 // Option represents the options that can be passed to NewMin and NewMax.
@@ -81,8 +80,8 @@ type T[K Ordered, V any] struct {
 
 func (h *T[K, V]) heapify() {
 	n := len(h.Keys)
-	// Start at the mid point since the bottom half must all be leaf nodes and
-	// hence need not be moved 'down' the heap.
+	// Use Floyd's algorithm, start at the mid point since the bottom half must
+	// all be leaf nodes and hence are already heaps.
 	for i := n/2 - 1; i >= 0; i-- {
 		h.siftDown(i, n)
 	}
