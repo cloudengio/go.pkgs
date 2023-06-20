@@ -350,4 +350,13 @@ func TestMinMaxCallback(t *testing.T) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
+
+	h.Update(locations[10], 100, 100)
+
+	output := popMin(t, h)
+	// 10 is not present and 100 is the max.
+	expected := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 100}
+	if got, want := output, expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
