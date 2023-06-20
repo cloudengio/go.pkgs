@@ -212,32 +212,82 @@ func TestMinMaxBounded(t *testing.T) {
 	}
 }
 
+func testMinMaxRemove(t *testing.T, h *heap.MinMax[int, int], pos int, input []int) {
+	size := len(input)
+
+	pushMinMax(t, h, input)
+
+	// Find the actual value to be removed and create a slice of the
+	// remaining keys by removing that value from the original input.
+	val := h.Keys[pos]
+	sort.Ints(input)
+	toBeRemoved := sort.SearchInts(input, val)
+	remaining := append([]int{}, input[:toBeRemoved]...)
+	remaining = append(remaining, input[toBeRemoved+1:]...)
+
+	rk, _ := h.Remove(pos)
+	if got, want := rk, val; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	h.VerifyQ(t)
+
+	output := popMin(t, h)
+	if got, want := output, remaining; !reflect.DeepEqual(got, want) {
+		t.Errorf("remove item %v, len %v, got %v, want %v", pos, size, got, want)
+	}
+}
+
 func TestMinMaxRemove(t *testing.T) {
 	for i := 1; i < 33; i++ {
 		minmax := heap.NewMinMax[int, int]()
-		for r := 1; r < i; r++ {
-			input := ascending(i)
-			pushMinMax(t, minmax, input)
-
-			fmt.Printf("Before: %v, #keys %v\n", minmax.Keys, len(minmax.Keys))
-			heap.Pretty(minmax.Keys)
-			rk, _ := minmax.Remove(r)
-			if !minmax.VerifyQ(t) {
-				fmt.Printf("RM: remove %v, len %v, #keys %v, %v, rk: %v \n", r, i, len(minmax.Keys), minmax.Keys, rk)
-			}
-			heap.Pretty(minmax.Keys)
-			//				break
-
-			output := popMin(t, minmax)
-			idx := sort.SearchInts(input, rk)
-			expected := append(input[:idx], input[idx+1:]...)
-			//fmt.Printf("i: %v, r %v, input %v\nG: %v\nW: %v\n", i, r, input, output, expected)
-
-			if got, want := output, expected; !reflect.DeepEqual(got, want) {
-				t.Errorf("remove item %v, got %v, want %v", i, got, want)
-				//				break
-			}
+		for r := 1; r <= i; r++ {
+			testMinMaxRemove(t, minmax, r, ascending(i))
+			testMinMaxRemove(t, minmax, r, descending(i))
+			testMinMaxRemove(t, minmax, r, uniformRand(347, i))
 		}
 	}
-	//t.Fail()
+}
+
+func testMinMaxUpdate(t *testing.T, h *heap.MinMax[int, int], pos, delta int, input []int) {
+	size := len(input)
+
+	pushMinMax(t, h, input)
+
+	heap.Pretty(h.Keys)
+
+	// Find the actual value to be update and create a slice of the
+	// with that updated value.
+	val := h.Keys[pos]
+	expected := make([]int, len(input))
+	copy(expected, input)
+	sort.Ints(expected)
+	expected[sort.SearchInts(expected, val)] = val + delta
+	sort.Ints(expected)
+
+	h.Update(pos, val+delta, val+delta)
+	if !h.VerifyQ(t) {
+		heap.Pretty(h.Keys)
+		t.Fatal("heap invariant violated")
+	}
+	heap.Pretty(h.Keys)
+
+	output := popMin(t, h)
+	if got, want := output, expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("remove item %v, len %v, got %v, want %v", pos, size, got, want)
+	}
+}
+
+func TestMinMaxUpdate(t *testing.T) {
+	for i := 10; i < 33; i++ {
+		minmax := heap.NewMinMax[int, int]()
+		for r := 3; r <= i; r++ {
+			fmt.Printf("i %v, r %v\n", i, r)
+			testMinMaxUpdate(t, minmax, r, 2, ascending(i))
+			testMinMaxUpdate(t, minmax, r, -2, ascending(i))
+			testMinMaxUpdate(t, minmax, r, i/2, ascending(i))
+			testMinMaxUpdate(t, minmax, r, -i/2, ascending(i))
+			testMinMaxUpdate(t, minmax, r, 1000, ascending(i))
+			testMinMaxUpdate(t, minmax, r, -1000, ascending(i))
+		}
+	}
 }

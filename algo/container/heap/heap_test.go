@@ -251,7 +251,7 @@ func TestUpdate(t *testing.T) {
 	sort.Ints(r1)
 
 	used := []int{}
-	for _ = range r1 {
+	for range r1 {
 		v := rand.Intn(100)
 		used = append(used, v)
 		h.Update(0, v, v)

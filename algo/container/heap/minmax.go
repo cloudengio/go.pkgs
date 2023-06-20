@@ -4,7 +4,10 @@
 
 package heap
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // MinMax represents a min-max heap as described in:
 // https://liacs.leidenuniv.nl/~stefanovtp/courses/StudentenSeminarium/Papers/AL/SMMH.pdf.
@@ -23,12 +26,14 @@ func NewMinMax[K Ordered, V any]() *MinMax[K, V] {
 	}
 }
 
-// Len returns the number of itesm stored in the heap, excluding the dummy
+// Len returns the number of items stored in the heap, excluding the dummy
 // root node.
 func (h *MinMax[K, V]) Len() int {
 	return len(h.Keys) - 1
 }
 
+// PushMaxN pushes the key/value pair onto the heap if the key is greater than
+// than the current maximum whilst ensuring that the heap is no larger than n.
 func (h *MinMax[K, V]) PushMaxN(k K, v V, n int) {
 	l := len(h.Keys)
 	if l < n+1 {
@@ -43,6 +48,8 @@ func (h *MinMax[K, V]) PushMaxN(k K, v V, n int) {
 	h.Push(k, v)
 }
 
+// PushMinN pushes the key/value pair onto the heap if the key is less than
+// the current minimum whilst ensuring that the heap is no larger than n.
 func (h *MinMax[K, V]) PushMinN(k K, v V, n int) {
 	l := len(h.Keys)
 	if l < n+1 {
@@ -61,6 +68,7 @@ func (h *MinMax[K, V]) PushMinN(k K, v V, n int) {
 	h.Push(k, v)
 }
 
+// Push pushes the key/value pair onto the heap.
 func (h *MinMax[K, V]) Push(k K, v V) {
 	n := len(h.Keys)
 	h.Keys = append(h.Keys, k)
@@ -68,81 +76,44 @@ func (h *MinMax[K, V]) Push(k K, v V) {
 	if n == 1 {
 		return
 	}
-	h.siftUp(k, n)
+	h.siftUp(h.adjustSiblings(n))
 }
 
-func (h *MinMax[K, V]) siftUp(k K, i int) {
+func (h *MinMax[K, V]) adjustSiblings(i int) int {
 	if i >= 2 && i%2 == 0 {
 		// if k is less than it's left sibling, if it has one, swap them.
-		if k < h.Keys[i-1] {
+		if h.Keys[i] < h.Keys[i-1] {
 			h.swap(i, i-1)
-			i--
+			return i - 1
 		}
 	}
+	return i
+}
+
+func (h *MinMax[K, V]) siftUp(i int) {
 	for {
-		// The easiest way to find the lnode and rnodes is to calculate them
+		// The lnode and rnodes is to calculate them
 		// relative to current nodes grandparent.
 		//            gp
 		//       lnode rnode
 		//      c1  c2   c3 c4
-		gp := ((i + 1) / 4) - 1
+		gp := (i - 3) / 4
 		if gp < 0 {
 			break
 		}
 		lnode := (2 * gp) + 1
 		rnode := lnode + 1
-		if k < h.Keys[lnode] {
+		if h.Keys[i] < h.Keys[lnode] {
 			h.swap(lnode, i)
 			i = lnode
 			continue
 		}
-		if k > h.Keys[rnode] {
+		if h.Keys[i] > h.Keys[rnode] {
 			h.swap(rnode, i)
 			i = rnode
 			continue
 		}
 		break
-	}
-}
-
-func (h *MinMax[K, V]) Update(i int, k K, v V) {
-	if i == 0 || i >= len(h.Keys) {
-		return
-	}
-	if i%2 == 1 {
-		// min node
-
-	} else {
-		// max node
-	}
-}
-
-func rightMostChild(l, r, limit int) int {
-	for {
-		lc := (2 * l) + 1
-		rc := (2 * r) + 2
-		//fmt.Printf("REM: % 3v % 3v % 3v % 3v\n", l, r, lc, rc)
-		if rc <= limit {
-			l = lc
-			r = rc
-			continue
-		}
-		if lc <= limit {
-			return r
-		}
-		//fmt.Printf("R: %v\n", r)
-		return r
-	}
-}
-func leftMostChild(l, r, limit int) int {
-	for {
-		lc := (2 * l) + 1
-		//fmt.Printf("REM: % 3v % 3v % 3v % 3v\n", l, r, lc, rc)
-		if lc <= limit {
-			l = lc
-			continue
-		}
-		return l
 	}
 }
 
@@ -154,65 +125,66 @@ func (h *MinMax[K, V]) Remove(i int) (k K, v V) {
 	if i > n || i == 0 {
 		return
 	}
-	if i == 1 && (n == 1 || n == 2) {
-		k, v := h.Keys[1], h.Vals[1]
-		h.Keys = h.Keys[:n]
-		h.Vals = h.Vals[:n]
-		return k, v
-	}
-	if i == 2 && n == 2 {
-		k, v := h.Keys[2], h.Vals[2]
-		h.swap(1, 2)
-		h.Keys = h.Keys[:n]
-		h.Vals = h.Vals[:n]
-		return k, v
-	}
-
 	k, v = h.Keys[i], h.Vals[i]
 	if i < n {
 		h.swap(i, n)
-		if (i*2)+1 > n {
-			fmt.Printf("i is leaf: %v\n", i)
-			h.siftUp(h.Keys[i], n-1)
-		} else {
-			//		h.swap(i, n)
-			//p := (i - 1) / 2
-			//		h.swap(i, p)
+		if n > 2 {
 			if i%2 == 1 { // min node
-				//rc := rightMostChild(i, i, n-1)
-				/*			if n <= (2*i)+3 {
-								fmt.Printf("min swap: %v <= %v\n", n, (2*i)+3)
-								h.swap(i, n)
-							} else {
-								fmt.Printf("min did nothing....\n")
-								return
-							}
-							//			h.swap(i, rc)
-							fmt.Printf("i: %v ... %v\n", i, n)*/
-				h.siftDownMin(i, n-1)
-				//h.siftUp()
-			} else { // max node
-				/*			if n <= (2*i)+1 {
-								fmt.Printf("max swap: %v <= %v\n", n, (2*i)+1)
-								h.swap(i, n)
-							} else {
-								fmt.Printf("max did nothing....\n")
-								return
-							}*/
-				//			lc := leftMostChild(i, i, n-1)
-				//			h.set(i, lc)
-				h.siftDownMax(i, n-1)
-				//h.siftUp(h.Keys[lc], lc)
+				h.updateMin(i, n-1)
+			} else {
+				h.updateMax(i, n-1)
 			}
 		}
-	}
+	} // i == n, ie. last node means we can just remove it.
 	h.Keys = h.Keys[:n]
 	h.Vals = h.Vals[:n]
 	return
 }
 
+// Update updates the i'th item in the heap, note that i includes the dummy
+// root element. This is more efficient than removing and adding an item.
+func (h *MinMax[K, V]) Update(i int, k K, v V) {
+	n := len(h.Keys)
+	if i == 0 || i >= n {
+		return
+	}
+	h.Keys[i] = k
+	h.Vals[i] = v
+	if n == 2 {
+		return
+	}
+	if i%2 == 1 {
+		h.updateMin(i, n-1)
+		return
+	}
+	h.updateMax(i, n-1)
+}
+
+func (h *MinMax[K, V]) updateMin(i int, last int) {
+	if i+1 <= last && h.Keys[i] > h.Keys[i+1] {
+		h.swap(i, i+1)
+		h.siftUp(i + 1)
+		h.siftDownMin(i, last)
+		return
+	}
+	if !h.siftDownMin(i, last) {
+		h.siftUp(i)
+	}
+}
+
+func (h *MinMax[K, V]) updateMax(i int, last int) {
+	if h.Keys[i] < h.Keys[i-1] {
+		h.swap(i, i-1)
+		h.siftUp(i - 1)
+		h.siftDownMax(i, last)
+		return
+	}
+	if !h.siftDownMax(i, last) {
+		h.siftUp(i)
+	}
+}
+
 func (h *MinMax[K, V]) swap(i, j int) {
-	fmt.Printf("swap: [%v] %v, [%v] %v\n", i, h.Keys[i], j, h.Keys[j])
 	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
 	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
 }
@@ -222,74 +194,64 @@ func (h *MinMax[K, V]) set(i, j int) {
 	h.Vals[i] = h.Vals[j]
 }
 
+// PopMin removes and returns the smallest key/value pair from the heap.
 func (h *MinMax[K, V]) PopMin() (K, V) {
 	i := len(h.Keys) - 1
 	k, v := h.Keys[1], h.Vals[1]
-	if i == 1 {
-		h.Keys, h.Vals = h.Keys[:1], h.Vals[:1]
-		return k, v
-	}
-	if i == 2 {
-		h.Keys[1], h.Vals[1] = h.Keys[2], h.Vals[2]
-		h.Keys, h.Vals = h.Keys[:2], h.Vals[:2]
-		return k, v
-	}
 	h.set(1, i)
 	h.siftDownMin(1, i)
 	h.Keys, h.Vals = h.Keys[:i], h.Vals[:i]
 	return k, v
 }
 
-func (h *MinMax[K, V]) siftDownMin(i, limit int) {
+func (h *MinMax[K, V]) siftDownMin(i, last int) bool {
+	root := i
 	for {
-		gp := ((i + 1) / 2) - 1      // grandparent
-		minMin := ((gp + 1) * 4) - 1 // min node in min tree
-		if minMin > limit {
+		minMinTree := (2 * i) + 1 // min node in min tree.
+		if minMinTree > last {
+			// no children, so we're done.
 			break
 		}
 
 		// test to see if the current node is larger than the smallest
-		// of the max nodes in either of the min or max trees, if so, swap.
-		if maxMin := minMin + 1; maxMin <= limit {
-			maxIdx := maxMin
-			if maxMax := minMin + 3; maxMax <= limit && h.Keys[maxMin] > h.Keys[maxMax] {
-				maxIdx = maxMax
+		// of the max nodes in either of the min or max trees, if so, swap
+		// and continue with the new max value in the same position.
+		if maxMinTree := minMinTree + 1; maxMinTree <= last {
+			maxIdx := maxMinTree
+			if maxMaxTree := minMinTree + 3; maxMaxTree <= last && h.Keys[maxMaxTree] <= h.Keys[maxMinTree] {
+				maxIdx = maxMaxTree
 			}
 			if h.Keys[i] > h.Keys[maxIdx] {
-				// maxIdx is smaller than the current node, so swap.
 				h.swap(i, maxIdx)
 				continue
 			}
 		}
 
-		// minIdx is the smallest of the min nodes.
-		minMax := minMin + 2 // min node in the max tree
-		minIdx := minMin
-		if minMax <= limit && h.Keys[minMin] > h.Keys[minMax] {
-			// compare against the smallest of the min nodes.
-			minIdx = minMax
+		// test to see if the current node is greater than the smallest
+		// of the min nodes, if so, swap and continue with the new min value.
+		minIdx := minMinTree
+		if minMaxTree := minIdx + 2; minMaxTree <= last && h.Keys[minMaxTree] <= h.Keys[minMinTree] {
+			minIdx = minMaxTree
 		}
-
 		if h.Keys[minIdx] < h.Keys[i] {
-			// min child is smaller than the current node, so swap.
 			h.swap(i, minIdx)
 			i = minIdx
 			continue
 		}
+
 		break
 	}
+	return i > root
 }
 
+// PopMax removes and returns the largest key/value pair from the heap.
 func (h *MinMax[K, V]) PopMax() (K, V) {
 	i := len(h.Keys) - 1
 	if i == 1 {
+		// Max is in the min node position for a heap
+		// with a single member.
 		k, v := h.Keys[1], h.Vals[1]
 		h.Keys, h.Vals = h.Keys[:1], h.Vals[:1]
-		return k, v
-	}
-	if i == 2 {
-		k, v := h.Keys[2], h.Vals[2]
-		h.Keys, h.Vals = h.Keys[:2], h.Vals[:2]
 		return k, v
 	}
 	k, v := h.Keys[2], h.Vals[2]
@@ -299,41 +261,57 @@ func (h *MinMax[K, V]) PopMax() (K, V) {
 	return k, v
 }
 
-func (h *MinMax[K, V]) siftDownMax(i, limit int) {
+func (h *MinMax[K, V]) siftDownMax(i, last int) bool {
+	root := i
 	for {
-		gp := (i / 2) - 1        // grandparent
-		maxMin := ((gp + 1) * 4) // max node in min tree
-		if maxMin > limit {
+
+		minMinTree := (2 * i) - 1
+		if minMinTree > last {
 			break
 		}
 
 		// test to see if the current node is smaller than the largest
-		// of the min nodes in either of the min or max trees, if so, swap.
-		minMin := maxMin - 1
-		minIdx := minMin
-		if minMax := minMin + 2; minMax <= limit && h.Keys[minMin] < h.Keys[minMax] {
-			minIdx = minMax
+		// of the min nodes in either of the min or max trees, if so, swap
+		// and continue with the new min value in the same position.
+		minIdx := minMinTree
+		if minMaxTree := minIdx + 2; minMaxTree <= last && h.Keys[minMaxTree] >= h.Keys[minIdx] {
+			minIdx = minMaxTree
 		}
 		if h.Keys[i] < h.Keys[minIdx] {
-			// maxIdx is smaller than the current node, so swap.
 			h.swap(i, minIdx)
 			continue
 		}
 
-		// maxIdx is the largest of the max nodes.
-		maxMax := maxMin + 2 // max node in the max tree
-		maxIdx := maxMin
-		if maxMax <= limit && h.Keys[maxMax] > h.Keys[maxMin] {
-			// compare against the smallest of the min nodes.
-			maxIdx = maxMax
+		// test to see if the current node is smaller than the largest
+		// of the max nodes, if so, swap and continue with the new value.
+		maxIdx := (2 * i)
+		if maxIdx > last {
+			break
 		}
-
-		if h.Keys[maxIdx] > h.Keys[i] {
-			// min child is smaller than the current node, so swap.
+		if maxMaxTree := maxIdx + 2; maxMaxTree <= last && h.Keys[maxMaxTree] > h.Keys[maxIdx] {
+			maxIdx = maxMaxTree
+		}
+		if h.Keys[i] < h.Keys[maxIdx] {
 			h.swap(i, maxIdx)
 			i = maxIdx
 			continue
 		}
+
 		break
 	}
+	return i > root
+}
+
+func pretty[K Ordered](k []K) {
+	l := 0
+	nsp := (((len(k) - 1) / 2) * 10)
+	for i, v := range k {
+		if i+1 == (1 << l) {
+			l++
+			fmt.Printf("\n% 4v:", (1<<(l-1))-1)
+			nsp >>= 1
+		}
+		fmt.Printf("%v%v%v", strings.Repeat(" ", nsp), v, strings.Repeat(" ", nsp))
+	}
+	fmt.Println()
 }
