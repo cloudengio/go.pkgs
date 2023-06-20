@@ -10,34 +10,6 @@ type Ordered interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | string
 }
 
-type options[K Ordered, V any] struct {
-	sliceCap int
-	keys     []K
-	vals     []V
-}
-
-// Option represents the options that can be passed to NewMin and NewMax.
-type Option[K Ordered, V any] func(*options[K, V])
-
-// WithSliceCap sets the initial capacity of the slices used to hold keys
-// and values.
-func WithSliceCap[K Ordered, V any](n int) Option[K, V] {
-	return func(o *options[K, V]) {
-		o.sliceCap = n
-	}
-}
-
-// WithData sets the initial data for the heap.
-func WithData[K Ordered, V any](keys []K, vals []V) Option[K, V] {
-	return func(o *options[K, V]) {
-		if len(keys) != len(vals) {
-			panic("keys and vals must be the same length")
-		}
-		o.keys = keys
-		o.vals = vals
-	}
-}
-
 // NewMin creates a new heap with ascending order.
 func NewMin[K Ordered, V any](opts ...Option[K, V]) *T[K, V] {
 	return newT(false, opts)
@@ -55,27 +27,30 @@ func newT[K Ordered, V any](max bool, opts []Option[K, V]) *T[K, V] {
 	}
 	if o.keys != nil && o.vals != nil {
 		h := &T[K, V]{
-			Keys: o.keys,
-			Vals: o.vals,
-			max:  max,
+			Keys:     o.keys,
+			Vals:     o.vals,
+			max:      max,
+			callback: o.callback,
 		}
 		h.heapify()
 		return h
 	}
 
 	n := &T[K, V]{
-		Keys: make([]K, 0, o.sliceCap),
-		Vals: make([]V, 0, o.sliceCap),
-		max:  max,
+		Keys:     make([]K, 0, o.sliceCap),
+		Vals:     make([]V, 0, o.sliceCap),
+		max:      max,
+		callback: o.callback,
 	}
 	return n
 }
 
 // T represents a heap of keys and values.
 type T[K Ordered, V any] struct {
-	Keys []K
-	Vals []V
-	max  bool
+	Keys     []K
+	Vals     []V
+	max      bool
+	callback func(iv, jv V, i, j int)
 }
 
 func (h *T[K, V]) heapify() {
@@ -147,6 +122,9 @@ func (h *T[K, V]) Update(pos int, k K, v V) {
 func (h *T[K, V]) swap(i, j int) {
 	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
 	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
+	if h.callback != nil {
+		h.callback(h.Vals[i], h.Vals[j], i, j)
+	}
 }
 
 func (h *T[K, V]) set(i, j int) {

@@ -14,8 +14,9 @@ import (
 // Note that this requires the use of a dummy root node in the key and value
 // slices, ie. Keys[0] and Values[0] is always empty.
 type MinMax[K Ordered, V any] struct {
-	Keys []K
-	Vals []V
+	Keys     []K
+	Vals     []V
+	callback func(iv, jv V, i, j int)
 }
 
 // NewMinMax creates a new instance of MinMax.
@@ -27,15 +28,17 @@ func NewMinMax[K Ordered, V any](opts ...Option[K, V]) *MinMax[K, V] {
 	}
 	if o.keys != nil && o.vals != nil {
 		h := &MinMax[K, V]{
-			Keys: o.keys,
-			Vals: o.vals,
+			Keys:     o.keys,
+			Vals:     o.vals,
+			callback: o.callback,
 		}
 		h.heapify()
 		return h
 	}
 	mm := &MinMax[K, V]{
-		Keys: make([]K, 1, o.sliceCap),
-		Vals: make([]V, 1, o.sliceCap),
+		Keys:     make([]K, 1, o.sliceCap),
+		Vals:     make([]V, 1, o.sliceCap),
+		callback: o.callback,
 	}
 	return mm
 }
@@ -231,9 +234,11 @@ func (h *MinMax[K, V]) updateMax(i int, last int) {
 }
 
 func (h *MinMax[K, V]) swap(i, j int) {
-	//	fmt.Printf("swap [%d] %v, [%d] %v\n", i, h.Keys[i], j, h.Keys[j])
 	h.Keys[i], h.Keys[j] = h.Keys[j], h.Keys[i]
 	h.Vals[i], h.Vals[j] = h.Vals[j], h.Vals[i]
+	if h.callback != nil {
+		h.callback(h.Vals[i], h.Vals[j], i, j)
+	}
 }
 
 func (h *MinMax[K, V]) set(i, j int) {

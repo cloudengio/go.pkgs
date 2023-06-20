@@ -327,3 +327,27 @@ func TestMinMaxHeapify(t *testing.T) {
 	testMinMaxHeapify(t, ascending(7))
 	testMinMaxHeapify(t, uniformRand(32, 25))
 }
+
+func TestMinMaxCallback(t *testing.T) {
+	locations := map[int]int{}
+	data := ascending(13)
+	for i, v := range data {
+		locations[v] = i + 1
+	}
+
+	h := heap.NewMinMax[int, int](heap.WithSwapCallback[int, int](func(iv, jv int, i, j int) {
+		locations[iv], locations[jv] = i, j
+	}))
+
+	pushMinMax(t, h, data)
+
+	if got, want := len(locations), len(h.Keys)-1; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	for v, l := range locations {
+		if got, want := h.Keys[l], v; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
