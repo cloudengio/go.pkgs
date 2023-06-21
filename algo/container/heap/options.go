@@ -36,7 +36,9 @@ func WithData[K Ordered, V any](keys []K, vals []V) Option[K, V] {
 // WithCallback provides a callback function that is called after every
 // operation with the values and indices of the elements that have changed
 // location. Note that is not sufficient to track removal of items and hence
-// any applications that requires such tracking should do so explicitly.
+// any applications that requires such tracking should do so explicitly by
+// wrapping the Pop operations and deleting the retried item from their
+// data structures.
 func WithCallback[K Ordered, V any](fn func(iv, jv V, i, j int)) Option[K, V] {
 	return func(o *options[K, V]) {
 		o.callback = fn
