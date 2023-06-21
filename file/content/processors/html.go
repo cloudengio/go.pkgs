@@ -8,6 +8,7 @@ package processors
 import (
 	"io"
 	"net/url"
+	"strings"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -34,6 +35,12 @@ func (ho HTMLDoc) HREFs(base string) ([]string, error) {
 }
 
 func (ho HTMLDoc) resolveReference(base *url.URL, href string) string {
+	if idx := strings.LastIndex(href, "/#"); idx != -1 {
+		sidx := strings.LastIndex(href, "/")
+		if sidx == idx {
+			href = href[:idx] + "/index.html" + href[idx+1:]
+		}
+	}
 	if base == nil || len(href) == 0 || href[0] == '#' {
 		return href
 	}
