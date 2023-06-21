@@ -331,11 +331,8 @@ func TestMinMaxHeapify(t *testing.T) {
 func TestMinMaxCallback(t *testing.T) {
 	locations := map[int]int{}
 	data := ascending(13)
-	for i, v := range data {
-		locations[v] = i + 1
-	}
 
-	h := heap.NewMinMax[int, int](heap.WithSwapCallback[int, int](func(iv, jv int, i, j int) {
+	h := heap.NewMinMax[int, int](heap.WithCallback[int, int](func(iv, jv int, i, j int) {
 		locations[iv], locations[jv] = i, j
 	}))
 
@@ -357,6 +354,34 @@ func TestMinMaxCallback(t *testing.T) {
 	// 10 is not present and 100 is the max.
 	expected := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 100}
 	if got, want := output, expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	locations = map[int]int{}
+	pushMinMax(t, h, data)
+	for h.Len() > 0 {
+		k, _ := h.PopMin()
+		if got, want := locations[k], len(h.Keys); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		delete(locations, k)
+	}
+
+	if got, want := len(locations), 0; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	locations = map[int]int{}
+	pushMinMax(t, h, data)
+	for h.Len() > 0 {
+		k, _ := h.PopMax()
+		if got, want := locations[k], len(h.Keys); got != want {
+			t.Errorf("%v: got %v, want %v", k, got, want)
+		}
+		delete(locations, k)
+	}
+
+	if got, want := len(locations), 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

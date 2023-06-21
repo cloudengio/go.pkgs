@@ -85,7 +85,7 @@ func (h *T[K, V]) Push(k K, v V) {
 func (h *T[K, V]) Pop() (K, V) {
 	k, v := h.Keys[0], h.Vals[0]
 	n := len(h.Keys) - 1
-	h.set(0, n)
+	h.swap(0, n)
 	h.siftDown(0, n)
 	// pop must come last so that there is room to move the last key all
 	// of the way back down to where it came from - ie. the special case
@@ -125,11 +125,6 @@ func (h *T[K, V]) swap(i, j int) {
 	if h.callback != nil {
 		h.callback(h.Vals[i], h.Vals[j], i, j)
 	}
-}
-
-func (h *T[K, V]) set(i, j int) {
-	h.Keys[i] = h.Keys[j]
-	h.Vals[i] = h.Vals[j]
 }
 
 func (h *T[K, V]) siftUp(from int) {

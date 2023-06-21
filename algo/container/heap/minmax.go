@@ -123,6 +123,9 @@ func (h *MinMax[K, V]) Push(k K, v V) {
 	h.Keys = append(h.Keys, k)
 	h.Vals = append(h.Vals, v)
 	if n == 1 {
+		if h.callback != nil {
+			h.callback(v, v, 1, 1)
+		}
 		return
 	}
 	h.siftUp(h.adjustSiblings(n))
@@ -241,17 +244,12 @@ func (h *MinMax[K, V]) swap(i, j int) {
 	}
 }
 
-func (h *MinMax[K, V]) set(i, j int) {
-	h.Keys[i] = h.Keys[j]
-	h.Vals[i] = h.Vals[j]
-}
-
 // PopMin removes and returns the smallest key/value pair from the heap.
 func (h *MinMax[K, V]) PopMin() (K, V) {
 	i := len(h.Keys) - 1
 	k, v := h.Keys[1], h.Vals[1]
-	h.set(1, i)
-	h.siftDownMin(1, i)
+	h.swap(1, i)
+	h.siftDownMin(1, i-1)
 	h.Keys, h.Vals = h.Keys[:i], h.Vals[:i]
 	return k, v
 }
@@ -307,8 +305,8 @@ func (h *MinMax[K, V]) PopMax() (K, V) {
 		return k, v
 	}
 	k, v := h.Keys[2], h.Vals[2]
-	h.set(2, i)
-	h.siftDownMax(2, i)
+	h.swap(2, i)
+	h.siftDownMax(2, i-1)
 	h.Keys, h.Vals = h.Keys[:i], h.Vals[:i]
 	return k, v
 }
