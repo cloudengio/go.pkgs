@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"cloudeng.io/file"
-	"cloudeng.io/file/checkpoint"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
@@ -76,31 +75,27 @@ type CrawlCacheConfig struct {
 // specified root, and optionally clears them before the crawl (if
 // Cache.ClearBeforeCrawl is true). Any environment variables in the
 // root or Cache.Prefix will be expanded.
-func (c CrawlCacheConfig) Initialize(root string) (string, checkpoint.Operation, error) {
+func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath string, err error) {
 	root = os.ExpandEnv(root)
-	cachePath, checkpointPath := os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
+	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
 	cachePath = filepath.Join(root, cachePath)
 	checkpointPath = filepath.Join(root, checkpointPath)
 
 	if c.ClearBeforeCrawl {
-		if err := os.RemoveAll(cachePath); err != nil {
-			return "", nil, err
+		if err = os.RemoveAll(cachePath); err != nil {
+			return
 		}
 		if len(c.Checkpoint) > 0 {
-			if err := os.RemoveAll(checkpointPath); err != nil {
-				return "", nil, err
+			if err = os.RemoveAll(checkpointPath); err != nil {
+				return
 			}
 		}
 	}
-	var cp checkpoint.Operation
-	var err error
-	if len(c.Checkpoint) > 0 {
-		cp, err = checkpoint.NewDirectoryOperation(checkpointPath)
-		if err != nil {
-			return "", nil, err
-		}
+	if err = os.MkdirAll(cachePath, 0700); err != nil {
+		return
 	}
-	return cachePath, cp, os.MkdirAll(cachePath, 0700)
+	err = os.MkdirAll(checkpointPath, 0700)
+	return
 }
 
 // Config represents the configuration for a single crawl.
