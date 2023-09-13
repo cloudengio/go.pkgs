@@ -33,8 +33,8 @@ type exampleFlags struct {
 }
 
 func init() {
-	cmdSet.Set("l0.1").RunnerAndFlags(l0_1, subcmd.MustRegisteredFlagSet(&exampleFlags{}))
-	cmdSet.Set("l0.2").RunnerAndFlags(l0_2, subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+	cmdSet.Set("l0.1").Runner(l0_1, &exampleFlags{})
+	cmdSet.Set("l0.2").Runner(l0_2, &exampleFlags{})
 }
 
 func l0_1(ctx context.Context, values interface{}, args []string) error {

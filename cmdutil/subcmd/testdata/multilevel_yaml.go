@@ -43,11 +43,11 @@ commands:
 var cmdSet *subcmd.CommandSetYAML = subcmd.MustFromYAML(multilevel)
 
 func init() {
-	cmdSet.Set("l0.1").RunnerAndFlags(l0_1, subcmd.MustRegisteredFlagSet(&exampleFlags{}))
-	cmdSet.Set("l0.2").RunnerAndFlags(l0_2, subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+	cmdSet.Set("l0.1").Runner(l0_1, &exampleFlags{})
+	cmdSet.Set("l0.2").Runner(l0_2, &exampleFlags{})
 
-	cmdSet.Set("l1", "l1.1").RunnerAndFlags(l1_1, subcmd.MustRegisteredFlagSet(&exampleFlags{}))
-	cmdSet.Set("l1", "l1.2").RunnerAndFlags(l1_2, subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+	cmdSet.Set("l1", "l1.1").Runner(l1_1, &exampleFlags{})
+	cmdSet.Set("l1", "l1.2").Runner(l1_2, &exampleFlags{})
 
 	gfs := subcmd.GlobalFlagSet().MustRegisterFlagStruct(&globalFlags, nil, nil)
 	cmdSet.WithGlobalFlags(gfs)

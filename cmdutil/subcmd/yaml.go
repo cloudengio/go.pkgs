@@ -70,9 +70,14 @@ func (c *CommandSetYAML) Set(names ...string) *CurrentCommand {
 	return cs
 }
 
-// RunnerAndFlags specifies the Runner and FlagSet for the currently 'set'
-// command as returned by CommandSetYAML.Set.
+// DEPRECATED: Use RunnerAndFlagSet or Runner.
 func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error {
+	return c.RunnerAndFlagSet(runner, fs)
+}
+
+// RunnerAndFlagset specifies the Runner and FlagSet for the currently 'set'
+// command as returned by CommandSetYAML.Set.
+func (c *CurrentCommand) RunnerAndFlagSet(runner Runner, fs *FlagSet) error {
 	if c.err != nil {
 		return c.err
 	}
@@ -81,9 +86,33 @@ func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error {
 	return nil
 }
 
-// MustRunnerAndFlags is like RunnerAndFlags but will panic on error.
+// MustRunnerAndFlagSet is like RunnerAndFlagSet but will panic on error.
+func (c *CurrentCommand) MustRunnerAndFlagSet(runner Runner, fs *FlagSet) {
+	if err := c.RunnerAndFlagSet(runner, fs); err != nil {
+		panic(fmt.Sprintf("%v", err))
+	}
+}
+
+// DEPRECATED: Use MustRunnerAndFlagSet or MustRunner.
 func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet) {
-	if err := c.RunnerAndFlags(runner, fs); err != nil {
+	c.MustRunnerAndFlagSet(runner, fs)
+}
+
+// Runner specifies the Runner and struct to use as a FlagSet for the currently
+// 'set' command as returned by CommandSetYAML.Set.
+func (c *CurrentCommand) Runner(runner Runner, fs any, defaults ...any) error {
+	if c.err != nil {
+		return c.err
+	}
+	c.set.runner = runner
+	var err error
+	c.set.flags, err = RegisteredFlagSet(fs, defaults...)
+	return err
+}
+
+// MustRunner is like Runner but will panic on error.
+func (c *CurrentCommand) MustRunner(runner Runner, fs any) {
+	if err := c.Runner(runner, fs); err != nil {
 		panic(fmt.Sprintf("%v", err))
 	}
 }

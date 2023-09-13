@@ -148,11 +148,31 @@ func NewFlagSet() *FlagSet {
 	return &FlagSet{flagSet: fs}
 }
 
-// MustRegisteredFlagSet is a convenience function that creates a new
+// RegisteredFlagSet is a convenience function that creates a new
 // FlagSet and calls RegisterFlagStruct on it. The valueDefaults and
 // usageDefaults are extracted from the defaults variadic parameter.
 // MustRegisteredFlagSet will panic if defaults contains inappopriate types
 // for the value and usage defaults.
+func RegisteredFlagSet(flagValues interface{}, defaults ...interface{}) (*FlagSet, error) {
+	fs := NewFlagSet()
+	var valueDefaults map[string]interface{}
+	var usageDefaults map[string]string
+	for _, def := range defaults {
+		switch v := def.(type) {
+		case map[string]interface{}:
+			valueDefaults = v
+		case map[string]string:
+			usageDefaults = v
+		}
+	}
+	if err := fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults); err != nil {
+		return nil, err
+	}
+	return fs, nil
+}
+
+// MustRegisteredFlagSet is like RegisteredFlagSet but will panic if
+// defaults contains inappopriate types for the value and usage defaults.
 func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *FlagSet {
 	fs := NewFlagSet()
 	var valueDefaults map[string]interface{}
