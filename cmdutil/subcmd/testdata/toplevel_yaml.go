@@ -24,7 +24,7 @@ type simpleFlags struct {
 }
 
 func init() {
-	cmdSet.Set("simple").RunnerAndFlags(runner, subcmd.MustRegisteredFlagSet(&simpleFlags{}))
+	cmdSet.Set("simple").RunnerAndFlagSet(runner, subcmd.MustRegisteredFlagSet(&simpleFlags{}))
 }
 
 func runner(ctx context.Context, values interface{}, args []string) error {

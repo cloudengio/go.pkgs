@@ -170,25 +170,25 @@ commands:
 `)
 
 	out := &strings.Builder{}
-	cmdSet.Set("l0.1").MustRunnerAndFlags(
+	cmdSet.Set("l0.1").MustRunner(
 		(&runner{name: "l0.1", out: out}).cmd,
-		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+		&exampleFlags{})
 
-	cmdSet.Set("l0.2").MustRunnerAndFlags(
+	cmdSet.Set("l0.2").MustRunner(
 		(&runner{name: "l0.2", out: out}).cmd,
-		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+		&exampleFlags{})
 
-	cmdSet.Set("l1", "l1.1").MustRunnerAndFlags(
+	cmdSet.Set("l1", "l1.1").MustRunner(
 		(&runner{name: "l1.2", out: out}).cmd,
-		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+		&exampleFlags{})
 
-	cmdSet.Set("l1", "l1.2").MustRunnerAndFlags(
+	cmdSet.Set("l1", "l1.2").MustRunner(
 		(&runner{name: "l1.2", out: out}).cmd,
-		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+		&exampleFlags{})
 
-	cmdSet.Set("l2", "l2.1", "l2.1.1").MustRunnerAndFlags(
+	cmdSet.Set("l2", "l2.1", "l2.1.1").MustRunner(
 		(&runner{name: "l1.2", out: out}).cmd,
-		subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+		&exampleFlags{})
 
 	if err := cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "l0.1", "-flag1=3", "first-arg", "second-arg"); err != nil {
 		panic(err)
@@ -230,9 +230,9 @@ commands:
 
 	out := &strings.Builder{}
 	for _, name := range []string{"c1", "c2", "c3", "c4", "c5", "c6"} {
-		cmdSet.Set(name).MustRunnerAndFlags(
+		cmdSet.Set(name).MustRunner(
 			(&runner{name: name, out: out}).cmd,
-			subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+			&exampleFlags{})
 	}
 
 	var err error
@@ -293,5 +293,15 @@ func TestYAMLCompatibility(t *testing.T) {
 				t.Errorf("%v: %v: got %v, want %v", tc, args, got, want)
 			}
 		}
+	}
+}
+
+func TestFErrors(t *testing.T) {
+	r := &runner{name: "a", out: nil}
+	cmdSet := subcmd.MustFromYAMLTemplate(oneLevel)
+	var notastruct int
+	err := cmdSet.Set("l0.1").Runner(r.cmd, &notastruct)
+	if err == nil || err.Error() != "*int is not a pointer to a struct" {
+		t.Errorf("missing or wrong error: %v", err)
 	}
 }
