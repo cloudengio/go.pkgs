@@ -70,7 +70,7 @@ func (c *CommandSetYAML) Set(names ...string) *CurrentCommand {
 	return cs
 }
 
-// DEPRECATED: Use RunnerAndFlagSet or Runner.
+// Deprecated: Use RunnerAndFlagSet or Runner.
 func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error {
 	return c.RunnerAndFlagSet(runner, fs)
 }
@@ -93,7 +93,7 @@ func (c *CurrentCommand) MustRunnerAndFlagSet(runner Runner, fs *FlagSet) {
 	}
 }
 
-// DEPRECATED: Use MustRunnerAndFlagSet or MustRunner.
+// Deprecated: Use MustRunnerAndFlagSet or MustRunner.
 func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet) {
 	c.MustRunnerAndFlagSet(runner, fs)
 }
