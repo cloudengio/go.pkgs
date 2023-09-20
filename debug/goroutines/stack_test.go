@@ -78,7 +78,7 @@ func TestGet(t *testing.T) {
 			}
 		}
 		fmt.Printf("><>< %v\n", bycreator)
-		panic("runGoA is missing")
+		panic(pkgPath + "runGoA is missing")
 	case len(a.Stack) < 1:
 		t.Errorf("got %d expected at least 1: %s", len(a.Stack), goroutines.Format(a))
 	case !strings.HasPrefix(a.Stack[0].Call, pkgPath+"waitForIt"):
@@ -87,13 +87,13 @@ func TestGet(t *testing.T) {
 	}
 	b := bycreator[pkgPath+"runGoB"]
 	if b == nil {
-		t.Errorf("runGoB is missing")
+		t.Errorf("%srunGoB is missing", pkgPath)
 	} else if len(b.Stack) < 5 {
 		t.Errorf("got %d expected at least 5: %s", len(b.Stack), goroutines.Format(b))
 	}
 	c := bycreator[pkgPath+"runGoC"]
 	if c == nil {
-		t.Errorf("runGoC is missing")
+		t.Errorf("%srunGoC is missing", pkgPath)
 	} else if len(c.Stack) < 1 {
 		t.Errorf("got %d expected at least 1: %s", len(c.Stack), goroutines.Format(c))
 	}
