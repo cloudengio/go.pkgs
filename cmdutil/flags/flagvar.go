@@ -283,13 +283,19 @@ func createVarFlag(fs *flag.FlagSet, fieldValue reflect.Value, name, value, desc
 	return set, nil
 }
 
-func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue interface{}, fieldValue reflect.Value, name, description string) bool {
-
+func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue interface{}, fieldType reflect.StructField, fieldValue reflect.Value, name, description string) bool {
 	switch dv := initialValue.(type) {
 	case int:
 		ptr := (*int)(unsafe.Pointer(fieldValue.Addr().Pointer()))
 		fs.IntVar(ptr, name, dv, description)
 	case int64:
+		if fieldType.Type == reflect.TypeOf(time.Duration(0)) {
+			// If no default value is specified, time.Duration defaults appear
+			// here as int64s rather than time.Duration with a zero value.
+			ptr := (*time.Duration)(unsafe.Pointer(fieldValue.Addr().Pointer()))
+			fs.DurationVar(ptr, name, 0, description)
+			break
+		}
 		ptr := (*int64)(unsafe.Pointer(fieldValue.Addr().Pointer()))
 		fs.Int64Var(ptr, name, dv, description)
 	case uint:
@@ -405,7 +411,7 @@ func (reg *registrar) registerFlagsInStruct(structWithFlags interface{}) error {
 			}
 			continue
 		}
-		if !createFlagsBasedOnValue(reg.fs, initialValue, fieldValue, name, description) {
+		if !createFlagsBasedOnValue(reg.fs, initialValue, fieldType, fieldValue, name, description) {
 			// should never reach here.
 			panic(fmt.Sprintf("%v flag: field %v, flag %v: unsupported type %T", fieldTypeName, fieldName, name, initialValue))
 		}
