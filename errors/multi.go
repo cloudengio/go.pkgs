@@ -5,6 +5,7 @@
 package errors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -159,6 +160,20 @@ func (m *M) Format(f fmt.State, c rune) {
 		fmt.Fprintf(f, "  --- %v of %v errors\n  ", i+1, l)
 		fmt.Fprintf(f, format, err)
 	}
+}
+
+// WithoutContextCanceled returns an error.M without any context.Canceled errors.
+func (m *M) WithoutContextCanceled() error {
+	c := &M{}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c.errs = make([]error, 0, len(m.errs))
+	for _, err := range m.errs {
+		if !errors.Is(err, context.Canceled) {
+			c.errs = append(c.errs, err)
+		}
+	}
+	return c
 }
 
 // Err returns nil if m contains no errors, or itself otherwise.

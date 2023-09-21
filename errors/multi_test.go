@@ -5,6 +5,7 @@
 package errors_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -195,6 +196,33 @@ func TestErr(t *testing.T) {
 	}
 	if _, ok := err.(*errors.M); !ok {
 		t.Errorf("failed to extract underlying type")
+	}
+}
+
+func TestRemoveCancel(t *testing.T) {
+	m := &errors.M{}
+	m.Append(context.Canceled)
+	m.Append(os.ErrExist)
+	m.Append(os.ErrInvalid)
+	m.Append(context.Canceled)
+
+	msg := fmt.Sprintf("%v", m)
+	if got, want := msg, `  --- 1 of 4 errors
+  context canceled
+  --- 2 of 4 errors
+  file already exists
+  --- 3 of 4 errors
+  invalid argument
+  --- 4 of 4 errors
+  context canceled`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	msg = fmt.Sprintf("%v", m.WithoutContextCanceled())
+	if got, want := msg, `  --- 1 of 2 errors
+  file already exists
+  --- 2 of 2 errors
+  invalid argument`; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
