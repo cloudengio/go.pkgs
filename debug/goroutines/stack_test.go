@@ -43,6 +43,15 @@ func runGoC(wg *sync.WaitGroup, wait chan struct{}) {
 	}()
 }
 
+func findGoroutine(gs []*goroutines.Goroutine, caller string) *goroutines.Goroutine {
+	for _, g := range gs {
+		if g.Creator != nil && strings.HasPrefix(g.Creator.Call, caller) {
+			return g
+		}
+	}
+	return nil
+}
+
 func TestGet(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -67,18 +76,9 @@ func TestGet(t *testing.T) {
 		bycreator[key] = g
 	}
 
-	findGoroutine := func(caller string) *goroutines.Goroutine {
-		for _, g := range gs {
-			if g.Creator != nil && strings.HasPrefix(g.Creator.Call, caller) {
-				return g
-			}
-		}
-		return nil
-	}
-
 	pkgPath, _ := gopkgpath.Caller()
 	pkgPath += "_test."
-	a := findGoroutine(pkgPath + "runGoA")
+	a := findGoroutine(gs, pkgPath+"runGoA")
 	switch {
 	case a == nil:
 		for _, g := range gs {
@@ -97,13 +97,13 @@ func TestGet(t *testing.T) {
 		t.Errorf("got %s, wanted it to start with %swaitForIt",
 			a.Stack[0].Call, pkgPath)
 	}
-	b := findGoroutine(pkgPath + "runGoB")
+	b := findGoroutine(gs, pkgPath+"runGoB")
 	if b == nil {
 		t.Errorf("%srunGoB is missing", pkgPath)
 	} else if len(b.Stack) < 5 {
 		t.Errorf("got %d expected at least 5: %s", len(b.Stack), goroutines.Format(b))
 	}
-	c := findGoroutine(pkgPath + "runGoC")
+	c := findGoroutine(gs, pkgPath+"runGoC")
 	if c == nil {
 		t.Errorf("%srunGoC is missing", pkgPath)
 	} else if len(c.Stack) < 1 {
@@ -134,23 +134,14 @@ func TestGetIgnore(t *testing.T) {
 		bycreator[key] = g
 	}
 
-	findGoroutine := func(caller string) bool {
-		for _, g := range gs {
-			if g.Creator != nil && strings.HasPrefix(g.Creator.Call, caller) {
-				return true
-			}
-		}
-		return false
-	}
-
 	pkgPath, _ := gopkgpath.Caller()
 	pkgPath += "_test."
 	for _, ignored := range []string{"runGoA", "runGoB"} {
-		if findGoroutine(pkgPath + ignored) {
+		if findGoroutine(gs, pkgPath+ignored) != nil {
 			t.Errorf("%v should have been recorded", ignored)
 		}
 	}
-	if !findGoroutine(pkgPath + "runGoC") {
+	if findGoroutine(gs, pkgPath+"runGoC") == nil {
 		t.Errorf("%v should have been recorded", "runGoC")
 	}
 }

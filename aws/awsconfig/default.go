@@ -85,7 +85,6 @@ func DebugPrintConfig(ctx context.Context, out io.Writer, cfg aws.Config) error 
 		fmt.Fprintf(out, "config source: %T\n", cs)
 	}
 	fmt.Fprintf(out, "http client: %T\n", cfg.HTTPClient)
-	fmt.Fprintf(out, "endpoint resolver: %T\n", cfg.EndpointResolverWithOptions)
 	fmt.Fprintf(out, "retryer: %T\n", cfg.Retryer)
 	fmt.Fprintf(out, "logger: %T\n", cfg.Logger)
 	fmt.Fprintf(out, "client log mode: %v\n", cfg.ClientLogMode)
