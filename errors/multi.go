@@ -162,17 +162,18 @@ func (m *M) Format(f fmt.State, c rune) {
 	}
 }
 
-// RemoveContextCanceled removes any context.Canceled errors from m.
-func (m *M) RemoveContextCanceled() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := make([]error, 0, len(m.errs))
+// WithoutContextCanceled returns an error.M without any context.Canceled errors.
+func (m *M) WithoutContextCanceled() error {
+	c := &M{}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c.errs = make([]error, 0, len(m.errs))
 	for _, err := range m.errs {
 		if !errors.Is(err, context.Canceled) {
-			n = append(n, err)
+			c.errs = append(c.errs, err)
 		}
 	}
-	m.errs = n
+	return c
 }
 
 // Err returns nil if m contains no errors, or itself otherwise.

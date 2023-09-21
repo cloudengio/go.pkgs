@@ -217,8 +217,7 @@ func TestRemoveCancel(t *testing.T) {
   context canceled`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	m.RemoveContextCanceled()
-	msg = fmt.Sprintf("%v", m)
+	msg = fmt.Sprintf("%v", m.WithoutContextCanceled())
 	if got, want := msg, `  --- 1 of 2 errors
   file already exists
   --- 2 of 2 errors
