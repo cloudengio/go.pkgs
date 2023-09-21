@@ -133,6 +133,7 @@ func readDirSorted(ctx context.Context, path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	scanSize := 50
 	files := make([]string, 0, 50)
 	for {

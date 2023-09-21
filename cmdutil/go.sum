@@ -1,9 +1,7 @@
 cloudeng.io/errors v0.0.8 h1:WEpTcAYnL2wsPm0qfMpXRupoO61DahxbD4doPKbsaGY=
 cloudeng.io/errors v0.0.8/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
-cloudeng.io/file v0.0.0-20230309184059-9263072b1423 h1:ig5X1PmRYJThHDE5rJOij2EUGESaPb1pmJ1+IH+rfF0=
-cloudeng.io/file v0.0.0-20230309184059-9263072b1423/go.mod h1:Ow6f4Wu+6U8XQFP4U2Kr9izv+oU/jVMZyuCTmf6FaOc=
-cloudeng.io/file v0.0.0-20230626173734-59e0cb432e38 h1:7GKGeilHIk5liin3NJLaodBmH8JGS8rvjjWuioSFGJU=
-cloudeng.io/file v0.0.0-20230626173734-59e0cb432e38/go.mod h1:svdodwp2fOBjFOl+rTWwlZiPF+fQB9Q8RuhdHvPQlfA=
+cloudeng.io/file v0.0.0-20230913164637-56a6ca867a22 h1:OZt8+76+/k/vIW6ri/2jXDK6P1O2yKkWgZZWq/gJEO8=
+cloudeng.io/file v0.0.0-20230913164637-56a6ca867a22/go.mod h1:svdodwp2fOBjFOl+rTWwlZiPF+fQB9Q8RuhdHvPQlfA=
 cloudeng.io/path v0.0.8 h1:wyHHEJLPoHe8jq6I7xJxM90Cy8hVkMNvW+jEQRvF3lg=
 cloudeng.io/path v0.0.8/go.mod h1:S9dU9pNDkx0EUIHY+Pcyfzs3/cItCI9lyClkwqv0PtM=
 cloudeng.io/text v0.0.11 h1:q3+p3gxwNdr/V+k4+77fj9QxVpUU8G7B4+v26m+sE8I=

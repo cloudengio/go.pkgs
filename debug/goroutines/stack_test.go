@@ -43,6 +43,15 @@ func runGoC(wg *sync.WaitGroup, wait chan struct{}) {
 	}()
 }
 
+func findGoroutine(gs []*goroutines.Goroutine, caller string) *goroutines.Goroutine {
+	for _, g := range gs {
+		if g.Creator != nil && strings.HasPrefix(g.Creator.Call, caller) {
+			return g
+		}
+	}
+	return nil
+}
+
 func TestGet(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -69,7 +78,7 @@ func TestGet(t *testing.T) {
 
 	pkgPath, _ := gopkgpath.Caller()
 	pkgPath += "_test."
-	a := bycreator[pkgPath+"runGoA"]
+	a := findGoroutine(gs, pkgPath+"runGoA")
 	switch {
 	case a == nil:
 		for _, g := range gs {
@@ -78,22 +87,25 @@ func TestGet(t *testing.T) {
 			}
 		}
 		fmt.Printf("><>< %v\n", bycreator)
-		panic("runGoA is missing")
+		for k, v := range bycreator {
+			fmt.Printf(": %v: %v\n", k, v)
+		}
+		panic(pkgPath + "runGoA is missing")
 	case len(a.Stack) < 1:
 		t.Errorf("got %d expected at least 1: %s", len(a.Stack), goroutines.Format(a))
 	case !strings.HasPrefix(a.Stack[0].Call, pkgPath+"waitForIt"):
 		t.Errorf("got %s, wanted it to start with %swaitForIt",
 			a.Stack[0].Call, pkgPath)
 	}
-	b := bycreator[pkgPath+"runGoB"]
+	b := findGoroutine(gs, pkgPath+"runGoB")
 	if b == nil {
-		t.Errorf("runGoB is missing")
+		t.Errorf("%srunGoB is missing", pkgPath)
 	} else if len(b.Stack) < 5 {
 		t.Errorf("got %d expected at least 5: %s", len(b.Stack), goroutines.Format(b))
 	}
-	c := bycreator[pkgPath+"runGoC"]
+	c := findGoroutine(gs, pkgPath+"runGoC")
 	if c == nil {
-		t.Errorf("runGoC is missing")
+		t.Errorf("%srunGoC is missing", pkgPath)
 	} else if len(c.Stack) < 1 {
 		t.Errorf("got %d expected at least 1: %s", len(c.Stack), goroutines.Format(c))
 	}
@@ -125,11 +137,11 @@ func TestGetIgnore(t *testing.T) {
 	pkgPath, _ := gopkgpath.Caller()
 	pkgPath += "_test."
 	for _, ignored := range []string{"runGoA", "runGoB"} {
-		if _, ok := bycreator[pkgPath+ignored]; ok {
+		if findGoroutine(gs, pkgPath+ignored) != nil {
 			t.Errorf("%v should have been recorded", ignored)
 		}
 	}
-	if _, ok := bycreator[pkgPath+"runGoC"]; !ok {
+	if findGoroutine(gs, pkgPath+"runGoC") == nil {
 		t.Errorf("%v should have been recorded", "runGoC")
 	}
 }
