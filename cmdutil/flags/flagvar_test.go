@@ -154,7 +154,7 @@ func TestRegister(t *testing.T) {
 		`cmdline:"u64,0,uint64Var flag"`,
 		`cmdline:"f64,0,float64Var flag"`,
 		`cmdline:"doit,false,boolVar flag"`,
-		`cmdline:"wait,0,durationVar flag"`,
+		`cmdline:"wait,0s,durationVar flag"`,
 		`cmdline:"str,,stringVar flag"`,
 		`cmdline:"str-nq,,stringVar no default flag"`,
 		`cmdline:"some-var,,user defined var flag"`,
@@ -193,6 +193,7 @@ func TestRegister(t *testing.T) {
 		E   float64       `cmdline:"f64,2.03,float64Var flag"`
 		F   bool          `cmdline:"doit,true,boolVar flag"`
 		G   time.Duration `cmdline:"wait,2s,durationVar flag"`
+		H   time.Duration `cmdline:"wait-no-default,0s,durationVar flag"`
 		HQ  string        `cmdline:"str,'xx,yy',stringVar flag"`
 		HNQ string        `cmdline:"str-nq,xxyy,stringVar no default flag"`
 		V   myFlagVar     `cmdline:"some-var,22,user defined var flag"`
@@ -220,6 +221,7 @@ func TestRegister(t *testing.T) {
 		`cmdline:"f64,2.03,float64Var flag"`,
 		`cmdline:"doit,true,boolVar flag"`,
 		`cmdline:"wait,2s,durationVar flag"`,
+		`cmdline:"wait-no-default,0s,durationVar flag"`,
 		`cmdline:"str,'xx,yy',stringVar flag"`,
 		`cmdline:"str-nq,xxyy,stringVar no default flag"`,
 		`cmdline:"some-var,22,user defined var flag"`,
@@ -244,6 +246,7 @@ func TestRegister(t *testing.T) {
 	assert(s1.E, 2.03)
 	assert(s1.F, true)
 	assert(s1.G, 2*time.Second)
+	assert(s1.H, time.Duration(0))
 	assert(s1.HQ, "xx,yy")
 	assert(s1.HNQ, "xxyy")
 	assert(s1.V, myFlagVar(22))
@@ -263,6 +266,7 @@ func TestRegister(t *testing.T) {
 	assert(s1.E, 2.03)
 	assert(s1.F, true)
 	assert(s1.G, 2*time.Second)
+	assert(s1.H, time.Duration(0))
 	assert(s1.HQ, "xx,yy")
 	assert(s1.HNQ, "oh my")
 	assert(s1.V, myFlagVar(22))
@@ -277,6 +281,7 @@ func TestRegister(t *testing.T) {
 		"-f64=42.42",
 		"-doit=false",
 		"--wait=42h",
+		"--wait-no-default=42h",
 		"--str=42",
 		"--str-nq=42",
 		"--some-var=42",
@@ -292,6 +297,7 @@ func TestRegister(t *testing.T) {
 	assert(s1.E, 42.42)
 	assert(s1.F, false)
 	assert(s1.G, 42*time.Hour)
+	assert(s1.H, 42*time.Hour)
 	assert(s1.HQ, "42")
 	assert(s1.HNQ, "42")
 	assert(s1.V, myFlagVar(42))
