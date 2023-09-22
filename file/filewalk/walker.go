@@ -33,13 +33,15 @@ type Contents struct {
 
 // Walker implements the filesyste walk.
 type Walker struct {
-	fs         Filesystem
-	opts       options
-	contentsFn ContentsFunc
-	prefixFn   PrefixFunc
-	errs       *errors.M
-	nSyncOps   int64
-	tk         *timekeeper
+	fs                            Filesystem
+	opts                          options
+	contentsFn                    ContentsFunc
+	prefixFn                      PrefixFunc
+	errs                          *errors.M
+	nSyncOps                      int64
+	prefixStarted, prefixFinished int64
+	files                         int64
+	tk                            *timekeeper
 }
 
 // Option represents options accepted by Walker.
@@ -65,15 +67,12 @@ type Status struct {
 	// as a fallback when all available goroutines are already occupied.
 	SynchronousScans int64
 
-	// SlowPrefix is a prefix that took longer than a certain durection
+	// SlowPrefix is a prefix that took longer than a certain duration
 	// to scan. ScanDuration is the time spent scanning that prefix to
 	// date. A SlowPrefix may be reported as slow before it has completed
 	// scanning.
 	SlowPrefix   string
 	ScanDuration time.Duration
-
-	Prefixes int64
-	Files    int64
 }
 
 func WithReporting(ch chan<- Status, interval, slowThreshold time.Duration) Option {
@@ -94,17 +93,24 @@ func New(filesystem Filesystem, opts ...Option) *Walker {
 	return w
 }
 
+type FilesystemStats struct {
+	NumList, NumStat, NumFiles, NumPrefixes int64
+}
+
 // Filesystem represents the interface that is implemeted for filesystems to
 // be traversed/scanned.
 type Filesystem interface {
 	// Stat obtains Info for the specified path.
 	Stat(ctx context.Context, path string) (file.Info, error)
 
+	// Stats reports statistics on the filesystem's invocations and contents.
+	Stats() FilesystemStats
+
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
 	Join(components ...string) string
 
 	// List will send all of the contents of path over the supplied channel.
-	List(ctx context.Context, path string, ch chan<- Contents)
+	List(ctx context.Context, path string, dirsOnly bool, ch chan<- Contents)
 
 	// IsPermissionError returns true if the specified error, as returned
 	// by the filesystem's implementation, is a result of a permissions error.
@@ -137,17 +143,17 @@ func (w *Walker) recordError(path, op string, err error) {
 	w.errs.Append(&Error{path, op, err})
 }
 
-func (w *Walker) listLevel(ctx context.Context, path string, info file.Info) file.InfoList {
+func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, info file.Info) file.InfoList {
 	ch := make(chan Contents, w.opts.concurrency)
 
 	go func(path string) {
 		w.tk.add(path)
-		w.fs.List(ctx, path, ch)
+		w.fs.List(ctx, path, unchanged, ch)
 		close(ch)
 		w.tk.rm(path)
 	}(path)
 
-	children, err := w.contentsFn(ctx, path, info, ch)
+	children, err := w.contentsFn(ctx, path, unchanged, info, ch)
 
 	if err != nil {
 		w.recordError(path, "fileFunc", err)
@@ -164,18 +170,22 @@ func (w *Walker) listLevel(ctx context.Context, path string, info file.Info) fil
 
 // ContentsFunc is the type of the function that is called to consume the results
 // of scanning a single level in the filesystem hierarchy. It should read
-// the contents of the supplied channel until that channel is closed.
+// the contents of the supplied channel until that channel is closed. Note
+// unchanged is set to the value returned by the preceeding call to PrefixFunc
+// and indicates that no file content should be expected, only prefixes/directories.
 // Errors, such as failing to access the prefix, are delivered over the channel.
-type ContentsFunc func(ctx context.Context, prefix string, info file.Info, ch <-chan Contents) (file.InfoList, error)
+type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info file.Info, ch <-chan Contents) (file.InfoList, error)
 
 // PrefixFunc is the type of the function that is called to determine if a given
 // level in the filesystem hiearchy should be further examined or traversed.
-// If stop is true then traversal stops at this point, however if a list
-// of children is returned, they will be traversed directly rather than
-// obtaining the children from the filesystem. This allows for both
+// If stop is true then traversal stops at this point. If a list of children
+// is returned then this list is traversed directly rather than obtaining
+// the children from the filesystem. If unchanged is true, then traversal
+// continues, but files are ignored at the next level.
+// This allows for both
 // exclusions and incremental processing in conjunction with a database to
 // be implemented.
-type PrefixFunc func(ctx context.Context, prefix string, info file.Info, err error) (stop bool, children file.InfoList, returnErr error)
+type PrefixFunc func(ctx context.Context, prefix string, info file.Info, err error) (stop, unchanged bool, children file.InfoList, returnErr error)
 
 // Walk traverses the hierarchies specified by each of the roots calling
 // prefixFn and contentsFn as it goes. prefixFn will always be called
@@ -298,7 +308,7 @@ func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{})
 		return
 	}
 	info, err := w.fs.Stat(ctx, path)
-	stop, children, err := w.prefixFn(ctx, path, info, err)
+	stop, unchanged, children, err := w.prefixFn(ctx, path, info, err)
 	w.recordError(path, "stat", err)
 	if stop {
 		return
@@ -307,7 +317,7 @@ func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{})
 		w.walkChildren(ctx, path, children, limitCh)
 		return
 	}
-	children = w.listLevel(ctx, path, info)
+	children = w.listLevel(ctx, path, unchanged, info)
 	if len(children) > 0 {
 		w.walkChildren(ctx, path, children, limitCh)
 	}
@@ -320,7 +330,8 @@ func (w *Walker) report(ctx context.Context, stopCh <-chan struct{}) bool {
 	case <-stopCh:
 		return true
 	case w.opts.reportCh <- Status{
-		SynchronousScans: atomic.LoadInt64(&w.nSyncOps)}:
+		SynchronousScans: atomic.LoadInt64(&w.nSyncOps),
+	}:
 	default:
 	}
 	return w.tk.report()

@@ -23,28 +23,17 @@ import (
 var localTestTree string
 
 func TestMain(m *testing.M) {
-	tmpDir, err := os.MkdirTemp("", "filewalk")
-	if err != nil {
-		fmt.Printf("failed to create testdir: %v", err)
-		os.RemoveAll(tmpDir)
-		os.Exit(0)
-	}
-	if err := createTestDir(tmpDir); err != nil {
-		fmt.Printf("failed to create testdir: %v", err)
-		os.RemoveAll(tmpDir)
-		os.Exit(0)
-	}
-	localTestTree = tmpDir
+	localTestTree = createTestTree()
 	code := m.Run()
-	os.RemoveAll(tmpDir)
+	os.RemoveAll(localTestTree)
 	os.Exit(code)
 }
 
-func scan(sc filewalk.Filesystem, ch chan filewalk.Contents, dir string) (dirNames, fileNames []string, errors []error, info map[string]file.Info) {
+func scan(sc filewalk.Filesystem, ch chan filewalk.Contents, dirsOnly bool, dir string) (dirNames, fileNames []string, errors []error, info map[string]file.Info) {
 	ctx := context.Background()
 	info = map[string]file.Info{}
 	go func() {
-		sc.List(ctx, dir, ch)
+		sc.List(ctx, dir, dirsOnly, ch)
 		close(ch)
 	}()
 	for c := range ch {
@@ -69,7 +58,7 @@ func TestLocalFilesystem(t *testing.T) {
 	sc := filewalk.LocalFilesystem(1)
 	ch := make(chan filewalk.Contents, 1)
 
-	dirs, files, errors, info := scan(sc, ch, localTestTree)
+	dirs, files, errors, info := scan(sc, ch, false, localTestTree)
 
 	expectedDirNames := []string{"a0", "b0", "inaccessible-dir"}
 	expectedFileNames := []string{"f0", "f1", "f2", "la0", "la1", "lf0"}
@@ -116,7 +105,7 @@ func TestLocalFilesystem(t *testing.T) {
 
 	ch = make(chan filewalk.Contents)
 
-	_, _, errors, _ = scan(sc, ch, sc.Join(localTestTree, "inaccessible-dir"))
+	_, _, errors, _ = scan(sc, ch, false, sc.Join(localTestTree, "inaccessible-dir"))
 
 	if got, want := len(errors), 1; got != want {
 		t.Fatalf("got %v, want %v", got, want)
@@ -125,6 +114,33 @@ func TestLocalFilesystem(t *testing.T) {
 	if got, want := sc.IsPermissionError(errors[0]), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	// directories only
+	ch = make(chan filewalk.Contents)
+
+	dirs, files, errors, info = scan(sc, ch, true, localTestTree)
+	if got, want := dirs, expectedDirNames; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := len(files), 0; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+}
+
+func createTestTree() string {
+	tmpDir, err := os.MkdirTemp("", "filewalk")
+	if err != nil {
+		fmt.Printf("failed to create testdir: %v", err)
+		os.RemoveAll(tmpDir)
+		os.Exit(0)
+	}
+	if err := createTestDir(tmpDir); err != nil {
+		fmt.Printf("failed to create testdir: %v", err)
+		os.RemoveAll(tmpDir)
+		os.Exit(0)
+	}
+	return tmpDir
 }
 
 func createTestDir(tmpDir string) error {

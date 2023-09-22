@@ -7,8 +7,10 @@ package file
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"time"
 )
@@ -218,6 +220,78 @@ func (fi *Info) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	fi.fromInfo(tmp)
+	return nil
+}
+
+func appendString(buf []byte, s string) []byte {
+	buf = binary.AppendVarint(buf, int64(len(s)))
+	return append(buf, s...)
+}
+
+func decodeString(data []byte) (int, string) {
+	l, n := binary.Varint(data)
+	return n + int(l), string(data[n : n+int(l)])
+}
+
+func (fi *Info) MarshalBinary() ([]byte, error) {
+	data := make([]byte, 0, 100)
+	data = append(data, 0x1)                                       // version
+	data = appendString(data, fi.name)                             // name
+	data = binary.AppendVarint(data, fi.size)                      // size
+	data = binary.LittleEndian.AppendUint32(data, uint32(fi.mode)) // mode
+	out, err := fi.modTime.MarshalBinary()                         // time
+	if err != nil {
+		return nil, err
+	}
+	data = binary.AppendVarint(data, int64(len(out)))
+	data = append(data, out...)
+
+	var mode uint8
+	if fi.isDir {
+		mode |= 1
+	}
+	if fi.isLink {
+		mode |= 2
+	}
+	data = append(data, mode)           // isDir, isLink
+	data = appendString(data, fi.user)  // user
+	data = appendString(data, fi.group) // group
+	return data, nil
+}
+
+func (fi *Info) UnmarshalBinary(data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("file.Info: insufficient data")
+	}
+	if data[0] != 0x1 {
+		return fmt.Errorf("file.Info: invalid version of binary encoding: got %x, want %x", data[0], 0x1)
+	}
+	data = data[1:] // version
+	var n int
+	n, fi.name = decodeString(data) // name
+	data = data[n:]
+	fi.size, n = binary.Varint(data) // size
+	data = data[n:]
+
+	fi.mode = fs.FileMode(binary.LittleEndian.Uint32(data)) // mode
+	data = data[4:]
+
+	ts, n := binary.Varint(data) // time
+	data = data[n:]
+	if err := fi.modTime.UnmarshalBinary(data[0:ts]); err != nil { // time
+		return err
+	}
+	data = data[ts:]
+
+	if data[0]&1 != 0 {
+		fi.isDir = true
+	}
+	if data[0]&2 != 0 {
+		fi.isLink = true
+	}
+	data = data[1:]
+	n, fi.user = decodeString(data)
+	_, fi.group = decodeString(data[n:])
 	return nil
 }
 

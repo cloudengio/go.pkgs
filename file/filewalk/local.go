@@ -6,21 +6,26 @@ package filewalk
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"cloudeng.io/file"
 )
 
 type local struct {
-	scanSize int
+	scanSize    int
+	numList     int64
+	numStat     int64
+	numPrefixes int64
+	numFiles    int64
 }
 
 func createInfo(path string, fi fs.FileInfo, symlinkSize int64) file.Info {
 	userID, groupID := getUserAndGroupID(path, fi)
-
 	size := fi.Size()
 	if size == 0 && symlinkSize > 0 {
 		size = symlinkSize
@@ -40,27 +45,52 @@ func createInfo(path string, fi fs.FileInfo, symlinkSize int64) file.Info {
 	)
 }
 
-func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
+func (l *local) Stats() FilesystemStats {
+	return FilesystemStats{
+		NumList:     atomic.LoadInt64(&l.numList),
+		NumStat:     atomic.LoadInt64(&l.numStat),
+		NumFiles:    atomic.LoadInt64(&l.numFiles),
+		NumPrefixes: atomic.LoadInt64(&l.numPrefixes),
+	}
+}
+
+func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- Contents) {
 	f, err := os.Open(path)
 	if err != nil {
 		ch <- Contents{Path: path, Err: err}
 		return
 	}
 	defer f.Close()
+	atomic.AddInt64(&l.numList, 1)
 	for {
 		select {
 		case <-ctx.Done():
 			ch <- Contents{Path: path, Err: ctx.Err()}
 		default:
 		}
-		infos, err := f.Readdir(l.scanSize)
-		if len(infos) > 0 {
-			files := make([]file.Info, 0, len(infos))
+		dirEntries, err := f.ReadDir(l.scanSize)
+		if len(dirEntries) > 0 {
+			var files []file.Info
+			if !dirsOnly {
+				files = make([]file.Info, 0, len(dirEntries))
+			}
 			dirs := make([]file.Info, 0, 10)
-			for _, info := range infos {
-				if info.IsDir() {
+			fmt.Printf("%s: # dir entries %v\n", path, len(dirEntries))
+			for _, de := range dirEntries {
+				if de.IsDir() {
+					info, err := de.Info()
+					if err != nil {
+						break
+					}
 					dirs = append(dirs, createInfo(path, info, -1))
 					continue
+				}
+				if dirsOnly {
+					continue
+				}
+				info, err := de.Info()
+				if err != nil {
+					break
 				}
 				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
 					s, err := os.Readlink(filepath.Join(path, info.Name()))
@@ -76,6 +106,8 @@ func (l *local) List(ctx context.Context, path string, ch chan<- Contents) {
 				}
 				files = append(files, createInfo(path, info, size))
 			}
+			atomic.AddInt64(&l.numFiles, int64(len(files)))
+			atomic.AddInt64(&l.numPrefixes, int64(len(dirs)))
 			ch <- Contents{
 				Path:     path,
 				Children: dirs,
@@ -98,6 +130,7 @@ func (l *local) Stat(_ context.Context, path string) (file.Info, error) {
 	if err != nil {
 		return file.Info{}, err
 	}
+	atomic.AddInt64(&l.numStat, 1)
 	return createInfo(path, info, -1), nil
 }
 
