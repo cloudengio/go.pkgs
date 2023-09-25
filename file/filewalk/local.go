@@ -6,54 +6,65 @@ package filewalk
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 
 	"cloudeng.io/file"
 )
 
 type local struct {
-	scanSize    int
-	numList     int64
-	numStat     int64
-	numPrefixes int64
-	numFiles    int64
+	//scanSize int
+	// numList  int64
+	// numStat  int64
 }
 
-func createInfo(path string, fi fs.FileInfo, symlinkSize int64) file.Info {
-	userID, groupID := getUserAndGroupID(path, fi)
-	size := fi.Size()
-	if size == 0 && symlinkSize > 0 {
-		size = symlinkSize
-	}
-	return *file.NewInfo(
-		fi.Name(),
-		size,
-		fi.Mode(),
-		fi.ModTime(),
-		file.InfoOption{
-			User:    userID,
-			Group:   groupID,
-			IsDir:   fi.IsDir(),
-			IsLink:  fi.Mode()&os.ModeSymlink == os.ModeSymlink,
-			SysInfo: fi,
-		},
-	)
-}
-
+/*
 func (l *local) Stats() FilesystemStats {
 	return FilesystemStats{
-		NumList:     atomic.LoadInt64(&l.numList),
-		NumStat:     atomic.LoadInt64(&l.numStat),
-		NumFiles:    atomic.LoadInt64(&l.numFiles),
-		NumPrefixes: atomic.LoadInt64(&l.numPrefixes),
+		NumList: atomic.LoadInt64(&l.numList),
+		NumStat: atomic.LoadInt64(&l.numStat),
 	}
+}*/
+
+type scanner struct {
+	err     error
+	file    *os.File
+	entries []fs.DirEntry
 }
 
+func (s *scanner) ReadDir() []fs.DirEntry {
+	return s.entries
+}
+
+func (s *scanner) Scan(_ context.Context, n int) bool {
+	dirEntries, err := s.file.ReadDir(n)
+	if err != nil {
+		s.file.Close()
+		if err = io.EOF; err != nil {
+			return false
+		}
+		s.err = err
+		return false
+	}
+	s.entries = dirEntries
+	return true
+}
+
+func (s *scanner) Err() error {
+	return s.err
+}
+
+func NewScanner(path string) Scanner {
+	f, err := os.Open(path)
+	if err != nil {
+		return &scanner{err: err}
+	}
+	return &scanner{file: f}
+}
+
+/*
 func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- Contents) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -61,7 +72,7 @@ func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- 
 		return
 	}
 	defer f.Close()
-	atomic.AddInt64(&l.numList, 1)
+	//	atomic.AddInt64(&l.numList, 1)
 	for {
 		select {
 		case <-ctx.Done():
@@ -75,10 +86,10 @@ func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- 
 				files = make([]file.Info, 0, len(dirEntries))
 			}
 			dirs := make([]file.Info, 0, 10)
-			fmt.Printf("%s: # dir entries %v\n", path, len(dirEntries))
 			for _, de := range dirEntries {
 				if de.IsDir() {
 					info, err := de.Info()
+					//					atomic.AddInt64(&l.numStat, 1)
 					if err != nil {
 						break
 					}
@@ -89,6 +100,7 @@ func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- 
 					continue
 				}
 				info, err := de.Info()
+				//				atomic.AddInt64(&l.numStat, 1)
 				if err != nil {
 					break
 				}
@@ -102,12 +114,10 @@ func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- 
 				}
 				size := int64(-1)
 				if (info.Mode()&os.ModeSymlink) == os.ModeSymlink && info.Size() == 0 {
-					size = symlinkSize(path, info)
+					size, _ = symlinkSize(path, info)
 				}
 				files = append(files, createInfo(path, info, size))
 			}
-			atomic.AddInt64(&l.numFiles, int64(len(files)))
-			atomic.AddInt64(&l.numPrefixes, int64(len(dirs)))
 			ch <- Contents{
 				Path:     path,
 				Children: dirs,
@@ -123,15 +133,42 @@ func (l *local) List(ctx context.Context, path string, dirsOnly bool, ch chan<- 
 			return
 		}
 	}
+}*/
+
+func (l *local) DirScanner(path string) DirScanner {
+	return NewDirScanner(path)
 }
 
-func (l *local) Stat(_ context.Context, path string) (file.Info, error) {
+/*
+func createInfo(path string, fi fs.FileInfo, symlinkSize int64) file.Info {
+	size := fi.Size()
+	if size == 0 && symlinkSize > 0 {
+		size = symlinkSize
+	}
+	return file.NewInfo(
+		fi.Name(),
+		size,
+		fi.Mode(),
+		fi.ModTime(),
+		fi)
+}*/
+
+func (l *local) Stat(ctx context.Context, path string) (file.Info, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return file.Info{}, err
+	}
+	//	atomic.AddInt64(&l.numStat, 1)
+	return file.NewInfoFromFileInfo(info), nil
+}
+
+func (l *local) LStat(ctx context.Context, path string) (file.Info, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return file.Info{}, err
 	}
-	atomic.AddInt64(&l.numStat, 1)
-	return createInfo(path, info, -1), nil
+	//	atomic.AddInt64(&l.numStat, 1)
+	return file.NewInfoFromFileInfo(info), nil
 }
 
 func (l *local) Join(components ...string) string {
@@ -146,6 +183,6 @@ func (l *local) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
-func LocalFilesystem(scanSize int) Filesystem {
-	return &local{scanSize: scanSize}
+func LocalFilesystem() FS {
+	return &local{}
 }

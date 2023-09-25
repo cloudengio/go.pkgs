@@ -12,6 +12,6 @@ import (
 )
 
 // symlinkSize returns the size of the symlinks.
-func symlinkSize(_ string, info os.FileInfo) int64 {
-	return info.Size()
+func symlinkSize(_ string, info os.FileInfo) (int64, error) {
+	return info.Size(), nil
 }

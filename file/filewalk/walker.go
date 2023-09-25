@@ -12,6 +12,7 @@ package filewalk
 
 import (
 	"context"
+	"io/fs"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -22,18 +23,9 @@ import (
 	"cloudeng.io/sync/errgroup"
 )
 
-// Contents represents the contents of the filesystem at the level represented
-// by Path.
-type Contents struct {
-	Path     string      `json:"p,omitempty"` // The name of the level being scanned.
-	Children []file.Info `json:"c,omitempty"` // Info on each of the next levels in the hierarchy.
-	Files    []file.Info `json:"f,omitempty"` // Info for the files at this level.
-	Err      error       `json:"e,omitempty"` // Non-nil if an error occurred.
-}
-
 // Walker implements the filesyste walk.
 type Walker struct {
-	fs                            Filesystem
+	fs                            FS
 	opts                          options
 	contentsFn                    ContentsFunc
 	prefixFn                      PrefixFunc
@@ -49,6 +41,7 @@ type Option func(o *options)
 
 type options struct {
 	concurrency    int
+	scanSize       int
 	reportCh       chan<- Status
 	reportInterval time.Duration
 	slowThreshold  time.Duration
@@ -62,6 +55,15 @@ func WithConcurrency(n int) Option {
 	}
 }
 
+// WithScanSize sets the number of prefix/directory entries to be scanned
+// in a single operation.
+func WithScanSize(n int) Option {
+	return func(o *options) {
+		o.scanSize = n
+	}
+}
+
+// Status is used to communicate the status of in-process Walk operation.
 type Status struct {
 	// SynchronousOps is the number of Scans that were performed synchronously
 	// as a fallback when all available goroutines are already occupied.
@@ -75,42 +77,48 @@ type Status struct {
 	ScanDuration time.Duration
 }
 
+// WithReporting can be used to enable reporting of slow and synchronous
+// prefix/directory scans.
 func WithReporting(ch chan<- Status, interval, slowThreshold time.Duration) Option {
 	return func(o *options) {
 		o.reportCh = ch
-		o.slowThreshold = slowThreshold
 		o.reportInterval = interval
+		o.slowThreshold = slowThreshold
 	}
 }
 
 // New creates a new Walker instance.
-func New(filesystem Filesystem, opts ...Option) *Walker {
-	w := &Walker{fs: filesystem, errs: &errors.M{}}
+func New(fs FS, opts ...Option) *Walker {
+	w := &Walker{fs: fs, errs: &errors.M{}}
 	for _, fn := range opts {
 		fn(&w.opts)
+	}
+	if w.opts.scanSize == 0 {
+		w.opts.scanSize = 1000
 	}
 	w.tk = newTimekeeper(w.opts)
 	return w
 }
 
-type FilesystemStats struct {
-	NumList, NumStat, NumFiles, NumPrefixes int64
+type Scanner interface {
+	Scan(ctx context.Context, n int) bool
+	ReadDir() []fs.DirEntry
+	Err() error
 }
 
-// Filesystem represents the interface that is implemeted for filesystems to
+// FS represents the interface that is implemeted for filesystems to
 // be traversed/scanned.
-type Filesystem interface {
-	// Stat obtains Info for the specified path.
+type FS interface {
+	// Stat will follow symlinks.
 	Stat(ctx context.Context, path string) (file.Info, error)
 
-	// Stats reports statistics on the filesystem's invocations and contents.
-	Stats() FilesystemStats
+	// LStat will not follow symlinks.
+	LStat(ctx context.Context, path string) (file.Info, error)
+
+	Scanner(path string) Scanner
 
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
 	Join(components ...string) string
-
-	// List will send all of the contents of path over the supplied channel.
-	List(ctx context.Context, path string, dirsOnly bool, ch chan<- Contents)
 
 	// IsPermissionError returns true if the specified error, as returned
 	// by the filesystem's implementation, is a result of a permissions error.
@@ -148,7 +156,13 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 
 	go func(path string) {
 		w.tk.add(path)
-		w.fs.List(ctx, path, unchanged, ch)
+		sc := w.fs.Scanner(path)
+		for sc.Scan(ctx, w.opts.scanSize) {
+			ch <- newContents(sc.ReadDir())
+		}
+		if sc.Err() != nil {
+			ch <- Contents{Err: sc.Err()}
+		}
 		close(ch)
 		w.tk.rm(path)
 	}(path)
@@ -168,16 +182,16 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 	return children
 }
 
-// ContentsFunc is the type of the function that is called to consume the results
-// of scanning a single level in the filesystem hierarchy. It should read
-// the contents of the supplied channel until that channel is closed. Note
-// unchanged is set to the value returned by the preceeding call to PrefixFunc
-// and indicates that no file content should be expected, only prefixes/directories.
+// ContentsFunc is called to consume the results of scanning a single level in the
+// filesystem hierarchy. It should read the contents of the supplied channel until
+// that channel is closed. Note unchanged is set to the value returned by the preceeding
+// call to PrefixFunc and indicates that no file content should be expected, only
+// prefixes/directories.
 // Errors, such as failing to access the prefix, are delivered over the channel.
 type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info file.Info, ch <-chan Contents) (file.InfoList, error)
 
-// PrefixFunc is the type of the function that is called to determine if a given
-// level in the filesystem hiearchy should be further examined or traversed.
+// PrefixFunc is called to determine if a given level in the filesystem hiearchy
+// should be further examined or traversed.
 // If stop is true then traversal stops at this point. If a list of children
 // is returned then this list is traversed directly rather than obtaining
 // the children from the filesystem. If unchanged is true, then traversal
@@ -188,8 +202,8 @@ type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info 
 type PrefixFunc func(ctx context.Context, prefix string, info file.Info, err error) (stop, unchanged bool, children file.InfoList, returnErr error)
 
 // Walk traverses the hierarchies specified by each of the roots calling
-// prefixFn and contentsFn as it goes. prefixFn will always be called
-// before contentsFn for the same prefix, but no other ordering guarantees
+// prefixFn and entriesFn as it goes. prefixFn will always be called
+// before entriesFn for the same prefix, but no other ordering guarantees
 // are provided.
 func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn ContentsFunc, roots ...string) error {
 	rootCtx := ctx
@@ -298,7 +312,6 @@ func (w *Walker) walkChildren(ctx context.Context, path string, children []file.
 		}()
 	}
 	wg.Wait()
-
 }
 
 func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{}) {
@@ -307,7 +320,7 @@ func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{})
 	case <-ctx.Done():
 		return
 	}
-	info, err := w.fs.Stat(ctx, path)
+	info, err := w.fs.LStat(ctx, path)
 	stop, unchanged, children, err := w.prefixFn(ctx, path, info, err)
 	w.recordError(path, "stat", err)
 	if stop {
@@ -334,7 +347,8 @@ func (w *Walker) report(ctx context.Context, stopCh <-chan struct{}) bool {
 	}:
 	default:
 	}
-	return w.tk.report()
+	w.tk.report()
+	return false
 }
 
 func newTimekeeper(opts options) *timekeeper {
@@ -373,9 +387,9 @@ func (tk *timekeeper) rm(prefix string) {
 	delete(tk.prefixes, prefix)
 }
 
-func (tk *timekeeper) report() bool {
+func (tk *timekeeper) report() {
 	if tk.slow == 0 {
-		return false
+		return
 	}
 	tk.Lock()
 	defer tk.Unlock()
@@ -387,5 +401,5 @@ func (tk *timekeeper) report() bool {
 			}
 		}
 	}
-	return false
+	return
 }

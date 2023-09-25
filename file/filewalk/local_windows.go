@@ -14,10 +14,10 @@ import (
 
 // symlinkSize returns the size of the symlinks. On windows we need to read
 // the symlink to determine its size on windows.
-func symlinkSize(path string, info os.FileInfo) int64 {
+func symlinkSize(path string, info os.FileInfo) (int64, error) {
 	s, err := os.Readlink(filepath.Join(path, info.Name()))
 	if err != nil {
-		return info.Size()
+		return info.Size(), err
 	}
-	return int64(len(s))
+	return int64(len(s)), nil
 }

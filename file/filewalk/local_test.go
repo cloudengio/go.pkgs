@@ -7,11 +7,13 @@ package filewalk_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 
 	"cloudeng.io/errors"
@@ -29,25 +31,28 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func scan(sc filewalk.Filesystem, ch chan filewalk.Contents, dirsOnly bool, dir string) (dirNames, fileNames []string, errors []error, info map[string]file.Info) {
+func scan(sc filewalk.FS, dir string) (dirNames, fileNames []string, errors []error, info map[string]file.Info) {
 	ctx := context.Background()
 	info = map[string]file.Info{}
-	go func() {
-		sc.List(ctx, dir, dirsOnly, ch)
-		close(ch)
-	}()
-	for c := range ch {
-		for _, child := range c.Children {
-			dirNames = append(dirNames, child.Name())
-			info[child.Name()] = child
+	ds := sc.DirScanner(dir)
+	for ds.Scan(ctx, 1) {
+		entries := ds.ReadDir()
+		for _, entry := range entries {
+			fi, err := file.NewInfoFromDirEntry(entry)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			info[entry.Name()] = fi
+			if entry.IsDir() {
+				dirNames = append(dirNames, entry.Name())
+			} else {
+				fileNames = append(fileNames, entry.Name())
+			}
 		}
-		for _, file := range c.Files {
-			fileNames = append(fileNames, file.Name())
-			info[file.Name()] = file
-		}
-		if c.Err != nil {
-			errors = append(errors, c.Err)
-		}
+	}
+	if err := ds.Err(); err != nil {
+		errors = append(errors, err)
 	}
 	sort.Strings(dirNames)
 	sort.Strings(fileNames)
@@ -55,10 +60,9 @@ func scan(sc filewalk.Filesystem, ch chan filewalk.Contents, dirsOnly bool, dir 
 }
 
 func TestLocalFilesystem(t *testing.T) {
-	sc := filewalk.LocalFilesystem(1)
-	ch := make(chan filewalk.Contents, 1)
+	sc := filewalk.LocalFilesystem()
 
-	dirs, files, errors, info := scan(sc, ch, false, localTestTree)
+	dirs, files, errors, info := scan(sc, localTestTree)
 
 	expectedDirNames := []string{"a0", "b0", "inaccessible-dir"}
 	expectedFileNames := []string{"f0", "f1", "f2", "la0", "la1", "lf0"}
@@ -77,13 +81,13 @@ func TestLocalFilesystem(t *testing.T) {
 
 	for _, d := range expectedDirNames {
 		i := info[d]
-		if _, ok := i.Sys().(os.FileInfo); !ok {
+		if _, ok := i.Sys().(*syscall.Stat_t); !ok {
 			t.Errorf("%v: wrong type for Sys %T", d, i.Sys())
 		}
 		if got, want := i.IsDir(), true; got != want {
 			t.Errorf("%v: got %v, want %v", d, got, want)
 		}
-		if got, want := i.IsLink(), false; got != want {
+		if got, want := i.Mode()&fs.ModeSymlink == fs.ModeSymlink, false; got != want {
 			t.Errorf("%v: got %v, want %v", d, got, want)
 		}
 	}
@@ -98,31 +102,18 @@ func TestLocalFilesystem(t *testing.T) {
 				t.Errorf("%v: got %v, want %v", f, got, want)
 			}
 		}
-		if got, want := i.IsLink(), strings.HasPrefix(f, "l"); got != want {
+		if got, want := i.Mode()&fs.ModeSymlink == fs.ModeSymlink, strings.HasPrefix(f, "l"); got != want {
 			t.Errorf("%v: got %v, want %v", f, got, want)
 		}
 	}
 
-	ch = make(chan filewalk.Contents)
-
-	_, _, errors, _ = scan(sc, ch, false, sc.Join(localTestTree, "inaccessible-dir"))
+	_, _, errors, _ = scan(sc, sc.Join(localTestTree, "inaccessible-dir"))
 
 	if got, want := len(errors), 1; got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 
-	if got, want := sc.IsPermissionError(errors[0]), true; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	// directories only
-	ch = make(chan filewalk.Contents)
-
-	dirs, files, errors, info = scan(sc, ch, true, localTestTree)
-	if got, want := dirs, expectedDirNames; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := len(files), 0; got != want {
+	if got, want := os.IsPermission(errors[0]), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

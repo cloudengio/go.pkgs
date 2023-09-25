@@ -17,7 +17,7 @@ import (
 	"cloudeng.io/file"
 )
 
-func gobRoundTrip(t *testing.T, fi *file.Info) file.Info {
+func gobRoundTrip(t *testing.T, fi file.Info) file.Info {
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
 	if err := enc.Encode(fi); err != nil {
@@ -31,7 +31,7 @@ func gobRoundTrip(t *testing.T, fi *file.Info) file.Info {
 	return nfi
 }
 
-func jsonRoundTrip(t *testing.T, fi *file.Info) file.Info {
+func jsonRoundTrip(t *testing.T, fi file.Info) file.Info {
 	buf, err := json.Marshal(fi)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func jsonRoundTrip(t *testing.T, fi *file.Info) file.Info {
 	return nfi
 }
 
-func binaryRoundTrip(t *testing.T, fi *file.Info) file.Info {
+func binaryRoundTrip(t *testing.T, fi file.Info) file.Info {
 	buf, err := fi.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
@@ -60,15 +60,9 @@ func TestEncodeDecode(t *testing.T) {
 	sysinfo := struct{ name string }{"foo"}
 
 	now := time.Now()
-	fi := file.NewInfo("ab", 32, 0700, now, file.InfoOption{
-		User:    "user",
-		Group:   "group",
-		IsDir:   true,
-		IsLink:  true,
-		SysInfo: &sysinfo,
-	})
+	fi := file.NewInfo("ab", 32, 0700|fs.ModeDir, now, "user", "group", &sysinfo)
 
-	type roundTripper func(*testing.T, *file.Info) file.Info
+	type roundTripper func(*testing.T, file.Info) file.Info
 
 	for _, fn := range []roundTripper{
 		jsonRoundTrip, gobRoundTrip, binaryRoundTrip,
@@ -80,16 +74,13 @@ func TestEncodeDecode(t *testing.T) {
 		if got, want := nfi.Size(), int64(32); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		if got, want := nfi.Mode(), fs.FileMode(0700); got != want {
+		if got, want := nfi.Mode().Perm(), fs.FileMode(0700).Perm(); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 		if got, want := nfi.ModTime(), now; !got.Equal(want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 		if got, want := nfi.IsDir(), true; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-		if got, want := nfi.IsLink(), true; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 		if got, want := nfi.Sys(), any(nil); got != want {
@@ -130,25 +121,27 @@ func jsonRoundTripList(t *testing.T, fi file.InfoList) file.InfoList {
 	return nfi
 }
 
+func binaryRoundTripList(t *testing.T, fi file.InfoList) file.InfoList {
+
+	buf, err := fi.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var nfi file.InfoList
+	if err := nfi.UnmarshalBinary(buf); err != nil {
+		t.Fatal(err)
+	}
+	return nfi
+}
+
 func TestEncodeDecodeList(t *testing.T) {
 
 	sysinfo := struct{ name string }{"foo"}
 	now := time.Now()
 	var fl file.InfoList
-	fl = fl.Append("0", 0, 0700, now, file.InfoOption{
-		User:    "user0",
-		Group:   "group0",
-		IsDir:   true,
-		IsLink:  true,
-		SysInfo: &sysinfo,
-	})
-	fl = fl.Append("1", 1, 0700, now.Add(time.Minute), file.InfoOption{
-		User:    "user1",
-		Group:   "group1",
-		IsDir:   true,
-		IsLink:  true,
-		SysInfo: &sysinfo,
-	})
+	fl = append(fl,
+		file.NewInfo("a0", 0, 0700|fs.ModeDir, now, "user0", "group0", &sysinfo),
+		file.NewInfo("a1", 1, 0700|fs.ModeDir, now.Add(time.Minute), "user1", "group1", &sysinfo))
 
 	if got, want := len(fl), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -157,29 +150,26 @@ func TestEncodeDecodeList(t *testing.T) {
 	type roundTripper func(*testing.T, file.InfoList) file.InfoList
 
 	for _, fn := range []roundTripper{
-		jsonRoundTripList, gobRoundTripList,
+		jsonRoundTripList, gobRoundTripList, binaryRoundTripList,
 	} {
 		nl := fn(t, fl)
 		for i := 0; i <= 1; i++ {
 			nfi := nl[i]
 			id := fmt.Sprintf("%v", i)
 			mt := now.Add(time.Minute * time.Duration(i))
-			if got, want := nfi.Name(), id; got != want {
+			if got, want := nfi.Name(), "a"+id; got != want {
 				t.Errorf("got %v, want %v", got, want)
 			}
 			if got, want := nfi.Size(), int64(i); got != want {
 				t.Errorf("got %v, want %v", got, want)
 			}
-			if got, want := nfi.Mode(), fs.FileMode(0700); got != want {
+			if got, want := nfi.Mode().Perm(), fs.FileMode(0700); got != want {
 				t.Errorf("got %v, want %v", got, want)
 			}
 			if got, want := nfi.ModTime(), mt; !got.Equal(want) {
 				t.Errorf("got %v, want %v", got, want)
 			}
 			if got, want := nfi.IsDir(), true; got != want {
-				t.Errorf("got %v, want %v", got, want)
-			}
-			if got, want := nfi.IsLink(), true; got != want {
 				t.Errorf("got %v, want %v", got, want)
 			}
 			if got, want := nfi.Sys(), any(nil); got != want {
