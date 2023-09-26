@@ -150,12 +150,62 @@ func (w *Walker) recordError(path, op string, err error) {
 	w.errs.Append(&Error{path, op, err})
 }
 
+/*
+func (w *Walker) readNext(ctx context.Context, path string, sc LevelScanner) (Contents, bool) {
+	w.tk.add(path)
+	defer w.tk.rm(path)
+	if sc.Scan(ctx, w.opts.scanSize) {
+		return sc.Contents(), false
+	}
+	return Contents{Err: sc.Err()}, true
+}*/
+
 func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, info file.Info) file.InfoList {
+	w.tk.add(path)
+	defer w.tk.rm(path)
+	var nextLevel file.InfoList
+	sc := w.fs.LevelScanner(path)
+	for sc.Scan(ctx, w.opts.scanSize) {
+		children, err := w.contentsFn(ctx, path, unchanged, info, sc.Contents(), nil)
+		if err != nil {
+			w.recordError(path, "contentsFunc", err)
+			return nil
+		}
+		nextLevel = append(nextLevel, children...)
+	}
+	if err := sc.Err(); err != nil {
+		if _, err := w.contentsFn(ctx, path, unchanged, info, Contents{Err: err}, nil); err != nil {
+			w.recordError(path, "contentsFunc", err)
+			return nil
+		}
+	}
+	return nextLevel
+}
+
+/*
+	// First scan is synchronous. Subsequent scans are asynchronous.
+	contents, done := w.readNext(ctx, path, sc)
+	children, err := w.contentsFn(ctx, path, unchanged, info, contents, nil)
+	if err != nil || done {
+		w.recordError(path, "contentsFunc", err)
+		return nil
+	}
+
+	// Subsequent scans, if any, are asynchronous.
+	contents, done = w.readNext(ctx, path, sc)
+	if done {
+		if contents.Err == nil {
+			return children
+		}
+
+		return children
+	}
+
 	ch := make(chan Contents, w.opts.concurrency)
 
-	go func(path string) {
+	go func(contents Contents, path string) {
 		w.tk.add(path)
-		sc := w.fs.LevelScanner(path)
+		ch <- contents
 		for sc.Scan(ctx, w.opts.scanSize) {
 			ch <- sc.Contents()
 		}
@@ -164,22 +214,21 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 		}
 		close(ch)
 		w.tk.rm(path)
-	}(path)
+	}(contents, path)
 
-	children, err := w.contentsFn(ctx, path, unchanged, info, ch)
-
-	if err != nil {
-		w.recordError(path, "fileFunc", err)
-		return nil
-	}
-
+	tmp, err := w.contentsFn(ctx, path, unchanged, info, Contents{}, ch)
+*/
+/*	if err != nil {
+	w.recordError(path, "contentsFunc", err)
+	return nil
+}*/
+//	children = append(children, tmp...)
+/*
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-ch:
-	}
-	return children
-}
+	}*/
 
 // ContentsFunc is called to consume the results of scanning a single level in the
 // filesystem hierarchy. It should read the contents of the supplied channel until
@@ -187,7 +236,7 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 // call to PrefixFunc and indicates that no file content should be expected, only
 // prefixes/directories.
 // Errors, such as failing to access the prefix, are delivered over the channel.
-type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info file.Info, ch <-chan Contents) (file.InfoList, error)
+type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info file.Info, contents Contents, ch <-chan Contents) (file.InfoList, error)
 
 // PrefixFunc is called to determine if a given level in the filesystem hiearchy
 // should be further examined or traversed.
@@ -320,6 +369,9 @@ func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{})
 		return
 	}
 	info, err := w.fs.LStat(ctx, path)
+
+	// this will break - test with a link a to a directory
+
 	stop, unchanged, children, err := w.prefixFn(ctx, path, info, err)
 	w.recordError(path, "stat", err)
 	if stop {

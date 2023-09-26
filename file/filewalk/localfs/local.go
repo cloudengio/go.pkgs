@@ -35,6 +35,7 @@ func (s *scanner) Contents() filewalk.Contents {
 func (s *scanner) Scan(_ context.Context, n int) bool {
 	dirEntries, err := s.file.ReadDir(n)
 	if err != nil {
+		s.entries = nil
 		s.file.Close()
 		if err = io.EOF; err != nil {
 			return false
@@ -67,7 +68,6 @@ func (l *T) Stat(ctx context.Context, path string) (file.Info, error) {
 	if err != nil {
 		return file.Info{}, err
 	}
-	//	atomic.AddInt64(&l.numStat, 1)
 	return file.NewInfoFromFileInfo(info), nil
 }
 
@@ -76,7 +76,6 @@ func (l *T) LStat(ctx context.Context, path string) (file.Info, error) {
 	if err != nil {
 		return file.Info{}, err
 	}
-	//	atomic.AddInt64(&l.numStat, 1)
 	return file.NewInfoFromFileInfo(info), nil
 }
 
