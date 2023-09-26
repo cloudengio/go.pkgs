@@ -20,8 +20,19 @@ import (
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
+	"cloudeng.io/file/filewalk/internal"
+	"cloudeng.io/file/filewalk/localfs"
 	"cloudeng.io/sync/synctestutil"
 )
+
+var localTestTree string
+
+func TestMain(m *testing.M) {
+	localTestTree = internal.CreateTestTree()
+	code := m.Run()
+	os.RemoveAll(localTestTree)
+	os.Exit(code)
+}
 
 type logger struct {
 	prefix   string
@@ -82,7 +93,7 @@ func (l *logger) dirsFunc(_ context.Context, prefix string, _ file.Info, err err
 func TestLocalWalk(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
-	sc := filewalk.LocalFilesystem()
+	sc := localfs.New()
 	wk := filewalk.New(sc, filewalk.WithScanSize(1))
 	nl := func() *logger {
 		return &logger{prefix: localTestTree,
@@ -258,7 +269,7 @@ func init() {
 func TestFunctionErrors(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
-	sc := filewalk.LocalFilesystem()
+	sc := localfs.New()
 	wk := filewalk.New(sc, filewalk.WithScanSize(1))
 	err := wk.Walk(ctx,
 		func(ctx context.Context, prefix string, info file.Info, err error) (skip, unchanged bool, children file.InfoList, returnErr error) {
@@ -299,8 +310,8 @@ func (is *infiniteScanner) Err() error {
 	return nil
 }
 
-func (is *infiniteScanner) ReadDir() []fs.DirEntry {
-	return nil
+func (is *infiniteScanner) Contents() filewalk.Contents {
+	return filewalk.Contents{}
 }
 
 func (is *infiniteScanner) Stat(context.Context, string) (file.Info, error) {
@@ -319,7 +330,7 @@ func (is *infiniteScanner) LStat(context.Context, string) (file.Info, error) {
 	return file.NewInfo(info.Name(), info.Size(), info.Mode(), info.ModTime(), nil), nil
 }
 
-func (is *infiniteScanner) DirScanner(path string) filewalk.DirScanner {
+func (is *infiniteScanner) LevelScanner(path string) filewalk.LevelScanner {
 	return &infiniteScanner{}
 }
 
@@ -371,31 +382,33 @@ type slowFS struct {
 	filewalk.FS
 }
 
-func (slowFS) Scanner(path string) filewalk.Scanner {
-	return &slowScanner{}
+func (sfs slowFS) LevelScanner(path string) filewalk.LevelScanner {
+	return &slowScanner{
+		sc: sfs.FS.LevelScanner(path),
+	}
 }
 
-type slowScanner struct{}
+type slowScanner struct {
+	sc filewalk.LevelScanner
+}
 
-func (is *slowScanner) Scan(context.Context, int) bool {
-	time.Sleep(time.Millisecond * 100)
-	return true
+func (is *slowScanner) Scan(ctx context.Context, n int) bool {
+	time.Sleep(time.Millisecond * 200)
+	return is.sc.Scan(ctx, n)
 }
 
 func (is *slowScanner) Err() error {
-	return nil
+	return is.sc.Err()
 }
 
-func (is *slowScanner) ReadDir() []fs.DirEntry {
-	return nil
+func (is *slowScanner) Contents() filewalk.Contents {
+	return is.sc.Contents()
 }
 
 func TestReporting(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
-	//	ctx, cancel := context.WithCancel(ctx)
-	//	defer cancel()
-	is := &slowFS{filewalk.LocalFilesystem()}
+	is := &slowFS{localfs.New()}
 	ch := make(chan filewalk.Status, 100)
 	wk := filewalk.New(is, filewalk.WithScanSize(1), filewalk.WithConcurrency(2),
 		filewalk.WithReporting(ch, time.Millisecond*100, time.Millisecond*250))
@@ -443,15 +456,24 @@ func (d *dbScanner) entriesFunc(ctx context.Context, prefix string, unchanged bo
 	for results := range ch {
 		for _, de := range results.Entries {
 			path := d.fs.Join(prefix, de.Name)
+			fi, err := d.fs.LStat(ctx, path)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := d.db[path]; !ok {
+				d.db[path] = fi
+			} else {
+				existing := d.db[path]
+				if fi.ModTime() == existing.ModTime() &&
+					fi.Mode() == existing.Mode() {
+					d.unchanged[path] = true
+				}
+			}
 			if !de.IsDir() {
 				d.lines = append(d.lines, path)
 				continue
 			}
 			d.lines = append(d.lines, path+"/")
-			fi, err := d.fs.Stat(ctx, path)
-			if err != nil {
-				return nil, err
-			}
 			children = children.AppendInfo(fi)
 		}
 	}
@@ -495,7 +517,7 @@ func (d *dbScanner) dirsAndFiles() (dirs, files, unchanged []string) {
 func TestUnchanged(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)
 	ctx := context.Background()
-	sc := filewalk.LocalFilesystem()
+	sc := localfs.New()
 	wk := filewalk.New(sc, filewalk.WithScanSize(1), filewalk.WithConcurrency(2))
 
 	dbl := &dbScanner{
@@ -505,7 +527,7 @@ func TestUnchanged(t *testing.T) {
 
 	// Use a separate copy of the test tree that can be modified without
 	// affecting other tests.
-	localTestTree := createTestTree()
+	localTestTree := internal.CreateTestTree()
 	defer os.RemoveAll(localTestTree)
 
 	err := wk.Walk(ctx, dbl.dirsFunc, dbl.entriesFunc, localTestTree)
@@ -531,15 +553,17 @@ func TestUnchanged(t *testing.T) {
 
 	ndirs, nfiles, nunchanged := dbl.dirsAndFiles()
 
+	sort.Strings(dirs)
+	sort.Strings(ndirs)
 	if got, want := ndirs, dirs; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := len(nfiles), 0; got != want {
+	if got, want := len(nfiles), 22; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := len(nunchanged), len(dirs); got != want {
+	if got, want := len(nunchanged), len(dirs)+len(files); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

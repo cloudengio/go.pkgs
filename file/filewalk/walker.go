@@ -12,7 +12,6 @@ package filewalk
 
 import (
 	"context"
-	"io/fs"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -100,9 +99,9 @@ func New(fs FS, opts ...Option) *Walker {
 	return w
 }
 
-type Scanner interface {
+type LevelScanner interface {
 	Scan(ctx context.Context, n int) bool
-	ReadDir() []fs.DirEntry
+	Contents() Contents
 	Err() error
 }
 
@@ -115,7 +114,7 @@ type FS interface {
 	// LStat will not follow symlinks.
 	LStat(ctx context.Context, path string) (file.Info, error)
 
-	Scanner(path string) Scanner
+	LevelScanner(path string) LevelScanner
 
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
 	Join(components ...string) string
@@ -156,9 +155,9 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 
 	go func(path string) {
 		w.tk.add(path)
-		sc := w.fs.Scanner(path)
+		sc := w.fs.LevelScanner(path)
 		for sc.Scan(ctx, w.opts.scanSize) {
-			ch <- newContents(sc.ReadDir())
+			ch <- sc.Contents()
 		}
 		if sc.Err() != nil {
 			ch <- Contents{Err: sc.Err()}

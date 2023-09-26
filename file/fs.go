@@ -88,14 +88,6 @@ func NewInfoFromFileInfo(fi fs.FileInfo) Info {
 		fi.Sys())
 }
 
-func NewInfoFromDirEntry(de fs.DirEntry) (Info, error) {
-	s, err := de.Info()
-	if err != nil {
-		return Info{}, err
-	}
-	return NewInfoFromFileInfo(s), nil
-}
-
 // Name implements fs.FileInfo.
 func (fi Info) Name() string {
 	return fi.name
