@@ -23,16 +23,14 @@ import (
 )
 
 // Walker implements the filesyste walk.
-type Walker struct {
-	fs                            FS
-	opts                          options
-	contentsFn                    ContentsFunc
-	prefixFn                      PrefixFunc
-	errs                          *errors.M
-	nSyncOps                      int64
-	prefixStarted, prefixFinished int64
-	files                         int64
-	tk                            *timekeeper
+type Walker[T any] struct {
+	fs         FS
+	opts       options
+	contentsFn ContentsFunc
+	prefixFn   PrefixFunc
+	errs       *errors.M
+	nSyncOps   int64
+	tk         *timekeeper
 }
 
 // Option represents options accepted by Walker.
@@ -108,6 +106,11 @@ type LevelScanner interface {
 // FS represents the interface that is implemeted for filesystems to
 // be traversed/scanned.
 type FS interface {
+	file.FS
+
+	// Readlink returns the contents of a symbolic link.
+	Readlink(ctx context.Context, path string) (string, error)
+
 	// Stat will follow symlinks.
 	Stat(ctx context.Context, path string) (file.Info, error)
 
@@ -143,30 +146,20 @@ func (e *Error) Error() string {
 
 // recordError will record the specified error if it is not nil; ie.
 // its safe to call it with a nil error.
-func (w *Walker) recordError(path, op string, err error) {
+func (w *Walker[T]) recordError(path, op string, err error) {
 	if err == nil {
 		return
 	}
 	w.errs.Append(&Error{path, op, err})
 }
 
-/*
-func (w *Walker) readNext(ctx context.Context, path string, sc LevelScanner) (Contents, bool) {
+func (w *Walker[T]) listLevel(ctx context.Context, path string, unchanged bool, info file.Info) []Entry {
 	w.tk.add(path)
 	defer w.tk.rm(path)
-	if sc.Scan(ctx, w.opts.scanSize) {
-		return sc.Contents(), false
-	}
-	return Contents{Err: sc.Err()}, true
-}*/
-
-func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, info file.Info) file.InfoList {
-	w.tk.add(path)
-	defer w.tk.rm(path)
-	var nextLevel file.InfoList
+	var nextLevel []Entry
 	sc := w.fs.LevelScanner(path)
 	for sc.Scan(ctx, w.opts.scanSize) {
-		children, err := w.contentsFn(ctx, path, unchanged, info, sc.Contents(), nil)
+		children, err := w.contentsFn(ctx, path, unchanged, info, sc.Contents())
 		if err != nil {
 			w.recordError(path, "contentsFunc", err)
 			return nil
@@ -174,7 +167,7 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 		nextLevel = append(nextLevel, children...)
 	}
 	if err := sc.Err(); err != nil {
-		if _, err := w.contentsFn(ctx, path, unchanged, info, Contents{Err: err}, nil); err != nil {
+		if _, err := w.contentsFn(ctx, path, unchanged, info, Contents{Err: err}); err != nil {
 			w.recordError(path, "contentsFunc", err)
 			return nil
 		}
@@ -182,64 +175,9 @@ func (w *Walker) listLevel(ctx context.Context, path string, unchanged bool, inf
 	return nextLevel
 }
 
-/*
-	// First scan is synchronous. Subsequent scans are asynchronous.
-	contents, done := w.readNext(ctx, path, sc)
-	children, err := w.contentsFn(ctx, path, unchanged, info, contents, nil)
-	if err != nil || done {
-		w.recordError(path, "contentsFunc", err)
-		return nil
-	}
-
-	// Subsequent scans, if any, are asynchronous.
-	contents, done = w.readNext(ctx, path, sc)
-	if done {
-		if contents.Err == nil {
-			return children
-		}
-
-		return children
-	}
-
-	ch := make(chan Contents, w.opts.concurrency)
-
-	go func(contents Contents, path string) {
-		w.tk.add(path)
-		ch <- contents
-		for sc.Scan(ctx, w.opts.scanSize) {
-			ch <- sc.Contents()
-		}
-		if sc.Err() != nil {
-			ch <- Contents{Err: sc.Err()}
-		}
-		close(ch)
-		w.tk.rm(path)
-	}(contents, path)
-
-	tmp, err := w.contentsFn(ctx, path, unchanged, info, Contents{}, ch)
-*/
-/*	if err != nil {
-	w.recordError(path, "contentsFunc", err)
-	return nil
-}*/
-//	children = append(children, tmp...)
-/*
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-ch:
-	}*/
-
-// ContentsFunc is called to consume the results of scanning a single level in the
-// filesystem hierarchy. It should read the contents of the supplied channel until
-// that channel is closed. Note unchanged is set to the value returned by the preceeding
-// call to PrefixFunc and indicates that no file content should be expected, only
-// prefixes/directories.
-// Errors, such as failing to access the prefix, are delivered over the channel.
-type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info file.Info, contents Contents, ch <-chan Contents) (file.InfoList, error)
-
 // PrefixFunc is called to determine if a given level in the filesystem hiearchy
-// should be further examined or traversed.
+// should be further examined or traversed. The file.Info is obtained via a call
+// to LStat and hence will refer to a symlink itself if the prefix is a symlink.
 // If stop is true then traversal stops at this point. If a list of children
 // is returned then this list is traversed directly rather than obtaining
 // the children from the filesystem. If unchanged is true, then traversal
@@ -247,13 +185,27 @@ type ContentsFunc func(ctx context.Context, prefix string, unchanged bool, info 
 // This allows for both
 // exclusions and incremental processing in conjunction with a database to
 // be implemented.
-type PrefixFunc func(ctx context.Context, prefix string, info file.Info, err error) (stop, unchanged bool, children file.InfoList, returnErr error)
+type PrefixFunc[T any] func(ctx context.Context, state T, prefix string, info file.Info, err error) (stop, unchanged bool, children []Entry, returnErr error)
+
+// ContentsFunc is called multiple times to consume the results of scanning
+// a single level in the filesystem hierarchy. Each call contains at most
+// the number of items allowed for by the WithScanSize option.
+// ionfo is the same as that passed to PrefixFunc and unchanged is the value
+// returned by PrefixFunc.
+// Errors, such as failing to access the prefix, are delivered over the channel.
+type ContentsFunc[T any] func(ctx context.Context, prefix string, unchanged bool, info file.Info, contents Contents) ([]Entry, error)
+
+type Handler[T any] interface {
+	Prefix(ctx context.Context, state T, prefix string, info file.Info, err error) (stop, unchanged bool, children []Entry, returnErr error)
+	Contents(ctx context.Context, prefix string, unchanged bool, info file.Info, contents Contents) ([]Entry, error)
+	Done(ctx context.Context, state T, prefix string, info file.Info) error
+}
 
 // Walk traverses the hierarchies specified by each of the roots calling
 // prefixFn and entriesFn as it goes. prefixFn will always be called
 // before entriesFn for the same prefix, but no other ordering guarantees
 // are provided.
-func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn ContentsFunc, roots ...string) error {
+func (w *Walker[T]) Walk(ctx context.Context, handler Handler[T], roots ...string) error {
 	rootCtx := ctx
 	listers, _ := errgroup.WithContext(rootCtx)
 	if w.opts.concurrency <= 0 {
@@ -265,8 +217,7 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	walkers, _ := errgroup.WithContext(rootCtx)
 	walkers = errgroup.WithConcurrency(walkers, w.opts.concurrency)
 
-	w.prefixFn = prefixFn
-	w.contentsFn = contentsFn
+	w.handler = handler
 
 	// create and prime the concurrency limiter for walking directories.
 	walkerLimitCh := make(chan struct{}, w.opts.concurrency*2)
@@ -335,7 +286,7 @@ func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn Conte
 	return w.errs.Err()
 }
 
-func (w *Walker) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) {
+func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []Entry, limitCh chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
 	for _, child := range children {
@@ -347,14 +298,14 @@ func (w *Walker) walkChildren(ctx context.Context, path string, children []file.
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
-			p := w.fs.Join(path, child.Name())
+			p := w.fs.Join(path, child.Name)
 
 			w.walker(ctx, p, limitCh)
 			wg.Done()
 			continue
 		}
 		go func() {
-			w.walker(ctx, w.fs.Join(path, child.Name()), limitCh)
+			w.walker(ctx, w.fs.Join(path, child.Name), limitCh)
 			wg.Done()
 			limitCh <- struct{}{}
 		}()
@@ -362,17 +313,16 @@ func (w *Walker) walkChildren(ctx context.Context, path string, children []file.
 	wg.Wait()
 }
 
-func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{}) {
+func (w *Walker[T]) walker(ctx context.Context, path string, limitCh chan struct{}) {
 	select {
 	default:
 	case <-ctx.Done():
 		return
 	}
+	var state T
 	info, err := w.fs.LStat(ctx, path)
 
-	// this will break - test with a link a to a directory
-
-	stop, unchanged, children, err := w.prefixFn(ctx, path, info, err)
+	stop, unchanged, children, err := w.prefixFn(ctx, path, &state, info, err)
 	w.recordError(path, "stat", err)
 	if stop {
 		return
@@ -381,13 +331,13 @@ func (w *Walker) walker(ctx context.Context, path string, limitCh chan struct{})
 		w.walkChildren(ctx, path, children, limitCh)
 		return
 	}
-	children = w.listLevel(ctx, path, unchanged, info)
+	children = w.listLevel(ctx, path, &state, unchanged, info)
 	if len(children) > 0 {
 		w.walkChildren(ctx, path, children, limitCh)
 	}
 }
 
-func (w *Walker) report(ctx context.Context, stopCh <-chan struct{}) bool {
+func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {
 	select {
 	case <-ctx.Done():
 		return true
@@ -452,5 +402,4 @@ func (tk *timekeeper) report() {
 			}
 		}
 	}
-	return
 }

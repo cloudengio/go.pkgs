@@ -21,7 +21,7 @@ import (
 func TestCrawledObject(t *testing.T) {
 	contents := []byte("hello world")
 	name := "hello.html"
-	fi := file.NewInfo(name, int64(len(contents)), 0600, time.Now().Truncate(0), file.InfoOption{})
+	fi := file.NewInfo(name, int64(len(contents)), 0600, time.Now().Truncate(0), nil)
 	dl := []download.Result{{
 		Contents: contents,
 		Name:     name,

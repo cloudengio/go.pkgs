@@ -60,7 +60,7 @@ func TestEncodeDecode(t *testing.T) {
 	sysinfo := struct{ name string }{"foo"}
 
 	now := time.Now()
-	fi := file.NewInfo("ab", 32, 0700|fs.ModeDir, now, "user", "group", &sysinfo)
+	fi := file.NewInfo("ab", 32, 0700|fs.ModeDir, now, &sysinfo)
 
 	type roundTripper func(*testing.T, file.Info) file.Info
 
@@ -84,12 +84,6 @@ func TestEncodeDecode(t *testing.T) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 		if got, want := nfi.Sys(), any(nil); got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-		if got, want := nfi.User(), "user"; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-		if got, want := nfi.Group(), "group"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
@@ -140,8 +134,8 @@ func TestEncodeDecodeList(t *testing.T) {
 	now := time.Now()
 	var fl file.InfoList
 	fl = append(fl,
-		file.NewInfo("a0", 0, 0700|fs.ModeDir, now, "user0", "group0", &sysinfo),
-		file.NewInfo("a1", 1, 0700|fs.ModeDir, now.Add(time.Minute), "user1", "group1", &sysinfo))
+		file.NewInfo("a0", 0, 0700|fs.ModeDir, now, &sysinfo),
+		file.NewInfo("a1", 1, 0700|fs.ModeDir, now.Add(time.Minute), &sysinfo))
 
 	if got, want := len(fl), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -173,12 +167,6 @@ func TestEncodeDecodeList(t *testing.T) {
 				t.Errorf("got %v, want %v", got, want)
 			}
 			if got, want := nfi.Sys(), any(nil); got != want {
-				t.Errorf("got %v, want %v", got, want)
-			}
-			if got, want := nfi.User(), "user"+id; got != want {
-				t.Errorf("got %v, want %v", got, want)
-			}
-			if got, want := nfi.Group(), "group"+id; got != want {
 				t.Errorf("got %v, want %v", got, want)
 			}
 		}

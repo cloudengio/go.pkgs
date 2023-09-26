@@ -39,7 +39,7 @@ type logger struct {
 	fs       filewalk.FS
 	linesMu  sync.Mutex
 	lines    []string
-	children map[string]file.InfoList
+	children map[string][]filewalk.Entry
 	skip     string
 }
 
@@ -49,35 +49,8 @@ func (l *logger) appendLine(s string) {
 	l.lines = append(l.lines, s)
 }
 
-/*
-func (l *logger) handleContents(ctx context.Context, prefix, parent string, unchanged bool, contents filewalk.Contents) (file.InfoList, error) {
-	children := file.InfoList{}
-	if err := contents.Err; err != nil {
-		l.appendLine(fmt.Sprintf("%v: %v\n", parent,
-			strings.Replace(contents.Err.Error(), l.prefix, "", 1)))
-		return nil, nil
-	}
-	for _, de := range contents.Entries {
-		link := ""
-		info, err := l.fs.LStat(ctx, l.fs.Join(prefix, de.Name))
-		if err != nil {
-			return nil, err
-		}
-		if info.Mode()&fs.ModeSymlink != 0 {
-			link = "@"
-		}
-		if de.IsDir() {
-			children = children.AppendInfo(info)
-			continue
-		}
-		l.appendLine(fmt.Sprintf("%v%s: %v\n", l.fs.Join(parent, de.Name), link, info.Size()))
-	}
-	return children, nil
-}
-*/
-
-func (l *logger) entriesFunc(ctx context.Context, prefix string, unchanged bool, _ file.Info, contents filewalk.Contents, ch <-chan filewalk.Contents) (file.InfoList, error) {
-	children := file.InfoList{}
+func (l *logger) entriesFunc(ctx context.Context, prefix string, _ bool, _ file.Info, contents filewalk.Contents) ([]filewalk.Entry, error) {
+	children := []filewalk.Entry{}
 	parent := strings.TrimPrefix(prefix, l.prefix)
 	if err := contents.Err; err != nil {
 		l.appendLine(fmt.Sprintf("%v: %v\n", parent,
@@ -94,7 +67,7 @@ func (l *logger) entriesFunc(ctx context.Context, prefix string, unchanged bool,
 			link = "@"
 		}
 		if de.IsDir() {
-			children = children.AppendInfo(info)
+			children = append(children, de)
 			continue
 		}
 		l.appendLine(fmt.Sprintf("%v%s: %v\n", l.fs.Join(parent, de.Name), link, info.Size()))
@@ -102,23 +75,7 @@ func (l *logger) entriesFunc(ctx context.Context, prefix string, unchanged bool,
 	return children, nil
 }
 
-/*
-	var children file.InfoList
-	parent := strings.TrimPrefix(prefix, l.prefix)
-	if ch == nil {
-		return l.handleContents(ctx, prefix, parent, unchanged, contents)
-	}
-	for contents := range ch {
-		c, err := l.handleContents(ctx, prefix, parent, unchanged, contents)
-		if err != nil {
-			return nil, err
-		}
-		children = append(children, c...)
-	}
-	return children, nil
-}*/
-
-func (l *logger) dirsFunc(_ context.Context, prefix string, _ file.Info, err error) (bool, bool, file.InfoList, error) {
+func (l *logger) dirsFunc(_ context.Context, prefix string, _ file.Info, err error) (bool, bool, []filewalk.Entry, error) {
 	if err != nil {
 		l.appendLine(fmt.Sprintf("dir  : error: %v: %v\n", prefix, err))
 		return true, false, nil, nil
@@ -139,13 +96,11 @@ func TestLocalWalk(t *testing.T) {
 	nl := func() *logger {
 		return &logger{prefix: localTestTree,
 			fs:       sc,
-			children: map[string]file.InfoList{},
+			children: map[string][]filewalk.Entry{},
 		}
 	}
 	lg := nl()
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
-
-	return
 
 	wk = filewalk.New(sc, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
 	lg = nl()
@@ -165,7 +120,8 @@ func TestLocalWalk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] = file.InfoList{b01}
+	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] =
+		[]filewalk.Entry{{Name: b01.Name(), Type: b01.Mode().Type()}}
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
 }
 
@@ -315,7 +271,7 @@ func TestFunctionErrors(t *testing.T) {
 	sc := localfs.New()
 	wk := filewalk.New(sc, filewalk.WithScanSize(1))
 	err := wk.Walk(ctx,
-		func(ctx context.Context, prefix string, info file.Info, err error) (skip, unchanged bool, children file.InfoList, returnErr error) {
+		func(ctx context.Context, prefix string, info file.Info, err error) (skip, unchanged bool, children []filewalk.Entry, returnErr error) {
 			return true, false, nil, fmt.Errorf("oops")
 		},
 		nil,
@@ -326,13 +282,10 @@ func TestFunctionErrors(t *testing.T) {
 	}
 
 	err = wk.Walk(ctx,
-		func(ctx context.Context, prefix string, info file.Info, err error) (skip, unchanged bool, children file.InfoList, returnErr error) {
+		func(ctx context.Context, prefix string, info file.Info, err error) (skip, unchanged bool, children []filewalk.Entry, returnErr error) {
 			return false, false, nil, err
 		},
-		func(ctx context.Context, prefix string, unchanged bool, info file.Info, contents filewalk.Contents, ch <-chan filewalk.Contents) (file.InfoList, error) {
-			//for c := range ch {
-			//	_ = c
-			//}
+		func(ctx context.Context, prefix string, unchanged bool, info file.Info, contents filewalk.Contents) ([]filewalk.Entry, error) {
 			return nil, fmt.Errorf("oh no")
 		},
 		localTestTree,
@@ -342,7 +295,9 @@ func TestFunctionErrors(t *testing.T) {
 	}
 }
 
-type infiniteScanner struct{}
+type infiniteScanner struct {
+	filewalk.FS
+}
 
 func (is *infiniteScanner) Scan(context.Context, int) bool {
 	time.Sleep(time.Hour)
@@ -357,36 +312,8 @@ func (is *infiniteScanner) Contents() filewalk.Contents {
 	return filewalk.Contents{}
 }
 
-func (is *infiniteScanner) Stat(context.Context, string) (file.Info, error) {
-	info, err := os.Stat(localTestTree)
-	if err != nil {
-		return file.Info{}, err
-	}
-	return file.NewInfo(info.Name(), info.Size(), info.Mode(), info.ModTime(), nil), nil
-}
-
-func (is *infiniteScanner) LStat(context.Context, string) (file.Info, error) {
-	info, err := os.Lstat(localTestTree)
-	if err != nil {
-		return file.Info{}, err
-	}
-	return file.NewInfo(info.Name(), info.Size(), info.Mode(), info.ModTime(), nil), nil
-}
-
-func (is *infiniteScanner) LevelScanner(path string) filewalk.LevelScanner {
+func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
 	return &infiniteScanner{}
-}
-
-func (is *infiniteScanner) Join(components ...string) string {
-	return filepath.Join(components...)
-}
-
-func (is *infiniteScanner) IsPermissionError(err error) bool {
-	return os.IsPermission(err)
-}
-
-func (is *infiniteScanner) IsNotExist(err error) bool {
-	return os.IsNotExist(err)
 }
 
 func TestCancel(t *testing.T) {
@@ -492,10 +419,10 @@ type dbScanner struct {
 	lines     []string
 }
 
-func (d *dbScanner) entriesFunc(ctx context.Context, prefix string, unchanged bool, fi file.Info, contents filewalk.Contents, ch <-chan filewalk.Contents) (file.InfoList, error) {
+func (d *dbScanner) entriesFunc(ctx context.Context, prefix string, _ bool, _ file.Info, contents filewalk.Contents) ([]filewalk.Entry, error) {
 	d.Lock()
 	defer d.Unlock()
-	var children file.InfoList
+	var children []filewalk.Entry
 	for _, de := range contents.Entries {
 		path := d.fs.Join(prefix, de.Name)
 		fi, err := d.fs.LStat(ctx, path)
@@ -516,13 +443,13 @@ func (d *dbScanner) entriesFunc(ctx context.Context, prefix string, unchanged bo
 			continue
 		}
 		d.lines = append(d.lines, path+"/")
-		children = children.AppendInfo(fi)
+		children = append(children, de)
 	}
 
 	return children, nil
 }
 
-func (d *dbScanner) dirsFunc(_ context.Context, prefix string, fi file.Info, err error) (bool, bool, file.InfoList, error) {
+func (d *dbScanner) dirsFunc(_ context.Context, prefix string, fi file.Info, err error) (bool, bool, []filewalk.Entry, error) {
 	d.Lock()
 	defer d.Unlock()
 	if err != nil {
@@ -608,5 +535,4 @@ func TestUnchanged(t *testing.T) {
 	if got, want := len(nunchanged), len(dirs)+len(files); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
 }

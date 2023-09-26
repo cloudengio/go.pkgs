@@ -59,11 +59,27 @@ func NewLevelScanner(path string) filewalk.LevelScanner {
 	return &scanner{file: f}
 }
 
+func (l *T) Open(path string) (fs.File, error) {
+	return os.Open(path)
+}
+
+func (l *T) OpenCtx(_ context.Context, path string) (fs.File, error) {
+	return os.Open(path)
+}
+
+func (l *T) Scheme() string {
+	return "file"
+}
+
 func (l *T) LevelScanner(prefix string) filewalk.LevelScanner {
 	return NewLevelScanner(prefix)
 }
 
-func (l *T) Stat(ctx context.Context, path string) (file.Info, error) {
+func (l *T) Readlink(_ context.Context, path string) (string, error) {
+	return os.Readlink(path)
+}
+
+func (l *T) Stat(_ context.Context, path string) (file.Info, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return file.Info{}, err
@@ -71,7 +87,7 @@ func (l *T) Stat(ctx context.Context, path string) (file.Info, error) {
 	return file.NewInfoFromFileInfo(info), nil
 }
 
-func (l *T) LStat(ctx context.Context, path string) (file.Info, error) {
+func (l *T) LStat(_ context.Context, path string) (file.Info, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return file.Info{}, err
@@ -96,7 +112,7 @@ func newContents(des []fs.DirEntry) filewalk.Contents {
 		Entries: make([]filewalk.Entry, len(des)),
 	}
 	for i, de := range des {
-		c.Entries[i] = filewalk.Entry{Name: de.Name(), Mode: de.Type()}
+		c.Entries[i] = filewalk.Entry{Name: de.Name(), Type: de.Type()}
 	}
 	return c
 }

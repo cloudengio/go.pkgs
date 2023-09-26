@@ -52,15 +52,13 @@ func (f *fsFromFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 
 var _ fs.FileInfo = (*Info)(nil)
 
-// Info implements fs.FileInfo to provide binary, gob and json encoding/decoding
-// that ensures that the Sys value is not encoded/decoded and hence is only
-// avalilable within the process that originally created the info Instance.
+// Info implements fs.FileInfo to provide binary, gob and json encoding/decoding.
 type Info struct {
 	name    string
 	size    int64
 	mode    fs.FileMode
 	modTime time.Time
-	sysInfo interface{}
+	sysInfo any
 }
 
 // NewInfo creates a new instance of Info.
@@ -124,8 +122,6 @@ type info struct {
 	Size    int64       `json:"size"`
 	Mode    fs.FileMode `json:"mode"`
 	ModTime time.Time   `json:"modTime"`
-	User    string      `json:"user"`
-	Group   string      `json:"group"`
 }
 
 func (fi Info) MarshalJSON() ([]byte, error) {
@@ -174,7 +170,7 @@ func (fi *Info) AppendBinary(data []byte) ([]byte, error) {
 }
 
 // Implements encoding.BinaryMarshaler.
-func (fi *Info) MarshalBinary() ([]byte, error) {
+func (fi Info) MarshalBinary() ([]byte, error) {
 	return fi.AppendBinary(make([]byte, 0, 100))
 }
 
@@ -246,7 +242,7 @@ func (il InfoList) MarshalBinary() ([]byte, error) {
 	return il.AppendBinary(make([]byte, 0, 200))
 }
 
-// DecodeBinary decodes the supplied data into an InfoList and returns
+// DecodeBinaryInfoList decodes the supplied data into an InfoList and returns
 // the remaining data.
 func DecodeBinaryInfoList(data []byte) (InfoList, []byte, error) {
 	l, n := binary.Varint(data)
