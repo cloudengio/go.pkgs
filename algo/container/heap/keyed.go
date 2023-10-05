@@ -25,7 +25,7 @@ type keyInt64 struct {
 // KeyedInt64 implements a heap whose values include both a key and
 // value to allow for updates to existing items in the heap. It also
 // keeps a running sum of the all of the values currently in the heap,
-// supports both ascending and desencding operations and is safe for
+// supports both ascending and descending operations and is safe for
 // concurrent use.
 type KeyedInt64 struct {
 	mu sync.Mutex

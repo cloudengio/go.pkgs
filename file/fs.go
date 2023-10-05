@@ -53,6 +53,8 @@ func (f *fsFromFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 var _ fs.FileInfo = (*Info)(nil)
 
 // Info implements fs.FileInfo to provide binary, gob and json encoding/decoding.
+// The SysInfo field is not encoded/decoded and hence is only available for use
+// within the process that Info was instantiated in.
 type Info struct {
 	name    string
 	size    int64
@@ -112,8 +114,12 @@ func (fi Info) IsDir() bool {
 }
 
 // Sys implements fs.FileInfo.
-func (fi Info) Sys() interface{} {
+func (fi Info) Sys() any {
 	return fi.sysInfo
+}
+
+func (fi *Info) SetSys(i any) {
+	fi.sysInfo = i
 }
 
 // info is like Info but without the Sys field.

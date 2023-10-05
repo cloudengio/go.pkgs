@@ -28,7 +28,7 @@ type scanner struct {
 	entries []fs.DirEntry
 }
 
-func (s *scanner) Contents() filewalk.Contents {
+func (s *scanner) Contents() []filewalk.Entry {
 	return newContents(s.entries)
 }
 
@@ -107,12 +107,10 @@ func (l *T) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
-func newContents(des []fs.DirEntry) filewalk.Contents {
-	c := filewalk.Contents{
-		Entries: make([]filewalk.Entry, len(des)),
-	}
+func newContents(des []fs.DirEntry) []filewalk.Entry {
+	c := make([]filewalk.Entry, len(des))
 	for i, de := range des {
-		c.Entries[i] = filewalk.Entry{Name: de.Name(), Type: de.Type()}
+		c[i] = filewalk.Entry{Name: de.Name(), Type: de.Type()}
 	}
 	return c
 }
