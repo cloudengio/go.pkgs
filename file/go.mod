@@ -11,11 +11,11 @@ require (
 	cloudeng.io/sync v0.0.8
 	cloudeng.io/sys v0.0.0-20230323174002-73014ceab7ea
 	cloudeng.io/text v0.0.11
-	golang.org/x/net v0.15.0
+	golang.org/x/net v0.17.0
 )
 
 require (
 	cloudeng.io/debug v0.0.0-20230105021008-948d22470af5 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
