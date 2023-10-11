@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.39.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.21.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.22.0
-	golang.org/x/crypto v0.13.0
+	golang.org/x/crypto v0.14.0
 )
 
 require (
@@ -33,7 +33,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.14.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.17.0 // indirect
 	github.com/aws/smithy-go v1.14.2 // indirect
-	golang.org/x/net v0.15.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
