@@ -226,10 +226,14 @@ commands:
       - <arg1>
       - <arg2>
       - ...
+  - name: c7
+    arguments: # at least two
+      - <arg1>
+      - <opt>...
 `)
 
 	out := &strings.Builder{}
-	for _, name := range []string{"c1", "c2", "c3", "c4", "c5", "c6"} {
+	for _, name := range []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7"} {
 		cmdSet.Set(name).MustRunner(
 			(&runner{name: name, out: out}).cmd,
 			&exampleFlags{})
@@ -268,6 +272,8 @@ commands:
 	}
 	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c6", "1")
 	assertError("c6: accepts at least 2 arguments")
+	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c7")
+	assertError("c7: accepts at least 1 argument")
 }
 
 func gorun(t *testing.T, file string, args []string) string {

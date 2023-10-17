@@ -146,7 +146,7 @@ func determineOptForArgs(args []string) CommandOption {
 	if len(args) == 0 {
 		return WithoutArguments()
 	}
-	if args[len(args)-1] == "..." {
+	if args[len(args)-1] == "..." || strings.HasSuffix(args[len(args)-1], "...") {
 		return AtLeastNArguments(len(args) - 1)
 	}
 	if len(args) == 1 {
