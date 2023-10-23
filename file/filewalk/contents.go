@@ -7,6 +7,8 @@ package filewalk
 import (
 	"encoding/binary"
 	"io/fs"
+
+	"cloudeng.io/file"
 )
 
 type Entry struct {
@@ -19,6 +21,15 @@ func (de Entry) IsDir() bool {
 }
 
 type EntryList []Entry
+
+func EntriesFromInfoList(infos file.InfoList) EntryList {
+	entries := make(EntryList, len(infos))
+	for i, info := range infos {
+		entries[i].Name = info.Name()
+		entries[i].Type = info.Mode().Type()
+	}
+	return entries
+}
 
 func appendString(buf []byte, s string) []byte {
 	buf = binary.AppendVarint(buf, int64(len(s)))

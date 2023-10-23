@@ -79,7 +79,7 @@ func (g *T) possiblyCancel() {
 }
 
 // Go runs the supplied function from a goroutine. If this group was created
-// using WithLimit then Go will block until a goroutine is available.
+// using WithConcurrency then Go will block until a goroutine is available.
 func (g *T) Go(f func() error) {
 	g.wg.Add(1)
 	if g.ch != nil {

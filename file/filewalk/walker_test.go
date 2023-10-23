@@ -41,7 +41,7 @@ type logger struct {
 	fs       filewalk.FS
 	linesMu  sync.Mutex
 	lines    []string
-	children map[string][]filewalk.Entry
+	children map[string]file.InfoList
 	state    map[string]int
 	skip     string
 	next     int
@@ -53,7 +53,7 @@ func (l *logger) appendLine(s string) {
 	l.lines = append(l.lines, s)
 }
 
-func (l *logger) Prefix(_ context.Context, state *int, prefix string, _ file.Info, err error) (bool, []filewalk.Entry, error) {
+func (l *logger) Prefix(_ context.Context, state *int, prefix string, _ file.Info, err error) (bool, file.InfoList, error) {
 	l.Lock()
 	defer l.Unlock()
 	if err != nil {
@@ -71,8 +71,8 @@ func (l *logger) Prefix(_ context.Context, state *int, prefix string, _ file.Inf
 	return false, l.children[prefix], nil
 }
 
-func (l *logger) Contents(ctx context.Context, state *int, prefix string, contents []filewalk.Entry, err error) ([]filewalk.Entry, error) {
-	children := []filewalk.Entry{}
+func (l *logger) Contents(ctx context.Context, state *int, prefix string, contents []filewalk.Entry, err error) (file.InfoList, error) {
+	children := file.InfoList{}
 	parent := strings.TrimPrefix(prefix, l.prefix)
 	if err != nil {
 		l.appendLine(fmt.Sprintf("%v: %v\n", parent,
@@ -89,7 +89,7 @@ func (l *logger) Contents(ctx context.Context, state *int, prefix string, conten
 			link = "@"
 		}
 		if de.IsDir() {
-			children = append(children, de)
+			children = append(children, info)
 			continue
 		}
 		l.appendLine(fmt.Sprintf("%v%s: %v [%v]\n", l.fs.Join(parent, de.Name), link, info.Size(), *state))
@@ -111,7 +111,7 @@ func TestLocalWalk(t *testing.T) {
 	nl := func() *logger {
 		return &logger{prefix: localTestTree,
 			fs:       sc,
-			children: map[string][]filewalk.Entry{},
+			children: map[string]file.InfoList{},
 			state:    map[string]int{},
 		}
 	}
@@ -142,7 +142,7 @@ func TestLocalWalk(t *testing.T) {
 	// Replace /b0's children only with /b0.1 and not b0.0
 	// Note: replacing / with filepath.Separator is required for windows.
 	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] =
-		[]filewalk.Entry{{Name: b01.Name(), Type: b01.Mode().Type()}}
+		file.InfoList{b01}
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
 }
 
@@ -336,11 +336,11 @@ type errorScanner struct {
 	doneError     error
 }
 
-func (e *errorScanner) Prefix(_ context.Context, _ *int, _ string, _ file.Info, _ error) (bool, []filewalk.Entry, error) {
+func (e *errorScanner) Prefix(_ context.Context, _ *int, _ string, _ file.Info, _ error) (bool, file.InfoList, error) {
 	return false, nil, e.prefixErr
 }
 
-func (e *errorScanner) Contents(_ context.Context, _ *int, _ string, _ []filewalk.Entry, _ error) ([]filewalk.Entry, error) {
+func (e *errorScanner) Contents(_ context.Context, _ *int, _ string, _ []filewalk.Entry, _ error) (file.InfoList, error) {
 	return nil, e.contentsError
 }
 
@@ -502,10 +502,10 @@ type dbScanner struct {
 	lines     []string
 }
 
-func (d *dbScanner) Contents(ctx context.Context, state *bool, prefix string, contents []filewalk.Entry, _ error) ([]filewalk.Entry, error) {
+func (d *dbScanner) Contents(ctx context.Context, state *bool, prefix string, contents []filewalk.Entry, _ error) (file.InfoList, error) {
 	d.Lock()
 	defer d.Unlock()
-	var children []filewalk.Entry
+	var children file.InfoList
 	for _, de := range contents {
 		path := d.fs.Join(prefix, de.Name)
 		fi, err := d.fs.LStat(ctx, path)
@@ -526,12 +526,12 @@ func (d *dbScanner) Contents(ctx context.Context, state *bool, prefix string, co
 			continue
 		}
 		d.lines = append(d.lines, path+"/")
-		children = append(children, de)
+		children = append(children, fi)
 	}
 	return children, nil
 }
 
-func (d *dbScanner) Prefix(_ context.Context, state *bool, prefix string, fi file.Info, err error) (bool, []filewalk.Entry, error) {
+func (d *dbScanner) Prefix(_ context.Context, state *bool, prefix string, fi file.Info, err error) (bool, file.InfoList, error) {
 	d.Lock()
 	defer d.Unlock()
 	if err != nil {
@@ -619,5 +619,45 @@ func TestUnchanged(t *testing.T) {
 
 	if got, want := len(nunchanged), len(dirs)+len(files); got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+type dummyError struct{}
+
+func (d dummyError) Error() string {
+	return "dummy error"
+}
+
+func TestError(t *testing.T) {
+	err := &filewalk.Error{"/a/b/c", "some op", context.Canceled}
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled")
+	}
+
+	if u := err.Unwrap(); u != context.Canceled {
+		t.Errorf("expected context.Canceled")
+	}
+
+	var expected filewalk.Error
+	if !errors.As(err, &expected) {
+		t.Errorf("expected filewalk.Error")
+	}
+
+	if got, want := expected.Path, "/a/b/c"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := expected.Op, "some op"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := expected.Err, context.Canceled; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	var other dummyError
+	if errors.As(err, &other) {
+		t.Errorf("expected filewalk.Error")
 	}
 }

@@ -139,8 +139,27 @@ type Error struct {
 }
 
 // Error implements error.
-func (e *Error) Error() string {
+func (e Error) Error() string {
 	return "[" + e.Path + ": " + e.Op + "] " + e.Err.Error()
+}
+
+// Is implements errors.Is.
+func (e Error) Is(target error) bool {
+	return errors.Is(e.Err, target)
+}
+
+// Unwrap implements errors.Unwrap.
+func (e Error) Unwrap() error {
+	return e.Err
+}
+
+// As implements errors.As.
+func (e *Error) As(target interface{}) bool {
+	if t, ok := target.(*Error); ok {
+		*t = *e
+		return true
+	}
+	return errors.As(e.Err, target)
 }
 
 // recordError will record the specified error if it is not nil; ie.
@@ -152,12 +171,12 @@ func (w *Walker[T]) recordError(path, op string, err error) {
 	w.errs.Append(&Error{path, op, err})
 }
 
-func (w *Walker[T]) listLevel(ctx context.Context, state *T, path string) []Entry {
+func (w *Walker[T]) listLevel(ctx context.Context, state *T, path string) []file.Info {
 
 	w.tk.add(path)
 	defer w.tk.rm(path)
 
-	var nextLevel []Entry
+	var nextLevel []file.Info
 	sc := w.fs.LevelScanner(path)
 	for sc.Scan(ctx, w.opts.scanSize) {
 		children, err := w.handler.Contents(ctx, state, path, sc.Contents(), nil)
@@ -190,14 +209,15 @@ type Handler[T any] interface {
 	// is returned then this list is traversed directly rather than obtaining
 	// the children from the filesystem. This allows for both exclusions and
 	// incremental processing in conjunction with a database to be implemented.
-	Prefix(ctx context.Context, state *T, prefix string, info file.Info, err error) (stop bool, children []Entry, returnErr error)
+	// Any returned is recorded, but traversal will continue unless stop is set.
+	Prefix(ctx context.Context, state *T, prefix string, info file.Info, err error) (stop bool, children file.InfoList, returnErr error)
 
 	// Contents is called, multiple times, to process the contents of a single
 	// level in the filesystem hierarchy. Each such call contains at most the
 	// number of items allowed for by the WithScanSize option. Note that
 	// errors encountered whilst scanning the filesystem result in calls to
 	// Contents with an empty list of Entry's and a non-nil error.
-	Contents(ctx context.Context, state *T, prefix string, contents []Entry, err error) ([]Entry, error)
+	Contents(ctx context.Context, state *T, prefix string, contents []Entry, err error) (file.InfoList, error)
 
 	// Done is called once calls to Contents have been made.
 	Done(ctx context.Context, state *T, prefix string) error
@@ -245,9 +265,10 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 
 	for _, root := range roots {
 		root := root
+		rootInfo, rootErr := w.fs.LStat(ctx, root)
 		walkers.Go(func() error {
 			<-walkerLimitCh
-			w.walker(ctx, root, walkerLimitCh)
+			w.walker(ctx, root, rootInfo, rootErr, walkerLimitCh)
 			return nil
 		})
 	}
@@ -286,7 +307,7 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	return w.errs.Err()
 }
 
-func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []Entry, limitCh chan struct{}) {
+func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
 	for _, child := range children {
@@ -298,14 +319,14 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []En
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
-			p := w.fs.Join(path, child.Name)
+			p := w.fs.Join(path, child.Name())
 
-			w.walker(ctx, p, limitCh)
+			w.walker(ctx, p, child, nil, limitCh)
 			wg.Done()
 			continue
 		}
 		go func() {
-			w.walker(ctx, w.fs.Join(path, child.Name), limitCh)
+			w.walker(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
 			wg.Done()
 			limitCh <- struct{}{}
 		}()
@@ -313,26 +334,24 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []En
 	wg.Wait()
 }
 
-func (w *Walker[T]) walker(ctx context.Context, path string, limitCh chan struct{}) {
+func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) {
 	select {
 	case <-ctx.Done():
 		return
 	default:
 	}
 
-	info, err := w.fs.LStat(ctx, path)
-
 	var state T
 
 	stop, children, err := w.handler.Prefix(ctx, &state, path, info, err)
-	w.recordError(path, "handler.Prefix", err)
+	w.recordError(path, "filewalk: handler.prefix", err)
 	if stop {
 		return
 	}
 	if len(children) > 0 {
 		w.walkChildren(ctx, path, children, limitCh)
 		if err := w.handler.Done(ctx, &state, path); err != nil {
-			w.recordError(path, "handler.Done", err)
+			w.recordError(path, "filewalk: handler.Done", err)
 		}
 		return
 	}
@@ -343,7 +362,7 @@ func (w *Walker[T]) walker(ctx context.Context, path string, limitCh chan struct
 		w.walkChildren(ctx, path, children, limitCh)
 	}
 	if err := w.handler.Done(ctx, &state, path); err != nil {
-		w.recordError(path, "handler.Done", err)
+		w.recordError(path, "filewalk: handler.Done", err)
 	}
 }
 

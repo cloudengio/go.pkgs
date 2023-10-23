@@ -5,6 +5,7 @@
 package file
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/gob"
@@ -151,9 +152,11 @@ func (fi *Info) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func appendString(buf []byte, s string) []byte {
-	buf = binary.AppendVarint(buf, int64(len(s)))
-	return append(buf, s...)
+func appendString(buf *bytes.Buffer, s string) {
+	var storage [5]byte
+	n := binary.PutVarint(storage[:], int64(len(s)))
+	buf.Write(storage[:n])
+	buf.WriteString(s)
 }
 
 func decodeString(data []byte) (int, string) {
@@ -161,23 +164,31 @@ func decodeString(data []byte) (int, string) {
 	return n + int(l), string(data[n : n+int(l)])
 }
 
-func (fi *Info) AppendBinary(data []byte) ([]byte, error) {
-	data = append(data, 0x1)                                       // version
-	data = appendString(data, fi.name)                             // name
+func (fi *Info) AppendBinary(buf *bytes.Buffer) error {
+	buf.WriteByte(0x1)         // version
+	appendString(buf, fi.name) // name
+	var storage [128]byte
+	data := storage[:0]
 	data = binary.AppendVarint(data, fi.size)                      // size
 	data = binary.LittleEndian.AppendUint32(data, uint32(fi.mode)) // filemode
 	out, err := fi.modTime.MarshalBinary()                         // modtime
 	if err != nil {
-		return nil, err
+		return err
 	}
 	data = binary.AppendVarint(data, int64(len(out)))
 	data = append(data, out...)
-	return data, nil
+	buf.Write(data)
+	return nil
 }
 
 // Implements encoding.BinaryMarshaler.
 func (fi Info) MarshalBinary() ([]byte, error) {
-	return fi.AppendBinary(make([]byte, 0, 100))
+	var buf bytes.Buffer
+	buf.Grow(100)
+	if err := fi.AppendBinary(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // Implements encoding.BinaryUnmarshaler.
@@ -231,21 +242,26 @@ func (il InfoList) AppendInfo(info Info) InfoList {
 
 // AppendBinary appends a binary encoded instance of Info to the supplied
 // byte slice.
-func (il InfoList) AppendBinary(data []byte) ([]byte, error) {
-	data = binary.AppendVarint(data, int64(len(il)))
-	var err error
+func (il InfoList) AppendBinary(buf *bytes.Buffer) error {
+	var data [5]byte
+	n := binary.PutVarint(data[:], int64(len(il)))
+	buf.Write(data[:n])
 	for _, c := range il {
-		data, err = c.AppendBinary(data)
-		if err != nil {
-			return nil, err
+		if err := c.AppendBinary(buf); err != nil {
+			return err
 		}
 	}
-	return data, err
+	return nil
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler.
 func (il InfoList) MarshalBinary() ([]byte, error) {
-	return il.AppendBinary(make([]byte, 0, 200))
+	var buf bytes.Buffer
+	buf.Grow(1000)
+	if err := il.AppendBinary(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // DecodeBinaryInfoList decodes the supplied data into an InfoList and returns

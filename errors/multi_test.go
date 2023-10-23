@@ -199,7 +199,7 @@ func TestErr(t *testing.T) {
 	}
 }
 
-func TestRemoveCancel(t *testing.T) {
+func TestSquashl(t *testing.T) {
 	m := &errors.M{}
 	m.Append(context.Canceled)
 	m.Append(os.ErrExist)
@@ -217,11 +217,53 @@ func TestRemoveCancel(t *testing.T) {
   context canceled`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	msg = fmt.Sprintf("%v", m.WithoutContextCanceled())
-	if got, want := msg, `  --- 1 of 2 errors
+	msg = fmt.Sprintf("%v", m.Squash(context.Canceled))
+	if got, want := msg, `  --- 1 of 3 errors
+  context canceled
+  --- 2 of 3 errors
   file already exists
+  --- 3 of 3 errors
+  invalid argument
+  --- context canceled squashed 2 times`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	m = &errors.M{}
+	m1 := &errors.M{}
+	m1.Append(context.Canceled)
+	m1.Append(os.ErrInvalid)
+	m1.Append(context.Canceled)
+	m.Append(m1)
+	m.Append(os.ErrExist)
+	m.Append(context.Canceled)
+	m.Append(context.Canceled)
+
+	if got, want := strings.Count(m.Error(), "context canceled"), 4; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := m.Squash(context.Canceled).Error(), `  --- 1 of 3 errors
+    --- 1 of 2 errors
+  context canceled
   --- 2 of 2 errors
-  invalid argument`; got != want {
+  invalid argument
+  --- context canceled squashed 2 times
+  --- 2 of 3 errors
+  file already exists
+  --- 3 of 3 errors
+  context canceled
+  --- context canceled squashed 2 times`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	m = &errors.M{}
+	m.Append(fmt.Errorf("e1 %w", context.Canceled))
+	m.Append(fmt.Errorf("e2 %w", context.Canceled))
+	m.Append(fmt.Errorf("e2 %w", context.Canceled))
+
+	if got, want := m.Squash(context.Canceled).Error(), `  --- 1 of 1 errors
+  e1 context canceled
+  --- context canceled squashed 3 times`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
