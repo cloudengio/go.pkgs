@@ -24,6 +24,7 @@ type simpleFlags struct {
 }
 
 func init() {
+	v
 	cmdSet.Set("simple").RunnerAndFlagSet(runner, subcmd.MustRegisteredFlagSet(&simpleFlags{}))
 }
 

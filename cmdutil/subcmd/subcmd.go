@@ -95,8 +95,8 @@
 //
 //  2. If the list contains n arguments then exactly that number of arguments
 //     is expected, unless, the last argument in the list is '...' in which case
-//     at least that number is
-//     expected.
+//     at least that number is expected. Similarly if an argument ends in '...'
+//     then at least the preceding number of arguments is expected.
 //
 //  3. If there is a single item in the list and it is enclosed
 //     in [] (in a quoted string), then 0 or 1 arguments are expected.
