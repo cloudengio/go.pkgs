@@ -5,7 +5,6 @@
 package errors
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -40,8 +39,10 @@ func As(err error, target interface{}) bool {
 //	...
 //	return errs.Err()
 type M struct {
-	mu   sync.RWMutex
-	errs []error // GUARDED_BY(mu)
+	mu          sync.RWMutex
+	errs        []error // GUARDED_BY(mu)
+	squashed    error
+	numSquashed int
 }
 
 // NewM is equivalent to:
@@ -123,13 +124,18 @@ func (m *M) Error() string {
 	case 0:
 		return ""
 	case 1:
-		return m.errs[0].Error()
+		if m.numSquashed == 0 {
+			return m.errs[0].Error()
+		}
 	}
 	out := &strings.Builder{}
 	for i, err := range m.errs {
 		fmt.Fprintf(out, "  --- %v of %v errors\n  ", i+1, l)
 		out.WriteString(err.Error())
 		out.WriteString("\n")
+	}
+	if m.numSquashed > 0 {
+		fmt.Fprintf(out, "  --- %v squashed %v times\n", m.squashed, m.numSquashed)
 	}
 	return strings.TrimSuffix(out.String(), "\n")
 }
@@ -160,20 +166,43 @@ func (m *M) Format(f fmt.State, c rune) {
 		fmt.Fprintf(f, "  --- %v of %v errors\n  ", i+1, l)
 		fmt.Fprintf(f, format, err)
 	}
+
+	if m.numSquashed > 0 {
+		fmt.Fprintf(f, "  --- %v squashed %v times\n", m.squashed, m.numSquashed)
+	}
 }
 
-// WithoutContextCanceled returns an error.M without any context.Canceled errors.
-func (m *M) WithoutContextCanceled() error {
-	c := &M{}
+func (m *M) squash(target error, first bool) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if len(m.errs) == 0 {
+		return nil
+	}
+	c := &M{}
 	c.errs = make([]error, 0, len(m.errs))
 	for _, err := range m.errs {
-		if !errors.Is(err, context.Canceled) {
-			c.errs = append(c.errs, err)
+		if rr, ok := err.(*M); ok {
+			c.Append(rr.squash(target, first))
+			continue
 		}
+		if errors.Is(err, target) {
+			if !first {
+				c.numSquashed++
+				continue
+			}
+			first = false
+			c.squashed = target
+			c.numSquashed = 1
+		}
+		c.errs = append(c.errs, err)
 	}
 	return c
+}
+
+// Squash returns an error.M with at most one instance of target per
+// level in the error tree.
+func (m *M) Squash(target error) error {
+	return m.squash(target, true)
 }
 
 // Err returns nil if m contains no errors, or itself otherwise.
