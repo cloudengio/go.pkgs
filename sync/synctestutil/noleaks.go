@@ -5,6 +5,7 @@
 package synctestutil
 
 import (
+	"strings"
 	"time"
 
 	"cloudeng.io/debug/goroutines"
@@ -100,8 +101,14 @@ func getGoroutines() (map[string]*goroutines.Goroutine, error) {
 	bycreator := map[string]*goroutines.Goroutine{}
 	for _, g := range gs {
 		key := ""
-		if g.Creator != nil {
-			key = g.Creator.Call
+		if g.Creator == nil {
+			continue
+		}
+		key = g.Creator.Call
+		if idx := strings.Index(key, " in "); idx != -1 {
+			// go 1.21 changed the format of the creator string to
+			// v.io/x/ref/test/goroutines.runGoA in goroutine 1 [running]:
+			key = key[:idx]
 		}
 		bycreator[key] = g
 	}
