@@ -16,6 +16,5 @@ func (c *CommandSetYAML) Usage(names ...string) string {
 		return cmd.Usage()
 	}
 	fmt.Printf("d: %v\n", c.cmdDict)
-	fmt.Printf(">>> %v\n", pathname)
 	return c.CommandSet.Usage(os.Args[0])
 }

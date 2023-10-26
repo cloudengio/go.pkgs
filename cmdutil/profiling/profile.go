@@ -29,10 +29,16 @@ type ProfileFlag struct {
 	Profiles []ProfileSpec
 }
 
+// PredefinedProfiles returns the list of predefined profiles, ie. those
+// documented as 'predefined' by the runtime/pprof package, such as
+// "goroutine", "heap", "allocs", "threadcreate", "block", "mutex".
 func PredefinedProfiles() []string {
 	return []string{"goroutine", "heap", "allocs", "threadcreate", "block", "mutex"}
 }
 
+// IsPredefined returns true if the specified name is one of the pprof predefined
+// profiles, or 'cpu' which is recognised by this package as requesting
+// a cpu profile.
 func IsPredefined(name string) bool {
 	if name == "cpu" {
 		return true
@@ -107,7 +113,10 @@ func Start(name, filename string) (func() error, error) {
 		err := fmt.Errorf("missing profile or filename: %q:%q", name, filename)
 		return func() error { return err }, err
 	}
-	if pprof.Lookup(name) == nil {
+	if !IsPredefined(name) {
+		return func() error { return nil }, fmt.Errorf("unsupported profile: %v", name)
+	}
+	if name == "cpu" {
 		save, err := enableCPUProfiling(filename)
 		return save, err
 	}

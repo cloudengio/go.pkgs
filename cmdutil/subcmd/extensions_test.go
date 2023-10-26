@@ -5,7 +5,6 @@
 package subcmd_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -37,8 +36,7 @@ type extType struct {
 	count int
 }
 
-func (e *extType) Set(cs *subcmd.CommandSetYAML) error {
-	fmt.Printf(">>>> %v\n", cs)
+func (e *extType) Set(_ *subcmd.CommandSetYAML) error {
 	e.count++
 	return nil
 }
