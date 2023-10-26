@@ -25,7 +25,7 @@ func TestCrawledObject(t *testing.T) {
 	dl := []download.Result{{
 		Contents: contents,
 		Name:     name,
-		FileInfo: fi,
+		FileInfo: &fi,
 		Retries:  2,
 		Err:      fmt.Errorf("oops"),
 	}}
