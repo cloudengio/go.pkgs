@@ -1,7 +1,7 @@
 cloudeng.io/errors v0.0.8 h1:WEpTcAYnL2wsPm0qfMpXRupoO61DahxbD4doPKbsaGY=
 cloudeng.io/errors v0.0.8/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
-cloudeng.io/file v0.0.0-20230913164637-56a6ca867a22 h1:OZt8+76+/k/vIW6ri/2jXDK6P1O2yKkWgZZWq/gJEO8=
-cloudeng.io/file v0.0.0-20230913164637-56a6ca867a22/go.mod h1:svdodwp2fOBjFOl+rTWwlZiPF+fQB9Q8RuhdHvPQlfA=
+cloudeng.io/file v0.0.0-20231026032435-4ad1389db593 h1:4vLodBotOVkF4TX5hXJk/nffwI3XBfgr0ESGuCv9wy0=
+cloudeng.io/file v0.0.0-20231026032435-4ad1389db593/go.mod h1:XQTJV7kZFCtC5lWr57xZtljzB8fQ6/42VA55g8TQYas=
 cloudeng.io/path v0.0.8 h1:wyHHEJLPoHe8jq6I7xJxM90Cy8hVkMNvW+jEQRvF3lg=
 cloudeng.io/path v0.0.8/go.mod h1:S9dU9pNDkx0EUIHY+Pcyfzs3/cItCI9lyClkwqv0PtM=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
