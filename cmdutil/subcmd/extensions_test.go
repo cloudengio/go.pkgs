@@ -36,7 +36,7 @@ type extType struct {
 	count int
 }
 
-func (e *extType) Set(cs *subcmd.CommandSetYAML) error {
+func (e *extType) Set(_ *subcmd.CommandSetYAML) error {
 	e.count++
 	return nil
 }
