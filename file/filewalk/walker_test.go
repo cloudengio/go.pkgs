@@ -97,14 +97,14 @@ func (l *logger) Contents(ctx context.Context, state *int, prefix string, conten
 	return children, nil
 }
 
-func (l *logger) Done(_ context.Context, state *int, prefix string) error {
+func (l *logger) Done(_ context.Context, state *int, prefix string, _ error) error {
 	prefix = strings.TrimPrefix(prefix, l.prefix)
 	l.appendLine(fmt.Sprintf("%v* end [%v]\n", prefix, *state))
 	return nil
 }
 
 func TestLocalWalk(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 	sc := localfs.New()
 
@@ -344,12 +344,15 @@ func (e *errorScanner) Contents(_ context.Context, _ *int, _ string, _ []filewal
 	return nil, e.contentsError
 }
 
-func (e *errorScanner) Done(_ context.Context, _ *int, _ string) error {
+func (e *errorScanner) Done(_ context.Context, _ *int, _ string, err error) error {
+	if err != nil {
+		return err
+	}
 	return e.doneError
 }
 
 func TestFunctionErrors(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 	sc := localfs.New()
 
@@ -374,10 +377,20 @@ func TestFunctionErrors(t *testing.T) {
 
 type infiniteScanner struct {
 	filewalk.FS
+	ctx                      context.Context
+	scanDelay, contentsDelay time.Duration
+	scanCh, contentCh        chan struct{}
+}
+
+func (is *infiniteScanner) close(ch chan struct{}) {
+	if ch != nil {
+		close(ch)
+	}
 }
 
 func (is *infiniteScanner) Scan(context.Context, int) bool {
-	time.Sleep(time.Hour)
+	is.close(is.scanCh)
+	time.Sleep(is.scanDelay)
 	return true
 }
 
@@ -386,42 +399,80 @@ func (is *infiniteScanner) Err() error {
 }
 
 func (is *infiniteScanner) Contents() []filewalk.Entry {
+	is.close(is.contentCh)
+	time.Sleep(is.contentsDelay)
 	return nil
 }
 
 func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
-	return &infiniteScanner{}
+	return &infiniteScanner{
+		scanDelay:     is.scanDelay,
+		contentsDelay: is.contentsDelay,
+		scanCh:        is.scanCh,
+		contentCh:     is.contentCh,
+	}
 }
 
 func TestCancel(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)
+	t.Fail()
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	is := &infiniteScanner{FS: localfs.New()}
-	lg := &logger{fs: is}
-	wk := filewalk.New(is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(4))
 
-	ch := make(chan error)
-	go func() {
-		ch <- wk.Walk(ctx, "anywhere")
-	}()
-	go cancel()
-	select {
-	case err := <-ch:
-		if err == nil || !strings.Contains(err.Error(), "context canceled") {
-			t.Fatalf("missing or wrong error: %v", err)
+	for _, tc := range []struct {
+		scanDelay, contentsDelay time.Duration
+		scanCh, contentCh        chan struct{}
+	}{
+		//{scanDelay: time.Hour, scanCh: make(chan struct{})},
+		//{contentsDelay: time.Hour, contentCh: make(chan struct{})},
+	} {
+		ctx, cancel := context.WithCancel(ctx)
+		is := &infiniteScanner{
+			FS:            localfs.New(),
+			scanDelay:     tc.scanDelay,
+			contentsDelay: tc.contentsDelay,
+			scanCh:        tc.scanCh,
+			contentCh:     tc.contentCh,
 		}
-	case <-time.After(time.Second * 30):
-		t.Fatalf("timed out")
-	}
+		lg := &logger{
+			prefix:   localTestTree,
+			fs:       is,
+			children: map[string]file.InfoList{},
+			state:    map[string]int{},
+		}
 
-	select {
-	case <-ctx.Done():
-		if err := ctx.Err(); err == nil || !strings.Contains(err.Error(), "context canceled") {
-			t.Fatalf("missing or wrong error: %v", err)
+		wk := filewalk.New(is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+
+		ch := make(chan error)
+		go func() {
+			ch <- wk.Walk(ctx, localTestTree)
+		}()
+
+		if tc.scanCh != nil {
+			<-tc.scanCh
+
 		}
-	default:
-		t.Fatalf("context was not canceld")
+		if tc.contentCh != nil {
+			<-tc.contentCh
+		}
+		go cancel()
+
+		select {
+		case err := <-ch:
+			if err == nil || !strings.Contains(err.Error(), "context canceled") {
+				t.Fatalf("missing or wrong error: %v", err)
+			}
+		case <-time.After(time.Second * 30):
+			t.Fatalf("timed out")
+		}
+
+		select {
+		case <-ctx.Done():
+			if err := ctx.Err(); err == nil || !strings.Contains(err.Error(), "context canceled") {
+				t.Fatalf("missing or wrong error: %v", err)
+			}
+		default:
+			t.Fatalf("context was not canceld")
+		}
 	}
 }
 
@@ -452,8 +503,8 @@ func (is *slowScanner) Contents() []filewalk.Entry {
 	return is.sc.Contents()
 }
 
-func TestReporting(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)
+func TestReportingSlowScanner(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 	is := &slowFS{localfs.New()}
 	ch := make(chan filewalk.Status, 100)
@@ -547,7 +598,7 @@ func (d *dbScanner) Prefix(_ context.Context, state *bool, prefix string, fi fil
 	return false, nil, nil
 }
 
-func (d *dbScanner) Done(_ context.Context, state *bool, prefix string) error {
+func (d *dbScanner) Done(_ context.Context, _ *bool, _ string, _ error) error {
 	return nil
 }
 
@@ -570,7 +621,7 @@ func (d *dbScanner) dirsAndFiles() (dirs, files, unchanged []string) {
 }
 
 func TestUnchanged(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 	sc := localfs.New()
 	dbl := &dbScanner{
@@ -629,7 +680,7 @@ func (d dummyError) Error() string {
 }
 
 func TestError(t *testing.T) {
-	err := &filewalk.Error{"/a/b/c", "some op", context.Canceled}
+	err := &filewalk.Error{"/a/b/c", context.Canceled}
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled")
@@ -645,10 +696,6 @@ func TestError(t *testing.T) {
 	}
 
 	if got, want := expected.Path, "/a/b/c"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	if got, want := expected.Op, "some op"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

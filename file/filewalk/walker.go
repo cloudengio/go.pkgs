@@ -134,13 +134,12 @@ type FS interface {
 // encountered.
 type Error struct {
 	Path string
-	Op   string
 	Err  error
 }
 
 // Error implements error.
 func (e Error) Error() string {
-	return "[" + e.Path + ": " + e.Op + "] " + e.Err.Error()
+	return "[" + e.Path + ": " + e.Err.Error()
 }
 
 // Is implements errors.Is.
@@ -162,39 +161,29 @@ func (e *Error) As(target interface{}) bool {
 	return errors.As(e.Err, target)
 }
 
-// recordError will record the specified error if it is not nil; ie.
-// its safe to call it with a nil error.
-func (w *Walker[T]) recordError(path, op string, err error) {
-	if err == nil {
-		return
-	}
-	w.errs.Append(&Error{path, op, err})
-}
-
-func (w *Walker[T]) listLevel(ctx context.Context, state *T, path string) []file.Info {
+func (w *Walker[T]) processLevel(ctx context.Context, state *T, path string) ([]file.Info, error) {
 
 	w.tk.add(path)
 	defer w.tk.rm(path)
 
 	var nextLevel []file.Info
+
 	sc := w.fs.LevelScanner(path)
 	for sc.Scan(ctx, w.opts.scanSize) {
 		children, err := w.handler.Contents(ctx, state, path, sc.Contents(), nil)
 		if err != nil {
-			w.recordError(path, "handler.Contents", err)
-			return nil
+			return nil, err
 		}
 		nextLevel = append(nextLevel, children...)
 	}
 
 	if err := sc.Err(); err != nil {
 		if _, err := w.handler.Contents(ctx, state, path, nil, err); err != nil {
-			w.recordError(path, "handler.Contents", err)
-			return nil
+			return nil, err
 		}
 	}
 
-	return nextLevel
+	return nextLevel, nil
 }
 
 // Handler is implemented by clients of Walker to process the results of
@@ -219,8 +208,10 @@ type Handler[T any] interface {
 	// Contents with an empty list of Entry's and a non-nil error.
 	Contents(ctx context.Context, state *T, prefix string, contents []Entry, err error) (file.InfoList, error)
 
-	// Done is called once calls to Contents have been made.
-	Done(ctx context.Context, state *T, prefix string) error
+	// Done is called once calls to Contents have been made or if Prefix returned
+	// an error. Done will always be called if Prefix did not return true for stop.
+	// Errors returned by Done are recorded and returned by the Walk method.
+	Done(ctx context.Context, state *T, prefix string, err error) error
 }
 
 // Walk traverses the hierarchies specified by each of the roots calling
@@ -320,7 +311,6 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name())
-
 			w.walker(ctx, p, child, nil, limitCh)
 			wg.Done()
 			continue
@@ -334,6 +324,14 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 	wg.Wait()
 }
 
+func (w *Walker[T]) handleDone(ctx context.Context, state *T, path string, err error) {
+	err = w.handler.Done(ctx, state, path, err)
+	if err == nil {
+		return
+	}
+	w.errs.Append(&Error{path, err})
+}
+
 func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) {
 	select {
 	case <-ctx.Done():
@@ -342,28 +340,24 @@ func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err
 	}
 
 	var state T
-
 	stop, children, err := w.handler.Prefix(ctx, &state, path, info, err)
-	w.recordError(path, "filewalk: handler.prefix", err)
 	if stop {
 		return
 	}
-	if len(children) > 0 {
-		w.walkChildren(ctx, path, children, limitCh)
-		if err := w.handler.Done(ctx, &state, path); err != nil {
-			w.recordError(path, "filewalk: handler.Done", err)
-		}
+	if err != nil {
+		w.handleDone(ctx, &state, path, err)
 		return
 	}
-
-	children = w.listLevel(ctx, &state, path)
-
-	if len(children) > 0 {
-		w.walkChildren(ctx, path, children, limitCh)
+	if len(children) == 0 {
+		children, err = w.processLevel(ctx, &state, path)
+		if err != nil {
+			w.handleDone(ctx, &state, path, err)
+			return
+		}
 	}
-	if err := w.handler.Done(ctx, &state, path); err != nil {
-		w.recordError(path, "filewalk: handler.Done", err)
-	}
+	w.walkChildren(ctx, path, children, limitCh)
+	w.handleDone(ctx, &state, path, nil)
+	return
 }
 
 func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {

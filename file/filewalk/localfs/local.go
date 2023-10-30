@@ -6,10 +6,12 @@ package localfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -23,6 +25,7 @@ func New() filewalk.FS {
 }
 
 type scanner struct {
+	path    string
 	err     error
 	file    *os.File
 	entries []fs.DirEntry
@@ -32,7 +35,12 @@ func (s *scanner) Contents() []filewalk.Entry {
 	return newContents(s.entries)
 }
 
-func (s *scanner) Scan(_ context.Context, n int) bool {
+func (s *scanner) Scan(ctx context.Context, n int) bool {
+	if s.file == nil {
+		if !s.open(ctx, s.path) {
+			return false
+		}
+	}
 	dirEntries, err := s.file.ReadDir(n)
 	if err != nil {
 		s.entries = nil
@@ -51,12 +59,31 @@ func (s *scanner) Err() error {
 	return s.err
 }
 
-func NewLevelScanner(path string) filewalk.LevelScanner {
-	f, err := os.Open(path)
-	if err != nil {
-		return &scanner{err: err}
+type openState struct {
+	file *os.File
+	err  error
+}
+
+func (s *scanner) open(ctx context.Context, path string) bool {
+	ch := make(chan openState, 1)
+	go func() {
+		f, err := os.Open(path)
+		ch <- openState{file: f, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		s.err = ctx.Err()
+		return false
+	case state := <-ch:
+		s.file, s.err = state.file, state.err
+	case <-time.After(time.Minute):
+		s.err = fmt.Errorf("os.Open(%s) too too long", path)
 	}
-	return &scanner{file: f}
+	return s.err == nil
+}
+
+func NewLevelScanner(path string) filewalk.LevelScanner {
+	return &scanner{path: path}
 }
 
 func (l *T) Open(path string) (fs.File, error) {

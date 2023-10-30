@@ -9,6 +9,7 @@ package profiling
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 
@@ -119,6 +120,9 @@ func Start(name, filename string) (func() error, error) {
 	if name == "cpu" {
 		save, err := enableCPUProfiling(filename)
 		return save, err
+	}
+	if name == "block" {
+		runtime.SetBlockProfileRate(1000)
 	}
 	output, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0760)
 	if err != nil {
