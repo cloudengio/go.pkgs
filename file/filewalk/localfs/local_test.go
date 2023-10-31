@@ -35,7 +35,7 @@ func scan(sc filewalk.FS, dir string) (dirNames, fileNames []string, errors []er
 	ds := sc.LevelScanner(dir)
 	for ds.Scan(ctx, 1) {
 		entries := ds.Contents()
-		for _, entry := range entries.Entries {
+		for _, entry := range entries {
 			fi, err := sc.LStat(ctx, sc.Join(dir, entry.Name))
 			if err != nil {
 				errors = append(errors, err)

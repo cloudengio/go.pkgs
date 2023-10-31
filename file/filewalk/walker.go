@@ -283,6 +283,7 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	select {
 	case <-rootCtx.Done():
 		w.errs.Append(rootCtx.Err())
+		<-waitCh
 	case <-waitCh:
 	}
 

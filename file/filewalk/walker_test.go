@@ -377,9 +377,9 @@ func TestFunctionErrors(t *testing.T) {
 
 type infiniteScanner struct {
 	filewalk.FS
-	ctx                      context.Context
-	scanDelay, contentsDelay time.Duration
-	scanCh, contentCh        chan struct{}
+	ctx       context.Context
+	scanDelay time.Duration
+	scanCh    chan struct{}
 }
 
 func (is *infiniteScanner) close(ch chan struct{}) {
@@ -388,10 +388,14 @@ func (is *infiniteScanner) close(ch chan struct{}) {
 	}
 }
 
-func (is *infiniteScanner) Scan(context.Context, int) bool {
+func (is *infiniteScanner) Scan(ctx context.Context, _ int) bool {
 	is.close(is.scanCh)
-	time.Sleep(is.scanDelay)
-	return true
+	select {
+	case <-time.After(is.scanDelay):
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func (is *infiniteScanner) Err() error {
@@ -399,81 +403,63 @@ func (is *infiniteScanner) Err() error {
 }
 
 func (is *infiniteScanner) Contents() []filewalk.Entry {
-	is.close(is.contentCh)
-	time.Sleep(is.contentsDelay)
 	return nil
 }
 
 func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
 	return &infiniteScanner{
-		scanDelay:     is.scanDelay,
-		contentsDelay: is.contentsDelay,
-		scanCh:        is.scanCh,
-		contentCh:     is.contentCh,
+		scanDelay: is.scanDelay,
+		scanCh:    is.scanCh,
 	}
 }
 
 func TestCancel(t *testing.T) {
-	t.Fail()
 	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 
-	for _, tc := range []struct {
-		scanDelay, contentsDelay time.Duration
-		scanCh, contentCh        chan struct{}
-	}{
-		//{scanDelay: time.Hour, scanCh: make(chan struct{})},
-		//{contentsDelay: time.Hour, contentCh: make(chan struct{})},
-	} {
-		ctx, cancel := context.WithCancel(ctx)
-		is := &infiniteScanner{
-			FS:            localfs.New(),
-			scanDelay:     tc.scanDelay,
-			contentsDelay: tc.contentsDelay,
-			scanCh:        tc.scanCh,
-			contentCh:     tc.contentCh,
-		}
-		lg := &logger{
-			prefix:   localTestTree,
-			fs:       is,
-			children: map[string]file.InfoList{},
-			state:    map[string]int{},
-		}
-
-		wk := filewalk.New(is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
-
-		ch := make(chan error)
-		go func() {
-			ch <- wk.Walk(ctx, localTestTree)
-		}()
-
-		if tc.scanCh != nil {
-			<-tc.scanCh
-
-		}
-		if tc.contentCh != nil {
-			<-tc.contentCh
-		}
-		go cancel()
-
-		select {
-		case err := <-ch:
-			if err == nil || !strings.Contains(err.Error(), "context canceled") {
-				t.Fatalf("missing or wrong error: %v", err)
-			}
-		case <-time.After(time.Second * 30):
-			t.Fatalf("timed out")
-		}
-
-		select {
-		case <-ctx.Done():
-			if err := ctx.Err(); err == nil || !strings.Contains(err.Error(), "context canceled") {
-				t.Fatalf("missing or wrong error: %v", err)
-			}
-		default:
-			t.Fatalf("context was not canceld")
-		}
+	ctx, cancel := context.WithCancel(ctx)
+	readyCh := make(chan struct{})
+	is := &infiniteScanner{
+		FS:        localfs.New(),
+		scanDelay: time.Hour,
+		scanCh:    readyCh,
 	}
+	lg := &logger{
+		prefix:   localTestTree,
+		fs:       is,
+		children: map[string]file.InfoList{},
+		state:    map[string]int{},
+	}
+
+	wk := filewalk.New(is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+
+	ch := make(chan error)
+	go func() {
+		ch <- wk.Walk(ctx, localTestTree)
+	}()
+
+	<-readyCh
+
+	go cancel()
+
+	select {
+	case err := <-ch:
+		if err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("missing or wrong error: %v", err)
+		}
+	case <-time.After(time.Second * 30):
+		t.Fatalf("timed out")
+	}
+
+	select {
+	case <-ctx.Done():
+		if err := ctx.Err(); err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("missing or wrong error: %v", err)
+		}
+	default:
+		t.Fatalf("context was not canceld")
+	}
+
 }
 
 type slowFS struct {
