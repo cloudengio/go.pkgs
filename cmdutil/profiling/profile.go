@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 
 	"cloudeng.io/errors"
@@ -122,7 +123,11 @@ func Start(name, filename string) (func() error, error) {
 		return save, err
 	}
 	if name == "block" {
-		runtime.SetBlockProfileRate(1000)
+		rate, _ := strconv.Atoi(os.Getenv("GO_BLOCK_PROFILE_RATE"))
+		if rate == 0 {
+			rate = 1000
+		}
+		runtime.SetBlockProfileRate(rate)
 	}
 	output, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0760)
 	if err != nil {
