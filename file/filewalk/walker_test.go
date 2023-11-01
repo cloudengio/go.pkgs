@@ -614,7 +614,7 @@ func TestUnchanged(t *testing.T) {
 		fs:        sc,
 		db:        map[string]file.Info{},
 		unchanged: map[string]bool{}}
-	wk := filewalk.New(sc, dbl, filewalk.WithScanSize(1), filewalk.WithConcurrency(2))
+	wk := filewalk.New[bool](sc, dbl, filewalk.WithScanSize(1), filewalk.WithConcurrency(2))
 
 	// Use a separate copy of the test tree that can be modified without
 	// affecting other tests.
