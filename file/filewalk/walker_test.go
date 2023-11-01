@@ -527,6 +527,7 @@ func TestReportingSlowScanner(t *testing.T) {
 	if nSync == 0 {
 		t.Errorf("no synchronous scans: %v", nSync)
 	}
+	wg.Wait()
 }
 
 type dbState bool
