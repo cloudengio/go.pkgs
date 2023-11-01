@@ -71,14 +71,9 @@ func (l *logger) Prefix(_ context.Context, state *int, prefix string, _ file.Inf
 	return false, l.children[prefix], nil
 }
 
-func (l *logger) Contents(ctx context.Context, state *int, prefix string, contents []filewalk.Entry, err error) (file.InfoList, error) {
+func (l *logger) Contents(ctx context.Context, state *int, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
 	children := file.InfoList{}
 	parent := strings.TrimPrefix(prefix, l.prefix)
-	if err != nil {
-		l.appendLine(fmt.Sprintf("%v: %v\n", parent,
-			strings.Replace(err.Error(), l.prefix, "", 1)))
-		return nil, nil
-	}
 	for _, de := range contents {
 		link := ""
 		info, err := l.fs.LStat(ctx, l.fs.Join(prefix, de.Name))
@@ -97,9 +92,14 @@ func (l *logger) Contents(ctx context.Context, state *int, prefix string, conten
 	return children, nil
 }
 
-func (l *logger) Done(_ context.Context, state *int, prefix string, _ error) error {
-	prefix = strings.TrimPrefix(prefix, l.prefix)
-	l.appendLine(fmt.Sprintf("%v* end [%v]\n", prefix, *state))
+func (l *logger) Done(_ context.Context, state *int, prefix string, err error) error {
+	parent := strings.TrimPrefix(prefix, l.prefix)
+	l.appendLine(fmt.Sprintf("%v* end [%v]\n", parent, *state))
+	if err != nil {
+		l.appendLine(fmt.Sprintf("%v: %v\n", parent,
+			strings.Replace(err.Error(), l.prefix, "", 1)))
+		return nil
+	}
 	return nil
 }
 
@@ -340,7 +340,7 @@ func (e *errorScanner) Prefix(_ context.Context, _ *int, _ string, _ file.Info, 
 	return false, nil, e.prefixErr
 }
 
-func (e *errorScanner) Contents(_ context.Context, _ *int, _ string, _ []filewalk.Entry, _ error) (file.InfoList, error) {
+func (e *errorScanner) Contents(_ context.Context, _ *int, _ string, _ []filewalk.Entry) (file.InfoList, error) {
 	return nil, e.contentsError
 }
 
@@ -540,7 +540,7 @@ type dbScanner struct {
 	lines     []string
 }
 
-func (d *dbScanner) Contents(ctx context.Context, state *bool, prefix string, contents []filewalk.Entry, _ error) (file.InfoList, error) {
+func (d *dbScanner) Contents(ctx context.Context, state *bool, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
 	d.Lock()
 	defer d.Unlock()
 	var children file.InfoList

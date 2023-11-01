@@ -170,20 +170,13 @@ func (w *Walker[T]) processLevel(ctx context.Context, state *T, path string) ([]
 
 	sc := w.fs.LevelScanner(path)
 	for sc.Scan(ctx, w.opts.scanSize) {
-		children, err := w.handler.Contents(ctx, state, path, sc.Contents(), nil)
+		children, err := w.handler.Contents(ctx, state, path, sc.Contents())
 		if err != nil {
 			return nil, err
 		}
 		nextLevel = append(nextLevel, children...)
 	}
-
-	if err := sc.Err(); err != nil {
-		if _, err := w.handler.Contents(ctx, state, path, nil, err); err != nil {
-			return nil, err
-		}
-	}
-
-	return nextLevel, nil
+	return nextLevel, sc.Err()
 }
 
 // Handler is implemented by clients of Walker to process the results of
@@ -205,8 +198,8 @@ type Handler[T any] interface {
 	// level in the filesystem hierarchy. Each such call contains at most the
 	// number of items allowed for by the WithScanSize option. Note that
 	// errors encountered whilst scanning the filesystem result in calls to
-	// Contents with an empty list of Entry's and a non-nil error.
-	Contents(ctx context.Context, state *T, prefix string, contents []Entry, err error) (file.InfoList, error)
+	// Done with the error encountered.
+	Contents(ctx context.Context, state *T, prefix string, contents []Entry) (file.InfoList, error)
 
 	// Done is called once calls to Contents have been made or if Prefix returned
 	// an error. Done will always be called if Prefix did not return true for stop.
