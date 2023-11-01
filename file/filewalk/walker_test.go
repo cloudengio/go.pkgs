@@ -116,25 +116,25 @@ func TestLocalWalk(t *testing.T) {
 		}
 	}
 	lg := nl()
-	wk := filewalk.New(sc, lg, filewalk.WithScanSize(1))
+	wk := filewalk.New[int](sc, lg, filewalk.WithScanSize(1))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
-	wk = filewalk.New(sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
-	wk = filewalk.New(sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
 	lg.skip = strings.ReplaceAll("/b0/b0.1", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial1)
 
 	lg = nl()
-	wk = filewalk.New(sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
 	lg.skip = strings.ReplaceAll("/b0", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial2)
 
 	lg = nl()
-	wk = filewalk.New(sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
 	b01, err := sc.Stat(ctx, sc.Join(localTestTree, "b0", "b0.1"))
 	if err != nil {
 		t.Fatal(err)
@@ -356,19 +356,19 @@ func TestFunctionErrors(t *testing.T) {
 	ctx := context.Background()
 	sc := localfs.New()
 
-	wk := filewalk.New(sc, &errorScanner{prefixErr: errors.New("oops")}, filewalk.WithScanSize(1))
+	wk := filewalk.New[int](sc, &errorScanner{prefixErr: errors.New("oops")}, filewalk.WithScanSize(1))
 	err := wk.Walk(ctx, localTestTree)
 	if err == nil || !strings.Contains(err.Error(), "oops") {
 		t.Errorf("missing or unexpected error: %v", err)
 	}
 
-	wk = filewalk.New(sc, &errorScanner{contentsError: errors.New("oh no")}, filewalk.WithScanSize(1))
+	wk = filewalk.New[int](sc, &errorScanner{contentsError: errors.New("oh no")}, filewalk.WithScanSize(1))
 	err = wk.Walk(ctx, localTestTree)
 	if err == nil || strings.Count(err.Error(), "oh no") != 1 {
 		t.Errorf("missing or unexpected error: %v", err)
 	}
 
-	wk = filewalk.New(sc, &errorScanner{doneError: errors.New("one more")}, filewalk.WithScanSize(1))
+	wk = filewalk.New[int](sc, &errorScanner{doneError: errors.New("one more")}, filewalk.WithScanSize(1))
 	err = wk.Walk(ctx, localTestTree)
 	if err == nil || strings.Count(err.Error(), "one more") != 1 {
 		t.Errorf("missing or unexpected error: %v", err)
@@ -431,7 +431,7 @@ func TestCancel(t *testing.T) {
 		state:    map[string]int{},
 	}
 
-	wk := filewalk.New(is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
 
 	ch := make(chan error)
 	go func() {
@@ -498,7 +498,7 @@ func TestReportingSlowScanner(t *testing.T) {
 		fs:    is,
 		state: map[string]int{},
 	}
-	wk := filewalk.New(is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(2),
+	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(2),
 		filewalk.WithReporting(ch, time.Millisecond*100, time.Millisecond*250))
 
 	var wg sync.WaitGroup
