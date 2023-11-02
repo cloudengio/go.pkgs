@@ -199,7 +199,9 @@ func (is *Issuer) async(ctx context.Context, prefix string, entries []filewalk.E
 			return nil
 		})
 	}
-	g.Wait()
+	if err = g.Wait(); err != nil {
+		return
+	}
 	close(ch)
 	for seq.Scan() {
 		res := seq.Item()

@@ -9,7 +9,7 @@ test:
 	multimod test
 
 lint:
-	multimod test
+	multimod lint
 
 deps:
 	multimod update
