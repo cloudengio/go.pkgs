@@ -97,6 +97,46 @@ func TestMutexExcludes(t *testing.T) {
 	wait(t)
 }
 
+func TestMutexReadOnlyCreate(t *testing.T) {
+	t.Parallel()
+
+	dir, remove := mustTempDir(t)
+	defer remove()
+
+	path := filepath.Join(dir, "lock")
+
+	mu := lockedfile.MutexAt(path)
+	t.Logf("mu := MutexAt(_)")
+
+	_, err := mu.RLock()
+	if err == nil || !os.IsNotExist(err) {
+		t.Fatalf("mu.RLock: missing or wrong error: %v", err)
+	}
+	unlock, err := mu.RLockCreate()
+	if err != nil {
+		t.Fatalf("mu.RLockCreate: %v", err)
+	}
+	t.Logf("unlock, _  := mu.RLockCreate()")
+
+	mu2 := lockedfile.MutexAt(mu.Path)
+	t.Logf("mu2 := MutexAt(mu.Path)")
+
+	wait := mustBlock(t, "mu2.Lock()", func() {
+		unlock2, err := mu2.Lock()
+		if err != nil {
+			t.Errorf("mu2.Lock: %v", err)
+			return
+		}
+		t.Logf("unlock2, _ := mu2.Lock()")
+		t.Logf("unlock2()")
+		unlock2()
+	})
+
+	t.Logf("unlock()")
+	unlock()
+	wait(t)
+}
+
 func TestReadWaitsForLock(t *testing.T) {
 	t.Parallel()
 
