@@ -13,6 +13,6 @@ import (
 )
 
 // symlinkInfo returns a file.Info appropriate for a symlink.
-func symlinkInfo(filename string, info os.FileInfo) (file.Info, error) {
+func symlinkInfo(_ string, info os.FileInfo) (file.Info, error) {
 	return file.NewInfoFromFileInfo(info), nil
 }
