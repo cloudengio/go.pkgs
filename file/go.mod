@@ -1,6 +1,6 @@
 module cloudeng.io/file
 
-go 1.18
+go 1.21
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20231026032435-4ad1389db593

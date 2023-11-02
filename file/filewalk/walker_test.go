@@ -76,7 +76,7 @@ func (l *logger) Contents(ctx context.Context, state *int, prefix string, conten
 	parent := strings.TrimPrefix(prefix, l.prefix)
 	for _, de := range contents {
 		link := ""
-		info, err := l.fs.LStat(ctx, l.fs.Join(prefix, de.Name))
+		info, err := l.fs.Lstat(ctx, l.fs.Join(prefix, de.Name))
 		if err != nil {
 			return nil, err
 		}
@@ -377,7 +377,6 @@ func TestFunctionErrors(t *testing.T) {
 
 type infiniteScanner struct {
 	filewalk.FS
-	ctx       context.Context
 	scanDelay time.Duration
 	scanCh    chan struct{}
 }
@@ -530,8 +529,6 @@ func TestReportingSlowScanner(t *testing.T) {
 	wg.Wait()
 }
 
-type dbState bool
-
 type dbScanner struct {
 	sync.Mutex
 	fs        filewalk.FS
@@ -540,13 +537,13 @@ type dbScanner struct {
 	lines     []string
 }
 
-func (d *dbScanner) Contents(ctx context.Context, state *bool, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
+func (d *dbScanner) Contents(ctx context.Context, _ *bool, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
 	d.Lock()
 	defer d.Unlock()
 	var children file.InfoList
 	for _, de := range contents {
 		path := d.fs.Join(prefix, de.Name)
-		fi, err := d.fs.LStat(ctx, path)
+		fi, err := d.fs.Lstat(ctx, path)
 		if err != nil {
 			return nil, err
 		}

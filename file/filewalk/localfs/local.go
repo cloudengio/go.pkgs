@@ -114,7 +114,7 @@ func (l *T) Stat(_ context.Context, path string) (file.Info, error) {
 	return file.NewInfoFromFileInfo(info), nil
 }
 
-func (l *T) LStat(_ context.Context, path string) (file.Info, error) {
+func (l *T) Lstat(_ context.Context, path string) (file.Info, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return file.Info{}, err

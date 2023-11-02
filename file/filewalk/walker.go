@@ -113,8 +113,8 @@ type FS interface {
 	// Stat will follow symlinks.
 	Stat(ctx context.Context, path string) (file.Info, error)
 
-	// LStat will not follow symlinks.
-	LStat(ctx context.Context, path string) (file.Info, error)
+	// Lstat will not follow symlinks.
+	Lstat(ctx context.Context, path string) (file.Info, error)
 
 	LevelScanner(path string) LevelScanner
 
@@ -186,7 +186,7 @@ type Handler[T any] interface {
 
 	// Prefix is called to determine if a given level in the filesystem hiearchy
 	// should be further examined or traversed. The file.Info is obtained via a call
-	// to LStat and hence will refer to a symlink itself if the prefix is a symlink.
+	// to Lstat and hence will refer to a symlink itself if the prefix is a symlink.
 	// If stop is true then traversal stops at this point. If a list of Entry's
 	// is returned then this list is traversed directly rather than obtaining
 	// the children from the filesystem. This allows for both exclusions and
@@ -249,7 +249,7 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 
 	for _, root := range roots {
 		root := root
-		rootInfo, rootErr := w.fs.LStat(ctx, root)
+		rootInfo, rootErr := w.fs.Lstat(ctx, root)
 		walkers.Go(func() error {
 			<-walkerLimitCh
 			w.walker(ctx, root, rootInfo, rootErr, walkerLimitCh)
@@ -351,7 +351,7 @@ func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err
 	}
 	w.walkChildren(ctx, path, children, limitCh)
 	w.handleDone(ctx, &state, path, nil)
-	return
+
 }
 
 func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {
