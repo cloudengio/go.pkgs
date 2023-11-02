@@ -11,7 +11,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"syscall"
 	"testing"
 
 	"cloudeng.io/file"
@@ -36,7 +35,7 @@ func scan(sc filewalk.FS, dir string) (dirNames, fileNames []string, errors []er
 	for ds.Scan(ctx, 1) {
 		entries := ds.Contents()
 		for _, entry := range entries {
-			fi, err := sc.LStat(ctx, sc.Join(dir, entry.Name))
+			fi, err := sc.Lstat(ctx, sc.Join(dir, entry.Name))
 			if err != nil {
 				errors = append(errors, err)
 				continue
@@ -79,9 +78,11 @@ func TestLocalFilesystem(t *testing.T) {
 
 	for _, d := range expectedDirNames {
 		i := info[d]
-		if _, ok := i.Sys().(*syscall.Stat_t); !ok {
-			t.Errorf("%v: wrong type for Sys %T", d, i.Sys())
-		}
+		/*		if _, ok := i.Sys().(*syscall.Stat_t); !ok {
+				t.Errorf("%v: wrong type for Sys %T", d, i.Sys())
+			}*/
+		t.Fail()
+		t.Logf(",....... %T %#v\n", i.Sys(), i.Sys())
 		if got, want := i.IsDir(), true; got != want {
 			t.Errorf("%v: got %v, want %v", d, got, want)
 		}
