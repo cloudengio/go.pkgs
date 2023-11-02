@@ -173,8 +173,10 @@ type lstatResult struct {
 }
 
 func (is *Issuer) async(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
-
-	concurrency := min(is.opts.asyncStats, len(entries))
+	concurrency := is.opts.asyncStats
+	if concurrency > len(entries) {
+		concurrency = len(entries)
+	}
 	g := &errgroup.T{}
 	g = errgroup.WithConcurrency(g, concurrency)
 
