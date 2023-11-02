@@ -119,6 +119,9 @@ func (l *T) Lstat(_ context.Context, path string) (file.Info, error) {
 	if err != nil {
 		return file.Info{}, err
 	}
+	if info.Mode()&os.ModeSymlink == os.ModeSymlink {
+		return symlinkInfo(path, info)
+	}
 	return file.NewInfoFromFileInfo(info), nil
 }
 

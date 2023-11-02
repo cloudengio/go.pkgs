@@ -78,11 +78,6 @@ func TestLocalFilesystem(t *testing.T) {
 
 	for _, d := range expectedDirNames {
 		i := info[d]
-		/*		if _, ok := i.Sys().(*syscall.Stat_t); !ok {
-				t.Errorf("%v: wrong type for Sys %T", d, i.Sys())
-			}*/
-		t.Fail()
-		t.Logf(",....... %T %#v\n", i.Sys(), i.Sys())
 		if got, want := i.IsDir(), true; got != want {
 			t.Errorf("%v: got %v, want %v", d, got, want)
 		}

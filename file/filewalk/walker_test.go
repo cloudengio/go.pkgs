@@ -164,7 +164,7 @@ func testLocalWalk(ctx context.Context, t *testing.T, tmpDir string, wk *filewal
 			p := l[:idx]
 			state = fmt.Sprintf(" [%v]", lg.state[filepath.Dir(p)])
 		}
-		if strings.Contains(l, "permission denied") {
+		if strings.Contains(l, "permission denied") || strings.Contains(l, "Access is denied") {
 			state = ""
 		}
 		if got, want := strings.TrimSpace(l), el[i]+state; got != want {
