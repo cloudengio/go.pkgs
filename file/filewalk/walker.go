@@ -299,8 +299,6 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 		child := child
 		select {
 		case <-limitCh:
-		case <-ctx.Done():
-			return
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
@@ -332,7 +330,6 @@ func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err
 		return
 	default:
 	}
-
 	var state T
 	stop, children, err := w.handler.Prefix(ctx, &state, path, info, err)
 	if stop {
@@ -351,7 +348,6 @@ func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err
 	}
 	w.walkChildren(ctx, path, children, limitCh)
 	w.handleDone(ctx, &state, path, nil)
-
 }
 
 func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {
