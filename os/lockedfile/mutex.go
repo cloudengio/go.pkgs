@@ -66,7 +66,7 @@ func (mu *Mutex) Lock() (unlock func(), err error) {
 	}, nil
 }
 
-// Lock attempts to lock the Mutex for read-only access.
+// RLock attempts to lock the Mutex for read-only access.
 func (mu *Mutex) RLock() (unlock func(), err error) {
 	if mu.Path == "" {
 		panic("lockedfile.Mutex: missing Path during Lock")
@@ -74,6 +74,35 @@ func (mu *Mutex) RLock() (unlock func(), err error) {
 	f, err := OpenFile(mu.Path, os.O_RDONLY, 0444)
 	if err != nil {
 		return nil, err
+	}
+	mu.mu.Lock()
+
+	return func() {
+		mu.mu.Unlock()
+		f.Close()
+	}, nil
+}
+
+// RLockCreate attempts to lock the Mutex for read-only access but
+// will create the lock file if one does not already exist.
+func (mu *Mutex) RLockCreate() (unlock func(), err error) {
+	if mu.Path == "" {
+		panic("lockedfile.Mutex: missing Path during Lock")
+	}
+	f, err := OpenFile(mu.Path, os.O_RDONLY, 0444)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		nf, nerr := OpenFile(mu.Path, os.O_RDWR|os.O_CREATE, 0666)
+		if nerr != nil {
+			return nil, err
+		}
+		nf.Close()
+		f, err = OpenFile(mu.Path, os.O_RDONLY, 0444)
+		if err != nil {
+			return nil, err
+		}
 	}
 	mu.mu.Lock()
 
