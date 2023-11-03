@@ -6,6 +6,7 @@ package asyncstat_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,21 +45,38 @@ func entriesFromDir(t *testing.T, dir string, stat bool) ([]filewalk.Entry, []fi
 	entries := make([]filewalk.Entry, 0, len(de))
 	infos := make([]file.Info, 0, len(de))
 	for _, d := range de {
+		filename := filepath.Join(dir, d.Name())
 		entries = append(entries, filewalk.Entry{Name: d.Name(), Type: d.Type()})
 		var info os.FileInfo
 		var err error
 		if stat {
-			info, err = os.Stat(filepath.Join(dir, d.Name()))
+			info, err = os.Stat(filename)
 		} else {
-			info, err = os.Lstat(filepath.Join(dir, d.Name()))
+			info, err = os.Lstat(filename)
 		}
+
 		if err != nil {
 			if stat {
 				continue
 			}
 			t.Fatal(err)
 		}
-		infos = append(infos, file.NewInfoFromFileInfo(info))
+		finfo := file.NewInfoFromFileInfo(info)
+		if info.Mode()&os.ModeSymlink != 0 {
+			// symlinks are annoyinglyg different on windows so we use
+			// readlink for all platforms.
+			buf, err := os.Readlink(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			finfo = file.NewInfo(
+				info.Name(),
+				int64(len(buf)),
+				info.Mode(),
+				info.ModTime(),
+				info.Sys())
+		}
+		infos = append(infos, finfo)
 	}
 	return entries, infos
 }
@@ -128,7 +146,8 @@ func (lt *latencyTracker) After(t time.Time) {
 	lt.Lock()
 	defer lt.Unlock()
 	lt.finished++
-	lt.took += time.Since(t)
+	s := time.Since(t)
+	lt.took += s
 }
 
 func TestIssue(t *testing.T) {
@@ -162,13 +181,13 @@ func TestIssue(t *testing.T) {
 
 		// Stat
 		latency := &latencyTracker{when: time.Now()}
-		var errors []string
+		statErrors := map[string]error{}
 		is = asyncstat.NewIssuer(fs,
 			asyncstat.WithAsyncThreshold(threshold),
 			asyncstat.WithStat(),
 			asyncstat.WithLatencyTracker(latency),
 			asyncstat.WithErrorLogger(func(ctx context.Context, filename string, err error) {
-				errors = append(errors, fmt.Sprintf("%v: %v", filename, err))
+				statErrors[filename] = err
 			}),
 		)
 
@@ -179,7 +198,10 @@ func TestIssue(t *testing.T) {
 		}
 		verifyEntries(t, children, all, infos)
 		ep := fs.Join(localTestTree, "la1")
-		if got, want := errors, []string{ep + ": stat " + ep + ": no such file or directory"}; !reflect.DeepEqual(got, want) {
+		if got, want := len(statErrors), 1; got != want {
+			t.Errorf("%v: got %v, want %v", mode, got, want)
+		}
+		if got, want := errors.Is(statErrors[ep], os.ErrNotExist), true; got != want {
 			t.Errorf("%v: got %v, want %v", mode, got, want)
 		}
 
@@ -191,7 +213,6 @@ func TestIssue(t *testing.T) {
 			t.Errorf("%v: got %v, want non-zero", mode, latency.took)
 		}
 	}
-
 }
 
 func TestASyncIssue(t *testing.T) {
