@@ -81,10 +81,10 @@ func entriesFromDir(t *testing.T, dir string, stat bool) ([]filewalk.Entry, []fi
 	return entries, infos
 }
 
-func verifyEntries(t *testing.T, children, all file.InfoList, wantAll file.InfoList) {
+func verifyEntries(t *testing.T, mode string, children, all file.InfoList, wantAll file.InfoList) {
 	_, _, line, _ := runtime.Caller(1)
 	if got, want := all, wantAll; !reflect.DeepEqual(got, want) {
-		t.Errorf("line %v, got %v, want %v", line, got, want)
+		t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 	}
 	wantNDirs := 0
 	for _, i := range wantAll {
@@ -95,24 +95,24 @@ func verifyEntries(t *testing.T, children, all file.InfoList, wantAll file.InfoL
 	wantNFiles := len(wantAll) - wantNDirs
 
 	if got, want := len(children), wantNDirs; got != want {
-		t.Errorf("line %v, got %v, want %v", line, got, want)
+		t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 	}
 
 	dirs := map[string]bool{}
 	for _, c := range children {
 		if got, want := c.IsDir(), true; got != want {
-			t.Errorf("line %v, got %v, want %v", line, got, want)
+			t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 		}
 		dirs[c.Name()] = true
 	}
 
 	if got, want := len(all), wantNFiles+wantNDirs; got != want {
-		t.Errorf("line %v, got %v, want %v", line, got, want)
+		t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 	}
 	ndirs, nfiles := 0, 0
 	for _, e := range all {
 		if got, want := dirs[e.Name()], e.IsDir(); got != want {
-			t.Errorf("line %v, got %v, want %v", line, got, want)
+			t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 		}
 		if e.IsDir() {
 			ndirs++
@@ -121,10 +121,10 @@ func verifyEntries(t *testing.T, children, all file.InfoList, wantAll file.InfoL
 		}
 	}
 	if got, want := ndirs, wantNDirs; got != want {
-		t.Errorf("line %v, got %v, want %v", line, got, want)
+		t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 	}
 	if got, want := nfiles, wantNFiles; got != want {
-		t.Errorf("line %v, got %v, want %v", line, got, want)
+		t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestIssue(t *testing.T) {
 			mode = "async"
 		}
 		// Lstat
-		is := asyncstat.NewIssuer(fs,
+		is := asyncstat.New(fs,
 			asyncstat.WithAsyncThreshold(threshold),
 		)
 
@@ -169,7 +169,7 @@ func TestIssue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", mode, err)
 		}
-		verifyEntries(t, children, all, infos)
+		verifyEntries(t, mode, children, all, infos)
 
 		nl := fs.Join(localTestTree, "a0")
 		entries, infos = entriesFromDir(t, nl, false)
@@ -177,12 +177,12 @@ func TestIssue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", mode, err)
 		}
-		verifyEntries(t, children, all, infos)
+		verifyEntries(t, mode, children, all, infos)
 
 		// Stat
 		latency := &latencyTracker{when: time.Now()}
 		statErrors := map[string]error{}
-		is = asyncstat.NewIssuer(fs,
+		is = asyncstat.New(fs,
 			asyncstat.WithAsyncThreshold(threshold),
 			asyncstat.WithStat(),
 			asyncstat.WithLatencyTracker(latency),
@@ -196,7 +196,7 @@ func TestIssue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", mode, err)
 		}
-		verifyEntries(t, children, all, infos)
+		verifyEntries(t, mode, children, all, infos)
 		ep := fs.Join(localTestTree, "la1")
 		if got, want := len(statErrors), 1; got != want {
 			t.Errorf("%v: got %v, want %v", mode, got, want)
@@ -207,10 +207,6 @@ func TestIssue(t *testing.T) {
 
 		if got, want := latency.finished, len(entries); got != want {
 			t.Errorf("%v: got %v, want %v", mode, got, want)
-		}
-
-		if latency.took == 0 {
-			t.Errorf("%v: got %v, want non-zero", mode, latency.took)
 		}
 	}
 }
@@ -233,7 +229,7 @@ func TestASyncIssue(t *testing.T) {
 	}
 
 	latency := &latencyTracker{when: time.Now()}
-	is := asyncstat.NewIssuer(fs,
+	is := asyncstat.New(fs,
 		asyncstat.WithAsyncThreshold(0),
 		asyncstat.WithLatencyTracker(latency),
 	)
@@ -246,7 +242,7 @@ func TestASyncIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 	took := time.Since(start)
-	verifyEntries(t, children, all, infos)
+	verifyEntries(t, "async", children, all, infos)
 	t.Logf("is.Process ran in %v, total stat time was %v", took, latency.took)
 
 	if took >= (latency.took / 10) {

@@ -14,13 +14,15 @@ import (
 	"cloudeng.io/sync/syncsort"
 )
 
-type Issuer struct {
+// T provides support for issuing asynchronous stat or lstat calls.
+type T struct {
 	fs      filewalk.FS
 	statFn  func(ctx context.Context, filename string) (file.Info, error)
 	opts    options
 	limitCh chan struct{}
 }
 
+// Option is used to configure an asyncstat.T.
 type Option func(*options)
 
 type options struct {
@@ -96,9 +98,9 @@ type nullLatencyTracker struct{}
 func (nullLatencyTracker) Before() time.Time { return time.Time{} }
 func (nullLatencyTracker) After(time.Time)   {}
 
-// NewIssuer returns an Issuer that uses the supplied filewalk.FS.
-func NewIssuer(fs filewalk.FS, opts ...Option) *Issuer {
-	is := &Issuer{fs: fs}
+// New returns an aysncstat.T that uses the supplied filewalk.FS.
+func New(fs filewalk.FS, opts ...Option) *T {
+	is := &T{fs: fs}
 	is.opts.asyncStats = 100
 	is.opts.asyncThreshold = 10
 	is.opts.latencyTracker = nullLatencyTracker{}
@@ -114,7 +116,10 @@ func NewIssuer(fs filewalk.FS, opts ...Option) *Issuer {
 	return is
 }
 
-func (is *Issuer) Process(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
+// Process processes the supplied entries, returning the list of
+// children as filewalk.Entry and the list of stat/lstat results as
+// a file.InfoList.
+func (is *T) Process(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
 	if len(entries) < is.opts.asyncThreshold {
 		return is.sync(ctx, prefix, entries)
 	}
@@ -122,7 +127,7 @@ func (is *Issuer) Process(ctx context.Context, prefix string, entries []filewalk
 
 }
 
-func (is *Issuer) callStat(ctx context.Context, filename string) (file.Info, error) {
+func (is *T) callStat(ctx context.Context, filename string) (file.Info, error) {
 	start := is.opts.latencyTracker.Before()
 	info, err := is.statFn(ctx, filename)
 	is.opts.latencyTracker.After(start)
@@ -132,7 +137,7 @@ func (is *Issuer) callStat(ctx context.Context, filename string) (file.Info, err
 	return info, err
 }
 
-func (is *Issuer) sync(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
+func (is *T) sync(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
 	for _, entry := range entries {
 		filename := is.fs.Join(prefix, entry.Name)
 		info, err := is.callStat(ctx, filename)
@@ -147,14 +152,14 @@ func (is *Issuer) sync(ctx context.Context, prefix string, entries []filewalk.En
 	return children, all, nil
 }
 
-func (is *Issuer) initLimiter() {
+func (is *T) initLimiter() {
 	is.limitCh = make(chan struct{}, is.opts.asyncStats)
 	for i := 0; i < cap(is.limitCh); i++ {
 		is.limitCh <- struct{}{}
 	}
 }
 
-func (is *Issuer) wait(ctx context.Context) error {
+func (is *T) wait(ctx context.Context) error {
 	select {
 	case <-is.limitCh:
 	case <-ctx.Done():
@@ -163,7 +168,7 @@ func (is *Issuer) wait(ctx context.Context) error {
 	return nil
 }
 
-func (is *Issuer) done() {
+func (is *T) done() {
 	is.limitCh <- struct{}{}
 }
 
@@ -172,7 +177,7 @@ type lstatResult struct {
 	err  error
 }
 
-func (is *Issuer) async(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
+func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
 	concurrency := is.opts.asyncStats
 	if concurrency > len(entries) {
 		concurrency = len(entries)
