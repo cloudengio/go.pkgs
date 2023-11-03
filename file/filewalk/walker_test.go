@@ -413,7 +413,7 @@ func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
 }
 
 func TestCancel(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -458,7 +458,6 @@ func TestCancel(t *testing.T) {
 	default:
 		t.Fatalf("context was not canceld")
 	}
-
 }
 
 type slowFS struct {
