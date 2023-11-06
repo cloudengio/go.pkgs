@@ -36,26 +36,32 @@ type Walker[T any] struct {
 type Option func(o *options)
 
 type options struct {
-	concurrency    int
-	scanSize       int
-	reportCh       chan<- Status
-	reportInterval time.Duration
-	slowThreshold  time.Duration
+	concurrentScans int
+	scanSize        int
+	reportCh        chan<- Status
+	reportInterval  time.Duration
+	slowThreshold   time.Duration
 }
 
-// WithConcurrency can be used to change the degree of concurrency used. The
-// default is to use all available CPUs.
-func WithConcurrency(n int) Option {
+// WithConcurrentScans can be used to change the number of prefixes/directories
+// that can be scanned concurrently.
+// The default is DefaultConcurrentScans.
+func WithConcurrentScans(n int) Option {
 	return func(o *options) {
-		o.concurrency = n
+		if n > 0 {
+			o.concurrentScans = n
+		}
 	}
 }
 
 // WithScanSize sets the number of prefix/directory entries to be scanned
 // in a single operation.
+// The default is DefaultScanSize.
 func WithScanSize(n int) Option {
 	return func(o *options) {
-		o.scanSize = n
+		if n > 0 {
+			o.scanSize = n
+		}
 	}
 }
 
@@ -83,14 +89,23 @@ func WithReporting(ch chan<- Status, interval, slowThreshold time.Duration) Opti
 	}
 }
 
+var (
+	// DefaultScansize is the default ScanSize used when the WithScanSize
+	// option is not supplied.
+	DefaultScanSize = 1000
+	// DefaultConcurrentScans is the default number of prefixes/directories
+	// that will be scanned concurrently when the WithConcurrencyOption is
+	// is not supplied.
+	DefaultConcurrentScans = 100
+)
+
 // New creates a new Walker instance.
 func New[T any](fs FS, handler Handler[T], opts ...Option) *Walker[T] {
 	w := &Walker[T]{fs: fs, handler: handler, errs: &errors.M{}}
+	w.opts.concurrentScans = DefaultScanSize
+	w.opts.scanSize = DefaultScanSize
 	for _, fn := range opts {
 		fn(&w.opts)
-	}
-	if w.opts.scanSize == 0 {
-		w.opts.scanSize = 1000
 	}
 	w.tk = newTimekeeper(w.opts)
 	return w
@@ -214,17 +229,17 @@ type Handler[T any] interface {
 func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	rootCtx := ctx
 	listers, _ := errgroup.WithContext(rootCtx)
-	if w.opts.concurrency <= 0 {
-		w.opts.concurrency = runtime.GOMAXPROCS(-1)
+	if w.opts.concurrentScans <= 0 {
+		w.opts.concurrentScans = runtime.GOMAXPROCS(-1)
 	}
 
-	listers = errgroup.WithConcurrency(listers, w.opts.concurrency)
+	listers = errgroup.WithConcurrency(listers, w.opts.concurrentScans)
 
 	walkers, _ := errgroup.WithContext(rootCtx)
-	walkers = errgroup.WithConcurrency(walkers, w.opts.concurrency)
+	walkers = errgroup.WithConcurrency(walkers, w.opts.concurrentScans)
 
-	// create and prime the concurrency limiter for walking directories.
-	walkerLimitCh := make(chan struct{}, w.opts.concurrency*2)
+	// create and prime the concurrentScans limiter for walking directories.
+	walkerLimitCh := make(chan struct{}, w.opts.concurrentScans*2)
 	for i := 0; i < cap(walkerLimitCh); i++ {
 		walkerLimitCh <- struct{}{}
 	}
@@ -371,7 +386,7 @@ func newTimekeeper(opts options) *timekeeper {
 		return &timekeeper{}
 	}
 	return &timekeeper{
-		prefixes: make(map[string]time.Time, opts.concurrency),
+		prefixes: make(map[string]time.Time, opts.concurrentScans),
 		ch:       opts.reportCh,
 		slow:     opts.slowThreshold,
 	}
@@ -415,5 +430,19 @@ func (tk *timekeeper) report() {
 			default:
 			}
 		}
+	}
+}
+
+type Configuration struct {
+	ConcurrentScans int
+	ScanSize        int
+	ReportInterval  time.Duration
+}
+
+func (w *Walker[T]) Configuration() Configuration {
+	return Configuration{
+		ConcurrentScans: w.opts.concurrentScans,
+		ScanSize:        w.opts.scanSize,
+		ReportInterval:  w.opts.reportInterval,
 	}
 }

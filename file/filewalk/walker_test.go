@@ -120,21 +120,21 @@ func TestLocalWalk(t *testing.T) {
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
-	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
-	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
 	lg.skip = strings.ReplaceAll("/b0/b0.1", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial1)
 
 	lg = nl()
-	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
 	lg.skip = strings.ReplaceAll("/b0", "/", string(filepath.Separator))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedPartial2)
 
 	lg = nl()
-	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
 	b01, err := sc.Stat(ctx, sc.Join(localTestTree, "b0", "b0.1"))
 	if err != nil {
 		t.Fatal(err)
@@ -430,7 +430,7 @@ func TestCancel(t *testing.T) {
 		state:    map[string]int{},
 	}
 
-	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(10))
+	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
 
 	ch := make(chan error)
 	go func() {
@@ -496,7 +496,7 @@ func TestReportingSlowScanner(t *testing.T) {
 		fs:    is,
 		state: map[string]int{},
 	}
-	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrency(2),
+	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(2),
 		filewalk.WithReporting(ch, time.Millisecond*100, time.Millisecond*250))
 
 	var wg sync.WaitGroup
@@ -611,7 +611,7 @@ func TestUnchanged(t *testing.T) {
 		fs:        sc,
 		db:        map[string]file.Info{},
 		unchanged: map[string]bool{}}
-	wk := filewalk.New[bool](sc, dbl, filewalk.WithScanSize(1), filewalk.WithConcurrency(2))
+	wk := filewalk.New[bool](sc, dbl, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(2))
 
 	// Use a separate copy of the test tree that can be modified without
 	// affecting other tests.

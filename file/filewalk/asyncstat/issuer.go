@@ -36,7 +36,7 @@ type options struct {
 // WithAsyncThreshold sets the threshold at which asynchronous
 // stats are used, any directory with less than number of entries
 // will be processed synchronously.
-// The default is 10.
+// The default is DefaultAsyncThreshold.
 func WithAsyncThreshold(threshold int) Option {
 	return func(o *options) {
 		o.asyncThreshold = threshold
@@ -45,10 +45,12 @@ func WithAsyncThreshold(threshold int) Option {
 
 // WithAsyncStats sets the total number of asynchronous stats to
 // be issued.
-// The default is 100.
+// The default is DefaultAsyncStats.
 func WithAsyncStats(stats int) Option {
 	return func(o *options) {
-		o.asyncStats = stats
+		if stats > 0 {
+			o.asyncStats = stats
+		}
 	}
 }
 
@@ -98,11 +100,21 @@ type nullLatencyTracker struct{}
 func (nullLatencyTracker) Before() time.Time { return time.Time{} }
 func (nullLatencyTracker) After(time.Time)   {}
 
+var (
+	// DefaultAsyncStats is the default maximum number of async stats to be issued
+	// when WithAsyncStats is not specified.
+	DefaultAsyncStats = 100
+	// DefaultAsyncThreshold is the default value for the number of directory
+	// entries that must be present before async stats are used when
+	// WithAsyncThreshold is not specified.
+	DefaultAsyncThreshold = 10
+)
+
 // New returns an aysncstat.T that uses the supplied filewalk.FS.
 func New(fs filewalk.FS, opts ...Option) *T {
 	is := &T{fs: fs}
-	is.opts.asyncStats = 100
-	is.opts.asyncThreshold = 10
+	is.opts.asyncStats = DefaultAsyncStats
+	is.opts.asyncThreshold = DefaultAsyncThreshold
 	is.opts.latencyTracker = nullLatencyTracker{}
 	is.opts.errLogger = func(context.Context, string, error) {}
 	is.statFn = fs.Lstat
@@ -220,4 +232,16 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 	}
 	err = seq.Err()
 	return
+}
+
+type Configuration struct {
+	AsyncStats     int
+	AsyncThreshold int
+}
+
+func (is *T) Configuration() Configuration {
+	return Configuration{
+		AsyncStats:     is.opts.asyncStats,
+		AsyncThreshold: is.opts.asyncThreshold,
+	}
 }
