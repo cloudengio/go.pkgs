@@ -3,8 +3,6 @@ module cloudeng.io/sync
 go 1.18
 
 require (
-	cloudeng.io/debug v0.0.0-20231026032435-4ad1389db593
-	cloudeng.io/errors v0.0.8
+	cloudeng.io/debug v0.0.0-20231106193145-45237a5eabab
+	cloudeng.io/errors v0.0.9
 )
-
-require golang.org/x/mod v0.13.0 // indirect
