@@ -9,7 +9,7 @@ require (
 	cloudeng.io/os v0.0.0-20231106193145-45237a5eabab
 	cloudeng.io/path v0.0.8
 	cloudeng.io/sync v0.0.8
-	cloudeng.io/sys v0.0.0-20231031020219-0e80cf65f8ef
+	cloudeng.io/sys v0.0.0-20231106193145-45237a5eabab
 	cloudeng.io/text v0.0.11
 	golang.org/x/net v0.18.0
 )
