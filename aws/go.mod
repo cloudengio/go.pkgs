@@ -1,6 +1,6 @@
 module cloudeng.io/aws
 
-go 1.21
+go 1.19
 
 require (
 	cloudeng.io/file v0.0.0-20231106193145-45237a5eabab
@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.25.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.16.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.42.2
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.23.1
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.23.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.25.2
 	golang.org/x/crypto v0.15.0
 )

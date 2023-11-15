@@ -139,7 +139,7 @@ func newRandomFileCreator(_ context.Context, name string, rnd *rand.Rand, maxSiz
 	if err != nil {
 		return nil, nil, err
 	}
-	info := file.NewInfo(name, int64(size), 0666, time.Now().Round(0), file.InfoOption{})
+	info := file.NewInfo(name, int64(size), 0666, time.Now().Round(0), nil)
 	return contents, NewFile(&BufferCloser{bytes.NewBuffer(contents)}, info), nil
 }
 
@@ -210,7 +210,7 @@ func (mfs *constantFS) OpenCtx(_ context.Context, name string) (fs.File, error) 
 	contents := bytes.Repeat(mfs.val, mfs.maxSize)
 	mfs.contents[name] = contents
 	info := file.NewInfo(name, int64(len(contents)), 0666, time.Now().Round(0),
-		file.InfoOption{})
+		nil)
 	return NewFile(&BufferCloser{bytes.NewBuffer(contents)}, info), nil
 
 }
@@ -260,7 +260,7 @@ func (wfs *WriteFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	contents := wfs.contents[name]
 	cpy := make([]byte, len(contents))
 	copy(cpy, contents)
-	info := file.NewInfo(name, int64(len(cpy)), entry.mode, entry.update, file.InfoOption{})
+	info := file.NewInfo(name, int64(len(cpy)), entry.mode, entry.update, nil)
 	return NewFile(&BufferCloser{bytes.NewBuffer(cpy)}, info), nil
 }
 
