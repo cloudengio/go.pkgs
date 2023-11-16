@@ -241,6 +241,40 @@ func TestErrors(t *testing.T) {
 		if got, want := m.Eval(fn("foo")), false; got != want {
 			t.Errorf("%v: got %v, want %v", tc.in, got, want)
 		}
-
 	}
+}
+
+func TestNeedsOps(t *testing.T) {
+	m, err := matcher.New(parse("xx")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert := func(m matcher.T, needsMode, needsTime bool) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := m.NeedsFileMode(), needsMode; got != want {
+			t.Errorf("mode: got %v, want %v", got, want)
+		}
+		if got, want := m.NeedsModTime(), needsTime; got != want {
+			t.Errorf("time: got %v, want %v", got, want)
+		}
+	}
+	assert(m, false, false)
+
+	m, err = matcher.New(parse("xx || ft: f")...)
+	assert(m, true, false)
+	m, err = matcher.New(parse("xx || nt: 2022-12-12 :nt")...)
+	assert(m, false, true)
+	m, err = matcher.New(parse("xx || ft: d || nt: 2022-12-12 :nt")...)
+	assert(m, true, true)
+
+	m, err = matcher.New(parse("a && ( xx || ft: f )")...)
+	assert(m, true, false)
+	m, err = matcher.New(parse("a && (xx || nt: 2022-12-12 :nt )")...)
+	assert(m, false, true)
+	m, err = matcher.New(parse("a && (xx || ft: d || nt: 2022-12-12 :nt )")...)
+	assert(m, true, true)
 }

@@ -124,7 +124,7 @@ func RightBracket() Item {
 }
 
 // Regexp returns a regular expression item. It is not compiled until
-// a matcher.Expression is created using New.
+// a matcher.T is created using New.
 func Regexp(re string) Item {
 	return Item{typ: regex, text: re}
 }
@@ -137,7 +137,7 @@ func (it Item) evalFileType(v fs.FileMode) bool {
 }
 
 // FileType returns a 'file type' item. It is not validated until a
-// matcher.Expression is created using New. Supported file types are
+// matcher.T is created using New. Supported file types are
 // (as per the unix find command):
 //   - f for regular files
 //   - d for directories
@@ -180,16 +180,30 @@ func (it Item) prepare() (Item, error) {
 }
 
 // NewerThan returns a 'newer than' item. It is not validated until a
-// matcher.Expression is created using New.
+// matcher.T is created using New.
 func NewerThan(typ string) Item {
 	return Item{typ: newerThan, text: typ}
 }
 
-// Expression represents a boolean expression of regular expressions,
+// T represents a boolean expression of regular expressions,
 // file type and mod time comparisons. It is evaluated against a single
 // input value.
-type Expression struct {
-	items []Item
+type T struct {
+	items        []Item
+	hasFileType  bool
+	hasNewerThan bool
+}
+
+// NeedsFileMode returns true if the expression contains a file type
+// comparison.
+func (m T) NeedsFileMode() bool {
+	return m.hasFileType
+}
+
+// NeedsModTime returns true if the expression contains a mod time
+// comparison.
+func (m T) NeedsModTime() bool {
+	return m.hasNewerThan
 }
 
 func newExpression(input <-chan Item) ([]Item, error) {
@@ -241,10 +255,10 @@ func itemChan(items []Item) <-chan Item {
 	return itemCh
 }
 
-// New returns a new matcher.Expression built from the supplied items.
-func New(items ...Item) (Expression, error) {
+// New returns a new matcher.T built from the supplied items.
+func New(items ...Item) (T, error) {
 	if len(items) == 0 {
-		return Expression{}, fmt.Errorf("empty expression")
+		return T{}, fmt.Errorf("empty expression")
 	}
 	// check for balanced ('s here since it's easy to do so.
 	balanced := 0
@@ -254,84 +268,44 @@ func New(items ...Item) (Expression, error) {
 		}
 		if it.typ == rightBracket {
 			if balanced == 0 {
-				return Expression{}, fmt.Errorf("unbalanced brackets")
+				return T{}, fmt.Errorf("unbalanced brackets")
 			}
 			balanced--
 		}
 	}
 	if balanced != 0 {
-		return Expression{}, fmt.Errorf("unbalanced brackets")
+		return T{}, fmt.Errorf("unbalanced brackets")
 	}
-
 	tree, err := newExpression(itemChan(items))
 	if err != nil {
-		return Expression{}, err
+		return T{}, err
 	}
 	if len(tree)%2 == 0 {
-		return Expression{}, fmt.Errorf("incomplete expression: %v", items)
+		return T{}, fmt.Errorf("incomplete expression: %v", items)
 	}
-	return Expression{items: tree}, nil
+	m := T{items: tree}
+	needs(&m, m.items)
+	return m, nil
 }
 
-/*
-func (e Expression) isWellFormed(items []Item) error {
-	if len(items) == 1 {
-		if !items[0].isOperand() {
-			return fmt.Errorf("single item expression must be an operand: %v", items[0])
-		}
-		return nil
-	}
-	if len(items)%2 == 0 {
-		return fmt.Errorf("incomplete expression: %v", items)
-	}
-	// should be alternating operands and operators.
-	for i, it := range items {
-		if i%2 == 0 {
-			if !it.isOperand() {
-				return fmt.Errorf("expected operand at position %v: %v", i, items)
-			}
-			if it.typ == subExpression && len(it.sub) == 0 {
-				return fmt.Errorf("empty sub-expression at position %v: %v", i, items)
-			}
-		}
-		if i%2 == 1 && !it.isOperator() {
-			return fmt.Errorf("expected operator at position %v: %v", i, items)
-		}
-	}
-	return nil
-}
-
-func (e Expression) validate(items []Item) error {
-	if len(items) == 0 {
-		return nil
-	}
-	for i, it := range items {
-		// There should be no bracket's left.
-		if it.typ == leftBracket {
-			return fmt.Errorf("extra left bracket at position %v", i)
-		}
-		if it.typ == rightBracket {
-			return fmt.Errorf("extra right bracket at position %v", i)
-		}
-	}
-	if err := e.isWellFormed(items); err != nil {
-		return err
-	}
+func needs(m *T, items []Item) {
 	for _, it := range items {
-		if it.typ == subExpression {
-			if err := e.validate(it.sub); err != nil {
-				return err
-			}
+		switch it.typ {
+		case fileType:
+			m.hasFileType = true
+		case newerThan:
+			m.hasNewerThan = true
+		case subExpression:
+			needs(m, it.sub)
 		}
 	}
-	return nil
-}*/
+}
 
-func (ex Expression) String() string {
+func (m T) String() string {
 	var out strings.Builder
-	for _, it := range ex.items {
+	for _, it := range m.items {
 		if it.typ == subExpression {
-			se := Expression{items: it.sub}
+			se := T{items: it.sub}
 			out.WriteString("(" + se.String() + ") ")
 			continue
 		}
@@ -350,11 +324,11 @@ type Value interface {
 // Eval evaluates the expression against the supplied value return
 // the value of the expression or an error. If expressions is empty
 // it will always return false.
-func (ex Expression) Eval(v Value) bool {
-	if len(ex.items) == 0 {
+func (m T) Eval(v Value) bool {
+	if len(m.items) == 0 {
 		return false
 	}
-	return eval(itemChan(ex.items), v)
+	return eval(itemChan(m.items), v)
 }
 
 func eval(exprs <-chan Item, v Value) bool {
