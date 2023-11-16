@@ -185,7 +185,6 @@ func TestSubExpressions(t *testing.T) {
 		{`(foo || bar)`, fn("wombat"), false},
 		{`(foo || bar) || wom.*`, fn("wombat"), true},
 		{`wo* || ( foo || bar )`, fn("wombat"), true},
-
 		{`wo.* && (foo || bar)`, fn("wombat"), false},
 		{`wo.* && (foo || .ext$)`, fn("wombat.ext"), true},
 		{`wo.* && (foo || .ext$)`, fn("foo.ext"), false},
@@ -198,6 +197,9 @@ func TestSubExpressions(t *testing.T) {
 		{`(foo && (baz || bar))`, fn("baz"), false},
 		{`(foo && (baz || bar))`, fn("foobar"), true},
 		{`(^foo && (^baz || ^bar))`, fn("foobar"), false},
+		{`(ft: f || ft: d)`, ft(0), true},
+		{`(ft: f || ft: d)`, ft(fs.ModeDir), true},
+		{`(ft: f || ft: d) && ft: l`, ft(fs.ModeDir), false},
 	} {
 		evalTestCase(t, parse(tc.in), tc.val, tc.out)
 	}
@@ -227,9 +229,7 @@ func TestErrors(t *testing.T) {
 		{`a || ||`, "missing operand for ||"},
 		{`&& &&`, "missing left operand for &&"},
 		{`a && &&`, "missing operand for &&"},
-
 		{`a (a)`, "missing operator for ("},
-
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
 		{`ft: x`, "invalid file type: x, use one of d, f or l"},
 		{`nt: xxx :nt`, "invalid time: xxx, use one of RFC3339, Date and Time, Date or Time only formats"},

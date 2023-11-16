@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package matcher provides suport for matching file names, types and modification
+// Package matcher provides support for matching file names, types and modification
 // times using regular expressions and boolean operators.
 package matcher
 
@@ -129,27 +129,11 @@ func Regexp(re string) Item {
 	return Item{typ: regex, text: re}
 }
 
-func (it Item) compileRE() (Item, error) {
-	re, err := regexp.Compile(it.text)
-	if err != nil {
-		return Item{}, err
+func (it Item) evalFileType(v fs.FileMode) bool {
+	if it.text == "f" {
+		return v.IsRegular()
 	}
-	it.re = re
-	return it, nil
-}
-
-func (it Item) parseFileType() (Item, error) {
-	switch it.text {
-	case "d":
-		it.filemode = fs.ModeDir
-	case "f":
-		it.filemode = 0
-	case "l":
-		it.filemode = fs.ModeSymlink
-	default:
-		return Item{}, fmt.Errorf("invalid file type: %v, use one of d, f or l", it.text)
-	}
-	return it, nil
+	return v&it.filemode == it.filemode
 }
 
 // FileType returns a 'file type' item. It is not validated until a
@@ -162,14 +146,37 @@ func FileType(typ string) Item {
 	return Item{typ: fileType, text: typ}
 }
 
-func (it Item) parseNewerThan() (Item, error) {
-	for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
-		if t, err := time.Parse(format, it.text); err == nil {
-			it.newerThan = t
-			return it, nil
+func (it Item) prepare() (Item, error) {
+	switch it.typ {
+	case regex:
+		re, err := regexp.Compile(it.text)
+		if err != nil {
+			return Item{}, err
 		}
+		it.re = re
+		return it, nil
+	case fileType:
+		switch it.text {
+		case "d":
+			it.filemode = fs.ModeDir
+		case "f":
+			it.filemode = 0
+		case "l":
+			it.filemode = fs.ModeSymlink
+		default:
+			return Item{}, fmt.Errorf("invalid file type: %v, use one of d, f or l", it.text)
+		}
+		return it, nil
+	case newerThan:
+		for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
+			if t, err := time.Parse(format, it.text); err == nil {
+				it.newerThan = t
+				return it, nil
+			}
+		}
+		return Item{}, fmt.Errorf("invalid time: %v, use one of RFC3339, Date and Time, Date or Time only formats", it.text)
 	}
-	return Item{}, fmt.Errorf("invalid time: %v, use one of RFC3339, Date and Time, Date or Time only formats", it.text)
+	return it, nil
 }
 
 // NewerThan returns a 'newer than' item. It is not validated until a
@@ -189,20 +196,8 @@ func newExpression(input <-chan Item) ([]Item, error) {
 	expr := []Item{}
 	for cur := range input {
 		switch cur.typ {
-		case regex:
-			cur, err := cur.compileRE()
-			if err != nil {
-				return nil, err
-			}
-			expr = append(expr, cur)
-		case fileType:
-			cur, err := cur.parseFileType()
-			if err != nil {
-				return nil, err
-			}
-			expr = append(expr, cur)
-		case newerThan:
-			cur, err := cur.parseNewerThan()
+		case regex, fileType, newerThan:
+			cur, err := cur.prepare()
 			if err != nil {
 				return nil, err
 			}
@@ -362,11 +357,6 @@ func (ex Expression) Eval(v Value) bool {
 	return eval(itemChan(ex.items), v)
 }
 
-type evalState struct {
-	value    bool
-	operator itemType // and, or.
-}
-
 func eval(exprs <-chan Item, v Value) bool {
 	values := []bool{}
 	operators := []itemType{}
@@ -375,15 +365,11 @@ func eval(exprs <-chan Item, v Value) bool {
 		case regex:
 			values = append(values, cur.re.MatchString(v.Name()))
 		case fileType:
-			val := v.Mode()&cur.filemode == cur.filemode
-			if cur.text == "f" {
-				val = v.Mode().IsRegular()
-			}
-			values = append(values, val)
+			values = append(values, cur.evalFileType(v.Mode()))
 		case newerThan:
 			values = append(values, v.ModTime().After(cur.newerThan))
 		case orOp:
-			if values[len(values)-1] == true {
+			if values[len(values)-1] {
 				// early return on true || ....
 				return true
 			}
@@ -391,9 +377,9 @@ func eval(exprs <-chan Item, v Value) bool {
 		case andOp:
 			operators = append(operators, cur.typ)
 		case subExpression:
-			subValue := eval(itemChan(cur.sub), v)
-			values = append(values, subValue)
+			values = append(values, eval(itemChan(cur.sub), v))
 		}
+		// left to right evaluation
 		if len(values) == 2 && len(operators) == 1 {
 			switch operators[0] {
 			case andOp:
