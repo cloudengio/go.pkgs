@@ -5,6 +5,7 @@
 package synctestutil
 
 import (
+	"runtime"
 	"time"
 
 	"cloudeng.io/debug/goroutines"
@@ -37,6 +38,7 @@ type Errorf interface {
 //		fn()
 //	}
 func AssertNoGoroutines(t Errorf) func() {
+	runtime.GC()
 	bycreator, err := getGoroutines()
 	if err != nil {
 		t.Errorf("NoLeaks: failed to parse goroutine output %v", err)
@@ -60,6 +62,7 @@ func AssertNoGoroutines(t Errorf) func() {
 // AssertNoGoroutinesRacy is like AssertNoGoroutines but allows for
 // a grace period for goroutines to terminate.
 func AssertNoGoroutinesRacy(t Errorf, wait time.Duration) func() {
+	runtime.GC()
 	bycreator, err := getGoroutines()
 	if err != nil {
 		t.Errorf("NoLeaks: failed to parse goroutine output %v", err)
