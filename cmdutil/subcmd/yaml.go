@@ -122,7 +122,7 @@ func (c *CurrentCommand) MustRunner(runner Runner, fs any) {
 // Tabs are replaced with two spaces to make it easier to write YAML
 // in go string literals (where most editors will always use tabs). This
 // does not guarantee correct alignment when spaces and tabs are mixed
-// arbitralily.
+// arbitrarily.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	spec = bytes.ReplaceAll(spec, []byte("\t"), []byte("  "))
 	var yamlCmd commandDef
