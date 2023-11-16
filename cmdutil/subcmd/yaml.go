@@ -5,6 +5,7 @@
 package subcmd
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"strings"
@@ -118,7 +119,12 @@ func (c *CurrentCommand) MustRunner(runner Runner, fs any) {
 }
 
 // FromYAML parses a YAML specification of the command tree.
+// Tabs are replaced with two spaces to make it easier to write YAML
+// in go string literals (where most editors will always use tabs). This
+// does not guarantee correct alignment when spaces and tabs are mixed
+// arbitralily.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
+	spec = bytes.ReplaceAll(spec, []byte("\t"), []byte("  "))
 	var yamlCmd commandDef
 	if err := cmdutil.ParseYAMLConfig(spec, &yamlCmd); err != nil {
 		return nil, err

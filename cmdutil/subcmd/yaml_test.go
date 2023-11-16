@@ -48,6 +48,32 @@ commands:
     summary: l0.5 documentation for l0.5
     # no arguments allowed.
 `
+
+	oneLevelTabs = `name: l0
+summary: describe l0
+commands:
+	- name: l0.1
+	  summary: l0.1 documentation for l0.1
+	  arguments:
+		- <arg1>
+		- <arg2>
+	- name: l0.2
+	  summary: l0.2 documentation for l0.2
+	  arguments:
+		- <arg1>
+		- ...
+	- name: l0.3
+	  summary: l0.3 documentation for l0.3
+	  arguments:
+		- ...
+	- name: l0.4
+	  summary: l0.4 documentation for l0.4
+	  arguments:
+		- "[optional-single-argument]"
+	- name: l0.5
+	  summary: l0.5 documentation for l0.5
+	  # no arguments allowed.
+		`
 )
 
 type exampleFlags struct {
@@ -108,11 +134,13 @@ func TestYAMLCommands(t *testing.T) {
 	dispatch(cs)
 	assertRunner(cs, "toplevel-example: flag: 12, args: []\n")
 
-	cs = fromYaml(oneLevel)
-	for _, cmd := range []string{"l0.1", "l0.2", "l0.3", "l0.4", "l0.5"} {
-		r := &runner{name: cmd, out: out}
-		cs.Set(cmd).MustRunnerAndFlags(r.cmd,
-			subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+	for _, spec := range []string{oneLevel, oneLevelTabs} {
+		cs = fromYaml(spec)
+		for _, cmd := range []string{"l0.1", "l0.2", "l0.3", "l0.4", "l0.5"} {
+			r := &runner{name: cmd, out: out}
+			cs.Set(cmd).MustRunnerAndFlags(r.cmd,
+				subcmd.MustRegisteredFlagSet(&exampleFlags{}))
+		}
 	}
 
 	assertUsage(cs, "l0", "describe l0")
@@ -302,7 +330,7 @@ func TestYAMLCompatibility(t *testing.T) {
 	}
 }
 
-func TestFErrors(t *testing.T) {
+func TestErrors(t *testing.T) {
 	r := &runner{name: "a", out: nil}
 	cmdSet := subcmd.MustFromYAMLTemplate(oneLevel)
 	var notastruct int
