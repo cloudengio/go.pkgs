@@ -7,82 +7,79 @@ package matcher_test
 import (
 	"fmt"
 	"io/fs"
+	"strings"
 	"testing"
 	"time"
 
 	"cloudeng.io/file/matcher"
 )
 
-func or() matcher.Item {
-	return matcher.OR()
-}
-
-func and() matcher.Item {
-	return matcher.AND()
-}
-
-func re(e string) matcher.Item {
-	return matcher.Regexp(e)
-}
-
-func ftyp(t string) matcher.Item {
-	return matcher.FileType(t)
-}
-
-func newer(t string) matcher.Item {
-	return matcher.NewerThan(t)
-}
-
-func lb() matcher.Item {
-	return matcher.LeftBracket()
-}
-
-func rb() matcher.Item {
-	return matcher.RightBracket()
-}
-
-func mi(items ...matcher.Item) []matcher.Item {
+func parse(input string) []matcher.Item {
+	input = strings.ReplaceAll(input, "(", " ( ")
+	input = strings.ReplaceAll(input, ")", " ) ")
+	input = strings.ReplaceAll(input, "||", " || ")
+	input = strings.ReplaceAll(input, "&&", " && ")
+	items := []matcher.Item{}
+	tokens := strings.Split(input, " ")
+	for i := 0; i < len(tokens); i++ {
+		if len(tokens[i]) == 0 {
+			continue
+		}
+		switch tokens[i] {
+		case "||":
+			items = append(items, matcher.OR())
+		case "&&":
+			items = append(items, matcher.AND())
+		case "(":
+			items = append(items, matcher.LeftBracket())
+		case ")":
+			items = append(items, matcher.RightBracket())
+		case "ft:":
+			i++
+			items = append(items, matcher.FileType(tokens[i]))
+		case "nt:":
+			date := ""
+			i++
+			for j := i; j < len(tokens); j++ {
+				i++
+				if tokens[j] == ":nt" {
+					break
+				}
+				date += tokens[j] + " "
+			}
+			items = append(items, matcher.NewerThan(strings.TrimSpace(date)))
+		default:
+			items = append(items, matcher.Regexp(tokens[i]))
+		}
+	}
 	return items
 }
 
 func TestFormating(t *testing.T) {
 	for _, tc := range []struct {
-		in  []matcher.Item
+		in  string
 		out string
 	}{
-		{in: mi(re("foo")),
-			out: "foo"},
-		{in: mi(re("foo"), or(), re("bar")),
-			out: "foo || bar"},
-		{in: mi(re("foo"), and(), re("bar")),
-			out: "foo && bar"},
-		{in: mi(re("foo"), and(), re("bar"), or(), re("baz")),
-			out: "foo && bar || baz"},
-		{in: mi(re("foo"), or(), re("bar"), and(), re("baz")),
-			out: "foo || bar && baz"},
-		{in: mi(re("foo"), and(), lb(), re("bar"), or(), re("baz"), rb()),
-			out: "foo && (bar || baz)"},
-		{in: mi(lb(), re("bar"), or(), re("baz"), rb(), and(), re("foo")),
-			out: "(bar || baz) && foo"},
-		{in: mi(lb(), re("bar"), and(), re("baz"), rb()),
-			out: "(bar && baz)"},
-		{in: mi(lb(), re("bar"), and(), lb(), re("baz"), or(), re("foo"), rb(), rb(), or(), re("else")),
-			out: "(bar && (baz || foo)) || else"},
-		{in: mi(ftyp("f"), or(), newer("2023-10-22")), out: "filetype(f) || newerthan(2023-10-22)"},
+		{"foo", "foo"},
+		{"foo || bar", "foo || bar"},
+		{"foo && bar", "foo && bar"},
+		{"foo && bar || baz", "foo && bar || baz"},
+		{"foo || bar && baz", "foo || bar && baz"},
+		{"foo && (bar||baz)", "foo && (bar || baz)"},
+		{"(bar || baz) && foo", "(bar || baz) && foo"},
+		{"( bar && baz )", "(bar && baz)"},
+		{"(bar && (baz || foo)) || else", "(bar && (baz || foo)) || else"},
+		{"ft: f || nt: 2023-10-22", `filetype("f") || newerthan("2023-10-22")`},
 	} {
-		expr, err := matcher.NewExpression(tc.in...)
+		expr, err := matcher.New(parse(tc.in)...)
 		if err != nil {
-			t.Errorf("failed to create expression: %v", err)
+			t.Errorf("%v: failed to create expression: %v", tc.in, err)
 			continue
 		}
 		if got, want := expr.String(), tc.out; got != want {
-			t.Errorf("got %v, want %v", got, want)
+			t.Errorf("%v: got %v, want %v", tc.in, got, want)
 		}
 	}
-}
-
-func TestErrors(t *testing.T) {
-	t.Fail()
 }
 
 type evaluable struct {
@@ -119,61 +116,131 @@ func (e evaluable) String() string {
 	return fmt.Sprintf("name: %q, mode: %v, modtime: %v", e.name, e.mode, e.modTime)
 }
 
-func TestEval(t *testing.T) {
+func evalTestCase(t *testing.T, in []matcher.Item, val evaluable, want bool) {
+	t.Helper()
+	expr, err := matcher.New(in...)
+	if err != nil {
+		t.Errorf("failed to create expression: %v", err)
+		return
+	}
+	r := expr.Eval(val)
+	if got := r; got != want {
+		t.Errorf("%v: %v: got %v, want %v", expr, val, got, want)
+	}
+}
+
+func TestOperands(t *testing.T) {
 	now := time.Now().UTC()
 	for _, tc := range []struct {
-		in  []matcher.Item
+		in  string
 		val evaluable
 		out bool
 	}{
-		{in: mi(re("foo")), val: fn("foo"), out: true},
-		{in: mi(re("foo")), val: fn("f"), out: false},
-		{in: mi(ftyp("f")), val: ft(0), out: true},
-		{in: mi(ftyp("d")), val: ft(fs.ModeDir), out: true},
-		{in: mi(ftyp("l")), val: ft(fs.ModeSymlink), out: true},
-		{in: mi(ftyp("f")), val: ft(fs.ModeDevice), out: false},
-		{in: mi(ftyp("d")), val: ft(fs.ModeDevice), out: false},
-		{in: mi(ftyp("l")), val: ft(fs.ModeDevice), out: false},
-		{in: mi(newer(now.Format(time.DateTime))), val: fm(now.Add(-time.Hour)), out: false},
-		{in: mi(newer(now.Format(time.DateTime))), val: fm(now.Add(time.Hour)), out: true},
-
-		{in: mi(re("^fo"), and(), re(".ext$")), val: fn("foo.ext"), out: true},
-		{in: mi(re("^fo"), and(), re(".ext$")), val: fn("foo"), out: false},
-		{in: mi(re("^fo"), or(), re(".ext$")), val: fn("foo"), out: true},
-		{in: mi(re("^fo"), or(), re(".ext$")), val: fn("x.ext"), out: true},
-		{in: mi(re("^fo"), or(), re(".ext$")), val: fn("not"), out: false},
-
-		/*
-			{in: mi(re("foo"), or(), re("bar")),
-				out: "foo || bar"},
-			{in: mi(re("foo"), and(), re("bar")),
-				out: "foo && bar"},
-			{in: mi(re("foo"), and(), re("bar"), or(), re("baz")),
-				out: "foo && bar || baz"},
-			{in: mi(re("foo"), or(), re("bar"), and(), re("baz")),
-				out: "foo || bar && baz"},
-			{in: mi(re("foo"), and(), lb(), re("bar"), or(), re("baz"), rb()),
-				out: "foo && (bar || baz)"},
-			{in: mi(lb(), re("bar"), or(), re("baz"), rb(), and(), re("foo")),
-				out: "(bar || baz) && foo"},
-			{in: mi(lb(), re("bar"), and(), re("baz"), rb()),
-				out: "(bar && baz)"},
-			{in: mi(lb(), re("bar"), and(), lb(), re("baz"), or(), re("foo"), rb(), rb(), or(), re("else")),
-				out: "(bar && (baz || foo)) || else"},
-			{in: mi(ftyp("f"), or(), newer("2023-10-22")), out: "filetype(f) || newerthan(2023-10-22)"},*/
+		{"foo", fn("foo"), true},
+		{"foo", fn("f"), false},
+		{"ft: f", ft(0), true},
+		{"ft: d", ft(fs.ModeDir), true},
+		{"ft: l", ft(fs.ModeSymlink), true},
+		{"ft: f", ft(fs.ModeDevice), false},
+		{"ft: d", ft(fs.ModeDevice), false},
+		{"ft: l", ft(fs.ModeDevice), false},
+		{"nt: " + now.Format(time.DateTime) + " :nt", fm(now.Add(-time.Hour)), false},
+		{"nt: " + now.Format(time.DateTime) + " :nt", fm(now.Add(time.Hour)), true},
 	} {
-		expr, err := matcher.NewExpression(tc.in...)
-		if err != nil {
-			t.Errorf("failed to create expression: %v", err)
-			continue
+		evalTestCase(t, parse(tc.in), tc.val, tc.out)
+	}
+}
+
+func TestOperators(t *testing.T) {
+	for _, tc := range []struct {
+		in  string
+		val evaluable
+		out bool
+	}{
+		{`^fo && .ext$`, fn("foo.ext"), true},
+		{`^fo && .ext$`, fn("foo"), false},
+		{`^fo || .ext$`, fn("foo"), true},
+		{`^fo || .ext$`, fn("x.ext"), true},
+		{`^fo || .ext$`, fn("not"), false},
+		{`^fo || .ext$ || wombat`, fn("foo.ext"), true},
+		{`^fo || .ext$ || wombat`, fn("wombat"), true},
+		{`^fo || .ext$ && wombat`, fn("wombat.ext"), true},
+		{`^fo && .ext$ || wombat`, fn("foo.ext"), true},
+		{`^fo && .ext$ || wombat`, fn("wombat"), true},
+		{`^fo && (.ext$ || wombat)`, fn("wombat"), false},
+		{`^fo && (.ext$ || wombat)`, fn("wombat.ext"), false},
+		{`^fo && .ext$ && wombat`, fn("wombat"), false},
+	} {
+		evalTestCase(t, parse(tc.in), tc.val, tc.out)
+	}
+}
+
+func TestSubExpressions(t *testing.T) {
+	for _, tc := range []struct {
+		in  string
+		val evaluable
+		out bool
+	}{
+		{`(foo || bar)`, fn("foo"), true},
+		{`(foo || bar)`, fn("wombat"), false},
+		{`(foo || bar) || wom.*`, fn("wombat"), true},
+		{`wo* || ( foo || bar )`, fn("wombat"), true},
+
+		{`wo.* && (foo || bar)`, fn("wombat"), false},
+		{`wo.* && (foo || .ext$)`, fn("wombat.ext"), true},
+		{`wo.* && (foo || .ext$)`, fn("foo.ext"), false},
+		{`(foo || \.ext$) && (wombat && \.ext$)`, fn("wombat.ext"), true},
+		{`(foo || \.ext$) && (wombat && \.ext$)`,
+			fn("wombat"), false},
+		{`(foo || \.ext$) || (wombat && \.ext$)`, fn("wombat"), false},
+		{`(foo || \.ext$) || (wombat && \.ext$)`, fn("wombat"), false},
+		{`(foo && (baz || bar))`, fn("foo"), false},
+		{`(foo && (baz || bar))`, fn("baz"), false},
+		{`(foo && (baz || bar))`, fn("foobar"), true},
+		{`(^foo && (^baz || ^bar))`, fn("foobar"), false},
+	} {
+		evalTestCase(t, parse(tc.in), tc.val, tc.out)
+	}
+}
+
+func TestErrors(t *testing.T) {
+	for _, tc := range []struct {
+		in  string
+		err string
+	}{
+		{``, "empty expression"},
+		{`(`, "unbalanced brackets"},
+		{`()`, "missing left operand for )"},
+		{`(foo || bar`, "unbalanced brackets"},
+		{`foo || bar)`, "unbalanced brackets"},
+		{`)(`, "unbalanced brackets"},
+		{`||`, "missing left operand for ||"},
+		{`|| a`, "missing left operand for ||"},
+		{`a ||`, "incomplete expression: [a ||]"},
+		{`&&`, "missing left operand for &&"},
+		{`&& a`, "missing left operand for &&"},
+		{`a &&`, "incomplete expression: [a &&]"},
+		{`a || b || ()`, "missing left operand for )"},
+		{`( a || )`, "missing operand for )"},
+		{`( a () )`, "missing operator for ("},
+		{`|| ||`, "missing left operand for ||"},
+		{`a || ||`, "missing operand for ||"},
+		{`&& &&`, "missing left operand for &&"},
+		{`a && &&`, "missing operand for &&"},
+
+		{`a (a)`, "missing operator for ("},
+
+		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
+		{`ft: x`, "invalid file type: x, use one of d, f or l"},
+		{`nt: xxx :nt`, "invalid time: xxx, use one of RFC3339, Date and Time, Date or Time only formats"},
+	} {
+		m, err := matcher.New(parse(tc.in)...)
+		if err == nil || err.Error() != tc.err {
+			t.Errorf("%v: got %v, want %v", tc.in, err, tc.err)
 		}
-		r, err := expr.Eval(tc.val)
-		if err != nil {
-			t.Errorf("failed to evaluate expression: %v", err)
-			continue
+		if got, want := m.Eval(fn("foo")), false; got != want {
+			t.Errorf("%v: got %v, want %v", tc.in, got, want)
 		}
-		if got, want := r, tc.out; got != want {
-			t.Errorf("%v: %v: got %v, want %v", expr, tc.val, got, want)
-		}
+
 	}
 }
