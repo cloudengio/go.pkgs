@@ -37,3 +37,27 @@ func CompareFS(a, b file.FS) error {
 	}
 	return errs.Err()
 }
+
+func CompareFileInfo(a, b file.InfoList) error {
+	if got, want := len(a), len(b); got != want {
+		return fmt.Errorf("len: got %v, want %v", got, want)
+	}
+	for i := range a {
+		if got, want := a[i].Name(), b[i].Name(); got != want {
+			return fmt.Errorf("name: got %v, want %v", got, want)
+		}
+		if got, want := a[i].Size(), b[i].Size(); got != want {
+			return fmt.Errorf("size: got %v, want %v", got, want)
+		}
+		if got, want := a[i].Mode(), b[i].Mode(); got != want {
+			return fmt.Errorf("mode: got %v, want %v", got, want)
+		}
+		if got, want := a[i].ModTime(), b[i].ModTime(); !got.Equal(want) {
+			return fmt.Errorf("modTime: got %v, want %v", got, want)
+		}
+		if got, want := a[i].IsDir(), b[i].IsDir(); got != want {
+			return fmt.Errorf("isDir: got %v, want %v", got, want)
+		}
+	}
+	return nil
+}
