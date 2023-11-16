@@ -10,13 +10,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/asyncstat"
 	"cloudeng.io/file/filewalk/internal"
@@ -83,8 +83,8 @@ func entriesFromDir(t *testing.T, dir string, stat bool) ([]filewalk.Entry, []fi
 
 func verifyEntries(t *testing.T, mode string, children, all file.InfoList, wantAll file.InfoList) {
 	_, _, line, _ := runtime.Caller(1)
-	if got, want := all, wantAll; !reflect.DeepEqual(got, want) {
-		t.Errorf("line %v: mode %v, got %v, want %v", mode, line, got, want)
+	if err := filetestutil.CompareFileInfo(all, wantAll); err != nil {
+		t.Errorf("line %v: mode %v, %v", line, mode, err)
 	}
 	wantNDirs := 0
 	for _, i := range wantAll {
