@@ -2,12 +2,12 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package find provides a filewalk.Handler that can be used to find files.
+// Package find provides a filewalk.Handler that can be used to locate
+// prefixes/directories and files based on file.Matcher expressions.
 package find
 
 import (
 	"context"
-	"io/fs"
 	"time"
 
 	"cloudeng.io/file"
@@ -43,27 +43,11 @@ type handler struct {
 	prune    bool
 }
 
-type nameValue struct {
-	name string
-}
-
-func (nv nameValue) Name() string {
-	return nv.name
-}
-
-func (nv nameValue) Mode() fs.FileMode {
-	return 0
-}
-
-func (nv nameValue) ModTime() time.Time {
-	return time.Time{}
-}
-
 func (h *handler) Prefix(_ context.Context, _ *struct{}, prefix string, fi file.Info, err error) (bool, file.InfoList, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	if h.pm.Eval(fi) {
+	if h.pm.Eval(matcher.NewValue(prefix, fi.Mode(), fi.ModTime())) {
 		h.found <- Found{Prefix: prefix}
 		return h.prune, nil, nil
 	}
@@ -84,17 +68,19 @@ func (h *handler) Contents(ctx context.Context, _ *struct{}, prefix string, cont
 			}
 			val = fi
 		} else {
-			val = nameValue{name: c.Name}
+			val = matcher.NewValue(c.Name, 0, time.Time{})
 		}
+		if c.IsDir() {
+			children = append(children, fi)
+			continue
+		}
+
 		if h.fm.Eval(val) {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case h.found <- Found{Prefix: prefix, Name: c.Name}:
 			}
-		}
-		if c.IsDir() {
-			children = append(children, fi)
 		}
 	}
 	return children, nil

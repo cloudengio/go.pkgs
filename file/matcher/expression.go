@@ -3,14 +3,14 @@
 // license that can be found in the LICENSE file.
 
 // Package matcher provides support for matching file names, types and modification
-// times using regular expressions and boolean operators.
+// times using boolean operators. The set of operands can be extended by defining
+// instances of Operand but the operators are limited to && and ||.
 package matcher
 
 import (
 	"fmt"
 	"io/fs"
-	"os"
-	"regexp"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -18,33 +18,16 @@ import (
 type itemType int
 
 const (
-	regex itemType = iota
-	fileType
-	newerThan
+	orOp itemType = iota
 	andOp
-	orOp
 	leftBracket
 	rightBracket
 	subExpression
+	operand
 )
-
-// Item represents an operator or operand in an expression. It is exposed
-// to allow clients packages to create their own parsers.
-type Item struct {
-	typ       itemType
-	text      string
-	re        *regexp.Regexp
-	filemode  os.FileMode
-	newerThan time.Time
-	sub       subItems
-}
-
-type subItems []Item
 
 func (it itemType) String() string {
 	switch it {
-	case regex:
-		return "regex"
 	case andOp:
 		return "&&"
 	case orOp:
@@ -53,10 +36,8 @@ func (it itemType) String() string {
 		return "("
 	case rightBracket:
 		return ")"
-	case fileType:
-		return "filetype"
-	case newerThan:
-		return "newerthan"
+	case operand:
+		return "operand"
 	case subExpression:
 		return "(...)"
 	default:
@@ -64,28 +45,28 @@ func (it itemType) String() string {
 	}
 }
 
-func (it Item) String() string {
-	switch it.typ {
-	case regex:
-		return it.text
-	case andOp:
-		return "&&"
-	case orOp:
-		return "||"
-	case leftBracket:
-		return "("
-	case rightBracket:
-		return ")"
-	case fileType:
-		return `filetype("` + it.text + `")`
-	case newerThan:
-		return `newerthan("` + it.text + `")`
-	case subExpression:
-		return "(" + it.sub.String() + ")"
-	default:
-		return fmt.Sprintf("unknown item type: %v", it.typ)
-	}
+// Operand represents an operand. It is exposed to allow clients packages
+// to define custom operands.
+type Operand interface {
+	Prepare() (Operand, error)
+	Eval(Value) bool
+	String() string
 }
+
+// NewOperand returns an item representing an operand.
+func NewOperand(op Operand) Item {
+	return Item{typ: operand, op: op}
+}
+
+// Item represents an operator or operand in an expression. It is exposed
+// to allow clients packages to create their own parsers.
+type Item struct {
+	typ itemType
+	sub subItems
+	op  Operand
+}
+
+type subItems []Item
 
 func (si subItems) String() string {
 	res := ""
@@ -95,12 +76,31 @@ func (si subItems) String() string {
 	return res
 }
 
+func (it Item) String() string {
+	switch it.typ {
+	case andOp:
+		return "&&"
+	case orOp:
+		return "||"
+	case leftBracket:
+		return "("
+	case rightBracket:
+		return ")"
+	case subExpression:
+		return "(" + it.sub.String() + ")"
+	case operand:
+		return it.op.String()
+	default:
+		return fmt.Sprintf("unknown item type: %v", it.typ)
+	}
+}
+
 func (it Item) isOperator() bool {
 	return it.typ == andOp || it.typ == orOp
 }
 
 func (it Item) isOperand() bool {
-	return it.typ == regex || it.typ == newerThan || it.typ == fileType || it.typ == subExpression
+	return it.typ == operand || it.typ == subExpression
 }
 
 // OR returns an OR item.
@@ -123,99 +123,43 @@ func RightBracket() Item {
 	return Item{typ: rightBracket}
 }
 
-// Regexp returns a regular expression item. It is not compiled until
-// a matcher.T is created using New.
-func Regexp(re string) Item {
-	return Item{typ: regex, text: re}
-}
-
-func (it Item) evalFileType(v fs.FileMode) bool {
-	if it.text == "f" {
-		return v.IsRegular()
-	}
-	return v&it.filemode == it.filemode
-}
-
-// FileType returns a 'file type' item. It is not validated until a
-// matcher.T is created using New. Supported file types are
-// (as per the unix find command):
-//   - f for regular files
-//   - d for directories
-//   - l for symbolic links
-func FileType(typ string) Item {
-	return Item{typ: fileType, text: typ}
-}
-
-func (it Item) prepare() (Item, error) {
-	switch it.typ {
-	case regex:
-		re, err := regexp.Compile(it.text)
-		if err != nil {
-			return Item{}, err
-		}
-		it.re = re
-		return it, nil
-	case fileType:
-		switch it.text {
-		case "d":
-			it.filemode = fs.ModeDir
-		case "f":
-			it.filemode = 0
-		case "l":
-			it.filemode = fs.ModeSymlink
-		default:
-			return Item{}, fmt.Errorf("invalid file type: %v, use one of d, f or l", it.text)
-		}
-		return it, nil
-	case newerThan:
-		for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
-			if t, err := time.Parse(format, it.text); err == nil {
-				it.newerThan = t
-				return it, nil
-			}
-		}
-		return Item{}, fmt.Errorf("invalid time: %v, use one of RFC3339, Date and Time, Date or Time only formats", it.text)
-	}
-	return it, nil
-}
-
-// NewerThan returns a 'newer than' item. It is not validated until a
-// matcher.T is created using New.
-func NewerThan(typ string) Item {
-	return Item{typ: newerThan, text: typ}
-}
-
 // T represents a boolean expression of regular expressions,
 // file type and mod time comparisons. It is evaluated against a single
 // input value.
 type T struct {
-	items        []Item
-	hasFileType  bool
-	hasNewerThan bool
+	items []Item
 }
 
-// NeedsFileMode returns true if the expression contains a file type
-// comparison.
-func (m T) NeedsFileMode() bool {
-	return m.hasFileType
+// HasOperand returns true if the matcher's expression contains an instance
+// of the specified operand.
+func (m T) HasOperand(it Item) bool {
+	return has(reflect.TypeOf(it.op), m.items)
 }
 
-// NeedsModTime returns true if the expression contains a mod time
-// comparison.
-func (m T) NeedsModTime() bool {
-	return m.hasNewerThan
+func has(want reflect.Type, items []Item) bool {
+	for _, it := range items {
+		switch it.typ {
+		case operand:
+			if reflect.TypeOf(it.op) == want {
+				return true
+			}
+		case subExpression:
+			return has(want, it.sub)
+		}
+	}
+	return false
 }
 
 func newExpression(input <-chan Item) ([]Item, error) {
 	expr := []Item{}
 	for cur := range input {
 		switch cur.typ {
-		case regex, fileType, newerThan:
-			cur, err := cur.prepare()
+		case operand:
+			op, err := cur.op.Prepare()
 			if err != nil {
 				return nil, err
 			}
-			expr = append(expr, cur)
+			expr = append(expr, Item{typ: operand, op: op})
 		case andOp, orOp:
 			if len(expr) == 0 {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
@@ -258,7 +202,7 @@ func itemChan(items []Item) <-chan Item {
 // New returns a new matcher.T built from the supplied items.
 func New(items ...Item) (T, error) {
 	if len(items) == 0 {
-		return T{}, fmt.Errorf("empty expression")
+		return T{}, nil
 	}
 	// check for balanced ('s here since it's easy to do so.
 	balanced := 0
@@ -283,22 +227,7 @@ func New(items ...Item) (T, error) {
 	if len(tree)%2 == 0 {
 		return T{}, fmt.Errorf("incomplete expression: %v", items)
 	}
-	m := T{items: tree}
-	needs(&m, m.items)
-	return m, nil
-}
-
-func needs(m *T, items []Item) {
-	for _, it := range items {
-		switch it.typ {
-		case fileType:
-			m.hasFileType = true
-		case newerThan:
-			m.hasNewerThan = true
-		case subExpression:
-			needs(m, it.sub)
-		}
-	}
+	return T{items: tree}, nil
 }
 
 func (m T) String() string {
@@ -314,16 +243,15 @@ func (m T) String() string {
 	return strings.TrimSpace(out.String())
 }
 
-// Value represents a value to be evaluated against an expression.
+// Value represents a value to be evaluated by an operand.
 type Value interface {
 	Name() string
 	Mode() fs.FileMode
 	ModTime() time.Time
 }
 
-// Eval evaluates the expression against the supplied value return
-// the value of the expression or an error. If expressions is empty
-// it will always return false.
+// Eval evaluates the matcher against the supplied value. An empty, default
+// matcher will always return false.
 func (m T) Eval(v Value) bool {
 	if len(m.items) == 0 {
 		return false
@@ -336,12 +264,8 @@ func eval(exprs <-chan Item, v Value) bool {
 	operators := []itemType{}
 	for cur := range exprs {
 		switch cur.typ {
-		case regex:
-			values = append(values, cur.re.MatchString(v.Name()))
-		case fileType:
-			values = append(values, cur.evalFileType(v.Mode()))
-		case newerThan:
-			values = append(values, v.ModTime().After(cur.newerThan))
+		case operand:
+			values = append(values, cur.op.Eval(v))
 		case orOp:
 			if values[len(values)-1] {
 				// early return on true || ....
@@ -365,4 +289,26 @@ func eval(exprs <-chan Item, v Value) bool {
 		}
 	}
 	return values[0]
+}
+
+func NewValue(name string, mode fs.FileMode, modTime time.Time) Value {
+	return value{name: name, mode: mode, modTime: modTime}
+}
+
+type value struct {
+	name    string
+	mode    fs.FileMode
+	modTime time.Time
+}
+
+func (v value) Name() string {
+	return v.name
+}
+
+func (v value) Mode() fs.FileMode {
+	return v.mode
+}
+
+func (v value) ModTime() time.Time {
+	return v.modTime
 }

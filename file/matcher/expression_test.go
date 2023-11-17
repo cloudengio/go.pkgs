@@ -5,7 +5,6 @@
 package matcher_test
 
 import (
-	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -60,6 +59,7 @@ func TestFormating(t *testing.T) {
 		in  string
 		out string
 	}{
+		{"", ""},
 		{"foo", "foo"},
 		{"foo || bar", "foo || bar"},
 		{"foo && bar", "foo && bar"},
@@ -69,7 +69,7 @@ func TestFormating(t *testing.T) {
 		{"(bar || baz) && foo", "(bar || baz) && foo"},
 		{"( bar && baz )", "(bar && baz)"},
 		{"(bar && (baz || foo)) || else", "(bar && (baz || foo)) || else"},
-		{"ft: f || nt: 2023-10-22", `filetype("f") || newerthan("2023-10-22")`},
+		{"ft: f || nt: 2023-10-22", `f || 2023-10-22`},
 	} {
 		expr, err := matcher.New(parse(tc.in)...)
 		if err != nil {
@@ -82,41 +82,19 @@ func TestFormating(t *testing.T) {
 	}
 }
 
-type evaluable struct {
-	name    string
-	mode    fs.FileMode
-	modTime time.Time
+func fn(name string) matcher.Value {
+	return matcher.NewValue(name, 0, time.Time{})
 }
 
-func (e evaluable) Name() string {
-	return e.name
+func ft(mode fs.FileMode) matcher.Value {
+	return matcher.NewValue("", mode, time.Time{})
 }
 
-func (e evaluable) Mode() fs.FileMode {
-	return e.mode
+func fm(modTime time.Time) matcher.Value {
+	return matcher.NewValue("", 0, modTime)
 }
 
-func (e evaluable) ModTime() time.Time {
-	return e.modTime
-}
-
-func fn(name string) evaluable {
-	return evaluable{name: name}
-}
-
-func ft(mode fs.FileMode) evaluable {
-	return evaluable{mode: mode}
-}
-
-func fm(modTime time.Time) evaluable {
-	return evaluable{modTime: modTime}
-}
-
-func (e evaluable) String() string {
-	return fmt.Sprintf("name: %q, mode: %v, modtime: %v", e.name, e.mode, e.modTime)
-}
-
-func evalTestCase(t *testing.T, in []matcher.Item, val evaluable, want bool) {
+func evalTestCase(t *testing.T, in []matcher.Item, val matcher.Value, want bool) {
 	t.Helper()
 	expr, err := matcher.New(in...)
 	if err != nil {
@@ -133,7 +111,7 @@ func TestOperands(t *testing.T) {
 	now := time.Now().UTC()
 	for _, tc := range []struct {
 		in  string
-		val evaluable
+		val matcher.Value
 		out bool
 	}{
 		{"foo", fn("foo"), true},
@@ -154,9 +132,10 @@ func TestOperands(t *testing.T) {
 func TestOperators(t *testing.T) {
 	for _, tc := range []struct {
 		in  string
-		val evaluable
+		val matcher.Value
 		out bool
 	}{
+		{"", fn("foo"), false},
 		{`^fo && .ext$`, fn("foo.ext"), true},
 		{`^fo && .ext$`, fn("foo"), false},
 		{`^fo || .ext$`, fn("foo"), true},
@@ -178,7 +157,7 @@ func TestOperators(t *testing.T) {
 func TestSubExpressions(t *testing.T) {
 	for _, tc := range []struct {
 		in  string
-		val evaluable
+		val matcher.Value
 		out bool
 	}{
 		{`(foo || bar)`, fn("foo"), true},
@@ -210,7 +189,6 @@ func TestErrors(t *testing.T) {
 		in  string
 		err string
 	}{
-		{``, "empty expression"},
 		{`(`, "unbalanced brackets"},
 		{`()`, "missing left operand for )"},
 		{`(foo || bar`, "unbalanced brackets"},
@@ -255,10 +233,10 @@ func TestNeedsOps(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got, want := m.NeedsFileMode(), needsMode; got != want {
+		if got, want := m.HasOperand(matcher.FileType("f")), needsMode; got != want {
 			t.Errorf("mode: got %v, want %v", got, want)
 		}
-		if got, want := m.NeedsModTime(), needsTime; got != want {
+		if got, want := m.HasOperand(matcher.NewerThan("2012-10-12")), needsTime; got != want {
 			t.Errorf("time: got %v, want %v", got, want)
 		}
 	}
