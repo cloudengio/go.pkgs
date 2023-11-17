@@ -118,7 +118,7 @@ func (pn nameAndType) Type() fs.FileMode {
 	return pn.typ
 }
 
-func (h *handler) Prefix(ctx context.Context, _ *struct{}, prefix string, fi file.Info, err error) (bool, file.InfoList, error) {
+func (h *handler) Prefix(_ context.Context, _ *struct{}, prefix string, fi file.Info, err error) (bool, file.InfoList, error) {
 	if err != nil {
 		return false, nil, err
 	}
