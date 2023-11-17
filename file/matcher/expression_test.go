@@ -5,12 +5,12 @@
 package matcher_test
 
 import (
-	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
 	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/matcher"
 )
 
@@ -47,7 +47,7 @@ func parse(input string) []matcher.Item {
 				}
 				date += tokens[j] + " "
 			}
-			items = append(items, matcher.NewerThan(strings.TrimSpace(date)))
+			items = append(items, matcher.NewerThanParsed(strings.TrimSpace(date)))
 		default:
 			items = append(items, matcher.Regexp(tokens[i]))
 		}
@@ -60,6 +60,7 @@ func TestFormating(t *testing.T) {
 		in  string
 		out string
 	}{
+		{"", ""},
 		{"foo", "foo"},
 		{"foo || bar", "foo || bar"},
 		{"foo && bar", "foo && bar"},
@@ -69,7 +70,7 @@ func TestFormating(t *testing.T) {
 		{"(bar || baz) && foo", "(bar || baz) && foo"},
 		{"( bar && baz )", "(bar && baz)"},
 		{"(bar && (baz || foo)) || else", "(bar && (baz || foo)) || else"},
-		{"ft: f || nt: 2023-10-22", `filetype("f") || newerthan("2023-10-22")`},
+		{"ft: f || nt: 2023-10-22", `f || 2023-10-22`},
 	} {
 		expr, err := matcher.New(parse(tc.in)...)
 		if err != nil {
@@ -82,41 +83,19 @@ func TestFormating(t *testing.T) {
 	}
 }
 
-type evaluable struct {
-	name    string
-	mode    fs.FileMode
-	modTime time.Time
+func fn(name string) any {
+	return file.NewInfo(name, 0, 0, time.Time{}, nil)
 }
 
-func (e evaluable) Name() string {
-	return e.name
+func ft(mode fs.FileMode) any {
+	return file.NewInfo("", 0, mode, time.Time{}, nil)
 }
 
-func (e evaluable) Mode() fs.FileMode {
-	return e.mode
+func fm(modTime time.Time) any {
+	return file.NewInfo("", 0, 0, modTime, nil)
 }
 
-func (e evaluable) ModTime() time.Time {
-	return e.modTime
-}
-
-func fn(name string) evaluable {
-	return evaluable{name: name}
-}
-
-func ft(mode fs.FileMode) evaluable {
-	return evaluable{mode: mode}
-}
-
-func fm(modTime time.Time) evaluable {
-	return evaluable{modTime: modTime}
-}
-
-func (e evaluable) String() string {
-	return fmt.Sprintf("name: %q, mode: %v, modtime: %v", e.name, e.mode, e.modTime)
-}
-
-func evalTestCase(t *testing.T, in []matcher.Item, val evaluable, want bool) {
+func evalTestCase(t *testing.T, in []matcher.Item, val any, want bool) {
 	t.Helper()
 	expr, err := matcher.New(in...)
 	if err != nil {
@@ -133,7 +112,7 @@ func TestOperands(t *testing.T) {
 	now := time.Now().UTC()
 	for _, tc := range []struct {
 		in  string
-		val evaluable
+		val any
 		out bool
 	}{
 		{"foo", fn("foo"), true},
@@ -154,9 +133,10 @@ func TestOperands(t *testing.T) {
 func TestOperators(t *testing.T) {
 	for _, tc := range []struct {
 		in  string
-		val evaluable
+		val any
 		out bool
 	}{
+		{"", fn("foo"), false},
 		{`^fo && .ext$`, fn("foo.ext"), true},
 		{`^fo && .ext$`, fn("foo"), false},
 		{`^fo || .ext$`, fn("foo"), true},
@@ -178,7 +158,7 @@ func TestOperators(t *testing.T) {
 func TestSubExpressions(t *testing.T) {
 	for _, tc := range []struct {
 		in  string
-		val evaluable
+		val any
 		out bool
 	}{
 		{`(foo || bar)`, fn("foo"), true},
@@ -210,7 +190,6 @@ func TestErrors(t *testing.T) {
 		in  string
 		err string
 	}{
-		{``, "empty expression"},
 		{`(`, "unbalanced brackets"},
 		{`()`, "missing left operand for )"},
 		{`(foo || bar`, "unbalanced brackets"},
@@ -241,6 +220,75 @@ func TestErrors(t *testing.T) {
 		if got, want := m.Eval(fn("foo")), false; got != want {
 			t.Errorf("%v: got %v, want %v", tc.in, got, want)
 		}
+	}
+}
 
+type nameOnly struct{}
+
+func (nameOnly) Name() string { return "" }
+
+type modeOnly struct{}
+
+func (modeOnly) Mode() fs.FileMode { return 0 }
+
+type typeOnly struct{}
+
+func (typeOnly) Type() fs.FileMode { return 0 }
+
+type modTimeOnly struct{}
+
+func (modTimeOnly) ModTime() time.Time { return time.Time{} }
+
+func TestNeedsOps(t *testing.T) {
+	var err error
+	assert := func(m matcher.T, needsName, needsMode, needsTime bool) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := m.Needs(nameOnly{}), needsName; got != want {
+			t.Errorf("mode: got %v, want %v", got, want)
+		}
+		if got, want := m.Needs(modeOnly{}), needsMode; got != want {
+			t.Errorf("mode: got %v, want %v", got, want)
+		}
+		if got, want := m.Needs(typeOnly{}), needsMode; got != want {
+			t.Errorf("mode: got %v, want %v", got, want)
+		}
+		if got, want := m.Needs(modTimeOnly{}), needsTime; got != want {
+			t.Errorf("time: got %v, want %v", got, want)
+		}
+	}
+
+	var m matcher.T
+	assert(m, false, false, false)
+	if got, want := m.Needs(file.Info{}), false; got != want {
+		t.Errorf("file.Info: got %v, want %v", got, want)
+	}
+
+	m, err = matcher.New(parse("xx")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert(m, true, false, false)
+
+	m, err = matcher.New(parse("xx || ft: f")...)
+	assert(m, true, true, false)
+	m, err = matcher.New(parse("xx || nt: 2022-12-12 :nt")...)
+	assert(m, true, false, true)
+	m, err = matcher.New(parse("xx || ft: d || nt: 2022-12-12 :nt")...)
+	assert(m, true, true, true)
+
+	m, err = matcher.New(parse("a && ( xx || ft: f )")...)
+	assert(m, true, true, false)
+	m, err = matcher.New(parse("a && (xx || nt: 2022-12-12 :nt )")...)
+	assert(m, true, false, true)
+	m, err = matcher.New(parse("a && (xx || ft: d || nt: 2022-12-12 :nt )")...)
+	assert(m, true, true, true)
+	m, err = matcher.New(parse(" (ft: d || nt: 2022-12-12 :nt )")...)
+	assert(m, false, true, true)
+
+	if got, want := m.Needs(file.Info{}), true; got != want {
+		t.Errorf("file.Info: got %v, want %v", got, want)
 	}
 }
