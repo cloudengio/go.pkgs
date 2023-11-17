@@ -60,7 +60,7 @@ func CompareFileInfo(a, b file.InfoList) error {
 			return fmt.Errorf("isDir: got %v, want %v", got, want)
 		}
 		if got, want := a[i].Sys(), b[i].Sys(); !reflect.DeepEqual(got, want) {
-			return fmt.Errorf("sys: got %v, want %v", got, want)
+			return fmt.Errorf("sys: got %v, want %v (%T, %T)", got, want, got, want)
 		}
 	}
 	return nil
