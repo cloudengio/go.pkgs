@@ -2,6 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+// Package find provides a filewalk.Handler that can be used to find files.
 package find
 
 import (
@@ -19,6 +20,10 @@ type Found struct {
 	Name   string
 }
 
+// New returns a filewalk.Handler that can match on prefix/directory names as well
+// as filenames using file.Matcher expressions. The prefixMatcher is applied to
+// the prefix/directory and if prune is true no futher processing of that directory
+// will take place. The fileMatcher is applied to the filename (without its parent).
 func New(fs filewalk.FS, ch chan<- Found, prefixMatcher, fileMatcher matcher.T, prune bool) filewalk.Handler[struct{}] {
 	return &handler{
 		found:    ch,
