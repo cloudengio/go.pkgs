@@ -7,8 +7,8 @@ package subcmd
 import (
 	"bytes"
 	"fmt"
-	"html/template"
 	"strings"
+	"text/template"
 )
 
 // Extension allows for extending a YAMLCommandSet with additional
@@ -61,7 +61,8 @@ func (e *extension) Set(cmdSet *CommandSetYAML) error {
 	return e.appendFn(cmdSet)
 }
 
-// NewExtension
+// NewExtension creates a new Extension with the specified name and spec. The name
+// is used to refer to the extension in the YAML template.
 func NewExtension(name, spec string, appendFn func(cmdSet *CommandSetYAML) error) Extension {
 	return &extension{
 		name:     name,
@@ -95,7 +96,7 @@ func (ef *extensionFunc) extension(name string) []string {
 	return ef.exts[name]
 }
 
-func yamlTemplate(specTpl string, exts ...Extension) ([]byte, error) {
+func yamlTemplate(specTpl string, exts []Extension) ([]byte, error) {
 	extFunc := extensionFunc{
 		exts: make(map[string][]string),
 	}
@@ -118,9 +119,17 @@ func yamlTemplate(specTpl string, exts ...Extension) ([]byte, error) {
 // FromYAMLTemplate returns a CommandSetYAML using the expanded value of
 // the supplied template and the supplied extensions.
 func FromYAMLTemplate(specTpl string, exts ...Extension) (*CommandSetYAML, []byte, error) {
-	extendedYAML, err := yamlTemplate(specTpl, exts...)
+	return fromYAMLTemplate(specTpl, exts, false)
+
+}
+
+func fromYAMLTemplate(specTpl string, exts []Extension, sanitize bool) (*CommandSetYAML, []byte, error) {
+	extendedYAML, err := yamlTemplate(specTpl, exts)
 	if err != nil {
 		return nil, nil, err
+	}
+	if sanitize {
+		extendedYAML = []byte(SanitizeYAML(string(extendedYAML)))
 	}
 	cs, err := FromYAML(extendedYAML)
 	if err != nil {
@@ -131,9 +140,9 @@ func FromYAMLTemplate(specTpl string, exts ...Extension) (*CommandSetYAML, []byt
 }
 
 // MustFromYAMLTemplate is like FromYAMLTemplate except that it panics
-// on error.
+// on error. SanitzeYAML is called on the expanded template.
 func MustFromYAMLTemplate(specTpl string, exts ...Extension) *CommandSetYAML {
-	cmds, expanded, err := FromYAMLTemplate(specTpl, exts...)
+	cmds, expanded, err := fromYAMLTemplate(specTpl, exts, true)
 	if err != nil {
 		fmt.Printf("%s", expanded)
 		panic(fmt.Sprintf("%v", err))
