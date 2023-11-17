@@ -3,48 +3,29 @@
 // license that can be found in the LICENSE file.
 
 // Package matcher provides support for matching file names, types and modification
-// times using regular expressions and boolean operators.
+// times using boolean operators. The set of operands can be extended by defining
+// instances of Operand but the operators are limited to && and ||.
 package matcher
 
 import (
 	"fmt"
-	"io/fs"
-	"os"
-	"regexp"
+	"reflect"
 	"strings"
-	"time"
 )
 
 type itemType int
 
 const (
-	regex itemType = iota
-	fileType
-	newerThan
+	orOp itemType = iota
 	andOp
-	orOp
 	leftBracket
 	rightBracket
 	subExpression
+	operand
 )
-
-// Item represents an operator or operand in an expression. It is exposed
-// to allow clients packages to create their own parsers.
-type Item struct {
-	typ       itemType
-	text      string
-	re        *regexp.Regexp
-	filemode  os.FileMode
-	newerThan time.Time
-	sub       subItems
-}
-
-type subItems []Item
 
 func (it itemType) String() string {
 	switch it {
-	case regex:
-		return "regex"
 	case andOp:
 		return "&&"
 	case orOp:
@@ -53,10 +34,8 @@ func (it itemType) String() string {
 		return "("
 	case rightBracket:
 		return ")"
-	case fileType:
-		return "filetype"
-	case newerThan:
-		return "newerthan"
+	case operand:
+		return "operand"
 	case subExpression:
 		return "(...)"
 	default:
@@ -64,28 +43,15 @@ func (it itemType) String() string {
 	}
 }
 
-func (it Item) String() string {
-	switch it.typ {
-	case regex:
-		return it.text
-	case andOp:
-		return "&&"
-	case orOp:
-		return "||"
-	case leftBracket:
-		return "("
-	case rightBracket:
-		return ")"
-	case fileType:
-		return `filetype("` + it.text + `")`
-	case newerThan:
-		return `newerthan("` + it.text + `")`
-	case subExpression:
-		return "(" + it.sub.String() + ")"
-	default:
-		return fmt.Sprintf("unknown item type: %v", it.typ)
-	}
+// Item represents an operator or operand in an expression. It is exposed
+// to allow clients packages to create their own parsers.
+type Item struct {
+	typ itemType
+	sub subItems
+	op  Operand
 }
+
+type subItems []Item
 
 func (si subItems) String() string {
 	res := ""
@@ -95,12 +61,31 @@ func (si subItems) String() string {
 	return res
 }
 
+func (it Item) String() string {
+	switch it.typ {
+	case andOp:
+		return "&&"
+	case orOp:
+		return "||"
+	case leftBracket:
+		return "("
+	case rightBracket:
+		return ")"
+	case subExpression:
+		return "(" + it.sub.String() + ")"
+	case operand:
+		return it.op.String()
+	default:
+		return fmt.Sprintf("unknown item type: %v", it.typ)
+	}
+}
+
 func (it Item) isOperator() bool {
 	return it.typ == andOp || it.typ == orOp
 }
 
 func (it Item) isOperand() bool {
-	return it.typ == regex || it.typ == newerThan || it.typ == fileType || it.typ == subExpression
+	return it.typ == operand || it.typ == subExpression
 }
 
 // OR returns an OR item.
@@ -123,85 +108,43 @@ func RightBracket() Item {
 	return Item{typ: rightBracket}
 }
 
-// Regexp returns a regular expression item. It is not compiled until
-// a matcher.Expression is created using New.
-func Regexp(re string) Item {
-	return Item{typ: regex, text: re}
-}
-
-func (it Item) evalFileType(v fs.FileMode) bool {
-	if it.text == "f" {
-		return v.IsRegular()
-	}
-	return v&it.filemode == it.filemode
-}
-
-// FileType returns a 'file type' item. It is not validated until a
-// matcher.Expression is created using New. Supported file types are
-// (as per the unix find command):
-//   - f for regular files
-//   - d for directories
-//   - l for symbolic links
-func FileType(typ string) Item {
-	return Item{typ: fileType, text: typ}
-}
-
-func (it Item) prepare() (Item, error) {
-	switch it.typ {
-	case regex:
-		re, err := regexp.Compile(it.text)
-		if err != nil {
-			return Item{}, err
-		}
-		it.re = re
-		return it, nil
-	case fileType:
-		switch it.text {
-		case "d":
-			it.filemode = fs.ModeDir
-		case "f":
-			it.filemode = 0
-		case "l":
-			it.filemode = fs.ModeSymlink
-		default:
-			return Item{}, fmt.Errorf("invalid file type: %v, use one of d, f or l", it.text)
-		}
-		return it, nil
-	case newerThan:
-		for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
-			if t, err := time.Parse(format, it.text); err == nil {
-				it.newerThan = t
-				return it, nil
-			}
-		}
-		return Item{}, fmt.Errorf("invalid time: %v, use one of RFC3339, Date and Time, Date or Time only formats", it.text)
-	}
-	return it, nil
-}
-
-// NewerThan returns a 'newer than' item. It is not validated until a
-// matcher.Expression is created using New.
-func NewerThan(typ string) Item {
-	return Item{typ: newerThan, text: typ}
-}
-
-// Expression represents a boolean expression of regular expressions,
+// T represents a boolean expression of regular expressions,
 // file type and mod time comparisons. It is evaluated against a single
 // input value.
-type Expression struct {
+type T struct {
 	items []Item
+}
+
+// HasOperand returns true if the matcher's expression contains an instance
+// of the specified operand.
+func (m T) Needs(typ any) bool {
+	return needs(reflect.TypeOf(typ), m.items)
+}
+
+func needs(want reflect.Type, items []Item) bool {
+	for _, it := range items {
+		switch it.typ {
+		case operand:
+			if it.op.Needs(want) {
+				return true
+			}
+		case subExpression:
+			return needs(want, it.sub)
+		}
+	}
+	return false
 }
 
 func newExpression(input <-chan Item) ([]Item, error) {
 	expr := []Item{}
 	for cur := range input {
 		switch cur.typ {
-		case regex, fileType, newerThan:
-			cur, err := cur.prepare()
+		case operand:
+			op, err := cur.op.Prepare()
 			if err != nil {
 				return nil, err
 			}
-			expr = append(expr, cur)
+			expr = append(expr, NewOperand(op))
 		case andOp, orOp:
 			if len(expr) == 0 {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
@@ -241,10 +184,10 @@ func itemChan(items []Item) <-chan Item {
 	return itemCh
 }
 
-// New returns a new matcher.Expression built from the supplied items.
-func New(items ...Item) (Expression, error) {
+// New returns a new matcher.T built from the supplied items.
+func New(items ...Item) (T, error) {
 	if len(items) == 0 {
-		return Expression{}, fmt.Errorf("empty expression")
+		return T{}, nil
 	}
 	// check for balanced ('s here since it's easy to do so.
 	balanced := 0
@@ -254,84 +197,29 @@ func New(items ...Item) (Expression, error) {
 		}
 		if it.typ == rightBracket {
 			if balanced == 0 {
-				return Expression{}, fmt.Errorf("unbalanced brackets")
+				return T{}, fmt.Errorf("unbalanced brackets")
 			}
 			balanced--
 		}
 	}
 	if balanced != 0 {
-		return Expression{}, fmt.Errorf("unbalanced brackets")
+		return T{}, fmt.Errorf("unbalanced brackets")
 	}
-
 	tree, err := newExpression(itemChan(items))
 	if err != nil {
-		return Expression{}, err
+		return T{}, err
 	}
 	if len(tree)%2 == 0 {
-		return Expression{}, fmt.Errorf("incomplete expression: %v", items)
+		return T{}, fmt.Errorf("incomplete expression: %v", items)
 	}
-	return Expression{items: tree}, nil
+	return T{items: tree}, nil
 }
 
-/*
-func (e Expression) isWellFormed(items []Item) error {
-	if len(items) == 1 {
-		if !items[0].isOperand() {
-			return fmt.Errorf("single item expression must be an operand: %v", items[0])
-		}
-		return nil
-	}
-	if len(items)%2 == 0 {
-		return fmt.Errorf("incomplete expression: %v", items)
-	}
-	// should be alternating operands and operators.
-	for i, it := range items {
-		if i%2 == 0 {
-			if !it.isOperand() {
-				return fmt.Errorf("expected operand at position %v: %v", i, items)
-			}
-			if it.typ == subExpression && len(it.sub) == 0 {
-				return fmt.Errorf("empty sub-expression at position %v: %v", i, items)
-			}
-		}
-		if i%2 == 1 && !it.isOperator() {
-			return fmt.Errorf("expected operator at position %v: %v", i, items)
-		}
-	}
-	return nil
-}
-
-func (e Expression) validate(items []Item) error {
-	if len(items) == 0 {
-		return nil
-	}
-	for i, it := range items {
-		// There should be no bracket's left.
-		if it.typ == leftBracket {
-			return fmt.Errorf("extra left bracket at position %v", i)
-		}
-		if it.typ == rightBracket {
-			return fmt.Errorf("extra right bracket at position %v", i)
-		}
-	}
-	if err := e.isWellFormed(items); err != nil {
-		return err
-	}
-	for _, it := range items {
-		if it.typ == subExpression {
-			if err := e.validate(it.sub); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}*/
-
-func (ex Expression) String() string {
+func (m T) String() string {
 	var out strings.Builder
-	for _, it := range ex.items {
+	for _, it := range m.items {
 		if it.typ == subExpression {
-			se := Expression{items: it.sub}
+			se := T{items: it.sub}
 			out.WriteString("(" + se.String() + ") ")
 			continue
 		}
@@ -340,34 +228,22 @@ func (ex Expression) String() string {
 	return strings.TrimSpace(out.String())
 }
 
-// Value represents a value to be evaluated against an expression.
-type Value interface {
-	Name() string
-	Mode() fs.FileMode
-	ModTime() time.Time
-}
-
-// Eval evaluates the expression against the supplied value return
-// the value of the expression or an error. If expressions is empty
-// it will always return false.
-func (ex Expression) Eval(v Value) bool {
-	if len(ex.items) == 0 {
+// Eval evaluates the matcher against the supplied value. An empty, default
+// matcher will always return false.
+func (m T) Eval(v any) bool {
+	if len(m.items) == 0 {
 		return false
 	}
-	return eval(itemChan(ex.items), v)
+	return eval(itemChan(m.items), v)
 }
 
-func eval(exprs <-chan Item, v Value) bool {
+func eval(exprs <-chan Item, v any) bool {
 	values := []bool{}
 	operators := []itemType{}
 	for cur := range exprs {
 		switch cur.typ {
-		case regex:
-			values = append(values, cur.re.MatchString(v.Name()))
-		case fileType:
-			values = append(values, cur.evalFileType(v.Mode()))
-		case newerThan:
-			values = append(values, v.ModTime().After(cur.newerThan))
+		case operand:
+			values = append(values, cur.op.Eval(v))
 		case orOp:
 			if values[len(values)-1] {
 				// early return on true || ....
