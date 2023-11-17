@@ -5,7 +5,6 @@
 package subcmd
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"strings"
@@ -118,13 +117,16 @@ func (c *CurrentCommand) MustRunner(runner Runner, fs any) {
 	}
 }
 
-// FromYAML parses a YAML specification of the command tree.
-// Tabs are replaced with two spaces to make it easier to write YAML
+// SanitizeYAML replaces tabs with two spaces to make it easier to write YAML
 // in go string literals (where most editors will always use tabs). This
 // does not guarantee correct alignment when spaces and tabs are mixed
 // arbitrarily.
+func SanitizeYAML(spec string) string {
+	return strings.ReplaceAll(spec, "\t", "  ")
+}
+
+// FromYAML parses a YAML specification of the command tree.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
-	spec = bytes.ReplaceAll(spec, []byte("\t"), []byte("  "))
 	var yamlCmd commandDef
 	if err := cmdutil.ParseYAMLConfig(spec, &yamlCmd); err != nil {
 		return nil, err
@@ -165,9 +167,10 @@ func determineOptForArgs(args []string) CommandOption {
 }
 
 // MustFromYAML is like FromYAML but will panic if the YAML spec is
-// incorrectly defined.
+// incorrectly defined. It calls SanitizeYAML on its input before calling
+// FromYAML.
 func MustFromYAML(spec string) *CommandSetYAML {
-	cs, err := FromYAML([]byte(spec))
+	cs, err := FromYAML([]byte(SanitizeYAML(spec)))
 	if err != nil {
 		panic(fmt.Sprintf("%v", err))
 	}

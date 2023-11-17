@@ -134,7 +134,7 @@ func TestYAMLCommands(t *testing.T) {
 	dispatch(cs)
 	assertRunner(cs, "toplevel-example: flag: 12, args: []\n")
 
-	for _, spec := range []string{oneLevel, oneLevelTabs} {
+	for _, spec := range []string{oneLevel, subcmd.SanitizeYAML(oneLevelTabs)} {
 		cs = fromYaml(spec)
 		for _, cmd := range []string{"l0.1", "l0.2", "l0.3", "l0.4", "l0.5"} {
 			r := &runner{name: cmd, out: out}
