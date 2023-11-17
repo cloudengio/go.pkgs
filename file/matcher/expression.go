@@ -9,10 +9,8 @@ package matcher
 
 import (
 	"fmt"
-	"io/fs"
 	"reflect"
 	"strings"
-	"time"
 )
 
 type itemType int
@@ -43,19 +41,6 @@ func (it itemType) String() string {
 	default:
 		return fmt.Sprintf("unknown item type: %d", it)
 	}
-}
-
-// Operand represents an operand. It is exposed to allow clients packages
-// to define custom operands.
-type Operand interface {
-	Prepare() (Operand, error)
-	Eval(Value) bool
-	String() string
-}
-
-// NewOperand returns an item representing an operand.
-func NewOperand(op Operand) Item {
-	return Item{typ: operand, op: op}
 }
 
 // Item represents an operator or operand in an expression. It is exposed
@@ -132,19 +117,19 @@ type T struct {
 
 // HasOperand returns true if the matcher's expression contains an instance
 // of the specified operand.
-func (m T) HasOperand(it Item) bool {
-	return has(reflect.TypeOf(it.op), m.items)
+func (m T) Needs(typ any) bool {
+	return needs(reflect.TypeOf(typ), m.items)
 }
 
-func has(want reflect.Type, items []Item) bool {
+func needs(want reflect.Type, items []Item) bool {
 	for _, it := range items {
 		switch it.typ {
 		case operand:
-			if reflect.TypeOf(it.op) == want {
+			if it.op.Needs(want) {
 				return true
 			}
 		case subExpression:
-			return has(want, it.sub)
+			return needs(want, it.sub)
 		}
 	}
 	return false
@@ -159,7 +144,7 @@ func newExpression(input <-chan Item) ([]Item, error) {
 			if err != nil {
 				return nil, err
 			}
-			expr = append(expr, Item{typ: operand, op: op})
+			expr = append(expr, NewOperand(op))
 		case andOp, orOp:
 			if len(expr) == 0 {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
@@ -243,23 +228,16 @@ func (m T) String() string {
 	return strings.TrimSpace(out.String())
 }
 
-// Value represents a value to be evaluated by an operand.
-type Value interface {
-	Name() string
-	Mode() fs.FileMode
-	ModTime() time.Time
-}
-
 // Eval evaluates the matcher against the supplied value. An empty, default
 // matcher will always return false.
-func (m T) Eval(v Value) bool {
+func (m T) Eval(v any) bool {
 	if len(m.items) == 0 {
 		return false
 	}
 	return eval(itemChan(m.items), v)
 }
 
-func eval(exprs <-chan Item, v Value) bool {
+func eval(exprs <-chan Item, v any) bool {
 	values := []bool{}
 	operators := []itemType{}
 	for cur := range exprs {
@@ -289,26 +267,4 @@ func eval(exprs <-chan Item, v Value) bool {
 		}
 	}
 	return values[0]
-}
-
-func NewValue(name string, mode fs.FileMode, modTime time.Time) Value {
-	return value{name: name, mode: mode, modTime: modTime}
-}
-
-type value struct {
-	name    string
-	mode    fs.FileMode
-	modTime time.Time
-}
-
-func (v value) Name() string {
-	return v.name
-}
-
-func (v value) Mode() fs.FileMode {
-	return v.mode
-}
-
-func (v value) ModTime() time.Time {
-	return v.modTime
 }
