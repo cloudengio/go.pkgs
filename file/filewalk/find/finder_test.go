@@ -184,7 +184,7 @@ func TestPrefixMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	fm = newMatcher(t, matcher.NewerThanTime(start))
-	found, foundErrors = findFiles(ctx, t, localTestTree, subTree, pm, fm, false, find.NeedsStat(pm, fm), false)
+	found, _ = findFiles(ctx, t, localTestTree, subTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	cmpFound(t, found, zipf(zips("/b0/b0.1/b1.0"), "f1"))
 
 }
