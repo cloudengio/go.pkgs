@@ -48,6 +48,12 @@ func parse(input string) []matcher.Item {
 				date += tokens[j] + " "
 			}
 			items = append(items, matcher.NewerThanParsed(strings.TrimSpace(date)))
+		case "glob:":
+			i++
+			items = append(items, matcher.Glob(tokens[i], false))
+		case "iglob:":
+			i++
+			items = append(items, matcher.Glob(tokens[i], true))
 		default:
 			items = append(items, matcher.Regexp(tokens[i]))
 		}
@@ -125,6 +131,10 @@ func TestOperands(t *testing.T) {
 		{"ft: l", ft(fs.ModeDevice), false},
 		{"nt: " + now.Format(time.DateTime) + " :nt", fm(now.Add(-time.Hour)), false},
 		{"nt: " + now.Format(time.DateTime) + " :nt", fm(now.Add(time.Hour)), true},
+		{`glob: foo`, fn("foo"), true},
+		{`glob: foo`, fn("Foo"), false},
+		{`iglob: foo`, fn("Foo"), true},
+		{`glob: f*foo`, fn("ffoo"), true},
 	} {
 		evalTestCase(t, parse(tc.in), tc.val, tc.out)
 	}
@@ -212,6 +222,7 @@ func TestErrors(t *testing.T) {
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
 		{`ft: x`, "invalid file type: x, use one of d, f or l"},
 		{`nt: xxx :nt`, "invalid time: xxx, use one of RFC3339, Date and Time, Date or Time only formats"},
+		{`glob: \\\`, "syntax error in pattern"},
 	} {
 		m, err := matcher.New(parse(tc.in)...)
 		if err == nil || err.Error() != tc.err {
