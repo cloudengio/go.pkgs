@@ -222,7 +222,7 @@ func TestErrors(t *testing.T) {
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
 		{`ft: x`, "invalid file type: x, use one of d, f or l"},
 		{`nt: xxx :nt`, "invalid time: xxx, use one of RFC3339, Date and Time, Date or Time only formats"},
-		{`glob: \\\`, "syntax error in pattern"},
+		{`glob: [x`, "syntax error in pattern"},
 	} {
 		m, err := matcher.New(parse(tc.in)...)
 		if err == nil || err.Error() != tc.err {
