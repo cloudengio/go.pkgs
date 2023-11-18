@@ -7,8 +7,10 @@ package matcher
 import (
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -86,6 +88,46 @@ func (op regEx) String() string {
 // matched provides Name() string.
 func Regexp(re string) Item {
 	return NewOperand(regEx{text: re})
+}
+
+type glob struct {
+	text            string
+	caseInsensitive bool
+	commonOperand
+}
+
+func (op glob) Prepare() (Operand, error) {
+	_, err := filepath.Match(op.text, "foo")
+	if err != nil {
+		fmt.Printf("ERR: %v\n", err)
+		return op, err
+	}
+	op.requires = reflect.TypeOf((*nameIfc)(nil)).Elem()
+	return op, nil
+}
+
+func (op glob) Eval(v any) bool {
+	if nt, ok := v.(nameIfc); ok {
+		name := nt.Name()
+		if op.caseInsensitive {
+			name = strings.ToLower(name)
+		}
+		matched, _ := filepath.Match(op.text, name)
+		return matched
+	}
+	return false
+}
+
+func (op glob) String() string {
+	return op.text
+}
+
+// Glob provides a glob operand that may be case insensitive, in which
+// case the value it is being against will be converted to lower case
+// before the match is evaluated. The pattern is not validated until a matcher.T
+// is created using New.
+func Glob(re string, caseInsensitive bool) Item {
+	return NewOperand(glob{text: re, caseInsensitive: caseInsensitive})
 }
 
 type fileType struct {
