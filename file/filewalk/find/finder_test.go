@@ -105,7 +105,9 @@ func cmpFound(t *testing.T, found []find.Found, expected []find.Found) {
 func zipf(a []string, b ...string) []find.Found {
 	z := make([]find.Found, 0, len(a))
 	for i := range a {
-		z = append(z, find.Found{Prefix: a[i], Name: b[i]})
+		z = append(z, find.Found{
+			Prefix: strings.ReplaceAll(a[i], "/", string(filepath.Separator)),
+			Name:   strings.ReplaceAll(b[i], "/", string(filepath.Separator))})
 	}
 	return z
 }
