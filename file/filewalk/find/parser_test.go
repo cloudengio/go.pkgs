@@ -13,7 +13,7 @@ func runParser(t *testing.T, input string) tokenList {
 	tok := tokenizer{}
 	toks, err := tok.run(input)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("input %q err: %v", input, err)
 	}
 	return toks
 }
@@ -34,6 +34,7 @@ func TestParser(t *testing.T) {
 		if got, want := toks.String(), tc.output; got != want {
 			t.Errorf("%q: got %v, want %v", tc.input, got, want)
 		}
+		t.Log(tc.input)
 	}
 }
 
@@ -42,13 +43,19 @@ func TestParserErros(t *testing.T) {
 		input string
 		err   string
 	}{
-		{"name=foo or", "unexpected end of input"},
-		{"name=foo or name=", "unexpected end of input"},
+		{"name=foo or", "incomplete operator or operand: or"},
+		{"name=foo or name=", "missing operand value: name"},
+		{"=", "incomplete operator or operand: ="},
+		{"or", "incomplete operator or operand: or"},
+		{"name='foo", "incomplete quoted value: foo"},
+		{"name='foo''", "incomplete operator or operand: '"},
+		{`name=\`, "incomplete escaped rune"},
+		{"foo bar", "unknown operator: foo, should be one of 'or', 'and', '( or ')'"},
 	} {
 		tok := tokenizer{}
 		_, err := tok.run(tc.input)
 		if err == nil || err.Error() != tc.err {
-			t.Errorf("%qq: missing or wrong error: %v", tc.input, err)
+			t.Errorf("%q: missing or wrong error: %v", tc.input, err)
 		}
 	}
 }

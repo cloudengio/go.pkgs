@@ -27,7 +27,6 @@ import (
 //	 in the pattern.
 func Parse(input string) (matcher.T, error) {
 	//	tokens := make(chan string, 100)
-
 	return matcher.T{}, nil
 }
 
@@ -106,7 +105,11 @@ func (t *tokenizer) run(input string) ([]token, error) {
 	case item:
 		return t.tokens, fmt.Errorf("incomplete operator or operand: %v", t.seen.String())
 	case operandValue:
-		return t.tokens, fmt.Errorf("missing operand value: %v", t.seen.String())
+		seen := t.seen.String()
+		if len(t.tokens) > 0 {
+			seen = t.tokens[len(t.tokens)-1].text
+		}
+		return t.tokens, fmt.Errorf("missing operand value: %v", seen)
 	case quotedValue:
 		return t.tokens, fmt.Errorf("incomplete quoted value: %v", t.seen.String())
 	case escapedValue:
@@ -115,7 +118,7 @@ func (t *tokenizer) run(input string) ([]token, error) {
 		})
 		return t.tokens, nil
 	case escapedRune:
-		return t.tokens, fmt.Errorf("incomplete escaped rune: %v", t.seen.String())
+		return t.tokens, fmt.Errorf("incomplete escaped rune")
 	}
 	return t.tokens, nil
 }
@@ -164,6 +167,9 @@ func (t *tokenizer) item(r rune) (state, error) {
 func (t *tokenizer) operandValue(r rune) (state, error) {
 	if r == '\'' {
 		return quotedValue, nil // quoted value
+	}
+	if r == '\\' {
+		return escapedRune, nil
 	}
 	t.seen.WriteRune(r)
 	return escapedValue, nil
