@@ -80,7 +80,7 @@ func (op regEx) Eval(v any) bool {
 }
 
 func (op regEx) String() string {
-	return op.text
+	return "re=" + op.text
 }
 
 // Regexp returns a regular expression operand. It is not compiled until
@@ -99,7 +99,6 @@ type glob struct {
 func (op glob) Prepare() (Operand, error) {
 	_, err := filepath.Match(op.text, "foo")
 	if err != nil {
-		fmt.Printf("ERR: %v\n", err)
 		return op, err
 	}
 	op.requires = reflect.TypeOf((*nameIfc)(nil)).Elem()
@@ -119,7 +118,10 @@ func (op glob) Eval(v any) bool {
 }
 
 func (op glob) String() string {
-	return op.text
+	if op.caseInsensitive {
+		return "iname=" + op.text
+	}
+	return "name=" + op.text
 }
 
 // Glob provides a glob operand that may be case insensitive, in which
@@ -170,7 +172,7 @@ func (op fileType) Eval(v any) bool {
 }
 
 func (op fileType) String() string {
-	return op.text
+	return "type=" + op.text
 }
 
 func (op fileType) Needs(t reflect.Type) bool {
@@ -219,7 +221,7 @@ func (op newerThan) Eval(v any) bool {
 }
 
 func (op newerThan) String() string {
-	return op.text
+	return "newer=" + op.text
 }
 
 // NewerThanParsed returns a 'newer than' operand. It is not validated until a

@@ -26,8 +26,16 @@ import (
 //	 Note that the single quotes are optional unless a white space is present
 //	 in the pattern.
 func Parse(input string) (matcher.T, error) {
-	//	tokens := make(chan string, 100)
-	return matcher.T{}, nil
+	tokenizer := &tokenizer{}
+	tokens, err := tokenizer.run(input)
+	if err != nil {
+		return matcher.T{}, err
+	}
+	merged, err := mergeOperandsAndValues(tokens)
+	if err != nil {
+		return matcher.T{}, err
+	}
+	return matcher.New(merged...)
 }
 
 type token struct {
@@ -35,6 +43,36 @@ type token struct {
 	operator bool
 	operand  bool
 	value    string
+}
+
+func operatorFor(text string) matcher.Item {
+	switch text {
+	case "or":
+		return matcher.OR()
+	case "and":
+		return matcher.AND()
+	case "(":
+		return matcher.LeftBracket()
+	case ")":
+		return matcher.RightBracket()
+	}
+	return matcher.Item{}
+}
+
+func operandFor(text, value string) matcher.Item {
+	switch text {
+	case "name":
+		return matcher.Glob(value, false)
+	case "iname":
+		return matcher.Glob(value, true)
+	case "re":
+		return matcher.Regexp(value)
+	case "type":
+		return matcher.FileType(value)
+	case "newer":
+		return matcher.NewerThanParsed(value)
+	}
+	return matcher.Item{}
 }
 
 type tokenizer struct {
@@ -60,6 +98,35 @@ func (tl tokenList) String() string {
 		}
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+func mergeOperandsAndValues(tl []token) ([]matcher.Item, error) {
+	var merged []matcher.Item
+	for i := 0; i < len(tl); i++ {
+		tok := tl[i]
+		if tok.operator {
+			merged = append(merged, operatorFor(tok.text))
+			continue
+		}
+		if tok.operand {
+			fmt.Printf("XXX %v %v %v\n", tok.text, i, len(tl))
+			if i+1 >= len(tl) {
+				return nil, fmt.Errorf("missing operand value for: %v", tok.text)
+			}
+			next := tl[i+1]
+			fmt.Printf("next... %#v\n", next)
+			if next.operand || next.operator || len(next.value) == 0 {
+				return nil, fmt.Errorf("missing operand value for: %v", tok.text)
+			}
+			merged = append(merged, operandFor(tok.text, next.value))
+			i++
+			continue
+		}
+		if len(tok.value) > 0 {
+			return nil, fmt.Errorf("unexpected value: %v", tok.value)
+		}
+	}
+	return merged, nil
 }
 
 type state int

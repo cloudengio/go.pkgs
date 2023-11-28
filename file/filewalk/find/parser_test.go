@@ -18,7 +18,7 @@ func runParser(t *testing.T, input string) tokenList {
 	return toks
 }
 
-func TestParser(t *testing.T) {
+func TesTokenParser(t *testing.T) {
 	for _, tc := range []struct {
 		input  string
 		output string
@@ -57,5 +57,45 @@ func TestParserErros(t *testing.T) {
 		if err == nil || err.Error() != tc.err {
 			t.Errorf("%q: missing or wrong error: %v", tc.input, err)
 		}
+	}
+}
+
+func TestParser(t *testing.T) {
+	for _, tc := range []struct {
+		input  string
+		output string
+	}{
+		{"", ""},
+		{"name=foo", "name=foo"},
+		{"iname=foo", "iname=foo"},
+		{"type=f", "type=f"},
+		{"re=foo", "re=foo"},
+		{"newer=2012-01-01", "newer=2012-01-01"},
+		{"re=foo or newer=2012-01-01 and type=f", "re=foo || newer=2012-01-01 && type=f"},
+		{"(re=foo or newer=2012-01-01) and type=f", "(re=foo || newer=2012-01-01) && type=f"},
+	} {
+		m, err := Parse(tc.input)
+		if err != nil {
+			t.Errorf("%v: %v", tc.input, err)
+		}
+		if got, want := m.String(), tc.output; got != want {
+			t.Errorf("%v: got %v, want %v", tc.input, got, want)
+		}
+	}
+}
+
+func TestParserErrors(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		err   string
+	}{
+		{"regexp=", "missing operand value: regexp"},
+		{"name= regexp=", "missing operand value: name"},
+	} {
+		_, err := Parse(tc.input)
+		if err == nil || err.Error() != tc.err {
+			t.Errorf("%q: missing or wrong error: %v", tc.input, err)
+		}
+
 	}
 }
