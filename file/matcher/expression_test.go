@@ -220,7 +220,7 @@ func TestErrors(t *testing.T) {
 		{`a && &&`, "missing operand for &&"},
 		{`a (a)`, "missing operator for ("},
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
-		{`ft: x`, "invalid file type: x, use one of d, f or l"},
+		{`ft: z`, "invalid file type: \"z\", use one of d, f, l or x"},
 		{`nt: xxx :nt`, "invalid time: xxx, use one of RFC3339, Date and Time, Date or Time only formats"},
 		{`glob: [x`, "syntax error in pattern"},
 	} {

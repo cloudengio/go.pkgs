@@ -18,39 +18,48 @@ func runParser(t *testing.T, input string) tokenList {
 	return toks
 }
 
-func TesTokenParser(t *testing.T) {
+func TestTokenParser(t *testing.T) {
 	for _, tc := range []struct {
 		input  string
 		output string
 	}{
+		{"anything", "anything="},
 		{"name=foo", "name='foo'"},
-		{"name=foo or name=bar", "name='foo' or name='bar'"},
-		{"name=foo and iname=bar", "name='foo' and iname='bar'"},
-		{"regexp='foo.*' or type=d and newer=2012-01-01", "regexp='foo.*' or type='d' and newer='2012-01-01'"},
-		{"newer=2012-01-01\\ 20:00:00 or newer='2012-01-01 20:00:00'", "newer='2012-01-01 20:00:00' or newer='2012-01-01 20:00:00'"},
-		{"name='f' or (name='d' and newer=2012-01-01)", "name='f' or ( name='d' and newer='2012-01-01' )"},
+		{"name=''", "name=''"},
+		{"name=foo || name=bar", "name='foo' || name='bar'"},
+		{"name=foo && iname=bar", "name='foo' && iname='bar'"},
+		{"name=foo&&iname=bar", "name='foo' && iname='bar'"},
+		{"regexp='foo.*' || type=d && newer=2012-01-01", "regexp='foo.*' || type='d' && newer='2012-01-01'"},
+		{"newer=2012-01-01\\ 20:00:00|| newer='2012-01-01 20:00:00'", "newer='2012-01-01 20:00:00' || newer='2012-01-01 20:00:00'"},
+		{"name='f'|| (name='d' && newer=2012-01-01)", "name='f' || ( name='d' && newer='2012-01-01' )"},
+		{"name='f'||(name='d'&& newer=2012-01-01)", "name='f' || ( name='d' && newer='2012-01-01' )"},
 	} {
 		toks := runParser(t, tc.input)
 		if got, want := toks.String(), tc.output; got != want {
+			t.Logf("tokens: #tokens: %v, %v\n", len(toks), toks)
 			t.Errorf("%q: got %v, want %v", tc.input, got, want)
 		}
-		t.Log(tc.input)
 	}
 }
 
-func TestParserErros(t *testing.T) {
+func TestTokenParserErros(t *testing.T) {
 	for _, tc := range []struct {
 		input string
 		err   string
 	}{
-		{"name=foo or", "incomplete operator or operand: or"},
-		{"name=foo or name=", "missing operand value: name"},
-		{"=", "incomplete operator or operand: ="},
-		{"or", "incomplete operator or operand: or"},
-		{"name='foo", "incomplete quoted value: foo"},
-		{"name='foo''", "incomplete operator or operand: '"},
-		{`name=\`, "incomplete escaped rune"},
-		{"foo bar", "unknown operator: foo, should be one of 'or', 'and', '( or ')'"},
+		{"name=foo |", "incomplete operator: |"},
+		{"name=foo &", "incomplete operator: &"},
+		{"name=foo & name=", "& is not a valid operator, should be &&"},
+		{"name=foo | name=", "| is not a valid operator, should be ||"},
+		{"=", "unexpected character: ="},
+		{"'", "unexpected character: '"},
+		{"\\", "unexpected character: \\"},
+		{"name='foo", "missing close quote: foo"},
+		{"name='foo''", "unexpected character: '"},
+		{"name='foo'=", "unexpected character: ="},
+		{"name='foo'\\", "unexpected character: \\"},
+		{`name=\`, "missing escaped rune"},
+		{"foo bar", "\"foo\": expected =, got ' '"},
 	} {
 		tok := tokenizer{}
 		_, err := tok.run(tc.input)
@@ -70,9 +79,10 @@ func TestParser(t *testing.T) {
 		{"iname=foo", "iname=foo"},
 		{"type=f", "type=f"},
 		{"re=foo", "re=foo"},
+		{"re=''", "re="},
 		{"newer=2012-01-01", "newer=2012-01-01"},
-		{"re=foo or newer=2012-01-01 and type=f", "re=foo || newer=2012-01-01 && type=f"},
-		{"(re=foo or newer=2012-01-01) and type=f", "(re=foo || newer=2012-01-01) && type=f"},
+		{"re=foo || newer=2012-01-01 && type=f", "re=foo || newer=2012-01-01 && type=f"},
+		{"(re=foo || newer=2012-01-01) && type=f", "(re=foo || newer=2012-01-01) && type=f"},
 	} {
 		m, err := Parse(tc.input)
 		if err != nil {
@@ -89,13 +99,21 @@ func TestParserErrors(t *testing.T) {
 		input string
 		err   string
 	}{
-		{"regexp=", "missing operand value: regexp"},
-		{"name= regexp=", "missing operand value: name"},
+		{"anything", "missing operand value: anything"},
+		{"name=|", "incomplete operator: |"},
+		{"re=&&", "incomplete expression: [re= &&]"},
+		{"regexp=", "unsupported operand: regexp"},
+		{"type=", "invalid file type: \"\", use one of d, f, l or x"},
+		{"type= ", "invalid file type: \"\", use one of d, f, l or x"},
+		{"type=z", "invalid file type: \"z\", use one of d, f, l or x"},
+		{"(", "unbalanced brackets"},
+		{")", "unbalanced brackets"},
+		{")(", "unbalanced brackets"},
+		{"(type=f && ))(", "unbalanced brackets"},
 	} {
 		_, err := Parse(tc.input)
 		if err == nil || err.Error() != tc.err {
 			t.Errorf("%q: missing or wrong error: %v", tc.input, err)
 		}
-
 	}
 }

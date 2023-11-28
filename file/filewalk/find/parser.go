@@ -39,17 +39,16 @@ func Parse(input string) (matcher.T, error) {
 }
 
 type token struct {
-	text     string
-	operator bool
-	operand  bool
-	value    string
+	text                      string
+	operator                  bool
+	operandName, operandValue bool
 }
 
 func operatorFor(text string) matcher.Item {
 	switch text {
-	case "or":
+	case "||":
 		return matcher.OR()
-	case "and":
+	case "&&":
 		return matcher.AND()
 	case "(":
 		return matcher.LeftBracket()
@@ -59,20 +58,19 @@ func operatorFor(text string) matcher.Item {
 	return matcher.Item{}
 }
 
-func operandFor(text, value string) matcher.Item {
-	switch text {
-	case "name":
-		return matcher.Glob(value, false)
-	case "iname":
-		return matcher.Glob(value, true)
-	case "re":
-		return matcher.Regexp(value)
-	case "type":
-		return matcher.FileType(value)
-	case "newer":
-		return matcher.NewerThanParsed(value)
+var bultinOperands = map[string]func(name, value string) matcher.Item{
+	"name":  func(_, v string) matcher.Item { return matcher.Glob(v, false) },
+	"iname": func(_, v string) matcher.Item { return matcher.Glob(v, true) },
+	"re":    func(_, v string) matcher.Item { return matcher.Regexp(v) },
+	"type":  func(_, v string) matcher.Item { return matcher.FileType(v) },
+	"newer": func(_, v string) matcher.Item { return matcher.NewerThanParsed(v) },
+}
+
+func operandFor(text, value string) (matcher.Item, error) {
+	if fn, ok := bultinOperands[text]; ok {
+		return fn(text, value), nil
 	}
-	return matcher.Item{}
+	return matcher.Item{}, fmt.Errorf("unsupported operand: %v", text)
 }
 
 type tokenizer struct {
@@ -89,12 +87,12 @@ func (tl tokenList) String() string {
 			sb.WriteString(t.text + " ")
 			continue
 		}
-		if t.operand {
+		if t.operandName {
 			sb.WriteString(t.text + "=")
 			continue
 		}
-		if len(t.value) > 0 {
-			sb.WriteString(fmt.Sprintf("'%v' ", t.value))
+		if t.operandValue {
+			sb.WriteString(fmt.Sprintf("'%v' ", t.text))
 		}
 	}
 	return strings.TrimSpace(sb.String())
@@ -108,22 +106,21 @@ func mergeOperandsAndValues(tl []token) ([]matcher.Item, error) {
 			merged = append(merged, operatorFor(tok.text))
 			continue
 		}
-		if tok.operand {
-			fmt.Printf("XXX %v %v %v\n", tok.text, i, len(tl))
+		if tok.operandName {
 			if i+1 >= len(tl) {
-				return nil, fmt.Errorf("missing operand value for: %v", tok.text)
+				return nil, fmt.Errorf("missing operand value: %v", tok.text)
 			}
 			next := tl[i+1]
-			fmt.Printf("next... %#v\n", next)
-			if next.operand || next.operator || len(next.value) == 0 {
-				return nil, fmt.Errorf("missing operand value for: %v", tok.text)
+			if !next.operandValue {
+				return nil, fmt.Errorf("missing operand value: %v", tok.text)
 			}
-			merged = append(merged, operandFor(tok.text, next.value))
+			op, err := operandFor(tok.text, next.text)
+			if err != nil {
+				return nil, err
+			}
+			merged = append(merged, op)
 			i++
 			continue
-		}
-		if len(tok.value) > 0 {
-			return nil, fmt.Errorf("unexpected value: %v", tok.value)
 		}
 	}
 	return merged, nil
@@ -133,8 +130,9 @@ type state int
 
 const (
 	start state = iota
-	item
-	operand
+	operandName
+	operatorAnd
+	operatorOr
 	operandValue
 	quotedValue
 	escapedValue
@@ -152,16 +150,19 @@ func (t *tokenizer) run(input string) ([]token, error) {
 		switch state {
 		case start: // white space, in-between tokens
 			state, err = t.start(r)
-		case item: // seen the first character of an operand or operator
-			state, err = t.item(r)
-		case operandValue: // seen an operand, i,e. <text>=, expecting a value
-			// for that operand next.
+		case operatorAnd: // seen a single &
+			state, err = t.operatorAnd(r)
+		case operatorOr: // seen a single |
+			state, err = t.operatorOr(r)
+		case operandName: // expecting an operand name, <text> terminated by =
+			state, err = t.operandName(r)
+		case operandValue: // seen an operand =, i,e. <text>=, expecting a value
 			state, err = t.operandValue(r)
-		case quotedValue:
+		case quotedValue: // quoted value, i.e. <text>='value'
 			state, err = t.quotedValue(r)
-		case escapedValue:
+		case escapedValue: // escaped rune, i.e. \s
 			state, err = t.escapedValue(r)
-		case escapedRune:
+		case escapedRune: // seen a \, always returns to escapedValue
 			state, err = t.escapedRune(r)
 		}
 		if err != nil {
@@ -169,66 +170,114 @@ func (t *tokenizer) run(input string) ([]token, error) {
 		}
 	}
 	switch state {
-	case item:
-		return t.tokens, fmt.Errorf("incomplete operator or operand: %v", t.seen.String())
-	case operandValue:
-		seen := t.seen.String()
-		if len(t.tokens) > 0 {
-			seen = t.tokens[len(t.tokens)-1].text
-		}
-		return t.tokens, fmt.Errorf("missing operand value: %v", seen)
+	case operandName:
+		t.appendOperandName()
+	case operandValue, escapedValue:
+		t.appendOperandValue()
+	case operatorAnd:
+		return t.tokens, fmt.Errorf("incomplete operator: &")
+	case operatorOr:
+		return t.tokens, fmt.Errorf("incomplete operator: |")
 	case quotedValue:
-		return t.tokens, fmt.Errorf("incomplete quoted value: %v", t.seen.String())
-	case escapedValue:
-		t.tokens = append(t.tokens, token{
-			value: t.seen.String(),
-		})
-		return t.tokens, nil
+		return t.tokens, fmt.Errorf("missing close quote: %v", t.seen.String())
 	case escapedRune:
-		return t.tokens, fmt.Errorf("incomplete escaped rune")
+		return t.tokens, fmt.Errorf("missing escaped rune")
 	}
 	return t.tokens, nil
+}
+
+func (t *tokenizer) appendOperator(text string) {
+	t.tokens = append(t.tokens, token{
+		text:     text,
+		operator: true,
+	})
+}
+
+func (t *tokenizer) appendOperandName() {
+	t.tokens = append(t.tokens, token{
+		text:        t.seen.String(),
+		operandName: true,
+	})
+	t.seen.Reset()
+}
+
+func (t *tokenizer) appendOperandValue() {
+	t.tokens = append(t.tokens, token{
+		text:         t.seen.String(),
+		operandValue: true,
+	})
+	t.seen.Reset()
 }
 
 func (t *tokenizer) start(r rune) (state, error) {
 	if unicode.IsSpace(r) {
 		return start, nil // consume white space
 	}
-	if r == '(' || r == ')' {
-		t.tokens = append(t.tokens, token{
-			text:     string(r),
-			operator: true,
-		})
+	switch r {
+	case '(', ')':
+		t.appendOperator(string(r))
 		return start, nil
+	case '&':
+		return operatorAnd, nil
+	case '|':
+		return operatorOr, nil
 	}
-	t.seen.WriteRune(r)
-	return item, nil
+	if unicode.IsLetter(r) {
+		t.seen.WriteRune(r)
+		return operandName, nil
+	}
+	return start, fmt.Errorf("unexpected character: %c", r)
 }
 
-func (t *tokenizer) item(r rune) (state, error) {
-	if r == '=' {
-		t.tokens = append(t.tokens, token{
-			text:    t.seen.String(),
-			operand: true,
-		})
-		t.seen.Reset()
-		return operandValue, nil
-	}
-	if unicode.IsSpace(r) {
-		op := t.seen.String()
-		if op == "and" || op == "or" || op == "(" || op == ")" {
-			t.tokens = append(t.tokens, token{
-				text:     op,
-				operator: true,
-			})
-		} else {
-			return start, fmt.Errorf("unknown operator: %v, should be one of 'or', 'and', '( or ')'", op)
-		}
+func (t *tokenizer) operatorAnd(r rune) (state, error) {
+	if r == '&' {
+		t.tokens = append(t.tokens, token{text: "&&", operator: true})
 		t.seen.Reset()
 		return start, nil
 	}
+	return start, fmt.Errorf("& is not a valid operator, should be &&")
+}
+
+func (t *tokenizer) operatorOr(r rune) (state, error) {
+	if r == '|' {
+		t.tokens = append(t.tokens, token{text: "||", operator: true})
+		t.seen.Reset()
+		return start, nil
+	}
+	return start, fmt.Errorf("| is not a valid operator, should be ||")
+}
+
+func (t *tokenizer) operandName(r rune) (state, error) {
+	if r == '=' {
+		t.appendOperandName()
+		return operandValue, nil
+	}
+	if unicode.IsLetter(r) || unicode.IsNumber(r) {
+		t.seen.WriteRune(r)
+		return operandName, nil
+	}
+	return start, fmt.Errorf("%q: expected =, got '%c'", t.seen.String(), r)
+}
+
+func (t *tokenizer) operandValueDone(r rune) (bool, state, error) {
+	if unicode.IsSpace(r) {
+		t.appendOperandValue()
+		return true, start, nil
+	}
+	switch r {
+	case '(', ')':
+		t.appendOperandValue()
+		t.appendOperator(string(r))
+		return true, start, nil
+	case '&':
+		t.appendOperandValue()
+		return true, operatorAnd, nil
+	case '|':
+		t.appendOperandValue()
+		return true, operatorOr, nil
+	}
 	t.seen.WriteRune(r)
-	return item, nil
+	return false, escapedValue, nil
 }
 
 func (t *tokenizer) operandValue(r rune) (state, error) {
@@ -236,18 +285,18 @@ func (t *tokenizer) operandValue(r rune) (state, error) {
 		return quotedValue, nil // quoted value
 	}
 	if r == '\\' {
+		// escapedRune always returns to escapedValue
 		return escapedRune, nil
 	}
-	t.seen.WriteRune(r)
+	if done, state, err := t.operandValueDone(r); done {
+		return state, err
+	}
 	return escapedValue, nil
 }
 
 func (t *tokenizer) quotedValue(r rune) (state, error) {
 	if r == '\'' {
-		t.tokens = append(t.tokens, token{
-			value: t.seen.String(),
-		})
-		t.seen.Reset()
+		t.appendOperandValue()
 		return start, nil
 	}
 	t.seen.WriteRune(r)
@@ -255,23 +304,12 @@ func (t *tokenizer) quotedValue(r rune) (state, error) {
 }
 
 func (t *tokenizer) escapedValue(r rune) (state, error) {
-	if unicode.IsSpace(r) || r == '(' || r == ')' {
-		t.tokens = append(t.tokens, token{
-			value: t.seen.String(),
-		})
-		t.seen.Reset()
-		if r == '(' || r == ')' {
-			t.tokens = append(t.tokens, token{
-				text:     string(r),
-				operator: true,
-			})
-		}
-		return start, nil
-	}
 	if r == '\\' {
 		return escapedRune, nil
 	}
-	t.seen.WriteRune(r)
+	if done, state, err := t.operandValueDone(r); done {
+		return state, err
+	}
 	return escapedValue, nil
 }
 

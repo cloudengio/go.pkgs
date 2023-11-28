@@ -147,8 +147,9 @@ func (op fileType) Prepare() (Operand, error) {
 		op.mode = 0
 	case "l":
 		op.mode = fs.ModeSymlink
+	case "x":
 	default:
-		return op, fmt.Errorf("invalid file type: %v, use one of d, f or l", op.text)
+		return op, fmt.Errorf("invalid file type: %q, use one of d, f, l or x", op.text)
 	}
 	op.requires = reflect.TypeOf((*fileModeIfc)(nil)).Elem()
 	op.typeRequires = reflect.TypeOf((*fileTypeIfc)(nil)).Elem()
@@ -168,6 +169,9 @@ func (op fileType) Eval(v any) bool {
 	if op.text == "f" {
 		return mode.IsRegular()
 	}
+	if op.text == "x" {
+		return !mode.IsRegular() && mode.Perm()&0111 != 0
+	}
 	return mode&op.mode == op.mode
 }
 
@@ -185,6 +189,7 @@ func (op fileType) Needs(t reflect.Type) bool {
 //   - f for regular files
 //   - d for directories
 //   - l for symbolic links
+//   - x executable regular files
 //
 // It requires that the value bein matched provides Mode() fs.FileMode or
 // Type() fs.FileMode (which should return Mode&fs.ModeType).
