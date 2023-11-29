@@ -67,16 +67,16 @@ func TestFormating(t *testing.T) {
 		out string
 	}{
 		{"", ""},
-		{"foo", "foo"},
-		{"foo || bar", "foo || bar"},
-		{"foo && bar", "foo && bar"},
-		{"foo && bar || baz", "foo && bar || baz"},
-		{"foo || bar && baz", "foo || bar && baz"},
-		{"foo && (bar||baz)", "foo && (bar || baz)"},
-		{"(bar || baz) && foo", "(bar || baz) && foo"},
-		{"( bar && baz )", "(bar && baz)"},
-		{"(bar && (baz || foo)) || else", "(bar && (baz || foo)) || else"},
-		{"ft: f || nt: 2023-10-22", `f || 2023-10-22`},
+		{"foo", "re=foo"},
+		{"foo || bar", "re=foo || re=bar"},
+		{"foo && bar", "re=foo && re=bar"},
+		{"foo && bar || baz", "re=foo && re=bar || re=baz"},
+		{"foo || bar && baz", "re=foo || re=bar && re=baz"},
+		{"foo && (bar||baz)", "re=foo && (re=bar || re=baz)"},
+		{"(bar || baz) && foo", "(re=bar || re=baz) && re=foo"},
+		{"( bar && baz )", "(re=bar && re=baz)"},
+		{"(bar && (baz || foo)) || else", "(re=bar && (re=baz || re=foo)) || re=else"},
+		{"ft: f || nt: 2023-10-22", `type=f || newer=2023-10-22`},
 	} {
 		expr, err := matcher.New(parse(tc.in)...)
 		if err != nil {
@@ -207,10 +207,10 @@ func TestErrors(t *testing.T) {
 		{`)(`, "unbalanced brackets"},
 		{`||`, "missing left operand for ||"},
 		{`|| a`, "missing left operand for ||"},
-		{`a ||`, "incomplete expression: [a ||]"},
+		{`a ||`, "incomplete expression: [re=a ||]"},
 		{`&&`, "missing left operand for &&"},
 		{`&& a`, "missing left operand for &&"},
-		{`a &&`, "incomplete expression: [a &&]"},
+		{`a &&`, "incomplete expression: [re=a &&]"},
 		{`a || b || ()`, "missing left operand for )"},
 		{`( a || )`, "missing operand for )"},
 		{`( a () )`, "missing operator for ("},
@@ -220,7 +220,7 @@ func TestErrors(t *testing.T) {
 		{`a && &&`, "missing operand for &&"},
 		{`a (a)`, "missing operator for ("},
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
-		{`ft: x`, "invalid file type: x, use one of d, f or l"},
+		{`ft: z`, "invalid file type: \"z\", use one of d, f, l or x"},
 		{`nt: xxx :nt`, "invalid time: xxx, use one of RFC3339, Date and Time, Date or Time only formats"},
 		{`glob: [x`, "syntax error in pattern"},
 	} {
@@ -231,75 +231,5 @@ func TestErrors(t *testing.T) {
 		if got, want := m.Eval(fn("foo")), false; got != want {
 			t.Errorf("%v: got %v, want %v", tc.in, got, want)
 		}
-	}
-}
-
-type nameOnly struct{}
-
-func (nameOnly) Name() string { return "" }
-
-type modeOnly struct{}
-
-func (modeOnly) Mode() fs.FileMode { return 0 }
-
-type typeOnly struct{}
-
-func (typeOnly) Type() fs.FileMode { return 0 }
-
-type modTimeOnly struct{}
-
-func (modTimeOnly) ModTime() time.Time { return time.Time{} }
-
-func TestNeedsOps(t *testing.T) {
-	var err error
-	assert := func(m matcher.T, needsName, needsMode, needsTime bool) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, want := m.Needs(nameOnly{}), needsName; got != want {
-			t.Errorf("mode: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(modeOnly{}), needsMode; got != want {
-			t.Errorf("mode: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(typeOnly{}), needsMode; got != want {
-			t.Errorf("mode: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(modTimeOnly{}), needsTime; got != want {
-			t.Errorf("time: got %v, want %v", got, want)
-		}
-	}
-
-	var m matcher.T
-	assert(m, false, false, false)
-	if got, want := m.Needs(file.Info{}), false; got != want {
-		t.Errorf("file.Info: got %v, want %v", got, want)
-	}
-
-	m, err = matcher.New(parse("xx")...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assert(m, true, false, false)
-
-	m, err = matcher.New(parse("xx || ft: f")...)
-	assert(m, true, true, false)
-	m, err = matcher.New(parse("xx || nt: 2022-12-12 :nt")...)
-	assert(m, true, false, true)
-	m, err = matcher.New(parse("xx || ft: d || nt: 2022-12-12 :nt")...)
-	assert(m, true, true, true)
-
-	m, err = matcher.New(parse("a && ( xx || ft: f )")...)
-	assert(m, true, true, false)
-	m, err = matcher.New(parse("a && (xx || nt: 2022-12-12 :nt )")...)
-	assert(m, true, false, true)
-	m, err = matcher.New(parse("a && (xx || ft: d || nt: 2022-12-12 :nt )")...)
-	assert(m, true, true, true)
-	m, err = matcher.New(parse(" (ft: d || nt: 2022-12-12 :nt )")...)
-	assert(m, false, true, true)
-
-	if got, want := m.Needs(file.Info{}), true; got != want {
-		t.Errorf("file.Info: got %v, want %v", got, want)
 	}
 }
