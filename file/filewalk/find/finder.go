@@ -23,14 +23,15 @@ type Found struct {
 	Err    error
 }
 
-type needModTime struct{}
+type needsStat struct{}
 
-func (nt needModTime) ModTime() time.Time { return time.Time{} }
+func (nt needsStat) ModTime() time.Time { return time.Time{} }
+func (nt needsStat) Mode() fs.FileMode  { return 0 }
 
 // NeedsStat determines if either of the supplied matcher.T's include
 // operands that would require a call to fs.Stat or fs.Lstat.
 func NeedsStat(prefixMatcher, fileMatcher matcher.T) bool {
-	return prefixMatcher.Needs(needModTime{}) || fileMatcher.Needs(needModTime{})
+	return prefixMatcher.Needs(needsStat{}) || fileMatcher.Needs(needsStat{})
 }
 
 // Option represents an option for New.

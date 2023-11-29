@@ -80,7 +80,7 @@ func (op regEx) Eval(v any) bool {
 }
 
 func (op regEx) String() string {
-	return op.text
+	return "re=" + op.text
 }
 
 // Regexp returns a regular expression operand. It is not compiled until
@@ -99,7 +99,6 @@ type glob struct {
 func (op glob) Prepare() (Operand, error) {
 	_, err := filepath.Match(op.text, "foo")
 	if err != nil {
-		fmt.Printf("ERR: %v\n", err)
 		return op, err
 	}
 	op.requires = reflect.TypeOf((*nameIfc)(nil)).Elem()
@@ -119,37 +118,38 @@ func (op glob) Eval(v any) bool {
 }
 
 func (op glob) String() string {
-	return op.text
+	if op.caseInsensitive {
+		return "iname=" + op.text
+	}
+	return "name=" + op.text
 }
 
 // Glob provides a glob operand that may be case insensitive, in which
 // case the value it is being against will be converted to lower case
 // before the match is evaluated. The pattern is not validated until a matcher.T
 // is created using New.
-func Glob(re string, caseInsensitive bool) Item {
-	return NewOperand(glob{text: re, caseInsensitive: caseInsensitive})
+func Glob(pat string, caseInsensitive bool) Item {
+	return NewOperand(glob{text: pat, caseInsensitive: caseInsensitive})
 }
 
 type fileType struct {
 	text string
-	mode fs.FileMode
 	commonOperand
-	typeRequires reflect.Type
+	// true if the operand requires a full mode, false if it only requires the modeType.
+	needsMode bool
 }
 
 func (op fileType) Prepare() (Operand, error) {
 	switch op.text {
-	case "d":
-		op.mode = fs.ModeDir
-	case "f":
-		op.mode = 0
-	case "l":
-		op.mode = fs.ModeSymlink
+	case "d", "l", "f":
+		op.needsMode = false
+		op.requires = reflect.TypeOf((*fileTypeIfc)(nil)).Elem()
+	case "x":
+		op.needsMode = true
+		op.requires = reflect.TypeOf((*fileModeIfc)(nil)).Elem()
 	default:
-		return op, fmt.Errorf("invalid file type: %v, use one of d, f or l", op.text)
+		return op, fmt.Errorf("invalid file type: %q, use one of d, f, l or x", op.text)
 	}
-	op.requires = reflect.TypeOf((*fileModeIfc)(nil)).Elem()
-	op.typeRequires = reflect.TypeOf((*fileTypeIfc)(nil)).Elem()
 	return op, nil
 }
 
@@ -158,23 +158,34 @@ func (op fileType) Eval(v any) bool {
 	switch t := v.(type) {
 	case fileTypeIfc:
 		mode = t.Type()
+		if op.needsMode {
+			// need the full fileMode, but only Type is available.
+			return false
+		}
 	case fileModeIfc:
 		mode = t.Mode()
 	default:
 		return false
 	}
-	if op.text == "f" {
+	switch op.text {
+	case "f":
 		return mode.IsRegular()
+	case "x":
+		return mode.IsRegular() && (mode.Perm()&0111 != 0)
+	case "l":
+		return mode&fs.ModeSymlink != 0
+	case "d":
+		return mode.IsDir()
 	}
-	return mode&op.mode == op.mode
+	return false
 }
 
 func (op fileType) String() string {
-	return op.text
+	return "type=" + op.text
 }
 
 func (op fileType) Needs(t reflect.Type) bool {
-	return t.Implements(op.requires) || t.Implements(op.typeRequires)
+	return t.Implements(op.requires)
 }
 
 // FileType returns a 'file type' item. It is not validated until a
@@ -183,6 +194,7 @@ func (op fileType) Needs(t reflect.Type) bool {
 //   - f for regular files
 //   - d for directories
 //   - l for symbolic links
+//   - x executable regular files
 //
 // It requires that the value bein matched provides Mode() fs.FileMode or
 // Type() fs.FileMode (which should return Mode&fs.ModeType).
@@ -219,7 +231,7 @@ func (op newerThan) Eval(v any) bool {
 }
 
 func (op newerThan) String() string {
-	return op.text
+	return "newer=" + op.text
 }
 
 // NewerThanParsed returns a 'newer than' operand. It is not validated until a

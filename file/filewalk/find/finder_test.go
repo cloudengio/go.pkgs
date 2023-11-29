@@ -46,6 +46,14 @@ func TestNeedsStat(t *testing.T) {
 	if got, want := find.NeedsStat(p, f), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	f = newMatcher(t, matcher.FileType("f"))
+	if got, want := find.NeedsStat(p, f), false; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	f = newMatcher(t, matcher.FileType("x"))
+	if got, want := find.NeedsStat(p, f), true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
 
 func findFiles(ctx context.Context, t *testing.T, testTree, start string, pm, fm matcher.T, prune, needStat, followlinks bool) ([]find.Found, []find.Found) {
@@ -185,8 +193,8 @@ func TestPrefixMatch(t *testing.T) {
 	if err := os.WriteFile(file, []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
+
 	fm = newMatcher(t, matcher.NewerThanTime(start))
 	found, _ = findFiles(ctx, t, localTestTree, subTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	cmpFound(t, found, zipf(zips("/b0/b0.1/b1.0"), "f1"))
-
 }
