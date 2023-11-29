@@ -139,11 +139,7 @@ const (
 	escapedRune
 )
 
-// input stream looks like:
-// <op>='value' - no escaping within quotes
-// <op>=value - with possible escaping of white space
-// or, and, (, )
-func (t *tokenizer) run(input string) ([]token, error) {
+func (t *tokenizer) runStateMachine(input string) (state, error) {
 	state := start
 	for _, r := range input {
 		var err error
@@ -166,8 +162,20 @@ func (t *tokenizer) run(input string) ([]token, error) {
 			state, err = t.escapedRune(r)
 		}
 		if err != nil {
-			return t.tokens, err
+			return start, err
 		}
+	}
+	return state, nil
+}
+
+// input stream looks like:
+// <op>='value' - no escaping within quotes
+// <op>=value - with possible escaping of white space
+// or, and, (, )
+func (t *tokenizer) run(input string) ([]token, error) {
+	state, err := t.runStateMachine(input)
+	if err != nil {
+		return t.tokens, err
 	}
 	switch state {
 	case operandName:
