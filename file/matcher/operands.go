@@ -128,31 +128,28 @@ func (op glob) String() string {
 // case the value it is being against will be converted to lower case
 // before the match is evaluated. The pattern is not validated until a matcher.T
 // is created using New.
-func Glob(re string, caseInsensitive bool) Item {
-	return NewOperand(glob{text: re, caseInsensitive: caseInsensitive})
+func Glob(pat string, caseInsensitive bool) Item {
+	return NewOperand(glob{text: pat, caseInsensitive: caseInsensitive})
 }
 
 type fileType struct {
 	text string
-	mode fs.FileMode
 	commonOperand
-	typeRequires reflect.Type
+	// true if the operand requires a full mode, false if it only requires the modeType.
+	needsMode bool
 }
 
 func (op fileType) Prepare() (Operand, error) {
 	switch op.text {
-	case "d":
-		op.mode = fs.ModeDir
-	case "f":
-		op.mode = 0
-	case "l":
-		op.mode = fs.ModeSymlink
+	case "d", "l", "f":
+		op.needsMode = false
+		op.requires = reflect.TypeOf((*fileTypeIfc)(nil)).Elem()
 	case "x":
+		op.needsMode = true
+		op.requires = reflect.TypeOf((*fileModeIfc)(nil)).Elem()
 	default:
 		return op, fmt.Errorf("invalid file type: %q, use one of d, f, l or x", op.text)
 	}
-	op.requires = reflect.TypeOf((*fileModeIfc)(nil)).Elem()
-	op.typeRequires = reflect.TypeOf((*fileTypeIfc)(nil)).Elem()
 	return op, nil
 }
 
@@ -161,18 +158,26 @@ func (op fileType) Eval(v any) bool {
 	switch t := v.(type) {
 	case fileTypeIfc:
 		mode = t.Type()
+		if op.needsMode {
+			// need the full fileMode, but only Type is available.
+			return false
+		}
 	case fileModeIfc:
 		mode = t.Mode()
 	default:
 		return false
 	}
-	if op.text == "f" {
+	switch op.text {
+	case "f":
 		return mode.IsRegular()
+	case "x":
+		return mode.IsRegular() && (mode.Perm()&0111 != 0)
+	case "l":
+		return mode&fs.ModeSymlink != 0
+	case "d":
+		return mode.IsDir()
 	}
-	if op.text == "x" {
-		return !mode.IsRegular() && mode.Perm()&0111 != 0
-	}
-	return mode&op.mode == op.mode
+	return false
 }
 
 func (op fileType) String() string {
@@ -180,7 +185,7 @@ func (op fileType) String() string {
 }
 
 func (op fileType) Needs(t reflect.Type) bool {
-	return t.Implements(op.requires) || t.Implements(op.typeRequires)
+	return t.Implements(op.requires)
 }
 
 // FileType returns a 'file type' item. It is not validated until a
