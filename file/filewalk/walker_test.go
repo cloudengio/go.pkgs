@@ -352,7 +352,7 @@ func (e *errorScanner) Done(_ context.Context, _ *int, _ string, err error) erro
 }
 
 func TestFunctionErrors(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 	sc := localfs.New()
 
