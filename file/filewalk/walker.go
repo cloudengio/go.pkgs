@@ -29,7 +29,6 @@ type Walker[T any] struct {
 	handler  Handler[T]
 	errs     *errors.M
 	nSyncOps int64
-	tk       *timekeeper
 }
 
 // Option represents options accepted by Walker.
@@ -38,9 +37,6 @@ type Option func(o *options)
 type options struct {
 	concurrentScans int
 	scanSize        int
-	reportCh        chan<- Status
-	reportInterval  time.Duration
-	slowThreshold   time.Duration
 }
 
 // WithConcurrentScans can be used to change the number of prefixes/directories
@@ -79,16 +75,6 @@ type Status struct {
 	ScanDuration time.Duration
 }
 
-// WithReporting can be used to enable reporting of slow and synchronous
-// prefix/directory scans.
-func WithReporting(ch chan<- Status, interval, slowThreshold time.Duration) Option {
-	return func(o *options) {
-		o.reportCh = ch
-		o.reportInterval = interval
-		o.slowThreshold = slowThreshold
-	}
-}
-
 var (
 	// DefaultScansize is the default ScanSize used when the WithScanSize
 	// option is not supplied.
@@ -107,7 +93,6 @@ func New[T any](fs FS, handler Handler[T], opts ...Option) *Walker[T] {
 	for _, fn := range opts {
 		fn(&w.opts)
 	}
-	w.tk = newTimekeeper(w.opts)
 	return w
 }
 
@@ -177,17 +162,17 @@ func (e *Error) As(target interface{}) bool {
 }
 
 func (w *Walker[T]) processLevel(ctx context.Context, state *T, path string) ([]file.Info, error) {
-
-	w.tk.add(path)
-	defer w.tk.rm(path)
-
 	var nextLevel []file.Info
-
 	sc := w.fs.LevelScanner(path)
 	for sc.Scan(ctx, w.opts.scanSize) {
 		children, err := w.handler.Contents(ctx, state, path, sc.Contents())
 		if err != nil {
 			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
 		nextLevel = append(nextLevel, children...)
 	}
@@ -219,6 +204,7 @@ type Handler[T any] interface {
 	// Done is called once calls to Contents have been made or if Prefix returned
 	// an error. Done will always be called if Prefix did not return true for stop.
 	// Errors returned by Done are recorded and returned by the Walk method.
+	// An error returned by Done does not terminate the walk.
 	Done(ctx context.Context, state *T, prefix string, err error) error
 }
 
@@ -227,13 +213,11 @@ type Handler[T any] interface {
 // before entriesFn for the same prefix, but no other ordering guarantees
 // are provided.
 func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
+	w.errs = &errors.M{}
 	rootCtx := ctx
-	listers, _ := errgroup.WithContext(rootCtx)
 	if w.opts.concurrentScans <= 0 {
 		w.opts.concurrentScans = runtime.GOMAXPROCS(-1)
 	}
-
-	listers = errgroup.WithConcurrency(listers, w.opts.concurrentScans)
 
 	walkers, _ := errgroup.WithContext(rootCtx)
 	walkers = errgroup.WithConcurrency(walkers, w.opts.concurrentScans)
@@ -244,47 +228,19 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		walkerLimitCh <- struct{}{}
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	var reportingDoneCh, reportingStopCh chan struct{}
-	if w.opts.reportCh != nil {
-		reportingDoneCh, reportingStopCh = make(chan struct{}), make(chan struct{})
-		go func() {
-			for {
-				if w.report(rootCtx, reportingStopCh) {
-					close(w.opts.reportCh)
-					close(reportingDoneCh)
-					return
-				}
-				time.Sleep(w.opts.reportInterval)
-			}
-		}()
-	}
-
 	for _, root := range roots {
 		root := root
 		rootInfo, rootErr := w.fs.Lstat(ctx, root)
 		walkers.Go(func() error {
-			<-walkerLimitCh
-			w.walker(ctx, root, rootInfo, rootErr, walkerLimitCh)
-			return nil
+			return w.walkPrefix(ctx, root, rootInfo, rootErr, walkerLimitCh)
 		})
 	}
 
-	go func() {
-		w.errs.Append(listers.Wait())
-		wg.Done()
-	}()
-
-	go func() {
-		w.errs.Append(walkers.Wait())
-		wg.Done()
-	}()
-
 	waitCh := make(chan struct{})
+
 	go func() {
-		wg.Wait()
+		err := walkers.Wait()
+		w.errs.Append(err)
 		close(waitCh)
 	}()
 
@@ -294,42 +250,47 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		<-waitCh
 	case <-waitCh:
 	}
-
-	if w.opts.reportCh != nil {
-		close(reportingStopCh)
-		select {
-		case <-rootCtx.Done():
-			w.errs.Append(rootCtx.Err())
-			<-reportingDoneCh
-		case <-reportingDoneCh:
-		}
-	}
-
 	return w.errs.Err()
 }
 
-func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) {
+func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) error {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
+
+	// Take care to catch all context cancellations as quickly as possible
+	// to avoid unnecessary work.
 	for _, child := range children {
 		child := child
 		select {
 		case <-limitCh:
+		case <-ctx.Done():
+			// This branch may not be taken even if the context is cancelled,
+			// so we check below also. However, we also need to check here
+			// for the case when limitCh is empty and the context is cancelled.
+			return ctx.Err()
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name())
-			w.walker(ctx, p, child, nil, limitCh)
+			if err := w.walkPrefix(ctx, p, child, nil, limitCh); err != nil {
+				return err
+			}
 			wg.Done()
 			continue
 		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		go func() {
-			w.walker(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
+			_ = w.walkPrefix(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
 			wg.Done()
 			limitCh <- struct{}{}
 		}()
 	}
 	wg.Wait()
+	return nil
 }
 
 func (w *Walker[T]) handleDone(ctx context.Context, state *T, path string, err error) {
@@ -340,109 +301,56 @@ func (w *Walker[T]) handleDone(ctx context.Context, state *T, path string, err e
 	w.errs.Append(&Error{path, err})
 }
 
-func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) {
+func (w *Walker[T]) walkPrefix(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) error {
+	var state T
 	select {
 	case <-ctx.Done():
-		return
+		return ctx.Err()
 	default:
 	}
-	var state T
 	stop, children, err := w.handler.Prefix(ctx, &state, path, info, err)
 	if stop {
-		return
+		return nil
 	}
 	if err != nil {
 		w.handleDone(ctx, &state, path, err)
-		return
+		return nil
 	}
 	if len(children) == 0 {
 		children, err = w.processLevel(ctx, &state, path)
 		if err != nil {
-			w.handleDone(ctx, &state, path, err)
-			return
-		}
-	}
-	w.walkChildren(ctx, path, children, limitCh)
-	w.handleDone(ctx, &state, path, nil)
-}
-
-func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	case <-stopCh:
-		return true
-	case w.opts.reportCh <- Status{
-		SynchronousScans: atomic.LoadInt64(&w.nSyncOps),
-	}:
-	default:
-	}
-	w.tk.report()
-	return false
-}
-
-func newTimekeeper(opts options) *timekeeper {
-	if opts.reportCh == nil {
-		return &timekeeper{}
-	}
-	return &timekeeper{
-		prefixes: make(map[string]time.Time, opts.concurrentScans),
-		ch:       opts.reportCh,
-		slow:     opts.slowThreshold,
-	}
-}
-
-type timekeeper struct {
-	sync.Mutex
-	prefixes map[string]time.Time
-	ch       chan<- Status
-	slow     time.Duration
-}
-
-func (tk *timekeeper) add(prefix string) {
-	if tk.slow == 0 {
-		return
-	}
-	tk.Lock()
-	defer tk.Unlock()
-	tk.prefixes[prefix] = time.Now()
-}
-
-func (tk *timekeeper) rm(prefix string) {
-	if tk.slow == 0 {
-		return
-	}
-	tk.Lock()
-	defer tk.Unlock()
-	delete(tk.prefixes, prefix)
-}
-
-func (tk *timekeeper) report() {
-	if tk.slow == 0 {
-		return
-	}
-	tk.Lock()
-	defer tk.Unlock()
-	for prefix, t := range tk.prefixes {
-		if since := time.Since(t); since > tk.slow {
-			select {
-			case tk.ch <- Status{SlowPrefix: prefix, ScanDuration: since}:
-			default:
+			if errors.Is(err, context.Canceled) {
+				return err
 			}
+			w.handleDone(ctx, &state, path, err)
+			return nil
 		}
 	}
+	if err := w.walkChildren(ctx, path, children, limitCh); err != nil {
+		return err
+	}
+	w.handleDone(ctx, &state, path, nil)
+	return nil
 }
 
 type Configuration struct {
 	ConcurrentScans int
 	ScanSize        int
-	ReportInterval  time.Duration
 }
 
 func (w *Walker[T]) Configuration() Configuration {
 	return Configuration{
 		ConcurrentScans: w.opts.concurrentScans,
 		ScanSize:        w.opts.scanSize,
-		ReportInterval:  w.opts.reportInterval,
+	}
+}
+
+type Stats struct {
+	SynchronousScans int64
+}
+
+func (w *Walker[T]) Stats() Stats {
+	return Stats{
+		SynchronousScans: atomic.LoadInt64(&w.nSyncOps),
 	}
 }

@@ -151,6 +151,11 @@ func (is *T) callStat(ctx context.Context, filename string) (file.Info, error) {
 
 func (is *T) sync(ctx context.Context, prefix string, entries []filewalk.Entry) (children, all file.InfoList, err error) {
 	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		default:
+		}
 		filename := is.fs.Join(prefix, entry.Name)
 		info, err := is.callStat(ctx, filename)
 		if err != nil {
@@ -194,7 +199,7 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 	if concurrency > len(entries) {
 		concurrency = len(entries)
 	}
-	g := &errgroup.T{}
+	g, _ := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, concurrency)
 
 	// The channel must be large enough to hold all of the items that
@@ -221,6 +226,12 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 	}
 	close(ch)
 	for seq.Scan() {
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+			return
+		default:
+		}
 		res := seq.Item()
 		if res.err != nil {
 			continue
