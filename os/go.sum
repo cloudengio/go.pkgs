@@ -1,5 +1,5 @@
 cloudeng.io/errors v0.0.9 h1:gHv7vqtI8pvhjJFsu4d60bYwOaT9sM6tn0ykoaw11WA=
 cloudeng.io/errors v0.0.9/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
-cloudeng.io/sys v0.0.0-20231106193145-45237a5eabab h1:xtgxXxWLhw18tcR41EI3igOoyuUIHRfzQQ6QOupttSs=
-cloudeng.io/sys v0.0.0-20231106193145-45237a5eabab/go.mod h1:MFRmalshPSElAZH66HdEB/QDRIZNoINbnKbxeYvMMF8=
-golang.org/x/sys v0.13.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+cloudeng.io/sys v0.0.0-20231129163852-526b6ff59b6d h1:7AYLXn/+VpXUu9saBIw12kLqs0/6S5wB1R6XbtSasis=
+cloudeng.io/sys v0.0.0-20231129163852-526b6ff59b6d/go.mod h1:ZhBqULK3D26CxeRY3bP+w0axi4L47nh2ClTBTjdLNkE=
+golang.org/x/sys v0.14.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=

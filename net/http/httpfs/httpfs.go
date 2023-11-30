@@ -115,9 +115,7 @@ func (f *httpFile) Stat() (fs.FileInfo, error) {
 		f.resp.ContentLength,
 		0666,
 		lmt,
-		file.InfoOption{
-			SysInfo: resp,
-		},
+		resp,
 	)
 	return fi, nil
 }

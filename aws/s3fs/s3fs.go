@@ -101,10 +101,10 @@ type s3file struct {
 func (f *s3file) Stat() (fs.FileInfo, error) {
 	return file.NewInfo(
 		f.path,
-		f.obj.ContentLength,
+		aws.ToInt64(f.obj.ContentLength),
 		0400,
 		aws.ToTime(f.obj.LastModified),
-		file.InfoOption{SysInfo: f.obj},
+		f.obj,
 	), nil
 }
 

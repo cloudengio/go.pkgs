@@ -99,6 +99,7 @@ func CopyAll(fromDir, toDir string, ovewrite bool) error {
 			}
 			return nil
 		}
+		fmt.Printf("XX %v %v %v\n", path, info.Mode(), info.Mode().Perm())
 		return CopyFile(
 			path,
 			dst,
