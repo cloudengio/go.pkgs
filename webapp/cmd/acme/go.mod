@@ -10,13 +10,13 @@ require (
 	cloudeng.io/aws v0.0.0-20231129163852-526b6ff59b6d
 	cloudeng.io/cmdutil v0.0.0-20231129163852-526b6ff59b6d
 	cloudeng.io/errors v0.0.9
-	cloudeng.io/webapp v0.0.0-20231129163852-526b6ff59b6d
+	cloudeng.io/webapp v0.0.0-20231130182733-8193ad9948bc
 	golang.org/x/crypto v0.16.0
 )
 
 require (
-	cloudeng.io/file v0.0.0-20231129163852-526b6ff59b6d // indirect
-	cloudeng.io/os v0.0.0-20231129163852-526b6ff59b6d // indirect
+	cloudeng.io/file v0.0.0-20231130182733-8193ad9948bc // indirect
+	cloudeng.io/os v0.0.0-20231130182733-8193ad9948bc // indirect
 	cloudeng.io/path v0.0.8 // indirect
 	cloudeng.io/text v0.0.11 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.23.4 // indirect

@@ -4,8 +4,8 @@ go 1.21
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20231129163852-526b6ff59b6d
-	cloudeng.io/io v0.0.0-20231129163852-526b6ff59b6d
-	cloudeng.io/os v0.0.0-20231129163852-526b6ff59b6d
+	cloudeng.io/io v0.0.0-20231130182733-8193ad9948bc
+	cloudeng.io/os v0.0.0-20231130182733-8193ad9948bc
 	golang.org/x/crypto v0.16.0
 	golang.org/x/net v0.19.0
 )
