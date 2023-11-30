@@ -476,6 +476,44 @@ to RegisterFlagsInStructWithSetMap.
 
 
 
+### Type Time
+```go
+type Time struct {
+	// contains filtered or unexported fields
+}
+```
+Time represents a time.Time that can be used as a flag.Value. The time can
+be expressed in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly
+formats.
+
+### Methods
+
+```go
+func (tf *Time) Get() interface{}
+```
+Value implements flag.Getter.
+
+
+```go
+func (tf *Time) IsDefault() bool
+```
+IsSet returns true if the value has been set.
+
+
+```go
+func (tf *Time) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (tf *Time) String() string
+```
+String implements flag.Value.
+
+
+
+
 
 
 ## Examples

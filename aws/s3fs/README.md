@@ -38,7 +38,7 @@ Factory implements file.FSFactory for AWS S3.
 ### Methods
 
 ```go
-func (d Factory) New(ctx context.Context, scheme string) (file.FS, error)
+func (d Factory) New(ctx context.Context, _ string) (file.FS, error)
 ```
 New implements file.FSFactory.
 

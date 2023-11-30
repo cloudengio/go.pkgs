@@ -62,7 +62,7 @@ ConfigOption represents an option to Load.
 ### Functions
 
 ```go
-func ConfigOptionsFromFlags(ctx context.Context, cl AWSFlags) []ConfigOption
+func ConfigOptionsFromFlags(cl AWSFlags) []ConfigOption
 ```
 ConfigOptionsFromFlags returns the ConfigOptions implied by the flags. NOTE:
 it always includes config.WithEC2IMDSRegion so that the region information

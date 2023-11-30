@@ -8,6 +8,22 @@ Package profiling provides support for enabling profiling of command line
 tools via flags.
 
 ## Functions
+### Func IsPredefined
+```go
+func IsPredefined(name string) bool
+```
+IsPredefined returns true if the specified name is one of the pprof
+predefined profiles, or 'cpu' which is recognised by this package as
+requesting a cpu profile.
+
+### Func PredefinedProfiles
+```go
+func PredefinedProfiles() []string
+```
+PredefinedProfiles returns the list of predefined profiles, ie.
+those documented as 'predefined' by the runtime/pprof package, such as
+"goroutine", "heap", "allocs", "threadcreate", "block", "mutex".
+
 ### Func Start
 ```go
 func Start(name, filename string) (func() error, error)

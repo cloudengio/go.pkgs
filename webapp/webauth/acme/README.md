@@ -54,7 +54,7 @@ used instead.
 
 ### Func NewManagerFromFlags
 ```go
-func NewManagerFromFlags(ctx context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error)
+func NewManagerFromFlags(_ context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error)
 ```
 NewManagerFromFlags creates a new autocert.Manager from the flag values.
 The cache may be not be nil.
@@ -107,7 +107,7 @@ Describe implements webapp.CertStoreFactory.
 
 
 ```go
-func (f CertStoreFactory) New(ctx context.Context, dir string, opts ...interface{}) (webapp.CertStore, error)
+func (f CertStoreFactory) New(_ context.Context, dir string, _ ...interface{}) (webapp.CertStore, error)
 ```
 New implements webapp.CertStoreFactory.
 

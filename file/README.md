@@ -41,6 +41,7 @@ is present, otherwise it will use os.ReadFile.
 ```go
 type FS interface {
 	fs.FS
+
 	// Scheme returns the URI scheme that this FS supports. Scheme should
 	// be "file" for local file system access.
 	Scheme() string
@@ -86,85 +87,99 @@ type Info struct {
 	// contains filtered or unexported fields
 }
 ```
-Info extends fs.FileInfo to provide additional information such
-as user/group, symbolic link status etc, as well gob and json
-encoding/decoding. Note that the Sys value is not encoded/decoded and
-is only avalilable within the process that originally created the info
-Instance.
+Info implements fs.FileInfo to provide binary, gob and json
+encoding/decoding. The SysInfo field is not encoded/decoded and hence is
+only available for use within the process that Info was instantiated in.
 
 ### Functions
 
 ```go
-func NewInfo(name string, size int64, mode fs.FileMode, modTime time.Time,
-	options InfoOption) *Info
+func NewInfo(
+	name string,
+	size int64,
+	mode fs.FileMode,
+	modTime time.Time,
+	sysInfo any) Info
 ```
 NewInfo creates a new instance of Info.
+
+
+```go
+func NewInfoFromFileInfo(fi fs.FileInfo) Info
+```
 
 
 
 ### Methods
 
 ```go
-func (fi *Info) GobDecode(data []byte) error
+func (fi *Info) AppendBinary(buf *bytes.Buffer) error
 ```
 
 
 ```go
-func (fi *Info) GobEncode() ([]byte, error)
+func (fi *Info) DecodeBinary(data []byte) ([]byte, error)
 ```
+DecodeBinary decodes the supplied data into the receiver and returns the
+remaining data.
 
 
 ```go
-func (fi *Info) Group() string
-```
-Group returns the group associated with the file.
-
-
-```go
-func (fi *Info) IsDir() bool
+func (fi Info) IsDir() bool
 ```
 IsDir implements fs.FileInfo.
 
 
 ```go
-func (fi *Info) IsLink() bool
+func (fi Info) MarshalBinary() ([]byte, error)
 ```
-IsLink returns true if the file is a symbolic link.
+Implements encoding.BinaryMarshaler.
 
 
 ```go
-func (fi *Info) MarshalJSON() ([]byte, error)
+func (fi Info) MarshalJSON() ([]byte, error)
 ```
 
 
 ```go
-func (fi *Info) ModTime() time.Time
+func (fi Info) ModTime() time.Time
 ```
 ModTime implements fs.FileInfo.
 
 
 ```go
-func (fi *Info) Mode() fs.FileMode
+func (fi Info) Mode() fs.FileMode
 ```
 Mode implements fs.FileInfo.
 
 
 ```go
-func (fi *Info) Name() string
+func (fi Info) Name() string
 ```
 Name implements fs.FileInfo.
 
 
 ```go
-func (fi *Info) Size() int64
+func (fi *Info) SetSys(i any)
+```
+
+
+```go
+func (fi Info) Size() int64
 ```
 Size implements fs.FileInfo.
 
 
 ```go
-func (fi *Info) Sys() interface{}
+func (fi Info) Sys() any
 ```
 Sys implements fs.FileInfo.
+
+
+```go
+func (fi *Info) UnmarshalBinary(data []byte) error
+```
+Implements encoding.BinaryUnmarshaler.
 
 
 ```go
@@ -172,26 +187,52 @@ func (fi *Info) UnmarshalJSON(data []byte) error
 ```
 
 
+
+
+### Type InfoList
 ```go
-func (fi *Info) User() string
+type InfoList []Info
 ```
-User returns the user associated with the file.
+InfoList represents a list of Info instances. It provides efficient
+encoding/decoding operations.
 
+### Functions
 
-
-
-### Type InfoOption
 ```go
-type InfoOption struct {
-	User    string
-	Group   string
-	IsDir   bool
-	IsLink  bool
-	SysInfo interface{}
-}
+func DecodeBinaryInfoList(data []byte) (InfoList, []byte, error)
 ```
-InfoOption is used to provide additional fields when creating an Info
-instance using NewInfo.
+DecodeBinaryInfoList decodes the supplied data into an InfoList and returns
+the remaining data.
+
+
+
+### Methods
+
+```go
+func (il InfoList) AppendBinary(buf *bytes.Buffer) error
+```
+AppendBinary appends a binary encoded instance of Info to the supplied byte
+slice.
+
+
+```go
+func (il InfoList) AppendInfo(info Info) InfoList
+```
+Append appends an Info instance to the list and returns the updated list.
+
+
+```go
+func (il InfoList) MarshalBinary() ([]byte, error)
+```
+MarshalBinary implements encoding.BinaryMarshaler.
+
+
+```go
+func (il *InfoList) UnmarshalBinary(data []byte) (err error)
+```
+UnmarshalBinary implements encoding.BinaryUnmarshaler.
+
+
 
 
 

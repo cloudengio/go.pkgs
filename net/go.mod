@@ -1,7 +1,7 @@
 module cloudeng.io/net
 
-go 1.19
+go 1.21
 
-require cloudeng.io/file v0.0.0-20231106193145-45237a5eabab
+require cloudeng.io/file v0.0.0-20231130182733-8193ad9948bc
 
 require cloudeng.io/path v0.0.8 // indirect

@@ -7,6 +7,19 @@ import cloudeng.io/os/executil
 Package executil provides utilities for working with os/exec.
 
 ## Functions
+### Func ExecName
+```go
+func ExecName(path string) string
+```
+ExecName returns path in a form suitable for use as an executable. For unix
+systems the path is unchanged. For windows a '.exe' suffix is added if not
+already present.
+
+### Func GoBuild
+```go
+func GoBuild(ctx context.Context, binary string, args ...string) (string, error)
+```
+
 ### Func NewLineFilter
 ```go
 func NewLineFilter(forward io.Writer, re *regexp.Regexp, ch chan<- []byte) io.WriteCloser

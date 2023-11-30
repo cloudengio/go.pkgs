@@ -10,6 +10,7 @@ import (
 
 	"cloudeng.io/aws/s3fs"
 	"cloudeng.io/file"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -62,7 +63,7 @@ func (m *mfs) GetObject(ctx context.Context, params *s3.GetObjectInput, _ ...fun
 		return nil, err
 	}
 	return &s3.GetObjectOutput{
-		ContentLength: fi.Size(),
+		ContentLength: aws.Int64(fi.Size()),
 		Body:          file,
 	}, nil
 }
