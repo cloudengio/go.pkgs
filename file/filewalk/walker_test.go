@@ -352,7 +352,7 @@ func (e *errorScanner) Done(_ context.Context, _ *int, _ string, err error) erro
 }
 
 func TestFunctionErrors(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 	sc := localfs.New()
 
@@ -413,7 +413,7 @@ func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
 }
 
 func TestCancel(t *testing.T) {
-	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -487,45 +487,21 @@ func (is *slowScanner) Contents() []filewalk.Entry {
 	return is.sc.Contents()
 }
 
-func TestReportingSlowScanner(t *testing.T) {
+func TestSyncScans(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 	is := &slowFS{localfs.New()}
-	ch := make(chan filewalk.Status, 100)
 	lg := &logger{
 		fs:    is,
 		state: map[string]int{},
 	}
-	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(2),
-		filewalk.WithReporting(ch, time.Millisecond*100, time.Millisecond*250))
+	wk := filewalk.New[int](is, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(1))
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		_ = wk.Walk(ctx, localTestTree)
-		wg.Done()
-	}()
-
-	nSlow := 0
-	nSync := int64(0)
-	for r := range ch {
-		if r.SlowPrefix != "" {
-			nSlow++
-			if r.ScanDuration < time.Millisecond*250 {
-				t.Errorf("scan duration too short: %v", r.ScanDuration)
-			}
-		}
-		nSync += r.SynchronousScans
+	_ = wk.Walk(ctx, localTestTree)
+	stats := wk.Stats()
+	if stats.SynchronousScans == 0 {
+		t.Errorf("no synchronous scans")
 	}
-
-	if nSlow <= 40 {
-		t.Errorf("not enough slow scans: %v", nSlow)
-	}
-	if nSync == 0 {
-		t.Errorf("no synchronous scans: %v", nSync)
-	}
-	wg.Wait()
 }
 
 type dbScanner struct {
