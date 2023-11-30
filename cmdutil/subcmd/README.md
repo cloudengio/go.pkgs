@@ -97,7 +97,8 @@ the number of expected arguments.
 
  2. If the list contains n arguments then exactly that number of arguments
     is expected, unless, the last argument in the list is '...' in which
-    case at least that number is expected.
+    case at least that number is expected. Similarly if an argument ends in
+    '...' then at least the preceding number of arguments is expected.
 
  3. If there is a single item in the list and it is enclosed in [] (in a
     quoted string), then 0 or 1 arguments are expected.
@@ -116,6 +117,17 @@ arguments, eg: '<command> --help' or "<command> <sub-command> --help".
 
 Note that this package will never call flag.Parse and will not associate any
 flags with flag.CommandLine.
+
+## Functions
+### Func SanitizeYAML
+```go
+func SanitizeYAML(spec string) string
+```
+SanitizeYAML replaces tabs with two spaces to make it easier to write YAML
+in go string literals (where most editors will always use tabs). This does
+not guarantee correct alignment when spaces and tabs are mixed arbitrarily.
+
+
 
 ## Types
 ### Type Command
@@ -328,14 +340,14 @@ supplied template and the supplied extensions.
 func MustFromYAML(spec string) *CommandSetYAML
 ```
 MustFromYAML is like FromYAML but will panic if the YAML spec is incorrectly
-defined.
+defined. It calls SanitizeYAML on its input before calling FromYAML.
 
 
 ```go
 func MustFromYAMLTemplate(specTpl string, exts ...Extension) *CommandSetYAML
 ```
 MustFromYAMLTemplate is like FromYAMLTemplate except that it panics on
-error.
+error. SanitzeYAML is called on the expanded template.
 
 
 
@@ -374,16 +386,41 @@ type CurrentCommand struct {
 ### Methods
 
 ```go
+func (c *CurrentCommand) MustRunner(runner Runner, fs any)
+```
+MustRunner is like Runner but will panic on error.
+
+
+```go
+func (c *CurrentCommand) MustRunnerAndFlagSet(runner Runner, fs *FlagSet)
+```
+MustRunnerAndFlagSet is like RunnerAndFlagSet but will panic on error.
+
+
+```go
 func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet)
 ```
-MustRunnerAndFlags is like RunnerAndFlags but will panic on error.
+Deprecated: Use MustRunnerAndFlagSet or MustRunner.
+
+
+```go
+func (c *CurrentCommand) Runner(runner Runner, fs any, defaults ...any) error
+```
+Runner specifies the Runner and struct to use as a FlagSet for the currently
+'set' command as returned by CommandSetYAML.Set.
+
+
+```go
+func (c *CurrentCommand) RunnerAndFlagSet(runner Runner, fs *FlagSet) error
+```
+RunnerAndFlagset specifies the Runner and FlagSet for the currently 'set'
+command as returned by CommandSetYAML.Set.
 
 
 ```go
 func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error
 ```
-RunnerAndFlags specifies the Runner and FlagSet for the currently 'set'
-command as returned by CommandSetYAML.Set.
+Deprecated: Use RunnerAndFlagSet or Runner.
 
 
 
@@ -433,7 +470,8 @@ specified.
 ```go
 func NewExtension(name, spec string, appendFn func(cmdSet *CommandSetYAML) error) Extension
 ```
-NewExtension
+NewExtension creates a new Extension with the specified name and spec.
+The name is used to refer to the extension in the YAML template.
 
 
 
@@ -465,11 +503,8 @@ within init functions.
 ```go
 func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *FlagSet
 ```
-MustRegisteredFlagSet is a convenience function that creates a new FlagSet
-and calls RegisterFlagStruct on it. The valueDefaults and usageDefaults
-are extracted from the defaults variadic parameter. MustRegisteredFlagSet
-will panic if defaults contains inappopriate types for the value and usage
-defaults.
+MustRegisteredFlagSet is like RegisteredFlagSet but will panic if defaults
+contains inappopriate types for the value and usage defaults.
 
 
 ```go
@@ -482,6 +517,16 @@ NewFlagSet returns a new instance of FlagSet.
 func RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*FlagSet, error)
 ```
 RegisterFlagStruct creates a new FlagSet and calls RegisterFlagStruct on it.
+
+
+```go
+func RegisteredFlagSet(flagValues interface{}, defaults ...interface{}) (*FlagSet, error)
+```
+RegisteredFlagSet is a convenience function that creates a new FlagSet
+and calls RegisterFlagStruct on it. The valueDefaults and usageDefaults
+are extracted from the defaults variadic parameter. MustRegisteredFlagSet
+will panic if defaults contains inappopriate types for the value and usage
+defaults.
 
 
 

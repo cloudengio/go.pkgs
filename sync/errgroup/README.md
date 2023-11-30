@@ -63,7 +63,7 @@ returned by a goroutine or when Wait is called.
 func (g *T) Go(f func() error)
 ```
 Go runs the supplied function from a goroutine. If this group was created
-using WithLimit then Go will block until a goroutine is available.
+using WithConcurrency then Go will block until a goroutine is available.
 
 
 ```go

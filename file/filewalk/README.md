@@ -11,159 +11,95 @@ as AWS S3 or GCP's Cloud Storage. All compatible systems must implement some
 sort of hierarchical naming scheme, whether it be directory based (as per
 Unix/POSIX filesystems) or by convention (as per S3).
 
+## Variables
+### DefaultScanSize, DefaultConcurrentScans
+```go
+// DefaultScansize is the default ScanSize used when the WithScanSize
+// option is not supplied.
+DefaultScanSize = 1000
+// DefaultConcurrentScans is the default number of prefixes/directories
+// that will be scanned concurrently when the WithConcurrencyOption is
+// is not supplied.
+DefaultConcurrentScans = 100
+
+```
+
+
+
 ## Types
-### Type Contents
+### Type Configuration
 ```go
-type Contents struct {
-	Path     string `json:"p,omitempty"` // The name of the level being scanned.
-	Children []Info `json:"c,omitempty"` // Info on each of the next levels in the hierarchy.
-	Files    []Info `json:"f,omitempty"` // Info for the files at this level.
-	Err      error  `json:"e,omitempty"` // Non-nil if an error occurred.
+type Configuration struct {
+	ConcurrentScans int
+	ScanSize        int
 }
 ```
-Contents represents the contents of the filesystem at the level represented
-by Path.
 
 
-### Type ContentsFunc
+### Type Entry
 ```go
-type ContentsFunc func(ctx context.Context, prefix string, info *Info, ch <-chan Contents) ([]Info, error)
-```
-ContentsFunc is the type of the function that is called to consume the
-results of scanning a single level in the filesystem hierarchy. It should
-read the contents of the supplied channel until that channel is closed.
-Errors, such as failing to access the prefix, are delivered over the
-channel.
-
-
-### Type Database
-```go
-type Database interface {
-	// Set stores the specified information in the database taking care to
-	// update all metrics. If PrefixInfo specifies a UserID then the metrics
-	// associated with that user will be updated in addition to global ones.
-	// Metrics are updated approriately for
-	Set(ctx context.Context, prefix string, info *PrefixInfo) error
-
-	// Get returns the information stored for the specified prefix. It will
-	// return false if the entry does not exist in the database but with
-	// a nil error.
-	Get(ctx context.Context, prefix string, info *PrefixInfo) (bool, error)
-
-	// Delete removes the supplied prefixes from all databases. If recurse
-	// is set then all children of those prefixes will be similarly deleted.
-	Delete(ctx context.Context, separator string, prefixes []string, recurse bool) (int, error)
-
-	// DeleteErrors deletes the errors associated with the specified prefixes.
-	DeleteErrors(ctx context.Context, prefixes []string) (int, error)
-
-	// Save saves the database to persistent storage.
-	Save(ctx context.Context) error
-
-	// Close will first Save and then release resources associated with the database.
-	Close(ctx context.Context) error
-
-	// CompactAndClose will perform any necessary/possible/supported
-	// compaction on the database and close it.
-	CompactAndClose(ctx context.Context) error
-
-	// UserIDs returns the current set of userIDs known to the database.
-	UserIDs(ctx context.Context) ([]string, error)
-
-	// GroupIDs returns the current set of groupIDs known to the database.
-	GroupIDs(ctx context.Context) ([]string, error)
-
-	// Metrics returns the names of the supported metrics.
-	Metrics() []MetricName
-
-	// Stats returns statistics on the database's components.
-	Stats() ([]DatabaseStats, error)
-
-	// Total returns the total (ie. sum) for the requested metric.
-	Total(ctx context.Context, name MetricName, opts ...MetricOption) (int64, error)
-
-	// TopN returns the top-n values for the requested metric.
-	TopN(ctx context.Context, name MetricName, n int, opts ...MetricOption) ([]Metric, error)
-
-	// NewScanner creates a scanner that will start at the specified prefix
-	// and scan at most limit items; a limit of 0 will scan all available
-	// items.
-	NewScanner(prefix string, limit int, opts ...ScannerOption) DatabaseScanner
+type Entry struct {
+	Name string
+	Type fs.FileMode // Type is the Type portion of fs.FileMode
 }
 ```
-Database is the interface to be implemented by a database suitable for use
-with filewalk.
 
+### Methods
 
-### Type DatabaseOption
 ```go
-type DatabaseOption func(o *DatabaseOptions)
+func (de Entry) IsDir() bool
 ```
-DatabaseOption represent a specific option common to all databases.
+
+
+
+
+### Type EntryList
+```go
+type EntryList []Entry
+```
 
 ### Functions
 
 ```go
-func ErrorsOnly() DatabaseOption
+func EntriesFromInfoList(infos file.InfoList) EntryList
 ```
-ErrorsOnly requests that only the errors portion of the database be opened.
+
+
+
+### Methods
+
+```go
+func (el EntryList) AppendBinary(data []byte) ([]byte, error)
+```
+AppendBinary appends a binary encoded instance of Info to the supplied byte
+slice.
 
 
 ```go
-func ReadOnly() DatabaseOption
+func (el *EntryList) DecodeBinary(data []byte) ([]byte, error)
 ```
-ReadOnly requests that the database be opened in read only mode.
+DecodeBinary decodes the supplied data into an InfoList and returns the
+remaining data.
 
 
 ```go
-func ResetStats() DatabaseOption
+func (el EntryList) MarshalBinary() ([]byte, error)
 ```
-ResetStats requests that the database reset its statistics when opened.
+MarshalBinary implements encoding.BinaryMarshaler.
 
 
-
-
-### Type DatabaseOptions
 ```go
-type DatabaseOptions struct {
-	ResetStats bool
-	ReadOnly   bool
-	ErrorsOnly bool
-}
+func (el *EntryList) UnmarshalBinary(data []byte) (err error)
 ```
-DatabaseOptions represents options common to all database implementations.
+UnmarshalBinary implements encoding.BinaryUnmarshaler.
 
 
-### Type DatabaseScanner
-```go
-type DatabaseScanner interface {
-	Scan(ctx context.Context) bool
-	PrefixInfo() (string, *PrefixInfo)
-	Err() error
-}
-```
-DatabaseScanner implements an idiomatic go scanner as created by
-Database.NewScanner.
-
-
-### Type DatabaseStats
-```go
-type DatabaseStats struct {
-	Name        string
-	Description string
-	NumEntries  int64
-	Size        int64
-}
-```
-DatabaseStats represents the statistices for a specific portion of the
-overall database.
 
 
 ### Type Error
 ```go
 type Error struct {
 	Path string
-	Op   string
 	Err  error
 }
 ```
@@ -173,54 +109,49 @@ encountered.
 ### Methods
 
 ```go
-func (e *Error) Error() string
+func (e *Error) As(target interface{}) bool
+```
+As implements errors.As.
+
+
+```go
+func (e Error) Error() string
 ```
 Error implements error.
 
 
-
-
-### Type FileMode
 ```go
-type FileMode uint32
+func (e Error) Is(target error) bool
 ```
-FileMode represents meta data about a single file, including its
-permissions. Not all underlying filesystems may support the full set of
-UNIX-style permissions.
+Is implements errors.Is.
 
-### Constants
-### ModePrefix, ModeLink, ModePerm
+
 ```go
-ModePrefix FileMode = FileMode(os.ModeDir)
-ModeLink FileMode = FileMode(os.ModeSymlink)
-ModePerm FileMode = FileMode(os.ModePerm)
-
+func (e Error) Unwrap() error
 ```
-Valuese for FileMode.
+Unwrap implements errors.Unwrap.
 
 
 
-### Methods
 
+### Type FS
 ```go
-func (fm FileMode) String() string
-```
-String implements jsonString.
+type FS interface {
+	file.FS
 
+	// Readlink returns the contents of a symbolic link.
+	Readlink(ctx context.Context, path string) (string, error)
 
+	// Stat will follow symlinks.
+	Stat(ctx context.Context, path string) (file.Info, error)
 
+	// Lstat will not follow symlinks.
+	Lstat(ctx context.Context, path string) (file.Info, error)
 
-### Type Filesystem
-```go
-type Filesystem interface {
-	// Stat obtains Info for the specified path.
-	Stat(ctx context.Context, path string) (Info, error)
+	LevelScanner(path string) LevelScanner
 
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
 	Join(components ...string) string
-
-	// List will send all of the contents of path over the supplied channel.
-	List(ctx context.Context, path string, ch chan<- Contents)
 
 	// IsPermissionError returns true if the specified error, as returned
 	// by the filesystem's implementation, is a result of a permissions error.
@@ -231,136 +162,51 @@ type Filesystem interface {
 	IsNotExist(err error) bool
 }
 ```
-Filesystem represents the interface that is implemeted for filesystems to be
+FS represents the interface that is implemeted for filesystems to be
 traversed/scanned.
 
-### Functions
 
+### Type Handler
 ```go
-func LocalFilesystem(scanSize int) Filesystem
-```
+type Handler[T any] interface {
 
+	// Prefix is called to determine if a given level in the filesystem hiearchy
+	// should be further examined or traversed. The file.Info is obtained via a call
+	// to Lstat and hence will refer to a symlink itself if the prefix is a symlink.
+	// If stop is true then traversal stops at this point. If a list of Entry's
+	// is returned then this list is traversed directly rather than obtaining
+	// the children from the filesystem. This allows for both exclusions and
+	// incremental processing in conjunction with a database to be implemented.
+	// Any returned is recorded, but traversal will continue unless stop is set.
+	Prefix(ctx context.Context, state *T, prefix string, info file.Info, err error) (stop bool, children file.InfoList, returnErr error)
 
+	// Contents is called, multiple times, to process the contents of a single
+	// level in the filesystem hierarchy. Each such call contains at most the
+	// number of items allowed for by the WithScanSize option. Note that
+	// errors encountered whilst scanning the filesystem result in calls to
+	// Done with the error encountered.
+	Contents(ctx context.Context, state *T, prefix string, contents []Entry) (file.InfoList, error)
 
-
-### Type Info
-```go
-type Info struct {
-	Name    string    // base name of the file
-	UserID  string    // user id as returned by the underlying system
-	GroupID string    // group id as returned by the underlying system
-	Size    int64     // length in bytes
-	ModTime time.Time // modification time
-	Mode    FileMode  // permissions, directory or link.
-	// contains filtered or unexported fields
+	// Done is called once calls to Contents have been made or if Prefix returned
+	// an error. Done will always be called if Prefix did not return true for stop.
+	// Errors returned by Done are recorded and returned by the Walk method.
+	// An error returned by Done does not terminate the walk.
+	Done(ctx context.Context, state *T, prefix string, err error) error
 }
 ```
-Info represents the information that can be retrieved for a single file or
-prefix.
+Handler is implemented by clients of Walker to process the results of
+walking a filesystem hierarchy. The type parameter is used to instantiate a
+state variable that is passed to each of the methods.
 
-### Methods
 
+### Type LevelScanner
 ```go
-func (i Info) IsLink() bool
-```
-IsLink returns true for a symbolic or other form of link.
-
-
-```go
-func (i Info) IsPrefix() bool
-```
-IsPrefix returns true for a prefix.
-
-
-```go
-func (i Info) Perms() FileMode
-```
-Perms returns UNIX-style permissions.
-
-
-```go
-func (i Info) Sys() interface{}
-```
-Sys returns the underlying, if available, data source.
-
-
-
-
-### Type Metric
-```go
-type Metric struct {
-	Prefix string
-	Value  int64
+type LevelScanner interface {
+	Scan(ctx context.Context, n int) bool
+	Contents() []Entry
+	Err() error
 }
 ```
-Metric represents a value associated with a prefix.
-
-
-### Type MetricName
-```go
-type MetricName string
-```
-MetricName names a particular metric supported by instances of Database.
-
-### Constants
-### TotalFileCount, TotalPrefixCount, TotalDiskUsage, TotalErrorCount
-```go
-// TotalFileCount refers to the total # of files in the database.
-TotalFileCount MetricName = "totalFileCount"
-// TotalPrefixCount refers to the total # of prefixes/directories in
-// the database. For cloud based filesystems the prefixes are likely
-// purely naming conventions as opposed to local filesystem directories.
-TotalPrefixCount MetricName = "totalPrefixCount"
-// TotalDiskUsage refers to the total disk usage of the files and prefixes
-// in the database taking the filesystems block size into account.
-TotalDiskUsage MetricName = "totalDiskUsage"
-// TotalError refers to the total number of errors encountered whilst
-// analyzing the file system.
-TotalErrorCount MetricName = "totalErrors"
-
-```
-
-
-
-
-### Type MetricOption
-```go
-type MetricOption func(o *MetricOptions)
-```
-MetricOption is used to request particular metrics, either per-user or
-global to the entire database.
-
-### Functions
-
-```go
-func Global() MetricOption
-```
-Global requests a global metric.
-
-
-```go
-func GroupID(groupID string) MetricOption
-```
-GroupID requests a per-group metric.
-
-
-```go
-func UserID(userID string) MetricOption
-```
-UserID requests a per-user metric.
-
-
-
-
-### Type MetricOptions
-```go
-type MetricOptions struct {
-	Global  bool
-	UserID  string
-	GroupID string
-}
-```
-MetricOptions is configured by instances of MetricOption.
 
 
 ### Type Option
@@ -372,124 +218,50 @@ Option represents options accepted by Walker.
 ### Functions
 
 ```go
-func ChanSize(n int) Option
+func WithConcurrentScans(n int) Option
 ```
-ChanSize can be used to set the size of the channel used to send results to
-ResultsFunc. It defaults to being unbuffered.
+WithConcurrentScans can be used to change the number of prefixes/directories
+that can be scanned concurrently. The default is DefaultConcurrentScans.
 
 
 ```go
-func Concurrency(n int) Option
+func WithScanSize(n int) Option
 ```
-Concurreny can be used to change the degree of concurrency used. The default
-is to use all available CPUs.
+WithScanSize sets the number of prefix/directory entries to be scanned in a
+single operation. The default is DefaultScanSize.
 
 
 
 
-### Type PrefixFunc
+### Type Stats
 ```go
-type PrefixFunc func(ctx context.Context, prefix string, info *Info, err error) (stop bool, children []Info, returnErr error)
-```
-PrefixFunc is the type of the function that is called to determine if
-a given level in the filesystem hiearchy should be further examined or
-traversed. If stop is true then traversal stops at this point, however if
-a list of children is returned, they will be traversed directly rather than
-obtaining the children from the filesystem. This allows for both exclusions
-and incremental processing in conjunction with a database to be implemented.
-
-
-### Type PrefixInfo
-```go
-type PrefixInfo struct {
-	ModTime   time.Time
-	Size      int64
-	UserID    string
-	GroupID   string
-	Mode      FileMode
-	Children  []Info
-	Files     []Info
-	DiskUsage int64 // DiskUsage is the total amount of storage required for the files under this prefix taking the filesystem's layout/block size into account.
-	Err       string
+type Stats struct {
+	SynchronousScans int64
 }
 ```
-PrefixInfo represents information on a given prefix.
 
-### Methods
 
+### Type Status
 ```go
-func (pi *PrefixInfo) GobDecode(buf []byte) error
-```
-GobDecode implements gob.Decoder.
+type Status struct {
+	// SynchronousOps is the number of Scans that were performed synchronously
+	// as a fallback when all available goroutines are already occupied.
+	SynchronousScans int64
 
-
-```go
-func (pi PrefixInfo) GobEncode() ([]byte, error)
-```
-GobEncode implements gob.Encoder.
-
-
-
-
-### Type ScannerOption
-```go
-type ScannerOption func(so *ScannerOptions)
-```
-ScannerOption represent a specific option common to all scanners.
-
-### Functions
-
-```go
-func KeysOnly() ScannerOption
-```
-KeysOnly requests that only keys and no data is scanned.
-
-
-```go
-func RangeScan() ScannerOption
-```
-RangeScan requests a range, as opposed to prefix scan. The range scan will
-start the prefix passed to NewScanner and continue until the number of keys
-specified by limit is reached.
-
-
-```go
-func ScanDescending() ScannerOption
-```
-ScanDescending requests a descending scan, the default is ascending.
-
-
-```go
-func ScanErrors() ScannerOption
-```
-ScanErrors requests that errors database is scanned.
-
-
-```go
-func ScanLimit(l int) ScannerOption
-```
-ScanLimit sets the number of items to be retrieved in a single underlying
-storage operation.
-
-
-
-
-### Type ScannerOptions
-```go
-type ScannerOptions struct {
-	Descending bool
-	RangeScan  bool
-	KeysOnly   bool
-	ScanErrors bool
-	ScanLimit  int
+	// SlowPrefix is a prefix that took longer than a certain duration
+	// to scan. ScanDuration is the time spent scanning that prefix to
+	// date. A SlowPrefix may be reported as slow before it has completed
+	// scanning.
+	SlowPrefix   string
+	ScanDuration time.Duration
 }
 ```
-ScannerOptions represents the options common to all scanner implementations.
+Status is used to communicate the status of in-process Walk operation.
 
 
 ### Type Walker
 ```go
-type Walker struct {
+type Walker[T any] struct {
 	// contains filtered or unexported fields
 }
 ```
@@ -498,7 +270,7 @@ Walker implements the filesyste walk.
 ### Functions
 
 ```go
-func New(filesystem Filesystem, opts ...Option) *Walker
+func New[T any](fs FS, handler Handler[T], opts ...Option) *Walker[T]
 ```
 New creates a new Walker instance.
 
@@ -507,11 +279,21 @@ New creates a new Walker instance.
 ### Methods
 
 ```go
-func (w *Walker) Walk(ctx context.Context, prefixFn PrefixFunc, contentsFn ContentsFunc, roots ...string) error
+func (w *Walker[T]) Configuration() Configuration
+```
+
+
+```go
+func (w *Walker[T]) Stats() Stats
+```
+
+
+```go
+func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error
 ```
 Walk traverses the hierarchies specified by each of the roots calling
-prefixFn and contentsFn as it goes. prefixFn will always be called before
-contentsFn for the same prefix, but no other ordering guarantees are
+prefixFn and entriesFn as it goes. prefixFn will always be called before
+entriesFn for the same prefix, but no other ordering guarantees are
 provided.
 
 

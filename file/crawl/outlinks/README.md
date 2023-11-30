@@ -47,6 +47,14 @@ type Errors struct {
 }
 ```
 
+### Methods
+
+```go
+func (e Errors) String() string
+```
+
+
+
 
 ### Type Extractor
 ```go
@@ -106,7 +114,7 @@ argument to IsDup).
 
 
 ```go
-func (ho *HTML) Outlinks(ctx context.Context, depth int, download Download, contents io.Reader) ([]string, error)
+func (ho *HTML) Outlinks(_ context.Context, _ int, download Download, contents io.Reader) ([]string, error)
 ```
 Outlinks implements Extractor.Outlinks.
 

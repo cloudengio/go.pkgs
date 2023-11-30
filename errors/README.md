@@ -178,6 +178,13 @@ Is supports errors.Is.
 
 
 ```go
+func (m *M) Squash(target error) error
+```
+Squash returns an error.M with at most one instance of target per level in
+the error tree.
+
+
+```go
 func (m *M) Unwrap() error
 ```
 Unwrap implements errors.Unwrap. It returns the first stored error and then

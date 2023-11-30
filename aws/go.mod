@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.4
 
 require (
-	cloudeng.io/file v0.0.0-20231129163852-526b6ff59b6d
+	cloudeng.io/file v0.0.0-20231130182733-8193ad9948bc
 	cloudeng.io/path v0.0.8
 	cloudeng.io/webapp v0.0.0-20231129163852-526b6ff59b6d
 	github.com/aws/aws-sdk-go-v2 v1.23.4

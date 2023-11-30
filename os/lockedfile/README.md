@@ -141,7 +141,14 @@ accompanying error. (See https://golang.org/issue/20803.)
 ```go
 func (mu *Mutex) RLock() (unlock func(), err error)
 ```
-Lock attempts to lock the Mutex for read-only access.
+RLock attempts to lock the Mutex for read-only access.
+
+
+```go
+func (mu *Mutex) RLockCreate() (unlock func(), err error)
+```
+RLockCreate attempts to lock the Mutex for read-only access but will create
+the lock file if one does not already exist.
 
 
 ```go

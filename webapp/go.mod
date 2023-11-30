@@ -14,7 +14,7 @@ require (
 
 require (
 	cloudeng.io/errors v0.0.9 // indirect
-	cloudeng.io/file v0.0.0-20231129163852-526b6ff59b6d // indirect
+	cloudeng.io/file v0.0.0-20231130182733-8193ad9948bc // indirect
 	cloudeng.io/path v0.0.8 // indirect
 	cloudeng.io/text v0.0.11 // indirect
 	golang.org/x/text v0.14.0 // indirect

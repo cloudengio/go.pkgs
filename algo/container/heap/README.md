@@ -4,110 +4,188 @@
 import cloudeng.io/algo/container/heap
 ```
 
-Package heap contains various implementations of heap containers.
 
 ## Types
-### Type KeyedInt64
+### Type MinMax
 ```go
-type KeyedInt64 struct {
+type MinMax[K Ordered, V any] struct {
+	Keys []K
+	Vals []V
 	// contains filtered or unexported fields
 }
 ```
-KeyedInt64 implements a heap whose values include both a key and value to
-allow for updates to existing items in the heap. It also keeps a running sum
-of the all of the values currently in the heap, supports both ascending and
-desencding operations and is safe for concurrent use.
+MinMax represents a min-max heap as described in:
+https://liacs.leidenuniv.nl/~stefanovtp/courses/StudentenSeminarium/Papers/AL/SMMH.pdf.
+Note that this requires the use of a dummy root node in the key and value
+slices, ie. Keys[0] and Values[0] is always empty.
 
 ### Functions
 
 ```go
-func NewKeyedInt64(order Order) *KeyedInt64
+func NewMinMax[K Ordered, V any](opts ...Option[K, V]) *MinMax[K, V]
 ```
-NewKeyedInt64 returns a new instance of KeyedInt64.
+NewMinMax creates a new instance of MinMax.
 
 
 
 ### Methods
 
 ```go
-func (ki *KeyedInt64) GobDecode(buf []byte) error
+func (h *MinMax[K, V]) Len() int
 ```
-GobDecode implements gob.GobDecoder.
+Len returns the number of items stored in the heap, excluding the dummy root
+node.
 
 
 ```go
-func (ki *KeyedInt64) GobEncode() ([]byte, error)
+func (h *MinMax[K, V]) PopMax() (K, V)
 ```
-GobEncode implements gob.GobEncode.
+PopMax removes and returns the largest key/value pair from the heap.
 
 
 ```go
-func (ki *KeyedInt64) Len() int
+func (h *MinMax[K, V]) PopMin() (K, V)
 ```
-Len returns the number of items in the heap.
+PopMin removes and returns the smallest key/value pair from the heap.
 
 
 ```go
-func (ki *KeyedInt64) MarshalJSON() ([]byte, error)
+func (h *MinMax[K, V]) Push(k K, v V)
 ```
-MarshalJSON implements json.Marshaler.
+Push pushes the key/value pair onto the heap.
 
 
 ```go
-func (ki *KeyedInt64) Pop() (string, int64)
+func (h *MinMax[K, V]) PushMaxN(k K, v V, n int)
 ```
-Pop removes the top most value (either largest or smallest) from the heap.
+PushMaxN pushes the key/value pair onto the heap if the key is greater than
+than the current maximum whilst ensuring that the heap is no larger than n.
 
 
 ```go
-func (ki *KeyedInt64) Remove(key string)
+func (h *MinMax[K, V]) PushMinN(k K, v V, n int)
 ```
-Remove removes the specified item from the heap.
+PushMinN pushes the key/value pair onto the heap if the key is less than the
+current minimum whilst ensuring that the heap is no larger than n.
 
 
 ```go
-func (ki *KeyedInt64) Sum() int64
+func (h *MinMax[K, V]) Remove(i int) (k K, v V)
 ```
-Sum returns the current sum of all values in the heap.
+Remove removes the i'th item from the heap, note that i includes the
+dummy root, i.e. i == 0 is the dummy root, 1 is the min, 2 is the max etc.
+Deleting the dummy root has no effect.
 
 
 ```go
-func (ki *KeyedInt64) TopN(n int) []struct {
-	K string
-	V int64
+func (h *MinMax[K, V]) Update(i int, k K, v V)
+```
+Update updates the i'th item in the heap, note that i includes the dummy
+root element. This is more efficient than removing and adding an item.
+
+
+
+
+### Type Option
+```go
+type Option[K Ordered, V any] func(*options[K, V])
+```
+Option represents the options that can be passed to NewMin and NewMax.
+
+### Functions
+
+```go
+func WithCallback[K Ordered, V any](fn func(iv, jv V, i, j int)) Option[K, V]
+```
+WithCallback provides a callback function that is called after every
+operation with the values and indices of the elements that have changed
+location. Note that is not sufficient to track removal of items and hence
+any applications that requires such tracking should do so explicitly by
+wrapping the Pop operations and deleting the retried item from their data
+structures.
+
+
+```go
+func WithData[K Ordered, V any](keys []K, vals []V) Option[K, V]
+```
+WithData sets the initial data for the heap.
+
+
+```go
+func WithSliceCap[K Ordered, V any](n int) Option[K, V]
+```
+WithSliceCap sets the initial capacity of the slices used to hold keys and
+values.
+
+
+
+
+### Type Ordered
+```go
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | string
 }
 ```
-TopN removes at most the top most n items from the heap.
+Orderded represents the set of types that can be used as keys in a heap.
+
+
+### Type T
+```go
+type T[K Ordered, V any] struct {
+	Keys []K
+	Vals []V
+	// contains filtered or unexported fields
+}
+```
+T represents a heap of keys and values.
+
+### Functions
+
+```go
+func NewMax[K Ordered, V any](opts ...Option[K, V]) *T[K, V]
+```
+NewMax creates a new heap with descending order.
 
 
 ```go
-func (ki *KeyedInt64) UnmarshalJSON(buf []byte) error
+func NewMin[K Ordered, V any](opts ...Option[K, V]) *T[K, V]
 ```
-UnmarshalJSON implements json.Unmarshaler.
+NewMin creates a new heap with ascending order.
+
+
+
+### Methods
+
+```go
+func (h *T[K, V]) Len() int
+```
+Len returns the number of elements in the heap.
 
 
 ```go
-func (ki *KeyedInt64) Update(key string, value int64)
+func (h *T[K, V]) Pop() (K, V)
 ```
-Update updates the value associated with key or it adds it to the heap.
+Pop removes and returns the top element from the heap.
 
 
-
-
-### Type Order
 ```go
-type Order bool
+func (h *T[K, V]) Push(k K, v V)
 ```
-Order determines if the heap is maintained in ascending or descending order.
+Push adds a new key and value to the heap.
 
-### Constants
-### Ascending, Descending
+
 ```go
-Ascending Order = false
-Descending Order = true
-
+func (h *T[K, V]) Remove(i int) (K, V)
 ```
-Values for Order.
+Remove removes the i'th element from the heap.
+
+
+```go
+func (h *T[K, V]) Update(pos int, k K, v V)
+```
+Update updates the key and value for the i'th element in the heap. It is
+more efficient than Remove followed by Push.
 
 
 

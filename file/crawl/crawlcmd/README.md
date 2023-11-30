@@ -75,7 +75,7 @@ relative to the
 ### Methods
 
 ```go
-func (c CrawlCacheConfig) Initialize(root string) (string, checkpoint.Operation, error)
+func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath string, err error)
 ```
 Initialize creates the cache and checkpoint directories relative to
 the specified root, and optionally clears them before the crawl (if
@@ -93,7 +93,7 @@ type Crawler struct {
 	// contains filtered or unexported fields
 }
 ```
-Crawler represents a crawler instance that contains global configuration
+Crawler represents a crawler instance and contains global configuration
 information.
 
 ### Methods
@@ -185,6 +185,8 @@ requests.
 ```go
 func (c RateControl) NewRateController() (*ratecontrol.Controller, error)
 ```
+NewRateController creates a new rate controller based on the values
+contained in RateControl.
 
 
 

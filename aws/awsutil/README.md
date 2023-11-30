@@ -20,7 +20,7 @@ IsArn returns true if the supplied string is an ARN.
 
 ### Func Region
 ```go
-func Region(ctx context.Context, cfg aws.Config) string
+func Region(_ context.Context, cfg aws.Config) string
 ```
 Region obtains the AWS region either from the supplied config or from the
 environment.

@@ -13,6 +13,11 @@ func CompareFS(a, b file.FS) error
 CompareFS returns nil if the two instances of fs.FS contain exactly the same
 files and file contents.
 
+### Func CompareFileInfo
+```go
+func CompareFileInfo(a, b file.InfoList) error
+```
+
 ### Func Contents
 ```go
 func Contents(fs file.FS) map[string][]byte
@@ -112,7 +117,7 @@ func NewWriteFS() *WriteFS
 ### Methods
 
 ```go
-func (wfs *WriteFS) Create(ctx context.Context, name string, filemode fs.FileMode) (io.WriteCloser, error)
+func (wfs *WriteFS) Create(_ context.Context, name string, filemode fs.FileMode) (io.WriteCloser, error)
 ```
 
 
@@ -122,7 +127,7 @@ func (wfs *WriteFS) Open(name string) (fs.File, error)
 
 
 ```go
-func (wfs *WriteFS) OpenCtx(ctx context.Context, name string) (fs.File, error)
+func (wfs *WriteFS) OpenCtx(_ context.Context, name string) (fs.File, error)
 ```
 
 
