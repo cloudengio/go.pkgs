@@ -12,10 +12,15 @@ import (
 )
 
 // HandleSignals will asynchronously invoke the supplied function when the
-// specified signals are received.
+// specified signals are received. Passing no signals requests that all
+// signals be handled.
 func HandleSignals(fn func(), signals ...os.Signal) {
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, signals...)
+	if len(signals) == 0 {
+		signal.Notify(sigCh)
+	} else {
+		signal.Notify(sigCh, signals...)
+	}
 	go func() {
 		sig := <-sigCh
 		fmt.Println("stopping on... ", sig)
