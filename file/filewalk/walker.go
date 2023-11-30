@@ -29,7 +29,6 @@ type Walker[T any] struct {
 	handler  Handler[T]
 	errs     *errors.M
 	nSyncOps int64
-	tk       *timekeeper
 }
 
 // Option represents options accepted by Walker.
@@ -38,9 +37,6 @@ type Option func(o *options)
 type options struct {
 	concurrentScans int
 	scanSize        int
-	reportCh        chan<- Status
-	reportInterval  time.Duration
-	slowThreshold   time.Duration
 }
 
 // WithConcurrentScans can be used to change the number of prefixes/directories
@@ -79,16 +75,6 @@ type Status struct {
 	ScanDuration time.Duration
 }
 
-// WithReporting can be used to enable reporting of slow and synchronous
-// prefix/directory scans.
-func WithReporting(ch chan<- Status, interval, slowThreshold time.Duration) Option {
-	return func(o *options) {
-		o.reportCh = ch
-		o.reportInterval = interval
-		o.slowThreshold = slowThreshold
-	}
-}
-
 var (
 	// DefaultScansize is the default ScanSize used when the WithScanSize
 	// option is not supplied.
@@ -107,7 +93,6 @@ func New[T any](fs FS, handler Handler[T], opts ...Option) *Walker[T] {
 	for _, fn := range opts {
 		fn(&w.opts)
 	}
-	w.tk = newTimekeeper(w.opts)
 	return w
 }
 
@@ -177,10 +162,6 @@ func (e *Error) As(target interface{}) bool {
 }
 
 func (w *Walker[T]) processLevel(ctx context.Context, state *T, path string) ([]file.Info, error) {
-
-	w.tk.add(path)
-	defer w.tk.rm(path)
-
 	var nextLevel []file.Info
 
 	sc := w.fs.LevelScanner(path)
@@ -247,21 +228,6 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	var reportingDoneCh, reportingStopCh chan struct{}
-	if w.opts.reportCh != nil {
-		reportingDoneCh, reportingStopCh = make(chan struct{}), make(chan struct{})
-		go func() {
-			for {
-				if w.report(rootCtx, reportingStopCh) {
-					close(w.opts.reportCh)
-					close(reportingDoneCh)
-					return
-				}
-				time.Sleep(w.opts.reportInterval)
-			}
-		}()
-	}
-
 	for _, root := range roots {
 		root := root
 		rootInfo, rootErr := w.fs.Lstat(ctx, root)
@@ -293,16 +259,6 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		w.errs.Append(rootCtx.Err())
 		<-waitCh
 	case <-waitCh:
-	}
-
-	if w.opts.reportCh != nil {
-		close(reportingStopCh)
-		select {
-		case <-rootCtx.Done():
-			w.errs.Append(rootCtx.Err())
-			<-reportingDoneCh
-		case <-reportingDoneCh:
-		}
 	}
 
 	return w.errs.Err()
@@ -372,77 +328,29 @@ func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {
 		return true
 	case <-stopCh:
 		return true
-	case w.opts.reportCh <- Status{
-		SynchronousScans: atomic.LoadInt64(&w.nSyncOps),
-	}:
 	default:
 	}
-	w.tk.report()
 	return false
-}
-
-func newTimekeeper(opts options) *timekeeper {
-	if opts.reportCh == nil {
-		return &timekeeper{}
-	}
-	return &timekeeper{
-		prefixes: make(map[string]time.Time, opts.concurrentScans),
-		ch:       opts.reportCh,
-		slow:     opts.slowThreshold,
-	}
-}
-
-type timekeeper struct {
-	sync.Mutex
-	prefixes map[string]time.Time
-	ch       chan<- Status
-	slow     time.Duration
-}
-
-func (tk *timekeeper) add(prefix string) {
-	if tk.slow == 0 {
-		return
-	}
-	tk.Lock()
-	defer tk.Unlock()
-	tk.prefixes[prefix] = time.Now()
-}
-
-func (tk *timekeeper) rm(prefix string) {
-	if tk.slow == 0 {
-		return
-	}
-	tk.Lock()
-	defer tk.Unlock()
-	delete(tk.prefixes, prefix)
-}
-
-func (tk *timekeeper) report() {
-	if tk.slow == 0 {
-		return
-	}
-	tk.Lock()
-	defer tk.Unlock()
-	for prefix, t := range tk.prefixes {
-		if since := time.Since(t); since > tk.slow {
-			select {
-			case tk.ch <- Status{SlowPrefix: prefix, ScanDuration: since}:
-			default:
-			}
-		}
-	}
 }
 
 type Configuration struct {
 	ConcurrentScans int
 	ScanSize        int
-	ReportInterval  time.Duration
 }
 
 func (w *Walker[T]) Configuration() Configuration {
 	return Configuration{
 		ConcurrentScans: w.opts.concurrentScans,
 		ScanSize:        w.opts.scanSize,
-		ReportInterval:  w.opts.reportInterval,
+	}
+}
+
+type Stats struct {
+	SynchronousScans int64
+}
+
+func (w *Walker[T]) Stats() Stats {
+	return Stats{
+		SynchronousScans: atomic.LoadInt64(&w.nSyncOps),
 	}
 }
