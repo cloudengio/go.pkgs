@@ -163,12 +163,16 @@ func (e *Error) As(target interface{}) bool {
 
 func (w *Walker[T]) processLevel(ctx context.Context, state *T, path string) ([]file.Info, error) {
 	var nextLevel []file.Info
-
 	sc := w.fs.LevelScanner(path)
 	for sc.Scan(ctx, w.opts.scanSize) {
 		children, err := w.handler.Contents(ctx, state, path, sc.Contents())
 		if err != nil {
 			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
 		nextLevel = append(nextLevel, children...)
 	}
@@ -232,9 +236,7 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		root := root
 		rootInfo, rootErr := w.fs.Lstat(ctx, root)
 		walkers.Go(func() error {
-			<-walkerLimitCh
-			w.walker(ctx, root, rootInfo, rootErr, walkerLimitCh)
-			return nil
+			return w.walkPrefix(ctx, root, rootInfo, rootErr, walkerLimitCh)
 		})
 	}
 
@@ -264,28 +266,42 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	return w.errs.Err()
 }
 
-func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) {
+func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) error {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
+
+	// Take care to catch all context cancellations as quickly as possible
+	// to avoid unnecessary work.
 	for _, child := range children {
 		child := child
 		select {
 		case <-limitCh:
+		case <-ctx.Done():
+			// This branch may not be taken even if the context is cancelled,
+			// so we check below also. However, we also need to check here
+			// for the case when limitCh is empty and the context is cancelled.
+			return ctx.Err()
 		default:
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name())
-			w.walker(ctx, p, child, nil, limitCh)
+			w.walkPrefix(ctx, p, child, nil, limitCh)
 			wg.Done()
 			continue
 		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		go func() {
-			w.walker(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
+			w.walkPrefix(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
 			wg.Done()
 			limitCh <- struct{}{}
 		}()
 	}
 	wg.Wait()
+	return nil
 }
 
 func (w *Walker[T]) handleDone(ctx context.Context, state *T, path string, err error) {
@@ -296,41 +312,36 @@ func (w *Walker[T]) handleDone(ctx context.Context, state *T, path string, err e
 	w.errs.Append(&Error{path, err})
 }
 
-func (w *Walker[T]) walker(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) {
+func (w *Walker[T]) walkPrefix(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) error {
+	var state T
 	select {
 	case <-ctx.Done():
-		return
+		return ctx.Err()
 	default:
 	}
-	var state T
 	stop, children, err := w.handler.Prefix(ctx, &state, path, info, err)
 	if stop {
-		return
+		return nil
 	}
 	if err != nil {
 		w.handleDone(ctx, &state, path, err)
-		return
+		return nil
 	}
 	if len(children) == 0 {
 		children, err = w.processLevel(ctx, &state, path)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
 			w.handleDone(ctx, &state, path, err)
-			return
+			return err
 		}
 	}
-	w.walkChildren(ctx, path, children, limitCh)
-	w.handleDone(ctx, &state, path, nil)
-}
-
-func (w *Walker[T]) report(ctx context.Context, stopCh <-chan struct{}) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	case <-stopCh:
-		return true
-	default:
+	if err := w.walkChildren(ctx, path, children, limitCh); err != nil {
+		return err
 	}
-	return false
+	w.handleDone(ctx, &state, path, nil)
+	return nil
 }
 
 type Configuration struct {
