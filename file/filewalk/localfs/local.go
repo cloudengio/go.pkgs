@@ -6,12 +6,10 @@ package localfs
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"time"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -73,20 +71,7 @@ type openState struct {
 }
 
 func (s *scanner) open(ctx context.Context, path string) bool {
-	ch := make(chan openState, 1)
-	go func() {
-		f, err := os.Open(path)
-		ch <- openState{file: f, err: err}
-	}()
-	select {
-	case <-ctx.Done():
-		s.err = ctx.Err()
-		return false
-	case state := <-ch:
-		s.file, s.err = state.file, state.err
-	case <-time.After(time.Minute):
-		s.err = fmt.Errorf("os.Open(%s) too too long", path)
-	}
+	s.file, s.err = os.Open(path)
 	return s.err == nil
 }
 

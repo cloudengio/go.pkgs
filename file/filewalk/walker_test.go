@@ -413,7 +413,7 @@ func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
 }
 
 func TestCancel(t *testing.T) {
-	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	defer synctestutil.AssertNoGoroutines(t)()
 	ctx := context.Background()
 
 	ctx, cancel := context.WithCancel(ctx)
