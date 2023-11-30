@@ -2,8 +2,6 @@ module cloudeng.io/webapp
 
 go 1.21
 
-toolchain go1.21.4
-
 require (
 	cloudeng.io/cmdutil v0.0.0-20231129163852-526b6ff59b6d
 	cloudeng.io/io v0.0.0-20231129163852-526b6ff59b6d
