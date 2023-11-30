@@ -364,7 +364,7 @@ func TestFunctionErrors(t *testing.T) {
 
 	wk = filewalk.New[int](sc, &errorScanner{contentsError: errors.New("oh no")}, filewalk.WithScanSize(1))
 	err = wk.Walk(ctx, localTestTree)
-	if err == nil || strings.Count(err.Error(), "oh no") != 2 {
+	if err == nil || strings.Count(err.Error(), "oh no") != 1 {
 		t.Errorf("missing or unexpected error: %v", err)
 	}
 

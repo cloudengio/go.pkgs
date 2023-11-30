@@ -65,12 +65,7 @@ func (s *scanner) Err() error {
 	return s.err
 }
 
-type openState struct {
-	file *os.File
-	err  error
-}
-
-func (s *scanner) open(ctx context.Context, path string) bool {
+func (s *scanner) open(_ context.Context, path string) bool {
 	s.file, s.err = os.Open(path)
 	return s.err == nil
 }

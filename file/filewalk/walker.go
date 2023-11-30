@@ -204,6 +204,7 @@ type Handler[T any] interface {
 	// Done is called once calls to Contents have been made or if Prefix returned
 	// an error. Done will always be called if Prefix did not return true for stop.
 	// Errors returned by Done are recorded and returned by the Walk method.
+	// An error returned by Done does not terminate the walk.
 	Done(ctx context.Context, state *T, prefix string, err error) error
 }
 
@@ -212,13 +213,11 @@ type Handler[T any] interface {
 // before entriesFn for the same prefix, but no other ordering guarantees
 // are provided.
 func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
+	w.errs = &errors.M{}
 	rootCtx := ctx
-	listers, _ := errgroup.WithContext(rootCtx)
 	if w.opts.concurrentScans <= 0 {
 		w.opts.concurrentScans = runtime.GOMAXPROCS(-1)
 	}
-
-	listers = errgroup.WithConcurrency(listers, w.opts.concurrentScans)
 
 	walkers, _ := errgroup.WithContext(rootCtx)
 	walkers = errgroup.WithConcurrency(walkers, w.opts.concurrentScans)
@@ -229,9 +228,6 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		walkerLimitCh <- struct{}{}
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
 	for _, root := range roots {
 		root := root
 		rootInfo, rootErr := w.fs.Lstat(ctx, root)
@@ -240,19 +236,11 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		})
 	}
 
-	go func() {
-		w.errs.Append(listers.Wait())
-		wg.Done()
-	}()
-
-	go func() {
-		w.errs.Append(walkers.Wait())
-		wg.Done()
-	}()
-
 	waitCh := make(chan struct{})
+
 	go func() {
-		wg.Wait()
+		err := walkers.Wait()
+		w.errs.Append(err)
 		close(waitCh)
 	}()
 
@@ -262,7 +250,6 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		<-waitCh
 	case <-waitCh:
 	}
-
 	return w.errs.Err()
 }
 
@@ -285,7 +272,9 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name())
-			w.walkPrefix(ctx, p, child, nil, limitCh)
+			if err := w.walkPrefix(ctx, p, child, nil, limitCh); err != nil {
+				return err
+			}
 			wg.Done()
 			continue
 		}
@@ -295,7 +284,7 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 		default:
 		}
 		go func() {
-			w.walkPrefix(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
+			_ = w.walkPrefix(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
 			wg.Done()
 			limitCh <- struct{}{}
 		}()
@@ -334,7 +323,7 @@ func (w *Walker[T]) walkPrefix(ctx context.Context, path string, info file.Info,
 				return err
 			}
 			w.handleDone(ctx, &state, path, err)
-			return err
+			return nil
 		}
 	}
 	if err := w.walkChildren(ctx, path, children, limitCh); err != nil {
