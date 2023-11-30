@@ -2,8 +2,6 @@ module cloudeng.io/webapp/cmd/acme
 
 go 1.21
 
-toolchain go1.21.4
-
 replace cloudeng.io/webapp => ../..
 
 require (
