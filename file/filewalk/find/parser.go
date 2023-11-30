@@ -58,7 +58,7 @@ func operatorFor(text string) matcher.Item {
 	return matcher.Item{}
 }
 
-var bultinOperands = map[string]func(name, value string) matcher.Item{
+var registeredOperands = map[string]func(name, value string) matcher.Item{
 	"name":  func(_, v string) matcher.Item { return matcher.Glob(v, false) },
 	"iname": func(_, v string) matcher.Item { return matcher.Glob(v, true) },
 	"re":    func(_, v string) matcher.Item { return matcher.Regexp(v) },
@@ -66,8 +66,14 @@ var bultinOperands = map[string]func(name, value string) matcher.Item{
 	"newer": func(_, v string) matcher.Item { return matcher.NewerThanParsed(v) },
 }
 
+func RegisterOperand(name string, factory func(name, value string) matcher.Operand) {
+	registeredOperands[name] = func(m, v string) matcher.Item {
+		return matcher.NewOperand(factory(m, v))
+	}
+}
+
 func operandFor(text, value string) (matcher.Item, error) {
-	if fn, ok := bultinOperands[text]; ok {
+	if fn, ok := registeredOperands[text]; ok {
 		return fn(text, value), nil
 	}
 	return matcher.Item{}, fmt.Errorf("unsupported operand: %v", text)
