@@ -2,10 +2,16 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package matcher provides support for matching file names, types and modification
-// times using boolean operators. The set of operands can be extended by defining
-// instances of Operand but the operators are limited to && and ||.
-package matcher
+// Package boolexpr provides a boolean expression evaluator and parser.
+// The supported operators are && and ||, and grouping via ().
+// The set of operands is defined by clients of the package by
+// implementing the Operand interface. Operands represent simple predicates
+// against which the value supplied to the expression is evaluated, as such,
+// they implicitly contain a value of their own that is assigned when the
+// operand is instantiated. For example, a simple string comparison operand
+// would be represented as "name='foo' || name='bar'" which evaluated to true
+// if the expression is evaluated for "foo" or "bar", but not otherwise.
+package boolexpr
 
 import (
 	"fmt"
@@ -144,7 +150,7 @@ func newExpression(input <-chan Item) ([]Item, error) {
 			if err != nil {
 				return nil, err
 			}
-			expr = append(expr, NewOperand(op))
+			expr = append(expr, NewOperandItem(op))
 		case andOp, orOp:
 			if len(expr) == 0 {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)

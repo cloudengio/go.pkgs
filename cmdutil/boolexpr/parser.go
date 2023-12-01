@@ -2,40 +2,59 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package find
+package boolexpr
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
-
-	"cloudeng.io/file/matcher"
 )
 
-// Parse parses the supplied input into a matcher.T.
-// The supported syntax is a boolean expression with
-// and (&&), or (||) and grouping, via ().
-// The supported operands are:
-//
-//		name='glob-pattern'
-//		iname='glob-pattern'
-//		re='regexp'
-//		type='f|d|l'
-//		newer='date' in time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly
-//
-//	 Note that the single quotes are optional unless a white space is present
-//	 in the pattern.
-func Parse(input string) (matcher.T, error) {
+type Parser struct {
+	ops map[string]func(name, value string) Operand
+}
+
+func (p *Parser) RegisterOperand(name string, factory func(name, value string) Operand) {
+	p.ops[name] = factory
+}
+
+func NewParser() *Parser {
+	return &Parser{ops: make(map[string]func(name, value string) Operand)}
+}
+
+// ListOperands returns the list of registered operands in alphanumeric order.
+func (p *Parser) ListOperands() []Operand {
+	keys := []string{}
+	for k := range p.ops {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	ops := []Operand{}
+	for _, k := range keys {
+		op := p.ops[k](k, "")
+		ops = append(ops, op)
+	}
+	return ops
+}
+
+// Parse parses the supplied input into a boolexpr.T. The supported syntax
+// is a boolean expression with and (&&), or (||) and grouping, via ().
+// Operands are represented as <operand>=<value> where the value is
+// interpreted by the operand. The <value> may be quoted using single-quotes
+// or contain escaped runes via \. The set of available operands is those
+// registered with the parser before Parse is called.
+func (t *Parser) Parse(input string) (T, error) {
 	tokenizer := &tokenizer{}
 	tokens, err := tokenizer.run(input)
 	if err != nil {
-		return matcher.T{}, err
+		return T{}, err
 	}
-	merged, err := mergeOperandsAndValues(tokens)
+	merged, err := t.mergeOperandsAndValues(tokens)
 	if err != nil {
-		return matcher.T{}, err
+		return T{}, err
 	}
-	return matcher.New(merged...)
+	return New(merged...)
 }
 
 type token struct {
@@ -44,39 +63,18 @@ type token struct {
 	operandName, operandValue bool
 }
 
-func operatorFor(text string) matcher.Item {
+func operatorFor(text string) Item {
 	switch text {
 	case "||":
-		return matcher.OR()
+		return OR()
 	case "&&":
-		return matcher.AND()
+		return AND()
 	case "(":
-		return matcher.LeftBracket()
+		return LeftBracket()
 	case ")":
-		return matcher.RightBracket()
+		return RightBracket()
 	}
-	return matcher.Item{}
-}
-
-var registeredOperands = map[string]func(name, value string) matcher.Item{
-	"name":  func(_, v string) matcher.Item { return matcher.Glob(v, false) },
-	"iname": func(_, v string) matcher.Item { return matcher.Glob(v, true) },
-	"re":    func(_, v string) matcher.Item { return matcher.Regexp(v) },
-	"type":  func(_, v string) matcher.Item { return matcher.FileType(v) },
-	"newer": func(_, v string) matcher.Item { return matcher.NewerThanParsed(v) },
-}
-
-func RegisterOperand(name string, factory func(name, value string) matcher.Operand) {
-	registeredOperands[name] = func(m, v string) matcher.Item {
-		return matcher.NewOperand(factory(m, v))
-	}
-}
-
-func operandFor(text, value string) (matcher.Item, error) {
-	if fn, ok := registeredOperands[text]; ok {
-		return fn(text, value), nil
-	}
-	return matcher.Item{}, fmt.Errorf("unsupported operand: %v", text)
+	return Item{}
 }
 
 type tokenizer struct {
@@ -104,8 +102,8 @@ func (tl tokenList) String() string {
 	return strings.TrimSpace(sb.String())
 }
 
-func mergeOperandsAndValues(tl []token) ([]matcher.Item, error) {
-	var merged []matcher.Item
+func (p *Parser) mergeOperandsAndValues(tl []token) ([]Item, error) {
+	var merged []Item
 	for i := 0; i < len(tl); i++ {
 		tok := tl[i]
 		if tok.operator {
@@ -113,6 +111,9 @@ func mergeOperandsAndValues(tl []token) ([]matcher.Item, error) {
 			continue
 		}
 		if tok.operandName {
+			if !p.operandExists(tok.text) {
+				return nil, fmt.Errorf("unsupported operand: %v", tok.text)
+			}
 			if i+1 >= len(tl) {
 				return nil, fmt.Errorf("missing operand value: %v", tok.text)
 			}
@@ -120,7 +121,7 @@ func mergeOperandsAndValues(tl []token) ([]matcher.Item, error) {
 			if !next.operandValue {
 				return nil, fmt.Errorf("missing operand value: %v", tok.text)
 			}
-			op, err := operandFor(tok.text, next.text)
+			op, err := p.operandFor(tok.text, next.text)
 			if err != nil {
 				return nil, err
 			}
@@ -130,6 +131,18 @@ func mergeOperandsAndValues(tl []token) ([]matcher.Item, error) {
 		}
 	}
 	return merged, nil
+}
+
+func (p *Parser) operandExists(text string) bool {
+	_, ok := p.ops[text]
+	return ok
+}
+
+func (p *Parser) operandFor(text, value string) (Item, error) {
+	if fn, ok := p.ops[text]; ok {
+		return NewOperandItem(fn(text, value)), nil
+	}
+	return Item{}, fmt.Errorf("unsupported operand: %v", text)
 }
 
 type state int
