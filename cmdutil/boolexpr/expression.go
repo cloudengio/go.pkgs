@@ -135,7 +135,9 @@ func needs(want reflect.Type, items []Item) bool {
 				return true
 			}
 		case subExpression:
-			return needs(want, it.sub)
+			if needs(want, it.sub) {
+				return true
+			}
 		}
 	}
 	return false

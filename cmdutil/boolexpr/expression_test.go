@@ -27,7 +27,10 @@ func (eq regexOp) String() string {
 }
 
 func (eq regexOp) Document() string {
-	return "simple string equality"
+	if eq.name == "" {
+		eq.name = "re"
+	}
+	return eq.name + ": regular expression"
 }
 
 func (eq regexOp) Prepare() (boolexpr.Operand, error) {
@@ -197,4 +200,98 @@ func TestErrors(t *testing.T) {
 			t.Errorf("%v: got %v, want %v", tc.in, got, want)
 		}
 	}
+}
+
+type nameIfc interface {
+	Name() string
+}
+
+type regexNameOp struct{}
+
+func (rno regexNameOp) Needs(t reflect.Type) bool {
+	needs := reflect.TypeOf((*nameIfc)(nil)).Elem()
+	return t.Implements(needs)
+}
+
+func (rno regexNameOp) String() string {
+	return "nre="
+}
+
+func (rno regexNameOp) Document() string {
+	return "nre: regular expression"
+}
+
+func (rno regexNameOp) Prepare() (boolexpr.Operand, error) {
+	return rno, nil
+}
+
+func (rno regexNameOp) Eval(v any) bool {
+	return false
+}
+
+type nifcImpl struct{}
+
+func (n nifcImpl) Name() string {
+	return "foo"
+}
+
+func TestNeeds(t *testing.T) {
+	var err error
+	var expr boolexpr.T
+	assert := func(strT, nameT, nameTPtr bool) {
+		t.Helper()
+		if err != nil {
+			t.Errorf("failed to create expression: %v", err)
+		}
+		if got, want := expr.Needs(""), strT; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := expr.Needs(nifcImpl{}), nameT; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := expr.Needs(&nifcImpl{}), nameTPtr; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+	expr, err = boolexpr.New()
+	assert(false, false, false)
+
+	expr, _ = boolexpr.New(boolexpr.NewOperandItem(regexOp{}))
+	assert(true, false, false)
+
+	expr, err = boolexpr.New(
+		boolexpr.NewOperandItem(&regexOp{}),
+		boolexpr.OR(),
+		boolexpr.NewOperandItem(&regexNameOp{}))
+
+	assert(true, true, true)
+
+	expr, err = boolexpr.New(boolexpr.NewOperandItem(&regexNameOp{}))
+	assert(false, true, true)
+
+	expr, err = boolexpr.New(boolexpr.LeftBracket(),
+		boolexpr.NewOperandItem(&regexOp{}),
+		boolexpr.RightBracket())
+	assert(true, false, false)
+
+	expr, err = boolexpr.New(
+		boolexpr.LeftBracket(),
+		boolexpr.NewOperandItem(&regexOp{}),
+		boolexpr.OR(),
+		boolexpr.LeftBracket(),
+		boolexpr.NewOperandItem(&regexOp{}),
+		boolexpr.RightBracket(),
+		boolexpr.RightBracket())
+	assert(true, false, false)
+
+	expr, err = boolexpr.New(
+		boolexpr.LeftBracket(),
+		boolexpr.NewOperandItem(&regexOp{}),
+		boolexpr.OR(),
+		boolexpr.LeftBracket(),
+		boolexpr.NewOperandItem(&regexNameOp{}),
+		boolexpr.RightBracket(),
+		boolexpr.RightBracket())
+	assert(true, true, true)
+
 }

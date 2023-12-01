@@ -16,6 +16,21 @@ func newParserRE() *boolexpr.Parser {
 	return parser
 }
 
+func TestOperandRegistration(t *testing.T) {
+	p := boolexpr.NewParser()
+	p.RegisterOperand("newOp", func(n, v string) boolexpr.Operand { return regexOp{val: v} })
+	m, err := p.Parse("newOp=foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := m.Eval("foo"), true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := m.Eval("bar"), false; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestParser(t *testing.T) {
 	parser := newParserRE()
 	parser.RegisterOperand("op2", func(n, v string) boolexpr.Operand { return regexOp{val: v, name: "op2"} })
@@ -62,5 +77,23 @@ func TestParserErrors(t *testing.T) {
 		if err == nil || err.Error() != tc.err {
 			t.Errorf("%q: missing or wrong error: %v", tc.input, err)
 		}
+	}
+}
+
+func TestList(t *testing.T) {
+	parser := newParserRE()
+	parser.RegisterOperand("op2", func(n, v string) boolexpr.Operand { return regexOp{val: v, name: "op2"} })
+
+	operands := parser.ListOperands()
+	if got, want := len(operands), 2; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	doc := ""
+	for _, op := range operands {
+		doc += op.Document() + "\n"
+	}
+
+	if got, want := doc, "op2: regular expression\nre: regular expression\n"; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
