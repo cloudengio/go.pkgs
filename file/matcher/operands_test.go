@@ -35,19 +35,9 @@ type needsStat struct{}
 func (nt needsStat) ModTime() time.Time { return time.Time{} }
 func (nt needsStat) Mode() fs.FileMode  { return 0 }
 
-func newParser() *boolexpr.Parser {
-	parser := boolexpr.NewParser()
-	parser.RegisterOperand("name", matcher.NewGlob)
-	parser.RegisterOperand("iname", matcher.NewIGlob)
-	parser.RegisterOperand("re", matcher.NewRegexp)
-	parser.RegisterOperand("type", matcher.NewFileType)
-	parser.RegisterOperand("newer", matcher.NewNewerThan)
-	return parser
-}
-
 func runParser(t *testing.T, input string) boolexpr.T {
 	t.Helper()
-	p := newParser()
+	p := matcher.New()
 	m, err := p.Parse(input)
 	if err != nil {
 		t.Fatal(err)

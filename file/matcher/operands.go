@@ -281,3 +281,19 @@ func NewFileType(_, v string) boolexpr.Operand { return FileType(v) }
 
 // NewNewerThan returns a boolexpr.Operand that matches a time that is newer
 func NewNewerThan(_, v string) boolexpr.Operand { return NewerThanParsed(v) }
+
+// New returns a boolexpr.Parser with the following operands registered:
+//   - name=<glob> matches a glob pattern for any type that implements: Name() string
+//   - iname=<glob> matches a case insensitive glob pattern for any type that implements: Name() string
+//   - re=<regexp> matches a regular expression for any type that implements: Name() string
+//   - type=<type> matches a file type (d, f, t) for any type that implements: Type() fs.FileMode, and type 'x' if the type implements: Mode() fs.FileMode
+//   - newer=<time> matches a time that is newer than the specified time for any type that implements: ModTime() time.Time. The time is specified in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly formats
+func New() *boolexpr.Parser {
+	parser := boolexpr.NewParser()
+	parser.RegisterOperand("name", NewGlob)
+	parser.RegisterOperand("iname", NewIGlob)
+	parser.RegisterOperand("re", NewRegexp)
+	parser.RegisterOperand("type", NewFileType)
+	parser.RegisterOperand("newer", NewNewerThan)
+	return parser
+}

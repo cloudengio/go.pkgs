@@ -11,9 +11,9 @@ import (
 	"io/fs"
 	"time"
 
+	"cloudeng.io/cmdutil/boolexpr"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
-	"cloudeng.io/file/matcher"
 )
 
 // Found is used to send matches or errors to the client.
@@ -28,9 +28,9 @@ type needsStat struct{}
 func (nt needsStat) ModTime() time.Time { return time.Time{} }
 func (nt needsStat) Mode() fs.FileMode  { return 0 }
 
-// NeedsStat determines if either of the supplied matcher.T's include
+// NeedsStat determines if either of the supplied boolexpr.T's include
 // operands that would require a call to fs.Stat or fs.Lstat.
-func NeedsStat(prefixMatcher, fileMatcher matcher.T) bool {
+func NeedsStat(prefixMatcher, fileMatcher boolexpr.T) bool {
 	return prefixMatcher.Needs(needsStat{}) || fileMatcher.Needs(needsStat{})
 }
 
@@ -41,8 +41,8 @@ type options struct {
 	prune           bool
 	needStat        bool
 	followSoftlinks bool
-	prefixMatcher   matcher.T
-	fileMatcher     matcher.T
+	prefixMatcher   boolexpr.T
+	fileMatcher     boolexpr.T
 }
 
 // WithStat specifies that the filewalk.Handler should call fs.Stat or fs.Lstat
@@ -62,19 +62,19 @@ func WithPrune(v bool) Option {
 	}
 }
 
-// WithPrefixMatcher specifies the matcher.T to use for matching prefixes/directories.
-// If none is supplied then no matches will be returned. The matcher.T is applied
+// WithPrefixMatcher specifies the boolexpr.T to use for matching prefixes/directories.
+// If none is supplied then no matches will be returned. The boolexpr.T is applied
 // to the full path of the prefix/directory.
-func WithPrefixMatcher(m matcher.T) Option {
+func WithPrefixMatcher(m boolexpr.T) Option {
 	return func(o *options) {
 		o.prefixMatcher = m
 	}
 }
 
-// WithFileMatcher specifies the matcher.T to use for matching filenames.
-// If none is supplied then no matches will be returned. The matcher.T is applied
+// WithFileMatcher specifies the boolexpr.T to use for matching filenames.
+// If none is supplied then no matches will be returned. The boolexpr.T is applied
 // to name of the entry within a prefix/directory.
-func WithFileMatcher(m matcher.T) Option {
+func WithFileMatcher(m boolexpr.T) Option {
 	return func(o *options) {
 		o.fileMatcher = m
 	}
