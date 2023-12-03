@@ -225,7 +225,7 @@ func (rno regexNameOp) Prepare() (boolexpr.Operand, error) {
 	return rno, nil
 }
 
-func (rno regexNameOp) Eval(v any) bool {
+func (rno regexNameOp) Eval(_ any) bool {
 	return false
 }
 

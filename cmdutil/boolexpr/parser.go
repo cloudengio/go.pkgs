@@ -44,13 +44,13 @@ func (p *Parser) ListOperands() []Operand {
 // interpreted by the operand. The <value> may be quoted using single-quotes
 // or contain escaped runes via \. The set of available operands is those
 // registered with the parser before Parse is called.
-func (t *Parser) Parse(input string) (T, error) {
+func (p *Parser) Parse(input string) (T, error) {
 	tokenizer := &tokenizer{}
 	tokens, err := tokenizer.run(input)
 	if err != nil {
 		return T{}, err
 	}
-	merged, err := t.mergeOperandsAndValues(tokens)
+	merged, err := p.mergeOperandsAndValues(tokens)
 	if err != nil {
 		return T{}, err
 	}
