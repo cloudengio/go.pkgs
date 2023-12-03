@@ -8,11 +8,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"cloudeng.io/cmdutil/boolexpr"
 	"cloudeng.io/errors"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/find"
@@ -22,9 +24,10 @@ import (
 	"cloudeng.io/sync/synctestutil"
 )
 
-func newMatcher(t *testing.T, items ...matcher.Item) matcher.T {
+func newMatcher(t *testing.T, expr string) boolexpr.T {
 	t.Helper()
-	m, err := matcher.New(items...)
+	parser := matcher.New()
+	m, err := parser.Parse(expr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,31 +35,31 @@ func newMatcher(t *testing.T, items ...matcher.Item) matcher.T {
 }
 
 func TestNeedsStat(t *testing.T) {
-	p := newMatcher(t, matcher.Regexp(".go"))
-	f := newMatcher(t, matcher.Regexp(".go"))
+	p := newMatcher(t, "re=.go")
+	f := newMatcher(t, "re=.go")
 
 	if got, want := find.NeedsStat(p, f), false; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	p = newMatcher(t, matcher.Regexp(".go"), matcher.OR(), matcher.FileType("f"))
+	p = newMatcher(t, "re=.go || type=f")
 	if got, want := find.NeedsStat(p, f), false; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	f = newMatcher(t, matcher.Regexp(".go"), matcher.OR(), matcher.NewerThanParsed("2010-12-13"))
+	f = newMatcher(t, "re=.go || newer=2010-12-13")
 	if got, want := find.NeedsStat(p, f), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	f = newMatcher(t, matcher.FileType("f"))
+	f = newMatcher(t, "type=f")
 	if got, want := find.NeedsStat(p, f), false; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	f = newMatcher(t, matcher.FileType("x"))
+	f = newMatcher(t, "type=x")
 	if got, want := find.NeedsStat(p, f), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
-func findFiles(ctx context.Context, t *testing.T, testTree, start string, pm, fm matcher.T, prune, needStat, followlinks bool) ([]find.Found, []find.Found) {
+func findFiles(ctx context.Context, t *testing.T, testTree, start string, pm, fm boolexpr.T, prune, needStat, followlinks bool) ([]find.Found, []find.Found) {
 	fs := localfs.New()
 	errs := &errors.M{}
 	ch := make(chan find.Found, 1000)
@@ -97,15 +100,16 @@ func findFiles(ctx context.Context, t *testing.T, testTree, start string, pm, fm
 }
 
 func cmpFound(t *testing.T, found []find.Found, expected []find.Found) {
+	_, _, line, _ := runtime.Caller(1)
 	if got, want := len(found), len(expected); got != want {
-		t.Fatalf("got %v, want %v", got, want)
+		t.Fatalf("line %v, got %v, want %v", line, got, want)
 	}
 	for i := range found {
 		if got, want := found[i].Prefix, expected[i].Prefix; got != want {
-			t.Fatalf("got %v, want %v", got, want)
+			t.Fatalf("line %v, got %v, want %v", line, got, want)
 		}
 		if got, want := found[i].Name, expected[i].Name; got != want {
-			t.Fatalf("got %v, want %v", got, want)
+			t.Fatalf("line %v, got %v, want %v", line, got, want)
 		}
 	}
 }
@@ -131,8 +135,8 @@ func TestPrefixMatch(t *testing.T) {
 	start := time.Now()
 
 	// prefix match.
-	var pm, fm matcher.T
-	pm = newMatcher(t, matcher.Regexp("a0$"), matcher.OR(), matcher.Regexp("b0.1$"))
+	var pm, fm boolexpr.T
+	pm = newMatcher(t, "re=a0$ || re=b0.1$")
 	found, foundErrors := findFiles(ctx, t, localTestTree, localTestTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	cmpFound(t, found, zipf(zips("/a0", "/b0/b0.1"), "", ""))
 	cmpFound(t, foundErrors, zipf(zips("/inaccessible-dir"), ""))
@@ -141,7 +145,7 @@ func TestPrefixMatch(t *testing.T) {
 	}
 
 	// with needstats and follow softlinks should get an error for a broken softlink
-	fm = newMatcher(t, matcher.Regexp(".*"))
+	fm = newMatcher(t, "re=.*")
 	_, foundErrors = findFiles(ctx, t, localTestTree, localTestTree, pm, fm, false, true, true)
 	cmpFound(t, foundErrors, zipf(zips("", "/inaccessible-dir"), "la1", ""))
 	if got, want := os.IsNotExist(foundErrors[0].Err), true; got != want {
@@ -152,7 +156,7 @@ func TestPrefixMatch(t *testing.T) {
 	}
 
 	// file and prefix match.
-	fm = newMatcher(t, matcher.Regexp("f2"))
+	fm = newMatcher(t, "re=f2")
 	found, _ = findFiles(ctx, t, localTestTree, localTestTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	cmpFound(t, found, zipf(
 		zips("", "/a0", "/a0", "/a0/a0.0", "/a0/a0.1", "/b0/b0.0", "/b0/b0.1", "/b0/b0.1/b1.0"),
@@ -167,23 +171,23 @@ func TestPrefixMatch(t *testing.T) {
 
 	// find soft links, without and with follow soft links set.
 	for _, followSoftLinks := range []bool{false, true} {
-		pm = matcher.T{}
-		fm = newMatcher(t, matcher.FileType("l"))
+		pm = boolexpr.T{}
+		fm = newMatcher(t, "type=l")
 		found, _ = findFiles(ctx, t, localTestTree, localTestTree, pm, fm, false, find.NeedsStat(pm, fm), followSoftLinks)
 		cmpFound(t, found, zipf(zips("", "", ""), "la0", "la1", "lf0"))
 	}
 
 	// find files newer than a time.
 	subTree := filepath.Join(localTestTree, "b0", "b0.1", "b1.0")
-	pm = matcher.T{}
+	pm = boolexpr.T{}
 	// nothing is newer than hour into the future
-	fm = newMatcher(t, matcher.NewerThanParsed(start.Add(time.Hour).Format(time.RFC3339)))
+	fm = newMatcher(t, "newer="+start.Add(time.Hour).Format(time.RFC3339))
 	found, _ = findFiles(ctx, t, localTestTree, subTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	t.Log(found)
 	cmpFound(t, found, nil)
 
 	// everything is newer than an hour ago.
-	fm = newMatcher(t, matcher.NewerThanParsed(start.Add(-time.Hour).Format(time.RFC3339)))
+	fm = newMatcher(t, "newer="+start.Add(-time.Hour).Format(time.RFC3339))
 	found, _ = findFiles(ctx, t, localTestTree, subTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	cmpFound(t, found, zipf(zips("/b0/b0.1/b1.0", "/b0/b0.1/b1.0", "/b0/b0.1/b1.0"), "f0", "f1", "f2"))
 
@@ -194,7 +198,10 @@ func TestPrefixMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fm = newMatcher(t, matcher.NewerThanTime(start))
+	fm, err := boolexpr.New(boolexpr.NewOperandItem(matcher.NewerThanTime(start)))
+	if err != nil {
+		t.Fatal(err)
+	}
 	found, _ = findFiles(ctx, t, localTestTree, subTree, pm, fm, false, find.NeedsStat(pm, fm), false)
 	cmpFound(t, found, zipf(zips("/b0/b0.1/b1.0"), "f1"))
 }

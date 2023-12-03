@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/cmdutil/boolexpr"
 	"cloudeng.io/file"
 	"cloudeng.io/file/matcher"
 )
@@ -34,63 +35,61 @@ type needsStat struct{}
 func (nt needsStat) ModTime() time.Time { return time.Time{} }
 func (nt needsStat) Mode() fs.FileMode  { return 0 }
 
-func TestNeedsOps(t *testing.T) {
-	var err error
-	assert := func(m matcher.T, needsName, needsType, needsMode, needsTime bool) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, want := m.Needs(nameOnly{}), needsName; got != want {
-			t.Errorf("nameOnly: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(modeOnly{}), needsMode; got != want {
-			t.Errorf("modeOnly: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(typeOnly{}), needsType; got != want {
-			t.Errorf("typeOnly: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(modTimeOnly{}), needsTime; got != want {
-			t.Errorf("time: got %v, want %v", got, want)
-		}
-		if got, want := m.Needs(needsStat{}), needsMode || needsTime; got != want {
-			t.Errorf("time: got %v, want %v", got, want)
-		}
-	}
-
-	var m matcher.T
-	assert(m, false, false, false, false)
-	if got, want := m.Needs(file.Info{}), false; got != want {
-		t.Errorf("file.Info: got %v, want %v", got, want)
-	}
-
-	m, err = matcher.New(parse("xx")...)
+func runParser(t *testing.T, input string) boolexpr.T {
+	t.Helper()
+	p := matcher.New()
+	m, err := p.Parse(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert(m, true, false, false, false)
+	return m
+}
 
-	m, err = matcher.New(parse("xx || ft: f || ft: d || ft: l")...)
-	assert(m, true, true, false, false)
-	m, err = matcher.New(parse("xx || ft: x || ft: f")...)
-	assert(m, true, true, true, false)
-	m, err = matcher.New(parse("xx || nt: 2022-12-12 :nt")...)
-	assert(m, true, false, false, true)
-	m, err = matcher.New(parse("xx || ft: d || nt: 2022-12-12 :nt")...)
-	assert(m, true, true, false, true)
-
-	m, err = matcher.New(parse("a && ( xx || ft: f )")...)
-	assert(m, true, true, false, false)
-	m, err = matcher.New(parse("a && (xx || nt: 2022-12-12 :nt )")...)
-	assert(m, true, false, false, true)
-	m, err = matcher.New(parse("a && (xx || ft: d || nt: 2022-12-12 :nt )")...)
-	assert(m, true, true, false, true)
-	m, err = matcher.New(parse(" (ft: x || nt: 2022-12-12 :nt )")...)
-	assert(m, false, false, true, true)
-
-	if got, want := m.Needs(file.Info{}), true; got != want {
-		t.Errorf("file.Info: got %v, want %v", got, want)
+func TestNeedsOps(t *testing.T) {
+	var expr boolexpr.T
+	assert := func(needsName, needsType, needsMode, needsTime bool) {
+		t.Helper()
+		if got, want := expr.Needs(nameOnly{}), needsName; got != want {
+			t.Errorf("nameOnly: got %v, want %v", got, want)
+		}
+		if got, want := expr.Needs(modeOnly{}), needsMode; got != want {
+			t.Errorf("modeOnly: got %v, want %v", got, want)
+		}
+		if got, want := expr.Needs(typeOnly{}), needsType; got != want {
+			t.Errorf("typeOnly: got %v, want %v", got, want)
+		}
+		if got, want := expr.Needs(modTimeOnly{}), needsTime; got != want {
+			t.Errorf("time: got %v, want %v", got, want)
+		}
+		if got, want := expr.Needs(needsStat{}), needsMode || needsTime; got != want {
+			t.Errorf("time: got %v, want %v", got, want)
+		}
 	}
+
+	expr = runParser(t, "")
+	assert(false, false, false, false)
+
+	expr = runParser(t, "name=foo")
+	assert(true, false, false, false)
+
+	expr = runParser(t, "type=f || type=d || type=l")
+	assert(false, true, false, false)
+	expr = runParser(t, "name=xx || type=x || type=f")
+	assert(true, true, true, false)
+	expr = runParser(t, "name=xx || newer=2022-12-12")
+	assert(true, false, false, true)
+	expr = runParser(t, "name=xx || type=d || newer=2022-12-12")
+	assert(true, true, false, true)
+
+	expr = runParser(t, "name=a && ( name=xx || type=f )")
+	assert(true, true, false, false)
+	expr = runParser(t, "name=a && (name=xx || newer=2022-12-12 )")
+	assert(true, false, false, true)
+	expr = runParser(t, "name=a && (name=xx || type=d || newer=2022-12-12 )")
+	assert(true, true, false, true)
+	expr = runParser(t, "(type=x || newer=2022-12-12 )")
+	assert(false, false, true, true)
+
 }
 
 type dirEntry struct {
@@ -129,7 +128,7 @@ func TestFileOperands(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		it     matcher.Item
+		it     boolexpr.Operand
 		de     any
 		result bool
 	}{
@@ -161,7 +160,7 @@ func TestFileOperands(t *testing.T) {
 		{matcher.NewerThanParsed("2010-01-01"), fileInfo{modTime: before}, false},
 		{matcher.NewerThanParsed("2010-01-01"), fileInfo{modTime: after}, true},
 	} {
-		expr, err := matcher.New(tc.it)
+		expr, err := boolexpr.New(boolexpr.NewOperandItem(tc.it))
 		if err != nil {
 			t.Errorf("%v: failed to create expression: %v", tc.it, err)
 			continue
