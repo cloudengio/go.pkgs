@@ -198,7 +198,7 @@ func TestPrefixMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fm, err := boolexpr.New(boolexpr.NewOperandItem(matcher.NewerThanTime(start)))
+	fm, err := boolexpr.New(boolexpr.NewOperandItem(matcher.NewerThanTime("", start)))
 	if err != nil {
 		t.Fatal(err)
 	}
