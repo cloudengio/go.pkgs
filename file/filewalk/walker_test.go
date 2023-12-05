@@ -104,7 +104,7 @@ func (l *logger) Done(_ context.Context, state *int, prefix string, err error) e
 }
 
 func TestLocalWalk(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 	sc := localfs.New()
 
@@ -413,7 +413,7 @@ func (is *infiniteScanner) LevelScanner(_ string) filewalk.LevelScanner {
 }
 
 func TestCancel(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 
 	ctx, cancel := context.WithCancel(ctx)
