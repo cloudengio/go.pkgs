@@ -279,7 +279,7 @@ func (t *tokenizer) operandName(r rune) (state, error) {
 		t.appendOperandName()
 		return operandValue, nil
 	}
-	if unicode.IsLetter(r) || unicode.IsNumber(r) {
+	if unicode.IsLetter(r) || unicode.IsNumber(r) || r == '-' || r == '_' {
 		t.seen.WriteRune(r)
 		return operandName, nil
 	}
