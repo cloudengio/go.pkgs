@@ -35,6 +35,10 @@ type needsStat struct{}
 func (nt needsStat) ModTime() time.Time { return time.Time{} }
 func (nt needsStat) Mode() fs.FileMode  { return 0 }
 
+type dirSize struct{}
+
+func (dirSize) NumEntries() int64 { return 0 }
+
 func runParser(t *testing.T, input string) boolexpr.T {
 	t.Helper()
 	p := matcher.New()
@@ -47,7 +51,7 @@ func runParser(t *testing.T, input string) boolexpr.T {
 
 func TestNeedsOps(t *testing.T) {
 	var expr boolexpr.T
-	assert := func(needsName, needsType, needsMode, needsTime bool) {
+	assert := func(needsName, needsType, needsMode, needsTime, needsDirSize bool) {
 		t.Helper()
 		if got, want := expr.Needs(nameOnly{}), needsName; got != want {
 			t.Errorf("nameOnly: got %v, want %v", got, want)
@@ -64,32 +68,38 @@ func TestNeedsOps(t *testing.T) {
 		if got, want := expr.Needs(needsStat{}), needsMode || needsTime; got != want {
 			t.Errorf("time: got %v, want %v", got, want)
 		}
+		if got, want := expr.Needs(dirSize{}), needsDirSize; got != want {
+			t.Errorf("dirSize: got %v, want %v", got, want)
+		}
 	}
 
 	expr = runParser(t, "")
-	assert(false, false, false, false)
+	assert(false, false, false, false, false)
 
 	expr = runParser(t, "name=foo")
-	assert(true, false, false, false)
+	assert(true, false, false, false, false)
 
 	expr = runParser(t, "type=f || type=d || type=l")
-	assert(false, true, false, false)
+	assert(false, true, false, false, false)
 	expr = runParser(t, "name=xx || type=x || type=f")
-	assert(true, true, true, false)
+	assert(true, true, true, false, false)
 	expr = runParser(t, "name=xx || newer=2022-12-12")
-	assert(true, false, false, true)
+	assert(true, false, false, true, false)
 	expr = runParser(t, "name=xx || type=d || newer=2022-12-12")
-	assert(true, true, false, true)
+	assert(true, true, false, true, false)
 
 	expr = runParser(t, "name=a && ( name=xx || type=f )")
-	assert(true, true, false, false)
+	assert(true, true, false, false, false)
 	expr = runParser(t, "name=a && (name=xx || newer=2022-12-12 )")
-	assert(true, false, false, true)
+	assert(true, false, false, true, false)
 	expr = runParser(t, "name=a && (name=xx || type=d || newer=2022-12-12 )")
-	assert(true, true, false, true)
+	assert(true, true, false, true, false)
 	expr = runParser(t, "(type=x || newer=2022-12-12 )")
-	assert(false, false, true, true)
-
+	assert(false, false, true, true, false)
+	expr = runParser(t, "(type=x || dir-larger=10)")
+	assert(false, false, true, false, true)
+	expr = runParser(t, "(type=x || dir-smaller=10)")
+	assert(false, false, true, false, true)
 }
 
 type dirEntry struct {
@@ -118,6 +128,12 @@ func (fi fileInfo) Info() (fs.FileInfo, error) {
 	return file.NewInfo(fi.name, 0, fi.mode, fi.modTime, nil), nil
 }
 
+type dirsize struct {
+	n int64
+}
+
+func (dc dirsize) NumEntries() int64 { return dc.n }
+
 func TestFileOperands(t *testing.T) {
 	before, err := time.Parse(time.DateOnly, "2000-01-01")
 	if err != nil {
@@ -132,33 +148,36 @@ func TestFileOperands(t *testing.T) {
 		de     any
 		result bool
 	}{
-		{matcher.Glob("foo", false), dirEntry{name: "foo"}, true},
-		{matcher.Glob("foo", false), dirEntry{name: "Foo"}, false},
-		{matcher.Glob("foo", true), dirEntry{name: "Foo"}, true},
-		{matcher.Glob("f*", true), dirEntry{name: "Fxx"}, true},
-		{matcher.Glob("x*", false), dirEntry{name: "Fxx"}, false},
-		{matcher.Regexp("^foo$"), dirEntry{name: "foo"}, true},
-		{matcher.Regexp("^foo$"), dirEntry{name: "foox"}, false},
-		{matcher.FileType("f"), dirEntry{name: "foo", mode: 0}, true},
-		{matcher.FileType("f"), dirEntry{name: "foo", mode: fs.ModeDir}, false},
-		{matcher.FileType("d"), dirEntry{name: "foo", mode: fs.ModeDir}, true},
-		{matcher.FileType("l"), dirEntry{name: "foo", mode: fs.ModeDir}, false},
-		{matcher.FileType("l"), dirEntry{name: "foo", mode: fs.ModeSymlink}, true},
-		{matcher.FileType("x"), dirEntry{name: "foo", mode: fs.ModeDir | 0111}, false},
-		{matcher.FileType("x"), dirEntry{name: "foo", mode: fs.ModeSymlink | 0111}, false},
-		{matcher.FileType("x"), dirEntry{name: "foo", mode: 0111}, false},
-		{matcher.NewerThanParsed("2010-01-01"), dirEntry{name: "foo"}, false},
-
-		{matcher.FileType("f"), fileInfo{mode: 0}, true},
-		{matcher.FileType("f"), fileInfo{mode: fs.ModeDir}, false},
-		{matcher.FileType("d"), fileInfo{mode: fs.ModeDir}, true},
-		{matcher.FileType("l"), fileInfo{mode: fs.ModeDir}, false},
-		{matcher.FileType("l"), fileInfo{mode: fs.ModeSymlink}, true},
-		{matcher.FileType("x"), fileInfo{mode: fs.ModeDir | 0111}, false},
-		{matcher.FileType("x"), fileInfo{mode: fs.ModeSymlink | 0111}, false},
-		{matcher.FileType("x"), fileInfo{mode: 0111}, true},
-		{matcher.NewerThanParsed("2010-01-01"), fileInfo{modTime: before}, false},
-		{matcher.NewerThanParsed("2010-01-01"), fileInfo{modTime: after}, true},
+		{matcher.Glob("", "foo", false), dirEntry{name: "foo"}, true},
+		{matcher.Glob("", "foo", false), dirEntry{name: "Foo"}, false},
+		{matcher.Glob("", "foo", true), dirEntry{name: "Foo"}, true},
+		{matcher.Glob("", "f*", true), dirEntry{name: "Fxx"}, true},
+		{matcher.Glob("", "x*", false), dirEntry{name: "Fxx"}, false},
+		{matcher.Regexp("", "^foo$"), dirEntry{name: "foo"}, true},
+		{matcher.Regexp("", "^foo$"), dirEntry{name: "foox"}, false},
+		{matcher.FileType("", "f"), dirEntry{name: "foo", mode: 0}, true},
+		{matcher.FileType("", "f"), dirEntry{name: "foo", mode: fs.ModeDir}, false},
+		{matcher.FileType("", "d"), dirEntry{name: "foo", mode: fs.ModeDir}, true},
+		{matcher.FileType("", "l"), dirEntry{name: "foo", mode: fs.ModeDir}, false},
+		{matcher.FileType("", "l"), dirEntry{name: "foo", mode: fs.ModeSymlink}, true},
+		{matcher.FileType("", "x"), dirEntry{name: "foo", mode: fs.ModeDir | 0111}, false},
+		{matcher.FileType("", "x"), dirEntry{name: "foo", mode: fs.ModeSymlink | 0111}, false},
+		{matcher.FileType("", "x"), dirEntry{name: "foo", mode: 0111}, false},
+		{matcher.NewerThanParsed("", "2010-01-01"), dirEntry{name: "foo"}, false},
+		{matcher.FileType("", "f"), fileInfo{mode: 0}, true},
+		{matcher.FileType("", "f"), fileInfo{mode: fs.ModeDir}, false},
+		{matcher.FileType("", "d"), fileInfo{mode: fs.ModeDir}, true},
+		{matcher.FileType("", "l"), fileInfo{mode: fs.ModeDir}, false},
+		{matcher.FileType("", "l"), fileInfo{mode: fs.ModeSymlink}, true},
+		{matcher.FileType("", "x"), fileInfo{mode: fs.ModeDir | 0111}, false},
+		{matcher.FileType("", "x"), fileInfo{mode: fs.ModeSymlink | 0111}, false},
+		{matcher.FileType("", "x"), fileInfo{mode: 0111}, true},
+		{matcher.NewerThanParsed("", "2010-01-01"), fileInfo{modTime: before}, false},
+		{matcher.NewerThanParsed("", "2010-01-01"), fileInfo{modTime: after}, true},
+		{matcher.DirSizeLarger("", "100"), dirsize{101}, true},
+		{matcher.DirSizeLarger("", "100"), dirsize{99}, false},
+		{matcher.DirSizeSmaller("", "100"), dirsize{101}, false},
+		{matcher.DirSizeSmaller("", "100"), dirsize{99}, true},
 	} {
 		expr, err := boolexpr.New(boolexpr.NewOperandItem(tc.it))
 		if err != nil {
