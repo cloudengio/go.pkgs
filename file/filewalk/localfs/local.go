@@ -92,13 +92,6 @@ func (s *scanner) open(ctx context.Context, path string) bool {
 	return s.err == nil
 }
 
-/*func (s *scanner) open(_ context.Context, path string) bool {
-
-	s.file, s.err = os.Open(path)
-
-	return s.err == nil
-}*/
-
 func NewLevelScanner(path string) filewalk.LevelScanner {
 	return &scanner{path: path}
 }
