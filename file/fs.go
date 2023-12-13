@@ -104,6 +104,11 @@ func (fi Info) Mode() fs.FileMode {
 	return fi.mode
 }
 
+// Type implements fs.Entry
+func (fi Info) Type() fs.FileMode {
+	return fi.mode.Type()
+}
+
 // ModTime implements fs.FileInfo.
 func (fi Info) ModTime() time.Time {
 	return fi.modTime
