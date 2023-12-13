@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package boolexpr provides a boolean expression evaluator and parser.
-// The supported operators are && and ||, and grouping via ().
+// The supported operators are &&, || and ! (negation), and grouping via ().
 // The set of operands is defined by clients of the package by
 // implementing the Operand interface. Operands represent simple predicates
 // against which the value supplied to the expression is evaluated, as such,
@@ -24,6 +24,7 @@ type itemType int
 const (
 	orOp itemType = iota
 	andOp
+	notOp
 	leftBracket
 	rightBracket
 	subExpression
@@ -40,6 +41,8 @@ func (it itemType) String() string {
 		return "("
 	case rightBracket:
 		return ")"
+	case notOp:
+		return "!"
 	case operand:
 		return "operand"
 	case subExpression:
@@ -77,6 +80,8 @@ func (it Item) String() string {
 		return "("
 	case rightBracket:
 		return ")"
+	case notOp:
+		return "!"
 	case subExpression:
 		return "(" + it.sub.String() + ")"
 	case operand:
@@ -102,6 +107,11 @@ func OR() Item {
 // And returns an AND item.
 func AND() Item {
 	return Item{typ: andOp}
+}
+
+// NOT returns a NOT item.
+func NOT() Item {
+	return Item{typ: notOp}
 }
 
 // LeftBracket returns a left bracket item.
@@ -157,6 +167,11 @@ func newExpression(input <-chan Item) ([]Item, error) {
 			if len(expr) == 0 {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
 			}
+			if !expr[len(expr)-1].isOperand() {
+				return nil, fmt.Errorf("missing operand for %v", cur.typ)
+			}
+			expr = append(expr, cur)
+		case notOp:
 			if !expr[len(expr)-1].isOperand() {
 				return nil, fmt.Errorf("missing operand for %v", cur.typ)
 			}
