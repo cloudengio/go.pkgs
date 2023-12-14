@@ -36,7 +36,7 @@ func NewRAID0(stripeSize int64, numStripes int) Calculator {
 	}
 }
 
-func (r0 RAID0) Calculate(size, blocks int64) int64 {
+func (r0 RAID0) Calculate(size, _ int64) int64 {
 	raw := ((size + r0.stripeSize) / r0.stripeSize) * r0.stripeSize
 	striped := int64(r0.numStripes) * r0.stripeSize
 	if striped > raw {
@@ -63,7 +63,7 @@ func NewRoundup(blocksize int64) Calculator {
 	}
 }
 
-func (s Roundup) Calculate(bytes, blocks int64) int64 {
+func (s Roundup) Calculate(bytes, _ int64) int64 {
 	return ((bytes + s.blockSize) / s.blockSize) * s.blockSize
 }
 
@@ -84,7 +84,7 @@ func NewBlock(blocksize int64) Calculator {
 	}
 }
 
-func (s Block) Calculate(bytes, blocks int64) int64 {
+func (s Block) Calculate(_, blocks int64) int64 {
 	return blocks * s.blockSize
 }
 
@@ -99,7 +99,7 @@ func NewIdentity() Calculator {
 	return &Identity{}
 }
 
-func (i Identity) Calculate(bytes, blocks int64) int64 {
+func (i Identity) Calculate(bytes, _ int64) int64 {
 	return bytes
 }
 
