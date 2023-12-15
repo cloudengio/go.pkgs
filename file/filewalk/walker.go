@@ -102,10 +102,23 @@ type LevelScanner interface {
 	Err() error
 }
 
+// XAttr represents extended information about a directory or file.
+type XAttr struct {
+	UID, GID       uint64
+	Device, FileID uint64
+	Blocks         int64
+	Hardlinks      int64
+}
+
 // FS represents the interface that is implemeted for filesystems to
 // be traversed/scanned.
 type FS interface {
 	file.FS
+
+	// Xattr returns extended attributes for the specified file.
+	XAttr(ctx context.Context, path string, fi file.Info) (XAttr, error)
+
+	NewXattr(XAttr) any
 
 	// Readlink returns the contents of a symbolic link.
 	Readlink(ctx context.Context, path string) (string, error)
