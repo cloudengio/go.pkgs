@@ -597,6 +597,13 @@ func (cmds *CommandSet) processHelp(usage string, args []string) error {
 	case "-help", "--help", "-h", "--h":
 		fmt.Fprintln(cmds.out, cmds.Usage(usage))
 		return flag.ErrHelp
+	case "vcsinfo":
+		version, when, dirty, ok := cmdutil.VCSInfo()
+		if !ok {
+			return fmt.Errorf("failed to determine version information")
+		}
+		fmt.Fprintf(cmds.out, "commit: %v, build date: %v, dirty: %v\n", version, when, dirty)
+		return nil
 	case "help":
 		if cmds.cmd != nil {
 			if len(args) < 2 || args[1] == cmds.cmd.name {
