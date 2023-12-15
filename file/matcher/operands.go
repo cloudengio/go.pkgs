@@ -140,7 +140,7 @@ func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
 		caseInsensitive: caseInsensitive,
 		commonOperand: commonOperand{
 			name:     opname,
-			document: opname + "<glob> matches a glob pattern",
+			document: opname + "=<glob> matches a glob pattern",
 			requires: reflect.TypeOf((*NameIfc)(nil)).Elem(),
 		}}
 }
@@ -194,7 +194,7 @@ func (op fileType) Eval(v any) bool {
 }
 
 func (op fileType) String() string {
-	return "type=" + op.text
+	return op.name + "=" + op.text
 }
 
 func (op fileType) Needs(t reflect.Type) bool {
@@ -251,7 +251,7 @@ func (op newerThan) Eval(v any) bool {
 }
 
 func (op newerThan) String() string {
-	return "newer=" + op.text
+	return op.name + "=" + op.text
 }
 
 const newerThanDoc = "=<time> matches a time that is newer than the specified time in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly formats"
@@ -292,6 +292,7 @@ func NewerThanTime(opname string, when time.Time) boolexpr.Operand {
 // The operand requires that the value being matched implements DirSizeIfc.
 func DirSize(opname, value string, larger bool) boolexpr.Operand {
 	return dirSize{
+		name:   opname,
 		text:   value,
 		larger: larger,
 		commonOperand: commonOperand{
