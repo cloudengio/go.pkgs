@@ -25,7 +25,7 @@ func xAttr(pathname string, fi file.Info) (filewalk.XAttr, error) {
 			Device:    s.Dev,
 			FileID:    s.Ino,
 			Blocks:    s.Blocks,
-			Hardlinks: uint64(s.Nlink),
+			Hardlinks: s.Nlink,
 		}, nil
 	}
 	return filewalk.XAttr{}, fmt.Errorf("unrecognised system information %T for %v", si, pathname)
