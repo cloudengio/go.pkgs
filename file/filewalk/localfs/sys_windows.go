@@ -6,10 +6,12 @@
 package localfs
 
 import (
+	"fmt"
 	"syscall"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
+	"golang.org/x/sys/windows"
 )
 
 type sysinfo struct {
@@ -42,8 +44,8 @@ func newXAttr(xattr filewalk.XAttr) any {
 	return &sysinfo{
 		uid:       xattr.UID,
 		gid:       xattr.GID,
-		dev:       xattr.Device,
-		ino:       xattr.FileID,
+		device:    xattr.Device,
+		fileID:    xattr.FileID,
 		blocks:    xattr.Blocks,
 		hardlinks: xattr.Hardlinks,
 	}
@@ -57,19 +59,19 @@ func getSysInfo(pathname string) (filewalk.XAttr, error) {
 	// taken from loadFileId in types_windows.go
 	pathp, err := syscall.UTF16PtrFromString(pathname)
 	if err != nil {
-		return
+		return filewalk.XAttr{}, fmt.Errorf("failed to convert %v to win32 utf16p: %v", pathname, err)
 	}
 	attrs := uint32(syscall.FILE_FLAG_BACKUP_SEMANTICS | syscall.FILE_FLAG_OPEN_REPARSE_POINT)
 	h, err := windows.CreateFile(pathp, 0, 0, nil, syscall.OPEN_EXISTING, attrs, 0)
 	if err != nil {
-		return
+		return filewalk.XAttr{}, fmt.Errorf("CreateFile OPEN_EXISTING: failed to open %v: %v", pathname, err)
 	}
 	defer windows.CloseHandle(h)
 	var d windows.ByHandleFileInformation
 	if err = windows.GetFileInformationByHandle(h, &d); err != nil {
-		return
+		return filewalk.XAttr{}, fmt.Errorf("GetFileInformationByHandle for %v: %v", pathname, err)
 	}
-	size := uint64(d.FileSizeHigh)<<32 | uint64(d.FileSizeLow)
+	size := int64(uint64(d.FileSizeHigh)<<32 | uint64(d.FileSizeLow))
 	blocks := (size + 512) / 512
 	return filewalk.XAttr{
 		UID:       0,
@@ -77,6 +79,6 @@ func getSysInfo(pathname string) (filewalk.XAttr, error) {
 		Device:    uint64(d.VolumeSerialNumber),
 		FileID:    packFileIndices(d.FileIndexHigh, d.FileIndexLow),
 		Blocks:    blocks,
-		Hardlinks: d.NumberOfLinks,
+		Hardlinks: int64(d.NumberOfLinks),
 	}, nil
 }
