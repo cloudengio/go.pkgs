@@ -603,7 +603,7 @@ func (cmds *CommandSet) processHelp(usage string, args []string) error {
 			return fmt.Errorf("failed to determine version information")
 		}
 		fmt.Fprintf(cmds.out, "commit: %v, build date: %v, dirty: %v\n", version, when, dirty)
-		return nil
+		return flag.ErrHelp
 	case "help":
 		if cmds.cmd != nil {
 			if len(args) < 2 || args[1] == cmds.cmd.name {
