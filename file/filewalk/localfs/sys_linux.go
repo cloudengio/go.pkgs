@@ -38,6 +38,6 @@ func newXAttr(xattr filewalk.XAttr) any {
 		Dev:    xattr.Device,
 		Ino:    xattr.FileID,
 		Blocks: xattr.Blocks,
-		Nlink:  xattr.Hardlinks,
+		Nlink:  uint32(xattr.Hardlinks & 0xffffffff),
 	}
 }

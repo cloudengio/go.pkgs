@@ -72,7 +72,10 @@ func getSysInfo(pathname string) (filewalk.XAttr, error) {
 		return filewalk.XAttr{}, fmt.Errorf("GetFileInformationByHandle for %v: %v", pathname, err)
 	}
 	size := int64(uint64(d.FileSizeHigh)<<32 | uint64(d.FileSizeLow))
-	blocks := (size + 512) / 512
+	blocks := size / 512
+	if blocks == 0 {
+		blocks = 1
+	}
 	return filewalk.XAttr{
 		UID:       0,
 		GID:       0,
