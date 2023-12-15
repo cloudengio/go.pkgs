@@ -128,6 +128,9 @@ func TestXAttr(t *testing.T) {
 		t.Fatal(err)
 	}
 	xattr, err := fs.XAttr(ctx, name, info)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if xattr.Device == 0 || xattr.FileID == 0 {
 		t.Fatalf("got %v, want non-zero", xattr)
 	}

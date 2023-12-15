@@ -147,7 +147,7 @@ func (l *T) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
-func (l *T) XAttr(ctx context.Context, path string, fi file.Info) (filewalk.XAttr, error) {
+func (l *T) XAttr(_ context.Context, path string, fi file.Info) (filewalk.XAttr, error) {
 	return xAttr(path, fi)
 }
 
