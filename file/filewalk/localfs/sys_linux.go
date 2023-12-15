@@ -35,9 +35,9 @@ func newXAttr(xattr filewalk.XAttr) any {
 	return &syscall.Stat_t{
 		Uid:    uint32(xattr.UID & 0xffffffff),
 		Gid:    uint32(xattr.GID & 0xffffffff),
-		Dev:    xattr.Device
+		Dev:    xattr.Device,
 		Ino:    xattr.FileID,
 		Blocks: xattr.Blocks,
-		Nlink:  uint16(xattr.Hardlinks & 0xffff),
+		Nlink:  uint32(xattr.Hardlinks & 0xffffffff),
 	}
 }

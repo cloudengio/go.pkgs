@@ -3,13 +3,13 @@ module cloudeng.io/file
 go 1.21
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20231205162401-e17bf4b2dbb2
+	cloudeng.io/cmdutil v0.0.0-20231215020541-6e96c2291daf
 	cloudeng.io/errors v0.0.9
-	cloudeng.io/net v0.0.0-20231205162401-e17bf4b2dbb2
-	cloudeng.io/os v0.0.0-20231205162401-e17bf4b2dbb2
+	cloudeng.io/net v0.0.0-20231215020541-6e96c2291daf
+	cloudeng.io/os v0.0.0-20231215020541-6e96c2291daf
 	cloudeng.io/path v0.0.8
 	cloudeng.io/sync v0.0.8
-	cloudeng.io/sys v0.0.0-20231205162401-e17bf4b2dbb2
+	cloudeng.io/sys v0.0.0-20231215020541-6e96c2291daf
 	cloudeng.io/text v0.0.11
 	golang.org/x/net v0.19.0
 )
