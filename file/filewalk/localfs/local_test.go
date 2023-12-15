@@ -152,7 +152,7 @@ func TestXAttr(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := xattr.Hardlinks, int64(1); got != want {
+	if got, want := xattr.Hardlinks, uint64(1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

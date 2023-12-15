@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// go:build linux
+// go:build linux && amd64
 package localfs
 
 import (
@@ -25,7 +25,7 @@ func xAttr(pathname string, fi file.Info) (filewalk.XAttr, error) {
 			Device:    s.Dev,
 			FileID:    s.Ino,
 			Blocks:    s.Blocks,
-			Hardlinks: int64(s.Nlink),
+			Hardlinks: uint64(s.Nlink),
 		}, nil
 	}
 	return filewalk.XAttr{}, fmt.Errorf("unrecognised system information %T for %v", si, pathname)
@@ -38,6 +38,6 @@ func newXAttr(xattr filewalk.XAttr) any {
 		Dev:    xattr.Device,
 		Ino:    xattr.FileID,
 		Blocks: xattr.Blocks,
-		Nlink:  uint32(xattr.Hardlinks & 0xffffffff),
+		Nlink:  xattr.Hardlinks,
 	}
 }

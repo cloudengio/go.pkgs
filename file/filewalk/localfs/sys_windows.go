@@ -18,7 +18,7 @@ type sysinfo struct {
 	uid, gid       uint64
 	device, fileID uint64
 	blocks         int64
-	hardlinks      int64
+	hardlinks      uint64
 }
 
 func xAttr(pathname string, fi file.Info) (filewalk.XAttr, error) {
@@ -82,6 +82,6 @@ func getSysInfo(pathname string) (filewalk.XAttr, error) {
 		Device:    uint64(d.VolumeSerialNumber),
 		FileID:    packFileIndices(d.FileIndexHigh, d.FileIndexLow),
 		Blocks:    blocks,
-		Hardlinks: int64(d.NumberOfLinks),
+		Hardlinks: uint64(d.NumberOfLinks),
 	}, nil
 }

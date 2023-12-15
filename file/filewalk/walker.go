@@ -107,7 +107,7 @@ type XAttr struct {
 	UID, GID       uint64
 	Device, FileID uint64
 	Blocks         int64
-	Hardlinks      int64
+	Hardlinks      uint64
 }
 
 // FS represents the interface that is implemeted for filesystems to
