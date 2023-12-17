@@ -147,6 +147,14 @@ func (l *T) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
+func (l *T) XAttr(_ context.Context, path string, fi file.Info) (filewalk.XAttr, error) {
+	return xAttr(path, fi)
+}
+
+func (l *T) NewXattr(x filewalk.XAttr) any {
+	return newXAttr(x)
+}
+
 func newContents(des []fs.DirEntry) []filewalk.Entry {
 	c := make([]filewalk.Entry, len(des))
 	for i, de := range des {
