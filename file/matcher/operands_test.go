@@ -189,3 +189,35 @@ func TestFileOperands(t *testing.T) {
 		}
 	}
 }
+
+type dirEntryPath struct {
+	name string
+	path string
+}
+
+func (de dirEntryPath) Name() string { return de.name }
+func (de dirEntryPath) Path() string { return de.path }
+
+func TestNameAndPath(t *testing.T) {
+	for _, tc := range []struct {
+		it     boolexpr.Operand
+		de     any
+		result bool
+	}{
+		{matcher.Glob("", "bar", false), dirEntryPath{name: "bar", path: "foo/bar"}, true},
+		{matcher.Glob("", "foo/bar", false), dirEntryPath{name: "bar", path: "foo/bar"}, true},
+		{matcher.Glob("", "*/bar", false), dirEntryPath{name: "bar", path: "foo/bar"}, true},
+		{matcher.Glob("", "foo/*", false), dirEntryPath{name: "bar", path: "foo/bar"}, true},
+		{matcher.Glob("", "*/foo/bar", false), dirEntryPath{name: "bar", path: "foo/bar"}, false},
+	} {
+		expr, err := boolexpr.New(boolexpr.NewOperandItem(tc.it))
+		if err != nil {
+			t.Errorf("%v: failed to create expression: %v", tc.it, err)
+			continue
+		}
+		if got, want := expr.Eval(tc.de), tc.result; got != want {
+			t.Errorf("%v: got %v, want %v", tc.it, got, want)
+		}
+	}
+
+}
