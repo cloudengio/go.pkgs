@@ -146,15 +146,13 @@ func (op glob) String() string {
 	return op.name + "=" + op.text
 }
 
-// Glob provides a glob operand that may be case insensitive, in which
+// Glob provides a glob operand (optionally case insensitive, in which
 // case the value it is being against will be converted to lower case
-// before the match is evaluated. The pattern is not validated until a matcher.T
-// is created using New. It requires that the value being matched implements
-// NameIfc.
-// Glob will match against either the name or the path of the value being
-// matched. The name is tested first and if false the path is used. This
-// allows for matching against the contents of a directory as well as an
-// entire path.
+// before the match is evaluated). The pattern is not validated until a
+// matcher.T is created. It requires that the value being matched implements
+// NameIfc and/or PathIfc.
+// The NameIfc interface is used first, if the value does not implement
+// NameIfc or the glob evaluates to false, then PathIfc is used.
 func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
 	return glob{text: pat,
 		caseInsensitive: caseInsensitive,
