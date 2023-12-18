@@ -36,10 +36,14 @@ type regEx struct {
 	commonOperand
 }
 
-// NameIfc must be implemented by any values that used with the Glob
-// or Regexp operands.
+// NameIfc must be implemented by any values that used with the Glob operands.
 type NameIfc interface {
 	Name() string
+}
+
+// PathIfc must be implemented by any values that used with the Regexp operand.
+type PathIfc interface {
+	Path() string
 }
 
 // FileTypeIfc must be implemented by any values that used with the
@@ -76,8 +80,8 @@ func (op regEx) Prepare() (boolexpr.Operand, error) {
 }
 
 func (op regEx) Eval(v any) bool {
-	if nt, ok := v.(NameIfc); ok {
-		return op.re.MatchString(nt.Name())
+	if nt, ok := v.(PathIfc); ok {
+		return op.re.MatchString(nt.Path())
 	}
 	return false
 }
@@ -88,13 +92,13 @@ func (op regEx) String() string {
 
 // Regexp returns a regular expression operand. It is not compiled until
 // a matcher.T is created using New. It requires that the value being
-// matched implements NameIfc.
+// matched implements PathIfc.
 func Regexp(opname string, re string) boolexpr.Operand {
 	return regEx{text: re,
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + "=<regexp> matches a regular expression",
-			requires: reflect.TypeOf((*NameIfc)(nil)).Elem(),
+			requires: reflect.TypeOf((*PathIfc)(nil)).Elem(),
 		},
 	}
 }
@@ -114,14 +118,25 @@ func (op glob) Prepare() (boolexpr.Operand, error) {
 	return op, nil
 }
 
+func (op glob) eval(v string) bool {
+	if op.caseInsensitive {
+		v = strings.ToLower(v)
+	}
+	matched, _ := filepath.Match(op.text, v)
+	return matched
+}
+
 func (op glob) Eval(v any) bool {
+	// try name first, then path.
 	if nt, ok := v.(NameIfc); ok {
-		name := nt.Name()
-		if op.caseInsensitive {
-			name = strings.ToLower(name)
+		if op.eval(nt.Name()) {
+			return true
 		}
-		matched, _ := filepath.Match(op.text, name)
-		return matched
+	}
+	if pt, ok := v.(PathIfc); ok {
+		if op.eval(pt.Path()) {
+			return true
+		}
 	}
 	return false
 }
