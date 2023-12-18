@@ -108,6 +108,7 @@ type dirEntry struct {
 }
 
 func (de dirEntry) Name() string      { return de.name }
+func (de dirEntry) Path() string      { return de.name }
 func (de dirEntry) Type() fs.FileMode { return de.mode }
 func (de dirEntry) IsDir() bool       { return de.mode.IsDir() }
 func (de dirEntry) Info() (fs.FileInfo, error) {
