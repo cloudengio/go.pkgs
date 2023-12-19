@@ -9,7 +9,7 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20231205162401-e17bf4b2dbb2
 	cloudeng.io/errors v0.0.9
 	cloudeng.io/webapp v0.0.0-20231205162401-e17bf4b2dbb2
-	golang.org/x/crypto v0.16.0
+	golang.org/x/crypto v0.17.0
 )
 
 require (
