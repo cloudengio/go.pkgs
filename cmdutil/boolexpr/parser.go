@@ -69,6 +69,8 @@ func operatorFor(text string) Item {
 		return OR()
 	case "&&":
 		return AND()
+	case "!":
+		return NOT()
 	case "(":
 		return LeftBracket()
 	case ")":
@@ -241,7 +243,7 @@ func (t *tokenizer) start(r rune) (state, error) {
 		return start, nil // consume white space
 	}
 	switch r {
-	case '(', ')':
+	case '(', ')', '!':
 		t.appendOperator(string(r))
 		return start, nil
 	case '&':
