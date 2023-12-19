@@ -36,12 +36,13 @@ type regEx struct {
 	commonOperand
 }
 
-// NameIfc must be implemented by any values that used with the Glob operands.
+// NameIfc and/or PathIfc must be implemented by any values that used with the Glob operands.
 type NameIfc interface {
 	Name() string
 }
 
-// PathIfc must be implemented by any values that used with the Regexp operand.
+// PathIfc must be implemented by any values that used with the Regexp operand
+// optionally for the Glob operand.
 type PathIfc interface {
 	Path() string
 }
@@ -145,11 +146,13 @@ func (op glob) String() string {
 	return op.name + "=" + op.text
 }
 
-// Glob provides a glob operand that may be case insensitive, in which
+// Glob provides a glob operand (optionally case insensitive, in which
 // case the value it is being against will be converted to lower case
-// before the match is evaluated. The pattern is not validated until a matcher.T
-// is created using New. It requires that the value being matched implements
-// NameIfc.
+// before the match is evaluated). The pattern is not validated until a
+// matcher.T is created. It requires that the value being matched implements
+// NameIfc and/or PathIfc.
+// The NameIfc interface is used first, if the value does not implement
+// NameIfc or the glob evaluates to false, then PathIfc is used.
 func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
 	return glob{text: pat,
 		caseInsensitive: caseInsensitive,

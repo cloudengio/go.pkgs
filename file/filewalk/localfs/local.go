@@ -139,6 +139,10 @@ func (l *T) Join(components ...string) string {
 	return filepath.Join(components...)
 }
 
+func (l *T) Base(path string) string {
+	return filepath.Base(path)
+}
+
 func (l *T) IsPermissionError(err error) bool {
 	return os.IsPermission(err)
 }

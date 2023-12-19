@@ -4,6 +4,8 @@
 
 // Package find provides a filewalk.Handler that can be used to locate
 // prefixes/directories and files based on file.Matcher expressions.
+// TODO(cnicolaou): add support for hardlinks, samefile, dir-larger/smaller,
+// etc, generally catch up with idu.
 package find
 
 import (
@@ -107,23 +109,36 @@ type handler struct {
 }
 
 type nameAndType struct {
-	prefix string
-	typ    fs.FileMode
+	name, path string
+	typ        fs.FileMode
 }
 
 func (pn nameAndType) Name() string {
-	return pn.prefix
+	return pn.name
 }
 
 func (pn nameAndType) Type() fs.FileMode {
 	return pn.typ
 }
 
+func (pn nameAndType) Path() string {
+	return pn.path
+}
+
+type withPath struct {
+	file.Info
+	path string
+}
+
+func (wp withPath) Path() string {
+	return wp.path
+}
+
 func (h *handler) Prefix(_ context.Context, _ *struct{}, prefix string, fi file.Info, err error) (bool, file.InfoList, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	if h.prefixMatcher.Eval(fi) {
+	if h.prefixMatcher.Eval(withPath{Info: fi, path: prefix}) {
 		h.found <- Found{Prefix: prefix}
 		return h.prune, nil, nil
 	}
@@ -161,7 +176,7 @@ func (h *handler) Contents(ctx context.Context, _ *struct{}, prefix string, cont
 			}
 			val = fi
 		} else {
-			val = nameAndType{c.Name, c.Type}
+			val = nameAndType{path: h.fs.Join(prefix, c.Name), name: c.Name, typ: c.Type}
 		}
 		if c.IsDir() {
 			children = append(children, fi)

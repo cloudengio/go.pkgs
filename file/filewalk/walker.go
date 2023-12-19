@@ -134,6 +134,9 @@ type FS interface {
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
 	Join(components ...string) string
 
+	// Base is like filepath.Base for the filesystem supported by this filesystem.
+	Base(path string) string
+
 	// IsPermissionError returns true if the specified error, as returned
 	// by the filesystem's implementation, is a result of a permissions error.
 	IsPermissionError(err error) bool
