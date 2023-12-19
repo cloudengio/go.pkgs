@@ -56,15 +56,15 @@ func (it itemType) String() string {
 // to allow clients packages to create their own parsers.
 type Item struct {
 	typ itemType
-	sub subItems
+	sub expression
 	op  Operand
 }
 
-type subItems []Item
+type expression []Item
 
-func (si subItems) String() string {
+func (e expression) String() string {
 	res := ""
-	for _, i := range si {
+	for _, i := range e {
 		res += i.String()
 	}
 	return res
@@ -153,52 +153,74 @@ func needs(want reflect.Type, items []Item) bool {
 	return false
 }
 
-func newExpression(input <-chan Item) ([]Item, error) {
-	expr := []Item{}
+func (e expression) newOperand(op Operand) (expression, error) {
+	op, err := op.Prepare()
+	if err != nil {
+		return nil, err
+	}
+	return append(e, NewOperandItem(op)), nil
+}
+
+func (e expression) newBinaryOp(cur Item) (expression, error) {
+	if len(e) == 0 {
+		return nil, fmt.Errorf("missing left operand for %v", cur.typ)
+	}
+	if !e[len(e)-1].isOperand() {
+		return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
+	}
+	return append(e, cur), nil
+}
+
+func (e expression) newUnaryOp(cur Item) (expression, error) {
+	if len(e) > 0 {
+		l := e[len(e)-1]
+		if !l.isOperator() {
+			return nil, fmt.Errorf("misplaced negation after %v", l.typ)
+		}
+	}
+	return append(e, cur), nil
+}
+
+func (e expression) newSubExpression(input <-chan Item, cur Item) (expression, error) {
+	if len(e) > 0 {
+		l := e[len(e)-1]
+		if !l.isOperator() && l.typ != notOp {
+			return nil, fmt.Errorf("missing operator preceding %v", cur.typ)
+		}
+	}
+	sub, err := newExpression(input)
+	if err != nil {
+		return nil, err
+	}
+	return append(e, Item{typ: subExpression, sub: sub}), nil
+}
+
+func (e expression) endSubExpression(cur Item) (expression, error) {
+	if len(e) == 0 {
+		return nil, fmt.Errorf("missing left operand for %v", cur.typ)
+	}
+	if !e[len(e)-1].isOperand() {
+		return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
+	}
+	return e, nil
+}
+
+func newExpression(input <-chan Item) (expr expression, err error) {
 	for cur := range input {
 		switch cur.typ {
 		case operand:
-			op, err := cur.op.Prepare()
-			if err != nil {
-				return nil, err
-			}
-			expr = append(expr, NewOperandItem(op))
+			expr, err = expr.newOperand(cur.op)
 		case andOp, orOp:
-			if len(expr) == 0 {
-				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
-			}
-			if !expr[len(expr)-1].isOperand() {
-				return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
-			}
-			expr = append(expr, cur)
+			expr, err = expr.newBinaryOp(cur)
 		case notOp:
-			if len(expr) > 0 {
-				l := expr[len(expr)-1]
-				if !l.isOperator() {
-					return nil, fmt.Errorf("misplaced negation after %v", l.typ)
-				}
-			}
-			expr = append(expr, cur)
+			expr, err = expr.newUnaryOp(cur)
 		case leftBracket:
-			if len(expr) > 0 {
-				l := expr[len(expr)-1]
-				if !l.isOperator() && l.typ != notOp {
-					return nil, fmt.Errorf("missing operator preceding %v", cur.typ)
-				}
-			}
-			sub, err := newExpression(input)
-			if err != nil {
-				return nil, err
-			}
-			expr = append(expr, Item{typ: subExpression, sub: sub})
+			expr, err = expr.newSubExpression(input, cur)
 		case rightBracket:
-			if len(expr) == 0 {
-				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
-			}
-			if !expr[len(expr)-1].isOperand() {
-				return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
-			}
-			return expr, nil
+			return expr.endSubExpression(cur)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	return expr, nil
@@ -289,18 +311,32 @@ func (m T) Eval(v any) bool {
 	return eval(itemChan(m.items), v)
 }
 
-func eval(exprs <-chan Item, v any) bool {
+type evaluator struct {
+	values    []bool
+	operators []itemType
+}
+
+func (e *evaluator) pushVal(bool) {
+	e.values = append(e.values, v)
+}
+
+func (e *evaluator) pushOp(it itemType) {
+	e.operators = append(e.operators, it)
+}
+
+func (e *evaluator) run(exprs <-chan Item, v any) bool {
 	values := []bool{}
 	operators := []itemType{}
 	for cur := range exprs {
 		switch cur.typ {
 		case operand:
-			values = append(values, cur.op.Eval(v))
+			e.pushVal(cur.op.Eval(v))
 		case orOp, andOp, notOp:
 			operators = append(operators, cur.typ)
 		case subExpression:
 			values = append(values, eval(itemChan(cur.sub), v))
 		}
+
 		// left to right evaluation
 		if len(values) == 1 && len(operators) == 1 && operators[0] == notOp {
 			// handle negation of single value
