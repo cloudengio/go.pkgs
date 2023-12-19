@@ -308,7 +308,8 @@ func (m T) Eval(v any) bool {
 	if len(m.items) == 0 {
 		return false
 	}
-	return eval(itemChan(m.items), v)
+	ev := evaluator{}
+	return ev.run(itemChan(m.items), v)
 }
 
 type evaluator struct {
@@ -316,7 +317,7 @@ type evaluator struct {
 	operators []itemType
 }
 
-func (e *evaluator) pushVal(bool) {
+func (e *evaluator) pushVal(v bool) {
 	e.values = append(e.values, v)
 }
 
@@ -324,45 +325,52 @@ func (e *evaluator) pushOp(it itemType) {
 	e.operators = append(e.operators, it)
 }
 
+func (e *evaluator) eval() bool {
+	// left to right evaluation
+	if len(e.values) == 1 && len(e.operators) == 1 && e.operators[0] == notOp {
+		// handle negation of single value
+		e.operators = e.operators[1:]
+		e.values[len(e.values)-1] = !e.values[len(e.values)-1]
+	}
+
+	if len(e.values) == 2 && len(e.operators) >= 1 {
+		if len(e.operators) >= 2 && e.operators[len(e.operators)-1] == notOp {
+			// handle negation in the right hand side of an expression.
+			e.values[1] = !e.values[1]
+			e.operators = e.operators[:len(e.operators)-1]
+		}
+
+		switch e.operators[0] {
+		case andOp:
+			e.values = []bool{e.values[0] && e.values[1]}
+		case orOp:
+			e.values = []bool{e.values[0] || e.values[1]}
+			if e.values[0] {
+				// short circuit evaluation of OR
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (e *evaluator) run(exprs <-chan Item, v any) bool {
-	values := []bool{}
-	operators := []itemType{}
 	for cur := range exprs {
 		switch cur.typ {
 		case operand:
 			e.pushVal(cur.op.Eval(v))
 		case orOp, andOp, notOp:
-			operators = append(operators, cur.typ)
+			e.pushOp(cur.typ)
 		case subExpression:
-			values = append(values, eval(itemChan(cur.sub), v))
+			sub := &evaluator{}
+			e.pushVal(sub.run(itemChan(cur.sub), v))
 		}
-
-		// left to right evaluation
-		if len(values) == 1 && len(operators) == 1 && operators[0] == notOp {
-			// handle negation of single value
-			operators = operators[1:]
-			values[len(values)-1] = !values[len(values)-1]
-		}
-		if len(values) == 2 && len(operators) >= 1 {
-			if len(operators) >= 2 && operators[len(operators)-1] == notOp {
-				// handle negation in the right hand side of an expression.
-				values[1] = !values[1]
-				operators = operators[:len(operators)-1]
-			}
-			switch operators[0] {
-			case andOp:
-				values = []bool{values[0] && values[1]}
-			case orOp:
-				values = []bool{values[0] || values[1]}
-				if values[0] {
-					// short circuit evaluation of OR
-					return true
-				}
-			}
+		if e.eval() {
+			return true
 		}
 	}
-	if len(values) > 1 {
-		panic(fmt.Sprintf("invalid expression: %v", values))
+	if len(e.values) > 1 {
+		panic(fmt.Sprintf("invalid expression: %v", e.values))
 	}
-	return values[0]
+	return e.values[0]
 }
