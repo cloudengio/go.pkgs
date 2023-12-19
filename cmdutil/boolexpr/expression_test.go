@@ -52,6 +52,7 @@ func parse(input string) []boolexpr.Item {
 	input = strings.ReplaceAll(input, ")", " ) ")
 	input = strings.ReplaceAll(input, "||", " || ")
 	input = strings.ReplaceAll(input, "&&", " && ")
+	input = strings.ReplaceAll(input, "!", " ! ")
 	items := []boolexpr.Item{}
 	tokens := strings.Split(input, " ")
 	for i := 0; i < len(tokens); i++ {
@@ -63,6 +64,8 @@ func parse(input string) []boolexpr.Item {
 			items = append(items, boolexpr.OR())
 		case "&&":
 			items = append(items, boolexpr.AND())
+		case "!":
+			items = append(items, boolexpr.NOT())
 		case "(":
 			items = append(items, boolexpr.LeftBracket())
 		case ")":
@@ -81,14 +84,20 @@ func TestFormating(t *testing.T) {
 	}{
 		{"", ""},
 		{"foo", "re=foo"},
+		{"!foo", "!re=foo"},
 		{"foo || bar", "re=foo || re=bar"},
+		{"foo || !bar", "re=foo || !re=bar"},
+		{"!foo || bar", "!re=foo || re=bar"},
 		{"foo && bar", "re=foo && re=bar"},
 		{"foo && bar || baz", "re=foo && re=bar || re=baz"},
+		{"foo && !bar || baz", "re=foo && !re=bar || re=baz"},
 		{"foo || bar && baz", "re=foo || re=bar && re=baz"},
 		{"foo && (bar||baz)", "re=foo && (re=bar || re=baz)"},
 		{"(bar || baz) && foo", "(re=bar || re=baz) && re=foo"},
 		{"( bar && baz )", "(re=bar && re=baz)"},
+		{"!( bar && baz )", "!(re=bar && re=baz)"},
 		{"(bar && (baz || foo)) || else", "(re=bar && (re=baz || re=foo)) || re=else"},
+		{"(bar && !(baz || foo)) || else", "(re=bar && !(re=baz || re=foo)) || re=else"},
 	} {
 		expr, err := boolexpr.New(parse(tc.in)...)
 		if err != nil {
@@ -121,19 +130,51 @@ func TestOperators(t *testing.T) {
 		out bool
 	}{
 		{"", "foo", false},
-		{`^fo && .ext$`, "foo.ext", true},
-		{`^fo && .ext$`, "foo", false},
-		{`^fo || .ext$`, "foo", true},
-		{`^fo || .ext$`, "x.ext", true},
-		{`^fo || .ext$`, "not", false},
-		{`^fo || .ext$ || wombat`, "foo.ext", true},
-		{`^fo || .ext$ || wombat`, "wombat", true},
-		{`^fo || .ext$ && wombat`, "wombat.ext", true},
-		{`^fo && .ext$ || wombat`, "foo.ext", true},
-		{`^fo && .ext$ || wombat`, "wombat", true},
-		{`^fo && (.ext$ || wombat)`, "wombat", false},
-		{`^fo && (.ext$ || wombat)`, "wombat.ext", false},
-		{`^fo && .ext$ && wombat`, "wombat", false},
+		{"foo", "foo", true},
+		{"!foo", "foo", false},
+		{"foo", "bar", false},
+		{"!foo", "bar", true},
+
+		{"foo && bar", "neither", false},
+		{"foo && bar", "foobar", true},
+		{"foo && bar", "foo", false},
+		{"foo && bar", "bar", false},
+		{"foo && !bar", "neither", false},
+		{"!foo && bar", "neither", false},
+		{"!foo && !bar", "neither", true},
+		{"foo && !bar", "foo", true},
+		{"!foo && bar", "bar", true},
+		{"!foo && !bar", "foo", false},
+
+		{"foo || bar", "neither", false},
+		{"foo || bar", "foobar", true},
+		{"foo || bar", "foo", true},
+		{"foo || bar", "bar", true},
+		{"foo || !bar", "neither", true},
+		{"!foo || bar", "neither", true},
+		{"!foo || !bar", "neither", true},
+		{"foo || !bar", "foo", true},
+		{"!foo || bar", "bar", true},
+		{"!foo || !bar", "foo", true},
+		{"!foo || !bar", "foobar", false},
+
+		{"foo && bar && baz", "neither", false},
+		{"foo && bar && baz", "foobarbaz", true},
+		{"!foo && !bar && !baz", "neither", true},
+		{"!foo && !bar && !baz", "foo", false},
+		{"!foo && !bar && !baz", "bar", false},
+		{"!foo && !bar && !baz", "baz", false},
+		{"!foo && bar && baz", "foobarbaz", false},
+		{"foo && !bar && baz", "foobarbaz", false},
+		{"foo && bar && !baz", "foobarbaz", false},
+
+		{"foo || bar || baz", "neither", false},
+		{"foo || bar || baz", "foobarbaz", true},
+		{"!foo || !bar || !baz", "foobarbaz", false},
+		{"!foo || !bar || !baz", "neither", true},
+		{"!foo || !bar || !baz", "foo", true},
+		{"!foo || !bar || !baz", "bar", true},
+		{"!foo || !bar || !baz", "baz", true},
 	} {
 		evalTestCase(t, parse(tc.in), tc.val, tc.out)
 	}
@@ -146,21 +187,24 @@ func TestSubExpressions(t *testing.T) {
 		out bool
 	}{
 		{`(foo || bar)`, "foo", true},
-		{`(foo || bar)`, "wombat", false},
-		{`(foo || bar) || wom.*`, "wombat", true},
-		{`wo* || ( foo || bar )`, "wombat", true},
-		{`wo.* && (foo || bar)`, "wombat", false},
-		{`wo.* && (foo || .ext$)`, "wombat.ext", true},
-		{`wo.* && (foo || .ext$)`, "foo.ext", false},
-		{`(foo || \.ext$) && (wombat && \.ext$)`, "wombat.ext", true},
-		{`(foo || \.ext$) && (wombat && \.ext$)`,
-			"wombat", false},
-		{`(foo || \.ext$) || (wombat && \.ext$)`, "wombat", false},
-		{`(foo || \.ext$) || (wombat && \.ext$)`, "wombat", false},
-		{`(foo && (baz || bar))`, "foo", false},
-		{`(foo && (baz || bar))`, "baz", false},
-		{`(foo && (baz || bar))`, "foobar", true},
-		{`(^foo && (^baz || ^bar))`, "foobar", false},
+		{`(foo || bar)`, "bar", true},
+		{`!(foo || bar)`, "foo", false},
+		{`!(foo || bar)`, "bar", false},
+		{`(foo && bar)`, "foo", false},
+		{`(foo && bar)`, "bar", false},
+		{`(foo && bar)`, "foobar", true},
+		{`!(foo && bar)`, "foobar", false},
+		{`!(foo && bar)`, "bar", true},
+		{`(foo && bar) || baz`, "foobar", true},
+		{`(foo && bar) || baz`, "baz", true},
+		{`baz || (foo && bar)`, "foobar", true},
+		{`!((foo && bar) || baz)`, "foobar", false},
+		{`!((foo && bar) || baz)`, "baz", false},
+		{`(foo && bar) || (baz && bat)`, "foobar", true},
+		{`(foo && bar) || (baz && bat)`, "batbaz", true},
+		{`(foo && bar) || !(baz && bat)`, "batbaz", false},
+		{`!(foo && bar) || !(baz && bat)`, "batbaz", true},
+		{`!(!(foo && bar) || !(baz && bat))`, "batbaz", false},
 	} {
 		evalTestCase(t, parse(tc.in), tc.val, tc.out)
 	}
@@ -173,7 +217,14 @@ func TestErrors(t *testing.T) {
 	}{
 		{`(`, "unbalanced brackets"},
 		{`()`, "missing left operand for )"},
+		{`!`, "incomplete expression: [!]"},
+		{`!&&`, "missing operand preceding &&"},
+		{`&&!`, "missing left operand for &&"},
+		{`&&&&`, "missing left operand for &&"},
+		{`!!`, "misplaced negation after !"},
 		{`(foo || bar`, "unbalanced brackets"},
+		{`(foo || bar)!`, "misplaced negation after (...)"},
+		{`(foo !|| bar)`, "misplaced negation after operand"},
 		{`foo || bar)`, "unbalanced brackets"},
 		{`)(`, "unbalanced brackets"},
 		{`||`, "missing left operand for ||"},
@@ -183,13 +234,13 @@ func TestErrors(t *testing.T) {
 		{`&& a`, "missing left operand for &&"},
 		{`a &&`, "incomplete expression: [re=a &&]"},
 		{`a || b || ()`, "missing left operand for )"},
-		{`( a || )`, "missing operand for )"},
-		{`( a () )`, "missing operator for ("},
+		{`( a || )`, "missing operand preceding )"},
+		{`( a () )`, "missing operator preceding ("},
 		{`|| ||`, "missing left operand for ||"},
-		{`a || ||`, "missing operand for ||"},
+		{`a || ||`, "missing operand preceding ||"},
 		{`&& &&`, "missing left operand for &&"},
-		{`a && &&`, "missing operand for &&"},
-		{`a (a)`, "missing operator for ("},
+		{`a && &&`, "missing operand preceding &&"},
+		{`a (a)`, "missing operator preceding ("},
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
 	} {
 		m, err := boolexpr.New(parse(tc.in)...)

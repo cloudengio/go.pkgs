@@ -168,17 +168,23 @@ func newExpression(input <-chan Item) ([]Item, error) {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
 			}
 			if !expr[len(expr)-1].isOperand() {
-				return nil, fmt.Errorf("missing operand for %v", cur.typ)
+				return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
 			}
 			expr = append(expr, cur)
 		case notOp:
-			if !expr[len(expr)-1].isOperand() {
-				return nil, fmt.Errorf("missing operand for %v", cur.typ)
+			if len(expr) > 0 {
+				l := expr[len(expr)-1]
+				if !l.isOperator() {
+					return nil, fmt.Errorf("misplaced negation after %v", l.typ)
+				}
 			}
 			expr = append(expr, cur)
 		case leftBracket:
-			if len(expr) > 0 && !expr[len(expr)-1].isOperator() {
-				return nil, fmt.Errorf("missing operator for %v", cur.typ)
+			if len(expr) > 0 {
+				l := expr[len(expr)-1]
+				if !l.isOperator() && l.typ != notOp {
+					return nil, fmt.Errorf("missing operator preceding %v", cur.typ)
+				}
 			}
 			sub, err := newExpression(input)
 			if err != nil {
@@ -190,7 +196,7 @@ func newExpression(input <-chan Item) ([]Item, error) {
 				return nil, fmt.Errorf("missing left operand for %v", cur.typ)
 			}
 			if !expr[len(expr)-1].isOperand() {
-				return nil, fmt.Errorf("missing operand for %v", cur.typ)
+				return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
 			}
 			return expr, nil
 		}
@@ -232,10 +238,30 @@ func New(items ...Item) (T, error) {
 	if err != nil {
 		return T{}, err
 	}
-	if len(tree)%2 == 0 {
+	if incompleteExpression(tree) {
 		return T{}, fmt.Errorf("incomplete expression: %v", items)
 	}
 	return T{items: tree}, nil
+}
+
+func incompleteExpression(items []Item) bool {
+	switch len(items) {
+	case 0:
+		return false
+	case 1:
+		switch items[0].typ {
+		case operand:
+			return false
+		case subExpression:
+			return incompleteExpression(items[0].sub)
+		}
+		return true
+	case 2:
+		return items[0].typ != notOp
+	case 3:
+		return false
+	}
+	return false
 }
 
 func (m T) String() string {
@@ -246,7 +272,10 @@ func (m T) String() string {
 			out.WriteString("(" + se.String() + ") ")
 			continue
 		}
-		out.WriteString(it.String() + " ")
+		out.WriteString(it.String())
+		if it.typ != notOp {
+			out.WriteRune(' ')
+		}
 	}
 	return strings.TrimSpace(out.String())
 }
@@ -267,27 +296,37 @@ func eval(exprs <-chan Item, v any) bool {
 		switch cur.typ {
 		case operand:
 			values = append(values, cur.op.Eval(v))
-		case orOp:
-			if values[len(values)-1] {
-				// early return on true || ....
-				return true
-			}
-			operators = append(operators, cur.typ)
-		case andOp:
+		case orOp, andOp, notOp:
 			operators = append(operators, cur.typ)
 		case subExpression:
 			values = append(values, eval(itemChan(cur.sub), v))
 		}
 		// left to right evaluation
-		if len(values) == 2 && len(operators) == 1 {
+		if len(values) == 1 && len(operators) == 1 && operators[0] == notOp {
+			// handle negation of single value
+			operators = operators[1:]
+			values[len(values)-1] = !values[len(values)-1]
+		}
+		if len(values) == 2 && len(operators) >= 1 {
+			if len(operators) >= 2 && operators[len(operators)-1] == notOp {
+				// handle negation in the right hand side of an expression.
+				values[1] = !values[1]
+				operators = operators[:len(operators)-1]
+			}
 			switch operators[0] {
 			case andOp:
 				values = []bool{values[0] && values[1]}
 			case orOp:
 				values = []bool{values[0] || values[1]}
+				if values[0] {
+					// short circuit evaluation of OR
+					return true
+				}
 			}
-			operators = []itemType{}
 		}
+	}
+	if len(values) > 1 {
+		panic(fmt.Sprintf("invalid expression: %v", values))
 	}
 	return values[0]
 }

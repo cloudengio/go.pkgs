@@ -41,9 +41,11 @@ func TestParser(t *testing.T) {
 	}{
 		{"", ""},
 		{"re=foo", "re=foo"},
+		{"!re=foo", "!re=foo"},
 		{"re=\\ a", "re= a"},
 		{"re=''", "re="},
 		{"re=foo || re=bar && re=baz", "re=foo || re=bar && re=baz"},
+		{"re=foo || re=bar && !re=baz", "re=foo || re=bar && !re=baz"},
 		{"(re=foo || op2=baz) && op2=f", "(re=foo || op2=baz) && op2=f"},
 	} {
 		m, err := parser.Parse(tc.input)
@@ -72,6 +74,7 @@ func TestParserErrors(t *testing.T) {
 		{")", "unbalanced brackets"},
 		{")(", "unbalanced brackets"},
 		{"(re=f && ))(", "unbalanced brackets"},
+		{"!!", "misplaced negation after !"},
 	} {
 		_, err := parser.Parse(tc.input)
 		if err == nil || err.Error() != tc.err {
