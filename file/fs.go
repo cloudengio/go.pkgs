@@ -29,26 +29,38 @@ type FS interface {
 
 	// OpenCtx is like fs.Open but with a context.
 	OpenCtx(ctx context.Context, name string) (fs.File, error)
-}
 
-// WrapFS wraps an fs.FS to implement file.FS.
-func WrapFS(fs fs.FS) FS {
-	return &fsFromFS{fs}
-}
+	// Readlink returns the contents of a symbolic link.
+	Readlink(ctx context.Context, path string) (string, error)
 
-type fsFromFS struct {
-	fs.FS
-}
+	// Stat will follow symlinks.
+	Stat(ctx context.Context, path string) (Info, error)
 
-// Scheme returns the URI scheme that this FS supports, which in for an fs.FS
-// is always "file".
-func (f *fsFromFS) Scheme() string {
-	return "file"
-}
+	// Lstat will not follow symlinks.
+	Lstat(ctx context.Context, path string) (Info, error)
 
-// OpenCtx just calls fs.Open.
-func (f *fsFromFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
-	return f.Open(name)
+	// Join is like filepath.Join for the filesystem supported by this filesystem.
+	Join(components ...string) string
+
+	// Base is like filepath.Base for the filesystem supported by this filesystem.
+	Base(path string) string
+
+	// IsPermissionError returns true if the specified error, as returned
+	// by the filesystem's implementation, is a result of a permissions error.
+	IsPermissionError(err error) bool
+
+	// IsNotExist returns true if the specified error, as returned by the
+	// filesystem's implementation, is a result of the object not existing.
+	IsNotExist(err error) bool
+
+	// XAttr returns extended attributes for the specified file.
+	XAttr(ctx context.Context, path string, fi Info) (XAttr, error)
+
+	// SysXAttr returns a representation of the extended attributes using the
+	// native data type of the underlying file system. If existing is
+	// non-nil and is of that file-system specific type the contents of
+	// XAttr are merged into it.
+	SysXAttr(existing any, merge XAttr) any
 }
 
 var _ fs.FileInfo = (*Info)(nil)
@@ -80,6 +92,7 @@ func NewInfo(
 	}
 }
 
+// NewInfoFromFileInfo creates a new instance of Info from a fs.FileInfo.
 func NewInfoFromFileInfo(fi fs.FileInfo) Info {
 	return NewInfo(
 		fi.Name(),
@@ -124,8 +137,17 @@ func (fi Info) Sys() any {
 	return fi.sysInfo
 }
 
+// SetSys sets the SysInfo field.
 func (fi *Info) SetSys(i any) {
 	fi.sysInfo = i
+}
+
+// XAttr represents extended information about a directory or file.
+type XAttr struct {
+	UID, GID       uint64
+	Device, FileID uint64
+	Blocks         int64
+	Hardlinks      uint64
 }
 
 // info is like Info but without the Sys field.

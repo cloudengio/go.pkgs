@@ -16,7 +16,7 @@ import (
 
 	"cloudeng.io/aws/s3fs"
 	"cloudeng.io/aws/s3fs/s3fstestutil"
-	"cloudeng.io/file"
+	"cloudeng.io/file/filetestutil"
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
@@ -26,7 +26,7 @@ var testdata embed.FS
 func TestS3FS(t *testing.T) {
 	ctx := context.Background()
 
-	mfs := s3fstestutil.NewMockFS(file.WrapFS(testdata),
+	mfs := s3fstestutil.NewMockFS(filetestutil.WrapEmbedFS(testdata),
 		s3fstestutil.WithBucket("bucket"),
 		s3fstestutil.WithLeadingSlashStripped())
 	fs := s3fs.New(aws.Config{}, s3fs.WithS3Client(mfs))

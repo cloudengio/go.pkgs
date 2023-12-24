@@ -15,10 +15,10 @@ import (
 	"sync"
 	"testing"
 
-	"cloudeng.io/file"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
+	"cloudeng.io/file/filetestutil"
 )
 
 //go:embed testdata/*.html
@@ -39,7 +39,7 @@ func downloadFromTestdata(t *testing.T, name string) download.Downloaded {
 	}
 	return download.Downloaded{
 		Request: download.SimpleRequest{
-			FS: file.WrapFS(htmlExamples),
+			FS: filetestutil.WrapEmbedFS(htmlExamples),
 		},
 		Downloads: []download.Result{
 			{Name: path.Join("testdata", name), Contents: buf.Bytes()},
