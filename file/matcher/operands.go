@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"cloudeng.io/cmdutil/boolexpr"
+	"cloudeng.io/file"
 	"cloudeng.io/file/diskusage"
 )
 
@@ -37,48 +38,49 @@ type regEx struct {
 	commonOperand
 }
 
-// NameIfc and/or PathIfc must be implemented by any values that used with the Glob operands.
+// NameIfc and/or PathIfc must be implemented by any values that are used with
+// the Glob operands.
 type NameIfc interface {
 	Name() string
 }
 
-// PathIfc must be implemented by any values that used with the Regexp operand
-// optionally for the Glob operand.
+// PathIfc must be implemented by any values that are used with the
+// Regexp operand optionally for the Glob operand.
 type PathIfc interface {
 	Path() string
 }
 
-// FileTypeIfc must be implemented by any values that used with the
+// FileTypeIfc must be implemented by any values that are used with the
 // Filetype operand for types f, d or l.
 type FileTypeIfc interface {
 	Type() fs.FileMode
 }
 
-// FileModeIfc must be implemented by any values that used with the
+// FileModeIfc must be implemented by any values that are used with the
 // Filetype operand for type x.
 type FileModeIfc interface {
 	Mode() fs.FileMode
 }
 
-// ModTimeIfc must be implemented by any values that used with the
+// ModTimeIfc must be implemented by any values that are used with the
 // NewerThan operand.
 type ModTimeIfc interface {
 	ModTime() time.Time
 }
 
-// FileSizeIfc must be implemented by any values that used with the
+// FileSizeIfc must be implemented by any values that are used with the
 // FileSize operand.
 type FileSizeIfc interface {
 	Size() int64
 }
 
-// DirSizeIfc must be implemented by any values that used with the
+// DirSizeIfc must be implemented by any values that are used with the
 // DirSize operand.
 type DirSizeIfc interface {
 	NumEntries() int64
 }
 
-// XAttrIfc must be implemented by any values that used with the
+// XAttrIfc must be implemented by any values that are used with the
 // XAttr operand.
 type XAttrIfc interface {
 	XAttr() file.XAttr
@@ -430,22 +432,6 @@ func (op fileSize) Eval(v any) bool {
 
 func (op fileSize) String() string {
 	return op.name + "=" + op.text
-}
-
-type xAttrOp struct {
-	commonOperand
-	text string
-}
-
-func NewXAttr(opname string) boolexpr.Operand {
-	return xAttr{
-		attr:  attr,
-		value: value,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + "=<attr> matches an extended attribute",
-			requires: reflect.TypeOf((*XAttrIfc)(nil)).Elem(),
-		}}
 }
 
 // NewGlob returns a case sensitive boolexpr.Operand that matches a glob pattern.
