@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"cloudeng.io/cmdutil/boolexpr"
-	"cloudeng.io/file"
 	"cloudeng.io/file/diskusage"
 )
 
@@ -78,12 +77,6 @@ type FileSizeIfc interface {
 // DirSize operand.
 type DirSizeIfc interface {
 	NumEntries() int64
-}
-
-// XAttrIfc must be implemented by any values that are used with the
-// XAttr operand.
-type XAttrIfc interface {
-	XAttr() file.XAttr
 }
 
 func (op regEx) Prepare() (boolexpr.Operand, error) {

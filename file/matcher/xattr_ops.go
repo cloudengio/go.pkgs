@@ -5,12 +5,17 @@
 package matcher
 
 import (
-	"fmt"
 	"reflect"
 
 	"cloudeng.io/cmdutil/boolexpr"
 	"cloudeng.io/file"
 )
+
+// XAttrIfc must be implemented by any values that are used with the
+// XAttr operand.
+type XAttrIfc interface {
+	XAttr() file.XAttr
+}
 
 type xAttrOp struct {
 	commonOperand
@@ -30,7 +35,6 @@ func (op xAttrOp) Prepare() (boolexpr.Operand, error) {
 }
 
 func (op xAttrOp) Eval(v any) bool {
-	fmt.Printf("XX: %T\n", v)
 	if nt, ok := v.(XAttrIfc); ok {
 		return op.eval(op.opVal, nt.XAttr())
 	}
@@ -41,10 +45,13 @@ func (op xAttrOp) String() string {
 	return op.name + "=" + op.text
 }
 
-func XAttr(opname, doc string,
+// XAttr returns an operand that compares an xattr value with
+// the xattr value of the value being evaluated.
+func XAttr(opname, value, doc string,
 	prepare func(opVal string) (file.XAttr, error),
 	eval func(opVal, val file.XAttr) bool) boolexpr.Operand {
 	return xAttrOp{
+		text: value,
 		prep: prepare,
 		eval: eval,
 		commonOperand: commonOperand{
@@ -56,8 +63,12 @@ func XAttr(opname, doc string,
 
 type IDLookup func(string) (uint64, error)
 
-func NewUser(name string, idl IDLookup) boolexpr.Operand {
-	return XAttr(name, "matches the supplied user id or name",
+// NewUser returns an operand that compares the user id of the value
+// being evaluated with the supplied user id or name. The supplied
+// IDLookup is used to convert the supplied text into a user id.
+// The value being evaluated must implement the XAttrIfc interface.
+func NewUser(name, value string, idl IDLookup) boolexpr.Operand {
+	return XAttr(name, value, "matches the supplied user id or name",
 		func(text string) (file.XAttr, error) {
 			id, err := idl(text)
 			if err != nil {
@@ -66,13 +77,16 @@ func NewUser(name string, idl IDLookup) boolexpr.Operand {
 			return file.XAttr{UID: id}, nil
 		},
 		func(opVal, val file.XAttr) bool {
-			fmt.Printf("%#v %#v\n", opVal, val)
 			return opVal.UID == val.UID
 		})
 }
 
-func NewGroup(name string, idl IDLookup) boolexpr.Operand {
-	return XAttr(name, "matches the supplied group id or name",
+// NewGroup returns an operand that compares the group id of the value
+// being evaluated with the supplied group id or name. The supplied
+// IDLookup is used to convert the supplied text into a group id.
+// The value being evaluated must implement the XAttrIfc interface.
+func NewGroup(name, value string, idl IDLookup) boolexpr.Operand {
+	return XAttr(name, value, "matches the supplied group id or name",
 		func(text string) (file.XAttr, error) {
 			id, err := idl(text)
 			if err != nil {

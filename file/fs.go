@@ -33,10 +33,10 @@ type FS interface {
 	// Readlink returns the contents of a symbolic link.
 	Readlink(ctx context.Context, path string) (string, error)
 
-	// Stat will follow symlinks.
+	// Stat will follow symlinks/redirects/aliases.
 	Stat(ctx context.Context, path string) (Info, error)
 
-	// Lstat will not follow symlinks.
+	// Lstat will not follow symlinks/redirects/aliases.
 	Lstat(ctx context.Context, path string) (Info, error)
 
 	// Join is like filepath.Join for the filesystem supported by this filesystem.
@@ -53,7 +53,8 @@ type FS interface {
 	// filesystem's implementation, is a result of the object not existing.
 	IsNotExist(err error) bool
 
-	// XAttr returns extended attributes for the specified file.
+	// XAttr returns extended attributes for the specified file.Info
+	// and file.
 	XAttr(ctx context.Context, path string, fi Info) (XAttr, error)
 
 	// SysXAttr returns a representation of the extended attributes using the

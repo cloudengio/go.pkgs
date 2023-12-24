@@ -5,8 +5,8 @@
 package matcher_test
 
 import (
+	"strconv"
 	"testing"
-	"time"
 
 	"cloudeng.io/cmdutil/boolexpr"
 	"cloudeng.io/file"
@@ -14,24 +14,28 @@ import (
 )
 
 type withXattr struct {
-	file.Info
-	fs file.FS
+	x file.XAttr
+}
+
+func (w withXattr) XAttr() file.XAttr {
+	return w.x
 }
 
 func TestUserGroup(t *testing.T) {
-	uid := matcher.NewUser("user", func(name string) (uint64, error) {
-		return 100, nil
+	uid := matcher.NewUser("user", "100", func(name string) (uint64, error) {
+		return strconv.ParseUint(name, 10, 32)
 	})
-	gid := matcher.NewUser("group", func(name string) (uint64, error) {
-		return 300, nil
+	gid := matcher.NewGroup("group", "300", func(name string) (uint64, error) {
+		return strconv.ParseUint(name, 10, 32)
 	})
-	fi := file.NewInfo("foo", 0, 0, time.Time{}, file.XAttr{UID: 100, GID: 300})
+	xattr := file.XAttr{UID: 100, GID: 300}
+	wx := withXattr{xattr}
 
 	expr, err := boolexpr.New(boolexpr.NewOperandItem(uid))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := expr.Eval(fi), true; got != want {
+	if got, want := expr.Eval(wx), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -39,7 +43,7 @@ func TestUserGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := expr.Eval(fi), true; got != want {
+	if got, want := expr.Eval(wx), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
