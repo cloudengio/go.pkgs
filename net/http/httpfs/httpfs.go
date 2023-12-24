@@ -75,17 +75,17 @@ func (fs *httpfs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 }
 
 // Readlink returns the contents of a redirect without following it.
-func (fs *httpfs) Readlink(_ context.Context, path string) (string, error) {
+func (fs *httpfs) Readlink(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("Readlink is not implemented for https")
 }
 
 // Stat issues a head request and will follow redirects.
-func (fs *httpfs) Stat(_ context.Context, path string) (file.Info, error) {
+func (fs *httpfs) Stat(_ context.Context, _ string) (file.Info, error) {
 	return file.Info{}, fmt.Errorf("Stat is not implemented for https")
 }
 
 // Lstat issues a head request but will not follow redirects.
-func (fs *httpfs) Lstat(ctx context.Context, path string) (file.Info, error) {
+func (fs *httpfs) Lstat(_ context.Context, _ string) (file.Info, error) {
 	return file.Info{}, fmt.Errorf("Lstat is not implemented for https")
 }
 
@@ -116,10 +116,9 @@ type httpXAttr struct {
 	obj   *http.Response
 }
 
-func (fs *httpfs) XAttr(_ context.Context, name string, info file.Info) (file.XAttr, error) {
+func (fs *httpfs) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error) {
 	sys := info.Sys()
-	switch v := sys.(type) {
-	case *httpXAttr:
+	if v, ok := sys.(*httpXAttr); ok {
 		return v.XAttr, nil
 	}
 	return file.XAttr{}, nil

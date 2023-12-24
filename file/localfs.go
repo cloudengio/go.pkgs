@@ -27,7 +27,7 @@ func (f *localfs) Scheme() string {
 	return "file"
 }
 
-func (f *localfs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (f *localfs) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	return os.Open(name)
 }
 
