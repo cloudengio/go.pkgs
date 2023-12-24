@@ -13,6 +13,11 @@ import (
 	"cloudeng.io/file/matcher"
 )
 
+type withXattr struct {
+	file.Info
+	fs file.FS
+}
+
 func TestUserGroup(t *testing.T) {
 	uid := matcher.NewUser("user", func(name string) (uint64, error) {
 		return 100, nil

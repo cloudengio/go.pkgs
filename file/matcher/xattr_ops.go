@@ -30,6 +30,7 @@ func (op xAttrOp) Prepare() (boolexpr.Operand, error) {
 }
 
 func (op xAttrOp) Eval(v any) bool {
+	fmt.Printf("XX: %T\n", v)
 	if nt, ok := v.(XAttrIfc); ok {
 		return op.eval(op.opVal, nt.XAttr())
 	}
