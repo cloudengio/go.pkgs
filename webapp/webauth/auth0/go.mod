@@ -6,5 +6,5 @@ replace cloudeng.io/webapp => ../..
 
 require (
 	github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693
-	golang.org/x/crypto v0.16.0 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
 )

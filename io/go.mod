@@ -1,8 +1,7 @@
 module cloudeng.io/io
 
-go 1.16
+go 1.21
 
-require (
-	cloudeng.io/sys v0.0.0-20231026032435-4ad1389db593
-	golang.org/x/sys v0.13.0 // indirect
-)
+require cloudeng.io/sys v0.0.0-20231215020541-6e96c2291daf
+
+require golang.org/x/sys v0.15.0 // indirect

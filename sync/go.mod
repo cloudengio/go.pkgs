@@ -1,8 +1,8 @@
 module cloudeng.io/sync
 
-go 1.18
+go 1.21
 
 require (
-	cloudeng.io/debug v0.0.0-20231205162401-e17bf4b2dbb2
+	cloudeng.io/debug v0.0.0-20231219174858-fd89ad37703c
 	cloudeng.io/errors v0.0.9
 )
