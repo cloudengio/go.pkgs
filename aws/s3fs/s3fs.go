@@ -98,7 +98,7 @@ func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	return &s3file{obj: obj, path: name}, nil
 }
 
-func (fs *s3fs) Readlink(_ context.Context, path string) (string, error) {
+func (fs *s3fs) Readlink(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("Readlink is not implemented for s3")
 }
 
@@ -141,10 +141,16 @@ type s3xattr struct {
 	obj   *s3.GetObjectOutput
 }
 
+<<<<<<< HEAD
 func (fs *s3fs) XAttr(_ context.Context, name string, info file.Info) (file.XAttr, error) {
 	sys := info.Sys()
 	switch v := sys.(type) {
 	case *s3xattr:
+=======
+func (fs *s3fs) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error) {
+	sys := info.Sys()
+	if v, ok := sys.(*s3xattr); ok {
+>>>>>>> main
 		return v.XAttr, nil
 	}
 	return file.XAttr{}, nil
