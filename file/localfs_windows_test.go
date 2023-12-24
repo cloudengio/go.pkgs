@@ -7,14 +7,13 @@ package file
 
 import (
 	"context"
+	"reflect"
 	"testing"
-
-	"cloudeng.io/file"
 )
 
 func TestMergeXAttr(t *testing.T) {
 	ctx := context.Background()
-	x := file.XAttr{
+	x := XAttr{
 		UID:       1,
 		GID:       2,
 		Device:    3,
@@ -22,14 +21,14 @@ func TestMergeXAttr(t *testing.T) {
 		Blocks:    5,
 		Hardlinks: 6,
 	}
-	fs := file.LocalFS()
+	fs := LocalFS()
 	xattr := fs.SysXAttr(nil, x)
 	stat, ok := xattr.(*sysinfo)
 	if !ok {
 		t.Fatalf("got %T, want *sysinfo", xattr)
 	}
 	nxattr := fs.SysXAttr(sysinfo, x)
-	if got, want:nxattr, xattr; !reflect.DeepEqual(got, want) {
+	if got, want := nxattr, xattr; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
