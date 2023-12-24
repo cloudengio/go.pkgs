@@ -101,15 +101,16 @@ func NewMockFS(opts ...FSOption) file.FS {
 	if len(options.scheme) == 0 {
 		options.scheme = "file"
 	}
+	fs := file.LocalFS()
 	if options.random {
-		return &randFS{localfs: localfs{scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
+		return &randFS{localfs: localfs{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.constant {
-		return &constantFS{localfs: localfs{scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
+		return &constantFS{localfs: localfs{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.numRetries > 0 {
 		return &randAfteRetryFS{
-			randFS:  randFS{localfs: localfs{scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}},
+			randFS:  randFS{localfs: localfs{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}},
 			retries: map[string]int{},
 		}
 	}
@@ -119,7 +120,10 @@ func NewMockFS(opts ...FSOption) file.FS {
 	return nil
 }
 
-type localfs struct{ scheme string }
+type localfs struct {
+	file.FS
+	scheme string
+}
 
 func (mfs *localfs) Scheme() string {
 	return mfs.scheme
@@ -146,6 +150,14 @@ func newRandomFileCreator(_ context.Context, name string, rnd *rand.Rand, maxSiz
 // Open implements fs.FS.
 func (mfs *randFS) Open(name string) (fs.File, error) {
 	return mfs.OpenCtx(context.Background(), name)
+}
+
+func (mfs *randFS) XAttr(_ context.Context, _ string, _ file.Info) (file.XAttr, error) {
+	return file.XAttr{}, nil
+}
+
+func (mfs *randFS) NewXattr(file.XAttr) any {
+	return nil
 }
 
 // Open implements file.FS.
