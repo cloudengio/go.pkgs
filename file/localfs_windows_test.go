@@ -6,13 +6,11 @@
 package file
 
 import (
-	"context"
 	"reflect"
 	"testing"
 )
 
 func TestMergeXAttr(t *testing.T) {
-	ctx := context.Background()
 	x := XAttr{
 		UID:       1,
 		GID:       2,
@@ -27,7 +25,7 @@ func TestMergeXAttr(t *testing.T) {
 	if !ok {
 		t.Fatalf("got %T, want *sysinfo", xattr)
 	}
-	nxattr := fs.SysXAttr(sysinfo, x)
+	nxattr := fs.SysXAttr(stat, x)
 	if got, want := nxattr, xattr; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
