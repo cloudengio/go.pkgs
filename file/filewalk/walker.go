@@ -102,40 +102,10 @@ type LevelScanner interface {
 	Err() error
 }
 
-// XAttr represents extended information about a directory or file.
-type XAttr struct {
-	UID, GID       uint64
-	Device, FileID uint64
-	Blocks         int64
-	Hardlinks      uint64
-}
-
 // FS represents the interface that is implemeted for filesystems to
 // be traversed/scanned.
 type FS interface {
 	file.FS
-
-	// Xattr returns extended attributes for the specified file.
-	XAttr(ctx context.Context, path string, fi file.Info) (XAttr, error)
-
-	NewXattr(XAttr) any
-
-	// Readlink returns the contents of a symbolic link.
-	Readlink(ctx context.Context, path string) (string, error)
-
-	// Stat will follow symlinks.
-	Stat(ctx context.Context, path string) (file.Info, error)
-
-	// Lstat will not follow symlinks.
-	Lstat(ctx context.Context, path string) (file.Info, error)
-
-	LevelScanner(path string) LevelScanner
-
-	// Join is like filepath.Join for the filesystem supported by this filesystem.
-	Join(components ...string) string
-
-	// Base is like filepath.Base for the filesystem supported by this filesystem.
-	Base(path string) string
 
 	// IsPermissionError returns true if the specified error, as returned
 	// by the filesystem's implementation, is a result of a permissions error.
@@ -144,6 +114,8 @@ type FS interface {
 	// IsNotExist returns true if the specified error, as returned by the
 	// filesystem's implementation, is a result of the object not existing.
 	IsNotExist(err error) bool
+
+	LevelScanner(path string) LevelScanner
 }
 
 // Error implements error and provides additional detail on the error

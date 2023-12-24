@@ -7,14 +7,19 @@ package s3fs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path"
 	"strings"
 
 	"cloudeng.io/file"
 	"cloudeng.io/path/cloudpath"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 // Option represents an option to New.
@@ -91,6 +96,68 @@ func (fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		return nil, err
 	}
 	return &s3file{obj: obj, path: name}, nil
+}
+
+func (fs *s3fs) Readlink(_ context.Context, path string) (string, error) {
+	return "", fmt.Errorf("Readlink is not implemented for s3")
+}
+
+func (fs *s3fs) Stat(_ context.Context, path string) (file.Info, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return file.Info{}, err
+	}
+	return file.NewInfoFromFileInfo(info), nil
+}
+
+func (fs *s3fs) Lstat(ctx context.Context, path string) (file.Info, error) {
+	return fs.Stat(ctx, path)
+}
+
+func (fs *s3fs) Join(components ...string) string {
+	return path.Join(components...)
+}
+
+func (fs *s3fs) Base(p string) string {
+	return path.Base(p)
+}
+
+func (fs *s3fs) IsPermissionError(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.ErrorCode() == "AccessDenied"
+	}
+	return false
+}
+
+func (fs *s3fs) IsNotExist(err error) bool {
+	var nsk *types.NoSuchKey
+	var nsb *types.NoSuchBucket
+	return errors.As(err, &nsk) || errors.As(err, &nsb)
+}
+
+type s3xattr struct {
+	XAttr file.XAttr
+	obj   *s3.GetObjectOutput
+}
+
+func (fs *s3fs) XAttr(_ context.Context, name string, info file.Info) (file.XAttr, error) {
+	sys := info.Sys()
+	switch v := sys.(type) {
+	case *s3xattr:
+		return v.XAttr, nil
+	}
+	return file.XAttr{}, nil
+}
+
+func (fs *s3fs) SysXAttr(existing any, merge file.XAttr) any {
+	switch v := existing.(type) {
+	case *s3.GetObjectOutput:
+		return &s3xattr{XAttr: merge, obj: v}
+	case *s3xattr:
+		return &s3xattr{XAttr: merge, obj: v.obj}
+	}
+	return nil
 }
 
 type s3file struct {
