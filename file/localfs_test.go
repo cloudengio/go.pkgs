@@ -40,10 +40,6 @@ func TestXAttr(t *testing.T) {
 	}
 
 	uid, gid := os.Getuid(), os.Getgid()
-	if uid == -1 {
-		// on windows uid, gid are zero for now.
-		uid, gid = 0, 0
-	}
 	if got, want := xattr.UID, int64(uid); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -56,12 +52,22 @@ func TestXAttr(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	if xattr.UID == -1 && len(xattr.User) == 0 {
+		t.Errorf("got %v, want non-empty User", xattr)
+	}
+
+	if xattr.UID == -1 && len(xattr.Group) == 0 {
+		t.Errorf("got %v, want non-empty Group", xattr)
+	}
+
 }
 
 func TestSetXAttr(t *testing.T) {
 	x := file.XAttr{
 		UID:       1,
 		GID:       2,
+		User:      "user",
+		Group:     "group",
 		Device:    3,
 		FileID:    4,
 		Blocks:    5,
@@ -73,5 +79,4 @@ func TestSetXAttr(t *testing.T) {
 	if got, want := fi.Sys(), x; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
 }

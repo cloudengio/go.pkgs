@@ -152,14 +152,16 @@ type XAttr struct {
 	Hardlinks      uint64
 }
 
-func (x XAttr) CompareUsers(o XAttr) bool {
+// CompareUser compares the UID fields if >=0 and the User fields otherwise.
+func (x XAttr) CompareUser(o XAttr) bool {
 	if x.UID != -1 && o.UID != -1 {
 		return x.UID == o.UID
 	}
 	return x.User == o.User
 }
 
-func (x XAttr) CompareGroups(o XAttr) bool {
+// CompareGroup compares the GID fields if >=0 and the Group fields otherwise.
+func (x XAttr) CompareGroup(o XAttr) bool {
 	if x.GID != -1 && o.GID != -1 {
 		return x.GID == o.GID
 	}
