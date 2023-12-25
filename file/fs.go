@@ -132,22 +132,40 @@ func (fi Info) IsDir() bool {
 	return fi.mode.IsDir()
 }
 
-// Sys implements fs.FileInfo.
+// Sys implements fs.FileInfo. Note that the Sys field is never encoded/decoded.
 func (fi Info) Sys() any {
 	return fi.sysInfo
 }
 
-// SetSys sets the SysInfo field.
+// SetSys sets the SysInfo field. Note that the Sys field is never encoded/decoded.
 func (fi *Info) SetSys(i any) {
 	fi.sysInfo = i
 }
 
-// XAttr represents extended information about a directory or file.
+// XAttr represents extended information about a directory or file as obtained
+// from the filesystem.
 type XAttr struct {
-	UID, GID       uint64
+	UID, GID       int64  // -1 for non-posix filesystems that don't support numeric UID, GID
+	User, Group    string // Used for systems that don't support numeric UID, GID
 	Device, FileID uint64
 	Blocks         int64
 	Hardlinks      uint64
+}
+
+// CompareUser compares the UID fields if >=0 and the User fields otherwise.
+func (x XAttr) CompareUser(o XAttr) bool {
+	if x.UID != -1 && o.UID != -1 {
+		return x.UID == o.UID
+	}
+	return x.User == o.User
+}
+
+// CompareGroup compares the GID fields if >=0 and the Group fields otherwise.
+func (x XAttr) CompareGroup(o XAttr) bool {
+	if x.GID != -1 && o.GID != -1 {
+		return x.GID == o.GID
+	}
+	return x.Group == o.Group
 }
 
 // info is like Info but without the Sys field.
@@ -191,6 +209,8 @@ func decodeString(data []byte) (int, string) {
 	return n + int(l), string(data[n : n+int(l)])
 }
 
+// AppendBinary appends a binary encoded instance of Info to the supplied
+// buffer.
 func (fi *Info) AppendBinary(buf *bytes.Buffer) error {
 	buf.WriteByte(0x1)         // version
 	appendString(buf, fi.name) // name
