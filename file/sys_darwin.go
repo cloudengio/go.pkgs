@@ -17,8 +17,8 @@ func xAttr(pathname string, fi Info) (XAttr, error) {
 	}
 	if s, ok := si.(*syscall.Stat_t); ok {
 		return XAttr{
-			UID:       uint64(s.Uid),
-			GID:       uint64(s.Gid),
+			UID:       int64(s.Uid),
+			GID:       int64(s.Gid),
 			Device:    uint64(s.Dev),
 			FileID:    s.Ino,
 			Blocks:    s.Blocks,

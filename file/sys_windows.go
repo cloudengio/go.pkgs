@@ -13,7 +13,7 @@ import (
 )
 
 type sysinfo struct {
-	uid, gid       uint64
+	user, group    string
 	device, fileID uint64
 	blocks         int64
 	hardlinks      uint64
@@ -27,8 +27,10 @@ func xAttr(pathname string, fi Info) (XAttr, error) {
 	switch s := si.(type) {
 	case *sysinfo:
 		return XAttr{
-			UID:       s.uid,
-			GID:       s.gid,
+			UID:       -1,
+			GID:       -1,
+			User:      "",
+			Group:     "",
 			Device:    s.device,
 			FileID:    s.fileID,
 			Blocks:    s.blocks,
@@ -44,8 +46,8 @@ func mergeXAttr(existing any, xattr XAttr) any {
 	if ok {
 		*n = *ex
 	}
-	n.uid = xattr.UID
-	n.gid = xattr.GID
+	n.user = xattr.User
+	n.group = xattr.Group
 	n.device = xattr.Device
 	n.fileID = xattr.FileID
 	n.blocks = xattr.Blocks
@@ -78,9 +80,20 @@ func getSysInfo(pathname string) (XAttr, error) {
 	if blocks == 0 {
 		blocks = 1
 	}
+	secinfo, _ := windows.GetNamedSecurityInfo(pathname, windows.SE_FILE_OBJECT,
+		windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION)
+	var usid, gsid string
+	if sid, _, err := secinfo.Owner(); err == nil {
+		usid = sid.String()
+	}
+	if sid, _, err := secinfo.Group(); err == nil {
+		gsid = sid.String()
+	}
 	return XAttr{
-		UID:       0,
-		GID:       0,
+		UID:       -1,
+		GID:       -1,
+		User:      usid,
+		Group:     gsid,
 		Device:    uint64(d.VolumeSerialNumber),
 		FileID:    packFileIndices(d.FileIndexHigh, d.FileIndexLow),
 		Blocks:    blocks,
