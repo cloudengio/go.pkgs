@@ -7,13 +7,15 @@ package file
 
 import (
 	"fmt"
+	"slices"
 	"syscall"
 
 	"golang.org/x/sys/windows"
 )
 
 type sysinfo struct {
-	uid, gid       uint64
+	userinfo       []byte
+	groupinfo      []byte
 	device, fileID uint64
 	blocks         int64
 	hardlinks      uint64
@@ -27,8 +29,10 @@ func xAttr(pathname string, fi Info) (XAttr, error) {
 	switch s := si.(type) {
 	case *sysinfo:
 		return XAttr{
-			UID:       s.uid,
-			GID:       s.gid,
+			UID:       -1,
+			GID:       -1,
+			UserInfo:  nil,
+			GroupInfo: nil,
 			Device:    s.device,
 			FileID:    s.fileID,
 			Blocks:    s.blocks,
@@ -44,8 +48,12 @@ func mergeXAttr(existing any, xattr XAttr) any {
 	if ok {
 		*n = *ex
 	}
-	n.uid = xattr.UID
-	n.gid = xattr.GID
+	if xattr.UserInfo != nil {
+		n.userinfo = slices.Clone(xattr.UserInfo)
+	}
+	if xattr.GroupInfo != nil {
+		n.groupinfo = slices.Clone(xattr.GroupInfo)
+	}
 	n.device = xattr.Device
 	n.fileID = xattr.FileID
 	n.blocks = xattr.Blocks
@@ -79,8 +87,10 @@ func getSysInfo(pathname string) (XAttr, error) {
 		blocks = 1
 	}
 	return XAttr{
-		UID:       0,
-		GID:       0,
+		UID:       -1,
+		GID:       -1,
+		UserInfo:  nil, // TODO(cnicolaou): get SID etc.
+		GroupInfo: nil, // TODO(cnicolaou): get SID etc.
 		Device:    uint64(d.VolumeSerialNumber),
 		FileID:    packFileIndices(d.FileIndexHigh, d.FileIndexLow),
 		Blocks:    blocks,

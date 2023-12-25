@@ -44,11 +44,11 @@ func TestXAttr(t *testing.T) {
 		// on windows uid, gid are zero for now.
 		uid, gid = 0, 0
 	}
-	if got, want := xattr.UID, uint64(uid); got != want {
+	if got, want := xattr.UID, int64(uid); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := xattr.GID, uint64(gid); got != want {
+	if got, want := xattr.GID, int64(gid); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
