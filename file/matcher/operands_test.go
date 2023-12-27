@@ -119,12 +119,14 @@ type fileInfo struct {
 	name    string
 	mode    fs.FileMode
 	modTime time.Time
+	size    int64
 }
 
 func (fi fileInfo) Name() string       { return fi.name }
 func (fi fileInfo) Mode() fs.FileMode  { return fi.mode }
 func (fi fileInfo) ModTime() time.Time { return fi.modTime }
 func (fi fileInfo) IsDir() bool        { return fi.mode.IsDir() }
+func (fi fileInfo) Size() int64        { return fi.size }
 func (fi fileInfo) Info() (fs.FileInfo, error) {
 	return file.NewInfo(fi.name, 0, fi.mode, fi.modTime, nil), nil
 }
@@ -179,6 +181,8 @@ func TestFileOperands(t *testing.T) {
 		{matcher.DirSizeLarger("", "100"), dirsize{99}, false},
 		{matcher.DirSizeSmaller("", "100"), dirsize{101}, false},
 		{matcher.DirSizeSmaller("", "100"), dirsize{99}, true},
+		{matcher.FileSizeLarger("", "100"), fileInfo{size: 101}, true},
+		{matcher.FileSizeSmaller("", "100"), fileInfo{size: 100}, true},
 	} {
 		expr, err := boolexpr.New(boolexpr.NewOperandItem(tc.it))
 		if err != nil {

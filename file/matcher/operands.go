@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"cloudeng.io/cmdutil/boolexpr"
+	"cloudeng.io/file/diskusage"
 )
 
 type commonOperand struct {
@@ -36,36 +37,43 @@ type regEx struct {
 	commonOperand
 }
 
-// NameIfc and/or PathIfc must be implemented by any values that used with the Glob operands.
+// NameIfc and/or PathIfc must be implemented by any values that are used with
+// the Glob operands.
 type NameIfc interface {
 	Name() string
 }
 
-// PathIfc must be implemented by any values that used with the Regexp operand
-// optionally for the Glob operand.
+// PathIfc must be implemented by any values that are used with the
+// Regexp operand optionally for the Glob operand.
 type PathIfc interface {
 	Path() string
 }
 
-// FileTypeIfc must be implemented by any values that used with the
+// FileTypeIfc must be implemented by any values that are used with the
 // Filetype operand for types f, d or l.
 type FileTypeIfc interface {
 	Type() fs.FileMode
 }
 
-// FileModeIfc must be implemented by any values that used with the
+// FileModeIfc must be implemented by any values that are used with the
 // Filetype operand for type x.
 type FileModeIfc interface {
 	Mode() fs.FileMode
 }
 
-// ModTimeIfc must be implemented by any values that used with the
+// ModTimeIfc must be implemented by any values that are used with the
 // NewerThan operand.
 type ModTimeIfc interface {
 	ModTime() time.Time
 }
 
-// DirSizeIfc must be implemented by any values that used with the
+// FileSizeIfc must be implemented by any values that are used with the
+// FileSize operand.
+type FileSizeIfc interface {
+	Size() int64
+}
+
+// DirSizeIfc must be implemented by any values that are used with the
 // DirSize operand.
 type DirSizeIfc interface {
 	NumEntries() int64
@@ -306,13 +314,15 @@ func NewerThanTime(opname string, when time.Time) boolexpr.Operand {
 
 // DirSize returns a 'directory size' operand. The value is not validated
 // until a matcher.T is created using New. The size must be expressed as
-// an integer. The comparison is performed using the supplied function.
+// an integer. If larger is true then the comparison is performed using
+// >, otherwise <=.
 // The operand requires that the value being matched implements DirSizeIfc.
 func DirSize(opname, value string, larger bool) boolexpr.Operand {
 	return dirSize{
-		name:   opname,
-		text:   value,
-		larger: larger,
+		sizeCommon: sizeCommon{
+			text:   value,
+			larger: larger,
+		},
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + "=<size> matches a directory size",
@@ -320,11 +330,22 @@ func DirSize(opname, value string, larger bool) boolexpr.Operand {
 		}}
 }
 
-type dirSize struct {
+func DirSizeLarger(n, v string) boolexpr.Operand {
+	return DirSize(n, v, true)
+}
+
+func DirSizeSmaller(n, v string) boolexpr.Operand {
+	return DirSize(n, v, false)
+}
+
+type sizeCommon struct {
 	text   string
-	name   string
 	larger bool
 	a      int64
+}
+
+type dirSize struct {
+	sizeCommon
 	commonOperand
 }
 
@@ -334,7 +355,6 @@ func (op dirSize) Prepare() (boolexpr.Operand, error) {
 		return op, err
 	}
 	op.a = s
-	op.requires = reflect.TypeOf((*DirSizeIfc)(nil)).Elem()
 	return op, nil
 }
 
@@ -352,12 +372,59 @@ func (op dirSize) String() string {
 	return op.name + "=" + op.text
 }
 
-func DirSizeLarger(n, v string) boolexpr.Operand {
-	return DirSize(n, v, true)
+// FileSize returns a 'file size' operand. The value is not validated
+// until a matcher.T is created using New. The size may be expressed as
+// an in binary (GiB, KiB) or decimal (GB, KB) or as bytes
+// (eg. 1.1GB, 1GiB or 1000). If larger is true then the comparison is performed
+// using >, otherwise <=.
+// The operand requires that the value being matched implements FileSizeIfc.
+func FileSize(opname, value string, larger bool) boolexpr.Operand {
+	return fileSize{
+		sizeCommon: sizeCommon{
+			text:   value,
+			larger: larger,
+		},
+		commonOperand: commonOperand{
+			name:     opname,
+			document: opname + "=<size> matches a directory size",
+			requires: reflect.TypeOf((*FileSizeIfc)(nil)).Elem(),
+		}}
 }
 
-func DirSizeSmaller(n, v string) boolexpr.Operand {
-	return DirSize(n, v, false)
+func FileSizeLarger(n, v string) boolexpr.Operand {
+	return FileSize(n, v, true)
+}
+
+func FileSizeSmaller(n, v string) boolexpr.Operand {
+	return FileSize(n, v, false)
+}
+
+type fileSize struct {
+	sizeCommon
+	commonOperand
+}
+
+func (op fileSize) Prepare() (boolexpr.Operand, error) {
+	s, err := diskusage.ParseToBytes(op.text)
+	if err != nil {
+		return op, err
+	}
+	op.a = int64(s)
+	return op, nil
+}
+
+func (op fileSize) Eval(v any) bool {
+	if nt, ok := v.(FileSizeIfc); ok {
+		if op.larger {
+			return nt.Size() > op.a
+		}
+		return nt.Size() <= op.a
+	}
+	return false
+}
+
+func (op fileSize) String() string {
+	return op.name + "=" + op.text
 }
 
 // NewGlob returns a case sensitive boolexpr.Operand that matches a glob pattern.
@@ -392,6 +459,15 @@ func NewDirSizeLarger(n, v string) boolexpr.Operand { return DirSizeLarger(n, v)
 // of entries is smaller or equal than the specified value.
 func NewDirSizeSmaller(n, v string) boolexpr.Operand { return DirSizeSmaller(n, v) }
 
+// NewFileSizeLarger returns a boolexpr.Operand that returns true if the expression
+// value implements DirSizeIfc and the number of entries in the directory
+// is greater than the specified value.
+func NewFileSizeLarger(n, v string) boolexpr.Operand { return FileSizeLarger(n, v) }
+
+// NewFileSizeSmaller is like NewFileSizeLarger but returns true if the number
+// of entries is smaller or equal than the specified value.
+func NewFileSizeSmaller(n, v string) boolexpr.Operand { return FileSizeSmaller(n, v) }
+
 // New returns a boolexpr.Parser with the following operands registered:
 //   - "name": case sensitive Glob
 //   - "iname", case insensitive Glob
@@ -409,5 +485,7 @@ func New() *boolexpr.Parser {
 	parser.RegisterOperand("newer", NewNewerThan)
 	parser.RegisterOperand("dir-larger", NewDirSizeLarger)
 	parser.RegisterOperand("dir-smaller", NewDirSizeSmaller)
+	parser.RegisterOperand("file-larger", NewFileSizeLarger)
+	parser.RegisterOperand("file-smaller", NewFileSizeSmaller)
 	return parser
 }
