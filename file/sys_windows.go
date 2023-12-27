@@ -80,14 +80,17 @@ func getSysInfo(pathname string) (XAttr, error) {
 	if blocks == 0 {
 		blocks = 1
 	}
-	secinfo, _ := windows.GetNamedSecurityInfo(pathname, windows.SE_FILE_OBJECT,
+	secinfo, err := windows.GetNamedSecurityInfo(pathname,
+		windows.SE_FILE_OBJECT,
 		windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION)
 	var usid, gsid string
-	if sid, _, err := secinfo.Owner(); err == nil {
-		usid = sid.String()
-	}
-	if sid, _, err := secinfo.Group(); err == nil {
-		gsid = sid.String()
+	if err == nil {
+		if sid, _, err := secinfo.Owner(); err == nil {
+			usid = sid.String()
+		}
+		if sid, _, err := secinfo.Group(); err == nil {
+			gsid = sid.String()
+		}
 	}
 	return XAttr{
 		UID:       -1,
