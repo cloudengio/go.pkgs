@@ -72,6 +72,9 @@ func TestUserGroupParsing(t *testing.T) {
 			t.Fatal(err)
 		}
 		xattr, err := fs.XAttr(ctx, testfile, info)
+		if err != nil {
+			t.Fatal(err)
+		}
 		var fileUID, fileGID string
 		if xattr.UID != -1 {
 			fileUID = fmt.Sprintf("%v", xattr.UID)
