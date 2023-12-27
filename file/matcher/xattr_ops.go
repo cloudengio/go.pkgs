@@ -71,7 +71,7 @@ func XAttr(opname, value, doc string,
 // IDLookup is used to convert the supplied text into a user id.
 // The value being evaluated must implement the XAttrIfc interface.
 func NewUser(name, value string, parser XAttrParser) boolexpr.Operand {
-	return XAttr(name, value, "matches the supplied user id or name",
+	return XAttr(name, value, "=<uid|username> matches the supplied user id or name",
 		parser,
 		func(opVal, val file.XAttr) bool {
 			return opVal.CompareUser(val)
@@ -83,7 +83,7 @@ func NewUser(name, value string, parser XAttrParser) boolexpr.Operand {
 // IDLookup is used to convert the supplied text into a group id.
 // The value being evaluated must implement the XAttrIfc interface.
 func NewGroup(name, value string, parser XAttrParser) boolexpr.Operand {
-	return XAttr(name, value, "matches the supplied group id or name",
+	return XAttr(name, value, "=<gid/groupname> matches the supplied group id or name",
 		parser,
 		func(opVal, val file.XAttr) bool {
 			return opVal.CompareGroup(val)
