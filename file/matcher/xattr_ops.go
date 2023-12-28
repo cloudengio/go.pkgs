@@ -96,8 +96,7 @@ func ParseUsernameOrID(nameOrID string, lookup func(name string) (userid.IDInfo,
 	info, err := lookup(nameOrID)
 	if err != nil {
 		// On Windows, the owner of a file may be a group.
-		grp, err := user.LookupGroupId(nameOrID)
-		if err == nil {
+		if grp, err := user.LookupGroupId(nameOrID); err == nil {
 			return file.XAttr{UID: -1, User: grp.Gid}, nil
 		}
 		return file.XAttr{UID: -1, User: nameOrID}, err
