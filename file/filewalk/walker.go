@@ -107,14 +107,6 @@ type LevelScanner interface {
 type FS interface {
 	file.FS
 
-	// IsPermissionError returns true if the specified error, as returned
-	// by the filesystem's implementation, is a result of a permissions error.
-	IsPermissionError(err error) bool
-
-	// IsNotExist returns true if the specified error, as returned by the
-	// filesystem's implementation, is a result of the object not existing.
-	IsNotExist(err error) bool
-
 	LevelScanner(path string) LevelScanner
 }
 
