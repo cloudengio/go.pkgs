@@ -476,6 +476,8 @@ func NewFileSizeSmaller(n, v string) boolexpr.Operand { return FileSizeSmaller(n
 //   - "newer", NewerThan
 //   - "dir-larger", DirSizeGreater
 //   - "dir-smaller", DirSizeSmaller
+//   - "file-larger", FileSizeGreater
+//   - "file-smaller", FileSizeSmaller
 func New() *boolexpr.Parser {
 	parser := boolexpr.NewParser()
 	parser.RegisterOperand("name", NewGlob)
