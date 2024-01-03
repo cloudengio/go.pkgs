@@ -19,6 +19,10 @@ func (p *Parser) RegisterOperand(name string, factory func(name, value string) O
 	p.ops[name] = factory
 }
 
+func (p *Parser) RemoveOperand(name string) {
+	delete(p.ops, name)
+}
+
 func NewParser() *Parser {
 	return &Parser{ops: make(map[string]func(name, value string) Operand)}
 }
