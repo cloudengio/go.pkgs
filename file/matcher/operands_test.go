@@ -123,6 +123,7 @@ type fileInfo struct {
 }
 
 func (fi fileInfo) Name() string       { return fi.name }
+func (fi fileInfo) Type() fs.FileMode  { return fi.mode }
 func (fi fileInfo) Mode() fs.FileMode  { return fi.mode }
 func (fi fileInfo) ModTime() time.Time { return fi.modTime }
 func (fi fileInfo) IsDir() bool        { return fi.mode.IsDir() }
@@ -134,6 +135,8 @@ func (fi fileInfo) Info() (fs.FileInfo, error) {
 type dirsize struct {
 	n int64
 }
+
+func (dc dirsize) Type() fs.FileMode { return fs.ModeDir }
 
 func (dc dirsize) NumEntries() int64 { return dc.n }
 
@@ -167,7 +170,7 @@ func TestFileOperands(t *testing.T) {
 		{matcher.FileType("", "x"), dirEntry{name: "foo", mode: fs.ModeSymlink | 0111}, false},
 		{matcher.FileType("", "x"), dirEntry{name: "foo", mode: 0111}, false},
 		{matcher.NewerThanParsed("", "2010-01-01"), dirEntry{name: "foo"}, false},
-		{matcher.FileType("", "f"), fileInfo{mode: 0}, true},
+		{matcher.FileType("", "f"), fileInfo{}, true},
 		{matcher.FileType("", "f"), fileInfo{mode: fs.ModeDir}, false},
 		{matcher.FileType("", "d"), fileInfo{mode: fs.ModeDir}, true},
 		{matcher.FileType("", "l"), fileInfo{mode: fs.ModeDir}, false},
@@ -177,12 +180,13 @@ func TestFileOperands(t *testing.T) {
 		{matcher.FileType("", "x"), fileInfo{mode: 0111}, true},
 		{matcher.NewerThanParsed("", "2010-01-01"), fileInfo{modTime: before}, false},
 		{matcher.NewerThanParsed("", "2010-01-01"), fileInfo{modTime: after}, true},
-		{matcher.DirSizeLarger("", "100"), dirsize{101}, true},
-		{matcher.DirSizeLarger("", "100"), dirsize{99}, false},
-		{matcher.DirSizeSmaller("", "100"), dirsize{101}, false},
-		{matcher.DirSizeSmaller("", "100"), dirsize{99}, true},
-		{matcher.FileSizeLarger("", "100"), fileInfo{size: 101}, true},
-		{matcher.FileSizeSmaller("", "100"), fileInfo{size: 100}, true},
+		{matcher.DirSizeLarger("dir>=:", "101"), dirsize{100}, false},
+		{matcher.DirSizeLarger("dir>=:", "100"), dirsize{100}, true},
+		{matcher.DirSizeSmaller("dir<:", "100"), dirsize{100}, false},
+		{matcher.DirSizeSmaller("dir<:", "100"), dirsize{99}, true},
+		{matcher.FileSizeLarger("file>=:", "100"), fileInfo{size: 100}, true},
+		{matcher.FileSizeSmaller("file<:", "100"), fileInfo{size: 100}, false},
+		{matcher.FileSizeSmaller("file<:", "100"), fileInfo{size: 99}, true},
 	} {
 		expr, err := boolexpr.New(boolexpr.NewOperandItem(tc.it))
 		if err != nil {
@@ -224,5 +228,4 @@ func TestNameAndPath(t *testing.T) {
 			t.Errorf("%v: got %v, want %v", tc.it, got, want)
 		}
 	}
-
 }
