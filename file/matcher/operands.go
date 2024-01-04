@@ -79,6 +79,19 @@ type DirSizeIfc interface {
 	NumEntries() int64
 }
 
+// Regexp returns a regular expression operand. It is not compiled until
+// a matcher.T is created using New. It requires that the value being
+// matched implements PathIfc.
+func Regexp(opname string, re string) boolexpr.Operand {
+	return regEx{text: re,
+		commonOperand: commonOperand{
+			name:     opname,
+			document: opname + "=<regexp> matches a regular expression",
+			requires: reflect.TypeOf((*PathIfc)(nil)).Elem(),
+		},
+	}
+}
+
 func (op regEx) Prepare() (boolexpr.Operand, error) {
 	re, err := regexp.Compile(op.text)
 	if err != nil {
@@ -99,17 +112,21 @@ func (op regEx) String() string {
 	return "re=" + op.text
 }
 
-// Regexp returns a regular expression operand. It is not compiled until
-// a matcher.T is created using New. It requires that the value being
-// matched implements PathIfc.
-func Regexp(opname string, re string) boolexpr.Operand {
-	return regEx{text: re,
+// Glob provides a glob operand (optionally case insensitive, in which
+// case the value it is being against will be converted to lower case
+// before the match is evaluated). The pattern is not validated until a
+// matcher.T is created. It requires that the value being matched implements
+// NameIfc and/or PathIfc.
+// The NameIfc interface is used first, if the value does not implement
+// NameIfc or the glob evaluates to false, then PathIfc is used.
+func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
+	return glob{text: pat,
+		caseInsensitive: caseInsensitive,
 		commonOperand: commonOperand{
 			name:     opname,
-			document: opname + "=<regexp> matches a regular expression",
-			requires: reflect.TypeOf((*PathIfc)(nil)).Elem(),
-		},
-	}
+			document: opname + "=<glob> matches a glob pattern",
+			requires: reflect.TypeOf((*NameIfc)(nil)).Elem(),
+		}}
 }
 
 type glob struct {
@@ -154,22 +171,26 @@ func (op glob) String() string {
 	return op.name + "=" + op.text
 }
 
-// Glob provides a glob operand (optionally case insensitive, in which
-// case the value it is being against will be converted to lower case
-// before the match is evaluated). The pattern is not validated until a
-// matcher.T is created. It requires that the value being matched implements
-// NameIfc and/or PathIfc.
-// The NameIfc interface is used first, if the value does not implement
-// NameIfc or the glob evaluates to false, then PathIfc is used.
-func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
-	return glob{text: pat,
-		caseInsensitive: caseInsensitive,
+// FileType returns a 'file type' operand. It is not validated until a
+// matcher.T is created using New. Supported file types are
+// (as per the unix find command):
+//   - f for regular files
+//   - d for directories
+//   - l for symbolic links
+//   - x executable regular files
+//
+// It requires that the value being matched implements FileTypeIfc for types
+// d, f and l and FileModeIfc for type x.
+func FileType(opname string, typ string) boolexpr.Operand {
+	return fileType{
+		text: typ,
 		commonOperand: commonOperand{
 			name:     opname,
-			document: opname + "=<glob> matches a glob pattern",
-			requires: reflect.TypeOf((*NameIfc)(nil)).Elem(),
+			document: opname + fileTypeDoc,
 		}}
 }
+
+const fileTypeDoc = "=<type> matches a file type (d, f, l, x), where d is a directory, f a regular file, l a symbolic link and x an executable regular file"
 
 type fileType struct {
 	text string
@@ -194,17 +215,18 @@ func (op fileType) Prepare() (boolexpr.Operand, error) {
 
 func (op fileType) Eval(v any) bool {
 	var mode fs.FileMode
-	switch t := v.(type) {
-	case FileTypeIfc:
-		mode = t.Type()
-		if op.needsMode {
-			// need the full fileMode, but only Type is available.
+	if op.needsMode {
+		if t, ok := v.(FileModeIfc); ok {
+			mode = t.Mode()
+		} else {
 			return false
 		}
-	case FileModeIfc:
-		mode = t.Mode()
-	default:
-		return false
+	} else {
+		if t, ok := v.(FileTypeIfc); ok {
+			mode = t.Type()
+		} else {
+			return false
+		}
 	}
 	switch op.text {
 	case "f":
@@ -227,26 +249,37 @@ func (op fileType) Needs(t reflect.Type) bool {
 	return t.Implements(op.requires)
 }
 
-const fileTypeDoc = "=<type> matches a file type (d, f, l, x), where d is a directory, f a regular file, l a symbolic link and x an executable regular file"
-
-// FileType returns a 'file type' operand. It is not validated until a
-// matcher.T is created using New. Supported file types are
-// (as per the unix find command):
-//   - f for regular files
-//   - d for directories
-//   - l for symbolic links
-//   - x executable regular files
+// NewerThanParsed returns a 'newer than' operand. It is not validated until a
+// matcher.T is created using New. The time must be expressed as one of
+// time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly. Due to the
+// nature of the parsed formats fine grained time comparisons are not
+// possible.
 //
-// It requires that the value being matched implements FileTypeIfc for types
-// d, f and l and FileModeIfc for type x.
-func FileType(opname string, typ string) boolexpr.Operand {
-	return fileType{
-		text: typ,
+// It requires that the value being matched implements ModTimeIfc.
+func NewerThanParsed(opname string, value string) boolexpr.Operand {
+	return newerThan{text: value,
 		commonOperand: commonOperand{
 			name:     opname,
-			document: opname + fileTypeDoc,
+			document: opname + newerThanDoc,
+			requires: reflect.TypeOf((*ModTimeIfc)(nil)).Elem(),
 		}}
 }
+
+// NewerThanTime returns a 'newer than' operand with the specified time.
+// This should be used in place of NewerThanFormat when fine grained time
+// comparisons are required.
+//
+// It requires that the value bein matched implements Mod
+func NewerThanTime(opname string, when time.Time) boolexpr.Operand {
+	return newerThan{when: when,
+		commonOperand: commonOperand{
+			name:     opname,
+			document: opname + newerThanDoc,
+			requires: reflect.TypeOf((*ModTimeIfc)(nil)).Elem(),
+		}}
+}
+
+const newerThanDoc = "=<time> matches a time that is newer than the specified time in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly formats"
 
 type newerThan struct {
 	text string
@@ -280,44 +313,19 @@ func (op newerThan) String() string {
 	return op.name + "=" + op.text
 }
 
-const newerThanDoc = "=<time> matches a time that is newer than the specified time in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly formats"
-
-// NewerThanParsed returns a 'newer than' operand. It is not validated until a
-// matcher.T is created using New. The time must be expressed as one of
-// time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly. Due to the
-// nature of the parsed formats fine grained time comparisons are not
-// possible.
-//
-// It requires that the value being matched implements ModTimeIfc.
-func NewerThanParsed(opname string, value string) boolexpr.Operand {
-	return newerThan{text: value,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + newerThanDoc,
-			requires: reflect.TypeOf((*ModTimeIfc)(nil)).Elem(),
-		}}
-}
-
-// NewerThanTime returns a 'newer than' operand with the specified time.
-// This should be used in place of NewerThanFormat when fine grained time
-// comparisons are required.
-//
-// It requires that the value bein matched implements Mod
-func NewerThanTime(opname string, when time.Time) boolexpr.Operand {
-	return newerThan{when: when,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + newerThanDoc,
-			requires: reflect.TypeOf((*ModTimeIfc)(nil)).Elem(),
-		}}
-}
-
 // DirSize returns a 'directory size' operand. The value is not validated
 // until a matcher.T is created using New. The size must be expressed as
 // an integer. If larger is true then the comparison is performed using
-// >, otherwise <=.
-// The operand requires that the value being matched implements DirSizeIfc.
+// >=, otherwise <.
+// The operand requires that the value being matched implements FileTypeIfc and
+// DirSizeIfc.
 func DirSize(opname, value string, larger bool) boolexpr.Operand {
+	doc := opname
+	if larger {
+		doc += `=<size> matches a directory size greater than or equal to <size>`
+	} else {
+		doc += `=<size> matches a directory size smaller than <size>`
+	}
 	return dirSize{
 		sizeCommon: sizeCommon{
 			text:   value,
@@ -325,7 +333,7 @@ func DirSize(opname, value string, larger bool) boolexpr.Operand {
 		},
 		commonOperand: commonOperand{
 			name:     opname,
-			document: opname + "=<size> matches a directory size",
+			document: doc,
 			requires: reflect.TypeOf((*DirSizeIfc)(nil)).Elem(),
 		}}
 }
@@ -359,11 +367,18 @@ func (op dirSize) Prepare() (boolexpr.Operand, error) {
 }
 
 func (op dirSize) Eval(v any) bool {
+	typ, ok := v.(FileTypeIfc)
+	if !ok {
+		return false
+	}
+	if !typ.Type().IsDir() {
+		return false
+	}
 	if nt, ok := v.(DirSizeIfc); ok {
 		if op.larger {
-			return nt.NumEntries() > op.a
+			return nt.NumEntries() >= op.a
 		}
-		return nt.NumEntries() <= op.a
+		return nt.NumEntries() < op.a
 	}
 	return false
 }
@@ -376,9 +391,16 @@ func (op dirSize) String() string {
 // until a matcher.T is created using New. The size may be expressed as
 // an in binary (GiB, KiB) or decimal (GB, KB) or as bytes
 // (eg. 1.1GB, 1GiB or 1000). If larger is true then the comparison is performed
-// using >, otherwise <=.
-// The operand requires that the value being matched implements FileSizeIfc.
+// using >=, otherwise <.
+// The operand requires that the value being matched implements FileTypeIfc and
+// FileSizeIfc.
 func FileSize(opname, value string, larger bool) boolexpr.Operand {
+	doc := opname
+	if larger {
+		doc += `=<size> matches a file size greater than or equal to <size>`
+	} else {
+		doc += `=<size> matches a file size smaller than <size>`
+	}
 	return fileSize{
 		sizeCommon: sizeCommon{
 			text:   value,
@@ -386,7 +408,7 @@ func FileSize(opname, value string, larger bool) boolexpr.Operand {
 		},
 		commonOperand: commonOperand{
 			name:     opname,
-			document: opname + "=<size> matches a directory size",
+			document: doc,
 			requires: reflect.TypeOf((*FileSizeIfc)(nil)).Elem(),
 		}}
 }
@@ -414,11 +436,18 @@ func (op fileSize) Prepare() (boolexpr.Operand, error) {
 }
 
 func (op fileSize) Eval(v any) bool {
+	typ, ok := v.(FileTypeIfc)
+	if !ok {
+		return false
+	}
+	if !typ.Type().IsRegular() {
+		return false
+	}
 	if nt, ok := v.(FileSizeIfc); ok {
 		if op.larger {
-			return nt.Size() > op.a
+			return nt.Size() >= op.a
 		}
-		return nt.Size() <= op.a
+		return nt.Size() < op.a
 	}
 	return false
 }
