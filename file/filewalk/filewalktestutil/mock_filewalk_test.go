@@ -6,7 +6,7 @@ package filewalktestutil_test
 
 import (
 	"context"
-	"slices"
+	"reflect"
 	"testing"
 
 	"cloudeng.io/file/filewalk/filewalktestutil"
@@ -109,7 +109,7 @@ func TestScan(t *testing.T) {
 		if err := sc.Err(); err != nil {
 			t.Fatal(err)
 		}
-		if got, want := found, tc.want; !slices.Equal(got, want) {
+		if got, want := found, tc.want; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %v, want %v", tc.root, got, want)
 		}
 	}
