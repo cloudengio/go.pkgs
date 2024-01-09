@@ -96,12 +96,16 @@ type options struct {
 	ymalConfig string
 }
 
+// WithYAMLConfig specifies the YAML config to use for creating a mock
+// filesystem.
 func WithYAMLConfig(config string) Option {
 	return func(o *options) {
 		o.ymalConfig = config
 	}
 }
 
+// NewMockFS creates a new MockFS rooted at root. All paths must start
+// with root.
 func NewMockFS(root string, opts ...Option) (*MockFS, error) {
 	m := &MockFS{root: path.Clean(root)}
 	for _, opt := range opts {
@@ -115,13 +119,13 @@ func NewMockFS(root string, opts ...Option) (*MockFS, error) {
 	return m, nil
 }
 
-func (mfs *MockFS) Scheme() string {
+func (m *MockFS) Scheme() string {
 	return "mock"
 }
 
-func (mfs *MockFS) Open(pathname string) (fs.File, error) {
+func (m *MockFS) Open(pathname string) (fs.File, error) {
 	pathname = path.Clean(pathname)
-	de, ok := mfs.lookup(pathname)
+	de, ok := m.lookup(pathname)
 	if !ok || de.IsDir() {
 		return nil, os.ErrNotExist
 	}
@@ -129,16 +133,16 @@ func (mfs *MockFS) Open(pathname string) (fs.File, error) {
 	return filetestutil.NewFile(rd, &de.file.info), nil
 }
 
-func (mfs *MockFS) OpenCtx(_ context.Context, pathname string) (fs.File, error) {
-	return mfs.Open(pathname)
+func (m *MockFS) OpenCtx(_ context.Context, pathname string) (fs.File, error) {
+	return m.Open(pathname)
 }
 
-func (mfs *MockFS) Readlink(ctx context.Context, pathname string) (string, error) {
+func (m *MockFS) Readlink(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("soft links are not supported")
 }
 
-func (mfs *MockFS) Stat(ctx context.Context, pathname string) (file.Info, error) {
-	de, ok := mfs.lookup(pathname)
+func (m *MockFS) Stat(_ context.Context, pathname string) (file.Info, error) {
+	de, ok := m.lookup(pathname)
 	if !ok {
 		return file.Info{}, os.ErrNotExist
 	}
@@ -148,51 +152,51 @@ func (mfs *MockFS) Stat(ctx context.Context, pathname string) (file.Info, error)
 	return de.file.info, nil
 }
 
-func (mfs *MockFS) Lstat(ctx context.Context, path string) (file.Info, error) {
-	return mfs.Stat(ctx, path)
+func (m *MockFS) Lstat(ctx context.Context, path string) (file.Info, error) {
+	return m.Stat(ctx, path)
 }
 
-func (mfs *MockFS) Join(components ...string) string {
+func (m *MockFS) Join(components ...string) string {
 	return path.Join(components...)
 }
 
-func (mfs *MockFS) Base(pathname string) string {
+func (m *MockFS) Base(pathname string) string {
 	return path.Base(pathname)
 }
 
-func (mfs *MockFS) IsPermissionError(err error) bool {
+func (m *MockFS) IsPermissionError(err error) bool {
 	return os.IsPermission(err)
 }
 
-func (mfs *MockFS) IsNotExist(err error) bool {
+func (m *MockFS) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
-func (mfs *MockFS) XAttr(ctx context.Context, pathname string, fi file.Info) (file.XAttr, error) {
-	de, ok := mfs.lookup(pathname)
+func (m *MockFS) XAttr(_ context.Context, pathname string, fi file.Info) (file.XAttr, error) {
+	de, ok := m.lookup(pathname)
 	if !ok || de.IsDir() {
 		return fi.Sys().(file.XAttr), os.ErrNotExist
 	}
 	return file.XAttr{}, nil
 }
 
-func (mfs *MockFS) SysXAttr(existing any, merge file.XAttr) any {
+func (m *MockFS) SysXAttr(_ any, merge file.XAttr) any {
 	return merge
 }
 
-func (mfs *MockFS) LevelScanner(pathname string) filewalk.LevelScanner {
-	de, ok := mfs.lookup(pathname)
+func (m *MockFS) LevelScanner(pathname string) filewalk.LevelScanner {
+	de, ok := m.lookup(pathname)
 	if !ok || !de.IsDir() {
 		return &scanner{err: os.ErrNotExist}
 	}
 	return &scanner{entries: de.dir.entries}
 }
 
-func (mfs *MockFS) String() string {
+func (m *MockFS) String() string {
 	var out strings.Builder
-	out.WriteString(mfs.root)
+	out.WriteString(m.root)
 	out.WriteRune('\n')
-	printTree(&out, &mfs.dir, 1)
+	printTree(&out, &m.dir, 1)
 	return out.String()
 }
 
@@ -221,7 +225,7 @@ func (s *scanner) Contents() []filewalk.Entry {
 	return newContents(s.entries[s.pos:s.end])
 }
 
-func (s *scanner) Scan(ctx context.Context, n int) bool {
+func (s *scanner) Scan(_ context.Context, n int) bool {
 	if s.err != nil {
 		return false
 	}
@@ -274,13 +278,13 @@ type dirSpec struct {
 	Entries []entrySpec `yaml:"entries"`
 }
 
-func (mfs *MockFS) initFromYAML(cfg string) error {
+func (m *MockFS) initFromYAML(cfg string) error {
 	var ds dirSpec
 	cfg = strings.ReplaceAll(cfg, "\t", "    ")
 	if err := yaml.Unmarshal([]byte(cfg), &ds); err != nil {
 		return err
 	}
-	mfs.dir = *createFromYAML(&ds)
+	m.dir = *createFromYAML(&ds)
 	return nil
 }
 
