@@ -51,7 +51,7 @@ func MakeInaccessibleToOwner(path string) error {
 	return sidAllowDeny(windows.DENY_ACCESS, 0, path)
 }
 
-// MakeAcessibleToOwner makes path ccessible to its owner.
+// MakeAcessibleToOwner makes path accessible to its owner.
 func MakeAccessibleToOwner(path string) error {
 	return sidAllowDeny(windows.GRANT_ACCESS, windows.GENERIC_ALL, path)
 }

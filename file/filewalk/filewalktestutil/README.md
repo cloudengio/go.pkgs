@@ -26,78 +26,80 @@ MockFS implements filewalk.FS for testing purposes. Note that:
 ```go
 func NewMockFS(root string, opts ...Option) (*MockFS, error)
 ```
+NewMockFS creates a new MockFS rooted at root. All paths must start with
+root.
 
 
 
 ### Methods
 
 ```go
-func (mfs *MockFS) Base(pathname string) string
+func (m *MockFS) Base(pathname string) string
 ```
 
 
 ```go
-func (mfs *MockFS) IsNotExist(err error) bool
+func (m *MockFS) IsNotExist(err error) bool
 ```
 
 
 ```go
-func (mfs *MockFS) IsPermissionError(err error) bool
+func (m *MockFS) IsPermissionError(err error) bool
 ```
 
 
 ```go
-func (mfs *MockFS) Join(components ...string) string
+func (m *MockFS) Join(components ...string) string
 ```
 
 
 ```go
-func (mfs *MockFS) LevelScanner(pathname string) filewalk.LevelScanner
+func (m *MockFS) LevelScanner(pathname string) filewalk.LevelScanner
 ```
 
 
 ```go
-func (mfs *MockFS) Lstat(ctx context.Context, path string) (file.Info, error)
+func (m *MockFS) Lstat(ctx context.Context, path string) (file.Info, error)
 ```
 
 
 ```go
-func (mfs *MockFS) Open(pathname string) (fs.File, error)
+func (m *MockFS) Open(pathname string) (fs.File, error)
 ```
 
 
 ```go
-func (mfs *MockFS) OpenCtx(_ context.Context, pathname string) (fs.File, error)
+func (m *MockFS) OpenCtx(_ context.Context, pathname string) (fs.File, error)
 ```
 
 
 ```go
-func (mfs *MockFS) Readlink(ctx context.Context, pathname string) (string, error)
+func (m *MockFS) Readlink(_ context.Context, _ string) (string, error)
 ```
 
 
 ```go
-func (mfs *MockFS) Scheme() string
+func (m *MockFS) Scheme() string
 ```
 
 
 ```go
-func (mfs *MockFS) Stat(ctx context.Context, pathname string) (file.Info, error)
+func (m *MockFS) Stat(_ context.Context, pathname string) (file.Info, error)
 ```
 
 
 ```go
-func (mfs *MockFS) String() string
+func (m *MockFS) String() string
 ```
 
 
 ```go
-func (mfs *MockFS) SysXAttr(existing any, merge file.XAttr) any
+func (m *MockFS) SysXAttr(_ any, merge file.XAttr) any
 ```
 
 
 ```go
-func (mfs *MockFS) XAttr(ctx context.Context, pathname string, fi file.Info) (file.XAttr, error)
+func (m *MockFS) XAttr(_ context.Context, pathname string, fi file.Info) (file.XAttr, error)
 ```
 
 
@@ -113,6 +115,8 @@ type Option func(o *options)
 ```go
 func WithYAMLConfig(config string) Option
 ```
+WithYAMLConfig specifies the YAML config to use for creating a mock
+filesystem.
 
 
 

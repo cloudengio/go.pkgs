@@ -48,7 +48,11 @@ type IDInfo struct {
 	Groups         []user.Group
 }
 ```
-IDInfo represents the parsed output of the 'id' command.
+IDInfo represents the parsed output of the 'id' command. It follows the
+convention of os/user.User and user.Group in that UID and GID are decimal
+strings on Posix systems but take on other, non-decimal, values on other
+systems (e.g SIDs on windows). The Username and Groupname are the system
+specific 'human-friendly' names.
 
 ### Functions
 
