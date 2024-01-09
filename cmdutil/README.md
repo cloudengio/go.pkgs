@@ -88,6 +88,11 @@ func ParseYAMLConfigString(spec string, cfg interface{}) error
 ```
 ParseYAMLConfigString is like ParseYAMLConfig but for a string.
 
+### Func VCSInfo
+```go
+func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool)
+```
+
 ### Func YAMLErrorWithSource
 ```go
 func YAMLErrorWithSource(spec []byte, err error) error
