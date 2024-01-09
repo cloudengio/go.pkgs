@@ -27,7 +27,7 @@ type Sequencer[T any] struct {
 }
 ```
 Sequencer implements a streaming sequencer that will accept a stream of
-unordered items (sent to it over a channel) and allow for that stream to
+unordered items (sent to it over a channel) and allow for that stream to be
 scanned in order. The end of the unordered stream is signaled by closing
 this chanel. Items to be sent in the stream are obtained via calls to
 NextItem and the order of calls to NextItem determines the order of items
