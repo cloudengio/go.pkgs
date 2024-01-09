@@ -4,6 +4,7 @@
 import cloudeng.io/file
 ```
 
+go:build darwin
 
 ## Functions
 ### Func ContextWithFS
@@ -48,6 +49,39 @@ type FS interface {
 
 	// OpenCtx is like fs.Open but with a context.
 	OpenCtx(ctx context.Context, name string) (fs.File, error)
+
+	// Readlink returns the contents of a symbolic link.
+	Readlink(ctx context.Context, path string) (string, error)
+
+	// Stat will follow symlinks/redirects/aliases.
+	Stat(ctx context.Context, path string) (Info, error)
+
+	// Lstat will not follow symlinks/redirects/aliases.
+	Lstat(ctx context.Context, path string) (Info, error)
+
+	// Join is like filepath.Join for the filesystem supported by this filesystem.
+	Join(components ...string) string
+
+	// Base is like filepath.Base for the filesystem supported by this filesystem.
+	Base(path string) string
+
+	// IsPermissionError returns true if the specified error, as returned
+	// by the filesystem's implementation, is a result of a permissions error.
+	IsPermissionError(err error) bool
+
+	// IsNotExist returns true if the specified error, as returned by the
+	// filesystem's implementation, is a result of the object not existing.
+	IsNotExist(err error) bool
+
+	// XAttr returns extended attributes for the specified file.Info
+	// and file.
+	XAttr(ctx context.Context, path string, fi Info) (XAttr, error)
+
+	// SysXAttr returns a representation of the extended attributes using the
+	// native data type of the underlying file system. If existing is
+	// non-nil and is of that file-system specific type the contents of
+	// XAttr are merged into it.
+	SysXAttr(existing any, merge XAttr) any
 }
 ```
 FS extends fs.FS with Scheme and OpenCtx.
@@ -55,9 +89,10 @@ FS extends fs.FS with Scheme and OpenCtx.
 ### Functions
 
 ```go
-func WrapFS(fs fs.FS) FS
+func LocalFS() FS
 ```
-WrapFS wraps an fs.FS to implement file.FS.
+LocalFS returns an instance of file.FS that provides access to the local
+filesystem.
 
 
 
@@ -107,6 +142,7 @@ NewInfo creates a new instance of Info.
 ```go
 func NewInfoFromFileInfo(fi fs.FileInfo) Info
 ```
+NewInfoFromFileInfo creates a new instance of Info from a fs.FileInfo.
 
 
 
@@ -115,6 +151,8 @@ func NewInfoFromFileInfo(fi fs.FileInfo) Info
 ```go
 func (fi *Info) AppendBinary(buf *bytes.Buffer) error
 ```
+AppendBinary appends a binary encoded instance of Info to the supplied
+buffer.
 
 
 ```go
@@ -162,6 +200,8 @@ Name implements fs.FileInfo.
 ```go
 func (fi *Info) SetSys(i any)
 ```
+SetSys sets the SysInfo field. Note that the Sys field is never
+encoded/decoded.
 
 
 ```go
@@ -173,7 +213,14 @@ Size implements fs.FileInfo.
 ```go
 func (fi Info) Sys() any
 ```
-Sys implements fs.FileInfo.
+Sys implements fs.FileInfo. Note that the Sys field is never
+encoded/decoded.
+
+
+```go
+func (fi Info) Type() fs.FileMode
+```
+Type implements fs.Entry
 
 
 ```go
@@ -231,6 +278,35 @@ MarshalBinary implements encoding.BinaryMarshaler.
 func (il *InfoList) UnmarshalBinary(data []byte) (err error)
 ```
 UnmarshalBinary implements encoding.BinaryUnmarshaler.
+
+
+
+
+### Type XAttr
+```go
+type XAttr struct {
+	UID, GID       int64  // -1 for non-posix filesystems that don't support numeric UID, GID
+	User, Group    string // Used for systems that don't support numeric UID, GID
+	Device, FileID uint64
+	Blocks         int64
+	Hardlinks      uint64
+}
+```
+XAttr represents extended information about a directory or file as obtained
+from the filesystem.
+
+### Methods
+
+```go
+func (x XAttr) CompareGroup(o XAttr) bool
+```
+CompareGroup compares the GID fields if >=0 and the Group fields otherwise.
+
+
+```go
+func (x XAttr) CompareUser(o XAttr) bool
+```
+CompareUser compares the UID fields if >=0 and the User fields otherwise.
 
 
 

@@ -5,6 +5,14 @@ import cloudeng.io/file/diskusage
 ```
 
 
+## Functions
+### Func ParseToBytes
+```go
+func ParseToBytes(val string) (float64, error)
+```
+
+
+
 ## Types
 ### Type Base2Bytes
 ```go
@@ -41,15 +49,48 @@ func (b Base2Bytes) Standardize() (float64, string)
 
 
 
-### Type Calculator
+### Type Block
 ```go
-type Calculator interface {
-	Calculate(int64) int64
-	String() string
+type Block struct {
+	// contains filtered or unexported fields
 }
 ```
 
+### Methods
+
+```go
+func (s Block) Calculate(_, blocks int64) int64
+```
+
+
+```go
+func (s Block) String() string
+```
+
+
+
+
+### Type Calculator
+```go
+type Calculator interface {
+	Calculate(bytes, blocks int64) int64
+	String() string
+}
+```
+Calculator is used to calculate the size of a file or directory based on
+either its size in bytes (often referred to as its apparent size) and/or
+the number of storage blocks it occupies. Some file systems support sparse
+files (most unix filesystems) where the number of blocks occupied by a file
+is less than the number of bytes it represents, hence, the term 'apparent
+size'.
+
 ### Functions
+
+```go
+func NewBlock(blocksize int64) Calculator
+```
+Block uses the number of blocks occupied by a file to calculate its size.
+
 
 ```go
 func NewIdentity() Calculator
@@ -62,7 +103,7 @@ func NewRAID0(stripeSize int64, numStripes int) Calculator
 
 
 ```go
-func NewSimple(blocksize int64) Calculator
+func NewRoundup(blocksize int64) Calculator
 ```
 
 
@@ -107,11 +148,12 @@ func (b DecimalBytes) Standardize() (float64, string)
 ```go
 type Identity struct{}
 ```
+Identity returns the apparent size of a file.
 
 ### Methods
 
 ```go
-func (i Identity) Calculate(size int64) int64
+func (i Identity) Calculate(bytes, _ int64) int64
 ```
 
 
@@ -128,11 +170,13 @@ type RAID0 struct {
 	// contains filtered or unexported fields
 }
 ```
+RAID0 is a calculator for RAID0 volumes based on the apparent size of the
+file and the RAID0 stripe size and number of stripes.
 
 ### Methods
 
 ```go
-func (r0 RAID0) Calculate(size int64) int64
+func (r0 RAID0) Calculate(size, _ int64) int64
 ```
 
 
@@ -143,22 +187,24 @@ func (r0 RAID0) String() string
 
 
 
-### Type Simple
+### Type Roundup
 ```go
-type Simple struct {
+type Roundup struct {
 	// contains filtered or unexported fields
 }
 ```
+Roundup rounds up the apparent size of a file to the nearest block size
+multiple.
 
 ### Methods
 
 ```go
-func (s Simple) Calculate(size int64) int64
+func (s Roundup) Calculate(bytes, _ int64) int64
 ```
 
 
 ```go
-func (s Simple) String() string
+func (s Roundup) String() string
 ```
 
 

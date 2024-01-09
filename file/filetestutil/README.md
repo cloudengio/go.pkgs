@@ -36,6 +36,12 @@ func NewMockFS(opts ...FSOption) file.FS
 NewMockFS returns an new mock instance of file.FS as per the specified
 options.
 
+### Func WrapEmbedFS
+```go
+func WrapEmbedFS(fs embed.FS) file.FS
+```
+WrapEmbedFS wraps an embed.FS to implement file.FS.
+
 
 
 ## Types

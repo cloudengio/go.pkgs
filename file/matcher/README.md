@@ -4,172 +4,315 @@
 import cloudeng.io/file/matcher
 ```
 
-Package matcher provides support for matching file names, types and
-modification times using boolean operators. The set of operands can be
-extended by defining instances of Operand but the operators are limited to
-&& and ||.
 
-## Types
-### Type Item
+## Functions
+### Func DirSize
 ```go
-type Item struct {
-	// contains filtered or unexported fields
-}
+func DirSize(opname, value string, larger bool) boolexpr.Operand
 ```
-Item represents an operator or operand in an expression. It is exposed to
-allow clients packages to create their own parsers.
+DirSize returns a 'directory size' operand. The value is not validated until
+a matcher.T is created using New. The size must be expressed as an integer.
+If larger is true then the comparison is performed using >=, otherwise <.
+The operand requires that the value being matched implements FileTypeIfc and
+DirSizeIfc.
 
-### Functions
-
+### Func DirSizeLarger
 ```go
-func AND() Item
+func DirSizeLarger(n, v string) boolexpr.Operand
 ```
-And returns an AND item.
 
-
+### Func DirSizeSmaller
 ```go
-func FileType(typ string) Item
+func DirSizeSmaller(n, v string) boolexpr.Operand
 ```
-FileType returns a 'file type' item. It is not validated until a matcher.T
-is created using New. Supported file types are (as per the unix find
-command):
+
+### Func FileSize
+```go
+func FileSize(opname, value string, larger bool) boolexpr.Operand
+```
+FileSize returns a 'file size' operand. The value is not validated until a
+matcher.T is created using New. The size may be expressed as an in binary
+(GiB, KiB) or decimal (GB, KB) or as bytes (eg. 1.1GB, 1GiB or 1000).
+If larger is true then the comparison is performed using >=, otherwise <.
+The operand requires that the value being matched implements FileTypeIfc and
+FileSizeIfc.
+
+### Func FileSizeLarger
+```go
+func FileSizeLarger(n, v string) boolexpr.Operand
+```
+
+### Func FileSizeSmaller
+```go
+func FileSizeSmaller(n, v string) boolexpr.Operand
+```
+
+### Func FileType
+```go
+func FileType(opname string, typ string) boolexpr.Operand
+```
+FileType returns a 'file type' operand. It is not validated until a
+matcher.T is created using New. Supported file types are (as per the unix
+find command):
   - f for regular files
   - d for directories
   - l for symbolic links
   - x executable regular files
 
-It requires that the value bein matched provides Mode() fs.FileMode or
-Type() fs.FileMode (which should return Mode&fs.ModeType).
+It requires that the value being matched implements FileTypeIfc for types d,
+f and l and FileModeIfc for type x.
 
-
+### Func Glob
 ```go
-func Glob(pat string, caseInsensitive bool) Item
+func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand
 ```
-Glob provides a glob operand that may be case insensitive, in which case the
+Glob provides a glob operand (optionally case insensitive, in which case the
 value it is being against will be converted to lower case before the match
-is evaluated. The pattern is not validated until a matcher.T is created
-using New.
+is evaluated). The pattern is not validated until a matcher.T is created.
+It requires that the value being matched implements NameIfc and/or PathIfc.
+The NameIfc interface is used first, if the value does not implement NameIfc
+or the glob evaluates to false, then PathIfc is used.
 
-
+### Func New
 ```go
-func LeftBracket() Item
+func New() *boolexpr.Parser
 ```
-LeftBracket returns a left bracket item.
+New returns a boolexpr.Parser with the following operands registered:
+  - "name": case sensitive Glob
+  - "iname", case insensitive Glob
+  - "re", Regxp
+  - "type", FileType
+  - "newer", NewerThan
+  - "dir-larger", DirSizeGreater
+  - "dir-smaller", DirSizeSmaller
+  - "file-larger", FileSizeGreater
+  - "file-smaller", FileSizeSmaller
 
-
+### Func NewDirSizeLarger
 ```go
-func NewOperand(op Operand) Item
+func NewDirSizeLarger(n, v string) boolexpr.Operand
 ```
-NewOperand returns an item representing an operand.
+NewDirSizeLarger returns a boolexpr.Operand that returns true if the
+expression value implements DirSizeIfc and the number of entries in the
+directory is greater than the specified value.
 
-
+### Func NewDirSizeSmaller
 ```go
-func NewerThanParsed(when string) Item
+func NewDirSizeSmaller(n, v string) boolexpr.Operand
+```
+NewDirSizeSmaller is like NewDirSizeLarger but returns true if the number of
+entries is smaller or equal than the specified value.
+
+### Func NewFileSizeLarger
+```go
+func NewFileSizeLarger(n, v string) boolexpr.Operand
+```
+NewFileSizeLarger returns a boolexpr.Operand that returns true if the
+expression value implements DirSizeIfc and the number of entries in the
+directory is greater than the specified value.
+
+### Func NewFileSizeSmaller
+```go
+func NewFileSizeSmaller(n, v string) boolexpr.Operand
+```
+NewFileSizeSmaller is like NewFileSizeLarger but returns true if the number
+of entries is smaller or equal than the specified value.
+
+### Func NewFileType
+```go
+func NewFileType(n, v string) boolexpr.Operand
+```
+NewFileType returns a boolexpr.Operand that matches a file type.
+The expression value must implement FileTypeIfc for types d, f and l and
+FileModeIfc for type x.
+
+### Func NewGlob
+```go
+func NewGlob(n, v string) boolexpr.Operand
+```
+NewGlob returns a case sensitive boolexpr.Operand that matches a glob
+pattern. The expression value must implement NameIfc.
+
+### Func NewGroup
+```go
+func NewGroup(name, value string, parser XAttrParser) boolexpr.Operand
+```
+NewGroup returns an operand that compares the group id of the value being
+evaluated with the supplied group id or name. The supplied IDLookup is used
+to convert the supplied text into a group id. The value being evaluated must
+implement the XAttrIfc interface.
+
+### Func NewIGlob
+```go
+func NewIGlob(n, v string) boolexpr.Operand
+```
+NewIGlob is a case-insensitive version of NewGlob. The expression value must
+implement NameIfc.
+
+### Func NewNewerThan
+```go
+func NewNewerThan(n, v string) boolexpr.Operand
+```
+NewNewerThan returns a boolexpr.Operand that matches a time that is
+newer than the specified time. The time is specified in time.RFC3339,
+time.DateTime, time.TimeOnly or time.DateOnly formats. The expression value
+must implement ModTimeIfc.
+
+### Func NewRegexp
+```go
+func NewRegexp(n, v string) boolexpr.Operand
+```
+NewRegexp returns a boolexpr.Operand that matches a regular expression.
+The expression value must implement NameIfc.
+
+### Func NewUser
+```go
+func NewUser(name, value string, parser XAttrParser) boolexpr.Operand
+```
+NewUser returns an operand that compares the user id of the value being
+evaluated with the supplied user id or name. The supplied IDLookup is used
+to convert the supplied text into a user id. The value being evaluated must
+implement the XAttrIfc interface.
+
+### Func NewerThanParsed
+```go
+func NewerThanParsed(opname string, value string) boolexpr.Operand
 ```
 NewerThanParsed returns a 'newer than' operand. It is not validated until
 a matcher.T is created using New. The time must be expressed as one of
 time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly. Due to the nature
 of the parsed formats fine grained time comparisons are not possible.
 
-It requires that the value bein matched provides ModTime() time.Time.
+It requires that the value being matched implements ModTimeIfc.
 
-
+### Func NewerThanTime
 ```go
-func NewerThanTime(when time.Time) Item
+func NewerThanTime(opname string, when time.Time) boolexpr.Operand
 ```
 NewerThanTime returns a 'newer than' operand with the specified time.
 This should be used in place of NewerThanFormat when fine grained time
 comparisons are required.
 
-It requires that the value bein matched provides ModTime() time.Time.
+It requires that the value bein matched implements Mod
 
-
+### Func ParseGroupnameOrID
 ```go
-func OR() Item
+func ParseGroupnameOrID(nameOrID string, lookup func(name string) (user.Group, error)) (file.XAttr, error)
 ```
-OR returns an OR item.
+ParseGroupnameOrID returns a file.XAttr that represents the supplied name or
+ID.
 
-
+### Func ParseUsernameOrID
 ```go
-func Regexp(re string) Item
+func ParseUsernameOrID(nameOrID string, lookup func(name string) (userid.IDInfo, error)) (file.XAttr, error)
+```
+ParseUsernameOrID returns a file.XAttr that represents the supplied name or
+ID.
+
+### Func Regexp
+```go
+func Regexp(opname string, re string) boolexpr.Operand
 ```
 Regexp returns a regular expression operand. It is not compiled until a
 matcher.T is created using New. It requires that the value being matched
-provides Name() string.
+implements PathIfc.
 
-
+### Func XAttr
 ```go
-func RightBracket() Item
+func XAttr(opname, value, doc string,
+	prepare XAttrParser,
+	eval func(opVal, val file.XAttr) bool) boolexpr.Operand
 ```
-RightBracket returns a right bracket item.
+XAttr returns an operand that compares an xattr value with the xattr value
+of the value being evaluated.
 
 
 
-### Methods
-
+## Types
+### Type DirSizeIfc
 ```go
-func (it Item) String() string
-```
-
-
-
-
-### Type Operand
-```go
-type Operand interface {
-	// Prepare is used to prepare the operand for evaluation, for example, to
-	// compile a regular expression.
-	Prepare() (Operand, error)
-	// Eval must return false for any type that it does not support.
-	Eval(any) bool
-	// Needs returns true if the operand needs the specified type.
-	Needs(reflect.Type) bool
-	String() string
+type DirSizeIfc interface {
+	NumEntries() int64
 }
 ```
-Operand represents an operand. It is exposed to allow clients packages to
-define custom operands.
+DirSizeIfc must be implemented by any values that are used with the DirSize
+operand.
 
 
-### Type T
+### Type FileModeIfc
 ```go
-type T struct {
-	// contains filtered or unexported fields
+type FileModeIfc interface {
+	Mode() fs.FileMode
 }
 ```
-T represents a boolean expression of regular expressions, file type and mod
-time comparisons. It is evaluated against a single input value.
+FileModeIfc must be implemented by any values that are used with the
+Filetype operand for type x.
 
-### Functions
 
+### Type FileSizeIfc
 ```go
-func New(items ...Item) (T, error)
+type FileSizeIfc interface {
+	Size() int64
+}
 ```
-New returns a new matcher.T built from the supplied items.
+FileSizeIfc must be implemented by any values that are used with the
+FileSize operand.
 
 
-
-### Methods
-
+### Type FileTypeIfc
 ```go
-func (m T) Eval(v any) bool
+type FileTypeIfc interface {
+	Type() fs.FileMode
+}
 ```
-Eval evaluates the matcher against the supplied value. An empty, default
-matcher will always return false.
+FileTypeIfc must be implemented by any values that are used with the
+Filetype operand for types f, d or l.
 
 
+### Type ModTimeIfc
 ```go
-func (m T) Needs(typ any) bool
+type ModTimeIfc interface {
+	ModTime() time.Time
+}
 ```
-HasOperand returns true if the matcher's expression contains an instance of
-the specified operand.
+ModTimeIfc must be implemented by any values that are used with the
+NewerThan operand.
 
 
+### Type NameIfc
 ```go
-func (m T) String() string
+type NameIfc interface {
+	Name() string
+}
 ```
+NameIfc and/or PathIfc must be implemented by any values that are used with
+the Glob operands.
 
 
+### Type PathIfc
+```go
+type PathIfc interface {
+	Path() string
+}
+```
+PathIfc must be implemented by any values that are used with the Regexp
+operand optionally for the Glob operand.
+
+
+### Type XAttrIfc
+```go
+type XAttrIfc interface {
+	XAttr() file.XAttr
+}
+```
+XAttrIfc must be implemented by any values that are used with the XAttr
+operand.
+
+
+### Type XAttrParser
+```go
+type XAttrParser func(text string) (file.XAttr, error)
+```
 
 
 
