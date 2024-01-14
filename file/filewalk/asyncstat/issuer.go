@@ -136,7 +136,6 @@ func (is *T) Process(ctx context.Context, prefix string, entries []filewalk.Entr
 		return is.sync(ctx, prefix, entries)
 	}
 	return is.async(ctx, prefix, entries)
-
 }
 
 func (is *T) callStat(ctx context.Context, filename string) (file.Info, error) {
