@@ -36,6 +36,9 @@ func (s *scanner) Contents() []filewalk.Entry {
 }
 
 func (s *scanner) Scan(ctx context.Context, n int) bool {
+	if n == 0 {
+		return false
+	}
 	// Check for ctx.Done() before performing any IO since
 	// readdir operations may be very slow.
 	select {
