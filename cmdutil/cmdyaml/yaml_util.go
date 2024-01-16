@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package cmdutil
+package cmdyaml
 
 import (
 	"bufio"
@@ -18,26 +18,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ParseYAMLConfig will parse the yaml config in spec into the requested
-// type. It provides improved error reporting via YAMLErrorWithSource.
-func ParseYAMLConfig(spec []byte, cfg interface{}) error {
+// ParseConfig will parse the yaml config in spec into the requested
+// type. It provides improved error reporting via ErrorWithSource.
+func ParseConfig(spec []byte, cfg interface{}) error {
 	if err := yaml.Unmarshal(spec, cfg); err != nil {
-		return YAMLErrorWithSource(spec, err)
+		return ErrorWithSource(spec, err)
 	}
 	return nil
 }
 
-// ParseYAMLConfigString is like ParseYAMLConfig but for a string.
-func ParseYAMLConfigString(spec string, cfg interface{}) error {
-	return ParseYAMLConfig([]byte(spec), cfg)
+// ParseConfigString is like ParseConfig but for a string.
+func ParseConfigString(spec string, cfg interface{}) error {
+	return ParseConfig([]byte(spec), cfg)
 }
 
-// ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig
+// ParseConfigFile reads a yaml config file as per ParseConfig
 // using file.FSReadFile to read the file. The use of FSReadFile allows
 // for the configuration file to be read from storage system, including
 // from embed.FS, instead of the local filesystem if an instance of fs.ReadFileFS
 // is stored in the context.
-func ParseYAMLConfigFile(ctx context.Context, filename string, cfg interface{}) error {
+func ParseConfigFile(ctx context.Context, filename string, cfg interface{}) error {
 	if len(filename) == 0 {
 		return fmt.Errorf("no config file specified")
 	}
@@ -45,20 +45,20 @@ func ParseYAMLConfigFile(ctx context.Context, filename string, cfg interface{}) 
 	if err != nil {
 		return err
 	}
-	if err := ParseYAMLConfig(spec, cfg); err != nil {
+	if err := ParseConfig(spec, cfg); err != nil {
 		return fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 	return nil
 }
 
-// YAMLErrorWithSource returns an error that includes the yaml source
+// ErrorWithSource returns an error that includes the yaml source
 // code that was the cause of the error to help with debugging YAML
 // errors.
 // Note that the errors reported for the yaml parser may be inaccurate
 // in terms of the lines the error is reported on. This seems to be particularly
 // true for lists where errors with use of tabs to indent are often reported
 // against the previous line rather than the offending one.
-func YAMLErrorWithSource(spec []byte, err error) error {
+func ErrorWithSource(spec []byte, err error) error {
 	specLines := bytes.Split(spec, []byte{'\n'})
 	if yerr, ok := err.(*yaml.TypeError); ok {
 		return yamlTypeErrorWithSource(specLines, yerr)

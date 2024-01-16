@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"cloudeng.io/cmdutil"
+	"cloudeng.io/cmdutil/cmdyaml"
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl/crawlcmd"
@@ -40,7 +40,7 @@ const crawlsSpec = `
 
 func TestCrawlConfig(t *testing.T) {
 	var crawl crawlcmd.Config
-	if err := cmdutil.ParseYAMLConfigString(crawlsSpec, &crawl); err != nil {
+	if err := cmdyaml.ParseConfigString(crawlsSpec, &crawl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +92,7 @@ download:
 
 func TestRateControl(t *testing.T) {
 	var crawl crawlcmd.Config
-	if err := cmdutil.ParseYAMLConfigString(crawlsRateControlSpec, &crawl); err != nil {
+	if err := cmdyaml.ParseConfigString(crawlsRateControlSpec, &crawl); err != nil {
 		t.Fatal(err)
 	}
 

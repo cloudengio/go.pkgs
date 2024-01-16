@@ -3,7 +3,7 @@ module cloudeng.io/file
 go 1.21
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20231219174858-fd89ad37703c
+	cloudeng.io/cmdutil v0.0.0-20240116220817-9db36ddadd3c
 	cloudeng.io/errors v0.0.9
 	cloudeng.io/net v0.0.0-20231219174858-fd89ad37703c
 	cloudeng.io/os v0.0.0-20231219174858-fd89ad37703c

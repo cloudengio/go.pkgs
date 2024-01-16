@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"cloudeng.io/cmdutil"
+	"cloudeng.io/cmdutil/cmdyaml"
 )
 
 // use to separate command names at different levels.
@@ -128,7 +128,7 @@ func SanitizeYAML(spec string) string {
 // FromYAML parses a YAML specification of the command tree.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	var yamlCmd commandDef
-	if err := cmdutil.ParseYAMLConfig(spec, &yamlCmd); err != nil {
+	if err := cmdyaml.ParseConfig(spec, &yamlCmd); err != nil {
 		return nil, err
 	}
 	cmdSet := &CommandSetYAML{
