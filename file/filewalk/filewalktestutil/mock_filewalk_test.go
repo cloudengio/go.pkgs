@@ -6,6 +6,7 @@ package filewalktestutil_test
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"reflect"
 	"testing"
@@ -139,6 +140,22 @@ entries:
 	  gid: 2
 `
 
+func cmpCommon(t *testing.T, f file.Info, name string, size int64, mode fs.FileMode, when time.Time) {
+	t.Helper()
+	if got, want := f.Name(), name; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Size(), int64(size); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Mode().Perm(), mode; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.ModTime(), when; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestXAttr(t *testing.T) {
 	ctx := context.Background()
 
@@ -153,18 +170,7 @@ func TestXAttr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := f.IsDir(), true; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := f.Size(), int64(100); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := f.Mode().Perm(), os.FileMode(0700); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := f.ModTime(), when; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
+	cmpCommon(t, f, "root", 100, os.FileMode(0700), when)
 
 	xattr, err := mfs.XAttr(ctx, "root", f)
 	if err != nil {
@@ -178,18 +184,8 @@ func TestXAttr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := f.Mode().IsRegular(), true; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := f.Size(), int64(2); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := f.Mode().Perm(), os.FileMode(0644); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := f.ModTime(), when; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
+
+	cmpCommon(t, f, "f0", 2, os.FileMode(0644), when)
 
 	xattr, err = mfs.XAttr(ctx, "root/f0", f)
 	if err != nil {
