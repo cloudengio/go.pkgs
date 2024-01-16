@@ -145,7 +145,7 @@ func cmpCommon(t *testing.T, f file.Info, name string, size int64, mode fs.FileM
 	if got, want := f.Name(), name; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := f.Size(), int64(size); got != want {
+	if got, want := f.Size(), size; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := f.Mode().Perm(), mode; got != want {
