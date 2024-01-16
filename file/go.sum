@@ -1,5 +1,7 @@
 cloudeng.io/cmdutil v0.0.0-20231219174858-fd89ad37703c h1:SnPD5IX+1pqSPHoJ8RqYwKaErOgbGBEKuZX7+IIWmNk=
 cloudeng.io/cmdutil v0.0.0-20231219174858-fd89ad37703c/go.mod h1:hoYkAtqaZlVijfSsWNwe+ntymZcYlIejsGaoX3oztAU=
+cloudeng.io/cmdutil v0.0.0-20240116220817-9db36ddadd3c h1:c1eFELXnZrkmZK99vybb7o64nryWmDSlYN/xS0y2dHg=
+cloudeng.io/cmdutil v0.0.0-20240116220817-9db36ddadd3c/go.mod h1:bpwFzmwjrw07Hg8zEP1CjfpJqII475r2j4GYMjLQN/E=
 cloudeng.io/debug v0.0.0-20231026032435-4ad1389db593 h1:WEFkomseqbtoV3sDgMh25BeMUjajGB3nFRUbV1X/auo=
 cloudeng.io/debug v0.0.0-20231026032435-4ad1389db593/go.mod h1:L94l9rix3PTZaCmlR4UiHtcU0ZVlFu5/BWbwgWSqqqk=
 cloudeng.io/errors v0.0.8/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
