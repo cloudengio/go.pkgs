@@ -173,11 +173,10 @@ func (m *MockFS) IsNotExist(err error) bool {
 }
 
 func (m *MockFS) XAttr(_ context.Context, pathname string, fi file.Info) (file.XAttr, error) {
-	de, ok := m.lookup(pathname)
-	if !ok || de.IsDir() {
-		return fi.Sys().(file.XAttr), os.ErrNotExist
+	if _, ok := m.lookup(pathname); ok {
+		return fi.Sys().(file.XAttr), nil
 	}
-	return file.XAttr{}, nil
+	return file.XAttr{}, os.ErrNotExist
 }
 
 func (m *MockFS) SysXAttr(_ any, merge file.XAttr) any {
@@ -256,14 +255,20 @@ func newContents(des []dirEntry) []filewalk.Entry {
 	return c
 }
 
+type commonSpec struct {
+	Name   string      `yaml:"name"`
+	Size   int64       `yaml:"size"`
+	Mode   fs.FileMode `yaml:"mode"`
+	Time   time.Time   `yaml:"time"`
+	UID    int64       `yaml:"uid"`
+	GID    int64       `yaml:"gid"`
+	Device uint64      `yaml:"device"`
+	FileID uint64      `yaml:"file_id"`
+}
+
 type fileSpec struct {
-	Name     string      `yaml:"name"`
-	Size     int64       `yaml:"size"`
-	Mode     fs.FileMode `yaml:"mode"`
-	Time     time.Time   `yaml:"time"`
-	Contents string      `yaml:"contents"`
-	UID      int64       `yaml:"uid"`
-	GID      int64       `yaml:"gid"`
+	commonSpec `yaml:",inline"`
+	Contents   string `yaml:"contents"`
 }
 
 type entrySpec struct {
@@ -272,10 +277,8 @@ type entrySpec struct {
 }
 
 type dirSpec struct {
-	Name    string      `yaml:"name"`
-	UID     int64       `yaml:"uid"`
-	GID     int64       `yaml:"gid"`
-	Entries []entrySpec `yaml:"entries"`
+	commonSpec `yaml:",inline"`
+	Entries    []entrySpec `yaml:"entries"`
 }
 
 func (m *MockFS) initFromYAML(cfg string) error {
@@ -290,8 +293,12 @@ func (m *MockFS) initFromYAML(cfg string) error {
 
 func createFromYAML(ds *dirSpec) *dir {
 	d := &dir{
-		info: file.NewInfo(ds.Name, 0, fs.ModeDir, time.Time{},
-			file.XAttr{UID: ds.UID, GID: ds.GID}),
+		info: file.NewInfo(ds.Name, ds.Size, ds.Mode|fs.ModeDir, time.Time{},
+			file.XAttr{
+				UID:    ds.UID,
+				GID:    ds.GID,
+				Device: ds.Device,
+				FileID: ds.FileID}),
 	}
 	for _, de := range ds.Entries {
 		if de.Dir != nil {
@@ -305,7 +312,11 @@ func createFromYAML(ds *dirSpec) *dir {
 				de.File.Size,
 				de.File.Mode,
 				de.File.Time,
-				file.XAttr{UID: de.File.UID, GID: de.File.GID},
+				file.XAttr{
+					UID:    de.File.UID,
+					GID:    de.File.GID,
+					Device: de.File.Device,
+					FileID: de.File.FileID},
 			),
 		}
 		d.entries = append(d.entries, dirEntry{name: de.File.Name, file: fe})

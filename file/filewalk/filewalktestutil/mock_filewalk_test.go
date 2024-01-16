@@ -6,9 +6,11 @@ package filewalktestutil_test
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"testing"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk/filewalktestutil"
 )
 
@@ -113,4 +115,49 @@ func TestScan(t *testing.T) {
 			t.Errorf("%v: got %v, want %v", tc.root, got, want)
 		}
 	}
+}
+
+const withDetailsSpec = `
+name: root
+size: 100
+device: 30
+file_id: 40
+mode: 0700
+uid: 10
+gid: 1
+entries:
+  - file:
+	  name: f0
+	  size: 100
+	  device: 20
+	  mode: 0644
+	  file_id: 30
+	  uid: 20
+	  gid: 2
+`
+
+func TestXAttr(t *testing.T) {
+	ctx := context.Background()
+
+	mfs := newFS(t, filewalktestutil.WithYAMLConfig(withDetailsSpec))
+
+	f, err := mfs.Stat(ctx, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := f.IsDir(), true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Mode().Perm(), os.FileMode(0700); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	xattr, err := mfs.XAttr(ctx, "root", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := xattr, (file.XAttr{UID: 10, GID: 1, Device: 30, FileID: 40}); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }
