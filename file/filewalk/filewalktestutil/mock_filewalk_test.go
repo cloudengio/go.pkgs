@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk/filewalktestutil"
@@ -125,19 +126,26 @@ file_id: 40
 mode: 0700
 uid: 10
 gid: 1
+time: "2021-10-10T03:03:03-07:00"
 entries:
   - file:
 	  name: f0
-	  size: 100
+	  size: 2
 	  device: 20
-	  mode: 0644
 	  file_id: 30
+	  mode: 0644
+	  time: "2021-10-10T03:03:03-07:00"
 	  uid: 20
 	  gid: 2
 `
 
 func TestXAttr(t *testing.T) {
 	ctx := context.Background()
+
+	when, err := time.Parse(time.RFC3339, "2021-10-10T03:03:03-07:00")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	mfs := newFS(t, filewalktestutil.WithYAMLConfig(withDetailsSpec))
 
@@ -148,7 +156,13 @@ func TestXAttr(t *testing.T) {
 	if got, want := f.IsDir(), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	if got, want := f.Size(), int64(100); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 	if got, want := f.Mode().Perm(), os.FileMode(0700); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.ModTime(), when; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -160,4 +174,28 @@ func TestXAttr(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	f, err = mfs.Stat(ctx, "root/f0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := f.Mode().IsRegular(), true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Size(), int64(2); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Mode().Perm(), os.FileMode(0644); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.ModTime(), when; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	xattr, err = mfs.XAttr(ctx, "root/f0", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := xattr, (file.XAttr{UID: 20, GID: 2, Device: 20, FileID: 30}); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
