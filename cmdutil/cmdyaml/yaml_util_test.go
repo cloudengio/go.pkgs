@@ -2,13 +2,13 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package cmdutil_test
+package cmdyaml_test
 
 import (
 	"strings"
 	"testing"
 
-	"cloudeng.io/cmdutil"
+	"cloudeng.io/cmdutil/cmdyaml"
 )
 
 type testStruct struct {
@@ -50,7 +50,7 @@ list:
 	  - b
 `, `yaml: line 3: "  - a": found a tab character that violates indentation`},
 	} {
-		err := cmdutil.ParseYAMLConfigString(tc.input, &ts)
+		err := cmdyaml.ParseConfigString(tc.input, &ts)
 		if err == nil || strings.TrimSpace(err.Error()) != tc.errMsg {
 			t.Errorf("%v: got %v, want %v", i, err, tc.errMsg)
 		}
