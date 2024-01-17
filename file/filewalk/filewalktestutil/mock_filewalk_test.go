@@ -6,9 +6,13 @@ package filewalktestutil_test
 
 import (
 	"context"
+	"io/fs"
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
+	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk/filewalktestutil"
 )
 
@@ -112,5 +116,82 @@ func TestScan(t *testing.T) {
 		if got, want := found, tc.want; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %v, want %v", tc.root, got, want)
 		}
+	}
+}
+
+const withDetailsSpec = `
+name: root
+size: 100
+device: 30
+file_id: 40
+mode: 0700
+uid: 10
+gid: 1
+time: "2021-10-10T03:03:03-07:00"
+entries:
+  - file:
+	  name: f0
+	  size: 2
+	  device: 20
+	  file_id: 30
+	  mode: 0644
+	  time: "2021-10-10T03:03:03-07:00"
+	  uid: 20
+	  gid: 2
+`
+
+func cmpCommon(t *testing.T, f file.Info, name string, size int64, mode fs.FileMode, when time.Time) {
+	t.Helper()
+	if got, want := f.Name(), name; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Size(), size; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.Mode().Perm(), mode; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := f.ModTime(), when; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestXAttr(t *testing.T) {
+	ctx := context.Background()
+
+	when, err := time.Parse(time.RFC3339, "2021-10-10T03:03:03-07:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mfs := newFS(t, filewalktestutil.WithYAMLConfig(withDetailsSpec))
+
+	f, err := mfs.Stat(ctx, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmpCommon(t, f, "root", 100, os.FileMode(0700), when)
+
+	xattr, err := mfs.XAttr(ctx, "root", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := xattr, (file.XAttr{UID: 10, GID: 1, Device: 30, FileID: 40}); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	f, err = mfs.Stat(ctx, "root/f0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmpCommon(t, f, "f0", 2, os.FileMode(0644), when)
+
+	xattr, err = mfs.XAttr(ctx, "root/f0", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := xattr, (file.XAttr{UID: 20, GID: 2, Device: 20, FileID: 30}); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
