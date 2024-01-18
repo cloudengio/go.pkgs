@@ -26,24 +26,24 @@ import (
 // ExponentialBackoffConfig is the configuration for an exponential backoff
 // retry strategy for downloads.
 type ExponentialBackoff struct {
-	InitialDelay time.Duration `yaml:"initial_delay" cmd:"the initial delay between retries in the exponential backoff"`
-	Steps        int           `yaml:"steps", cmd:"the number of steps of exponential backoff before giving up"`
-	StatusCodes  []int         `yaml:"status_codes,flow" cmd:"the status codes that trigger a retry"`
+	InitialDelay time.Duration `yaml:"initial_delay"`
+	Steps        int           `yaml:"steps"`
+	StatusCodes  []int         `yaml:"status_codes,flow"`
 }
 
 // Rate specifies a rate in one of several forms, only one should
 // be used.
 type Rate struct {
-	Tick            time.Duration `yaml:"tick" cmd:"the duration of a tick"`
-	RequestsPerTick int           `yaml:"requests_per_tick" cmd:"the number of requests per tick"`
-	BytesPerTick    int           `yaml:"bytes_per_tick" cmd:"the number of bytes per tick"`
+	Tick            time.Duration `yaml:"tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick"`
 }
 
 // RateControl is the configuration for rate based control of download
 // requests.
 type RateControl struct {
-	Rate               Rate               `yaml:"rate_control" cmd:"the rate control parameters"`
-	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff" cmd:"the exponential backoff parameters"`
+	Rate               Rate               `yaml:"rate_control"`
+	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff"`
 }
 
 // DownloadFactoryConfig is the configuration for a crawl.DownloaderFactory.
