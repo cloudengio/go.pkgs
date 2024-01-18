@@ -29,7 +29,11 @@ type Field struct {
 	Fields []Field `json:",omitempty" yaml:",omitempty"`
 }
 
-func describeTags(tagName string, typ reflect.Type) []Field {
+func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Type) []Field {
+	if _, ok := seen[typ]; ok {
+		return nil
+	}
+	seen[typ] = struct{}{}
 	var fields []Field
 	if typ.Kind() != reflect.Struct {
 		return nil
@@ -50,7 +54,7 @@ func describeTags(tagName string, typ reflect.Type) []Field {
 		var subFields []Field
 		var slice bool
 		if field.Type.Kind() == reflect.Struct {
-			subFields = describeTags(tagName, field.Type)
+			subFields = describeTags(seen, tagName, field.Type)
 			if field.Anonymous {
 				fields = append(fields, subFields...)
 				subFields = nil
@@ -58,7 +62,7 @@ func describeTags(tagName string, typ reflect.Type) []Field {
 		}
 		if field.Type.Kind() == reflect.Slice {
 			slice = true
-			subFields = describeTags(tagName, field.Type.Elem())
+			subFields = describeTags(seen, tagName, field.Type.Elem())
 		}
 		if !ok && (len(subFields) == 0) {
 			continue
@@ -144,8 +148,9 @@ func Describe(t interface{}, tag, detail string) (*Description, error) {
 	if typ.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("%T is not a struct", t)
 	}
+	seen := map[reflect.Type]struct{}{}
 	return &Description{
 		Detail: detail,
-		Fields: describeTags(tag, typ),
+		Fields: describeTags(seen, tag, typ),
 	}, nil
 }

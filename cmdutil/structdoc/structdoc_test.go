@@ -93,3 +93,24 @@ SubStruct:         a substruct
 		t.Errorf("unexpected or missing error: %v", err)
 	}
 }
+
+type R1 struct {
+	R []R2 `tag:"R1 recursive"`
+}
+
+type R2 struct {
+	R []R1 `tag:"R2 recursive"`
+}
+
+func TestRecursion(t *testing.T) {
+	desc, err := structdoc.Describe(&R1{}, "tag", "detail:\n")
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	if got, want := desc.String(), `detail:
+R: []R1 recursive
+  R: []R2 recursive
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
