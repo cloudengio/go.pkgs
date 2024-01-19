@@ -114,3 +114,24 @@ R: []R1 recursive
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+type I1 struct {
+	A I2 `tag:"I1"`
+}
+
+type I2 struct {
+	B string `tag:"I2"`
+}
+
+func TestIndent(t *testing.T) {
+	desc, err := structdoc.Describe(&I1{}, "tag", "detail:\n")
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	if got, want := desc.String(), `detail:
+A: I1
+  B: I2
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
