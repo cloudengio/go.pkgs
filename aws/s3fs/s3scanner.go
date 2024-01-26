@@ -39,9 +39,9 @@ var slashDelimiter = aws.String("/")
 func NewLevelScanner(client Client, path string) filewalk.LevelScanner {
 	match := cloudpath.AWSS3Matcher(path)
 	if len(match.Matched) == 0 {
-		return &scannerCommon{err: fmt.Errorf("invalid s3 path: %v", path)}
+		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
 	}
-	sc := scannerCommon{
+	sc := scanner{
 		client:    client,
 		match:     match,
 		bucket:    aws.String(match.Volume),
@@ -49,81 +49,35 @@ func NewLevelScanner(client Client, path string) filewalk.LevelScanner {
 		delimiter: slashDelimiter,
 	}
 	if IsDirectoryBucket(match.Volume) {
-		return &dbScanner{scannerCommon: sc,
-			continuationToken: nil,
-		}
+		sc.delimiter = slashDelimiter
 	}
-	return &dbScanner{scannerCommon: sc,
-		continuationToken: nil,
-	}
-	return &gpScanner{scannerCommon: sc,
-		startAfter: initialStartAfter,
-	}
+	return sc
 }
 
 func (fs *s3fs) LevelScanner(prefix string) filewalk.LevelScanner {
 	return NewLevelScanner(fs.client, prefix)
 }
 
-type scannerCommon struct {
-	client         Client
-	match          cloudpath.Match
-	entries        []filewalk.Entry
-	bucket, prefix *string
-	delimiter      *string
-	err            error
+type scanner struct {
+	client            Client
+	match             cloudpath.Match
+	entries           []filewalk.Entry
+	bucket, prefix    *string
+	done              bool
+	continuationToken *string
+	delimiter         *string
+	err               error
 }
 
-func (s *scannerCommon) Contents() []filewalk.Entry {
+func (s *scanner) Contents() []filewalk.Entry {
 	return s.entries
 }
 
-func (s *scannerCommon) Err() error {
+func (s *scanner) Err() error {
 	return s.err
 }
 
-func (s *scannerCommon) Scan(ctx context.Context, n int) bool {
-	return false
-}
-
-type gpScanner struct {
-	scannerCommon
-	startAfter *string
-}
-
-func (s *gpScanner) Scan(ctx context.Context, n int) bool {
-	if s.err != nil {
-		return false
-	}
-	req := s3.ListObjectsV2Input{
-		Bucket:     s.bucket,
-		Prefix:     s.prefix,
-		StartAfter: s.startAfter,
-		Delimiter:  s.delimiter,
-		MaxKeys:    aws.Int32(int32(n)),
-	}
-	obj, err := s.client.ListObjectsV2(ctx, &req)
-	if err != nil {
-		s.err = err
-		return false
-	}
-	kc := aws.ToInt32(obj.KeyCount)
-	if kc == 0 {
-		return false
-	}
-	s.entries = convertListObjectsOutput(obj)
-	last := s.entries[len(s.entries)-1].Name
-	s.startAfter = aws.String(last)
-	return true
-}
-
-type dbScanner struct {
-	scannerCommon
-	continuationToken *string
-	done              bool
-}
-
-func (s *dbScanner) Scan(ctx context.Context, n int) bool {
+func (s *scanner) Scan(ctx context.Context, n int) bool {
 	if s.err != nil || s.done {
 		return false
 	}
