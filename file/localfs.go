@@ -19,6 +19,12 @@ func LocalFS() FS {
 	return &localfs{}
 }
 
+// LocalObjectFS returns an instance of file.ObjectFS that provides access to
+// the local filesystem.
+func LocalObjectFS() ObjectFS {
+	return &localfs{}
+}
+
 func (f *localfs) Open(name string) (fs.File, error) {
 	return os.Open(name)
 }
@@ -76,4 +82,24 @@ func (f *localfs) XAttr(_ context.Context, name string, info Info) (XAttr, error
 
 func (f *localfs) SysXAttr(existing any, merge XAttr) any {
 	return mergeXAttr(existing, merge)
+}
+
+func (f *localfs) Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error {
+	return os.WriteFile(path, data, perm)
+}
+
+func (f *localfs) Get(_ context.Context, path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+func (f *localfs) Delete(_ context.Context, path string) error {
+	return os.Remove(path)
+}
+
+func (f *localfs) DeleteAll(_ context.Context, path string) error {
+	return os.RemoveAll(path)
+}
+
+func (f *localfs) EnsurePrefix(_ context.Context, path string, perm fs.FileMode) error {
+	return os.MkdirAll(path, perm)
 }

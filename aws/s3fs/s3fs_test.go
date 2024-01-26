@@ -47,5 +47,4 @@ func TestS3FS(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("got %s, want %s", got, want)
 	}
-
 }

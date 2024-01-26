@@ -67,3 +67,15 @@ func (m *mfs) GetObject(ctx context.Context, params *s3.GetObjectInput, _ ...fun
 		Body:          file,
 	}, nil
 }
+
+func (m *mfs) HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	return nil, nil
+}
+
+func (m *mfs) GetBucketAcl(ctx context.Context, params *s3.GetBucketAclInput, optFns ...func(*s3.Options)) (*s3.GetBucketAclOutput, error) {
+	return nil, nil
+}
+
+func (m *mfs) GetObjectAcl(ctx context.Context, params *s3.GetObjectAclInput, optFns ...func(*s3.Options)) (*s3.GetObjectAclOutput, error) {
+	return nil, nil
+}
