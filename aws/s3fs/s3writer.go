@@ -88,9 +88,8 @@ func (s3fs *s3fs) DeleteAll(ctx context.Context, path string) error {
 			return err
 		}
 		if *objs.IsTruncated {
-			break
+			return nil
 		}
 		continuationToken = objs.NextContinuationToken
 	}
-	return nil
 }

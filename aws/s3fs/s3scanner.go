@@ -41,7 +41,7 @@ func NewLevelScanner(client Client, path string) filewalk.LevelScanner {
 	if len(match.Matched) == 0 {
 		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
 	}
-	sc := scanner{
+	sc := &scanner{
 		client:    client,
 		match:     match,
 		bucket:    aws.String(match.Volume),
@@ -69,38 +69,38 @@ type scanner struct {
 	err               error
 }
 
-func (s *scanner) Contents() []filewalk.Entry {
-	return s.entries
+func (sc *scanner) Contents() []filewalk.Entry {
+	return sc.entries
 }
 
-func (s *scanner) Err() error {
-	return s.err
+func (sc *scanner) Err() error {
+	return sc.err
 }
 
-func (s *scanner) Scan(ctx context.Context, n int) bool {
-	if s.err != nil || s.done {
+func (sc *scanner) Scan(ctx context.Context, n int) bool {
+	if sc.err != nil || sc.done {
 		return false
 	}
 	req := s3.ListObjectsV2Input{
-		Bucket:            s.bucket,
-		Prefix:            s.prefix,
-		ContinuationToken: s.continuationToken,
-		Delimiter:         slashDelimiter,
+		Bucket:            sc.bucket,
+		Prefix:            sc.prefix,
+		ContinuationToken: sc.continuationToken,
+		Delimiter:         sc.delimiter,
 		MaxKeys:           aws.Int32(int32(n)),
 	}
-	obj, err := s.client.ListObjectsV2(ctx, &req)
+	obj, err := sc.client.ListObjectsV2(ctx, &req)
 	if err != nil {
-		s.err = err
+		sc.err = err
 		return false
 	}
 	if !*obj.IsTruncated {
 		// This is the last response for this directory, save the
 		// results and return false on the next call to Scan.
-		s.done = true
+		sc.done = true
 	}
-	s.continuationToken = obj.NextContinuationToken
-	s.entries = convertListObjectsOutput(obj)
-	return len(s.entries) != 0
+	sc.continuationToken = obj.NextContinuationToken
+	sc.entries = convertListObjectsOutput(obj)
+	return len(sc.entries) != 0
 }
 
 func convertListObjectsOutput(lo *s3.ListObjectsV2Output) []filewalk.Entry {
