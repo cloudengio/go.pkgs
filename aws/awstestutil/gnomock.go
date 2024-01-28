@@ -7,9 +7,12 @@ package awstestutil
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"sync"
+	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -27,6 +30,24 @@ const (
 	S3             Service = Service(localstack.S3)
 	SecretsManager Service = Service(localstack.SecretsManager)
 )
+
+func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
+	svc := NewLocalAWS(opts...)
+	if err := svc.Start(); err != nil {
+		panic(fmt.Sprintf("failed to start aws test services: %v", err))
+	}
+	*service = svc
+	code := m.Run()
+	if code != 0 {
+		svc.Stop() //nolint: errcheck
+		os.Exit(code)
+	}
+	svc.Stop() //nolint: errcheck
+}
+
+func isOnGitHubActions() bool {
+	return os.Getenv("GITHUB_ACTIONS") != ""
+}
 
 func WithDebug(log io.Writer) Option {
 	return func(o *Options) {

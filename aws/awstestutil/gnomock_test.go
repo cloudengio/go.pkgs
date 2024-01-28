@@ -7,7 +7,6 @@ package awstestutil_test
 import (
 	"context"
 	"io"
-	"os"
 	"slices"
 	"testing"
 
@@ -20,22 +19,14 @@ import (
 var awsService *awstestutil.AWS
 
 func TestMain(m *testing.M) {
-	awsService = awstestutil.NewLocalAWS(
+	awstestutil.AWSTestMain(m, &awsService,
 		awstestutil.WithS3(),
 		awstestutil.WithS3Tree("testdata"),
 		awstestutil.WithSecretsManager())
-	if err := awsService.Start(); err != nil {
-		panic(err)
-	}
-	code := m.Run()
-	if code != 0 {
-		awsService.Stop()
-		os.Exit(code)
-	}
-	awsService.Stop()
 }
 
 func TestSecrets(t *testing.T) {
+	awstestutil.SkipOnCI(t)
 	ctx := context.Background()
 	client := awsService.SecretsManager(awstestutil.DefaultAWSConfig())
 	list, err := client.ListSecrets(ctx, &secretsmanager.ListSecretsInput{})
@@ -79,7 +70,6 @@ func TestSecrets(t *testing.T) {
 	if got, want := aws.ToString(list.SecretList[0].Name), name; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
 }
 
 func getFile(ctx context.Context, t *testing.T, client *s3.Client, bucket, key string) string {
@@ -104,6 +94,7 @@ func getFile(ctx context.Context, t *testing.T, client *s3.Client, bucket, key s
 }
 
 func TestS3(t *testing.T) {
+	awstestutil.SkipOnCI(t)
 	ctx := context.Background()
 	client := awsService.S3(awstestutil.DefaultAWSConfig())
 
