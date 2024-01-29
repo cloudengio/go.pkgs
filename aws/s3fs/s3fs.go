@@ -27,6 +27,7 @@ type Option func(o *options)
 type options struct {
 	s3options s3.Options
 	client    Client
+	scanSize  int
 }
 
 // WithS3Options wraps s3.Options for use when creating an s3.Client.
@@ -42,6 +43,15 @@ func WithS3Options(opts ...func(*s3.Options)) Option {
 func WithS3Client(client Client) Option {
 	return func(o *options) {
 		o.client = client
+	}
+}
+
+// WithScanSize sets the number of items to fetch in a single remote api
+// invocation for operations such as DeleteAll which may require
+// iterating over a range of objects.
+func WithScanSize(s int) Option {
+	return func(o *options) {
+		o.scanSize = s
 	}
 }
 

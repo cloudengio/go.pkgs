@@ -62,7 +62,7 @@ func (s3fs *s3fs) DeleteAll(ctx context.Context, path string) error {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
 	bucket, prefix := aws.String(match.Volume), aws.String(match.Key)
-	items := aws.Int32(1000)
+	items := aws.Int32(int32(s3fs.options.scanSize))
 	var continuationToken *string
 	for {
 		objs, err := s3fs.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
