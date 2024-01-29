@@ -6,7 +6,14 @@
 
 package awstestutil
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
+
+func isOnGitHubActions() bool {
+	return os.Getenv("GITHUB_ACTIONS") != ""
+}
 
 func SkipAWSTests(t *testing.T) {
 	if isOnGitHubActions() {
@@ -16,8 +23,7 @@ func SkipAWSTests(t *testing.T) {
 
 func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
 	if isOnGitHubActions() {
-		withoutGnomock(m)
-	} else {
-		withGnomock(m, service, opts)
+		os.Exit(m.Run())
 	}
+	withGnomock(m, service, opts)
 }

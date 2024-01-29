@@ -31,10 +31,6 @@ const (
 	SecretsManager Service = Service(localstack.SecretsManager)
 )
 
-func withoutGnomock(m *testing.M) {
-	os.Exit(m.Run())
-}
-
 func withGnomock(m *testing.M, service **AWS, opts []Option) {
 	svc := NewLocalAWS(opts...)
 	if err := svc.Start(); err != nil {
@@ -47,10 +43,6 @@ func withGnomock(m *testing.M, service **AWS, opts []Option) {
 		os.Exit(code)
 	}
 	svc.Stop() //nolint: errcheck
-}
-
-func isOnGitHubActions() bool {
-	return os.Getenv("GITHUB_ACTIONS") != ""
 }
 
 func WithDebug(log io.Writer) Option {

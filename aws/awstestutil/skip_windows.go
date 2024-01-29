@@ -6,12 +6,15 @@
 
 package awstestutil
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func SkipAWSTests(t *testing.T) {
 	t.Skip("skipping test on windows")
 }
 
 func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
-	withoutGnomock(m)
+	os.Exit(m.Run())
 }
