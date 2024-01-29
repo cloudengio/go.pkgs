@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSecrets(t *testing.T) {
-	awstestutil.SkipOnCI(t)
+	awstestutil.SkipAWSTests(t)
 	ctx := context.Background()
 	client := awsService.SecretsManager(awstestutil.DefaultAWSConfig())
 	list, err := client.ListSecrets(ctx, &secretsmanager.ListSecretsInput{})
@@ -94,7 +94,7 @@ func getFile(ctx context.Context, t *testing.T, client *s3.Client, bucket, key s
 }
 
 func TestS3(t *testing.T) {
-	awstestutil.SkipOnCI(t)
+	awstestutil.SkipAWSTests(t)
 	ctx := context.Background()
 	client := awsService.S3(awstestutil.DefaultAWSConfig())
 

@@ -8,8 +8,16 @@ package awstestutil
 
 import "testing"
 
-func SkipOnCI(t *testing.T) {
+func SkipAWSTests(t *testing.T) {
 	if isOnGitHubActions() {
 		t.Skip("skipping test on github actions")
+	}
+}
+
+func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
+	if isOnGitHubActions() {
+		withoutGnomock(m)
+	} else {
+		withGnomock(m, service, opts)
 	}
 }

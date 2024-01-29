@@ -31,7 +31,11 @@ const (
 	SecretsManager Service = Service(localstack.SecretsManager)
 )
 
-func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
+func withoutGnomock(m *testing.M) {
+	os.Exit(m.Run())
+}
+
+func withGnomock(m *testing.M, service **AWS, opts []Option) {
 	svc := NewLocalAWS(opts...)
 	if err := svc.Start(); err != nil {
 		panic(fmt.Sprintf("failed to start aws test services: %v", err))

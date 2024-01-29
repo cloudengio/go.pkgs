@@ -8,4 +8,8 @@ package awstestutil
 
 import "testing"
 
-func SkipOnCI(t *testing.T) {}
+func SkipAWSTests(_ *testing.T) {}
+
+func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
+	withGnomock(m, service, opts)
+}
