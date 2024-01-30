@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"strings"
 
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/path/cloudpath"
@@ -33,29 +34,30 @@ func DirectoryBucketAZ(bucket string) string {
 	return m[1]
 }
 
-var initialStartAfter = aws.String("")
-var slashDelimiter = aws.String("/")
+var slasDelim = aws.String("/")
 
-func NewLevelScanner(client Client, path string) filewalk.LevelScanner {
+func NewLevelScanner(client Client, path, delimiter string) filewalk.LevelScanner {
+	fmt.Printf("new level scanner: %v\n", path)
 	match := cloudpath.AWSS3Matcher(path)
 	if len(match.Matched) == 0 {
 		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
 	}
+	key := strings.TrimPrefix(match.Key, "/")
 	sc := &scanner{
-		client:    client,
-		match:     match,
-		bucket:    aws.String(match.Volume),
-		prefix:    aws.String(match.Key),
-		delimiter: slashDelimiter,
+		client: client,
+		match:  match,
+		bucket: aws.String(match.Volume),
+		prefix: aws.String(key),
+		delim:  aws.String(delimiter),
 	}
 	if IsDirectoryBucket(match.Volume) {
-		sc.delimiter = slashDelimiter
+		sc.delim = slasDelim
 	}
 	return sc
 }
 
 func (fs *s3fs) LevelScanner(prefix string) filewalk.LevelScanner {
-	return NewLevelScanner(fs.client, prefix)
+	return NewLevelScanner(fs.client, prefix, fs.options.delimiter)
 }
 
 type scanner struct {
@@ -65,7 +67,7 @@ type scanner struct {
 	bucket, prefix    *string
 	done              bool
 	continuationToken *string
-	delimiter         *string
+	delim             *string
 	err               error
 }
 
@@ -78,6 +80,7 @@ func (sc *scanner) Err() error {
 }
 
 func (sc *scanner) Scan(ctx context.Context, n int) bool {
+	fmt.Printf("scan: %q %q %v (%v %v)\n", *sc.bucket, *sc.prefix, sc.continuationToken, sc.err, sc.done)
 	if sc.err != nil || sc.done {
 		return false
 	}
@@ -85,32 +88,34 @@ func (sc *scanner) Scan(ctx context.Context, n int) bool {
 		Bucket:            sc.bucket,
 		Prefix:            sc.prefix,
 		ContinuationToken: sc.continuationToken,
-		Delimiter:         sc.delimiter,
+		Delimiter:         sc.delim,
 		MaxKeys:           aws.Int32(int32(n)),
 	}
 	obj, err := sc.client.ListObjectsV2(ctx, &req)
 	if err != nil {
+		fmt.Printf("ERR %v\n", err)
 		sc.err = err
 		return false
 	}
+	fmt.Printf("got.... %v %v\n", len(obj.Contents), len(obj.CommonPrefixes))
 	if !*obj.IsTruncated {
 		// This is the last response for this directory, save the
 		// results and return false on the next call to Scan.
 		sc.done = true
 	}
 	sc.continuationToken = obj.NextContinuationToken
-	sc.entries = convertListObjectsOutput(obj)
+	sc.entries = convertListObjectsOutput(obj, *sc.delim)
 	return len(sc.entries) != 0
 }
 
-func convertListObjectsOutput(lo *s3.ListObjectsV2Output) []filewalk.Entry {
+func convertListObjectsOutput(lo *s3.ListObjectsV2Output, delim string) []filewalk.Entry {
 	ne := len(lo.Contents) + len(lo.CommonPrefixes)
 	if ne == 0 {
 		return nil
 	}
 	entries := make([]filewalk.Entry, ne)
 	for i, c := range lo.Contents {
-		entries[i].Name = aws.ToString(c.Key)
+		entries[i].Name = basename(aws.ToString(c.Key), delim)
 		entries[i].Type = fs.FileMode(0)
 	}
 	n := len(lo.Contents)

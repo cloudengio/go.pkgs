@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"strings"
+	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file"
@@ -25,6 +27,7 @@ import (
 type Option func(o *options)
 
 type options struct {
+	delimiter string
 	s3options s3.Options
 	client    Client
 	scanSize  int
@@ -55,6 +58,14 @@ func WithScanSize(s int) Option {
 	}
 }
 
+// WithDelimiter sets the delimiter to use when listing objects,
+// the default is /.
+func WithDelimiter(d string) Option {
+	return func(o *options) {
+		o.delimiter = d
+	}
+}
+
 type s3fs struct {
 	client  Client
 	options options
@@ -63,6 +74,8 @@ type s3fs struct {
 // New creates a new instance of filewalk.FS backed by S3.
 func New(cfg aws.Config, options ...Option) filewalk.FS {
 	s3fs := &s3fs{}
+	s3fs.options.delimiter = "/"
+	s3fs.options.scanSize = 1000
 	for _, fn := range options {
 		fn(&s3fs.options)
 	}
@@ -73,6 +86,7 @@ func New(cfg aws.Config, options ...Option) filewalk.FS {
 	return s3fs
 }
 
+// NewObjectFS creates a new instance of file.ObjectFS backed by S3.
 func NewObjectFS(cfg aws.Config, options ...Option) file.ObjectFS {
 	return New(cfg, options...).(file.ObjectFS)
 }
@@ -98,7 +112,7 @@ func (s3fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		obj:    res,
 		match:  match,
 		client: s3fs.client,
-		isDir:  key[len(key)-1] == '/',
+		isDir:  strings.HasSuffix(key, s3fs.options.delimiter),
 	}, nil
 }
 
@@ -106,10 +120,36 @@ func (s3fs *s3fs) Readlink(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("Readlink is not implemented for s3")
 }
 
+func basename(path string, delim string) string {
+	if len(path) == 0 {
+		return ""
+	}
+	isdir := false
+	for lp := len(path); lp > 0 && strings.HasSuffix(path, delim); lp = len(path) {
+		path = path[0 : lp-1]
+		isdir = true
+	}
+	if idx := strings.LastIndex(path, delim); idx >= 0 {
+		if isdir {
+			return path[idx+1:] + string(delim)
+		}
+		return path[idx+1:]
+	}
+	return path
+}
+
+// Stat invokes a Head operation on objects only. If name ends in /
+// (or the currently configured delimiter) it is considered to be a
+// prefix and a file.Info is created that reflects that (ie IsDir()
+// returns true).
 func (s3fs *s3fs) Stat(ctx context.Context, name string) (file.Info, error) {
 	match := cloudpath.AWSS3Matcher(name)
 	if len(match.Matched) == 0 {
 		return file.Info{}, fmt.Errorf("invalid s3 path: %v", name)
+	}
+	if len(match.Key) > 0 && strings.HasSuffix(match.Key, s3fs.options.delimiter) {
+		name = basename(match.Key, s3fs.options.delimiter)
+		return file.NewInfo(name, 0, fs.ModeDir, time.Time{}, nil), nil
 	}
 	return objectStat(ctx, s3fs.client, match)
 }
@@ -118,8 +158,30 @@ func (s3fs *s3fs) Lstat(ctx context.Context, path string) (file.Info, error) {
 	return s3fs.Stat(ctx, path)
 }
 
+// Join concatenates the supplied components ensuring to insert
+// delimiters only when necessary, that is components ending
+// or starting with / (or the currently configured delimiter)
+// will not
 func (s3fs *s3fs) Join(components ...string) string {
-	return path.Join(components...)
+	delim := s3fs.options.delimiter
+	size := 0
+	for _, c := range components {
+		size += len(c)
+	}
+	if size == 0 {
+		return ""
+	}
+	joined := make([]byte, 0, size+len(components)-1)
+	for _, c := range components {
+		if len(c) == 0 {
+			continue
+		}
+		if lj := len(joined); lj > 0 && !strings.HasSuffix(string(joined), delim) && !strings.HasPrefix(c, delim) {
+			joined = append(joined, delim...)
+		}
+		joined = append(joined, c...)
+	}
+	return string(joined)
 }
 
 func (s3fs *s3fs) Base(p string) string {
