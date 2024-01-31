@@ -9,10 +9,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/aws/s3fs"
+	"cloudeng.io/file"
+	"cloudeng.io/file/filewalk"
 )
 
 func main() {
@@ -23,7 +26,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fs := s3fs.New(cfg)
+	fs := s3fs.NewS3FS(cfg)
 
 	/*
 		f, err := fs.OpenCtx(ctx, name)
@@ -59,6 +62,7 @@ func main() {
 
 		fmt.Printf("%#v\n", xattr)
 	*/
+
 	sc := fs.LevelScanner(name)
 	for sc.Scan(ctx, 1) {
 		for _, c := range sc.Contents() {
@@ -69,4 +73,45 @@ func main() {
 	if err := sc.Err(); err != nil {
 		panic(err)
 	}
+
+	w := &s3walker{fs: fs}
+	walker := filewalk.New(fs, w)
+	if err := walker.Walk(ctx, name); err != nil {
+		log.Fatal(err)
+	}
+
+	err = fs.DeleteAll(ctx, fs.Join(name, ".git/logs/refs/remotes/origin/dependabot/go_modules"))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+type s3walker struct {
+	fs filewalk.FS
+}
+
+func (w *s3walker) Prefix(_ context.Context, state *struct{}, prefix string, _ file.Info, err error) (bool, file.InfoList, error) {
+	fmt.Printf("%v/\n", prefix)
+	return false, nil, nil
+}
+
+func (w *s3walker) Contents(ctx context.Context, state *struct{}, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
+	children := make(file.InfoList, 0, len(contents))
+	for _, c := range contents {
+		key := w.fs.Join(prefix, c.Name)
+		if !c.IsDir() {
+			fmt.Printf("%v\n", key)
+			continue
+		}
+		info, err := w.fs.Stat(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		children = append(children, info)
+	}
+	return children, nil
+}
+
+func (w *s3walker) Done(_ context.Context, state *struct{}, prefix string, err error) error {
+	return err
 }

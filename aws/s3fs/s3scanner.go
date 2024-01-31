@@ -37,7 +37,6 @@ func DirectoryBucketAZ(bucket string) string {
 var slasDelim = aws.String("/")
 
 func NewLevelScanner(client Client, path, delimiter string) filewalk.LevelScanner {
-	fmt.Printf("new level scanner: %v\n", path)
 	match := cloudpath.AWSS3Matcher(path)
 	if len(match.Matched) == 0 {
 		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
@@ -56,7 +55,7 @@ func NewLevelScanner(client Client, path, delimiter string) filewalk.LevelScanne
 	return sc
 }
 
-func (fs *s3fs) LevelScanner(prefix string) filewalk.LevelScanner {
+func (fs *T) LevelScanner(prefix string) filewalk.LevelScanner {
 	return NewLevelScanner(fs.client, prefix, fs.options.delimiter)
 }
 
@@ -80,7 +79,6 @@ func (sc *scanner) Err() error {
 }
 
 func (sc *scanner) Scan(ctx context.Context, n int) bool {
-	fmt.Printf("scan: %q %q %v (%v %v)\n", *sc.bucket, *sc.prefix, sc.continuationToken, sc.err, sc.done)
 	if sc.err != nil || sc.done {
 		return false
 	}
@@ -93,11 +91,10 @@ func (sc *scanner) Scan(ctx context.Context, n int) bool {
 	}
 	obj, err := sc.client.ListObjectsV2(ctx, &req)
 	if err != nil {
-		fmt.Printf("ERR %v\n", err)
 		sc.err = err
 		return false
 	}
-	fmt.Printf("got.... %v %v\n", len(obj.Contents), len(obj.CommonPrefixes))
+
 	if !*obj.IsTruncated {
 		// This is the last response for this directory, save the
 		// results and return false on the next call to Scan.
@@ -120,7 +117,7 @@ func convertListObjectsOutput(lo *s3.ListObjectsV2Output, delim string) []filewa
 	}
 	n := len(lo.Contents)
 	for i, p := range lo.CommonPrefixes {
-		entries[n+i].Name = aws.ToString(p.Prefix)
+		entries[n+i].Name = basename(aws.ToString(p.Prefix), delim)
 		entries[n+i].Type = fs.ModeDir
 	}
 	return entries

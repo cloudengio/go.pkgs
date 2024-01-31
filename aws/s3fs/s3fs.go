@@ -66,14 +66,20 @@ func WithDelimiter(d string) Option {
 	}
 }
 
-type s3fs struct {
+type T struct {
 	client  Client
 	options options
 }
 
 // New creates a new instance of filewalk.FS backed by S3.
 func New(cfg aws.Config, options ...Option) filewalk.FS {
-	s3fs := &s3fs{}
+	return NewS3FS(cfg, options...)
+}
+
+// NewS3FS creates a new instance of filewalk.FS and
+// file.ObjectFS backed by S3.
+func NewS3FS(cfg aws.Config, options ...Option) *T {
+	s3fs := &T{}
 	s3fs.options.delimiter = "/"
 	s3fs.options.scanSize = 1000
 	for _, fn := range options {
@@ -86,23 +92,18 @@ func New(cfg aws.Config, options ...Option) filewalk.FS {
 	return s3fs
 }
 
-// NewObjectFS creates a new instance of file.ObjectFS backed by S3.
-func NewObjectFS(cfg aws.Config, options ...Option) file.ObjectFS {
-	return New(cfg, options...).(file.ObjectFS)
-}
-
 // Scheme implements fs.FS.
-func (s3fs *s3fs) Scheme() string {
+func (s3fs *T) Scheme() string {
 	return "s3"
 }
 
 // Open implements fs.FS.
-func (s3fs *s3fs) Open(name string) (fs.File, error) {
+func (s3fs *T) Open(name string) (fs.File, error) {
 	return s3fs.OpenCtx(context.Background(), name)
 }
 
 // OpenCtx implements file.FS.
-func (s3fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (s3fs *T) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	match, res, err := getObject(ctx, s3fs.client, name)
 	if err != nil {
 		return nil, err
@@ -116,7 +117,7 @@ func (s3fs *s3fs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	}, nil
 }
 
-func (s3fs *s3fs) Readlink(_ context.Context, _ string) (string, error) {
+func (s3fs *T) Readlink(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("Readlink is not implemented for s3")
 }
 
@@ -135,6 +136,9 @@ func basename(path string, delim string) string {
 		}
 		return path[idx+1:]
 	}
+	if isdir {
+		path += string(delim)
+	}
 	return path
 }
 
@@ -142,7 +146,7 @@ func basename(path string, delim string) string {
 // (or the currently configured delimiter) it is considered to be a
 // prefix and a file.Info is created that reflects that (ie IsDir()
 // returns true).
-func (s3fs *s3fs) Stat(ctx context.Context, name string) (file.Info, error) {
+func (s3fs *T) Stat(ctx context.Context, name string) (file.Info, error) {
 	match := cloudpath.AWSS3Matcher(name)
 	if len(match.Matched) == 0 {
 		return file.Info{}, fmt.Errorf("invalid s3 path: %v", name)
@@ -154,7 +158,7 @@ func (s3fs *s3fs) Stat(ctx context.Context, name string) (file.Info, error) {
 	return objectStat(ctx, s3fs.client, match)
 }
 
-func (s3fs *s3fs) Lstat(ctx context.Context, path string) (file.Info, error) {
+func (s3fs *T) Lstat(ctx context.Context, path string) (file.Info, error) {
 	return s3fs.Stat(ctx, path)
 }
 
@@ -162,7 +166,7 @@ func (s3fs *s3fs) Lstat(ctx context.Context, path string) (file.Info, error) {
 // delimiters only when necessary, that is components ending
 // or starting with / (or the currently configured delimiter)
 // will not
-func (s3fs *s3fs) Join(components ...string) string {
+func (s3fs *T) Join(components ...string) string {
 	delim := s3fs.options.delimiter
 	size := 0
 	for _, c := range components {
@@ -184,11 +188,11 @@ func (s3fs *s3fs) Join(components ...string) string {
 	return string(joined)
 }
 
-func (s3fs *s3fs) Base(p string) string {
+func (s3fs *T) Base(p string) string {
 	return path.Base(p)
 }
 
-func (s3fs *s3fs) IsPermissionError(err error) bool {
+func (s3fs *T) IsPermissionError(err error) bool {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.ErrorCode() == "AccessDenied"
@@ -196,7 +200,7 @@ func (s3fs *s3fs) IsPermissionError(err error) bool {
 	return false
 }
 
-func (s3fs *s3fs) IsNotExist(err error) bool {
+func (s3fs *T) IsNotExist(err error) bool {
 	var nsk *types.NoSuchKey
 	var nsb *types.NoSuchBucket
 	return errors.As(err, &nsk) || errors.As(err, &nsb)
@@ -207,7 +211,7 @@ type s3xattr struct {
 	obj   any
 }
 
-func (s3fs *s3fs) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error) {
+func (s3fs *T) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error) {
 	sys := info.Sys()
 	if v, ok := sys.(s3xattr); ok {
 		return file.XAttr{User: v.owner}, nil
@@ -215,7 +219,7 @@ func (s3fs *s3fs) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr
 	return file.XAttr{}, nil
 }
 
-func (s3fs *s3fs) SysXAttr(existing any, merge file.XAttr) any {
+func (s3fs *T) SysXAttr(existing any, merge file.XAttr) any {
 	switch v := existing.(type) {
 	case s3xattr:
 		return s3xattr{owner: merge.User, obj: v.obj}

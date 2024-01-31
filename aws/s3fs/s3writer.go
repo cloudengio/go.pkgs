@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"strings"
 
 	"cloudeng.io/path/cloudpath"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,25 +18,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-func (s3fs *s3fs) Put(ctx context.Context, path string, _ fs.FileMode, data []byte) error {
+func (s3fs *T) Put(ctx context.Context, path string, _ fs.FileMode, data []byte) error {
 	match := cloudpath.AWSS3Matcher(path)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
+	key := strings.TrimPrefix(match.Key, s3fs.options.delimiter)
 	req := s3.PutObjectInput{
 		Bucket: aws.String(match.Volume),
-		Key:    aws.String(match.Key),
-		Body:   bytes.NewBuffer(data),
+		Key:    aws.String(key),
+		Body:   bytes.NewReader(data),
 	}
 	_, err := s3fs.client.PutObject(ctx, &req)
 	return err
 }
 
-func (s3fs *s3fs) EnsurePrefix(_ context.Context, _ string, _ fs.FileMode) error {
+func (s3fs *T) EnsurePrefix(_ context.Context, _ string, _ fs.FileMode) error {
 	return nil
 }
 
-func (s3fs *s3fs) Get(ctx context.Context, path string) ([]byte, error) {
+func (s3fs *T) Get(ctx context.Context, path string) ([]byte, error) {
 	_, obj, err := getObject(ctx, s3fs.client, path)
 	if err != nil {
 		return nil, err
@@ -43,25 +45,28 @@ func (s3fs *s3fs) Get(ctx context.Context, path string) ([]byte, error) {
 	return io.ReadAll(obj.Body)
 }
 
-func (s3fs *s3fs) Delete(ctx context.Context, path string) error {
+func (s3fs *T) Delete(ctx context.Context, path string) error {
 	match := cloudpath.AWSS3Matcher(path)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
 	req := s3.DeleteObjectInput{
 		Bucket: aws.String(match.Volume),
-		Key:    aws.String(match.Key),
+		Key:    aws.String(strings.TrimPrefix(match.Key, s3fs.options.delimiter)),
 	}
-	_, err := s3fs.client.DeleteObject(ctx, &req)
+	res, err := s3fs.client.DeleteObject(ctx, &req)
+
+	fmt.Printf("XX %v\n", aws.ToString(res.VersionId))
 	return err
 }
 
-func (s3fs *s3fs) DeleteAll(ctx context.Context, path string) error {
+func (s3fs *T) DeleteAll(ctx context.Context, path string) error {
 	match := cloudpath.AWSS3Matcher(path)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
-	bucket, prefix := aws.String(match.Volume), aws.String(match.Key)
+	bucket := aws.String(match.Volume)
+	prefix := aws.String(strings.TrimPrefix(match.Key, s3fs.options.delimiter))
 	items := aws.Int32(int32(s3fs.options.scanSize))
 	var continuationToken *string
 	for {
@@ -73,6 +78,9 @@ func (s3fs *s3fs) DeleteAll(ctx context.Context, path string) error {
 		})
 		if err != nil {
 			return err
+		}
+		if len(objs.Contents) == 0 {
+			return nil
 		}
 		keys := make([]types.ObjectIdentifier, len(objs.Contents))
 		for i, obj := range objs.Contents {
@@ -87,7 +95,7 @@ func (s3fs *s3fs) DeleteAll(ctx context.Context, path string) error {
 		if err != nil {
 			return err
 		}
-		if *objs.IsTruncated {
+		if !*objs.IsTruncated {
 			return nil
 		}
 		continuationToken = objs.NextContinuationToken
