@@ -19,7 +19,7 @@ func GoogleCloudStorageMatcher(p string) Match {
 	}
 	if len(p) >= 5 && p[0:5] == "gs://" {
 		m.Path = p[5:]
-		m.Volume, m.Key = bucketAndKey(m.Path)
+		m.Volume, m.Key = bucketAndKey(m.Path, byte(m.Separator))
 		return m
 	}
 	u, err := url.Parse(p)
@@ -39,7 +39,7 @@ func GoogleCloudStorageMatcher(p string) Match {
 		return Match{}
 	case "storage.cloud.google.com":
 		// https://storage.cloud.google.com/[BUCKET_NAME]/[OBJECT_NAME]
-		m.Volume, m.Key = bucketAndKey(u.Path)
+		m.Volume, m.Key = bucketAndKey(u.Path, byte(m.Separator))
 		return m
 	case "storage.googleapis.com":
 		/*
@@ -59,7 +59,7 @@ func GoogleCloudStorageMatcher(p string) Match {
 		default:
 			return Match{}
 		case "/":
-			m.Volume, m.Key = bucketAndKey(m.Path)
+			m.Volume, m.Key = bucketAndKey(m.Path, byte(m.Separator))
 		case "/download/":
 			oidx := strings.Index(m.Path, "/o/")
 			if oidx < 0 {
