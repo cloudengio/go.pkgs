@@ -73,7 +73,7 @@ func TestGoogleCloudStorage(t *testing.T) {
 			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "", "/", "", '/', nil,
 		},
 	}
-	if err := testMatcher(cloudpath.GoogleCloudStorageMatcher, data[:]); err != nil {
+	if err := testMatcher(cloudpath.GoogleCloudStorageMatcher, data); err != nil {
 		t.Errorf("%v", err)
 	}
 
