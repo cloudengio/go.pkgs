@@ -11,31 +11,32 @@ import (
 	"path/filepath"
 )
 
-type localfs struct{}
+// Local represents the local filesystem. It implements FS and ObjectFS.
+type Local struct{}
 
 // LocalFS returns an instance of file.FS that provides access to the
 // local filesystem.
-func LocalFS() FS {
-	return &localfs{}
+func LocalFS() *Local {
+	return &Local{}
 }
 
-func (f *localfs) Open(name string) (fs.File, error) {
+func (f *Local) Open(name string) (fs.File, error) {
 	return os.Open(name)
 }
 
-func (f *localfs) Scheme() string {
+func (f *Local) Scheme() string {
 	return "file"
 }
 
-func (f *localfs) OpenCtx(_ context.Context, name string) (fs.File, error) {
+func (f *Local) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	return os.Open(name)
 }
 
-func (f *localfs) Readlink(_ context.Context, path string) (string, error) {
+func (f *Local) Readlink(_ context.Context, path string) (string, error) {
 	return os.Readlink(path)
 }
 
-func (f *localfs) Stat(_ context.Context, path string) (Info, error) {
+func (f *Local) Stat(_ context.Context, path string) (Info, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return Info{}, err
@@ -43,7 +44,7 @@ func (f *localfs) Stat(_ context.Context, path string) (Info, error) {
 	return NewInfoFromFileInfo(info), nil
 }
 
-func (f *localfs) Lstat(_ context.Context, path string) (Info, error) {
+func (f *Local) Lstat(_ context.Context, path string) (Info, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Info{}, err
@@ -54,26 +55,46 @@ func (f *localfs) Lstat(_ context.Context, path string) (Info, error) {
 	return NewInfoFromFileInfo(info), nil
 }
 
-func (f *localfs) Join(components ...string) string {
+func (f *Local) Join(components ...string) string {
 	return filepath.Join(components...)
 }
 
-func (f *localfs) Base(path string) string {
+func (f *Local) Base(path string) string {
 	return filepath.Base(path)
 }
 
-func (f *localfs) IsPermissionError(err error) bool {
+func (f *Local) IsPermissionError(err error) bool {
 	return os.IsPermission(err)
 }
 
-func (f *localfs) IsNotExist(err error) bool {
+func (f *Local) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
-func (f *localfs) XAttr(_ context.Context, name string, info Info) (XAttr, error) {
+func (f *Local) XAttr(_ context.Context, name string, info Info) (XAttr, error) {
 	return xAttr(name, info)
 }
 
-func (f *localfs) SysXAttr(existing any, merge XAttr) any {
+func (f *Local) SysXAttr(existing any, merge XAttr) any {
 	return mergeXAttr(existing, merge)
+}
+
+func (f *Local) Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error {
+	return os.WriteFile(path, data, perm)
+}
+
+func (f *Local) Get(_ context.Context, path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+func (f *Local) Delete(_ context.Context, path string) error {
+	return os.Remove(path)
+}
+
+func (f *Local) DeleteAll(_ context.Context, path string) error {
+	return os.RemoveAll(path)
+}
+
+func (f *Local) EnsurePrefix(_ context.Context, path string, perm fs.FileMode) error {
+	return os.MkdirAll(path, perm)
 }
