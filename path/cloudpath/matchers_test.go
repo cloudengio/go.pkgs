@@ -34,7 +34,7 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			"s3://my-bucket/files-on-s3",
-			cloudpath.AWSS3, "", "", "my-bucket", "my-bucket/files-on-s3", "/files-on-s3", '/', nil,
+			cloudpath.AWSS3, "", "", "my-bucket", "my-bucket/files-on-s3", "files-on-s3", '/', nil,
 		},
 		{
 			"/a/b",
@@ -54,7 +54,7 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			"gs://bucket/object",
-			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object", "/object", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object", "object", '/', nil,
 		},
 		{
 			"file:///a/b/c/",

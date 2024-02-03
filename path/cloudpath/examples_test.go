@@ -28,8 +28,8 @@ func ExampleScheme() {
 		fmt.Printf("%v %q %q %q %q %q %q %c %v\n", local, scheme, host, region, volume, path, key, sep, parameters)
 	}
 	// Output:
-	// false "s3" "" "" "my-bucket" "my-bucket/object" "/object" / map[]
-	// false "GoogleCloudStorage" "storage.cloud.google.com" "" "bucket" "/bucket/obj" "/obj" / map[]
+	// false "s3" "" "" "my-bucket" "my-bucket/object" "object" / map[]
+	// false "GoogleCloudStorage" "storage.cloud.google.com" "" "bucket" "/bucket/obj" "obj" / map[]
 	// false "GoogleCloudStorage" "" "" "my-bucket" "my-bucket" "" / map[]
 	// true "windows" "" "" "c" "c:\\root\\file" "\\root\\file" \ map[]
 }

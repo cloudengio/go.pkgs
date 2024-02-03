@@ -22,23 +22,23 @@ func TestGoogleCloudStorage(t *testing.T) {
 		},
 		{
 			"gs://bucket/",
-			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/", "/", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/", "", '/', nil,
 		},
 		{
 			"gs://bucket/object",
-			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object", "/object", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object", "object", '/', nil,
 		},
 		{
 			"gs://bucket/object/",
-			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object/", "/object/", '/', nil,
+			cloudpath.GoogleCloudStorage, "", "", "bucket", "bucket/object/", "object/", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/bucket/path",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/path", "/path", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/path", "path", '/', nil,
 		},
 		{
 			"https://storage.cloud.google.com/bucket/path?a=b&c=d",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/path", "/path", '/', exampleParameters,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/path", "path", '/', exampleParameters,
 		},
 		{
 			"https://storage.cloud.google.com",
@@ -54,11 +54,11 @@ func TestGoogleCloudStorage(t *testing.T) {
 		},
 		{
 			"https://storage.cloud.google.com/bucket/",
-			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/", "/", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.cloud.google.com", "", "bucket", "/bucket/", "", '/', nil,
 		},
 		{
 			"https://storage.googleapis.com/storage/v1/b/bucket/path",
-			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "bucket", "/bucket/path", "/path", '/', nil,
+			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "bucket", "/bucket/path", "path", '/', nil,
 		},
 		{
 			"https://storage.googleapis.com/download/storage/v1/b/bucket/o/path",
@@ -73,7 +73,7 @@ func TestGoogleCloudStorage(t *testing.T) {
 			cloudpath.GoogleCloudStorage, "storage.googleapis.com", "", "", "/", "", '/', nil,
 		},
 	}
-	if err := testMatcher(cloudpath.GoogleCloudStorageMatcher, data[14:]); err != nil {
+	if err := testMatcher(cloudpath.GoogleCloudStorageMatcher, data); err != nil {
 		t.Errorf("%v", err)
 	}
 

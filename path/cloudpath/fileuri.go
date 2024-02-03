@@ -5,6 +5,7 @@
 package cloudpath
 
 import (
+	"bytes"
 	"strings"
 )
 
@@ -33,25 +34,25 @@ func parseFileURI(p string) (host, rest, drive string) {
 }
 
 // return the bucket and key from /bucket/key...
-func bucketAndKey(path string) (bucket, key string) {
+func bucketAndKey(path string, sep byte) (bucket, key string) {
 	p := path
 	switch len(path) {
 	case 0:
 		return
 	case 1:
-		if path[0] == '/' {
+		if path[0] == sep {
 			return
 		}
 	default:
-		if path[0] == '/' {
+		if path[0] == sep {
 			p = p[1:]
 		}
 	}
 	// p is now bucket/key...
-	idx := strings.Index(p, "/")
+	idx := bytes.Index([]byte(p), []byte{sep})
 	if idx < 0 {
 		bucket = p
 		return
 	}
-	return p[:idx], p[idx:]
+	return p[:idx], p[idx+1:] // drop the leading sep from key.
 }
