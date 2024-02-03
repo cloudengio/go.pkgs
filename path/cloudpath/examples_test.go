@@ -29,8 +29,8 @@ func ExampleScheme() {
 	}
 	// Output:
 	// false "s3" "" "" "my-bucket" "my-bucket/object" "object" / map[]
-	// false "GoogleCloudStorage" "storage.cloud.google.com" "" "bucket" "/bucket/obj" "obj" / map[]
-	// false "GoogleCloudStorage" "" "" "my-bucket" "my-bucket" "" / map[]
+	// false "gs" "storage.cloud.google.com" "" "bucket" "/bucket/obj" "obj" / map[]
+	// false "gs" "" "" "my-bucket" "my-bucket" "" / map[]
 	// true "windows" "" "" "c" "c:\\root\\file" "\\root\\file" \ map[]
 }
 

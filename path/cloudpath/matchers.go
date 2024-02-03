@@ -62,7 +62,7 @@ const (
 	// AWSS3 is the scheme for Amazon Web Service's S3 object store.
 	AWSS3 = "s3"
 	// GoogleCloudStorage is the scheme for Google's Cloud Storage object store.
-	GoogleCloudStorage = "GoogleCloudStorage"
+	GoogleCloudStorage = "gs"
 	// UnixFileSystem is the scheme for unix like systems such as linux, macos etc.
 	UnixFileSystem = "unix"
 	// WindowsFileSystem is the scheme for msdos and windows filesystems.
