@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"strings"
 
 	"cloudeng.io/path/cloudpath"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,14 +18,13 @@ import (
 )
 
 func (s3fs *T) Put(ctx context.Context, path string, _ fs.FileMode, data []byte) error {
-	match := cloudpath.AWSS3Matcher(path)
+	match := cloudpath.AWSS3MatcherSep(path, s3fs.options.delimiter)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
-	key := strings.TrimPrefix(match.Key, s3fs.options.delimiter)
 	req := s3.PutObjectInput{
 		Bucket: aws.String(match.Volume),
-		Key:    aws.String(key),
+		Key:    aws.String(match.Key),
 		Body:   bytes.NewReader(data),
 	}
 	_, err := s3fs.client.PutObject(ctx, &req)
@@ -38,7 +36,7 @@ func (s3fs *T) EnsurePrefix(_ context.Context, _ string, _ fs.FileMode) error {
 }
 
 func (s3fs *T) Get(ctx context.Context, path string) ([]byte, error) {
-	_, obj, err := getObject(ctx, s3fs.client, path)
+	_, obj, err := getObject(ctx, s3fs.client, s3fs.options.delimiter, path)
 	if err != nil {
 		return nil, err
 	}
@@ -46,27 +44,25 @@ func (s3fs *T) Get(ctx context.Context, path string) ([]byte, error) {
 }
 
 func (s3fs *T) Delete(ctx context.Context, path string) error {
-	match := cloudpath.AWSS3Matcher(path)
+	match := cloudpath.AWSS3MatcherSep(path, s3fs.options.delimiter)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
 	req := s3.DeleteObjectInput{
 		Bucket: aws.String(match.Volume),
-		Key:    aws.String(strings.TrimPrefix(match.Key, s3fs.options.delimiter)),
+		Key:    aws.String(match.Key),
 	}
-	res, err := s3fs.client.DeleteObject(ctx, &req)
-
-	fmt.Printf("XX %v\n", aws.ToString(res.VersionId))
+	_, err := s3fs.client.DeleteObject(ctx, &req)
 	return err
 }
 
 func (s3fs *T) DeleteAll(ctx context.Context, path string) error {
-	match := cloudpath.AWSS3Matcher(path)
+	match := cloudpath.AWSS3MatcherSep(path, s3fs.options.delimiter)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
 	bucket := aws.String(match.Volume)
-	prefix := aws.String(strings.TrimPrefix(match.Key, s3fs.options.delimiter))
+	prefix := aws.String(match.Key)
 	items := aws.Int32(int32(s3fs.options.scanSize))
 	var continuationToken *string
 	for {

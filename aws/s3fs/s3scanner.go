@@ -36,18 +36,19 @@ func DirectoryBucketAZ(bucket string) string {
 
 var slasDelim = aws.String("/")
 
-func NewLevelScanner(client Client, path, delimiter string) filewalk.LevelScanner {
-	match := cloudpath.AWSS3Matcher(path)
+func NewLevelScanner(client Client, delimiter byte, path string) filewalk.LevelScanner {
+	match := cloudpath.AWSS3MatcherSep(path, delimiter)
 	if len(match.Matched) == 0 {
 		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
 	}
 	key := strings.TrimPrefix(match.Key, "/")
 	sc := &scanner{
-		client: client,
-		match:  match,
-		bucket: aws.String(match.Volume),
-		prefix: aws.String(key),
-		delim:  aws.String(delimiter),
+		client:    client,
+		match:     match,
+		bucket:    aws.String(match.Volume),
+		prefix:    aws.String(key),
+		delim:     aws.String(string(delimiter)),
+		delimByte: delimiter,
 	}
 	if IsDirectoryBucket(match.Volume) {
 		sc.delim = slasDelim
@@ -56,7 +57,7 @@ func NewLevelScanner(client Client, path, delimiter string) filewalk.LevelScanne
 }
 
 func (fs *T) LevelScanner(prefix string) filewalk.LevelScanner {
-	return NewLevelScanner(fs.client, prefix, fs.options.delimiter)
+	return NewLevelScanner(fs.client, fs.options.delimiter, prefix)
 }
 
 type scanner struct {
@@ -67,6 +68,7 @@ type scanner struct {
 	done              bool
 	continuationToken *string
 	delim             *string
+	delimByte         byte
 	err               error
 }
 
@@ -101,23 +103,27 @@ func (sc *scanner) Scan(ctx context.Context, n int) bool {
 		sc.done = true
 	}
 	sc.continuationToken = obj.NextContinuationToken
-	sc.entries = convertListObjectsOutput(obj, *sc.delim)
+	sc.entries = convertListObjectsOutput(obj, sc.delimByte)
 	return len(sc.entries) != 0
 }
 
-func convertListObjectsOutput(lo *s3.ListObjectsV2Output, delim string) []filewalk.Entry {
+func convertListObjectsOutput(lo *s3.ListObjectsV2Output, delim byte) []filewalk.Entry {
 	ne := len(lo.Contents) + len(lo.CommonPrefixes)
 	if ne == 0 {
 		return nil
 	}
 	entries := make([]filewalk.Entry, ne)
 	for i, c := range lo.Contents {
-		entries[i].Name = basename(aws.ToString(c.Key), delim)
+		entries[i].Name = cloudpath.Base("s3://", delim, aws.ToString(c.Key))
 		entries[i].Type = fs.FileMode(0)
 	}
 	n := len(lo.Contents)
 	for i, p := range lo.CommonPrefixes {
-		entries[n+i].Name = basename(aws.ToString(p.Prefix), delim)
+		// Need the name of the parent prefix as a prefix, eg.
+		// for s3://a/b/ want b/.
+		pref := aws.ToString(p.Prefix)
+		pref = pref[:len(pref)-1]
+		entries[n+i].Name = cloudpath.Base("s3://", delim, pref) + string(delim)
 		entries[n+i].Type = fs.ModeDir
 	}
 	return entries

@@ -8,8 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"path"
-	"strings"
 	"sync"
 
 	"cloudeng.io/file"
@@ -39,9 +37,8 @@ func objectHead(ctx context.Context, client Client, bucket, key *string) (*s3.He
 
 func objectStat(ctx context.Context, client Client, match cloudpath.Match) (file.Info, error) {
 	bucket := match.Volume
-	key := strings.TrimPrefix(match.Key, "/")
 	awsBucket := aws.String(bucket)
-	awsKey := aws.String(key)
+	awsKey := aws.String(match.Key)
 
 	acl, err := bucketAcls.get(ctx, client, bucket)
 	if err != nil {
@@ -54,7 +51,7 @@ func objectStat(ctx context.Context, client Client, match cloudpath.Match) (file
 	}
 
 	var mode fs.FileMode
-	if key[len(key)-1] == '/' {
+	if match.Key[len(match.Key)-1] == '/' {
 		mode = fs.ModeDir
 	}
 	var xattr s3xattr
@@ -62,7 +59,7 @@ func objectStat(ctx context.Context, client Client, match cloudpath.Match) (file
 	xattr.obj = head
 
 	info := file.NewInfo(
-		path.Base(match.Key),
+		cloudpath.Base("s3://", byte(match.Separator), match.Key),
 		aws.ToInt64(head.ContentLength),
 		mode,
 		aws.ToTime(head.LastModified),
@@ -71,16 +68,15 @@ func objectStat(ctx context.Context, client Client, match cloudpath.Match) (file
 	return info, nil
 }
 
-func getObject(ctx context.Context, client Client, name string) (cloudpath.Match, *s3.GetObjectOutput, error) {
-	match := cloudpath.AWSS3Matcher(name)
+func getObject(ctx context.Context, client Client, delim byte, name string) (cloudpath.Match, *s3.GetObjectOutput, error) {
+	match := cloudpath.AWSS3MatcherSep(name, delim)
 	if len(match.Matched) == 0 {
 		return match, nil, fmt.Errorf("invalid s3 path: %v", name)
 	}
 	bucket := match.Volume
-	key := strings.TrimPrefix(match.Key, "/")
 	req := s3.GetObjectInput{
 		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(match.Key),
 	}
 	res, err := client.GetObject(ctx, &req)
 	return match, res, err

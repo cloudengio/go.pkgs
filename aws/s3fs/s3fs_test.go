@@ -29,7 +29,7 @@ func TestJoin(t *testing.T) {
 	j := func(a ...string) []string {
 		return a
 	}
-	for _, delim := range []string{"/", "@"} {
+	for _, delim := range []byte{'/', '@'} {
 		fs := s3fs.New(awstestutil.DefaultAWSConfig(), s3fs.WithDelimiter(delim))
 		for i, tc := range []struct {
 			input  []string
