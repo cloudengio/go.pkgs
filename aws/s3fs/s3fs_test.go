@@ -62,12 +62,12 @@ type s3walker struct {
 	contents []string
 }
 
-func (w *s3walker) Prefix(_ context.Context, state *struct{}, prefix string, _ file.Info, err error) (bool, file.InfoList, error) {
+func (w *s3walker) Prefix(_ context.Context, _ *struct{}, prefix string, _ file.Info, _ error) (bool, file.InfoList, error) {
 	w.prefixes = append(w.prefixes, prefix)
 	return false, nil, nil
 }
 
-func (w *s3walker) Contents(ctx context.Context, state *struct{}, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
+func (w *s3walker) Contents(ctx context.Context, _ *struct{}, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
 	children := make(file.InfoList, 0, len(contents))
 	for _, c := range contents {
 		key := w.fs.Join(prefix, c.Name)
@@ -84,7 +84,7 @@ func (w *s3walker) Contents(ctx context.Context, state *struct{}, prefix string,
 	return children, nil
 }
 
-func (w *s3walker) Done(_ context.Context, state *struct{}, prefix string, err error) error {
+func (w *s3walker) Done(_ context.Context, _ *struct{}, _ string, err error) error {
 	return err
 }
 

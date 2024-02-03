@@ -128,7 +128,7 @@ func (s3fs *T) Readlink(_ context.Context, _ string) (string, error) {
 // prefix and a file.Info is created that reflects that (ie IsDir()
 // returns true).
 func (s3fs *T) Stat(ctx context.Context, name string) (file.Info, error) {
-	match := cloudpath.AWSS3MatcherSep(name, byte(s3fs.options.delimiter))
+	match := cloudpath.AWSS3MatcherSep(name, s3fs.options.delimiter)
 	if len(match.Matched) == 0 {
 		return file.Info{}, fmt.Errorf("invalid s3 path: %v", name)
 	}
@@ -183,8 +183,7 @@ func (s3fs *T) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, e
 }
 
 func (s3fs *T) SysXAttr(existing any, merge file.XAttr) any {
-	switch v := existing.(type) {
-	case s3xattr:
+	if v, ok := existing.(s3xattr); ok {
 		return s3xattr{owner: merge.User, obj: v.obj}
 	}
 	return existing
