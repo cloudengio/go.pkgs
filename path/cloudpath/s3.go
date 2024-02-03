@@ -28,11 +28,11 @@ func AWSS3Matcher(p string) Match {
 	return AWSS3MatcherSep(p, '/')
 }
 
-func AWSS3MatcherSep(p string, sep rune) Match {
+func AWSS3MatcherSep(p string, sep byte) Match {
 	m := Match{
 		Matched:   p,
 		Scheme:    AWSS3,
-		Separator: sep,
+		Separator: rune(sep),
 	}
 	if len(p) >= 5 && p[0:5] == "s3://" {
 		m.Path = p[5:]
