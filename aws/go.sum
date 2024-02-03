@@ -9,6 +9,8 @@ cloudeng.io/os v0.0.0-20231219174858-fd89ad37703c h1:mFD6VQ4aKiDBlRlW0Z7GaKyTUdX
 cloudeng.io/os v0.0.0-20231219174858-fd89ad37703c/go.mod h1:Y1FBS4qqGw0mNi7VbDYqH3ySL680QkD7OHIofY9y4P4=
 cloudeng.io/path v0.0.8 h1:wyHHEJLPoHe8jq6I7xJxM90Cy8hVkMNvW+jEQRvF3lg=
 cloudeng.io/path v0.0.8/go.mod h1:S9dU9pNDkx0EUIHY+Pcyfzs3/cItCI9lyClkwqv0PtM=
+cloudeng.io/path v0.0.9-0.20240203201011-836f54a43a9d h1:wQD/M5tzRqHGR9KDBgUt64YbHAEGSWSE+nNJohHhDRc=
+cloudeng.io/path v0.0.9-0.20240203201011-836f54a43a9d/go.mod h1:ZNgON0dxZp8dA2igYqywNcB3cEc5cvJniYaYVPWy3l8=
 cloudeng.io/sys v0.0.0-20231205162401-e17bf4b2dbb2/go.mod h1:/68XpG0RtUrrYfLQWtmG0zjYwubYe/CIvipnMnlX10A=
 cloudeng.io/text v0.0.11 h1:q3+p3gxwNdr/V+k4+77fj9QxVpUU8G7B4+v26m+sE8I=
 cloudeng.io/text v0.0.11/go.mod h1:99L3CQ55YhUy2+lHlFPowYyCoXO86fmkvNtcMT2X3GU=
