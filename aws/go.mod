@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	cloudeng.io/errors v0.0.9
-	cloudeng.io/file v0.0.0-20231224020430-ceb8702695a4
+	cloudeng.io/file v0.0.0-20240203201011-836f54a43a9d
 	cloudeng.io/path v0.0.9-0.20240203201011-836f54a43a9d
 	cloudeng.io/webapp v0.0.0-20231219174858-fd89ad37703c
 	github.com/aws/aws-sdk-go-v2 v1.24.1
@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20231219174858-fd89ad37703c // indirect
+	cloudeng.io/cmdutil v0.0.0-20240116220817-9db36ddadd3c // indirect
 	cloudeng.io/os v0.0.0-20231219174858-fd89ad37703c // indirect
 	cloudeng.io/sync v0.0.8 // indirect
 	cloudeng.io/text v0.0.11 // indirect
