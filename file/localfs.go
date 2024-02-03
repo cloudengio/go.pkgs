@@ -79,7 +79,7 @@ func (f *Local) SysXAttr(existing any, merge XAttr) any {
 	return mergeXAttr(existing, merge)
 }
 
-func (f *Local) Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error {
+func (f *Local) Put(_ context.Context, path string, perm fs.FileMode, data []byte) error {
 	return os.WriteFile(path, data, perm)
 }
 
