@@ -4,11 +4,11 @@ go 1.21
 
 require (
 	cloudeng.io/errors v0.0.9
-	cloudeng.io/file v0.0.0-20240203201011-836f54a43a9d
-	cloudeng.io/path v0.0.9-0.20240203201011-836f54a43a9d
-	cloudeng.io/webapp v0.0.0-20231219174858-fd89ad37703c
+	cloudeng.io/file v0.0.0-20240204011218-453d510d0c93
+	cloudeng.io/path v0.0.9
+	cloudeng.io/webapp v0.0.0-20240204011218-453d510d0c93
 	github.com/aws/aws-sdk-go-v2 v1.24.1
-	github.com/aws/aws-sdk-go-v2/config v1.26.2
+	github.com/aws/aws-sdk-go-v2/config v1.26.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.16.16
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.48.1
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.26.2
@@ -19,18 +19,18 @@ require (
 )
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20240116220817-9db36ddadd3c // indirect
-	cloudeng.io/os v0.0.0-20231219174858-fd89ad37703c // indirect
+	cloudeng.io/cmdutil v0.0.0-20240204011218-453d510d0c93 // indirect
+	cloudeng.io/os v0.0.0-20240204011218-453d510d0c93 // indirect
 	cloudeng.io/sync v0.0.8 // indirect
 	cloudeng.io/text v0.0.11 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
-	github.com/aws/aws-sdk-go v1.50.5 // indirect
+	github.com/aws/aws-sdk-go v1.50.10 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.14.11 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.2.10 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.5.10 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.7.2 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.7.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.2.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.10.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.2.10 // indirect
@@ -40,7 +40,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.21.7 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/distribution/reference v0.5.0 // indirect
-	github.com/docker/docker v25.0.1+incompatible // indirect
+	github.com/docker/docker v25.0.2+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
