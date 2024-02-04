@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"cloudeng.io/aws/awstestutil"
@@ -57,13 +58,16 @@ func TestJoin(t *testing.T) {
 }
 
 type s3walker struct {
+	sync.Mutex
 	fs       filewalk.FS
 	prefixes []string
 	contents []string
 }
 
 func (w *s3walker) Prefix(_ context.Context, _ *struct{}, prefix string, _ file.Info, _ error) (bool, file.InfoList, error) {
+	w.Lock()
 	w.prefixes = append(w.prefixes, prefix)
+	w.Unlock()
 	return false, nil, nil
 }
 
@@ -72,7 +76,9 @@ func (w *s3walker) Contents(ctx context.Context, _ *struct{}, prefix string, con
 	for _, c := range contents {
 		key := w.fs.Join(prefix, c.Name)
 		if !c.IsDir() {
+			w.Lock()
 			w.contents = append(w.contents, key)
+			w.Unlock()
 			continue
 		}
 		info, err := w.fs.Stat(ctx, key)
