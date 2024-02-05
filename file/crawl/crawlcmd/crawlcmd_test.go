@@ -23,17 +23,11 @@ import (
 	"cloudeng.io/file/filewalk/filewalktestutil"
 	"cloudeng.io/file/filewalk/localfs"
 	"cloudeng.io/path"
-	"cloudeng.io/path/cloudpath"
 )
 
 type randfs struct{}
 
-func (f *randfs) New(ctx context.Context, _ string) (file.FS, error) {
-	src := rand.NewSource(time.Now().UnixMicro())
-	return filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024)), nil
-}
-
-func (f *randfs) NewFromMatch(ctx context.Context, match cloudpath.Match) (file.FS, error) {
+func (f *randfs) NewFS(ctx context.Context) (file.FS, error) {
 	src := rand.NewSource(time.Now().UnixMicro())
 	return filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024)), nil
 }

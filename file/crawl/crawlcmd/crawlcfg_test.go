@@ -124,18 +124,14 @@ func TestRateControl(t *testing.T) {
 }
 
 type dummyFSFactory struct {
-	called string
+	called, scheme string
 }
 
-func (d *dummyFSFactory) New(_ context.Context, scheme string) (file.FS, error) {
-	d.called = scheme
+func (d *dummyFSFactory) NewFS(_ context.Context) (file.FS, error) {
+	d.called = d.scheme
 	return filetestutil.NewMockFS(
-		filetestutil.FSScheme(scheme),
+		filetestutil.FSScheme(d.scheme),
 		filetestutil.FSWithConstantContents([]byte{'a'}, 10)), nil
-}
-
-func (d *dummyFSFactory) NewFromMatch(ctx context.Context, match cloudpath.Match) (file.FS, error) {
-	return d.New(ctx, match.Scheme)
 }
 
 func TestCrawlSeeds(t *testing.T) {
@@ -183,8 +179,8 @@ func TestCrawlRequests(t *testing.T) {
 	}
 
 	factories := map[string]file.FSFactory{
-		"s3":    &dummyFSFactory{},
-		"https": &dummyFSFactory{},
+		"s3":    &dummyFSFactory{scheme: "s3"},
+		"https": &dummyFSFactory{scheme: "https"},
 	}
 
 	requests, err := crawl.CreateSeedCrawlRequests(ctx, factories, byScheme)
