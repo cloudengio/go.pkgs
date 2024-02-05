@@ -26,7 +26,6 @@ import (
 type Crawler struct {
 	Config
 	Extractors      func() map[content.Type]outlinks.Extractor
-	crawlCachePath  string
 	displayOutlinks bool
 	displayProgress bool
 	fsMap           map[string]file.FSFactory
@@ -39,7 +38,7 @@ func (c *Crawler) Run(ctx context.Context, fsMap map[string]file.FSFactory, cach
 	if err != nil {
 		return fmt.Errorf("failed to initialize crawl cache: %v: %v", c.Cache, err)
 	}
-	c.crawlCachePath = crawlCache
+	crawlCache = fs.Join(cacheRoot, crawlCache)
 	c.displayOutlinks = displayOutlinks
 	c.displayProgress = displayProgress
 	c.fsMap = fsMap

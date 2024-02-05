@@ -78,22 +78,22 @@ type CrawlCacheConfig struct {
 func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath, checkpointPath string, err error) {
 	root = os.ExpandEnv(root)
 	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
-	cachePath = filepath.Join(root, cachePath)
-	checkpointPath = filepath.Join(root, checkpointPath)
-	if c.ClearBeforeCrawl {
-		if err = fs.DeleteAll(ctx, cachePath); err != nil {
+	cachePathFull := filepath.Join(root, cachePath)
+	checkpointPathFull := filepath.Join(root, checkpointPath)
+	if c.ClearBeforeCrawl && len(c.Prefix) > 0 {
+		if err = fs.DeleteAll(ctx, cachePathFull); err != nil {
 			return
 		}
-		if len(c.Checkpoint) > 0 {
-			if err = fs.DeleteAll(ctx, checkpointPath); err != nil {
-				return
-			}
+	}
+	if c.ClearBeforeCrawl && len(c.Checkpoint) > 0 {
+		if err = fs.DeleteAll(ctx, checkpointPathFull); err != nil {
+			return
 		}
 	}
-	if err = fs.EnsurePrefix(ctx, cachePath, 0700); err != nil {
+	if err = fs.EnsurePrefix(ctx, cachePathFull, 0700); err != nil {
 		return
 	}
-	err = fs.EnsurePrefix(ctx, checkpointPath, 0700)
+	err = fs.EnsurePrefix(ctx, checkpointPathFull, 0700)
 	return
 }
 

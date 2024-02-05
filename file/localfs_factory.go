@@ -10,10 +10,10 @@ import (
 
 type LocalFSFactory struct{}
 
-func (f *LocalFSFactory) NewFS(ctx context.Context) (FS, error) {
+func (f *LocalFSFactory) NewFS(_ context.Context) (FS, error) {
 	return &Local{}, nil
 }
 
-func (f *LocalFSFactory) NewObjectFS(ctx context.Context) (ObjectFS, error) {
+func (f *LocalFSFactory) NewObjectFS(_ context.Context) (ObjectFS, error) {
 	return &Local{}, nil
 }
