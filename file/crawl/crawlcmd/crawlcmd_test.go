@@ -26,8 +26,7 @@ import (
 	"cloudeng.io/path/cloudpath"
 )
 
-type randfs struct {
-}
+type randfs struct{}
 
 func (f *randfs) New(ctx context.Context, _ string) (file.FS, error) {
 	src := rand.NewSource(time.Now().UnixMicro())

@@ -75,6 +75,8 @@ type CrawlCacheConfig struct {
 // specified root, and optionally clears them before the crawl (if
 // Cache.ClearBeforeCrawl is true). Any environment variables in the
 // root or Cache.Prefix will be expanded.
+//
+// Deprecated: use InitStore instead.
 func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath string, err error) {
 	root = os.ExpandEnv(root)
 	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
@@ -98,6 +100,10 @@ func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath str
 	return
 }
 
+// InitStore creates the cache and checkpoint directories relative to the
+// specified root, and optionally clears them before the crawl (if
+// Cache.ClearBeforeCrawl is true). Any environment variables in the
+// root or Cache.Prefix will be expanded.
 func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath, checkpointPath string, err error) {
 	root = os.ExpandEnv(root)
 	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
@@ -175,7 +181,7 @@ func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[strin
 		if !ok {
 			return nil, fmt.Errorf("no file.FSFactory for scheme: %v", scheme)
 		}
-		container, err := factory.New(ctx, scheme)
+		container, err := factory.NewFS(ctx)
 		if err != nil {
 			return nil, err
 		}
