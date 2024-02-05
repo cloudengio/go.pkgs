@@ -98,6 +98,28 @@ func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath str
 	return
 }
 
+func (c CrawlCacheConfig) InitStore(ctx context.Context, root string, fs file.ObjectFS) (cachePath, checkpointPath string, err error) {
+	root = os.ExpandEnv(root)
+	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
+	cachePath = filepath.Join(root, cachePath)
+	checkpointPath = filepath.Join(root, checkpointPath)
+	if c.ClearBeforeCrawl {
+		if err = fs.DeleteAll(ctx, cachePath); err != nil {
+			return
+		}
+		if len(c.Checkpoint) > 0 {
+			if err = fs.DeleteAll(ctx, checkpointPath); err != nil {
+				return
+			}
+		}
+	}
+	if err = fs.EnsurePrefix(ctx, cachePath, 0700); err != nil {
+		return
+	}
+	err = fs.EnsurePrefix(ctx, checkpointPath, 0700)
+	return
+}
+
 // Config represents the configuration for a single crawl.
 type Config struct {
 	Name          string           `yaml:"name" cmd:"the name of the crawl"`

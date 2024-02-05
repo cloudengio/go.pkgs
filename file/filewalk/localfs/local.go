@@ -21,7 +21,6 @@ type T struct{ file.FS }
 
 func New() filewalk.FS {
 	return &T{file.LocalFS()}
-
 }
 
 type scanner struct {

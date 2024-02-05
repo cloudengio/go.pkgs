@@ -13,7 +13,7 @@ import (
 // FSFactory is implemented by types that can create a file.FS for a given
 // URI scheme or for a cloudpath.Match. New is used for the common case
 // where an FS can be created for an entire filesystem instance, whereas
-// NewMatch is intended for the case where more granular approach is required.
+// NewMatch is intended for the case where a more granular approach is required.
 // The implementations of FSFactory will typically store the authentication
 // credentials required to create the FS when New or NewMatch is called.
 // For AWS S3 for example, the information required to create an aws.Config
