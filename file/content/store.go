@@ -19,22 +19,22 @@ import (
 // that root. It is intended to be backed by either a local or cloud
 // filesystem.
 type Store[Value, Response any] struct {
-	fs                              ContentFS
+	fs                              FS
 	valueEncoding, responseEncoding ObjectEncoding
 	root                            string
 	written                         int64
 	read                            int64
 }
 
-type ContentFS interface {
+type FS interface {
 	file.ObjectFS
 	file.FS
 }
 
 // NewStore returns a new instance of Store backed by the supplied
-// ContentFS and storing the specified objects encoded using the
+// content.FS and storing the specified objects encoded using the
 // specified encodings.
-func NewStore[V, R any](fs ContentFS, path string, valueEncoding, responseEncoding ObjectEncoding) *Store[V, R] {
+func NewStore[V, R any](fs FS, path string, valueEncoding, responseEncoding ObjectEncoding) *Store[V, R] {
 	return &Store[V, R]{
 		fs:               fs,
 		root:             path,
