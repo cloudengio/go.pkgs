@@ -61,9 +61,7 @@ func Scan(ctx context.Context, fs filewalk.FS, prefix string) ([]filewalk.Entry,
 	sc := fs.LevelScanner(prefix)
 	found := []filewalk.Entry{}
 	for sc.Scan(ctx, 1) {
-		for _, c := range sc.Contents() {
-			found = append(found, c)
-		}
+		found = append(found, sc.Contents()...)
 	}
 	return found, sc.Err()
 }
