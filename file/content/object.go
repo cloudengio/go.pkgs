@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 )
 
-// Object represents the result of object/file download/crawl operation. As such
+// Object represents the result of an object/file download/crawl operation. As such
 // it contains both the value that was downloaded and the result of the operation.
 // The Value field represents the typed value of the result of the download
 // or API operation. The Response field is the actual response for the download,

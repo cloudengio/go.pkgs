@@ -5,9 +5,9 @@
 package content_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
@@ -85,29 +85,24 @@ func roundtrip[V, R any](t *testing.T, obj content.Object[V, R], valueEncoding, 
 	}
 }
 
-func roundTripFile[V, R any](t *testing.T, obj content.Object[V, R], path string, ctype content.Type, valueEncoding, responseEncoding content.ObjectEncoding) {
-	if err := obj.WriteObjectFile(path, valueEncoding, responseEncoding); err != nil {
+func roundTripFile[V, R any](ctx context.Context, t *testing.T, store *content.Store[V, R], obj content.Object[V, R], prefix, name string, ctype content.Type) {
+	if err := store.Store(ctx, prefix, name, obj); err != nil {
 		t.Fatal(err)
 	}
-	ctype1, data1, err := content.ReadObjectFile(path)
+	ctype1, obj1, err := store.Load(ctx, prefix, name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := ctype1, ctype; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
-	var obj1 content.Object[V, R]
-	if err := obj1.Decode(data1); err != nil {
-		t.Fatal(err)
-	}
-
-	if got, want := obj, obj1; !reflect.DeepEqual(got, want) {
+	if got, want := obj1, obj; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
 func TestObjectEncoding(t *testing.T) {
+	ctx := context.Background()
 	tmpDir := t.TempDir()
 	ctype := content.Type("bar")
 	obj := content.Object[int, string]{
@@ -115,9 +110,10 @@ func TestObjectEncoding(t *testing.T) {
 		Response: "anything",
 		Type:     ctype,
 	}
-	path := filepath.Join(tmpDir, "obj")
+	fs := file.LocalFS()
+	store := content.NewStore[int, string](fs, tmpDir, content.GOBObjectEncoding, content.GOBObjectEncoding)
 
-	roundTripFile(t, obj, path, ctype, content.GOBObjectEncoding, content.GOBObjectEncoding)
-	roundTripFile(t, obj, path, ctype, content.JSONObjectEncoding, content.JSONObjectEncoding)
+	roundTripFile(ctx, t, store, obj, "a", "obj1.obj", ctype)
+	roundTripFile(ctx, t, store, obj, "a", "obj2.obj", ctype)
 
 }
