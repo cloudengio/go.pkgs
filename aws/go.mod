@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	cloudeng.io/errors v0.0.9
-	cloudeng.io/file v0.0.0-20240205181811-9ff641ce7eec
+	cloudeng.io/file v0.0.0-20240205202944-bea2cea1e7bf
 	cloudeng.io/path v0.0.9
 	cloudeng.io/webapp v0.0.0-20240204011218-453d510d0c93
 	github.com/aws/aws-sdk-go-v2 v1.24.1

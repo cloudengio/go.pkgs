@@ -14,6 +14,7 @@ package crawl
 import (
 	"context"
 
+	"cloudeng.io/file/content"
 	"cloudeng.io/file/download"
 )
 
@@ -54,4 +55,9 @@ type T interface {
 		extractor Outlinks,
 		input <-chan download.Request,
 		output chan<- Crawled) error
+}
+
+// NewStore returns a new content.Store appropriate for crawled content.
+func NewStore(fs content.FS, root string) *content.Store[[]byte, download.Result] {
+	return content.NewStore[[]byte, download.Result](fs, root, content.GOBObjectEncoding, content.GOBObjectEncoding)
 }

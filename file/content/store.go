@@ -52,6 +52,7 @@ func (s *Store[V, R]) EraseExisting(ctx context.Context) error {
 	return nil
 }
 
+// Store stores the supplied object at the specified prefix and name.
 func (s *Store[V, R]) Store(ctx context.Context, prefix, name string, obj Object[V, R]) error {
 	buf, err := obj.Encode(s.valueEncoding, s.responseEncoding)
 	if err != nil {
@@ -74,10 +75,13 @@ func (s *Store[V, R]) Store(ctx context.Context, prefix, name string, obj Object
 	return nil
 }
 
-func (s *Store[V, R]) Progress() (written, read int64) {
+// Progress returns the number of objects read and written to the store
+// since this instance was created.
+func (s *Store[V, R]) Progress() (read, written int64) {
 	return atomic.LoadInt64(&s.read), atomic.LoadInt64(&s.written)
 }
 
+// Load loads the object at the specified prefix and name.
 func (s *Store[V, R]) Load(ctx context.Context, prefix, name string) (Type, Object[V, R], error) {
 	var obj Object[V, R]
 	path := s.fs.Join(s.root, prefix, name)
@@ -96,4 +100,8 @@ func (s *Store[V, R]) Load(ctx context.Context, prefix, name string) (Type, Obje
 	}
 	atomic.AddInt64(&s.read, 1)
 	return Type(typ), obj, nil
+}
+
+func (s *Store[V, R]) FS() FS {
+	return s.fs
 }

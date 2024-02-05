@@ -71,30 +71,29 @@ type CrawlCacheConfig struct {
 	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
 }
 
-// Initialize creates the cache and checkpoint directories relative to the
+// InitStore creates the cache and checkpoint directories relative to the
 // specified root, and optionally clears them before the crawl (if
 // Cache.ClearBeforeCrawl is true). Any environment variables in the
 // root or Cache.Prefix will be expanded.
-func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath string, err error) {
+func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath, checkpointPath string, err error) {
 	root = os.ExpandEnv(root)
 	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
-	cachePath = filepath.Join(root, cachePath)
-	checkpointPath = filepath.Join(root, checkpointPath)
-
-	if c.ClearBeforeCrawl {
-		if err = os.RemoveAll(cachePath); err != nil {
+	cachePathFull := filepath.Join(root, cachePath)
+	checkpointPathFull := filepath.Join(root, checkpointPath)
+	if c.ClearBeforeCrawl && len(c.Prefix) > 0 {
+		if err = fs.DeleteAll(ctx, cachePathFull); err != nil {
 			return
 		}
-		if len(c.Checkpoint) > 0 {
-			if err = os.RemoveAll(checkpointPath); err != nil {
-				return
-			}
+	}
+	if c.ClearBeforeCrawl && len(c.Checkpoint) > 0 {
+		if err = fs.DeleteAll(ctx, checkpointPathFull); err != nil {
+			return
 		}
 	}
-	if err = os.MkdirAll(cachePath, 0700); err != nil {
+	if err = fs.EnsurePrefix(ctx, cachePathFull, 0700); err != nil {
 		return
 	}
-	err = os.MkdirAll(checkpointPath, 0700)
+	err = fs.EnsurePrefix(ctx, checkpointPathFull, 0700)
 	return
 }
 
@@ -153,7 +152,7 @@ func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[strin
 		if !ok {
 			return nil, fmt.Errorf("no file.FSFactory for scheme: %v", scheme)
 		}
-		container, err := factory.New(ctx, scheme)
+		container, err := factory.NewFS(ctx)
 		if err != nil {
 			return nil, err
 		}

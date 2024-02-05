@@ -6,22 +6,18 @@ package file
 
 import (
 	"context"
-
-	"cloudeng.io/path/cloudpath"
 )
 
 // FSFactory is implemented by types that can create a file.FS for a given
-// URI scheme or for a cloudpath.Match. New is used for the common case
-// where an FS can be created for an entire filesystem instance, whereas
-// NewMatch is intended for the case where more granular approach is required.
-// The implementations of FSFactory will typically store the authentication
-// credentials required to create the FS when New or NewMatch is called.
+// URI scheme. The implementations of FSFactory will typically store the
+// authentication credentials required to create the FS when NewFS is called.
 // For AWS S3 for example, the information required to create an aws.Config
-// will be stored in used when New or NewMatch are called. New will create
-// an FS for S3 in general, whereas NewMatch can take more specific action
-// such as creating an FS for a specific bucket or region with different
-// credentials.
+// will be stored in used when NewFS is called.
 type FSFactory interface {
-	New(ctx context.Context, scheme string) (FS, error)
-	NewFromMatch(ctx context.Context, m cloudpath.Match) (FS, error)
+	NewFS(ctx context.Context) (FS, error)
+}
+
+// ObjectFSFactory is like FSFactory but for ObjectFS.
+type ObjectFSFactory interface {
+	NewObjectFS(ctx context.Context) (ObjectFS, error)
 }

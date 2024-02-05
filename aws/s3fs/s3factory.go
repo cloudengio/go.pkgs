@@ -11,28 +11,33 @@ import (
 
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/file"
-	"cloudeng.io/path/cloudpath"
 )
 
 // Factory implements file.FSFactory for AWS S3.
 type Factory struct {
-	Config awsconfig.AWSFlags
+	Config  awsconfig.AWSFlags
+	Options []Option
 }
 
-// New implements file.FSFactory.
-func (d Factory) New(ctx context.Context, _ string) (file.FS, error) {
-	if !d.Config.AWS {
+func (f Factory) newFS(ctx context.Context) (*T, error) {
+	if !f.Config.AWS {
 		return nil, fmt.Errorf("AWS authentication must be enabled to use S3")
 	}
-	awsConfig, err := awsconfig.LoadUsingFlags(ctx, d.Config)
+	awsConfig, err := awsconfig.LoadUsingFlags(ctx, f.Config)
 	if err != nil {
 		return nil, err
 	}
-	return New(awsConfig), nil
+	return NewS3FS(awsConfig, f.Options...), nil
 }
 
-func (d Factory) NewFromMatch(ctx context.Context, match cloudpath.Match) (file.FS, error) {
-	return d.New(ctx, match.Scheme)
+// New implements file.FSFactory.
+func (f Factory) NewFS(ctx context.Context) (file.FS, error) {
+	return f.newFS(ctx)
+}
+
+func (f Factory) NewObjectFS(ctx context.Context) (file.ObjectFS, error) {
+	return f.newFS(ctx)
 }
 
 var _ file.FSFactory = (*Factory)(nil)
+var _ file.ObjectFSFactory = (*Factory)(nil)
