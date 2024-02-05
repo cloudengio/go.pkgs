@@ -10,13 +10,12 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	"cloudeng.io/aws/awstestutil"
 	"cloudeng.io/aws/s3fs"
-	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
+	"cloudeng.io/file/filewalk/filewalktestutil"
 )
 
 var awsInstance *awstestutil.AWS
@@ -57,56 +56,18 @@ func TestJoin(t *testing.T) {
 	}
 }
 
-type s3walker struct {
-	sync.Mutex
-	fs       filewalk.FS
-	prefixes []string
-	contents []string
-}
-
-func (w *s3walker) Prefix(_ context.Context, _ *struct{}, prefix string, _ file.Info, _ error) (bool, file.InfoList, error) {
-	w.Lock()
-	w.prefixes = append(w.prefixes, prefix)
-	w.Unlock()
-	return false, nil, nil
-}
-
-func (w *s3walker) Contents(ctx context.Context, _ *struct{}, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
-	children := make(file.InfoList, 0, len(contents))
-	for _, c := range contents {
-		key := w.fs.Join(prefix, c.Name)
-		if !c.IsDir() {
-			w.Lock()
-			w.contents = append(w.contents, key)
-			w.Unlock()
-			continue
-		}
-		info, err := w.fs.Stat(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		children = append(children, info)
-	}
-	return children, nil
-}
-
-func (w *s3walker) Done(_ context.Context, _ *struct{}, _ string, err error) error {
-	return err
-}
-
 func walkAndCompare(ctx context.Context, t *testing.T, fs filewalk.FS, start, prefixes, contents []string) {
 	t.Helper()
-	w := &s3walker{fs: fs}
-	walker := filewalk.New(fs, w)
-	if err := walker.Walk(ctx, start...); err != nil {
+	p, c, err := filewalktestutil.WalkContents(ctx, fs, start...)
+	if err != nil {
 		t.Fatal(err)
 	}
-	sort.Strings(w.prefixes)
-	if got, want := w.prefixes, prefixes; !slices.Equal(got, want) {
+	sort.Strings(p)
+	if got, want := p, prefixes; !slices.Equal(got, want) {
 		t.Errorf("prefixes: got %v, want %v", got, want)
 	}
-	sort.Strings(w.contents)
-	if got, want := w.contents, contents; !slices.Equal(got, want) {
+	sort.Strings(c)
+	if got, want := c, contents; !slices.Equal(got, want) {
 		t.Errorf("contents: got %v, want %v", got, want)
 	}
 }
@@ -126,14 +87,8 @@ func newS3ObjFS() *s3fs.T {
 
 func scanAndCompare(ctx context.Context, t *testing.T, fs filewalk.FS, start string, contents []string) {
 	t.Helper()
-	sc := fs.LevelScanner(start)
-	found := []string{}
-	for sc.Scan(ctx, 1) {
-		for _, c := range sc.Contents() {
-			found = append(found, fs.Join(start, c.Name))
-		}
-	}
-	if err := sc.Err(); err != nil {
+	found, err := filewalktestutil.ScanNames(ctx, fs, start)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := found, contents; !slices.Equal(got, want) {
