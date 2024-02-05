@@ -98,7 +98,7 @@ func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath str
 	return
 }
 
-func (c CrawlCacheConfig) InitStore(ctx context.Context, root string, fs file.ObjectFS) (cachePath, checkpointPath string, err error) {
+func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath, checkpointPath string, err error) {
 	root = os.ExpandEnv(root)
 	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
 	cachePath = filepath.Join(root, cachePath)

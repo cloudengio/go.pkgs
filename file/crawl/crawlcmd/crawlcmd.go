@@ -35,7 +35,7 @@ type Crawler struct {
 
 // Run runs the crawler.
 func (c *Crawler) Run(ctx context.Context, fsMap map[string]file.FSFactory, cacheRoot string, fs content.FS, displayOutlinks, displayProgress bool) error {
-	crawlCache, _, err := c.Cache.InitStore(ctx, cacheRoot, fs)
+	crawlCache, _, err := c.Cache.InitStore(ctx, fs, cacheRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize crawl cache: %v: %v", c.Cache, err)
 	}
