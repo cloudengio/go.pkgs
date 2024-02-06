@@ -13,6 +13,13 @@ import (
 	"cloudeng.io/file"
 )
 
+// FS represents the interface to a filesystem/objec store that is used to
+// back Store.
+type FS interface {
+	file.FS
+	file.ObjectFS
+}
+
 // Store represents a store for objects. It uses an instance of content.FS
 // to store and retrieve objects. The objects are stored in a hierarchy
 // at the specified root prefix/path and all operations are relative to
@@ -24,11 +31,6 @@ type Store[Value, Response any] struct {
 	root                            string
 	written                         int64
 	read                            int64
-}
-
-type FS interface {
-	file.ObjectFS
-	file.FS
 }
 
 // NewStore returns a new instance of Store backed by the supplied

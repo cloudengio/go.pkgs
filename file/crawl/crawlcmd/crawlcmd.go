@@ -28,12 +28,20 @@ type Crawler struct {
 	Extractors      func() map[content.Type]outlinks.Extractor
 	displayOutlinks bool
 	displayProgress bool
-	fsMap           map[string]file.FSFactory
+	fsMap           map[string]FSFactory
 	cache           *content.Store[[]byte, download.Result]
 }
 
+// FSFactory is a function that returns a file.FS used to crawl
+// a given FS.
+type FSFactory func(context.Context) (file.FS, error)
+
 // Run runs the crawler.
-func (c *Crawler) Run(ctx context.Context, fsMap map[string]file.FSFactory, cacheRoot string, fs content.FS, displayOutlinks, displayProgress bool) error {
+func (c *Crawler) Run(ctx context.Context,
+	fsMap map[string]FSFactory,
+	cacheRoot string,
+	fs content.FS,
+	displayOutlinks, displayProgress bool) error {
 	crawlCache, _, err := c.Cache.InitStore(ctx, fs, cacheRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize crawl cache: %v: %v", c.Cache, err)

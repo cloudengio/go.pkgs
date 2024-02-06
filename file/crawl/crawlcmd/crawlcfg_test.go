@@ -127,7 +127,7 @@ type dummyFSFactory struct {
 	called, scheme string
 }
 
-func (d *dummyFSFactory) NewFS(_ context.Context) (file.FS, error) {
+func (d *dummyFSFactory) New(_ context.Context) (file.FS, error) {
 	d.called = d.scheme
 	return filetestutil.NewMockFS(
 		filetestutil.FSScheme(d.scheme),
@@ -178,9 +178,9 @@ func TestCrawlRequests(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	factories := map[string]file.FSFactory{
-		"s3":    &dummyFSFactory{scheme: "s3"},
-		"https": &dummyFSFactory{scheme: "https"},
+	factories := map[string]crawlcmd.FSFactory{
+		"s3":    (&dummyFSFactory{scheme: "s3"}).New,
+		"https": (&dummyFSFactory{scheme: "https"}).New,
 	}
 
 	requests, err := crawl.CreateSeedCrawlRequests(ctx, factories, byScheme)
@@ -202,13 +202,6 @@ func TestCrawlRequests(t *testing.T) {
 				t.Errorf("got %v, want %v", got, want)
 			}
 		}
-	}
-
-	if got, want := factories["s3"].(*dummyFSFactory).called, "s3"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := factories["https"].(*dummyFSFactory).called, "https"; got != want {
-		t.Errorf("got %v, want %v", got, want)
 	}
 
 }

@@ -67,8 +67,8 @@ func TestCrawlCmd(t *testing.T) {
 	writeFS := file.LocalFS()
 	writeRoot := tmpDir
 
-	fsMap := map[string]file.FSFactory{
-		"unix": &randfs{},
+	fsMap := map[string]crawlcmd.FSFactory{
+		"unix": (&randfs{}).NewFS,
 	}
 
 	seeds := []string{"rand1", "rand6"}

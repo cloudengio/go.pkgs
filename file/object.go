@@ -9,7 +9,7 @@ import (
 	"io/fs"
 )
 
-// ObjectFS represents a writeable object store.
+// ObjectFS extends FS to represent a writeable object store.
 type ObjectFS interface {
 	Get(ctx context.Context, path string) ([]byte, error)
 	Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error

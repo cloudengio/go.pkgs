@@ -10,16 +10,16 @@ import (
 	"fmt"
 
 	"cloudeng.io/aws/awsconfig"
-	"cloudeng.io/file"
 )
 
-// Factory implements file.FSFactory for AWS S3.
+// Factory wraps creating an S3FS with the configuration required to
+// correctly initialize it.
 type Factory struct {
 	Config  awsconfig.AWSFlags
 	Options []Option
 }
 
-func (f Factory) newFS(ctx context.Context) (*T, error) {
+func (f Factory) New(ctx context.Context) (*T, error) {
 	if !f.Config.AWS {
 		return nil, fmt.Errorf("AWS authentication must be enabled to use S3")
 	}
@@ -29,15 +29,3 @@ func (f Factory) newFS(ctx context.Context) (*T, error) {
 	}
 	return NewS3FS(awsConfig, f.Options...), nil
 }
-
-// New implements file.FSFactory.
-func (f Factory) NewFS(ctx context.Context) (file.FS, error) {
-	return f.newFS(ctx)
-}
-
-func (f Factory) NewObjectFS(ctx context.Context) (file.ObjectFS, error) {
-	return f.newFS(ctx)
-}
-
-var _ file.FSFactory = (*Factory)(nil)
-var _ file.ObjectFSFactory = (*Factory)(nil)

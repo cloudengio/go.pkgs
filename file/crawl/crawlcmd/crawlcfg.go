@@ -145,14 +145,18 @@ func (c Config) SeedsByScheme(matchers cloudpath.MatcherSpec) (map[string][]clou
 // CreateSeedCrawlRequests creates a set of crawl requests for the supplied
 // seeds. It use the factories to create a file.FS for the URI scheme of
 // each seed.
-func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error) {
+func (c Config) CreateSeedCrawlRequests(
+	ctx context.Context,
+	factories map[string]FSFactory,
+	seeds map[string][]cloudpath.Match,
+) ([]download.Request, error) {
 	requests := []download.Request{}
 	for scheme, matched := range seeds {
 		factory, ok := factories[scheme]
 		if !ok {
 			return nil, fmt.Errorf("no file.FSFactory for scheme: %v", scheme)
 		}
-		container, err := factory.NewFS(ctx)
+		container, err := factory(ctx)
 		if err != nil {
 			return nil, err
 		}
