@@ -9,7 +9,9 @@ import (
 	"io/fs"
 )
 
-// ObjectFS extends FS to represent a writeable object store.
+// ObjectFS represents a writeable object store. It is intended to backed
+// by cloud or local filesystems. The permissions may be ignored by some
+// implementations.
 type ObjectFS interface {
 	Get(ctx context.Context, path string) ([]byte, error)
 	Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error
