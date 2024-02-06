@@ -25,7 +25,7 @@ import (
 // information.
 type Crawler struct {
 	Config
-	Extractors      func() map[content.Type]outlinks.Extractor
+	Extractors      map[content.Type]outlinks.Extractor
 	displayOutlinks bool
 	displayProgress bool
 	fsMap           map[string]FSFactory
@@ -96,7 +96,7 @@ func (c *Crawler) run(ctx context.Context) error {
 		return fmt.Errorf("failed to compile link processing rules: %v", err)
 	}
 
-	extractorRegistry, err := c.ExtractorRegistry(c.Extractors())
+	extractorRegistry, err := c.ExtractorRegistry(c.Extractors)
 	if err != nil {
 		return fmt.Errorf("failed to create extractor registry: %v", err)
 	}

@@ -59,9 +59,7 @@ func TestCrawlCmd(t *testing.T) {
 	}()
 
 	cmd := crawlcmd.Crawler{
-		Extractors: func() map[content.Type]outlinks.Extractor {
-			return map[content.Type]outlinks.Extractor{}
-		},
+		Extractors: map[content.Type]outlinks.Extractor{},
 	}
 
 	writeFS := file.LocalFS()
