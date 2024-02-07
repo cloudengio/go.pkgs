@@ -8,10 +8,13 @@ package localfs
 import (
 	"reflect"
 	"testing"
+
+	"cloudeng.io/file"
+	"cloudeng.io/file/localfs"
 )
 
 func TestMergeXAttr(t *testing.T) {
-	x := XAttr{
+	x := file.XAttr{
 		UID:       1,
 		GID:       2,
 		Device:    3,
@@ -19,7 +22,7 @@ func TestMergeXAttr(t *testing.T) {
 		Blocks:    5,
 		Hardlinks: 6,
 	}
-	fs := LocalFS()
+	fs := localfs.New()
 	xattr := fs.SysXAttr(nil, x)
 	stat, ok := xattr.(*sysinfo)
 	if !ok {
