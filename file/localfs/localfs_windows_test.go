@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"cloudeng.io/file"
-	"cloudeng.io/file/localfs"
 )
 
 func TestMergeXAttr(t *testing.T) {
@@ -22,7 +21,7 @@ func TestMergeXAttr(t *testing.T) {
 		Blocks:    5,
 		Hardlinks: 6,
 	}
-	fs := localfs.New()
+	fs := New()
 	xattr := fs.SysXAttr(nil, x)
 	stat, ok := xattr.(*sysinfo)
 	if !ok {
