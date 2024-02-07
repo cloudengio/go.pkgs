@@ -42,7 +42,7 @@ func (c *Crawler) Run(ctx context.Context,
 	cacheRoot string,
 	fs content.FS,
 	displayOutlinks, displayProgress bool) error {
-	crawlCache, _, err := c.Cache.InitStore(ctx, fs, cacheRoot)
+	crawlCache, err := c.Cache.InitStore(ctx, fs, cacheRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize crawl cache: %v: %v", c.Cache, err)
 	}

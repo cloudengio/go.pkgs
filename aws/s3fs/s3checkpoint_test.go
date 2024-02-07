@@ -1,28 +1,33 @@
-// Copyright 2023 cloudeng llc. All rights reserved.
+// Copyright 2024 cloudeng llc. All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package checkpoint_test
+package s3fs_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 
-	"cloudeng.io/file/checkpoint"
+	"cloudeng.io/aws/awstestutil"
+	"cloudeng.io/aws/s3fs"
 )
 
-func readdir(t *testing.T, d string) []string {
-	f, err := os.Open(d)
-	if err != nil {
-		t.Fatal(err)
+func readdir(ctx context.Context, t *testing.T, fs *s3fs.T, prefix string) []string {
+	t.Helper()
+	sc := fs.LevelScanner(prefix)
+	names := []string{}
+	for sc.Scan(ctx, 100) {
+		contents := sc.Contents()
+		for _, c := range contents {
+			if c.IsDir() {
+				continue
+			}
+			names = append(names, c.Name)
+		}
 	}
-	defer f.Close()
-	names, err := f.Readdirnames(-1)
-	if err != nil {
+	if err := sc.Err(); err != nil {
 		t.Fatal(err)
 	}
 	sort.Strings(names)
@@ -30,16 +35,23 @@ func readdir(t *testing.T, d string) []string {
 }
 
 func TestCheckpoint(t *testing.T) {
+	awstestutil.SkipAWSTests(t)
 	ctx := context.Background()
-	tmpdir := t.TempDir()
-	tmp1 := filepath.Join(tmpdir, "1")
-	op := checkpoint.NewDirectoryOperation()
-	err := op.Init(ctx, tmp1)
+	fs := newS3ObjFS()
+
+	tmpdir := "s3://bucket-checkpoint/a"
+	tmp1 := fs.Join(tmpdir, "checkpoint")
+	op := s3fs.NewCheckpointOperation(fs)
+	var err error
 	assert := func() {
+		t.Helper()
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
+
+	err = op.Init(ctx, tmp1)
+	assert()
 
 	id, err := op.Checkpoint(ctx, "-1-of-3", []byte("0"))
 	assert()
@@ -52,8 +64,8 @@ func TestCheckpoint(t *testing.T) {
 	if got, want := id, "00000001-2-of-3.chk"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	expected := []string{"00000000-1-of-3.chk", "00000001-2-of-3.chk", "lock"}
-	if got, want := readdir(t, tmp1), expected; !reflect.DeepEqual(got, want) {
+	expected := []string{"00000000-1-of-3.chk", "00000001-2-of-3.chk"}
+	if got, want := readdir(ctx, t, fs, tmp1), expected; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -64,12 +76,10 @@ func TestCheckpoint(t *testing.T) {
 	}
 
 	// With no label.
-	tmp2 := filepath.Join(tmpdir, "2")
-
-	op = checkpoint.NewDirectoryOperation()
-	if err := op.Init(ctx, tmp2); err != nil {
-		t.Fatal(err)
-	}
+	op = s3fs.NewCheckpointOperation(fs)
+	tmp2 := fs.Join(tmpdir, "2")
+	err = op.Init(ctx, tmp2)
+	assert()
 
 	id, err = op.Checkpoint(ctx, "", []byte("0"))
 	assert()
@@ -88,8 +98,8 @@ func TestCheckpoint(t *testing.T) {
 	if got, want := id, "00000002.chk"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	expected = []string{"00000000.chk", "00000001.chk", "00000002.chk", "lock"}
-	if got, want := readdir(t, tmp2), expected; !reflect.DeepEqual(got, want) {
+	expected = []string{"00000000.chk", "00000001.chk", "00000002.chk"}
+	if got, want := readdir(ctx, t, fs, tmp2), expected; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
