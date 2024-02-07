@@ -17,6 +17,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+func (s3fs *T) ensureIsPrefix(prefix string) string {
+	if len(prefix) == 0 {
+		return ""
+	}
+	if prefix[len(prefix)-1] != s3fs.options.delimiter {
+		prefix += string(s3fs.options.delimiter)
+	}
+	return prefix
+}
+
 func (s3fs *T) Put(ctx context.Context, path string, _ fs.FileMode, data []byte) error {
 	match := cloudpath.AWSS3MatcherSep(path, s3fs.options.delimiter)
 	if len(match.Matched) == 0 {
@@ -31,8 +41,12 @@ func (s3fs *T) Put(ctx context.Context, path string, _ fs.FileMode, data []byte)
 	return err
 }
 
-func (s3fs *T) EnsurePrefix(_ context.Context, _ string, _ fs.FileMode) error {
-	return nil
+func (s3fs *T) EnsurePrefix(ctx context.Context, path string, _ fs.FileMode) error {
+	match := cloudpath.AWSS3MatcherSep(path, s3fs.options.delimiter)
+	if len(match.Matched) == 0 {
+		return fmt.Errorf("invalid s3 path: %v", path)
+	}
+	return createBucket(ctx, s3fs.client, match.Volume)
 }
 
 func (s3fs *T) Get(ctx context.Context, path string) ([]byte, error) {

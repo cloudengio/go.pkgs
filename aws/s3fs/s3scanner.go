@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
-	"strings"
 
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/path/cloudpath"
@@ -34,29 +33,29 @@ func DirectoryBucketAZ(bucket string) string {
 	return m[1]
 }
 
-var slasDelim = aws.String("/")
+var slashDelim = aws.String("/")
 
 func NewLevelScanner(client Client, delimiter byte, path string) filewalk.LevelScanner {
 	match := cloudpath.AWSS3MatcherSep(path, delimiter)
 	if len(match.Matched) == 0 {
 		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
 	}
-	key := strings.TrimPrefix(match.Key, "/")
 	sc := &scanner{
 		client:    client,
 		match:     match,
 		bucket:    aws.String(match.Volume),
-		prefix:    aws.String(key),
+		prefix:    aws.String(match.Key),
 		delim:     aws.String(string(delimiter)),
 		delimByte: delimiter,
 	}
 	if IsDirectoryBucket(match.Volume) {
-		sc.delim = slasDelim
+		sc.delim = slashDelim
 	}
 	return sc
 }
 
 func (fs *T) LevelScanner(prefix string) filewalk.LevelScanner {
+	prefix = fs.ensureIsPrefix(prefix)
 	return NewLevelScanner(fs.client, fs.options.delimiter, prefix)
 }
 

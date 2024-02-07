@@ -31,8 +31,8 @@ func (f *randfs) NewFS(_ context.Context) (file.FS, error) {
 	return filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024)), nil
 }
 
-func expectedOutput(fs file.FS, name, root, cache, checkpoint string, seeds ...string) (dirs, files []string) {
-	dirs = []string{root, fs.Join(root, cache), fs.Join(root, checkpoint)}
+func expectedOutput(fs file.FS, name, root, cache string, seeds ...string) (dirs, files []string) {
+	dirs = []string{root, fs.Join(root, cache)}
 	sharder := path.NewSharder(path.WithSHA1PrefixLength(1))
 	for _, seed := range seeds {
 		p, f := sharder.Assign(name + seed)
@@ -87,15 +87,12 @@ func TestCrawlCmd(t *testing.T) {
 			ShardingPrefixLen: 1,
 		},
 	}
-	cachePath, checkpointPath, err := cmd.Cache.InitStore(ctx, writeFS, writeRoot)
+	cachePath, err := cmd.Cache.InitStore(ctx, writeFS, writeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if got, want := cachePath, cmd.Config.Cache.Prefix; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := checkpointPath, cmd.Config.Cache.Checkpoint; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -105,8 +102,7 @@ func TestCrawlCmd(t *testing.T) {
 	}
 
 	expectedDirs, expectedFiles := expectedOutput(writeFS, cmd.Config.Name,
-		writeRoot, cachePath, checkpointPath,
-		cmd.Config.Seeds...)
+		writeRoot, cachePath, cmd.Config.Seeds...)
 
 	lfs := localfs.New()
 	prefixes, contents, err := filewalktestutil.WalkContents(ctx, lfs, tmpDir)
@@ -126,7 +122,7 @@ func TestCrawlCmd(t *testing.T) {
 
 	// Test erase.
 	cmd.Config.Cache.ClearBeforeCrawl = true
-	_, _, err = cmd.Cache.InitStore(ctx, writeFS, writeRoot)
+	_, err = cmd.Cache.InitStore(ctx, writeFS, writeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +130,7 @@ func TestCrawlCmd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := len(prefixes), 3; got != want {
+	if got, want := len(prefixes), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := len(contents), 0; got != want {

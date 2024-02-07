@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/checkpoint"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
@@ -66,34 +67,42 @@ type DownloadConfig struct {
 // to be relative to the 'root' of the overall crawl operation.
 type CrawlCacheConfig struct {
 	Prefix            string `yaml:"cache_prefix" cmd:"the prefix/directory to use for the cache of downloaded documents. This is relative to the root directory of the crawl."`
-	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl" cmd:"if true, the cache will be cleared before the crawl starts."`
+	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
 	Checkpoint        string `yaml:"cache_checkpoint" cmd:"the location of any checkpoint data used to resume a crawl."`
 	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
 }
 
-// InitStore creates the cache and checkpoint directories relative to the
-// specified root, and optionally clears them before the crawl (if
-// Cache.ClearBeforeCrawl is true). Any environment variables in the
-// root or Cache.Prefix will be expanded.
-func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath, checkpointPath string, err error) {
+// InitObjectStore creates the object store relative to the specified root, and
+// optionally clears it before the crawl (if Cache.ClearBeforeCrawl is true).
+// Any environment variables in root and Cache.Prefix will be expanded.
+func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath string, err error) {
+	cachePath = os.ExpandEnv(c.Prefix)
 	root = os.ExpandEnv(root)
-	cachePath, checkpointPath = os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
 	cachePathFull := filepath.Join(root, cachePath)
-	checkpointPathFull := filepath.Join(root, checkpointPath)
 	if c.ClearBeforeCrawl && len(c.Prefix) > 0 {
 		if err = fs.DeleteAll(ctx, cachePathFull); err != nil {
 			return
 		}
 	}
+	err = fs.EnsurePrefix(ctx, cachePathFull, 0700)
+	return
+}
+
+// InitCheckpointOperation creates the checkpoint store, relative to the specified
+// root and optionally clears it before the crawl (if Cache.ClearBeforeCrawl is
+// true). Any environment variables in root and Cache.Checkpoint will be expanded.
+func (c CrawlCacheConfig) InitCheckpoint(ctx context.Context, op checkpoint.Operation, root string) (checkpointPath string, err error) {
+	checkpointPath = os.ExpandEnv(c.Checkpoint)
+	root = os.ExpandEnv(root)
+	checkpointPathFull := filepath.Join(root, checkpointPath)
+	if err := op.Init(ctx, checkpointPathFull); err != nil {
+		return "", err
+	}
 	if c.ClearBeforeCrawl && len(c.Checkpoint) > 0 {
-		if err = fs.DeleteAll(ctx, checkpointPathFull); err != nil {
+		if err = op.Clear(ctx); err != nil {
 			return
 		}
 	}
-	if err = fs.EnsurePrefix(ctx, cachePathFull, 0700); err != nil {
-		return
-	}
-	err = fs.EnsurePrefix(ctx, checkpointPathFull, 0700)
 	return
 }
 
