@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package file_test
+package localfs_test
 
 import (
 	"context"
@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/localfs"
 )
 
 func TestXAttr(t *testing.T) {
 	tmpdir := t.TempDir()
 
 	ctx := context.Background()
-	fs := file.LocalFS()
+	fs := localfs.New()
 	name := fs.Join(tmpdir, "testfile")
 	if err := os.WriteFile(name, make([]byte, 4096), 0644); err != nil {
 		t.Fatal(err)

@@ -20,7 +20,7 @@ import (
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/file/filewalk/filewalktestutil"
-	"cloudeng.io/file/filewalk/localfs"
+	"cloudeng.io/file/localfs"
 	"cloudeng.io/path"
 )
 
@@ -62,7 +62,7 @@ func TestCrawlCmd(t *testing.T) {
 		Extractors: map[content.Type]outlinks.Extractor{},
 	}
 
-	writeFS := file.LocalFS()
+	writeFS := localfs.New()
 	writeRoot := tmpDir
 
 	fsMap := map[string]crawlcmd.FSFactory{

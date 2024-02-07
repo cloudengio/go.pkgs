@@ -14,6 +14,7 @@ import (
 
 	"cloudeng.io/cmdutil/boolexpr"
 	"cloudeng.io/file"
+	"cloudeng.io/file/localfs"
 	"cloudeng.io/file/matcher"
 	"cloudeng.io/os/userid"
 )
@@ -66,7 +67,7 @@ func TestUserGroupParsing(t *testing.T) {
 	// Test a file in a temp dir and a locally existing one since on windows
 	// the file owners are different.
 	for _, testfile := range []string{filename, "xattr_ops_test.go"} {
-		fs := file.LocalFS()
+		fs := localfs.New()
 		info, err := fs.Stat(ctx, testfile)
 		if err != nil {
 			t.Fatal(err)

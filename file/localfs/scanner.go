@@ -12,16 +12,8 @@ import (
 	"os"
 	"time"
 
-	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 )
-
-// T represents an instance of filewalk.FS for a local filesystem.
-type T struct{ file.FS }
-
-func New() filewalk.FS {
-	return &T{file.LocalFS()}
-}
 
 type scanner struct {
 	path    string
@@ -98,7 +90,7 @@ func NewLevelScanner(path string) filewalk.LevelScanner {
 	return &scanner{path: path}
 }
 
-func (l *T) LevelScanner(prefix string) filewalk.LevelScanner {
+func (f *T) LevelScanner(prefix string) filewalk.LevelScanner {
 	return NewLevelScanner(prefix)
 }
 

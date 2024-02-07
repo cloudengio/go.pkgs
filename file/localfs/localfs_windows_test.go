@@ -3,15 +3,17 @@
 // license that can be found in the LICENSE file.
 
 // go:build windows
-package file
+package localfs
 
 import (
 	"reflect"
 	"testing"
+
+	"cloudeng.io/file"
 )
 
 func TestMergeXAttr(t *testing.T) {
-	x := XAttr{
+	x := file.XAttr{
 		UID:       1,
 		GID:       2,
 		Device:    3,
@@ -19,7 +21,7 @@ func TestMergeXAttr(t *testing.T) {
 		Blocks:    5,
 		Hardlinks: 6,
 	}
-	fs := LocalFS()
+	fs := New()
 	xattr := fs.SysXAttr(nil, x)
 	stat, ok := xattr.(*sysinfo)
 	if !ok {

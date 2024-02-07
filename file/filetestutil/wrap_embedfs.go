@@ -9,11 +9,12 @@ import (
 	"io/fs"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/localfs"
 )
 
 // WrapEmbedFS wraps an embed.FS to implement file.FS.
 func WrapEmbedFS(fs embed.FS) file.FS {
-	return &fsFromFS{fs: fs, FS: file.LocalFS()}
+	return &fsFromFS{fs: fs, FS: localfs.New()}
 }
 
 type fsFromFS struct {

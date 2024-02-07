@@ -3,20 +3,22 @@
 // license that can be found in the LICENSE file.
 
 // go:build linux && amd64
-package file
+package localfs
 
 import (
 	"fmt"
 	"syscall"
+
+	"cloudeng.io/file"
 )
 
-func xAttr(pathname string, fi Info) (XAttr, error) {
+func xAttr(pathname string, fi file.Info) (file.XAttr, error) {
 	si := fi.Sys()
 	if si == nil {
-		return XAttr{}, fmt.Errorf("no system set for %v", pathname)
+		return file.XAttr{}, fmt.Errorf("no system set for %v", pathname)
 	}
 	if s, ok := si.(*syscall.Stat_t); ok {
-		return XAttr{
+		return file.XAttr{
 			UID:       int64(s.Uid),
 			GID:       int64(s.Gid),
 			Device:    s.Dev,
@@ -25,10 +27,10 @@ func xAttr(pathname string, fi Info) (XAttr, error) {
 			Hardlinks: s.Nlink,
 		}, nil
 	}
-	return XAttr{}, fmt.Errorf("unrecognised system information %T for %v", si, pathname)
+	return file.XAttr{}, fmt.Errorf("unrecognised system information %T for %v", si, pathname)
 }
 
-func mergeXAttr(existing any, xattr XAttr) any {
+func mergeXAttr(existing any, xattr file.XAttr) any {
 	n := &syscall.Stat_t{}
 	ex, ok := existing.(*syscall.Stat_t)
 	if ok {

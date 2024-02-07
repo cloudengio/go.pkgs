@@ -16,6 +16,7 @@ import (
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/download"
+	"cloudeng.io/file/localfs"
 )
 
 func TestCrawledObject(t *testing.T) {
@@ -110,7 +111,7 @@ func TestObjectEncoding(t *testing.T) {
 		Response: "anything",
 		Type:     ctype,
 	}
-	fs := file.LocalFS()
+	fs := localfs.New()
 	store := content.NewStore[int, string](fs, tmpDir, content.GOBObjectEncoding, content.GOBObjectEncoding)
 
 	roundTripFile(ctx, t, store, obj, "a", "obj1.obj", ctype)

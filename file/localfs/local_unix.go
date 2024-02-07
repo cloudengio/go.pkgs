@@ -4,13 +4,15 @@
 
 //go:build unix
 
-package file
+package localfs
 
 import (
 	"os"
+
+	"cloudeng.io/file"
 )
 
 // symlinkInfo returns a file.Info appropriate for a symlink.
-func symlinkInfo(_ string, info os.FileInfo) (Info, error) {
-	return NewInfoFromFileInfo(info), nil
+func symlinkInfo(_ string, info os.FileInfo) (file.Info, error) {
+	return file.NewInfoFromFileInfo(info), nil
 }

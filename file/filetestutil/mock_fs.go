@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/localfs"
 )
 
 // Contents returns the contents stored in the mock fs.FS.
@@ -101,16 +102,16 @@ func NewMockFS(opts ...FSOption) file.FS {
 	if len(options.scheme) == 0 {
 		options.scheme = "file"
 	}
-	fs := file.LocalFS()
+	fs := localfs.New()
 	if options.random {
-		return &randFS{localfs: localfs{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
+		return &randFS{local: local{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.constant {
-		return &constantFS{localfs: localfs{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
+		return &constantFS{local: local{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}}
 	}
 	if options.numRetries > 0 {
 		return &randAfteRetryFS{
-			randFS:  randFS{localfs: localfs{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}},
+			randFS:  randFS{local: local{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}},
 			retries: map[string]int{},
 		}
 	}
@@ -120,18 +121,18 @@ func NewMockFS(opts ...FSOption) file.FS {
 	return nil
 }
 
-type localfs struct {
+type local struct {
 	file.FS
 	scheme string
 }
 
-func (mfs *localfs) Scheme() string {
+func (mfs *local) Scheme() string {
 	return mfs.scheme
 }
 
 type randFS struct {
 	sync.Mutex
-	localfs
+	local
 	fsOptions
 	contents map[string][]byte
 }
@@ -190,7 +191,7 @@ func (mfs *randAfteRetryFS) OpenCtx(ctx context.Context, name string) (fs.File, 
 }
 
 type errorFs struct {
-	localfs
+	local
 	err error
 }
 
@@ -205,7 +206,7 @@ func (mfs *errorFs) OpenCtx(_ context.Context, _ string) (fs.File, error) {
 
 type constantFS struct {
 	sync.Mutex
-	localfs
+	local
 	fsOptions
 	val      []byte
 	contents map[string][]byte
@@ -234,7 +235,7 @@ type writeFSEntry struct {
 
 type WriteFS struct {
 	sync.Mutex
-	localfs
+	local
 	entries  map[string]writeFSEntry
 	contents map[string][]byte
 }
