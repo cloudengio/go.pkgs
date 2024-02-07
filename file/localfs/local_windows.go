@@ -17,7 +17,7 @@ func symlinkInfo(filename string, info os.FileInfo) (file.Info, error) {
 	// on windows the only way to get the size of a symlink is to read it!
 	s, err := os.Readlink(filename)
 	if err != nil {
-		return Info{}, err
+		return file.Info{}, err
 	}
 	return file.NewInfo(
 		info.Name(),
