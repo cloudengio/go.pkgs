@@ -21,8 +21,8 @@ import (
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
-	"cloudeng.io/file/filewalk/internal"
-	"cloudeng.io/file/filewalk/localfs"
+	"cloudeng.io/file/internal"
+	"cloudeng.io/file/localfs"
 	"cloudeng.io/sync/synctestutil"
 )
 

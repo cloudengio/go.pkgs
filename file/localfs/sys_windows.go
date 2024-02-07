@@ -3,12 +3,13 @@
 // license that can be found in the LICENSE file.
 
 // go:build windows
-package file
+package localfs
 
 import (
 	"fmt"
 	"syscall"
 
+	"cloudeng.io/file"
 	"golang.org/x/sys/windows"
 )
 
@@ -19,14 +20,14 @@ type sysinfo struct {
 	hardlinks      uint64
 }
 
-func xAttr(pathname string, fi Info) (XAttr, error) {
+func xAttr(pathname string, fi file.Info) (file.XAttr, error) {
 	si := fi.Sys()
 	if si == nil {
 		return getSysInfo(pathname)
 	}
 	switch s := si.(type) {
 	case *sysinfo:
-		return XAttr{
+		return file.XAttr{
 			UID:       -1,
 			GID:       -1,
 			User:      "",
@@ -40,7 +41,7 @@ func xAttr(pathname string, fi Info) (XAttr, error) {
 	return getSysInfo(pathname)
 }
 
-func mergeXAttr(existing any, xattr XAttr) any {
+func mergeXAttr(existing any, xattr file.XAttr) any {
 	n := &sysinfo{}
 	ex, ok := existing.(*sysinfo)
 	if ok {
@@ -59,7 +60,7 @@ func packFileIndices(hi, low uint32) uint64 {
 	return uint64(hi)<<32 | uint64(low)
 }
 
-func getSysInfo(pathname string) (XAttr, error) {
+func getSysInfo(pathname string) (file.XAttr, error) {
 	// taken from loadFileId in types_windows.go
 	pathp, err := syscall.UTF16PtrFromString(pathname)
 	if err != nil {

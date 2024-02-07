@@ -4,20 +4,22 @@
 
 //go:build windows
 
-package file
+package localfs
 
 import (
 	"os"
+
+	"cloudeng.io/file"
 )
 
 // symlinkInfo returns a file.Info appropriate for a symlink.
-func symlinkInfo(filename string, info os.FileInfo) (Info, error) {
+func symlinkInfo(filename string, info os.FileInfo) (file.Info, error) {
 	// on windows the only way to get the size of a symlink is to read it!
 	s, err := os.Readlink(filename)
 	if err != nil {
 		return Info{}, err
 	}
-	return NewInfo(
+	return file.NewInfo(
 		info.Name(),
 		int64(len(s)),
 		info.Mode(),

@@ -19,8 +19,8 @@ import (
 	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/asyncstat"
-	"cloudeng.io/file/filewalk/internal"
-	"cloudeng.io/file/filewalk/localfs"
+	"cloudeng.io/file/internal"
+	"cloudeng.io/file/localfs"
 )
 
 var localTestTree string

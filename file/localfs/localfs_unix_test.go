@@ -4,7 +4,7 @@
 
 //go:build unix
 
-package file_test
+package localfs_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"cloudeng.io/file"
+	"cloudeng.io/file/localfs"
 )
 
 func TestMergeXAttr(t *testing.T) {
@@ -24,7 +25,7 @@ func TestMergeXAttr(t *testing.T) {
 		Blocks:    5,
 		Hardlinks: 6,
 	}
-	fs := file.LocalFS()
+	fs := localfs.New()
 	xattr := fs.SysXAttr(nil, x)
 
 	stat, ok := xattr.(*syscall.Stat_t)

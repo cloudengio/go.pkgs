@@ -11,8 +11,8 @@ import (
 	"reflect"
 	"testing"
 
-	"cloudeng.io/file"
 	"cloudeng.io/file/content"
+	"cloudeng.io/file/localfs"
 )
 
 func mkdirall(t *testing.T, paths ...string) {
@@ -26,7 +26,7 @@ func mkdirall(t *testing.T, paths ...string) {
 func TestStore(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	fs := file.LocalFS()
+	fs := localfs.New()
 
 	root := fs.Join(tmpDir, "store")
 	mkdirall(t, root)
