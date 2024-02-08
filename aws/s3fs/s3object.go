@@ -46,7 +46,7 @@ func (s3fs *T) EnsurePrefix(ctx context.Context, path string, _ fs.FileMode) err
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)
 	}
-	return createBucket(ctx, s3fs.client, match.Volume)
+	return nil
 }
 
 func (s3fs *T) Get(ctx context.Context, path string) ([]byte, error) {

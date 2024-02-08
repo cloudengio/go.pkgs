@@ -25,7 +25,6 @@ type Client interface {
 	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	DeleteObject(ctx context.Context, params *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
-	CreateBucket(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error)
 }
 
 func objectHead(ctx context.Context, client Client, bucket, key *string) (*s3.HeadObjectOutput, error) {
@@ -105,12 +104,4 @@ func (bacl *bucketACLs) get(ctx context.Context, client Client, bucket string) (
 	}
 	bacl.acls[bucket] = res
 	return res, nil
-}
-
-func createBucket(ctx context.Context, client Client, bucket string) error {
-	req := s3.CreateBucketInput{
-		Bucket: aws.String(bucket),
-	}
-	_, err := client.CreateBucket(ctx, &req)
-	return err
 }
