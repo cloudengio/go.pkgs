@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"cloudeng.io/file"
@@ -72,38 +71,41 @@ type CrawlCacheConfig struct {
 	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
 }
 
-// InitObjectStore creates the object store relative to the specified root, and
-// optionally clears it before the crawl (if Cache.ClearBeforeCrawl is true).
-// Any environment variables in root and Cache.Prefix will be expanded.
-func (c CrawlCacheConfig) InitStore(ctx context.Context, fs file.ObjectFS, root string) (cachePath string, err error) {
-	cachePath = os.ExpandEnv(c.Prefix)
-	root = os.ExpandEnv(root)
-	cachePathFull := filepath.Join(root, cachePath)
-	if c.ClearBeforeCrawl && len(c.Prefix) > 0 {
-		if err = fs.DeleteAll(ctx, cachePathFull); err != nil {
-			return
-		}
-	}
-	err = fs.EnsurePrefix(ctx, cachePathFull, 0700)
+func (c CrawlCacheConfig) RelativePaths(root string) (parent, downloads, checkpoint string) {
+	return os.ExpandEnv(root), os.ExpandEnv(c.Prefix), os.ExpandEnv(c.Checkpoint)
+}
+
+func (c CrawlCacheConfig) AbsolutePaths(fs file.FS, root string) (parent, downloads, checkpoint string) {
+	parent, downloads, checkpoint = c.RelativePaths(root)
+	downloads = fs.Join(parent, downloads)
+	checkpoint = fs.Join(parent, checkpoint)
 	return
 }
 
-// InitCheckpointOperation creates the checkpoint store, relative to the specified
-// root and optionally clears it before the crawl (if Cache.ClearBeforeCrawl is
-// true). Any environment variables in root and Cache.Checkpoint will be expanded.
-func (c CrawlCacheConfig) InitCheckpoint(ctx context.Context, op checkpoint.Operation, root string) (checkpointPath string, err error) {
-	checkpointPath = os.ExpandEnv(c.Checkpoint)
-	root = os.ExpandEnv(root)
-	checkpointPathFull := filepath.Join(root, checkpointPath)
-	if err := op.Init(ctx, checkpointPathFull); err != nil {
-		return "", err
-	}
-	if c.ClearBeforeCrawl && len(c.Checkpoint) > 0 {
-		if err = op.Clear(ctx); err != nil {
-			return
+// PrepareDownloads ensures that the cache directory exists and is empty if
+// ClearBeforeCrawl is true. It returns an error if the directory cannot be
+// created or cleared.
+func (c CrawlCacheConfig) PrepareDownloads(ctx context.Context, fs content.FS, downloads string) error {
+	if c.ClearBeforeCrawl && len(c.Prefix) > 0 {
+		if err := fs.DeleteAll(ctx, downloads); err != nil {
+			return err
 		}
 	}
-	return
+	return fs.EnsurePrefix(ctx, downloads, 0700)
+}
+
+// PrepareCheckpoint initializes the checkpoint operation with checkpointPath
+// (ie. calls op.Init(ctx, checkpointPath)) and optionally clears the checkpoint
+// if ClearBeforeCrawl is true. It returns an error if the checkpoint cannot be
+// initialized or cleared.
+func (c CrawlCacheConfig) PrepareCheckpoint(ctx context.Context, op checkpoint.Operation, checkpointPath string) error {
+	if err := op.Init(ctx, checkpointPath); err != nil {
+		return err
+	}
+	if c.ClearBeforeCrawl {
+		return op.Clear(ctx)
+	}
+	return nil
 }
 
 // Config represents the configuration for a single crawl.
