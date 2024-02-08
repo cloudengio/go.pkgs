@@ -66,9 +66,8 @@ func WithDelimiter(d byte) Option {
 }
 
 type T struct {
-	client             Client
-	createBucketClient Client
-	options            options
+	client  Client
+	options options
 }
 
 // New creates a new instance of filewalk.FS backed by S3.
@@ -89,9 +88,6 @@ func NewS3FS(cfg aws.Config, options ...Option) *T {
 	if s3fs.client == nil {
 		s3fs.client = s3.NewFromConfig(cfg)
 	}
-	useast1 := cfg
-	useast1.Region = "us-east-1"
-	s3fs.createBucketClient = s3.NewFromConfig(useast1)
 	return s3fs
 }
 
