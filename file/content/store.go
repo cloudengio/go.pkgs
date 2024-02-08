@@ -13,7 +13,7 @@ import (
 	"cloudeng.io/file"
 )
 
-// FS represents the interface to a filesystem/objec store that is used to
+// FS represents the interface to a filesystem/object store that is used to
 // back Store.
 type FS interface {
 	file.FS
