@@ -96,7 +96,6 @@ func (s *Store[V, R]) Load(ctx context.Context, prefix, name string) (Type, Obje
 	if err != nil {
 		return "", obj, err
 	}
-
 	if err := obj.Decode(buf); err != nil {
 		return Type(typ), obj, err
 	}
