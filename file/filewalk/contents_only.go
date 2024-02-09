@@ -6,6 +6,7 @@ package filewalk
 
 import (
 	"context"
+	"sync"
 
 	"cloudeng.io/file"
 )
@@ -13,6 +14,7 @@ import (
 type ContentsHandler func(ctx context.Context, prefix string, contents []Entry, err error) error
 
 type contentsOnly struct {
+	mu sync.Mutex
 	fs FS
 	h  ContentsHandler
 }
@@ -35,6 +37,8 @@ func (l *contentsOnly) Contents(ctx context.Context, _ *struct{}, prefix string,
 		}
 		files = append(files, c)
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if err := l.h(ctx, prefix, files, nil); err != nil {
 		return nil, err
 	}
@@ -49,8 +53,9 @@ func (l *contentsOnly) Done(ctx context.Context, _ *struct{}, prefix string, err
 }
 
 // ContentsOnly provides a simplified API for walking the contents (files)
-// of a directory hierarchy.
+// of a directory hierarchy. Inovations of the ContentsHandler are serialized
+// using a mutex.
 func ContentsOnly(ctx context.Context, fs FS, start string, h ContentsHandler, opts ...Option) error {
-	wk := New[struct{}](fs, &contentsOnly{fs, h}, opts...)
+	wk := New[struct{}](fs, &contentsOnly{fs: fs, h: h}, opts...)
 	return wk.Walk(ctx, start)
 }

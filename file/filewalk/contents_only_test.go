@@ -46,7 +46,7 @@ func TestSimple(t *testing.T) {
 
 	found := []filewalk.Entry{}
 	err := filewalk.ContentsOnly(ctx, sc, localTestTree,
-		func(ctx context.Context, prefix string, contents []filewalk.Entry, err error) error {
+		func(_ context.Context, prefix string, contents []filewalk.Entry, err error) error {
 			if err != nil {
 				if sc.IsPermissionError(err) {
 					return nil
