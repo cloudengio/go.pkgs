@@ -186,7 +186,7 @@ func TestIssue(t *testing.T) {
 			asyncstat.WithAsyncThreshold(threshold),
 			asyncstat.WithStat(),
 			asyncstat.WithLatencyTracker(latency),
-			asyncstat.WithErrorLogger(func(ctx context.Context, filename string, err error) {
+			asyncstat.WithErrorLogger(func(_ context.Context, filename string, err error) {
 				statErrors[filename] = err
 			}),
 		)

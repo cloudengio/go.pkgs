@@ -183,7 +183,7 @@ func (mt *MessageTrace) Flatten(tag string) MessageRecords {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 	out := make([]MessageRecord, 0, len(mt.records))
-	walk(&mt.trace, 0, nil, func(level int, wr *walkRecord) {
+	walk(&mt.trace, 0, nil, func(_ int, wr *walkRecord) {
 		payload := wr.payload.(messageRecord)
 		if payload.status == 0 {
 			// skip the record created when a go routine is spawned.

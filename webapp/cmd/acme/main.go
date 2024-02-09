@@ -144,7 +144,7 @@ func manageCerts(ctx context.Context, values interface{}, _ []string) error {
 		return err
 	}
 
-	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fallback := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	})
 	port80, port80Srv, err := webapp.NewHTTPServer(":80", mgr.HTTPHandler(fallback))
@@ -162,7 +162,7 @@ func manageCerts(ctx context.Context, values interface{}, _ []string) error {
 	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "acme only please\n")
 	})
 
@@ -222,7 +222,7 @@ func refreshCertificates(ctx context.Context, interval time.Duration, acmeClient
 		Timeout:   60 * time.Second,
 		KeepAlive: 60 * time.Second,
 	}
-	rt.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+	rt.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return dialer.DialContext(ctx, "tcp", acmeClientHost+":443")
 	}
 	customCertPool(rt, rootCAPemFile)

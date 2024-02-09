@@ -264,7 +264,7 @@ func NewCommand(name string, flags *FlagSet, runner Runner, options ...CommandOp
 		flags = &FlagSet{}
 	}
 	if runner == nil {
-		runner = func(ctx context.Context, values interface{}, args []string) error {
+		runner = func(_ context.Context, _ interface{}, _ []string) error {
 			return fmt.Errorf("no runner specified for: %v", name)
 		}
 	}

@@ -12,13 +12,13 @@ import (
 
 func newParserRE() *boolexpr.Parser {
 	parser := boolexpr.NewParser()
-	parser.RegisterOperand("re", func(n, v string) boolexpr.Operand { return regexOp{val: v} })
+	parser.RegisterOperand("re", func(_, v string) boolexpr.Operand { return regexOp{val: v} })
 	return parser
 }
 
 func TestOperandRegistration(t *testing.T) {
 	p := boolexpr.NewParser()
-	p.RegisterOperand("newOp", func(n, v string) boolexpr.Operand { return regexOp{val: v} })
+	p.RegisterOperand("newOp", func(_, v string) boolexpr.Operand { return regexOp{val: v} })
 	m, err := p.Parse("newOp=foo")
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestOperandRegistration(t *testing.T) {
 
 func TestParser(t *testing.T) {
 	parser := newParserRE()
-	parser.RegisterOperand("op2", func(n, v string) boolexpr.Operand { return regexOp{val: v, name: "op2"} })
+	parser.RegisterOperand("op2", func(_, v string) boolexpr.Operand { return regexOp{val: v, name: "op2"} })
 
 	for _, tc := range []struct {
 		input  string
@@ -85,7 +85,7 @@ func TestParserErrors(t *testing.T) {
 
 func TestList(t *testing.T) {
 	parser := newParserRE()
-	parser.RegisterOperand("op2", func(n, v string) boolexpr.Operand { return regexOp{val: v, name: "op2"} })
+	parser.RegisterOperand("op2", func(_, v string) boolexpr.Operand { return regexOp{val: v, name: "op2"} })
 
 	operands := parser.ListOperands()
 	if got, want := len(operands), 2; got != want {
