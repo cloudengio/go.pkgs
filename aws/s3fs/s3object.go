@@ -41,7 +41,7 @@ func (s3fs *T) Put(ctx context.Context, path string, _ fs.FileMode, data []byte)
 	return err
 }
 
-func (s3fs *T) EnsurePrefix(ctx context.Context, path string, _ fs.FileMode) error {
+func (s3fs *T) EnsurePrefix(_ context.Context, path string, _ fs.FileMode) error {
 	match := cloudpath.AWSS3MatcherSep(path, s3fs.options.delimiter)
 	if len(match.Matched) == 0 {
 		return fmt.Errorf("invalid s3 path: %v", path)

@@ -117,7 +117,7 @@ func TestYAMLCommands(t *testing.T) {
 		}
 	}
 
-	assertRunner := func(cs *subcmd.CommandSetYAML, output string) {
+	assertRunner := func(_ *subcmd.CommandSetYAML, output string) {
 		if got, want := out.String(), output; got != want {
 			_, _, line, _ := runtime.Caller(1)
 

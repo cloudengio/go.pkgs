@@ -59,7 +59,7 @@ func testACMERedirect(ctx context.Context, values interface{}, _ []string) error
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "hello\n")
 	})
 	ln, srv, err := webapp.NewTLSServer(cl.Address, mux, cfg)

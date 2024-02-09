@@ -35,7 +35,7 @@ func testRunAndFormat(t *testing.T, delay time.Duration) error {
 	ch := make(chan struct{})
 	dch := make(chan struct{})
 
-	pproftrace.Run(ctx, key, value, func(ctx context.Context) {
+	pproftrace.Run(ctx, key, value, func(_ context.Context) {
 		runner(delay, ch, dch)
 	})
 	<-spawned

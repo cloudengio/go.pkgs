@@ -25,7 +25,7 @@ func TestMulti(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	ms.Validate = func(v string) error {
+	ms.Validate = func(_ string) error {
 		return fmt.Errorf("oops")
 	}
 	err := fs.Parse([]string{"-x=a", "-x=b"})
@@ -48,7 +48,7 @@ func TestCommaSeparated(t *testing.T) {
 	if got, want := ms.String(), "a, x, b, y"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	ms.Validate = func(v string) error {
+	ms.Validate = func(_ string) error {
 		return fmt.Errorf("oops")
 	}
 	err := fs.Parse([]string{"-x=a", "-x=b"})
