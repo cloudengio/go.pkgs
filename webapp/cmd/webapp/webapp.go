@@ -161,13 +161,13 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 }
 
 func configureAPIEndpoints(router *httprouter.Router) {
-	router.HandlerFunc("GET", "/hello", func(w http.ResponseWriter, r *http.Request) {
+	router.HandlerFunc("GET", "/hello", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "hello")
 	})
 }
 
 func serveIndexHTML(fsys fs.FS) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		code, err := webassets.ServeFile(w, fsys, "index.html")
 		w.WriteHeader(code)
 		if err != nil {

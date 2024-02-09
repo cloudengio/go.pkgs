@@ -33,7 +33,7 @@ func TestResize(t *testing.T) {
 	testResize(t, make([]int64, 10, 15), 50, 10, 15, true)
 	testResize(t, make([]int64, 10, 15), 49, 10, 10, false)
 
-	waster := func(buf []byte) (string, int) {
+	waster := func(_ []byte) (string, int) {
 		return "A", 10
 	}
 
@@ -58,7 +58,7 @@ func TestResize(t *testing.T) {
 }
 
 func TestEarlyExit(t *testing.T) {
-	earlyExit := func(buf []byte) (string, int) {
+	earlyExit := func(_ []byte) (string, int) {
 		return "", 0
 	}
 	used := NewDecoder(earlyExit).Decode([]byte("BBCXXX"))

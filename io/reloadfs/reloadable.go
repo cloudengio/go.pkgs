@@ -235,7 +235,7 @@ func New(root, prefix string, embedded fs.FS, opts ...ReloadableOption) fs.FS {
 		fn(r)
 	}
 	if r.logger == nil {
-		r.logger = func(action Action, name, path string, err error) {}
+		r.logger = func(_ Action, _, _ string, _ error) {}
 	}
 	return r
 }
