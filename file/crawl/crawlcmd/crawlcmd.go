@@ -29,7 +29,7 @@ type Crawler struct {
 	displayOutlinks bool
 	displayProgress bool
 	fsMap           map[string]FSFactory
-	cache           *content.Store[[]byte, download.Result]
+	cache           *content.Store
 }
 
 // FSFactory is a function that returns a file.FS used to crawl
@@ -49,7 +49,7 @@ func (c *Crawler) Run(ctx context.Context,
 	c.displayOutlinks = displayOutlinks
 	c.displayProgress = displayProgress
 	c.fsMap = fsMap
-	c.cache = content.NewStore[[]byte, download.Result](fs, crawlCache, content.GOBObjectEncoding, content.GOBObjectEncoding)
+	c.cache = content.NewStore(fs, crawlCache)
 	return c.run(ctx)
 }
 
@@ -162,7 +162,7 @@ func (c Crawler) saveCrawled(ctx context.Context, name string, crawledCh chan cr
 				continue
 			}
 			prefix, suffix := sharder.Assign(name + dld.Name)
-			if err := c.cache.Store(ctx, prefix, suffix, obj); err != nil {
+			if err := obj.Store(ctx, c.cache, prefix, suffix, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
 				fmt.Printf("failed to write: %v as prefix: %v, suffix: %v: %v\n", dld.Name, prefix, suffix, err)
 				continue
 			}

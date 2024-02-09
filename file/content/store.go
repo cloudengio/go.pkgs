@@ -25,38 +25,42 @@ type FS interface {
 // at the specified root prefix/path and all operations are relative to
 // that root. It is intended to be backed by either a local or cloud
 // filesystem.
-type Store[Value, Response any] struct {
-	fs                              FS
-	valueEncoding, responseEncoding ObjectEncoding
-	root                            string
-	written                         int64
-	read                            int64
+type Store struct {
+	fs      FS
+	root    string
+	written int64
+	read    int64
 }
 
 // NewStore returns a new instance of Store backed by the supplied
 // content.FS and storing the specified objects encoded using the
 // specified encodings.
-func NewStore[V, R any](fs FS, path string, valueEncoding, responseEncoding ObjectEncoding) *Store[V, R] {
-	return &Store[V, R]{
-		fs:               fs,
-		root:             path,
-		valueEncoding:    valueEncoding,
-		responseEncoding: responseEncoding,
+func NewStore(fs FS, path string) *Store {
+	return &Store{
+		fs:   fs,
+		root: path,
 	}
 }
 
 // EraseExisting deletes all existing contents of the store,
 // ie. all objects beneath the root prefix.
-func (s *Store[V, R]) EraseExisting(ctx context.Context) error {
+func (s *Store) EraseExisting(ctx context.Context) error {
 	if err := s.fs.DeleteAll(ctx, s.root); err != nil {
 		return fmt.Errorf("failed to delete store contents at %v: %v", s.root, err)
 	}
 	return nil
 }
 
-// Store stores the supplied object at the specified prefix and name.
-func (s *Store[V, R]) Store(ctx context.Context, prefix, name string, obj Object[V, R]) error {
-	buf, err := obj.Encode(s.valueEncoding, s.responseEncoding)
+func (s *Store) FS() FS {
+	return s.fs
+}
+
+func (s *Store) Root() string {
+	return s.root
+}
+
+func (o *Object[V, R]) Store(ctx context.Context, s *Store, prefix, name string, valueEncoding, responseEncoding ObjectEncoding) error {
+	buf, err := o.Encode(valueEncoding, responseEncoding)
 	if err != nil {
 		return err
 	}
@@ -77,32 +81,31 @@ func (s *Store[V, R]) Store(ctx context.Context, prefix, name string, obj Object
 	return nil
 }
 
-// Progress returns the number of objects read and written to the store
-// since this instance was created.
-func (s *Store[V, R]) Progress() (read, written int64) {
-	return atomic.LoadInt64(&s.read), atomic.LoadInt64(&s.written)
+func (o *Object[V, R]) Load(ctx context.Context, s *Store, prefix, name string) (Type, error) {
+	ctype, buf, err := s.Read(ctx, prefix, name)
+	if err != nil {
+		return "", err
+	}
+	return ctype, o.Decode(buf)
 }
 
-// Load loads the object at the specified prefix and name.
-func (s *Store[V, R]) Load(ctx context.Context, prefix, name string) (Type, Object[V, R], error) {
-	var obj Object[V, R]
-	path := s.fs.Join(s.root, prefix, name)
-	buf, err := s.fs.Get(ctx, path)
+func (s *Store) Read(ctx context.Context, prefix, name string) (Type, []byte, error) {
+	name = s.fs.Join(s.root, prefix, name)
+	buf, err := s.fs.Get(ctx, name)
 	if err != nil {
-		return "", obj, err
+		return "", nil, err
 	}
 	rd := bytes.NewReader(buf)
 	typ, err := readSlice(rd)
 	if err != nil {
-		return "", obj, err
-	}
-	if err := obj.Decode(buf); err != nil {
-		return Type(typ), obj, err
+		return "", nil, err
 	}
 	atomic.AddInt64(&s.read, 1)
-	return Type(typ), obj, nil
+	return Type(typ), buf, nil
 }
 
-func (s *Store[V, R]) FS() FS {
-	return s.fs
+// Stats returns the number of objects read and written to the store
+// since this instance was created.
+func (s *Store) Stats() (read, written int64) {
+	return atomic.LoadInt64(&s.read), atomic.LoadInt64(&s.written)
 }

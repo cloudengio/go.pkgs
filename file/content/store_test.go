@@ -37,7 +37,7 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store := content.NewStore[string, int](fs, root, content.JSONObjectEncoding, content.JSONObjectEncoding)
+	store := content.NewStore(fs, root)
 
 	if err := store.EraseExisting(ctx); err != nil {
 		t.Fatal(err)
@@ -55,12 +55,12 @@ func TestStore(t *testing.T) {
 	}
 
 	prefix := fs.Join("a", "b")
-	path := fs.Join(root, prefix, "c")
-	if err := store.Store(ctx, prefix, "c", obj); err != nil {
+	if err := obj.Store(ctx, store, prefix, "c", content.JSONObjectEncoding, content.JSONObjectEncoding); err != nil {
 		t.Fatal(err)
 	}
+	path := fs.Join(root, prefix, "c")
 
-	read, written := store.Progress()
+	read, written := store.Stats()
 	if got, want := read, int64(0); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -72,7 +72,8 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctype, obj1, err := store.Load(ctx, prefix, "c")
+	var obj1 content.Object[string, int]
+	ctype, err := obj1.Load(ctx, store, prefix, "c")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestStore(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	read, written = store.Progress()
+	read, written = store.Stats()
 	if got, want := read, int64(1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
