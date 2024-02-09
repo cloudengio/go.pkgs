@@ -183,6 +183,8 @@ func (o *Object[V, R]) Decode(data []byte) error {
 // WriteObject will encode the object using the requested encoding to the
 // specified file. It will create the directory that the file is to be written
 // to if it does not exist.
+//
+// Deprecated: will soon be removed.
 func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncoding ObjectEncoding) error {
 	buf, err := o.Encode(valueEncoding, responseEncoding)
 	if err != nil {
@@ -208,6 +210,8 @@ func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncod
 // ReadObjectFile will read the specified file and return the object type, encoding and the
 // the contents of that file. The returned byte slice can be used to decode the object using
 // its Decode method.
+//
+// Deprecated: will soon be removed.
 func ReadObjectFile(path string) (Type, []byte, error) {
 	buf, err := os.ReadFile(path)
 	if err != nil {

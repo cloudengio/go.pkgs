@@ -86,11 +86,12 @@ func roundtrip[V, R any](t *testing.T, obj content.Object[V, R], valueEncoding, 
 	}
 }
 
-func roundTripFile[V, R any](ctx context.Context, t *testing.T, store *content.Store[V, R], obj content.Object[V, R], prefix, name string, ctype content.Type) {
-	if err := store.Store(ctx, prefix, name, obj); err != nil {
+func roundTripFile[V, R any](ctx context.Context, t *testing.T, store *content.Store, obj content.Object[V, R], prefix, name string, ctype content.Type) {
+	if err := obj.Store(ctx, store, prefix, name, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
 		t.Fatal(err)
 	}
-	ctype1, obj1, err := store.Load(ctx, prefix, name)
+	var obj1 content.Object[V, R]
+	ctype1, err := obj1.Load(ctx, store, prefix, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,9 +113,7 @@ func TestObjectEncoding(t *testing.T) {
 		Type:     ctype,
 	}
 	fs := localfs.New()
-	store := content.NewStore[int, string](fs, tmpDir, content.GOBObjectEncoding, content.GOBObjectEncoding)
-
+	store := content.NewStore(fs, tmpDir)
 	roundTripFile(ctx, t, store, obj, "a", "obj1.obj", ctype)
 	roundTripFile(ctx, t, store, obj, "a", "obj2.obj", ctype)
-
 }
