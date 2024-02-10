@@ -114,7 +114,7 @@ func (s3fs *T) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		obj:    res,
 		bucket: match.Volume,
 		key:    key,
-		delim:  s3fs.options.delimiter,
+		delim:  string(s3fs.options.delimiter),
 		client: s3fs.client,
 		isDir:  key[len(key)-1] == s3fs.options.delimiter,
 	}, nil
@@ -133,10 +133,7 @@ func (s3fs *T) Stat(ctx context.Context, name string) (file.Info, error) {
 	if len(match.Matched) == 0 {
 		return file.Info{}, fmt.Errorf("invalid s3 path: %v", name)
 	}
-	if isPrefix(match.Key, s3fs.options.delimiter) {
-		return prefixFileInfo(match.Key, s3fs.options.delimiter), nil
-	}
-	return objectOrPrefixStat(ctx, s3fs.client, match.Volume, match.Key, s3fs.options.delimiter)
+	return statObjectOrPrefix(ctx, s3fs.client, match.Volume, match.Key, string(s3fs.options.delimiter))
 }
 
 func (s3fs *T) Lstat(ctx context.Context, path string) (file.Info, error) {
@@ -166,7 +163,8 @@ func (s3fs *T) IsPermissionError(err error) bool {
 func (s3fs *T) IsNotExist(err error) bool {
 	var nsk *types.NoSuchKey
 	var nsb *types.NoSuchBucket
-	return errors.As(err, &nsk) || errors.As(err, &nsb)
+	var nf *types.NotFound
+	return errors.As(err, &nf) || errors.As(err, &nsk) || errors.As(err, &nsb)
 }
 
 type s3xattr struct {
@@ -190,18 +188,20 @@ func (s3fs *T) SysXAttr(existing any, merge file.XAttr) any {
 }
 
 type s3Readble struct {
-	obj         *s3.GetObjectOutput
-	isDir       bool
-	client      Client
-	bucket, key string
-	delim       byte
+	obj    *s3.GetObjectOutput
+	isDir  bool
+	client Client
+	bucket string
+	key    string
+	delim  string
 }
 
 func (f *s3Readble) Stat() (fs.FileInfo, error) {
+	ctx := context.Background()
 	if f.isDir {
-		return prefixFileInfo(f.key, f.delim), nil
+		return listPrefixThenHead(ctx, f.client, f.bucket, f.key, f.delim)
 	}
-	return objectOrPrefixStat(context.Background(), f.client, f.bucket, f.key, f.delim)
+	return headThenListPrefix(ctx, f.client, f.bucket, f.key, f.delim)
 }
 
 func (f *s3Readble) Read(p []byte) (int, error) {
