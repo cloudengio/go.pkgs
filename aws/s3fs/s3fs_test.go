@@ -140,6 +140,23 @@ func TestStat(t *testing.T) {
 	if got, want := info.Name(), "0"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	info, err = fs.Stat(ctx, "s3://bucket-a/x/y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := info.Name(), "y/"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	info, err = fs.Stat(ctx, "s3://bucket-a/x/y/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := info.Name(), "y/"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }
 
 func TestWalk(t *testing.T) {

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
-	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file"
@@ -113,7 +112,9 @@ func (s3fs *T) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	key := match.Key
 	return &s3Readble{
 		obj:    res,
-		match:  match,
+		bucket: match.Volume,
+		key:    key,
+		delim:  s3fs.options.delimiter,
 		client: s3fs.client,
 		isDir:  key[len(key)-1] == s3fs.options.delimiter,
 	}, nil
@@ -132,11 +133,10 @@ func (s3fs *T) Stat(ctx context.Context, name string) (file.Info, error) {
 	if len(match.Matched) == 0 {
 		return file.Info{}, fmt.Errorf("invalid s3 path: %v", name)
 	}
-	if lk := len(match.Key); lk > 0 && match.Key[lk-1] == s3fs.options.delimiter {
-		name = cloudpath.Base("s3://", s3fs.options.delimiter, match.Key[:lk-1]) + string(s3fs.options.delimiter)
-		return file.NewInfo(name, 0, fs.ModeDir, time.Time{}, nil), nil
+	if isPrefix(match.Key, s3fs.options.delimiter) {
+		return prefixFileInfo(match.Key, s3fs.options.delimiter), nil
 	}
-	return objectStat(ctx, s3fs.client, match)
+	return objectOrPrefixStat(ctx, s3fs.client, match.Volume, match.Key, s3fs.options.delimiter)
 }
 
 func (s3fs *T) Lstat(ctx context.Context, path string) (file.Info, error) {
@@ -190,14 +190,18 @@ func (s3fs *T) SysXAttr(existing any, merge file.XAttr) any {
 }
 
 type s3Readble struct {
-	obj    *s3.GetObjectOutput
-	isDir  bool
-	client Client
-	match  cloudpath.Match
+	obj         *s3.GetObjectOutput
+	isDir       bool
+	client      Client
+	bucket, key string
+	delim       byte
 }
 
 func (f *s3Readble) Stat() (fs.FileInfo, error) {
-	return objectStat(context.Background(), f.client, f.match)
+	if f.isDir {
+		return prefixFileInfo(f.key, f.delim), nil
+	}
+	return objectOrPrefixStat(context.Background(), f.client, f.bucket, f.key, f.delim)
 }
 
 func (f *s3Readble) Read(p []byte) (int, error) {
