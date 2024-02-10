@@ -68,19 +68,21 @@ func listPrefix(ctx context.Context, client Client, bucket, key, delim, owner st
 	if len(res.Contents)+len(res.CommonPrefixes) == 0 {
 		return file.Info{}, &types.NotFound{}
 	}
-	return prefixFileInfo(key, delim[0]), nil
+	return prefixFileInfo(key, delim[0], owner), nil
 }
 
 func isPrefixKey(key string, delim byte) bool {
 	return len(key) > 0 && key[len(key)-1] == delim
 }
 
-func prefixFileInfo(key string, delim byte) file.Info {
+func prefixFileInfo(key string, delim byte, owner string) file.Info {
 	if lk := len(key); lk > 0 && key[lk-1] == delim {
 		key = key[:lk-1]
 	}
+	var xattr s3xattr
+	xattr.owner = owner
 	name := cloudpath.Base("s3://", delim, key) + string(delim)
-	return file.NewInfo(name, 0, fs.ModeDir, time.Time{}, nil)
+	return file.NewInfo(name, 0, fs.ModeDir, time.Time{}, xattr)
 }
 
 func ensureIsPrefix(prefix string, delim byte) string {
