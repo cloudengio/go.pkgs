@@ -140,6 +140,28 @@ func TestStat(t *testing.T) {
 	if got, want := info.Name(), "0"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	for _, p := range []string{"s3://bucket-b/x/y", "s3://bucket-b/x/y"} {
+		info, err = fs.Stat(ctx, p)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if got, want := info.Name(), "y/"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := info.IsDir(), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+
+	for _, p := range []string{"s3://bucket-a/does-not-exist", "s3://bucket-a/not-there/", "s3://bucket-a/not-there/or here"} {
+		_, err = fs.Stat(ctx, p)
+		if !fs.IsNotExist(err) {
+			t.Errorf("unexpected or missing error: %v", err)
+		}
+	}
+
 }
 
 func TestWalk(t *testing.T) {

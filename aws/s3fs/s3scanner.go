@@ -36,6 +36,7 @@ func DirectoryBucketAZ(bucket string) string {
 var slashDelim = aws.String("/")
 
 func NewLevelScanner(client Client, delimiter byte, path string) filewalk.LevelScanner {
+	path = ensureIsPrefix(path, delimiter)
 	match := cloudpath.AWSS3MatcherSep(path, delimiter)
 	if len(match.Matched) == 0 {
 		return &scanner{err: fmt.Errorf("invalid s3 path: %v", path)}
@@ -55,7 +56,6 @@ func NewLevelScanner(client Client, delimiter byte, path string) filewalk.LevelS
 }
 
 func (fs *T) LevelScanner(prefix string) filewalk.LevelScanner {
-	prefix = fs.ensureIsPrefix(prefix)
 	return NewLevelScanner(fs.client, fs.options.delimiter, prefix)
 }
 
