@@ -12,9 +12,14 @@ import (
 
 // SimpleRequest is a simple implementation of Request.
 type SimpleRequest struct {
-	FS        file.FS
-	Filenames []string
-	Mode      fs.FileMode
+	RequestedBy string
+	FS          file.FS
+	Filenames   []string
+	Mode        fs.FileMode
+}
+
+func (cr SimpleRequest) Requester() string {
+	return cr.RequestedBy
 }
 
 func (cr SimpleRequest) Container() file.FS {
