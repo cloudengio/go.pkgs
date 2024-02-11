@@ -55,7 +55,7 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 		if err != nil {
 			errs.Errors = append(errs.Errors, ErrorDetail{
 				Result: dl,
-				Error:  fmt.Errorf("no extractor for %v: %v", ctype, dl.Name),
+				Error:  fmt.Errorf("no extractor found for %v: %v, found in %v", ctype, dl.Name, downloaded.Request.Requester()),
 			})
 			continue
 		}
