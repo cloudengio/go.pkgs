@@ -37,9 +37,9 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store := content.NewStore(fs, root)
+	store := content.NewStore(fs)
 
-	if err := store.EraseExisting(ctx); err != nil {
+	if err := store.EraseExisting(ctx, root); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ func TestStore(t *testing.T) {
 	}
 
 	prefix := fs.Join("a", "b")
-	if err := obj.Store(ctx, store, prefix, "c", content.JSONObjectEncoding, content.JSONObjectEncoding); err != nil {
+	if err := obj.Store(ctx, store, fs.Join(root, prefix), "c", content.JSONObjectEncoding, content.JSONObjectEncoding); err != nil {
 		t.Fatal(err)
 	}
 	path := fs.Join(root, prefix, "c")
@@ -73,7 +73,7 @@ func TestStore(t *testing.T) {
 	}
 
 	var obj1 content.Object[string, int]
-	ctype, err := obj1.Load(ctx, store, prefix, "c")
+	ctype, err := obj1.Load(ctx, store, fs.Join(root, prefix), "c")
 	if err != nil {
 		t.Fatal(err)
 	}

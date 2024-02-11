@@ -27,7 +27,6 @@ type FS interface {
 // filesystem.
 type Store struct {
 	fs      FS
-	root    string
 	written int64
 	read    int64
 }
@@ -35,18 +34,16 @@ type Store struct {
 // NewStore returns a new instance of Store backed by the supplied
 // content.FS and storing the specified objects encoded using the
 // specified encodings.
-func NewStore(fs FS, path string) *Store {
+func NewStore(fs FS) *Store {
 	return &Store{
-		fs:   fs,
-		root: path,
+		fs: fs,
 	}
 }
 
-// EraseExisting deletes all existing contents of the store,
-// ie. all objects beneath the root prefix.
-func (s *Store) EraseExisting(ctx context.Context) error {
-	if err := s.fs.DeleteAll(ctx, s.root); err != nil {
-		return fmt.Errorf("failed to delete store contents at %v: %v", s.root, err)
+// EraseExisting deletes all contents of the store beneath root.
+func (s *Store) EraseExisting(ctx context.Context, root string) error {
+	if err := s.fs.DeleteAll(ctx, root); err != nil {
+		return fmt.Errorf("failed to delete store contents at %v: %v", root, err)
 	}
 	return nil
 }
@@ -55,16 +52,11 @@ func (s *Store) FS() FS {
 	return s.fs
 }
 
-func (s *Store) Root() string {
-	return s.root
-}
-
 func (o *Object[V, R]) Store(ctx context.Context, s *Store, prefix, name string, valueEncoding, responseEncoding ObjectEncoding) error {
 	buf, err := o.Encode(valueEncoding, responseEncoding)
 	if err != nil {
 		return err
 	}
-	prefix = s.fs.Join(s.root, prefix)
 	path := s.fs.Join(prefix, name)
 	if err := s.fs.Put(ctx, path, 0600, buf); err != nil {
 		if !s.fs.IsNotExist(err) {
@@ -90,8 +82,8 @@ func (o *Object[V, R]) Load(ctx context.Context, s *Store, prefix, name string) 
 }
 
 func (s *Store) Read(ctx context.Context, prefix, name string) (Type, []byte, error) {
-	name = s.fs.Join(s.root, prefix, name)
-	buf, err := s.fs.Get(ctx, name)
+	path := s.fs.Join(prefix, name)
+	buf, err := s.fs.Get(ctx, path)
 	if err != nil {
 		return "", nil, err
 	}
