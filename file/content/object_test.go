@@ -113,7 +113,7 @@ func TestObjectEncoding(t *testing.T) {
 		Type:     ctype,
 	}
 	fs := localfs.New()
-	store := content.NewStore(fs, tmpDir)
-	roundTripFile(ctx, t, store, obj, "a", "obj1.obj", ctype)
-	roundTripFile(ctx, t, store, obj, "a", "obj2.obj", ctype)
+	store := content.NewStore(fs)
+	roundTripFile(ctx, t, store, obj, fs.Join(tmpDir, "a"), "obj1.obj", ctype)
+	roundTripFile(ctx, t, store, obj, fs.Join(tmpDir, "a"), "obj2.obj", ctype)
 }

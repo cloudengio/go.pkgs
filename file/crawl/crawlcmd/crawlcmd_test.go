@@ -97,7 +97,7 @@ func TestCrawlCmd(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	err = cmd.Run(ctx, fsMap, writeRoot, writeFS, false, false)
+	err = cmd.Run(ctx, fsMap, writeFS, writeRoot, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
