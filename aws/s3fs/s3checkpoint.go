@@ -35,7 +35,7 @@ func (c *chkpt) Init(ctx context.Context, prefix string) error {
 	if len(prefix) == 0 {
 		return fmt.Errorf("prefix must be non-empty")
 	}
-	c.prefix = c.ensureIsPrefix(prefix)
+	c.prefix = ensureIsPrefix(prefix, c.options.delimiter)
 	return c.EnsurePrefix(ctx, prefix, 0700)
 }
 
