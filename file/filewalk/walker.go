@@ -37,6 +37,7 @@ type Option func(o *options)
 type options struct {
 	concurrentScans int
 	scanSize        int
+	depth           int
 }
 
 // WithConcurrentScans can be used to change the number of prefixes/directories
@@ -58,6 +59,15 @@ func WithScanSize(n int) Option {
 		if n > 0 {
 			o.scanSize = n
 		}
+	}
+}
+
+// WithDepth sets the maximum depth of the traversal. A depth of 0 will
+// only traverse the specified roots. A depth of 1, one level below the
+// roots etc. The default is -1 which denotes no limit on the depth.
+func WithDepth(d int) Option {
+	return func(o *options) {
+		o.depth = d
 	}
 }
 
@@ -90,6 +100,7 @@ func New[T any](fs FS, handler Handler[T], opts ...Option) *Walker[T] {
 	w := &Walker[T]{fs: fs, handler: handler, errs: &errors.M{}}
 	w.opts.concurrentScans = DefaultScanSize
 	w.opts.scanSize = DefaultScanSize
+	w.opts.depth = -1
 	for _, fn := range opts {
 		fn(&w.opts)
 	}
@@ -212,7 +223,7 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 		root := root
 		rootInfo, rootErr := w.fs.Lstat(ctx, root)
 		walkers.Go(func() error {
-			return w.walkPrefix(ctx, root, rootInfo, rootErr, walkerLimitCh)
+			return w.walkPrefix(ctx, root, 0, rootInfo, rootErr, walkerLimitCh)
 		})
 	}
 
@@ -233,9 +244,10 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	return w.errs.Err()
 }
 
-func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []file.Info, limitCh chan struct{}) error {
+func (w *Walker[T]) walkChildren(ctx context.Context, path string, depth int, children []file.Info, limitCh chan struct{}) error {
 	var wg sync.WaitGroup
 	wg.Add(len(children))
+	depth++
 
 	// Take care to catch all context cancellations as quickly as possible
 	// to avoid unnecessary work.
@@ -252,7 +264,7 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 			// no concurreny is available fallback to sync.
 			atomic.AddInt64(&w.nSyncOps, 1)
 			p := w.fs.Join(path, child.Name())
-			if err := w.walkPrefix(ctx, p, child, nil, limitCh); err != nil {
+			if err := w.walkPrefix(ctx, p, depth, child, nil, limitCh); err != nil {
 				return err
 			}
 			wg.Done()
@@ -264,7 +276,7 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, children []fi
 		default:
 		}
 		go func() {
-			_ = w.walkPrefix(ctx, w.fs.Join(path, child.Name()), child, nil, limitCh)
+			_ = w.walkPrefix(ctx, w.fs.Join(path, child.Name()), depth, child, nil, limitCh)
 			wg.Done()
 			limitCh <- struct{}{}
 		}()
@@ -281,7 +293,10 @@ func (w *Walker[T]) handleDone(ctx context.Context, state *T, path string, err e
 	w.errs.Append(&Error{path, err})
 }
 
-func (w *Walker[T]) walkPrefix(ctx context.Context, path string, info file.Info, err error, limitCh chan struct{}) error {
+func (w *Walker[T]) walkPrefix(ctx context.Context, path string, depth int, info file.Info, err error, limitCh chan struct{}) error {
+	if w.opts.depth >= 0 && depth > w.opts.depth {
+		return nil
+	}
 	var state T
 	select {
 	case <-ctx.Done():
@@ -306,7 +321,7 @@ func (w *Walker[T]) walkPrefix(ctx context.Context, path string, info file.Info,
 			return nil
 		}
 	}
-	if err := w.walkChildren(ctx, path, children, limitCh); err != nil {
+	if err := w.walkChildren(ctx, path, depth, children, limitCh); err != nil {
 		return err
 	}
 	w.handleDone(ctx, &state, path, nil)
