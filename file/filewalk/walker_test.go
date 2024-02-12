@@ -116,11 +116,11 @@ func TestLocalWalk(t *testing.T) {
 		}
 	}
 	lg := nl()
-	wk := filewalk.New[int](sc, lg, filewalk.WithScanSize(1))
+	wk := filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithDepth(1000))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
-	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10), filewalk.WithDepth(-1))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
@@ -144,6 +144,15 @@ func TestLocalWalk(t *testing.T) {
 	lg.children[strings.ReplaceAll("/b0", "/", string(filepath.Separator))] =
 		file.InfoList{b01}
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedExistingChildren)
+
+	lg = nl()
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithDepth(0))
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedDepth0)
+
+	lg = nl()
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithDepth(1))
+	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedDepth1)
+
 }
 
 func testLocalWalk(ctx context.Context, t *testing.T, tmpDir string, wk *filewalk.Walker[int], lg *logger, expected string) {
@@ -205,6 +214,37 @@ var expectedFull = `* begin
 /b0/b0.1/b1.0/f0: 3
 /b0/b0.1/b1.0/f1: 3
 /b0/b0.1/b1.0/f2: 3
+/inaccessible-dir* begin
+/inaccessible-dir* end
+/inaccessible-dir: open /inaccessible-dir: permission denied
+f0: 3
+f1: 3
+f2: 3
+la0@: 2
+la1@: 7
+lf0@: 5
+`
+
+var expectedDepth0 = `* begin
+* end
+f0: 3
+f1: 3
+f2: 3
+la0@: 2
+la1@: 7
+lf0@: 5
+`
+
+var expectedDepth1 = `* begin
+* end
+/a0* begin
+/a0* end
+/a0/f0: 3
+/a0/f1: 3
+/a0/f2: 3
+/a0/inaccessible-file: 3
+/b0* begin
+/b0* end
 /inaccessible-dir* begin
 /inaccessible-dir* end
 /inaccessible-dir: open /inaccessible-dir: permission denied
@@ -323,7 +363,7 @@ lf0@: 5
 
 func init() {
 	if filepath.Separator != '/' {
-		for _, p := range []*string{&expectedFull, &expectedPartial1, &expectedPartial2, &expectedExistingChildren} {
+		for _, p := range []*string{&expectedFull, &expectedPartial1, &expectedPartial2, &expectedExistingChildren, &expectedDepth0, &expectedDepth1} {
 			*p = strings.ReplaceAll(*p, "/", string(filepath.Separator))
 			*p = strings.ReplaceAll(*p, "permission denied", "Access is denied.")
 		}
