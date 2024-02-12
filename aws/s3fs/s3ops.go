@@ -30,7 +30,24 @@ type Client interface {
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
+func bucketInfo(ctx context.Context, client Client, bucket string) (file.Info, error) {
+	acl, err := bucketAcls.get(ctx, client, bucket)
+	if err != nil {
+		return file.Info{}, err
+	}
+	return file.NewInfo(
+		"",
+		0,
+		fs.ModeDir,
+		time.Time{},
+		s3xattr{owner: aws.ToString(acl.Owner.ID)},
+	), nil
+}
+
 func objectHead(ctx context.Context, client Client, bucket, key, delim, owner string) (file.Info, error) {
+	if len(key) == 0 {
+		return bucketInfo(ctx, client, bucket)
+	}
 	req := s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
