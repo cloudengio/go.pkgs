@@ -116,11 +116,11 @@ func TestLocalWalk(t *testing.T) {
 		}
 	}
 	lg := nl()
-	wk := filewalk.New[int](sc, lg, filewalk.WithScanSize(1))
+	wk := filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithDepth(1000))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
-	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10))
+	wk = filewalk.New[int](sc, lg, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(10), filewalk.WithDepth(-1))
 	testLocalWalk(ctx, t, localTestTree, wk, lg, expectedFull)
 
 	lg = nl()
@@ -363,7 +363,7 @@ lf0@: 5
 
 func init() {
 	if filepath.Separator != '/' {
-		for _, p := range []*string{&expectedFull, &expectedPartial1, &expectedPartial2, &expectedExistingChildren} {
+		for _, p := range []*string{&expectedFull, &expectedPartial1, &expectedPartial2, &expectedExistingChildren, &expectedDepth0, &expectedDepth1} {
 			*p = strings.ReplaceAll(*p, "/", string(filepath.Separator))
 			*p = strings.ReplaceAll(*p, "permission denied", "Access is denied.")
 		}
