@@ -65,6 +65,7 @@ func (e *extractor) Extract(_ context.Context, depth int, downloaded download.Do
 func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
 	for i := 0; i < nItems; i++ {
 		req := crawl.SimpleRequest{}
+		req.RequestedBy = "issueCrawlRequest"
 		req.FS = reader
 		req.Filenames = []string{fmt.Sprintf("%08v", i)}
 		select {
@@ -199,6 +200,12 @@ func TestCrawler(t *testing.T) {
 			t.Errorf("depth %v: got %v, want %v", depth, got, want)
 		}
 
+		for _, c := range crawled {
+			if got, want := c.Request.Requester(), "issueCrawlRequest"; got != want {
+				t.Errorf("depth %v: got %v, want %v", depth, got, want)
+			}
+
+		}
 		writeFS := copyDownloadsToFS(ctx, t, crawled)
 
 		crawledContents := filetestutil.Contents(writeFS)

@@ -64,6 +64,7 @@ func (ho *HTML) Outlinks(_ context.Context, _ int, download Download, contents i
 // Request implements Extractor.Request.
 func (ho *HTML) Request(depth int, download Download, outlinks []string) download.Request {
 	var request crawl.SimpleRequest
+	request.RequestedBy = download.Download.Name
 	request.Depth = depth
 	request.FS = download.Request.Container()
 	for _, out := range outlinks {

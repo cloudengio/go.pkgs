@@ -15,6 +15,7 @@ import (
 // Request represents a request for a list of objects, stored in the same
 // container, to be downloaded.
 type Request interface {
+	Requester() string
 	Container() file.FS
 	FileMode() fs.FileMode // FileMode to use for the downloaded contents.
 	Names() []string

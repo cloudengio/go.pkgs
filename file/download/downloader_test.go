@@ -73,7 +73,7 @@ func copyDownloadsToFS(ctx context.Context, t *testing.T, downloaded []download.
 func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
 	for i := 0; i < nItems; i++ {
 		select {
-		case input <- download.SimpleRequest{FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%04v", i)}}:
+		case input <- download.SimpleRequest{RequestedBy: "issueDownloadRequest", FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%04v", i)}}:
 		case <-ctx.Done():
 			break
 		}
@@ -109,6 +109,11 @@ func TestDownload(t *testing.T) {
 
 	checkForDownloadErrors(t, downloaded)
 	writeFS := copyDownloadsToFS(ctx, t, downloaded)
+	for _, d := range downloaded {
+		if got, want := d.Request.Requester(), "issueDownloadRequest"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
 	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
 		t.Fatal(err)
 	}
