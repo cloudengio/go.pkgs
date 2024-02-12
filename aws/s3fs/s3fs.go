@@ -161,6 +161,14 @@ func (s3fs *T) IsPermissionError(err error) bool {
 }
 
 func (s3fs *T) IsNotExist(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchKey", "NoSuchBucket", "NotFound":
+			return true
+		}
+	}
+	// Try both ways..
 	var nsk *types.NoSuchKey
 	var nsb *types.NoSuchBucket
 	var nf *types.NotFound

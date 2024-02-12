@@ -162,6 +162,18 @@ func TestStat(t *testing.T) {
 		}
 	}
 
+	info, err = fs.Stat(ctx, "s3://bucket-a/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := info.Name(), ""; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	_, err = fs.Stat(ctx, "s3://does-not-exist")
+	if !fs.IsNotExist(err) {
+		t.Errorf("unexpected or missing error: %v", err)
+	}
+
 }
 
 func TestWalk(t *testing.T) {
