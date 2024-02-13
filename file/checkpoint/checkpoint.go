@@ -70,11 +70,25 @@ func (d *dirop) Init(_ context.Context, dir string) error {
 	return os.MkdirAll(dir, 0755)
 }
 
-func (d *dirop) Clear(_ context.Context) error {
+func (d *dirop) Clear(ctx context.Context) error {
 	if len(d.dir) == 0 {
-		return fmt.Errorf("not yet nitialized")
+		return fmt.Errorf("not yet initialized")
 	}
-	return os.RemoveAll(d.dir)
+	unlock, err := d.mu.Lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	existing, err := readDirSorted(ctx, d.dir)
+	if err != nil {
+		return err
+	}
+	for _, f := range existing {
+		if err := os.Remove(filepath.Join(d.dir, f)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d *dirop) Complete(ctx context.Context) error {

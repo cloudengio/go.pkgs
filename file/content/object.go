@@ -11,8 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 )
 
 // Object represents the result of an object/file download/crawl operation. As such
@@ -73,7 +71,7 @@ func writeSlice(wr io.Writer, data []byte) error {
 	return binary.Write(wr, binary.LittleEndian, data)
 }
 
-const limit = 1 << 23 // 8MB seems large enough
+const limit = 1 << 26 // 64MB seems large enough
 
 func readSlice(rd io.Reader) ([]byte, error) {
 	var l int64
@@ -178,51 +176,6 @@ func (o *Object[V, R]) Decode(data []byte) error {
 		return fmt.Errorf("unsupported value encoding: %v", responseEncoding)
 	}
 	return err
-}
-
-// WriteObject will encode the object using the requested encoding to the
-// specified file. It will create the directory that the file is to be written
-// to if it does not exist.
-//
-// Deprecated: will soon be removed.
-func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncoding ObjectEncoding) error {
-	buf, err := o.Encode(valueEncoding, responseEncoding)
-	if err != nil {
-		return err
-	}
-	wr, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		// Try to create the directory that the file is to be written to.
-		os.MkdirAll(filepath.Dir(path), 0700) //nolint:errcheck
-		wr, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
-		if err != nil {
-			return err
-		}
-	}
-	defer wr.Close()
-	_, err = wr.Write(buf)
-	return err
-}
-
-// ReadObjectFile will read the specified file and return the object type, encoding and the
-// the contents of that file. The returned byte slice can be used to decode the object using
-// its Decode method.
-//
-// Deprecated: will soon be removed.
-func ReadObjectFile(path string) (Type, []byte, error) {
-	buf, err := os.ReadFile(path)
-	if err != nil {
-		return "", nil, err
-	}
-	rd := bytes.NewReader(buf)
-	data, err := readSlice(rd)
-	if err != nil {
-		return "", nil, err
-	}
-	return Type(data), buf, err
 }
 
 // Error is an implementation of error that is registered with the gob
