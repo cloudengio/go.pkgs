@@ -8,8 +8,3 @@ require (
 	cloudeng.io/text v0.0.11
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-require (
-	cloudeng.io/path v0.0.9 // indirect
-	golang.org/x/sys v0.16.0 // indirect
-)
