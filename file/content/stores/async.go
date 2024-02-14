@@ -101,5 +101,5 @@ func (s *Async) Finish() error {
 	close(s.ch)
 	errs := s.g.Wait()
 	s.errs.Append(errs)
-	return s.errs
+	return s.errs.Err()
 }
