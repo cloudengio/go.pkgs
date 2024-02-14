@@ -66,6 +66,10 @@ func (m *M) Append(errs ...error) {
 		if err == nil {
 			continue
 		}
+		if merr, ok := err.(*M); ok {
+			m.errs = append(m.errs, merr.errs...)
+			continue
+		}
 		m.errs = append(m.errs, err)
 	}
 }
