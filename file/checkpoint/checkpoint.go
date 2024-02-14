@@ -199,3 +199,16 @@ const (
 func formatFilename(n int, label string) string {
 	return fmt.Sprintf(checkpointNumFormat+"%s"+checkpointSuffix, n, label)
 }
+
+// Compact replaces all existing checkpoints with just the most recent one.
+func Compact(ctx context.Context, op Operation) error {
+	latest, err := op.Latest(ctx)
+	if err != nil {
+		return err
+	}
+	if err := op.Complete(ctx); err != nil {
+		return err
+	}
+	_, err = op.Checkpoint(ctx, "", latest)
+	return err
+}
