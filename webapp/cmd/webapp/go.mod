@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	cloudeng.io/file v0.0.0-20240214013242-3c0d4550fc32 // indirect
+	cloudeng.io/file v0.0.0-20240213043943-f6a8f92f083f // indirect
 	cloudeng.io/io v0.0.0-20240213043943-f6a8f92f083f // indirect
 	cloudeng.io/os v0.0.0-20240213043943-f6a8f92f083f // indirect
 	cloudeng.io/text v0.0.11 // indirect
