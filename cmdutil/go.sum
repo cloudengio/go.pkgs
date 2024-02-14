@@ -1,14 +1,10 @@
 cloudeng.io/errors v0.0.8/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
 cloudeng.io/errors v0.0.9 h1:gHv7vqtI8pvhjJFsu4d60bYwOaT9sM6tn0ykoaw11WA=
 cloudeng.io/errors v0.0.9/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
-cloudeng.io/file v0.0.0-20240204011218-453d510d0c93 h1:73xO/0Q3nHqElFNuR5akHUdWAvr91DwOyO+pBP0M0Zo=
-cloudeng.io/file v0.0.0-20240204011218-453d510d0c93/go.mod h1:EHJ2rDAhGJ1qvEOox8broDMvWyJRa1elevrDOPPBs6I=
-cloudeng.io/path v0.0.9 h1:4kqfJ2OJwScl4E+iTo41ofV+pc4y8ZevAfUVkGSNALI=
-cloudeng.io/path v0.0.9/go.mod h1:ZNgON0dxZp8dA2igYqywNcB3cEc5cvJniYaYVPWy3l8=
+cloudeng.io/file v0.0.0-20240213043943-f6a8f92f083f h1:z18Y3GuDJPgfG2P6O7WBpE4ypDDdk3uM++nzzIHOXiY=
+cloudeng.io/file v0.0.0-20240213043943-f6a8f92f083f/go.mod h1:YXIkqlmkw3GwyT3q+MzulnH5V613GwSQcCCgmc0qQoQ=
 cloudeng.io/text v0.0.11 h1:q3+p3gxwNdr/V+k4+77fj9QxVpUU8G7B4+v26m+sE8I=
 cloudeng.io/text v0.0.11/go.mod h1:99L3CQ55YhUy2+lHlFPowYyCoXO86fmkvNtcMT2X3GU=
-golang.org/x/sys v0.16.0 h1:xWw16ngr6ZMtmxDyKyIgsE93KNKz5HKmMa3b8ALHidU=
-golang.org/x/sys v0.16.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
