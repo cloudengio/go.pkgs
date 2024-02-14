@@ -10,7 +10,8 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"io"
+
+	"cloudeng.io/file/content/internal"
 )
 
 // Object represents the result of an object/file download/crawl operation. As such
@@ -64,34 +65,10 @@ const (
 	JSONObjectEncoding
 )
 
-func writeSlice(wr io.Writer, data []byte) error {
-	if err := binary.Write(wr, binary.LittleEndian, int64(len(data))); err != nil {
-		return err
-	}
-	return binary.Write(wr, binary.LittleEndian, data)
-}
-
-const limit = 1 << 26 // 64MB seems large enough
-
-func readSlice(rd io.Reader) ([]byte, error) {
-	var l int64
-	if err := binary.Read(rd, binary.LittleEndian, &l); err != nil {
-		return nil, err
-	}
-	if l > limit {
-		return nil, fmt.Errorf("data size too large (%v > %v): likely the file is in the wrong format", l, limit)
-	}
-	data := make([]byte, l)
-	if err := binary.Read(rd, binary.LittleEndian, data); err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
 // Encode encodes the object using the requested encodings.
 func (o *Object[V, R]) Encode(valueEncoding, responseEncoding ObjectEncoding) ([]byte, error) {
 	buf := bytes.Buffer{}
-	if err := writeSlice(&buf, []byte(o.Type)); err != nil {
+	if err := internal.WriteSlice(&buf, []byte(o.Type)); err != nil {
 		return nil, err
 	}
 	if err := binary.Write(&buf, binary.LittleEndian, uint8(valueEncoding)); err != nil {
@@ -124,10 +101,10 @@ func (o *Object[V, R]) Encode(valueEncoding, responseEncoding ObjectEncoding) ([
 	if err != nil {
 		return nil, err
 	}
-	if err := writeSlice(&buf, vbuf.Bytes()); err != nil {
+	if err := internal.WriteSlice(&buf, vbuf.Bytes()); err != nil {
 		return nil, err
 	}
-	if err := writeSlice(&buf, rbuf.Bytes()); err != nil {
+	if err := internal.WriteSlice(&buf, rbuf.Bytes()); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -136,7 +113,7 @@ func (o *Object[V, R]) Encode(valueEncoding, responseEncoding ObjectEncoding) ([
 // Decode decodes the object in data.
 func (o *Object[V, R]) Decode(data []byte) error {
 	rd := bytes.NewReader(data)
-	data, err := readSlice(rd)
+	data, err := internal.ReadSlice(rd)
 	if err != nil {
 		return err
 	}
@@ -148,11 +125,11 @@ func (o *Object[V, R]) Decode(data []byte) error {
 	if err := binary.Read(rd, binary.LittleEndian, &responseEncoding); err != nil {
 		return err
 	}
-	vbuf, err := readSlice(rd)
+	vbuf, err := internal.ReadSlice(rd)
 	if err != nil {
 		return err
 	}
-	rbuf, err := readSlice(rd)
+	rbuf, err := internal.ReadSlice(rd)
 	if err != nil {
 		return err
 	}

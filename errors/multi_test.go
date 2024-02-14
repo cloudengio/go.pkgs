@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -266,6 +267,37 @@ func TestSquashl(t *testing.T) {
   --- context canceled squashed 3 times`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+func TestAppend(t *testing.T) {
+	m := &errors.M{}
+	m.Append(os.ErrExist)
+	m.Append(os.ErrInvalid)
+
+	n := &errors.M{}
+	n.Append(os.ErrExist)
+	n.Append(os.ErrInvalid)
+	m.Append(n)
+
+	m.Append(os.ErrExist)
+
+	all := []error{}
+	for {
+		e := m.Unwrap()
+		if e == nil {
+			break
+		}
+		all = append(all, e)
+	}
+
+	if got, want := len(all), 5; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if !slices.Equal(all, []error{os.ErrExist, os.ErrInvalid, os.ErrExist, os.ErrInvalid, os.ErrExist}) {
+		t.Errorf("got %v, want %v", all, []error{os.ErrExist, os.ErrInvalid, os.ErrExist, os.ErrInvalid})
+	}
+
 }
 
 func ExampleM() {

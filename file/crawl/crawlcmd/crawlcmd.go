@@ -14,6 +14,7 @@ import (
 	"cloudeng.io/errors"
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
+	"cloudeng.io/file/content/stores"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
@@ -29,7 +30,7 @@ type Crawler struct {
 	displayOutlinks bool
 	displayProgress bool
 	fsMap           map[string]FSFactory
-	cache           *content.Store
+	cache           *stores.Sync
 	cacheRoot       string
 }
 
@@ -51,7 +52,7 @@ func (c *Crawler) Run(ctx context.Context,
 	c.displayProgress = displayProgress
 	c.fsMap = fsMap
 	c.cacheRoot = cacheRoot
-	c.cache = content.NewStore(fs)
+	c.cache = stores.New(fs)
 	return c.run(ctx, downloadsPath)
 }
 

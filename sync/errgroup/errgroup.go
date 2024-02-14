@@ -99,7 +99,7 @@ func (g *T) Go(f func() error) {
 
 // GoContext is a drop-in alternative to the Go method that checks for ctx.Done()
 // before calling g.Go. If the ctx has been canceled it will return immediately
-// recoding the error and calling the internal stored cancel function.
+// recording the error and calling the internal stored cancel function.
 func (g *T) GoContext(ctx context.Context, f func() error) {
 	select {
 	case <-ctx.Done():
