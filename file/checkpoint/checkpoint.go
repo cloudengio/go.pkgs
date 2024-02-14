@@ -29,6 +29,10 @@ type Operation interface {
 	// Clear all existing checkpoints.
 	Clear(context.Context) error
 
+	// Compact removes all but the most recent checkpoint and
+	// renames as the first checkpoint in the sequence.
+	Compact(ctx context.Context, label string) error
+
 	// Checkpoint records the successful completion of a step in the
 	// operation.
 	Checkpoint(ctx context.Context, label string, data []byte) (id string, err error)
@@ -156,6 +160,34 @@ func (d *dirop) Latest(ctx context.Context) ([]byte, error) {
 	return os.ReadFile(filepath.Join(d.dir, prev))
 }
 
+func (d *dirop) Compact(ctx context.Context, label string) error {
+	unlock, err := d.mu.Lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	existing, err := readDirSorted(ctx, d.dir)
+	if err != nil {
+		return err
+	}
+	if len(existing) == 0 {
+		return nil
+	}
+	prev := existing[len(existing)-1]
+	data, err := os.ReadFile(filepath.Join(d.dir, prev))
+	if err != nil {
+		return err
+	}
+	for _, f := range existing {
+		if err := os.Remove(filepath.Join(d.dir, f)); err != nil {
+			return err
+		}
+	}
+	zero := formatFilename(0, label)
+	return os.WriteFile(filepath.Join(d.dir, zero), data, 0644)
+}
+
 func readDirSorted(ctx context.Context, path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -198,17 +230,4 @@ const (
 
 func formatFilename(n int, label string) string {
 	return fmt.Sprintf(checkpointNumFormat+"%s"+checkpointSuffix, n, label)
-}
-
-// Compact replaces all existing checkpoints with just the most recent one.
-func Compact(ctx context.Context, op Operation) error {
-	latest, err := op.Latest(ctx)
-	if err != nil {
-		return err
-	}
-	if err := op.Complete(ctx); err != nil {
-		return err
-	}
-	_, err = op.Checkpoint(ctx, "", latest)
-	return err
 }

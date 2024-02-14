@@ -126,9 +126,9 @@ func TestCompact(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	err = checkpoint.Compact(ctx, op)
+	err = op.Compact(ctx, "-label")
 	assert()
-	expected = append([]string{}, "00000000.chk", "lock")
+	expected = append([]string{}, "00000000-label.chk", "lock")
 	if got, want := readdir(t, tmp1), expected; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
