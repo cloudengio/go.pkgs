@@ -1,5 +1,5 @@
-cloudeng.io/file v0.0.0-20240214013242-3c0d4550fc32 h1:+GnLZFqbEFla0+woaG426swMj9vVNyu7zGSwrIynFc8=
-cloudeng.io/file v0.0.0-20240214013242-3c0d4550fc32/go.mod h1:YXIkqlmkw3GwyT3q+MzulnH5V613GwSQcCCgmc0qQoQ=
+cloudeng.io/file v0.0.0-20240213043943-f6a8f92f083f h1:z18Y3GuDJPgfG2P6O7WBpE4ypDDdk3uM++nzzIHOXiY=
+cloudeng.io/file v0.0.0-20240213043943-f6a8f92f083f/go.mod h1:YXIkqlmkw3GwyT3q+MzulnH5V613GwSQcCCgmc0qQoQ=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.49.0 h1:VfU15izXQjz4m9y1DkbY79iylIiuPwWtrram4cSpWEI=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.49.0/go.mod h1:1o/W6JFUuREj2ExoQ21vHJgO7wakvjhol91M9eknFgs=
 github.com/aws/smithy-go v1.20.0 h1:6+kZsCXZwKxZS9RfISnPc4EXlHoyAkm2hPuM8X2BrrQ=
