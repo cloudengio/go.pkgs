@@ -20,7 +20,14 @@ type FS interface {
 	file.ObjectFS
 }
 
-// Store represents a store for objects. It uses an instance of content.FS
+// ObjectStore represents the interface used by Objects to store and retrieve
+// their data.
+type ObjectStore interface {
+	Read(ctx context.Context, prefix, name string) (Type, []byte, error)
+	Write(ctx context.Context, prefix, name string, data []byte) error
+}
+
+// Store represents an for objects. It uses an instance of content.FS
 // to store and retrieve objects. The objects are stored in a hierarchy
 // at the specified root prefix/path and all operations are relative to
 // that root. It is intended to be backed by either a local or cloud
@@ -52,35 +59,9 @@ func (s *Store) FS() FS {
 	return s.fs
 }
 
-func (o *Object[V, R]) Store(ctx context.Context, s *Store, prefix, name string, valueEncoding, responseEncoding ObjectEncoding) error {
-	buf, err := o.Encode(valueEncoding, responseEncoding)
-	if err != nil {
-		return err
-	}
-	path := s.fs.Join(prefix, name)
-	if err := s.fs.Put(ctx, path, 0600, buf); err != nil {
-		if !s.fs.IsNotExist(err) {
-			return err
-		}
-		if err := s.fs.EnsurePrefix(ctx, prefix, 0700); err != nil {
-			return err
-		}
-		if err := s.fs.Put(ctx, path, 0600, buf); err != nil {
-			return err
-		}
-	}
-	atomic.AddInt64(&s.written, 1)
-	return nil
-}
-
-func (o *Object[V, R]) Load(ctx context.Context, s *Store, prefix, name string) (Type, error) {
-	ctype, buf, err := s.Read(ctx, prefix, name)
-	if err != nil {
-		return "", err
-	}
-	return ctype, o.Decode(buf)
-}
-
+// Read retrieves the object type and serialized data at the specified prefix and name
+// from the store. The caller is responsible for using the returned type to
+// decode the data into an appropriate object.
 func (s *Store) Read(ctx context.Context, prefix, name string) (Type, []byte, error) {
 	path := s.fs.Join(prefix, name)
 	buf, err := s.fs.Get(ctx, path)
@@ -96,8 +77,48 @@ func (s *Store) Read(ctx context.Context, prefix, name string) (Type, []byte, er
 	return Type(typ), buf, nil
 }
 
+// Write stores the data at the specified prefix and name in the store.
+func (s *Store) Write(ctx context.Context, prefix, name string, data []byte) error {
+	path := s.fs.Join(prefix, name)
+	if err := s.fs.Put(ctx, path, 0600, data); err != nil {
+		if !s.fs.IsNotExist(err) {
+			return err
+		}
+		if err := s.fs.EnsurePrefix(ctx, prefix, 0700); err != nil {
+			return err
+		}
+		if err := s.fs.Put(ctx, path, 0600, data); err != nil {
+			return err
+		}
+	}
+	atomic.AddInt64(&s.written, 1)
+	return nil
+}
+
 // Stats returns the number of objects read and written to the store
 // since this instance was created.
 func (s *Store) Stats() (read, written int64) {
 	return atomic.LoadInt64(&s.read), atomic.LoadInt64(&s.written)
+}
+
+// Store serializes the object and writes the resulting data the supplied store
+// at the specified prefix and name.
+func (o *Object[V, R]) Store(ctx context.Context, s ObjectStore, prefix, name string, valueEncoding, responseEncoding ObjectEncoding) error {
+	buf, err := o.Encode(valueEncoding, responseEncoding)
+	if err != nil {
+		return err
+	}
+	return s.Write(ctx, prefix, name, buf)
+}
+
+// Load reads the serialized data from the supplied store at the specified
+// prefix and name and deserializes it into the object. The caller is responsible
+// for ensuring that the type of the stored object and the type of the object
+// are identical.
+func (o *Object[V, R]) Load(ctx context.Context, s Store, prefix, name string) (Type, error) {
+	ctype, buf, err := s.Read(ctx, prefix, name)
+	if err != nil {
+		return "", err
+	}
+	return ctype, o.Decode(buf)
 }
