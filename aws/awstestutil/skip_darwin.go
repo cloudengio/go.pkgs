@@ -7,14 +7,11 @@
 package awstestutil
 
 import (
-	"fmt"
 	"os"
 	"testing"
 )
 
 func isOnGitHubActions() bool {
-	fmt.Printf("GITHUB_ACTIONS: %v\n", os.Getenv("GITHUB_ACTIONS"))
-	fmt.Printf("ENV: %v\n", os.Environ())
 	return os.Getenv("GITHUB_ACTIONS") != ""
 }
 

@@ -119,6 +119,7 @@ func TestCheckpoint(t *testing.T) {
 }
 
 func TestCompact(t *testing.T) {
+	awstestutil.SkipAWSTests(t)
 	ctx := context.Background()
 	fs := newS3ObjFS()
 	tmpdir := "s3://bucket-checkpoint/a"
