@@ -7,4 +7,7 @@ require (
 	cloudeng.io/errors v0.0.9
 )
 
-require cloudeng.io/path v0.0.9 // indirect
+require (
+	cloudeng.io/file v0.0.0-20240214013242-3c0d4550fc32 // indirect
+	cloudeng.io/path v0.0.9 // indirect
+)

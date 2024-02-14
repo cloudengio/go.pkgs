@@ -1,3 +1,5 @@
+cloudeng.io/file v0.0.0-20240214013242-3c0d4550fc32 h1:+GnLZFqbEFla0+woaG426swMj9vVNyu7zGSwrIynFc8=
+cloudeng.io/file v0.0.0-20240214013242-3c0d4550fc32/go.mod h1:YXIkqlmkw3GwyT3q+MzulnH5V613GwSQcCCgmc0qQoQ=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.5.0 h1:/QaMHBdZ26BB3SSst0Iwl10Epc+xhTquomWX0oZEB6w=
