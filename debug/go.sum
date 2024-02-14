@@ -1,3 +1,5 @@
+cloudeng.io/file v0.0.0-20240214044655-223c29824207 h1:1bAIRRN7eLfZZpDWrqBxVkAOyPm7bTFU4XNvwKxClsw=
+cloudeng.io/file v0.0.0-20240214044655-223c29824207/go.mod h1:cmNGFILlDaNku6KiLsXeAGjY/227h2Pdb3pY763KG9s=
 cloudeng.io/path v0.0.9 h1:4kqfJ2OJwScl4E+iTo41ofV+pc4y8ZevAfUVkGSNALI=
 cloudeng.io/path v0.0.9/go.mod h1:ZNgON0dxZp8dA2igYqywNcB3cEc5cvJniYaYVPWy3l8=
 github.com/google/pprof v0.0.0-20240207164012-fb44976bdcd5 h1:E/LAvt58di64hlYjx7AsNS6C/ysHWYo+2qPCZKTQhRo=

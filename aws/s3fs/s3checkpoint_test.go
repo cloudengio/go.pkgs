@@ -76,6 +76,8 @@ func TestCheckpoint(t *testing.T) {
 	if got, want := latest, []byte("1"); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	err = op.Clear(ctx)
+	assert()
 
 	// With no label.
 	op = s3fs.NewCheckpointOperation(fs)
@@ -110,6 +112,9 @@ func TestCheckpoint(t *testing.T) {
 	if got, want := latest, []byte("2"); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	err = op.Clear(ctx)
+	assert()
 
 }
 
