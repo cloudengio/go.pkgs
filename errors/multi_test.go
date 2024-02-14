@@ -277,9 +277,7 @@ func TestAppend(t *testing.T) {
 	n := &errors.M{}
 	n.Append(os.ErrExist)
 	n.Append(os.ErrInvalid)
-	m.Append(n)
-
-	m.Append(os.ErrExist)
+	m.Append(n, os.ErrExist)
 
 	all := []error{}
 	for {
