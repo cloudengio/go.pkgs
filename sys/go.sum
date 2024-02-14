@@ -1,4 +1,2 @@
-cloudeng.io/file v0.0.0-20240214044655-223c29824207 h1:1bAIRRN7eLfZZpDWrqBxVkAOyPm7bTFU4XNvwKxClsw=
-cloudeng.io/file v0.0.0-20240214044655-223c29824207/go.mod h1:cmNGFILlDaNku6KiLsXeAGjY/227h2Pdb3pY763KG9s=
 golang.org/x/sys v0.17.0 h1:25cE3gD+tdBA7lp7QfhuV+rJiE9YXTcS3VG1SqssI/Y=
 golang.org/x/sys v0.17.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
