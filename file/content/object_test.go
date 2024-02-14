@@ -15,6 +15,7 @@ import (
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
+	"cloudeng.io/file/content/stores"
 	"cloudeng.io/file/download"
 	"cloudeng.io/file/localfs"
 )
@@ -86,7 +87,7 @@ func roundtrip[V, R any](t *testing.T, obj content.Object[V, R], valueEncoding, 
 	}
 }
 
-func roundTripFile[V, R any](ctx context.Context, t *testing.T, store *content.Store, obj content.Object[V, R], prefix, name string, ctype content.Type) {
+func roundTripFile[V, R any](ctx context.Context, t *testing.T, store *stores.Sync, obj content.Object[V, R], prefix, name string, ctype content.Type) {
 	if err := obj.Store(ctx, store, prefix, name, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +114,7 @@ func TestObjectEncoding(t *testing.T) {
 		Type:     ctype,
 	}
 	fs := localfs.New()
-	store := content.NewStore(fs)
+	store := stores.New(fs)
 	roundTripFile(ctx, t, store, obj, fs.Join(tmpDir, "a"), "obj1.obj", ctype)
 	roundTripFile(ctx, t, store, obj, fs.Join(tmpDir, "a"), "obj2.obj", ctype)
 }
