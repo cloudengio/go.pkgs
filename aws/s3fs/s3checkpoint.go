@@ -70,6 +70,30 @@ func (c *chkpt) Checkpoint(ctx context.Context, label string, data []byte) (id s
 	return next, err
 }
 
+func (c *chkpt) Compact(ctx context.Context, label string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	existing, err := c.readAllSorted(ctx)
+	if err != nil {
+		return err
+	}
+	if len(existing) == 0 {
+		return nil
+	}
+	last := existing[len(existing)-1]
+	data, err := c.Get(ctx, c.Join(c.prefix, last))
+	if err != nil {
+		return err
+	}
+	for _, f := range existing {
+		if err := c.Delete(ctx, c.Join(c.prefix, f)); err != nil {
+			return err
+		}
+	}
+	zero := formatFilename(0, label)
+	return c.Put(ctx, c.Join(c.prefix, zero), 0644, data)
+}
+
 func (c *chkpt) readAllSorted(ctx context.Context) ([]string, error) {
 	sc := c.LevelScanner(c.prefix)
 	entries := make([]string, 0, c.options.scanSize)

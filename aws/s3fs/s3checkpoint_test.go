@@ -5,7 +5,9 @@
 package s3fs_test
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -74,6 +76,8 @@ func TestCheckpoint(t *testing.T) {
 	if got, want := latest, []byte("1"); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	err = op.Clear(ctx)
+	assert()
 
 	// With no label.
 	op = s3fs.NewCheckpointOperation(fs)
@@ -109,4 +113,44 @@ func TestCheckpoint(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	err = op.Clear(ctx)
+	assert()
+
+}
+
+func TestCompact(t *testing.T) {
+	awstestutil.SkipAWSTests(t)
+	ctx := context.Background()
+	fs := newS3ObjFS()
+	tmpdir := "s3://bucket-checkpoint/a"
+	tmp1 := fs.Join(tmpdir, "checkpoint")
+	op := s3fs.NewCheckpointOperation(fs)
+	err := op.Init(ctx, tmp1)
+	assert := func() {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expected := []string{}
+	for i := 0; i < 5; i++ {
+		_, err = op.Checkpoint(ctx, "", []byte(fmt.Sprintf("%02v", i)))
+		assert()
+		expected = append(expected, fmt.Sprintf("%08v.chk", i))
+	}
+	if got, want := readdir(ctx, t, fs, tmp1), expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	err = op.Compact(ctx, "-label")
+	assert()
+	expected = append([]string{}, "00000000-label.chk")
+	if got, want := readdir(ctx, t, fs, tmp1), expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	latest, err := op.Latest(ctx)
+	assert()
+	if got, want := latest, []byte(fmt.Sprintf("%02v", 4)); !bytes.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }

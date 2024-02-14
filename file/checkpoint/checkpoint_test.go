@@ -5,7 +5,9 @@
 package checkpoint_test
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -99,4 +101,40 @@ func TestCheckpoint(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+}
+
+func TestCompact(t *testing.T) {
+	ctx := context.Background()
+	tmpdir := t.TempDir()
+	tmp1 := filepath.Join(tmpdir, "1")
+	op := checkpoint.NewDirectoryOperation()
+	err := op.Init(ctx, tmp1)
+	assert := func() {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expected := []string{}
+	for i := 0; i < 5; i++ {
+		_, err = op.Checkpoint(ctx, "", []byte(fmt.Sprintf("%02v", i)))
+		assert()
+		expected = append(expected, fmt.Sprintf("%08v.chk", i))
+	}
+	expected = append(expected, "lock")
+	if got, want := readdir(t, tmp1), expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	err = op.Compact(ctx, "-label")
+	assert()
+	expected = append([]string{}, "00000000-label.chk", "lock")
+	if got, want := readdir(t, tmp1), expected; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	latest, err := op.Latest(ctx)
+	assert()
+	if got, want := latest, []byte(fmt.Sprintf("%02v", 4)); !bytes.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }

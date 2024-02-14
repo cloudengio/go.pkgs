@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	cloudeng.io/file v0.0.0-20240213043943-f6a8f92f083f // indirect
+	cloudeng.io/file v0.0.0-20240214044655-223c29824207 // indirect
 	cloudeng.io/os v0.0.0-20240213043943-f6a8f92f083f // indirect
 	cloudeng.io/text v0.0.11 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.25.0 // indirect
