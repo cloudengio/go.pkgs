@@ -8,6 +8,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ func TestSimple(t *testing.T) {
 	sc := localfs.New()
 
 	found := []filewalk.Entry{}
+	var mu sync.Mutex
 	err := filewalk.ContentsOnly(ctx, sc, localTestTree,
 		func(_ context.Context, prefix string, contents []filewalk.Entry, err error) error {
 			if err != nil {
@@ -59,7 +61,9 @@ func TestSimple(t *testing.T) {
 				}
 				nc := c
 				nc.Name = sc.Join(prefix, c.Name)
+				mu.Lock()
 				found = append(found, nc)
+				mu.Unlock()
 			}
 			return nil
 		})
