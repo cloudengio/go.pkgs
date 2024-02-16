@@ -17,10 +17,10 @@ type Sync struct {
 	fs content.FS
 }
 
-// New returns a new instance of Sync backed by the supplied
+// NewSync returns a new instance of Sync backed by the supplied
 // content.FS and storing the specified objects encoded using the
 // specified encodings.
-func New(fs content.FS) *Sync {
+func NewSync(fs content.FS) *Sync {
 	return &Sync{
 		fs: fs,
 	}
@@ -45,4 +45,24 @@ func (s *Sync) Read(ctx context.Context, prefix, name string) (content.Type, []b
 // Write stores the data at the specified prefix and name in the store.
 func (s *Sync) Write(ctx context.Context, prefix, name string, data []byte) error {
 	return write(ctx, s.fs, prefix, name, data)
+}
+
+// ReadV calls ReadFunc for each object read from the store synchronously.
+func (s *Sync) ReadV(ctx context.Context, prefix string, names []string, fn ReadFunc) error {
+	for _, name := range names {
+		typ, data, err := read(ctx, s.fs, s.fs.Join(prefix, name))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if err := fn(ctx, prefix, name, typ, data, err); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Sync) Finish(context.Context) error {
+	return nil
 }

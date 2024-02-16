@@ -113,7 +113,7 @@ func (wr *asyncWriter) finish() error {
 
 // Finish waits for all queued writes to complete and returns any errors
 // encountered during the writes.
-func (s *Async) Finish() error {
+func (s *Async) Finish(context.Context) error {
 	s.mu.Lock()
 	if s.writer == nil {
 		s.mu.Unlock()
@@ -124,12 +124,6 @@ func (s *Async) Finish() error {
 	s.mu.Unlock()
 	return writer.finish()
 }
-
-// ReadFunc is called by ReadAsync for each object read from the store.
-// If the read operation returned an error it is passed to ReadFunc and if
-// then returned by ReadFunc it will cause the entire ReadAsync operation
-// to terminate and return an error.
-type ReadFunc func(ctx context.Context, prefix, name string, typ content.Type, data []byte, err error) error
 
 type asyncReader struct {
 	ch           chan string
@@ -195,10 +189,10 @@ func (rd *asyncReader) issueRequests(ctx context.Context, names []string) error 
 	return nil
 }
 
-// ReadAsync retrieves the objects with the specified names from the store
+// ReadV retrieves the objects with the specified names from the store
 // and calls fn for each object. The read operations are performed
 // concurrently.
-func (s *Async) ReadAsync(ctx context.Context, prefix string, names []string, fn ReadFunc) error {
+func (s *Async) ReadV(ctx context.Context, prefix string, names []string, fn ReadFunc) error {
 	s.mu.Lock()
 	if s.reader == nil {
 		s.reader = s.newReader(ctx, prefix, fn)

@@ -48,44 +48,46 @@ func TestAsyncWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store := stores.NewAsync(fs, 5)
+	for _, concurrency := range []int{0, 5, 10} {
+		store := stores.New(fs, concurrency)
 
-	if err := store.EraseExisting(ctx, root); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := fs.Stat(ctx, root)
-	if err == nil || !fs.IsNotExist(err) {
-		t.Errorf("expected not to exist: %v", err)
-	}
-
-	prefix := fs.Join(root, "l1", "l2")
-	for i := 0; i < 100; i++ {
-		writeObject(ctx, t, store, prefix, i)
-	}
-	if err := store.Finish(); err != nil {
-		t.Fatal(err)
-	}
-
-	// It's safe to call Finish multiple times.
-	if err := store.Finish(); err != nil {
-		t.Fatal(err)
-	}
-
-	for i := 0; i < 100; i++ {
-		var obj content.Object[string, int]
-		ctype, err := obj.Load(ctx, store, prefix, fmt.Sprintf("c-%03v", i))
-		if err != nil {
+		if err := store.EraseExisting(ctx, root); err != nil {
 			t.Fatal(err)
 		}
-		if got, want := ctype, content.Type("test"); got != want {
-			t.Errorf("got %v, want %v", got, want)
+
+		_, err := fs.Stat(ctx, root)
+		if err == nil || !fs.IsNotExist(err) {
+			t.Errorf("expected not to exist: %v", err)
 		}
-		if got, want := obj.Value, fmt.Sprintf("test-0%3v", i); got != want {
-			t.Errorf("got %v, want %v", got, want)
+
+		prefix := fs.Join(root, "l1", "l2")
+		for i := 0; i < 100; i++ {
+			writeObject(ctx, t, store, prefix, i)
 		}
-		if got, want := obj.Response, i; got != want {
-			t.Errorf("got %v, want %v", got, want)
+		if err := store.Finish(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// It's safe to call Finish multiple times.
+		if err := store.Finish(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		for i := 0; i < 100; i++ {
+			var obj content.Object[string, int]
+			ctype, err := obj.Load(ctx, store, prefix, fmt.Sprintf("c-%03v", i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := ctype, content.Type("test"); got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+			if got, want := obj.Value, fmt.Sprintf("test-0%3v", i); got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+			if got, want := obj.Response, i; got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
 		}
 	}
 }
@@ -129,7 +131,7 @@ func TestAsyncWriteCancel(t *testing.T) {
 				return
 			}
 		}
-		errCh <- store.Finish()
+		errCh <- store.Finish(ctx)
 	}()
 
 	time.Sleep(time.Second)
@@ -141,10 +143,11 @@ func TestAsyncWriteCancel(t *testing.T) {
 }
 
 func TestAsyncWriteFinish(t *testing.T) {
+	ctx := context.Background()
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	fs := localfs.New()
 	store := stores.NewAsync(fs, 5)
-	if err := store.Finish(); err != nil {
+	if err := store.Finish(ctx); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -156,7 +159,7 @@ func TestAsyncRead(t *testing.T) {
 	fs := localfs.New()
 
 	root := fs.Join(tmpDir, "store")
-	syncStore := stores.New(fs)
+	syncStore := stores.NewSync(fs)
 	mkdirall(t, root)
 	names := []string{}
 	for i := 0; i < 10; i++ {
@@ -173,7 +176,7 @@ func TestAsyncRead(t *testing.T) {
 
 	store := stores.NewAsync(fs, 5)
 
-	err := store.ReadAsync(ctx, root, names, func(_ context.Context, prefix, name string, typ content.Type, data []byte, err error) error {
+	err := store.ReadV(ctx, root, names, func(_ context.Context, prefix, name string, typ content.Type, data []byte, err error) error {
 		if err != nil {
 			return err
 		}
@@ -233,7 +236,7 @@ func TestAsyncReadError(t *testing.T) {
 	store := stores.NewAsync(fs, 5)
 
 	root := fs.Join(tmpDir, "store")
-	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(_ context.Context, _, _ string, _ content.Type, _ []byte, err error) error {
+	err := store.ReadV(ctx, root, []string{"a", "b", "c"}, func(_ context.Context, _, _ string, _ content.Type, _ []byte, err error) error {
 		time.Sleep(100 * time.Millisecond)
 		return err
 	})
@@ -252,7 +255,7 @@ func TestAsyncReadCancel(t *testing.T) {
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(_ context.Context, _, _ string, _ content.Type, _ []byte, err error) error {
+		errCh <- store.ReadV(ctx, tmpDir, []string{"a", "b", "c"}, func(_ context.Context, _, _ string, _ content.Type, _ []byte, err error) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

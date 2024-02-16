@@ -24,6 +24,17 @@ func mkdirall(t *testing.T, paths ...string) {
 	}
 }
 
+func TestTypes(t *testing.T) {
+	a := stores.New(nil, 0)
+	if got, want := reflect.TypeOf(a), reflect.TypeOf(new(stores.Sync)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	a = stores.New(nil, 100)
+	if got, want := reflect.TypeOf(a), reflect.TypeOf(new(stores.Async)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestStore(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -38,7 +49,7 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store := stores.New(fs)
+	store := stores.New(fs, 0)
 
 	if err := store.EraseExisting(ctx, root); err != nil {
 		t.Fatal(err)
