@@ -124,7 +124,7 @@ func (s *Async) Write(ctx context.Context, prefix, name string, data []byte) err
 // If the read operation returned an error it is passed to ReadFunc and if
 // then returned by ReadFunc it will cause the entire ReadAsync operation
 // to terminate and return an error.
-type ReadFunc func(ctx context.Context, name string, typ content.Type, data []byte, err error) error
+type ReadFunc func(ctx context.Context, prefix, name string, typ content.Type, data []byte, err error) error
 
 type asyncReader struct {
 	ch           chan string
@@ -169,7 +169,7 @@ func (rd *asyncReader) reader(ctx context.Context, fs content.FS, prefix string,
 				return ctx.Err()
 			default:
 			}
-			if err := fn(ctx, name, typ, data, err); err != nil {
+			if err := fn(ctx, prefix, name, typ, data, err); err != nil {
 				return err
 			}
 		}
