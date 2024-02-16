@@ -67,6 +67,11 @@ func TestAsyncWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// It's safe to call Finish multiple times.
+	if err := store.Finish(); err != nil {
+		t.Fatal(err)
+	}
+
 	for i := 0; i < 100; i++ {
 		var obj content.Object[string, int]
 		ctype, err := obj.Load(ctx, store, prefix, fmt.Sprintf("c-%03v", i))

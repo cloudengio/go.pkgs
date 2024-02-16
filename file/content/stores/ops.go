@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync/atomic"
 
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/content/internal"
@@ -21,7 +20,7 @@ func eraseExisting(ctx context.Context, fs content.FS, root string) error {
 	return nil
 }
 
-func read(ctx context.Context, fs content.FS, path string, readCnt *int64) (content.Type, []byte, error) {
+func read(ctx context.Context, fs content.FS, path string) (content.Type, []byte, error) {
 	buf, err := fs.Get(ctx, path)
 	if err != nil {
 		return "", nil, err
@@ -31,11 +30,10 @@ func read(ctx context.Context, fs content.FS, path string, readCnt *int64) (cont
 	if err != nil {
 		return "", nil, err
 	}
-	atomic.AddInt64(readCnt, 1)
 	return content.Type(typ), buf, nil
 }
 
-func write(ctx context.Context, fs content.FS, prefix, name string, data []byte, writtenCnt *int64) error {
+func write(ctx context.Context, fs content.FS, prefix, name string, data []byte) error {
 	path := fs.Join(prefix, name)
 	if err := fs.Put(ctx, path, 0600, data); err != nil {
 		if !fs.IsNotExist(err) {
@@ -48,6 +46,5 @@ func write(ctx context.Context, fs content.FS, prefix, name string, data []byte,
 			return err
 		}
 	}
-	atomic.AddInt64(writtenCnt, 1)
 	return nil
 }

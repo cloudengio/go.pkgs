@@ -149,8 +149,8 @@ func (c Crawler) saveCrawled(ctx context.Context, root, name string, crawledCh c
 	sharder := path.NewSharder(path.WithSHA1PrefixLength(c.Cache.ShardingPrefixLen))
 	join := c.cache.FS().Join
 
+	written := 0
 	defer func() {
-		_, written := c.cache.Stats()
 		log.Printf("total written: %v", written)
 	}()
 
@@ -176,7 +176,8 @@ func (c Crawler) saveCrawled(ctx context.Context, root, name string, crawledCh c
 				log.Printf("failed to write: %v as prefix: %v, suffix: %v: %v\n", dld.Name, prefix, suffix, err)
 				continue
 			}
-			if _, written := c.cache.Stats(); written%100 == 0 {
+			written++
+			if written%100 == 0 {
 				log.Printf("written: %v", written)
 			}
 		}

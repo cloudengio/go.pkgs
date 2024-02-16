@@ -6,7 +6,6 @@ package stores
 
 import (
 	"context"
-	"sync/atomic"
 
 	"cloudeng.io/file/content"
 )
@@ -15,9 +14,7 @@ import (
 // content.ObjectStore. It uses an instance of content.FS to store and
 // retrieve objects.
 type Sync struct {
-	fs      content.FS
-	written int64
-	read    int64
+	fs content.FS
 }
 
 // New returns a new instance of Sync backed by the supplied
@@ -42,16 +39,10 @@ func (s *Sync) FS() content.FS {
 // from the store. The caller is responsible for using the returned type to
 // decode the data into an appropriate object.
 func (s *Sync) Read(ctx context.Context, prefix, name string) (content.Type, []byte, error) {
-	return read(ctx, s.fs, s.fs.Join(prefix, name), &s.read)
+	return read(ctx, s.fs, s.fs.Join(prefix, name))
 }
 
 // Write stores the data at the specified prefix and name in the store.
 func (s *Sync) Write(ctx context.Context, prefix, name string, data []byte) error {
-	return write(ctx, s.fs, prefix, name, data, &s.written)
-}
-
-// Stats returns the number of objects read and written to the store
-// since this instance was created.
-func (s *Sync) Stats() (read, written int64) {
-	return atomic.LoadInt64(&s.read), atomic.LoadInt64(&s.written)
+	return write(ctx, s.fs, prefix, name, data)
 }
