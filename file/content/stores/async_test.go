@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -149,7 +148,8 @@ func TestAsyncRead(t *testing.T) {
 		name := writeObject(ctx, t, syncStore, root, i)
 		names = append(names, name)
 	}
-	found := []string{}
+
+	var objs []content.Object[string, int]
 	var mu sync.Mutex
 
 	store := stores.NewAsync(fs, 5)
@@ -159,16 +159,32 @@ func TestAsyncRead(t *testing.T) {
 			return err
 		}
 		mu.Lock()
-		found = append(found, name)
+		var obj content.Object[string, int]
+		if err := obj.Decode(data); err != nil {
+			return err
+		}
+		objs = append(objs, obj)
 		mu.Unlock()
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sort.Strings(found)
-	if got, want := found, names; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	sort.Slice(objs, func(i, j int) bool {
+		return objs[i].Response < objs[j].Response
+	})
+
+	for i := 0; i < len(names); i++ {
+		o := objs[i]
+		if got, want := o.Type, content.Type("test"); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := o.Value, fmt.Sprintf("test-0%3v", i); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := o.Response, i; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 
 }
@@ -181,7 +197,7 @@ func TestAsyncReadError(t *testing.T) {
 	store := stores.NewAsync(fs, 5)
 
 	root := fs.Join(tmpDir, "store")
-	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(name string, typ content.Type, data []byte, err error) error {
+	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(_ string, _ content.Type, _ []byte, err error) error {
 		time.Sleep(100 * time.Millisecond)
 		return err
 	})
@@ -200,13 +216,13 @@ func TestAsyncReadCancel(t *testing.T) {
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(name string, typ content.Type, data []byte, err error) error {
+		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(_ string, _ content.Type, _ []byte, err error) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(100 * time.Millisecond):
 			}
-			return os.ErrNotExist
+			return err
 		})
 	}()
 
