@@ -151,14 +151,15 @@ func TestAsyncRead(t *testing.T) {
 	}
 
 	var (
-		objs  []content.Object[string, int]
-		found []string
-		mu    sync.Mutex
+		objs     []content.Object[string, int]
+		prefixes = map[string]struct{}{}
+		found    []string
+		mu       sync.Mutex
 	)
 
 	store := stores.NewAsync(fs, 5)
 
-	err := store.ReadAsync(ctx, root, names, func(_ context.Context, name string, typ content.Type, data []byte, err error) error {
+	err := store.ReadAsync(ctx, root, names, func(_ context.Context, prefix, name string, typ content.Type, data []byte, err error) error {
 		if err != nil {
 			return err
 		}
@@ -170,6 +171,7 @@ func TestAsyncRead(t *testing.T) {
 			return err
 		}
 		mu.Lock()
+		prefixes[prefix] = struct{}{}
 		objs = append(objs, obj)
 		found = append(found, name)
 		mu.Unlock()
@@ -185,6 +187,13 @@ func TestAsyncRead(t *testing.T) {
 	sort.Strings(found)
 	if got, want := found, names; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := len(prefixes), 1; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if _, ok := prefixes[root]; !ok {
+		t.Errorf("missing prefix: %v", root)
 	}
 
 	for i := 0; i < len(names); i++ {
@@ -210,7 +219,7 @@ func TestAsyncReadError(t *testing.T) {
 	store := stores.NewAsync(fs, 5)
 
 	root := fs.Join(tmpDir, "store")
-	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(_ context.Context, _ string, _ content.Type, _ []byte, err error) error {
+	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(_ context.Context, _, _ string, _ content.Type, _ []byte, err error) error {
 		time.Sleep(100 * time.Millisecond)
 		return err
 	})
@@ -229,7 +238,7 @@ func TestAsyncReadCancel(t *testing.T) {
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(_ context.Context, _ string, _ content.Type, _ []byte, err error) error {
+		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(_ context.Context, _, _ string, _ content.Type, _ []byte, err error) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
