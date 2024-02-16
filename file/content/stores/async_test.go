@@ -158,7 +158,7 @@ func TestAsyncRead(t *testing.T) {
 
 	store := stores.NewAsync(fs, 5)
 
-	err := store.ReadAsync(ctx, root, names, func(name string, typ content.Type, data []byte, err error) error {
+	err := store.ReadAsync(ctx, root, names, func(_ context.Context, name string, typ content.Type, data []byte, err error) error {
 		if err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func TestAsyncReadError(t *testing.T) {
 	store := stores.NewAsync(fs, 5)
 
 	root := fs.Join(tmpDir, "store")
-	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(_ string, _ content.Type, _ []byte, err error) error {
+	err := store.ReadAsync(ctx, root, []string{"a", "b", "c"}, func(_ context.Context, _ string, _ content.Type, _ []byte, err error) error {
 		time.Sleep(100 * time.Millisecond)
 		return err
 	})
@@ -229,7 +229,7 @@ func TestAsyncReadCancel(t *testing.T) {
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(_ string, _ content.Type, _ []byte, err error) error {
+		errCh <- store.ReadAsync(ctx, tmpDir, []string{"a", "b", "c"}, func(_ context.Context, _ string, _ content.Type, _ []byte, err error) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
