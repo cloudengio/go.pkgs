@@ -6,6 +6,7 @@ package stores
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -53,7 +54,12 @@ type writeRequest struct {
 	data         []byte
 }
 
+// NewAsync returns a new instance of Async with the specified concurrency.
+// If concurrency is less than or equal to zero, the number of CPUs is used.
 func NewAsync(fs content.FS, concurrency int) *Async {
+	if concurrency <= 0 {
+		concurrency = runtime.NumCPU()
+	}
 	return &Async{
 		fs:          fs,
 		concurrency: concurrency,
@@ -184,6 +190,9 @@ func (rd *asyncReader) issueRequests(ctx context.Context, names []string) error 
 	return nil
 }
 
+// ReadAsync retrieves the objects with the specified names from the store
+// and calls fn for each object. The read operations are performed
+// concurrently.
 func (s *Async) ReadAsync(ctx context.Context, prefix string, names []string,
 	fn func(name string, typ content.Type, data []byte, err error) error) error {
 	s.mu.Lock()
