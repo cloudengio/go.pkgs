@@ -89,6 +89,12 @@ func (wr *asyncWriter) writer(ctx context.Context, fs content.FS, counter *int64
 	}
 }
 
+func (wr *asyncWriter) finish() error {
+	close(wr.ch)
+	wr.errs.Append(wr.g.Wait())
+	return wr.errs.Err()
+}
+
 // Write queues a write request for the specified prefix and name in the store.
 // There is no guarantee that the write will have completed when this method
 // returns. The error code returned is an indication that the write request
@@ -108,10 +114,16 @@ func (s *Async) Write(ctx context.Context, prefix, name string, data []byte) err
 	}
 }
 
+// ReadFunc is called by ReadAsync for each object read from the store.
+// If the read operation returned an error it is passed to ReadFunc and if
+// then returned by ReadFunc it will cause the entire ReadAsync operation
+// to terminate and return an error.
+type ReadFunc func(name string, typ content.Type, data []byte, err error) error
+
 type asyncReader struct {
-	ch   chan string
-	g    *errgroup.T
-	errs *errors.M
+	ch           chan string
+	readerDoneCh chan struct{}
+	g            *errgroup.T
 }
 
 // Read retrieves the object type and serialized data at the specified prefix and name
@@ -121,18 +133,36 @@ func (s *Async) Read(ctx context.Context, prefix, name string) (content.Type, []
 	return read(ctx, s.fs, s.fs.Join(prefix, name), &s.read)
 }
 
-func (s *Async) newReader(ctx context.Context, prefix string,
-	fn func(name string, typ content.Type, data []byte, err error) error) error {
+func (s *Async) newReader(ctx context.Context, prefix string, fn ReadFunc) *asyncReader {
+	rd := &asyncReader{
+		ch:           make(chan string, s.concurrency),
+		g:            &errgroup.T{},
+		readerDoneCh: make(chan struct{}, 1),
+	}
+	for i := 0; i < s.concurrency; i++ {
+		rd.g.Go(func() error {
+			return rd.reader(ctx, s.fs, prefix, &s.read, fn)
+		})
+	}
+	return rd
+}
+
+func (rd *asyncReader) reader(ctx context.Context, fs content.FS, prefix string, counter *int64, fn ReadFunc) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case name, ok := <-s.rdCh:
+		case name, ok := <-rd.ch:
 			if !ok {
 				return nil
 			}
-			typ, data, err := s.Read(ctx, prefix, name)
-			s.errs.Append(err)
+			path := fs.Join(prefix, name)
+			typ, data, err := read(ctx, fs, path, counter)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 			if err := fn(name, typ, data, err); err != nil {
 				return err
 			}
@@ -140,40 +170,42 @@ func (s *Async) newReader(ctx context.Context, prefix string,
 	}
 }
 
+func (rd *asyncReader) issueRequests(ctx context.Context, names []string) error {
+	defer close(rd.ch)
+	for _, name := range names {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-rd.readerDoneCh:
+			break
+		case rd.ch <- name:
+		}
+	}
+	return nil
+}
+
 func (s *Async) ReadAsync(ctx context.Context, prefix string, names []string,
 	fn func(name string, typ content.Type, data []byte, err error) error) error {
-	rdCh := make(chan string, s.concurrency)
+	s.mu.Lock()
+	if s.reader == nil {
+		s.reader = s.newReader(ctx, prefix, fn)
+	}
+	s.mu.Unlock()
 
+	var errs errors.M
 	var errCh = make(chan error, 1)
 	go func() {
-		defer close(rdCh)
-		for _, name := range names {
-			select {
-			case <-ctx.Done():
-				errCh <- ctx.Err()
-				return
-			case s.rdCh <- name:
-			}
-		}
-		errCh <- nil
+		errCh <- s.reader.issueRequests(ctx, names)
 	}()
 
-	for i := 0; i < s.concurrency; i++ {
-		s.g.Go(func() error {
-			return s.reader(ctx, prefix, fn)
-		})
-	}
-
-	s.errs.Append(<-errCh)
-	s.errs.Append(s.g.Wait())
-	return s.errs.Err()
+	errs.Append(s.reader.g.Wait())
+	close(s.reader.readerDoneCh)
+	errs.Append(<-errCh)
+	return errs.Err()
 }
 
 // Finish waits for all queued writes to complete and returns any errors
 // encountered during the writes.
 func (s *Async) Finish() error {
-	close(s.wrCh)
-	errs := s.g.Wait()
-	s.errs.Append(errs)
-	return s.errs.Err()
+	return s.writer.finish()
 }
