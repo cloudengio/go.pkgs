@@ -61,14 +61,6 @@ func TestStore(t *testing.T) {
 	}
 	path := fs.Join(root, prefix, "c")
 
-	read, written := store.Stats()
-	if got, want := read, int64(0); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := written, int64(1); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
 	if _, err := fs.Stat(ctx, path); err != nil {
 		t.Fatal(err)
 	}
@@ -82,14 +74,6 @@ func TestStore(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := obj1, obj; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	read, written = store.Stats()
-	if got, want := read, int64(1); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := written, int64(1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

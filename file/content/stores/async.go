@@ -8,7 +8,6 @@ import (
 	"context"
 	"runtime"
 	"sync"
-	"sync/atomic"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/content"
@@ -20,8 +19,6 @@ import (
 // that all writes have completed.
 type Async struct {
 	fs          content.FS
-	written     int64
-	read        int64
 	concurrency int
 	mu          sync.Mutex
 	writer      *asyncWriter
@@ -35,12 +32,6 @@ func (s *Async) EraseExisting(ctx context.Context, root string) error {
 
 func (s *Async) FS() content.FS {
 	return s.fs
-}
-
-// Stats returns the number of objects read and written to the store
-// since this instance was created.
-func (s *Async) Stats() (read, written int64) {
-	return atomic.LoadInt64(&s.read), atomic.LoadInt64(&s.written)
 }
 
 type asyncWriter struct {
@@ -74,13 +65,13 @@ func (s *Async) newWriter(ctx context.Context) *asyncWriter {
 	}
 	for i := 0; i < s.concurrency; i++ {
 		wr.g.Go(func() error {
-			return wr.writer(ctx, s.fs, &s.written)
+			return wr.writer(ctx, s.fs)
 		})
 	}
 	return wr
 }
 
-func (wr *asyncWriter) writer(ctx context.Context, fs content.FS, counter *int64) error {
+func (wr *asyncWriter) writer(ctx context.Context, fs content.FS) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -89,7 +80,7 @@ func (wr *asyncWriter) writer(ctx context.Context, fs content.FS, counter *int64
 			if !ok {
 				return nil
 			}
-			err := write(ctx, fs, req.prefix, req.name, req.data, counter)
+			err := write(ctx, fs, req.prefix, req.name, req.data)
 			wr.errs.Append(err)
 		}
 	}
@@ -128,8 +119,10 @@ func (s *Async) Finish() error {
 		s.mu.Unlock()
 		return nil
 	}
+	writer := s.writer
+	s.writer = nil
 	s.mu.Unlock()
-	return s.writer.finish()
+	return writer.finish()
 }
 
 // ReadFunc is called by ReadAsync for each object read from the store.
@@ -148,7 +141,7 @@ type asyncReader struct {
 // from the store. The caller is responsible for using the returned type to
 // decode the data into an appropriate object.
 func (s *Async) Read(ctx context.Context, prefix, name string) (content.Type, []byte, error) {
-	return read(ctx, s.fs, s.fs.Join(prefix, name), &s.read)
+	return read(ctx, s.fs, s.fs.Join(prefix, name))
 }
 
 func (s *Async) newReader(ctx context.Context, prefix string, fn ReadFunc) *asyncReader {
@@ -159,13 +152,13 @@ func (s *Async) newReader(ctx context.Context, prefix string, fn ReadFunc) *asyn
 	}
 	for i := 0; i < s.concurrency; i++ {
 		rd.g.Go(func() error {
-			return rd.reader(ctx, s.fs, prefix, &s.read, fn)
+			return rd.reader(ctx, s.fs, prefix, fn)
 		})
 	}
 	return rd
 }
 
-func (rd *asyncReader) reader(ctx context.Context, fs content.FS, prefix string, counter *int64, fn ReadFunc) error {
+func (rd *asyncReader) reader(ctx context.Context, fs content.FS, prefix string, fn ReadFunc) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -175,7 +168,7 @@ func (rd *asyncReader) reader(ctx context.Context, fs content.FS, prefix string,
 				return nil
 			}
 			path := fs.Join(prefix, name)
-			typ, data, err := read(ctx, fs, path, counter)
+			typ, data, err := read(ctx, fs, path)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
