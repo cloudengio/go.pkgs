@@ -6,6 +6,7 @@ package localfs
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -71,7 +72,7 @@ func (f *T) IsPermissionError(err error) bool {
 }
 
 func (f *T) IsNotExist(err error) bool {
-	return os.IsNotExist(err)
+	return errors.Is(err, os.ErrNotExist)
 }
 
 func (f *T) XAttr(_ context.Context, name string, info file.Info) (file.XAttr, error) {
