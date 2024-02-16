@@ -135,6 +135,15 @@ func TestAsyncWriteCancel(t *testing.T) {
 	}
 }
 
+func TestAsyncWriteFinish(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	fs := localfs.New()
+	store := stores.NewAsync(fs, 5)
+	if err := store.Finish(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAsyncRead(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()

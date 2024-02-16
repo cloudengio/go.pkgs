@@ -95,12 +95,6 @@ func (wr *asyncWriter) writer(ctx context.Context, fs content.FS, counter *int64
 	}
 }
 
-func (wr *asyncWriter) finish() error {
-	close(wr.ch)
-	wr.errs.Append(wr.g.Wait())
-	return wr.errs.Err()
-}
-
 // Write queues a write request for the specified prefix and name in the store.
 // There is no guarantee that the write will have completed when this method
 // returns. The error code returned is an indication that the write request
@@ -118,6 +112,24 @@ func (s *Async) Write(ctx context.Context, prefix, name string, data []byte) err
 	case ch <- writeRequest{prefix, name, data}:
 		return nil
 	}
+}
+
+func (wr *asyncWriter) finish() error {
+	close(wr.ch)
+	wr.errs.Append(wr.g.Wait())
+	return wr.errs.Err()
+}
+
+// Finish waits for all queued writes to complete and returns any errors
+// encountered during the writes.
+func (s *Async) Finish() error {
+	s.mu.Lock()
+	if s.writer == nil {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
+	return s.writer.finish()
 }
 
 // ReadFunc is called by ReadAsync for each object read from the store.
@@ -210,10 +222,4 @@ func (s *Async) ReadAsync(ctx context.Context, prefix string, names []string, fn
 	close(s.reader.readerDoneCh)
 	errs.Append(<-errCh)
 	return errs.Err()
-}
-
-// Finish waits for all queued writes to complete and returns any errors
-// encountered during the writes.
-func (s *Async) Finish() error {
-	return s.writer.finish()
 }
