@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -149,8 +150,11 @@ func TestAsyncRead(t *testing.T) {
 		names = append(names, name)
 	}
 
-	var objs []content.Object[string, int]
-	var mu sync.Mutex
+	var (
+		objs  []content.Object[string, int]
+		found []string
+		mu    sync.Mutex
+	)
 
 	store := stores.NewAsync(fs, 5)
 
@@ -158,12 +162,16 @@ func TestAsyncRead(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		mu.Lock()
+		if typ != content.Type("test") {
+			return fmt.Errorf("unexpected type: %v", typ)
+		}
 		var obj content.Object[string, int]
 		if err := obj.Decode(data); err != nil {
 			return err
 		}
+		mu.Lock()
 		objs = append(objs, obj)
+		found = append(found, name)
 		mu.Unlock()
 		return nil
 	})
@@ -173,6 +181,11 @@ func TestAsyncRead(t *testing.T) {
 	sort.Slice(objs, func(i, j int) bool {
 		return objs[i].Response < objs[j].Response
 	})
+
+	sort.Strings(found)
+	if got, want := found, names; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 
 	for i := 0; i < len(names); i++ {
 		o := objs[i]
