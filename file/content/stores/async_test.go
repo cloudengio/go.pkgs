@@ -167,65 +167,67 @@ func TestAsyncRead(t *testing.T) {
 		names = append(names, name)
 	}
 
-	var (
-		objs     []content.Object[string, int]
-		prefixes = map[string]struct{}{}
-		found    []string
-		mu       sync.Mutex
-	)
+	for _, concurrency := range []int{0, 5, 10} {
+		store := stores.New(fs, concurrency)
 
-	store := stores.NewAsync(fs, 5)
+		var (
+			objs     []content.Object[string, int]
+			prefixes = map[string]struct{}{}
+			found    []string
+			mu       sync.Mutex
+		)
 
-	err := store.ReadV(ctx, root, names, func(_ context.Context, prefix, name string, typ content.Type, data []byte, err error) error {
+		err := store.ReadV(ctx, root, names, func(_ context.Context, prefix, name string, typ content.Type, data []byte, err error) error {
+			if err != nil {
+				return err
+			}
+			if typ != content.Type("test") {
+				return fmt.Errorf("unexpected type: %v", typ)
+			}
+			var obj content.Object[string, int]
+			if err := obj.Decode(data); err != nil {
+				return err
+			}
+			mu.Lock()
+			prefixes[prefix] = struct{}{}
+			objs = append(objs, obj)
+			found = append(found, name)
+			mu.Unlock()
+			return nil
+		})
 		if err != nil {
-			return err
+			t.Fatal(err)
 		}
-		if typ != content.Type("test") {
-			return fmt.Errorf("unexpected type: %v", typ)
-		}
-		var obj content.Object[string, int]
-		if err := obj.Decode(data); err != nil {
-			return err
-		}
-		mu.Lock()
-		prefixes[prefix] = struct{}{}
-		objs = append(objs, obj)
-		found = append(found, name)
-		mu.Unlock()
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Slice(objs, func(i, j int) bool {
-		return objs[i].Response < objs[j].Response
-	})
+		sort.Slice(objs, func(i, j int) bool {
+			return objs[i].Response < objs[j].Response
+		})
 
-	sort.Strings(found)
-	if got, want := found, names; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	if got, want := len(prefixes), 1; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if _, ok := prefixes[root]; !ok {
-		t.Errorf("missing prefix: %v", root)
-	}
-
-	for i := 0; i < len(names); i++ {
-		o := objs[i]
-		if got, want := o.Type, content.Type("test"); got != want {
+		sort.Strings(found)
+		if got, want := found, names; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		if got, want := o.Value, fmt.Sprintf("test-0%3v", i); got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-		if got, want := o.Response, i; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-	}
 
+		if got, want := len(prefixes), 1; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if _, ok := prefixes[root]; !ok {
+			t.Errorf("missing prefix: %v", root)
+		}
+
+		for i := 0; i < len(names); i++ {
+			o := objs[i]
+			if got, want := o.Type, content.Type("test"); got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+			if got, want := o.Value, fmt.Sprintf("test-0%3v", i); got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+			if got, want := o.Response, i; got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		}
+
+	}
 }
 
 func TestAsyncReadError(t *testing.T) {
