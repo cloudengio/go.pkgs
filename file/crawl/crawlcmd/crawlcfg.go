@@ -69,6 +69,7 @@ type CrawlCacheConfig struct {
 	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
 	Checkpoint        string `yaml:"cache_checkpoint" cmd:"the location of any checkpoint data used to resume a crawl."`
 	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
+	Concurrency       int    `yaml:"cache_concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
 }
 
 func (c CrawlCacheConfig) RelativePaths(root string) (parent, downloads, checkpoint string) {

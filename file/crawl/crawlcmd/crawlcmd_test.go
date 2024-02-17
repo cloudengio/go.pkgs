@@ -85,6 +85,7 @@ func TestCrawlCmd(t *testing.T) {
 			Checkpoint:        "checkpoint",
 			ClearBeforeCrawl:  true,
 			ShardingPrefixLen: 1,
+			Concurrency:       2,
 		},
 	}
 
