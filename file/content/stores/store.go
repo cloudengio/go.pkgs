@@ -16,7 +16,9 @@ import (
 // to terminate and return an error.
 type ReadFunc func(ctx context.Context, prefix, name string, typ content.Type, data []byte, err error) error
 
-type API interface {
+// T represents a common interface for both synchronous and asynchronous
+// stores.
+type T interface {
 	content.ObjectStore
 	EraseExisting(ctx context.Context, root string) error
 	FS() content.FS
@@ -24,7 +26,8 @@ type API interface {
 	Finish(context.Context) error
 }
 
-func New(fs content.FS, concurrency int) API {
+// New returns a new instance of T with the specified concurrency.
+func New(fs content.FS, concurrency int) T {
 	if concurrency > 1 {
 		return NewAsync(fs, concurrency)
 	}

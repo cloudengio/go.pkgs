@@ -30,7 +30,7 @@ type Crawler struct {
 	displayOutlinks bool
 	displayProgress bool
 	fsMap           map[string]FSFactory
-	cache           *stores.Sync
+	cache           stores.T
 	cacheRoot       string
 }
 
@@ -52,7 +52,7 @@ func (c *Crawler) Run(ctx context.Context,
 	c.displayProgress = displayProgress
 	c.fsMap = fsMap
 	c.cacheRoot = cacheRoot
-	c.cache = stores.New(fs)
+	c.cache = stores.New(fs, c.Cache.Concurrency)
 	return c.run(ctx, downloadsPath)
 }
 
