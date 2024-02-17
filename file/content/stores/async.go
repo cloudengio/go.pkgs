@@ -22,7 +22,6 @@ type Async struct {
 	concurrency int
 	mu          sync.Mutex
 	writer      *asyncWriter
-	reader      *asyncReader
 }
 
 // EraseExisting deletes all contents of the store beneath root.
@@ -193,20 +192,16 @@ func (rd *asyncReader) issueRequests(ctx context.Context, names []string) error 
 // and calls fn for each object. The read operations are performed
 // concurrently.
 func (s *Async) ReadV(ctx context.Context, prefix string, names []string, fn ReadFunc) error {
-	s.mu.Lock()
-	if s.reader == nil {
-		s.reader = s.newReader(ctx, prefix, fn)
-	}
-	s.mu.Unlock()
+	reader := s.newReader(ctx, prefix, fn)
 
 	var errs errors.M
 	var errCh = make(chan error, 1)
 	go func() {
-		errCh <- s.reader.issueRequests(ctx, names)
+		errCh <- reader.issueRequests(ctx, names)
 	}()
 
-	errs.Append(s.reader.g.Wait())
-	close(s.reader.readerDoneCh)
+	errs.Append(reader.g.Wait())
+	close(reader.readerDoneCh)
 	errs.Append(<-errCh)
 	return errs.Err()
 }
