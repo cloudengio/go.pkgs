@@ -27,7 +27,7 @@ func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool) {
 	return c, ok
 }
 
-// FSOpen will attemp to open filename using the context's set of
+// FSOpen will attempt to open filename using the context's set of
 // fs.ReadFileFS instances (if any), in the order in which they were
 // provided to ContextWithFS, returning the first successful result.
 // If no fs.ReadFileFS instances are present in the context or

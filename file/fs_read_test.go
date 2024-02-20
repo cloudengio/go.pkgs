@@ -37,39 +37,38 @@ func (c *container) Open(filename string) (fs.File, error) {
 //go:embed testdata/hello.txt
 var helloBytes []byte
 
-//go:embed testdata/hello.txt
+//go:embed testdata/world.txt
 var worldBytes []byte
 
 func TestOpenReadFile(t *testing.T) {
 	ctx := context.Background()
 
-	filenameA := path.Join("testdata", "hello.txt")
-	filenameB := path.Join("testdata", "world.txt")
-	data, err := file.FSReadFile(ctx, filenameA)
-	if err != nil {
-		t.Error(err)
-	}
-	if got, want := data, helloBytes; !bytes.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	dummyA := &container{filename: filenameA, contents: []byte("dummy hello data\n")}
-	dummyB := &container{filename: filenameB, contents: []byte("dummy world data\n")}
-
-	ctx = file.ContextWithFS(ctx, dummyA, dummyB)
-	data, err = file.FSReadFile(ctx, filenameA)
-	if err != nil {
-		t.Error(err)
-	}
-	if got, want := data, dummyA.contents; !bytes.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	data, err = file.FSReadFile(ctx, filenameB)
-	if err != nil {
-		t.Error(err)
-	}
-	if got, want := data, dummyB.contents; !bytes.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	for _, tc := range []struct {
+		name          string
+		contents      []byte
+		dummyContents []byte
+	}{
+		{path.Join("testdata", "hello.txt"), helloBytes, []byte("dummy hello data\n")},
+		{path.Join("testdata", "world.txt"), worldBytes, []byte("dummy world data\n")},
+	} {
+		data, err := file.FSReadFile(ctx, tc.name)
+		if err != nil {
+			t.Error(err)
+		}
+		if got, want := data, tc.contents; !bytes.Equal(got, want) {
+			t.Errorf("got %s, want %s", got, want)
+		}
+		dummy := &container{filename: tc.name, contents: tc.dummyContents}
+		ctx = file.ContextWithFS(ctx, dummy)
+		data, err = file.FSReadFile(ctx, tc.name)
+		if err != nil {
+			t.Error(err)
+		}
+		if got, want := data, tc.contents; bytes.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := data, tc.dummyContents; !bytes.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }
