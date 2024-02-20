@@ -22,7 +22,6 @@ var awsInstance *awstestutil.AWS
 
 func TestMain(m *testing.M) {
 	awstestutil.AWSTestMain(m, &awsInstance,
-		//		awstestutil.WithDebug(os.Stderr),
 		awstestutil.WithS3Tree("testdata/s3"))
 }
 
