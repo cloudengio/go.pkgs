@@ -26,24 +26,6 @@ func getARN(ctx context.Context, client *secretsmanager.Client, name string) str
 	return *out.ARN
 }
 
-/* NOTE: that secretecache is currently outdated so it's not used.
-type Cache struct {
-	c *secretcache.Cache
-}
-
-func NewCache(ctx context.Context, cfg aws.Config) *Cache {
-	return &Cache{
-		c: secretcache.NewCache(func(c *secretcache.Cache) {
-			c.Client = secretsmanager.NewFromConfig(cfg)
-		}),
-	}
-}
-
-func (c *Cache) Get(ctx context.Context, name string) (string, error) {
-	return c.c.GetSecret(ctx,name)
-}
-*/
-
 // GetSecret returns the value of the secret with the given name or arn.
 func GetSecret(ctx context.Context, config aws.Config, nameOrArn string) (string, error) {
 	client := secretsmanager.NewFromConfig(config)

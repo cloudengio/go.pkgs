@@ -16,42 +16,60 @@ import (
 )
 
 type container struct {
+	filename string
 	contents []byte
 }
 
-func (c *container) New() fs.ReadFileFS {
-	return &container{}
-}
-
-func (c *container) ReadFile(_ string) ([]byte, error) {
+func (c *container) ReadFile(filename string) ([]byte, error) {
+	if filename != c.filename {
+		return nil, fs.ErrNotExist
+	}
 	return c.contents, nil
 }
 
-func (c *container) Open(_ string) (fs.File, error) {
+func (c *container) Open(filename string) (fs.File, error) {
+	if filename != c.filename {
+		return nil, fs.ErrNotExist
+	}
 	return nil, nil
 }
 
 //go:embed testdata/hello.txt
-var testFSBytes []byte
+var helloBytes []byte
+
+//go:embed testdata/hello.txt
+var worldBytes []byte
 
 func TestOpenReadFile(t *testing.T) {
 	ctx := context.Background()
 
-	data, err := file.FSReadFile(ctx, path.Join("testdata", "hello.txt"))
+	filenameA := path.Join("testdata", "hello.txt")
+	filenameB := path.Join("testdata", "world.txt")
+	data, err := file.FSReadFile(ctx, filenameA)
 	if err != nil {
 		t.Error(err)
 	}
-	if got, want := data, testFSBytes; !bytes.Equal(got, want) {
+	if got, want := data, helloBytes; !bytes.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	dummy := &container{contents: []byte("dummy data\n")}
-	ctx = file.ContextWithFS(ctx, dummy)
-	data, err = file.FSReadFile(ctx, path.Join("testdata", "hello.txt"))
+	dummyA := &container{filename: filenameA, contents: []byte("dummy hello data\n")}
+	dummyB := &container{filename: filenameB, contents: []byte("dummy world data\n")}
+
+	ctx = file.ContextWithFS(ctx, dummyA, dummyB)
+	data, err = file.FSReadFile(ctx, filenameA)
 	if err != nil {
 		t.Error(err)
 	}
-	if got, want := data, dummy.contents; !bytes.Equal(got, want) {
+	if got, want := data, dummyA.contents; !bytes.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	data, err = file.FSReadFile(ctx, filenameB)
+	if err != nil {
+		t.Error(err)
+	}
+	if got, want := data, dummyB.contents; !bytes.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
