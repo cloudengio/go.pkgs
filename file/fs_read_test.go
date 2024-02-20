@@ -16,42 +16,59 @@ import (
 )
 
 type container struct {
+	filename string
 	contents []byte
 }
 
-func (c *container) New() fs.ReadFileFS {
-	return &container{}
-}
-
-func (c *container) ReadFile(_ string) ([]byte, error) {
+func (c *container) ReadFile(filename string) ([]byte, error) {
+	if filename != c.filename {
+		return nil, fs.ErrNotExist
+	}
 	return c.contents, nil
 }
 
-func (c *container) Open(_ string) (fs.File, error) {
+func (c *container) Open(filename string) (fs.File, error) {
+	if filename != c.filename {
+		return nil, fs.ErrNotExist
+	}
 	return nil, nil
 }
 
 //go:embed testdata/hello.txt
-var testFSBytes []byte
+var helloBytes []byte
+
+//go:embed testdata/world.txt
+var worldBytes []byte
 
 func TestOpenReadFile(t *testing.T) {
 	ctx := context.Background()
 
-	data, err := file.FSReadFile(ctx, path.Join("testdata", "hello.txt"))
-	if err != nil {
-		t.Error(err)
-	}
-	if got, want := data, testFSBytes; !bytes.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	dummy := &container{contents: []byte("dummy data\n")}
-	ctx = file.ContextWithFS(ctx, dummy)
-	data, err = file.FSReadFile(ctx, path.Join("testdata", "hello.txt"))
-	if err != nil {
-		t.Error(err)
-	}
-	if got, want := data, dummy.contents; !bytes.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	for _, tc := range []struct {
+		name          string
+		contents      []byte
+		dummyContents []byte
+	}{
+		{path.Join("testdata", "hello.txt"), helloBytes, []byte("dummy hello data\n")},
+		{path.Join("testdata", "world.txt"), worldBytes, []byte("dummy world data\n")},
+	} {
+		data, err := file.FSReadFile(ctx, tc.name)
+		if err != nil {
+			t.Error(err)
+		}
+		if got, want := data, tc.contents; !bytes.Equal(got, want) {
+			t.Errorf("got %s, want %s", got, want)
+		}
+		dummy := &container{filename: tc.name, contents: tc.dummyContents}
+		ctx = file.ContextWithFS(ctx, dummy)
+		data, err = file.FSReadFile(ctx, tc.name)
+		if err != nil {
+			t.Error(err)
+		}
+		if got, want := data, tc.contents; bytes.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := data, tc.dummyContents; !bytes.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }
