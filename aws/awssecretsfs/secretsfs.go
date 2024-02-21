@@ -4,7 +4,7 @@
 
 // Package awssecrets provides an implementation of fs.ReadFileFS that reads
 // secrets from the AWS secretsmanager.
-package awssecrets
+package awssecretsfs
 
 import (
 	"bytes"

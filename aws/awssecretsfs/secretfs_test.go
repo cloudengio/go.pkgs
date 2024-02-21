@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package awssecrets_test
+package awssecretsfs_test
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"io/fs"
 	"testing"
 
-	"cloudeng.io/aws/awssecrets"
+	"cloudeng.io/aws/awssecretsfs"
 	"cloudeng.io/aws/awstestutil"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -25,8 +25,8 @@ func TestMain(m *testing.M) {
 
 func newSecretsFS() fs.ReadFileFS {
 	cfg := awstestutil.DefaultAWSConfig()
-	return awssecrets.New(cfg,
-		awssecrets.WithSecretsClient(awsInstance.SecretsManager(cfg)))
+	return awssecretsfs.New(cfg,
+		awssecretsfs.WithSecretsClient(awsInstance.SecretsManager(cfg)))
 }
 
 func TestSecrets(t *testing.T) {
