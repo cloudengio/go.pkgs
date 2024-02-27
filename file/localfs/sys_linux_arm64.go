@@ -27,7 +27,7 @@ func xAttr(pathname string, fi file.Info) (file.XAttr, error) {
 			Hardlinks: uint64(s.Nlink),
 		}, nil
 	}
-	return XAttr{}, fmt.Errorf("unrecognised system information %T for %v", si, pathname)
+	return file.XAttr{}, fmt.Errorf("unrecognised system information %T for %v", si, pathname)
 }
 
 func mergeXAttr(existing any, xattr file.XAttr) any {
