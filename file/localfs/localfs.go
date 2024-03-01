@@ -40,6 +40,14 @@ func (f *T) Readlink(_ context.Context, path string) (string, error) {
 	return os.Readlink(path)
 }
 
+func (f *T) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
+
+func (f *T) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
+	return f.ReadFile(name)
+}
+
 func (f *T) Stat(_ context.Context, path string) (file.Info, error) {
 	info, err := os.Stat(path)
 	if err != nil {
