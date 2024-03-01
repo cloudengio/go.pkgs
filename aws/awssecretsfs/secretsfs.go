@@ -78,7 +78,16 @@ func (smfs *T) Open(name string) (fs.File, error) {
 
 // ReadFile implements fs.ReadFileFS. Name can be the short name of the secret or the ARN.
 func (smfs *T) ReadFile(name string) ([]byte, error) {
-	out, err := readSecret(context.Background(), smfs.client, name)
+	return smfs.readFileCtx(context.Background(), name)
+}
+
+// ReadFileCtx is like ReadFile but with a context.
+func (smfs *T) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	return smfs.readFileCtx(ctx, name)
+}
+
+func (smfs *T) readFileCtx(ctx context.Context, name string) ([]byte, error) {
+	out, err := readSecret(ctx, smfs.client, name)
 	if err != nil {
 		return nil, err
 	}
