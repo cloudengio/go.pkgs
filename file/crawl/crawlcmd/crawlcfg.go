@@ -68,12 +68,12 @@ type DownloadConfig struct {
 // left to client packages to avoid depenedency bloat in core packages
 // such as this.
 type CrawlCacheConfig[T any] struct {
-	Downloads         string `yaml:"cache_root" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
-	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
-	Checkpoint        string `yaml:"cache_checkpoint" cmd:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
-	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
-	Concurrency       int    `yaml:"cache_concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
-	ServiceConfig     T      `yaml:"cache_service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
+	Downloads         string `yaml:"downloads" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
+	ClearBeforeCrawl  bool   `yaml:"clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
+	Checkpoint        string `yaml:"checkpoint" cmd:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
+	ShardingPrefixLen int    `yaml:"sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
+	Concurrency       int    `yaml:"concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
+	ServiceConfig     T      `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
 }
 
 // ParseCrawlCacheConfig parses a CrawlCacheConfig for a specific cache service.
