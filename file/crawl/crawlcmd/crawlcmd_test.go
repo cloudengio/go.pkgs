@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"testing"
 	"time"
 
+	"cloudeng.io/cmdutil/cmdyaml"
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl/crawlcmd"
@@ -22,6 +24,7 @@ import (
 	"cloudeng.io/file/filewalk/filewalktestutil"
 	"cloudeng.io/file/localfs"
 	"cloudeng.io/path"
+	"gopkg.in/yaml.v3"
 )
 
 type randfs struct{}
@@ -31,13 +34,13 @@ func (f *randfs) NewFS(_ context.Context) (file.FS, error) {
 	return filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024)), nil
 }
 
-func expectedOutput(fs file.FS, name, root, cache string, seeds ...string) (dirs, files []string) {
-	dirs = []string{root, cache}
+func expectedOutput(fs file.FS, name, root, downloads string, seeds ...string) (dirs, files []string) {
+	dirs = []string{root, downloads}
 	sharder := path.NewSharder(path.WithSHA1PrefixLength(1))
 	for _, seed := range seeds {
 		p, f := sharder.Assign(name + seed)
-		dirs = append(dirs, fs.Join(cache, p))
-		files = append(files, fs.Join(cache, p, f))
+		dirs = append(dirs, fs.Join(downloads, p))
+		files = append(files, fs.Join(downloads, p, f))
 	}
 	sort.Strings(dirs)
 	sort.Strings(files)
@@ -80,31 +83,27 @@ func TestCrawlCmd(t *testing.T) {
 				DefaultConcurrency: 1,
 			},
 		},
-		Cache: crawlcmd.CrawlCacheConfig{
-			Prefix:            "crawled",
-			Checkpoint:        "checkpoint",
+		Cache: crawlcmd.CrawlCacheConfig[yaml.Node]{
+			Downloads:         filepath.Join(writeRoot, "crawled"),
+			Checkpoint:        filepath.Join(writeRoot, "checkpoint"),
 			ClearBeforeCrawl:  true,
 			ShardingPrefixLen: 1,
 			Concurrency:       2,
 		},
 	}
 
-	root, cache, _ := cmd.Cache.AbsolutePaths(writeFS, writeRoot)
-	if err := cmd.Cache.PrepareDownloads(ctx, writeFS, cache); err != nil {
+	downloads, _ := cmd.Cache.Paths()
+	if err := cmd.Cache.PrepareDownloads(ctx, writeFS); err != nil {
 		t.Fatal(err)
 	}
 
-	if got, want := cache, writeFS.Join(writeRoot, cmd.Config.Cache.Prefix); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	err = cmd.Run(ctx, fsMap, writeFS, writeRoot, false, false)
+	err = cmd.Run(ctx, fsMap, writeFS, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expectedDirs, expectedFiles := expectedOutput(writeFS, cmd.Config.Name,
-		root, cache, cmd.Config.Seeds...)
+		writeRoot, downloads, cmd.Config.Seeds...)
 
 	lfs := localfs.New()
 	prefixes, contents, err := filewalktestutil.WalkContents(ctx, lfs, tmpDir)
@@ -124,7 +123,7 @@ func TestCrawlCmd(t *testing.T) {
 
 	// Test erase.
 	cmd.Config.Cache.ClearBeforeCrawl = true
-	if err := cmd.Cache.PrepareDownloads(ctx, writeFS, cache); err != nil {
+	if err := cmd.Cache.PrepareDownloads(ctx, writeFS); err != nil {
 		t.Fatal(err)
 	}
 	prefixes, contents, err = filewalktestutil.WalkContents(ctx, lfs, tmpDir)
@@ -137,4 +136,30 @@ func TestCrawlCmd(t *testing.T) {
 	if got, want := len(contents), 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+func ExampleCrawlCacheConfig() {
+	type cloudConfig struct {
+		Region string `yaml:"region"`
+	}
+	var cfg crawlcmd.CrawlCacheConfig[yaml.Node]
+	var service crawlcmd.CrawlCacheConfig[cloudConfig]
+
+	err := cmdyaml.ParseConfig([]byte(`
+cache_root: cloud-service://bucket/downloads
+cache_service_config:
+  region: us-west-2
+`), &cfg)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+	if err := crawlcmd.ParseCrawlCacheConfig(cfg, &service); err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+	fmt.Println(service.Downloads)
+	fmt.Println(service.ServiceConfig.Region)
+	// Output:
+	// cloud-service://bucket/downloads
+	// us-west-2
+
 }
