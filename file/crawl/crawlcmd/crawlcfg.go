@@ -66,7 +66,9 @@ type DownloadConfig struct {
 // field is intended to be parametized to some service specific configuration
 // for cache services that require it, such as AWS S3. This is deliberately
 // left to client packages to avoid depenedency bloat in core packages
-// such as this.
+// such as this. The type of the ServiceConfig file is generally determined
+// using the scheme of the Downloads path (e.g s3://... would imply an AWS
+// specific configuration).
 type CrawlCacheConfig[T any] struct {
 	Downloads         string `yaml:"downloads" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
 	ClearBeforeCrawl  bool   `yaml:"clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
