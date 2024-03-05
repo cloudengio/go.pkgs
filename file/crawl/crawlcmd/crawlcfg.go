@@ -199,7 +199,7 @@ func (c Config) CreateSeedCrawlRequests(
 	return requests, nil
 }
 
-// ExtractorRegistry returns a content.Registry containing for outlinks.Extractor
+// ExtractorRegistry returns a content.Registry containing the outlinks.Extractor
 // that can be used with outlinks.Extract.
 func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*content.Registry[outlinks.Extractor], error) {
 	reg := content.NewRegistry[outlinks.Extractor]()

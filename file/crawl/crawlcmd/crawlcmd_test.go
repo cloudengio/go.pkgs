@@ -61,10 +61,6 @@ func TestCrawlCmd(t *testing.T) {
 		}
 	}()
 
-	cmd := crawlcmd.Crawler{
-		Extractors: map[content.Type]outlinks.Extractor{},
-	}
-
 	writeFS := localfs.New()
 	writeRoot := tmpDir
 
@@ -74,7 +70,7 @@ func TestCrawlCmd(t *testing.T) {
 
 	seeds := []string{"rand1", "rand6"}
 
-	cmd.Config = crawlcmd.Config{
+	config := crawlcmd.Config{
 		Name:  "test",
 		Depth: 0,
 		Seeds: seeds,
@@ -92,18 +88,28 @@ func TestCrawlCmd(t *testing.T) {
 		},
 	}
 
-	downloads, _ := cmd.Cache.Paths()
-	if err := cmd.Cache.PrepareDownloads(ctx, writeFS); err != nil {
+	cmd := crawlcmd.NewCrawler(
+		config,
+		crawlcmd.Resources{
+			Extractors:          map[content.Type]outlinks.Extractor{},
+			CrawlStoreFactories: fsMap,
+			ContentStoreFactory: func(_ context.Context, _ crawlcmd.CrawlCacheConfig[yaml.Node]) (content.FS, error) {
+				return writeFS, nil
+			},
+		})
+
+	downloads, _ := config.Cache.Paths()
+	if err := config.Cache.PrepareDownloads(ctx, writeFS); err != nil {
 		t.Fatal(err)
 	}
 
-	err = cmd.Run(ctx, fsMap, writeFS, false, false)
+	err = cmd.Run(ctx, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedDirs, expectedFiles := expectedOutput(writeFS, cmd.Config.Name,
-		writeRoot, downloads, cmd.Config.Seeds...)
+	expectedDirs, expectedFiles := expectedOutput(writeFS, config.Name,
+		writeRoot, downloads, config.Seeds...)
 
 	lfs := localfs.New()
 	prefixes, contents, err := filewalktestutil.WalkContents(ctx, lfs, tmpDir)
@@ -122,8 +128,8 @@ func TestCrawlCmd(t *testing.T) {
 	}
 
 	// Test erase.
-	cmd.Config.Cache.ClearBeforeCrawl = true
-	if err := cmd.Cache.PrepareDownloads(ctx, writeFS); err != nil {
+	config.Cache.ClearBeforeCrawl = true
+	if err := config.Cache.PrepareDownloads(ctx, writeFS); err != nil {
 		t.Fatal(err)
 	}
 	prefixes, contents, err = filewalktestutil.WalkContents(ctx, lfs, tmpDir)
