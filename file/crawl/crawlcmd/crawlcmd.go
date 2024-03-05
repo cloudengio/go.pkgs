@@ -20,7 +20,6 @@ import (
 	"cloudeng.io/file/download"
 	"cloudeng.io/path"
 	"cloudeng.io/path/cloudpath"
-	"gopkg.in/yaml.v3"
 )
 
 // Crawler represents a crawler instance and contains global configuration
@@ -39,7 +38,7 @@ type FSFactory func(context.Context) (file.FS, error)
 
 // ContentFSFactory is a function that returns a content.FS used to store
 // the downloaded content.
-type ContentFSFactory func(context.Context, CrawlCacheConfig[yaml.Node]) (content.FS, error)
+type ContentFSFactory func(context.Context, CrawlCacheConfig) (content.FS, error)
 
 // Resources contains the resources required by the crawler.
 type Resources struct {
@@ -51,7 +50,7 @@ type Resources struct {
 	CrawlStoreFactories map[string]FSFactory
 	// ContentStoreFactory is a function that returns a content.FS used to store
 	// the downloaded content.
-	ContentStoreFactory func(context.Context, CrawlCacheConfig[yaml.Node]) (content.FS, error)
+	ContentStoreFactory func(context.Context, CrawlCacheConfig) (content.FS, error)
 }
 
 // NewCrawler creates a new crawler instance using the supplied configuration

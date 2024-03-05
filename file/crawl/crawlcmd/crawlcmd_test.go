@@ -24,7 +24,6 @@ import (
 	"cloudeng.io/file/filewalk/filewalktestutil"
 	"cloudeng.io/file/localfs"
 	"cloudeng.io/path"
-	"gopkg.in/yaml.v3"
 )
 
 type randfs struct{}
@@ -79,7 +78,7 @@ func TestCrawlCmd(t *testing.T) {
 				DefaultConcurrency: 1,
 			},
 		},
-		Cache: crawlcmd.CrawlCacheConfig[yaml.Node]{
+		Cache: crawlcmd.CrawlCacheConfig{
 			Downloads:         filepath.Join(writeRoot, "crawled"),
 			Checkpoint:        filepath.Join(writeRoot, "checkpoint"),
 			ClearBeforeCrawl:  true,
@@ -93,7 +92,7 @@ func TestCrawlCmd(t *testing.T) {
 		crawlcmd.Resources{
 			Extractors:          map[content.Type]outlinks.Extractor{},
 			CrawlStoreFactories: fsMap,
-			ContentStoreFactory: func(_ context.Context, _ crawlcmd.CrawlCacheConfig[yaml.Node]) (content.FS, error) {
+			ContentStoreFactory: func(_ context.Context, _ crawlcmd.CrawlCacheConfig) (content.FS, error) {
 				return writeFS, nil
 			},
 		})
@@ -148,8 +147,8 @@ func ExampleCrawlCacheConfig() {
 	type cloudConfig struct {
 		Region string `yaml:"region"`
 	}
-	var cfg crawlcmd.CrawlCacheConfig[yaml.Node]
-	var service crawlcmd.CrawlCacheConfig[cloudConfig]
+	var cfg crawlcmd.CrawlCacheConfig
+	var service cloudConfig
 
 	err := cmdyaml.ParseConfig([]byte(`
 downloads: cloud-service://bucket/downloads
@@ -159,11 +158,11 @@ service_config:
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 	}
-	if err := crawlcmd.ParseCrawlCacheConfig(cfg, &service); err != nil {
+	if err := cfg.ServiceConfig.Decode(&service); err != nil {
 		fmt.Printf("error: %v\n", err)
 	}
-	fmt.Println(service.Downloads)
-	fmt.Println(service.ServiceConfig.Region)
+	fmt.Println(cfg.Downloads)
+	fmt.Println(service.Region)
 	// Output:
 	// cloud-service://bucket/downloads
 	// us-west-2
