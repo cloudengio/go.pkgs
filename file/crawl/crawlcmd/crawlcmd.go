@@ -31,7 +31,6 @@ type Crawler struct {
 	displayProgress bool
 	fsMap           map[string]FSFactory
 	cache           stores.T
-	cacheRoot       string
 }
 
 // FSFactory is a function that returns a file.FS used to crawl

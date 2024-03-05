@@ -100,12 +100,13 @@ func (c CrawlCacheConfig[T]) Paths() (downloads, checkpoint string) {
 // ClearBeforeCrawl is true. It returns an error if the directory cannot be
 // created or cleared.
 func (c CrawlCacheConfig[T]) PrepareDownloads(ctx context.Context, fs content.FS) error {
-	if c.ClearBeforeCrawl && len(c.Downloads) > 0 {
-		if err := fs.DeleteAll(ctx, c.Downloads); err != nil {
+	dl := os.ExpandEnv(c.Downloads)
+	if c.ClearBeforeCrawl && len(dl) > 0 {
+		if err := fs.DeleteAll(ctx, dl); err != nil {
 			return err
 		}
 	}
-	return fs.EnsurePrefix(ctx, c.Downloads, 0700)
+	return fs.EnsurePrefix(ctx, dl, 0700)
 }
 
 // PrepareCheckpoint initializes the checkpoint operation (ie.
@@ -113,7 +114,8 @@ func (c CrawlCacheConfig[T]) PrepareDownloads(ctx context.Context, fs content.FS
 // ClearBeforeCrawl is true. It returns an error if the checkpoint cannot be
 // initialized or cleared.
 func (c CrawlCacheConfig[T]) PrepareCheckpoint(ctx context.Context, op checkpoint.Operation) error {
-	if err := op.Init(ctx, c.Checkpoint); err != nil {
+	cp := os.ExpandEnv(c.Checkpoint)
+	if err := op.Init(ctx, cp); err != nil {
 		return err
 	}
 	if c.ClearBeforeCrawl {
