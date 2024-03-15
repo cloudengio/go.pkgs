@@ -36,10 +36,6 @@ type Crawler struct {
 // a given FS.
 type FSFactory func(context.Context) (file.FS, error)
 
-// ContentFSFactory is a function that returns a content.FS used to store
-// the downloaded content.
-type ContentFSFactory func(context.Context, CrawlCacheConfig) (content.FS, error)
-
 // Resources contains the resources required by the crawler.
 type Resources struct {
 	// Extractors are used to extract outlinks from crawled documents
@@ -50,7 +46,7 @@ type Resources struct {
 	CrawlStoreFactories map[string]FSFactory
 	// ContentStoreFactory is a function that returns a content.FS used to store
 	// the downloaded content.
-	ContentStoreFactory func(context.Context, CrawlCacheConfig) (content.FS, error)
+	NewContentFS func(context.Context, CrawlCacheConfig) (content.FS, error)
 }
 
 // NewCrawler creates a new crawler instance using the supplied configuration
@@ -62,7 +58,7 @@ func NewCrawler(cfg Config, resources Resources) *Crawler {
 // Run runs the crawler.
 func (c *Crawler) Run(ctx context.Context,
 	displayOutlinks, displayProgress bool) error {
-	cfs, err := c.resources.ContentStoreFactory(ctx, c.config.Cache)
+	cfs, err := c.resources.NewContentFS(ctx, c.config.Cache)
 	if err != nil {
 		return fmt.Errorf("failed to create content store: %v: %v", c.config.Cache, err)
 	}

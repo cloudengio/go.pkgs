@@ -78,20 +78,6 @@ type CrawlCacheConfig struct {
 	ServiceConfig     yaml.Node `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
 }
 
-/*
-// ParseCrawlCacheConfig parses a CrawlCacheConfig for a specific cache service.
-func ParseCrawlCacheConfig[T any](cfg CrawlCacheConfig, specific *CrawlCacheConfig[T]) error {
-	specific.Downloads = cfg.Downloads
-	specific.ClearBeforeCrawl = cfg.ClearBeforeCrawl
-	specific.Checkpoint = cfg.Checkpoint
-	specific.ShardingPrefixLen = cfg.ShardingPrefixLen
-	specific.Concurrency = cfg.Concurrency
-	if err := cfg.ServiceConfig.Decode(&specific.ServiceConfig); err != nil {
-		return err
-	}
-	return nil
-}*/
-
 // Paths returns the downloads and checkpoint paths expanded using os.ExpandEnv.
 func (c CrawlCacheConfig) Paths() (downloads, checkpoint string) {
 	return os.ExpandEnv(c.Downloads), os.ExpandEnv(c.Checkpoint)

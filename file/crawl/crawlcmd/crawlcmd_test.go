@@ -92,7 +92,7 @@ func TestCrawlCmd(t *testing.T) {
 		crawlcmd.Resources{
 			Extractors:          map[content.Type]outlinks.Extractor{},
 			CrawlStoreFactories: fsMap,
-			ContentStoreFactory: func(_ context.Context, _ crawlcmd.CrawlCacheConfig) (content.FS, error) {
+			NewContentFS: func(_ context.Context, _ crawlcmd.CrawlCacheConfig) (content.FS, error) {
 				return writeFS, nil
 			},
 		})
