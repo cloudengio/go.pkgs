@@ -6,7 +6,6 @@ package filewalk_test
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -129,10 +128,6 @@ func TestSkipDir(t *testing.T) {
 	if err != nil {
 		t.Errorf("%v", err)
 	}
-
-	for _, f := range found {
-		fmt.Printf("found: %v\n", f.Name)
-	}
 	compareNames(t, sc, found, `f0
 f1
 f2
@@ -179,5 +174,4 @@ func TestSkipAll(t *testing.T) {
 			t.Errorf("unexpected: %v", f.Name)
 		}
 	}
-	t.Fail()
 }
