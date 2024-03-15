@@ -31,7 +31,6 @@ type Crawler struct {
 	displayProgress bool
 	fsMap           map[string]FSFactory
 	cache           stores.T
-	cacheRoot       string
 }
 
 // FSFactory is a function that returns a file.FS used to crawl
@@ -42,18 +41,16 @@ type FSFactory func(context.Context) (file.FS, error)
 func (c *Crawler) Run(ctx context.Context,
 	fsMap map[string]FSFactory,
 	fs content.FS,
-	cacheRoot string,
 	displayOutlinks, displayProgress bool) error {
-	_, downloadsPath, _ := c.Cache.AbsolutePaths(fs, cacheRoot)
-	if err := c.Cache.PrepareDownloads(ctx, fs, downloadsPath); err != nil {
+	if err := c.Cache.PrepareDownloads(ctx, fs); err != nil {
 		return fmt.Errorf("failed to initialize crawl cache: %v: %v", c.Cache, err)
 	}
 	c.displayOutlinks = displayOutlinks
 	c.displayProgress = displayProgress
 	c.fsMap = fsMap
-	c.cacheRoot = cacheRoot
 	c.cache = stores.New(fs, c.Cache.Concurrency)
-	return c.run(ctx, downloadsPath)
+	downloads, _ := c.Cache.Paths()
+	return c.run(ctx, downloads)
 }
 
 func displayProgress(ctx context.Context, name string, progress <-chan download.Progress) {
@@ -67,7 +64,7 @@ func displayProgress(ctx context.Context, name string, progress <-chan download.
 	}
 }
 
-func (c *Crawler) run(ctx context.Context, root string) error {
+func (c *Crawler) run(ctx context.Context, downloads string) error {
 	seedsByScheme, rejected := c.SeedsByScheme(cloudpath.DefaultMatchers)
 	if len(rejected) > 0 {
 		return fmt.Errorf("unable to determine a file system for seeds: %v", rejected)
@@ -110,7 +107,7 @@ func (c *Crawler) run(ctx context.Context, root string) error {
 	wg.Add(3)
 
 	go func(ch chan crawl.Crawled) {
-		errs.Append(c.saveCrawled(ctx, root, c.Name, ch))
+		errs.Append(c.saveCrawled(ctx, downloads, c.Name, ch))
 		wg.Done()
 	}(crawledCh)
 
@@ -145,7 +142,7 @@ func (c *Crawler) run(ctx context.Context, root string) error {
 	return errs.Err()
 }
 
-func (c Crawler) saveCrawled(ctx context.Context, root, name string, crawledCh chan crawl.Crawled) error {
+func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawledCh chan crawl.Crawled) error {
 	sharder := path.NewSharder(path.WithSHA1PrefixLength(c.Cache.ShardingPrefixLen))
 	join := c.cache.FS().Join
 
@@ -171,7 +168,7 @@ func (c Crawler) saveCrawled(ctx context.Context, root, name string, crawledCh c
 				continue
 			}
 			prefix, suffix := sharder.Assign(name + dld.Name)
-			prefix = join(root, prefix)
+			prefix = join(downloads, prefix)
 			if err := obj.Store(ctx, c.cache, prefix, suffix, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
 				log.Printf("failed to write: %v as prefix: %v, suffix: %v: %v\n", dld.Name, prefix, suffix, err)
 				continue
