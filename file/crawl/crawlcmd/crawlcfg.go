@@ -69,37 +69,24 @@ type DownloadConfig struct {
 // such as this. The type of the ServiceConfig file is generally determined
 // using the scheme of the Downloads path (e.g s3://... would imply an AWS
 // specific configuration).
-type CrawlCacheConfig[T any] struct {
-	Downloads         string `yaml:"downloads" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
-	ClearBeforeCrawl  bool   `yaml:"clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
-	Checkpoint        string `yaml:"checkpoint" cmd:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
-	ShardingPrefixLen int    `yaml:"sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
-	Concurrency       int    `yaml:"concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
-	ServiceConfig     T      `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
-}
-
-// ParseCrawlCacheConfig parses a CrawlCacheConfig for a specific cache service.
-func ParseCrawlCacheConfig[T any](cfg CrawlCacheConfig[yaml.Node], specific *CrawlCacheConfig[T]) error {
-	specific.Downloads = cfg.Downloads
-	specific.ClearBeforeCrawl = cfg.ClearBeforeCrawl
-	specific.Checkpoint = cfg.Checkpoint
-	specific.ShardingPrefixLen = cfg.ShardingPrefixLen
-	specific.Concurrency = cfg.Concurrency
-	if err := cfg.ServiceConfig.Decode(&specific.ServiceConfig); err != nil {
-		return err
-	}
-	return nil
+type CrawlCacheConfig struct {
+	Downloads         string    `yaml:"downloads" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
+	ClearBeforeCrawl  bool      `yaml:"clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
+	Checkpoint        string    `yaml:"checkpoint" cmd:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
+	ShardingPrefixLen int       `yaml:"sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
+	Concurrency       int       `yaml:"concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
+	ServiceConfig     yaml.Node `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
 }
 
 // Paths returns the downloads and checkpoint paths expanded using os.ExpandEnv.
-func (c CrawlCacheConfig[T]) Paths() (downloads, checkpoint string) {
+func (c CrawlCacheConfig) Paths() (downloads, checkpoint string) {
 	return os.ExpandEnv(c.Downloads), os.ExpandEnv(c.Checkpoint)
 }
 
 // PrepareDownloads ensures that the cache directory exists and is empty if
 // ClearBeforeCrawl is true. It returns an error if the directory cannot be
 // created or cleared.
-func (c CrawlCacheConfig[T]) PrepareDownloads(ctx context.Context, fs content.FS) error {
+func (c CrawlCacheConfig) PrepareDownloads(ctx context.Context, fs content.FS) error {
 	dl := os.ExpandEnv(c.Downloads)
 	if c.ClearBeforeCrawl && len(dl) > 0 {
 		if err := fs.DeleteAll(ctx, dl); err != nil {
@@ -113,7 +100,7 @@ func (c CrawlCacheConfig[T]) PrepareDownloads(ctx context.Context, fs content.FS
 // calls op.Init(ctx, checkpointPath)) and optionally clears the checkpoint if
 // ClearBeforeCrawl is true. It returns an error if the checkpoint cannot be
 // initialized or cleared.
-func (c CrawlCacheConfig[T]) PrepareCheckpoint(ctx context.Context, op checkpoint.Operation) error {
+func (c CrawlCacheConfig) PrepareCheckpoint(ctx context.Context, op checkpoint.Operation) error {
 	cp := os.ExpandEnv(c.Checkpoint)
 	if err := op.Init(ctx, cp); err != nil {
 		return err
@@ -126,16 +113,16 @@ func (c CrawlCacheConfig[T]) PrepareCheckpoint(ctx context.Context, op checkpoin
 
 // Config represents the configuration for a single crawl.
 type Config struct {
-	Name          string                      `yaml:"name" cmd:"the name of the crawl"`
-	Depth         int                         `yaml:"depth" cmd:"the maximum depth to crawl"`
-	Seeds         []string                    `yaml:"seeds" cmd:"the initial set of URIs to crawl"`
-	NoFollowRules []string                    `yaml:"nofollow" cmd:"a set of regular expressions that will be used to determine which links to not follow. The regular expressions are applied to the full URL."`
-	FollowRules   []string                    `yaml:"follow" cmd:"a set of regular expressions that will be used to determine which links to follow. The regular expressions are applied to the full URL."`
-	RewriteRules  []string                    `yaml:"rewrite" cmd:"a set of regular expressions that will be used to rewrite links. The regular expressions are applied to the full URL."`
-	Download      DownloadConfig              `yaml:"download" cmd:"the configuration for downloading documents"`
-	NumExtractors int                         `yaml:"num_extractors" cmd:"the number of concurrent link extractors to use"`
-	Extractors    []content.Type              `yaml:"extractors" cmd:"the content types to extract links from"`
-	Cache         CrawlCacheConfig[yaml.Node] `yaml:"cache" cmd:"the configuration for the cache of downloaded documents"`
+	Name          string           `yaml:"name" cmd:"the name of the crawl"`
+	Depth         int              `yaml:"depth" cmd:"the maximum depth to crawl"`
+	Seeds         []string         `yaml:"seeds" cmd:"the initial set of URIs to crawl"`
+	NoFollowRules []string         `yaml:"nofollow" cmd:"a set of regular expressions that will be used to determine which links to not follow. The regular expressions are applied to the full URL."`
+	FollowRules   []string         `yaml:"follow" cmd:"a set of regular expressions that will be used to determine which links to follow. The regular expressions are applied to the full URL."`
+	RewriteRules  []string         `yaml:"rewrite" cmd:"a set of regular expressions that will be used to rewrite links. The regular expressions are applied to the full URL."`
+	Download      DownloadConfig   `yaml:"download" cmd:"the configuration for downloading documents"`
+	NumExtractors int              `yaml:"num_extractors" cmd:"the number of concurrent link extractors to use"`
+	Extractors    []content.Type   `yaml:"extractors" cmd:"the content types to extract links from"`
+	Cache         CrawlCacheConfig `yaml:"cache" cmd:"the configuration for the cache of downloaded documents"`
 }
 
 // NewLinkProcessor creates a outlinks.RegexpProcessor using the
@@ -199,7 +186,7 @@ func (c Config) CreateSeedCrawlRequests(
 	return requests, nil
 }
 
-// ExtractorRegistry returns a content.Registry containing for outlinks.Extractor
+// ExtractorRegistry returns a content.Registry containing the outlinks.Extractor
 // that can be used with outlinks.Extract.
 func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*content.Registry[outlinks.Extractor], error) {
 	reg := content.NewRegistry[outlinks.Extractor]()
