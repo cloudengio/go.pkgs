@@ -44,7 +44,7 @@ func (l *contentsOnly) setStop() {
 	l.stop = true
 }
 
-func (l *contentsOnly) Prefix(_ context.Context, _ *struct{}, prefix string, _ file.Info, err error) (bool, file.InfoList, error) {
+func (l *contentsOnly) Prefix(_ context.Context, _ *struct{}, _ string, _ file.Info, err error) (bool, file.InfoList, error) {
 	return l.isStopped(), nil, err
 }
 
