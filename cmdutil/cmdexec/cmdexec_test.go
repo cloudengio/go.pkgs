@@ -34,8 +34,7 @@ type Variables struct {
 }
 
 func expand(s string) string {
-	switch s {
-	case "MINE":
+	if s == "MINE" {
 		return "YOURS"
 	}
 	return os.Getenv(s)

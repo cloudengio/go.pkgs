@@ -175,7 +175,7 @@ func (r *Runner) runInDir(ctx context.Context, args []string) error {
 		args = args[1:]
 	}
 	if r.opts.dryRun || r.opts.verbose {
-		r.opts.logger("[%v]: %v %v\n", r.opts.workingDir, binary, strings.Join(args, " "))
+		r.opts.logger("[%v]: %v %v\n", r.opts.workingDir, binary, strings.Join(args, " ")) //nolint:errcheck
 	}
 	if r.opts.dryRun {
 		return nil
