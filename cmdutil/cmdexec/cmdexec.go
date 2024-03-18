@@ -126,7 +126,7 @@ func AppendToOSEnv(v ...string) []string {
 	return append(os.Environ(), v...)
 }
 
-// WithEnv sets the environment variables to be made availabe to the
+// WithEnv sets the environment variables to be made available to the
 // executed command.
 func WithEnv(v []string) Option {
 	return func(o *options) {
