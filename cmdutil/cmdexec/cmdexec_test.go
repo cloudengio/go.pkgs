@@ -46,6 +46,17 @@ func expand(s string) string {
 	return os.Getenv(s)
 }
 
+func ExampleRunner() {
+	ctx := context.Background()
+	os.Setenv("ENV_VAR", "ENV_VAR_VAL")
+	cmdexec.New("test",
+		cmdexec.WithTemplateVars(struct{ A string }{A: "value"}),
+	).Run(ctx, "echo", "{{.A}}", "$ENV_VAR")
+
+	// Output:
+	// value ENV_VAR_VAL
+}
+
 func TestExpansion(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := context.Background()
