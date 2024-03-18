@@ -27,6 +27,7 @@ type options struct {
 	dryRun         bool
 	verbose        bool
 	workingDir     string
+	env            []string
 	prefix         []string
 	stdout, stderr io.Writer
 	templateVars   any
@@ -119,6 +120,20 @@ func WithTemplateVars(v any) Option {
 	}
 }
 
+// AppendToOSEnv returns a copy of os.Environ with the supplied environment
+// variables appended to it.
+func AppendToOSEnv(v ...string) []string {
+	return append(os.Environ(), v...)
+}
+
+// WithEnv sets the environment variables to be made availabe to the
+// executed command.
+func WithEnv(v []string) Option {
+	return func(o *options) {
+		o.env = v
+	}
+}
+
 // New creates a new Runner instance with the supplied name and options.
 func New(name string, opts ...Option) *Runner {
 	r := &Runner{name: name}
@@ -133,8 +148,13 @@ func New(name string, opts ...Option) *Runner {
 }
 
 // ExpandCommandLine expands the supplied command line arguments using
-// the supplied template functions and variables. Template expansion
-// is performed before variable expansion.
+// the supplied template functions and template variables, followed by
+// environment variale expansion. Template expansion is performed before
+// environment variable expansion, that is, a template expression may
+// evaulate to an environment variable expression (eg. to return
+// ${MYVAR}).
+// NOTE that the environment variables are expanded by the current
+// process and not by the executed command.
 func (r *Runner) ExpandCommandLine(args ...string) ([]string, error) {
 	expanded := make([]string, 0, len(args))
 	for _, arg := range args {
@@ -152,8 +172,8 @@ func (r *Runner) ExpandCommandLine(args ...string) ([]string, error) {
 	return expanded, nil
 }
 
-// Run executes the supplied commands with template expansion using
-// the supplied template functions and variables.
+// Run executes the supplied commands with the expanded command line
+// as per ExpandCommandLine.
 func (r *Runner) Run(ctx context.Context, cmds ...string) error {
 	if len(cmds) == 0 {
 		return fmt.Errorf("no commands for %v", r.name)
@@ -180,8 +200,8 @@ func (r *Runner) runInDir(ctx context.Context, args []string) error {
 	if r.opts.dryRun {
 		return nil
 	}
-	fmt.Printf(">>>> %v %v\n", binary, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Env = r.opts.env
 	cmd.Dir = r.opts.workingDir
 	cmd.Stdout = r.opts.stdout
 	cmd.Stderr = r.opts.stderr

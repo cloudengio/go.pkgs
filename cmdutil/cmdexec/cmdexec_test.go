@@ -9,10 +9,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"text/template"
 
+	"cloudeng.io/cmdutil"
 	"cloudeng.io/cmdutil/cmdexec"
 )
 
@@ -31,11 +33,15 @@ func newLogger() *logger {
 type Variables struct {
 	A string
 	B int
+	V string
 }
 
 func expand(s string) string {
-	if s == "MINE" {
+	switch s {
+	case "MINE":
 		return "YOURS"
+	case "MY_VAR":
+		return "ENV_VAR"
 	}
 	return os.Getenv(s)
 }
@@ -47,34 +53,45 @@ func TestExpansion(t *testing.T) {
 
 	output := &bytes.Buffer{}
 
+	testcmd := []string{
+		"go", "run", filepath.Join("testdata", "main.go"),
+	}
+	os.Setenv("os_env_var", "something")
+	env := cmdexec.AppendToOSEnv("os_env_var_child=something_else")
 	opts := []cmdexec.Option{
+		cmdexec.WithEnv(env),
 		cmdexec.WithWorkingDir(tmpDir),
 		cmdexec.WithVerbose(true),
 		cmdexec.WithLogger(l.Logf),
 		cmdexec.WithExpandMapping(expand),
 		cmdexec.WithStdout(output),
-		cmdexec.WithCommandsPrefix("echo", "hello"),
-		cmdexec.WithTemplateVars(Variables{A: "A", B: 42}),
+		cmdexec.WithCommandsPrefix(testcmd...),
+		cmdexec.WithTemplateVars(Variables{A: "A", B: 42, V: "${MY_VAR}"}),
 		cmdexec.WithTemplateFuncs(template.FuncMap{
 			"add": func(a, b int) int { return a + b },
 		})}
 
-	cmds := []string{"world", "{{.A}}", "{{.B}}", "{{add .B 1}}", "${MINE} ${HOME}"}
-	home := os.Getenv("HOME")
+	cmds := []string{"world", "{{.A}}", "{{.B}}", "{{add .B 1}}", "${MINE} ${os_env_var}", "os_env_var_child", "{{.V}}"}
+	envVar := os.Getenv("os_env_var")
 
 	dryrun := append([]cmdexec.Option{cmdexec.WithDryRun(true)}, opts...)
 	if err := cmdexec.New("test", dryrun...).Run(ctx, cmds...); err != nil {
 		t.Fatal(err)
 	}
 
-	expected := fmt.Sprintf("[%v]: echo hello world A 42 43 YOURS %v\n", tmpDir, home)
+	expected := fmt.Sprintf(
+		"[%v]: %v world A 42 43 YOURS %v os_env_var_child ENV_VAR\n",
+		tmpDir, strings.Join(testcmd, " "), envVar)
 	if got, want := l.buf.String(), expected; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := output.String(), ""; got != want {
-		t.Errorf("got %v, want %v", got, want)
+		t.Errorf("got %q, want %q", got, want)
 	}
 
+	if err := cmdutil.CopyAll("testdata", tmpDir, false); err != nil {
+		t.Fatal(err)
+	}
 	l.buf.Reset()
 	nodryrun := append([]cmdexec.Option{cmdexec.WithDryRun(false)}, opts...)
 	if err := cmdexec.New("test", nodryrun...).Run(ctx, cmds...); err != nil {
@@ -83,7 +100,7 @@ func TestExpansion(t *testing.T) {
 	if got, want := l.buf.String(), expected; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := strings.TrimSpace(output.String()), "hello world A 42 43 YOURS "+home; got != want {
-		t.Errorf("got %v, want %v", got, want)
+	if got, want := strings.TrimSpace(output.String()), "world A 42 43 YOURS "+envVar+" something_else ENV_VAR"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
