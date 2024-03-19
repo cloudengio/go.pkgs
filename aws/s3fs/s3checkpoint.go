@@ -30,10 +30,10 @@ func (c *chkpt) Init(ctx context.Context, prefix string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.prefix) > 0 {
-		return fmt.Errorf("checkpoint operation already initialized")
+		return fmt.Errorf("checkpoint init: operation already initialized")
 	}
 	if len(prefix) == 0 {
-		return fmt.Errorf("prefix must be non-empty")
+		return fmt.Errorf("checkpoint init: prefix must be non-empty")
 	}
 	c.prefix = ensureIsPrefix(prefix, c.options.delimiter)
 	return c.EnsurePrefix(ctx, prefix, 0700)
@@ -43,9 +43,12 @@ func (c *chkpt) Clear(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.prefix) == 0 {
-		return fmt.Errorf("checkpoint nit initialized")
+		return fmt.Errorf("checkpoint clear: not initialized")
 	}
-	return c.DeleteAll(ctx, c.prefix)
+	if err := c.DeleteAll(ctx, c.prefix); err != nil {
+		return fmt.Errorf("checkpoint clear: failed to delete all: %v: %v", c.prefix, err)
+	}
+	return nil
 }
 
 func (c *chkpt) Checkpoint(ctx context.Context, label string, data []byte) (id string, err error) {
@@ -86,8 +89,9 @@ func (c *chkpt) Compact(ctx context.Context, label string) error {
 		return err
 	}
 	for _, f := range existing {
-		if err := c.Delete(ctx, c.Join(c.prefix, f)); err != nil {
-			return err
+		cp := c.Join(c.prefix, f)
+		if err := c.Delete(ctx, cp); err != nil {
+			return fmt.Errorf("checkpoint compact: failed to delete: %v: %v", cp, err)
 		}
 	}
 	zero := formatFilename(0, label)
@@ -103,7 +107,9 @@ func (c *chkpt) readAllSorted(ctx context.Context) ([]string, error) {
 			if c.IsDir() {
 				continue
 			}
-			entries = append(entries, c.Name)
+			if len(c.Name) > checkpointNumFormatSize+len(checkpointSuffix) {
+				entries = append(entries, c.Name)
+			}
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -135,8 +141,9 @@ func (c *chkpt) Complete(ctx context.Context) error {
 		return err
 	}
 	for _, s := range sorted {
-		if err := c.Delete(ctx, c.Join(c.prefix, s)); err != nil {
-			return err
+		cp := c.Join(c.prefix, s)
+		if err := c.Delete(ctx, cp); err != nil {
+			return fmt.Errorf("checkpoint complete: failed to delete: %v: %v", cp, err)
 		}
 	}
 	return nil
