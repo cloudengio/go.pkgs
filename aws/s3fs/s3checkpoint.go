@@ -7,6 +7,7 @@ package s3fs
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -107,7 +108,7 @@ func (c *chkpt) readAllSorted(ctx context.Context) ([]string, error) {
 			if c.IsDir() {
 				continue
 			}
-			if len(c.Name) > checkpointNumFormatSize+len(checkpointSuffix) {
+			if isValidFilename(c.Name) {
 				entries = append(entries, c.Name)
 			}
 		}
@@ -168,6 +169,12 @@ const (
 	checkpointSuffix        = ".chk"
 )
 
+var re = regexp.MustCompile(`^\d\d\d\d\d\d\d\d.*\.chk$`)
+
 func formatFilename(n int, label string) string {
 	return fmt.Sprintf(checkpointNumFormat+"%s"+checkpointSuffix, n, label)
+}
+
+func isValidFilename(name string) bool {
+	return re.MatchString(name)
 }
