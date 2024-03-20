@@ -64,6 +64,10 @@ type FS interface {
 	SysXAttr(existing any, merge XAttr) any
 }
 
+// ErrNotImplemented is returned by methods that are not implemented
+// by a particular filesystem.
+var ErrNotImplemented = fmt.Errorf("not implemented")
+
 var _ fs.FileInfo = (*Info)(nil)
 
 // Info implements fs.FileInfo to provide binary, gob and json encoding/decoding.
