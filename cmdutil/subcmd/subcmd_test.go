@@ -153,7 +153,7 @@ func TestCommandSet(t *testing.T) {
 	commands.SetOutput(help)
 	err = commands.DispatchWithArgs(ctx, "test", "help", "cmd-a")
 	errHelp()
-	if got, want := help.String(), `Usage of command cmd-a: subcmd a
+	if got, want := help.String(), `Usage of command "cmd-a": subcmd a
 cmd-a [--flag-a=0 --flag-b=0] <args>...
 
   -flag-a int

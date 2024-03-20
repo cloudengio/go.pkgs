@@ -101,6 +101,16 @@
 //  3. If there is a single item in the list and it is enclosed
 //     in [] (in a quoted string), then 0 or 1 arguments are expected.
 //
+// Note that the arguments may be structured into a short form name and a
+// description, eg. arg - description, where ' - ' is used to separate
+// the short form and description. The usage displayed will use the
+// short form name to display a summary of the command line and the description
+// will be detailed below, eg:
+//
+//	my-command <arg1> <arg2>
+//	  <arg1> - description of arg1
+//	  <arg2> - description of arg2
+//
 // To define a simple command line, with no sub-commands, specify only
 // the name:, summary: and arguments: fields.
 //
@@ -250,12 +260,13 @@ type Main func(ctx context.Context, cmdRunner func(ctx context.Context) error) e
 
 // Command represents a single command.
 type Command struct {
-	name        string
-	description string
-	arguments   string
-	runner      Runner
-	flags       *FlagSet
-	opts        options
+	name            string
+	description     string
+	arguments       []string
+	argumentDetails []string
+	runner          Runner
+	flags           *FlagSet
+	opts            options
 }
 
 // NewCommand returns a new instance of Command.
@@ -289,11 +300,40 @@ func NewCommandLevel(name string, subcmds *CommandSet) *Command {
 	return cmd
 }
 
+func splitArgument(arg, sep string) (name, detail string) {
+	idx := strings.Index(arg, sep)
+	if idx < 0 {
+		return arg, ""
+	}
+	return strings.TrimSpace(arg[:idx]), strings.TrimSpace(arg[idx+len(sep):])
+}
+
+func splitArguments(args []string, sep string) (names, details []string) {
+	var dl []string
+	max := 0
+	for _, arg := range args {
+		n, d := splitArgument(arg, sep)
+		names = append(names, n)
+		dl = append(dl, d)
+		if len(n) > max {
+			max = len(n)
+		}
+	}
+	for i, d := range dl {
+		if len(d) == 0 {
+			continue
+		}
+		detail := fmt.Sprintf("%*s%s%s", max, names[i], sep, d)
+		details = append(details, detail)
+	}
+	return names, details
+}
+
 // Document adds a description of the command and optionally descriptions
 // of its arguments.
 func (cmd *Command) Document(description string, arguments ...string) {
 	cmd.description = description
-	cmd.arguments = strings.Join(arguments, " ")
+	cmd.arguments, cmd.argumentDetails = splitArguments(arguments, " - ")
 }
 
 func namesAndDefault(name string, fs *flag.FlagSet) string {
@@ -312,13 +352,17 @@ func namesAndDefault(name string, fs *flag.FlagSet) string {
 // its flags and arguments and the flag defaults.
 func (cmd *Command) Usage() string {
 	out := &strings.Builder{}
-	fmt.Fprintf(out, "Usage of command %v", cmd.name)
+	fmt.Fprintf(out, "Usage of command %q", cmd.name)
 	if len(cmd.description) > 0 {
 		fmt.Fprintf(out, ": %v", cmd.description)
 	}
 	out.WriteString("\n")
-	fs := cmd.flags.flagSet
-	cl := namesAndDefault(cmd.name, fs)
+	var fs *flag.FlagSet
+	cl := cmd.name
+	if cmd.flags != nil {
+		fs = cmd.flags.flagSet
+		cl = namesAndDefault(cmd.name, fs)
+	}
 	out.WriteString(cl)
 	if sc := cmd.opts.subcmds; sc != nil {
 		fmt.Fprintf(out, " %v ...", strings.Join(sc.Commands(), "|"))
@@ -326,10 +370,15 @@ func (cmd *Command) Usage() string {
 		if len(cl) > 0 {
 			out.WriteString(" ")
 		}
-		out.WriteString(args)
+		out.WriteString(strings.Join(args, " "))
 	}
 	out.WriteString("\n")
-	fmt.Fprintf(out, "\n%s\n", printDefaults(cmd.flags.flagSet))
+	for _, detail := range cmd.argumentDetails {
+		fmt.Fprintf(out, "  %s\n", detail)
+	}
+	if fs != nil {
+		fmt.Fprintf(out, "\n%s\n", printDefaults(fs))
+	}
 	return out.String()
 }
 

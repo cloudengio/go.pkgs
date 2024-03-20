@@ -23,8 +23,8 @@ func buildTree(cmdDict map[string]*Command, parent string, defs []commandDef) []
 			cmd := &Command{
 				name:        def.Name,
 				description: def.Summary,
-				arguments:   strings.Join(def.Arguments, " "),
 			}
+			cmd.arguments, cmd.argumentDetails = splitArguments(def.Arguments, " - ")
 			fn := determineOptForArgs(def.Arguments)
 			fn(&cmd.opts)
 			cmdDict[pathName] = cmd
