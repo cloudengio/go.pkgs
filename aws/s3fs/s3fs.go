@@ -120,8 +120,9 @@ func (s3fs *T) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	}, nil
 }
 
+// ReadLink is not implemented for S3, ie. returns file.ErrNotImplemented.
 func (s3fs *T) Readlink(_ context.Context, _ string) (string, error) {
-	return "", fmt.Errorf("Readlink is not implemented for s3")
+	return "", file.ErrNotImplemented
 }
 
 // Stat invokes a Head operation on objects only. If name ends in /
