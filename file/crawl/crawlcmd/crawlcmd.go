@@ -151,7 +151,7 @@ func (c *Crawler) run(ctx context.Context, downloads string) error {
 	go func() {
 		for err := range extractorErrCh {
 			if len(err.Errors) > 0 {
-				log.Printf("extractor error: %v\n", err)
+				log.Printf("crawl: extractor error: %v\n", err)
 			}
 		}
 	}()
@@ -168,7 +168,7 @@ func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawle
 
 	written := 0
 	defer func() {
-		log.Printf("total written: %v", written)
+		log.Printf("crawl: total written: %v", written)
 	}()
 
 	for crawled := range crawledCh {
@@ -184,18 +184,18 @@ func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawle
 		for _, obj := range objs {
 			dld := obj.Response
 			if dld.Err != nil {
-				log.Printf("download error: %v: %v\n", dld.Name, dld.Err)
+				log.Printf("crawl: download error: %v: %v\n", dld.Name, dld.Err)
 				continue
 			}
 			prefix, suffix := sharder.Assign(name + dld.Name)
 			prefix = join(downloads, prefix)
 			if err := obj.Store(ctx, c.cache, prefix, suffix, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
-				log.Printf("failed to write: %v as prefix: %v, suffix: %v: %v\n", dld.Name, prefix, suffix, err)
+				log.Printf("crawl: failed to write: %v as prefix: %v, suffix: %v: %v\n", dld.Name, prefix, suffix, err)
 				continue
 			}
 			written++
 			if written%100 == 0 {
-				log.Printf("written: %v", written)
+				log.Printf("crawl: written: %v", written)
 			}
 		}
 	}
