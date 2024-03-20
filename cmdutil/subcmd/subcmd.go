@@ -101,6 +101,16 @@
 //  3. If there is a single item in the list and it is enclosed
 //     in [] (in a quoted string), then 0 or 1 arguments are expected.
 //
+// Note that the arguments may be structured into a short form name and a
+// description, eg. arg - description, where ' - ' is used to separate
+// the short form and description. The usage displayed will use the
+// short form name to display a summary of the command line and the description
+// will be detailed below, eg:
+//
+//	my-command <arg1> <arg2>
+//	  <arg1> - description of arg1
+//	  <arg2> - description of arg2
+//
 // To define a simple command line, with no sub-commands, specify only
 // the name:, summary: and arguments: fields.
 //
@@ -309,8 +319,11 @@ func splitArguments(args []string, sep string) (names, details []string) {
 			max = len(n)
 		}
 	}
-	for i, n := range names {
-		detail := fmt.Sprintf("%*s%s%s", max, n, sep, dl[i])
+	for i, d := range dl {
+		if len(d) == 0 {
+			continue
+		}
+		detail := fmt.Sprintf("%*s%s%s", max, names[i], sep, d)
 		details = append(details, detail)
 	}
 	return names, details
@@ -344,8 +357,12 @@ func (cmd *Command) Usage() string {
 		fmt.Fprintf(out, ": %v", cmd.description)
 	}
 	out.WriteString("\n")
-	fs := cmd.flags.flagSet
-	cl := namesAndDefault(cmd.name, fs)
+	var fs *flag.FlagSet
+	cl := cmd.name
+	if cmd.flags != nil {
+		fs = cmd.flags.flagSet
+		cl = namesAndDefault(cmd.name, fs)
+	}
 	out.WriteString(cl)
 	if sc := cmd.opts.subcmds; sc != nil {
 		fmt.Fprintf(out, " %v ...", strings.Join(sc.Commands(), "|"))
@@ -359,7 +376,9 @@ func (cmd *Command) Usage() string {
 	for _, detail := range cmd.argumentDetails {
 		fmt.Fprintf(out, "  %s\n", detail)
 	}
-	fmt.Fprintf(out, "\n%s\n", printDefaults(cmd.flags.flagSet))
+	if fs != nil {
+		fmt.Fprintf(out, "\n%s\n", printDefaults(fs))
+	}
 	return out.String()
 }
 

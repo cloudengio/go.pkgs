@@ -29,8 +29,8 @@ commands:
   - name: l0.1
     summary: l0.1 documentation for l0.1
     arguments:
-      - <arg1>
-      - <arg2>
+      - <arg1> - arg 1
+      - <arg2> - arg 2
   - name: l0.2
     summary: l0.2 documentation for l0.2
     arguments:
@@ -337,5 +337,55 @@ func TestErrors(t *testing.T) {
 	err := cmdSet.Set("l0.1").Runner(r.cmd, &notastruct)
 	if err == nil || err.Error() != "*int is not a pointer to a struct" {
 		t.Errorf("missing or wrong error: %v", err)
+	}
+}
+
+func TestArgDetail(t *testing.T) {
+	cmdSet := subcmd.MustFromYAML(`name: l0
+summary: documentation for l0
+commands:
+  - name: l0.1
+    summary: summary of l0.1
+    arguments:
+      - <arg1> - arg 1
+      - <arg2> - arg 2
+  - name: l1
+    summary: summary of l1
+    commands:
+      - name: l1.1
+        summary: summary of l1.1
+        arguments:
+          - <arg1> - arg 1
+          - ...
+  - name: l2
+    summary: summary of l2
+    commands:
+      - name: l2.1
+        commands:
+          - name: l2.1.1
+            arguments:
+              - <arg1> - arg 1
+`)
+
+	if got, want := cmdSet.Usage("l0.1"), `Usage of command "l0.1": summary of l0.1
+l0.1 <arg1> <arg2>
+  <arg1> - arg 1
+  <arg2> - arg 2
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := cmdSet.Usage("l1/l1.1"), `Usage of command "l1.1": summary of l1.1
+l1.1 <arg1> ...
+  <arg1> - arg 1
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := cmdSet.Usage("l2/l2.1/l2.1.1"), `Usage of command "l2.1.1"
+l2.1.1 <arg1>
+  <arg1> - arg 1
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
