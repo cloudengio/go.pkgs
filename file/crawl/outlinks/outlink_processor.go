@@ -80,6 +80,9 @@ func matchRegexps(regexps []*regexp.Regexp, outlink string) bool {
 func (cfg *RegexpProcessor) Process(outlinks []string) []string {
 	out := make([]string, 0, len(outlinks))
 	for _, outlink := range outlinks {
+		if len(outlink) == 0 {
+			continue
+		}
 		if outlink[0] == '#' {
 			continue
 		}
