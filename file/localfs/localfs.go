@@ -10,18 +10,37 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"cloudeng.io/file"
 )
 
 // T represents the local filesystem. It implements FS, ObjectFS
 // and filewalk.FS
-type T struct{}
+type T struct {
+	opts options
+}
+
+type Option func(o *options)
+
+type options struct {
+	scannerOpenWait time.Duration
+}
+
+func WithScannerOpenWait(d time.Duration) Option {
+	return func(o *options) {
+		o.scannerOpenWait = d
+	}
+}
 
 // NewLocalFS returns an instance of file.FS that provides access to the
 // local filesystem.
-func New() *T {
-	return &T{}
+func New(opts ...Option) *T {
+	t := &T{}
+	for _, fn := range opts {
+		fn(&t.opts)
+	}
+	return t
 }
 
 func (f *T) Open(name string) (fs.File, error) {
