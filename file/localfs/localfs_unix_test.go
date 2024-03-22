@@ -8,8 +8,10 @@ package localfs_test
 
 import (
 	"context"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/localfs"
@@ -56,5 +58,21 @@ func TestMergeXAttr(t *testing.T) {
 	}
 	if got, want := stat.Blksize, osStat.Blksize; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestWait(t *testing.T) {
+	tmpdir := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	// Impossibly short timeout.
+	fs := localfs.New(localfs.WithScannerOpenWait(time.Nanosecond))
+	sc := fs.LevelScanner(tmpdir)
+	if sc.Scan(ctx, 1) {
+		t.Errorf("expected scan to fail")
+	}
+	err := sc.Err()
+	if err == nil || !strings.Contains(err.Error(), "took too long") {
+		t.Errorf("missing or wrong error: %v", err)
 	}
 }
