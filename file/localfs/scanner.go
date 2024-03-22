@@ -16,10 +16,11 @@ import (
 )
 
 type scanner struct {
-	path    string
-	err     error
-	file    *os.File
-	entries []fs.DirEntry
+	path     string
+	openWait time.Duration
+	err      error
+	file     *os.File
+	entries  []fs.DirEntry
 }
 
 func (s *scanner) Contents() []filewalk.Entry {
@@ -39,7 +40,7 @@ func (s *scanner) Scan(ctx context.Context, n int) bool {
 	default:
 	}
 	if s.file == nil {
-		if !s.open(ctx, s.path) {
+		if !s.open(ctx, s.path, s.openWait) {
 			return false
 		}
 	}
@@ -66,7 +67,11 @@ type openState struct {
 	err  error
 }
 
-func (s *scanner) open(ctx context.Context, path string) bool {
+func (s *scanner) open(ctx context.Context, path string, waitDuration time.Duration) bool {
+	if waitDuration == 0 {
+		s.file, s.err = os.Open(path)
+		return s.err == nil
+	}
 	ch := make(chan openState, 1)
 	start := time.Now()
 	go func() {
@@ -80,18 +85,18 @@ func (s *scanner) open(ctx context.Context, path string) bool {
 		return false
 	case state := <-ch:
 		s.file, s.err = state.file, state.err
-	case <-time.After(time.Minute):
-		s.err = fmt.Errorf("os.Open took too %v long for: %v", time.Since(start), path)
+	case <-time.After(waitDuration):
+		s.err = fmt.Errorf("os.Open took too long for: %v: %v", time.Since(start), path)
 	}
 	return s.err == nil
 }
 
-func NewLevelScanner(path string) filewalk.LevelScanner {
-	return &scanner{path: path}
+func NewLevelScanner(path string, openwait time.Duration) filewalk.LevelScanner {
+	return &scanner{path: path, openWait: openwait}
 }
 
 func (f *T) LevelScanner(prefix string) filewalk.LevelScanner {
-	return NewLevelScanner(prefix)
+	return NewLevelScanner(prefix, f.opts.scannerOpenWait)
 }
 
 func newContents(des []fs.DirEntry) []filewalk.Entry {
