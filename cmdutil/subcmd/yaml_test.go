@@ -244,8 +244,8 @@ commands:
       - <arg1>
       - <arg2>
   - name: c4
-    arguments: # zero or 1.
-      - "[optional]"
+    arguments: # zero or 1, ie. at most one.
+      - '[optional]'
   - name: c5
     arguments: # at least zero
       - ...
@@ -258,10 +258,26 @@ commands:
     arguments: # at least two
       - <arg1>
       - <opt>...
-`)
+  - name: c8
+    arguments: # zero or 1, ie. at most one.
+      - |
+        "[optional]" - with an explanation
+  - name: c9
+    arguments: # at least zero
+      - ... - with an explanation
+  - name: c10
+    arguments: # at least two
+      - <arg1>
+      - <arg2>
+      - ... - with an explanation
+  - name: c11
+    arguments: # at least two
+      - <arg1>
+      - <opt>... - with an explanation
+  `)
 
 	out := &strings.Builder{}
-	for _, name := range []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7"} {
+	for _, name := range []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10", "c11"} {
 		cmdSet.Set(name).MustRunner(
 			(&runner{name: name, out: out}).cmd,
 			&exampleFlags{})
@@ -286,22 +302,33 @@ commands:
 	assertError("c3: accepts exactly 2 arguments")
 	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c4", "1", "2")
 	assertError("c4: accepts at most one argument")
-	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c5", "1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c5", "2")
-	if err != nil {
-		t.Fatal(err)
+	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c8", "1", "2")
+	assertError("c8: accepts at most one argument")
+
+	for _, c := range []string{"c5", "c9"} {
+		err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], c, "1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], c, "1", "2")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c6", "1")
 	assertError("c6: accepts at least 2 arguments")
 	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c7")
 	assertError("c7: accepts at least 1 argument")
+
+	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c10", "1")
+	assertError("c10: accepts at least 2 arguments")
+	err = cmdSet.DispatchWithArgs(context.Background(), os.Args[0], "c11")
+	assertError("c11: accepts at least 1 argument")
+
 }
 
 func gorun(t *testing.T, file string, args []string) string {
