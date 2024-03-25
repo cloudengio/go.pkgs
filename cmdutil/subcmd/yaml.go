@@ -15,7 +15,7 @@ import (
 // use to separate command names at different levels.
 const levelSep = "/"
 
-func buildTree(cmdDict map[string]*Command, parent string, defs []commandDef) []*Command {
+func buildTree(cmdDict map[string]*Command, parent, sep string, defs []commandDef) []*Command {
 	cmds := make([]*Command, len(defs))
 	for i, def := range defs {
 		pathName := strings.TrimPrefix(parent+levelSep+def.Name, levelSep)
@@ -25,13 +25,13 @@ func buildTree(cmdDict map[string]*Command, parent string, defs []commandDef) []
 				description: def.Summary,
 			}
 			cmd.arguments, cmd.argumentDetails = splitArguments(def.Arguments, " - ")
-			fn := determineOptForArgs(def.Arguments)
+			fn := determineOptForArgs(def.Arguments, sep)
 			fn(&cmd.opts)
 			cmdDict[pathName] = cmd
 			cmds[i] = cmd
 			continue
 		}
-		cmdSet := NewCommandSet(buildTree(cmdDict, parent+levelSep+def.Name, def.Commands)...)
+		cmdSet := NewCommandSet(buildTree(cmdDict, parent+levelSep+def.Name, sep, def.Commands)...)
 		cmds[i] = NewCommandLevel(def.Name, cmdSet)
 		cmds[i].Document(def.Summary, def.Arguments...)
 		cmdDict[pathName] = cmds[i]
@@ -127,6 +127,7 @@ func SanitizeYAML(spec string) string {
 
 // FromYAML parses a YAML specification of the command tree.
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
+	sep := " - "
 	var yamlCmd commandDef
 	if err := cmdyaml.ParseConfig(spec, &yamlCmd); err != nil {
 		return nil, err
@@ -134,11 +135,11 @@ func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	cmdSet := &CommandSetYAML{
 		cmdDict: map[string]*Command{},
 	}
-	tlcmd := NewCommand(yamlCmd.Name, nil, nil, determineOptForArgs(yamlCmd.Arguments))
+	tlcmd := NewCommand(yamlCmd.Name, nil, nil, determineOptForArgs(yamlCmd.Arguments, sep))
 	tlcmd.Document(yamlCmd.Summary, yamlCmd.Arguments...)
 	cmdSet.cmdDict[yamlCmd.Name] = tlcmd
 	if yamlCmd.Commands != nil {
-		cmds := buildTree(cmdSet.cmdDict, "", yamlCmd.Commands)
+		cmds := buildTree(cmdSet.cmdDict, "", sep, yamlCmd.Commands)
 		cmdSet.CommandSet = NewCommandSet(cmds...)
 		cmdSet.document = yamlCmd.Summary
 		tlcmd.flags = &FlagSet{}
@@ -150,16 +151,19 @@ func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	return cmdSet, nil
 }
 
-func determineOptForArgs(args []string) CommandOption {
+func determineOptForArgs(args []string, sep string) CommandOption {
 	if len(args) == 0 {
 		return WithoutArguments()
 	}
-	if args[len(args)-1] == "..." || strings.HasSuffix(args[len(args)-1], "...") {
+	last := args[len(args)-1]
+	name, _ := splitArgument(last, sep)
+	if name == "..." || strings.HasSuffix(name, "...") {
 		return AtLeastNArguments(len(args) - 1)
 	}
 	if len(args) == 1 {
-		a := args[0]
-		if a[0] == '[' && a[len(a)-1] == ']' {
+		name, _ := splitArgument(args[0], sep)
+		name = strings.Trim(name, `"'`)
+		if name[0] == '[' && name[len(name)-1] == ']' {
 			return OptionalSingleArgument()
 		}
 	}
