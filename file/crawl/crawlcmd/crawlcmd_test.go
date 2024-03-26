@@ -97,7 +97,7 @@ func TestCrawlCmd(t *testing.T) {
 			},
 		})
 
-	downloads, _ := config.Cache.Paths()
+	downloads := config.Cache.DownloadPath()
 	if err := config.Cache.PrepareDownloads(ctx, writeFS); err != nil {
 		t.Fatal(err)
 	}
