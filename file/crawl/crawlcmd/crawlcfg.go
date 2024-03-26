@@ -78,16 +78,21 @@ type CrawlCacheConfig struct {
 	ServiceConfig     yaml.Node `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
 }
 
-// Paths returns the downloads and checkpoint paths expanded using os.ExpandEnv.
-func (c CrawlCacheConfig) Paths() (downloads, checkpoint string) {
-	return os.ExpandEnv(c.Downloads), os.ExpandEnv(c.Checkpoint)
+// DownloadPath returns the expanded downloads path.
+func (c CrawlCacheConfig) DownloadPath() string {
+	return os.ExpandEnv(c.Downloads)
+}
+
+// CheckpointPath returns the expanded checkpoint path.
+func (c CrawlCacheConfig) CheckpointPath() string {
+	return os.ExpandEnv(c.Checkpoint)
 }
 
 // PrepareDownloads ensures that the cache directory exists and is empty if
 // ClearBeforeCrawl is true. It returns an error if the directory cannot be
 // created or cleared.
 func (c CrawlCacheConfig) PrepareDownloads(ctx context.Context, fs content.FS) error {
-	dl := os.ExpandEnv(c.Downloads)
+	dl := c.DownloadPath()
 	if c.ClearBeforeCrawl && len(dl) > 0 {
 		if err := fs.DeleteAll(ctx, dl); err != nil {
 			return err

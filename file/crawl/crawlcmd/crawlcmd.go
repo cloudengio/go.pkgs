@@ -68,8 +68,7 @@ func (c *Crawler) Run(ctx context.Context,
 	c.displayOutlinks = displayOutlinks
 	c.displayProgress = displayProgress
 	c.cache = stores.New(cfs, c.config.Cache.Concurrency)
-	downloads, _ := c.config.Cache.Paths()
-	return c.run(ctx, downloads)
+	return c.run(ctx, c.config.Cache.DownloadPath())
 }
 
 func displayProgress(ctx context.Context, name string, progress <-chan download.Progress) {
