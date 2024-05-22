@@ -79,14 +79,17 @@ func (s *scanner) open(ctx context.Context, path string, waitDuration time.Durat
 		f, err := os.Open(path)
 		ch <- openState{file: f, err: err}
 	}()
+	after := time.NewTimer(waitDuration)
 	select {
 	case <-ctx.Done():
 		s.err = ctx.Err()
-		return false
 	case state := <-ch:
 		s.file, s.err = state.file, state.err
-	case <-time.After(waitDuration):
+	case <-after.C:
 		s.err = fmt.Errorf("os.Open took too long for: %v: %v", time.Since(start), path)
+	}
+	if !after.Stop() {
+		<-after.C
 	}
 	return s.err == nil
 }
