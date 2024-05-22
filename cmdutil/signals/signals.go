@@ -75,7 +75,7 @@ func (h *Handler) WaitForSignal() os.Signal {
 //	   ....
 //	   handler.RegisterCancel(func() { ... })
 //	   ...
-//	   defer hanlder.WaitForSignal() // wait for a signal or context cancelation.
+//	   defer handler.WaitForSignal() // wait for a signal or context cancelation.
 //	 }
 //
 // If a second, different, signal is received then os.Exit(ExitCode) is called.
