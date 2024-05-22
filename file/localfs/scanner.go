@@ -72,6 +72,10 @@ func (s *scanner) open(ctx context.Context, path string, waitDuration time.Durat
 		s.file, s.err = os.Open(path)
 		return s.err == nil
 	}
+	return s.openTimed(ctx, path, waitDuration)
+}
+
+func (s *scanner) openTimed(ctx context.Context, path string, waitDuration time.Duration) bool {
 	ch := make(chan openState, 1)
 	start := time.Now()
 	go func() {
@@ -83,14 +87,18 @@ func (s *scanner) open(ctx context.Context, path string, waitDuration time.Durat
 	select {
 	case <-ctx.Done():
 		s.err = ctx.Err()
+		if !after.Stop() {
+			<-after.C
+		}
 	case state := <-ch:
 		s.file, s.err = state.file, state.err
+		if !after.Stop() {
+			<-after.C
+		}
 	case <-after.C:
 		s.err = fmt.Errorf("os.Open took too long for: %v: %v", time.Since(start), path)
 	}
-	if !after.Stop() {
-		<-after.C
-	}
+
 	return s.err == nil
 }
 
