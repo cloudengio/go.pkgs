@@ -7,6 +7,7 @@ package webapp
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -52,7 +53,7 @@ type HTTPServerFlags struct {
 // supplied storeOpts are passed to TLSConfigUsingCertStore.
 func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, storeOpts ...interface{}) (*tls.Config, error) {
 	if cl.ListStoreTypes {
-		return nil, fmt.Errorf(strings.Join(RegisteredCertStores(), "\n"))
+		return nil, errors.New(strings.Join(RegisteredCertStores(), "\n"))
 	}
 	useCache := len(cl.CertStoreType) > 0 || len(cl.CertStore) > 0
 	useFiles := len(cl.CertificateFile) > 0 || len(cl.KeyFile) > 0

@@ -113,7 +113,7 @@ func newAutoCertCacheFromFlags(ctx context.Context, cl webapp.TLSCertStoreFlags,
 		opts = append(opts, awscertstore.WithAWSConfig(awscfg))
 	}
 	if cl.ListStoreTypes {
-		return nil, fmt.Errorf(strings.Join(webapp.RegisteredCertStores(), "\n"))
+		return nil, errors.New(strings.Join(webapp.RegisteredCertStores(), "\n"))
 	}
 	var cache autocert.Cache
 	switch {
