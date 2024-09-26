@@ -11,11 +11,11 @@ import (
 
 type rfs struct{}
 
-func (rfs) Open(name string) (fs.File, error) {
+func (rfs) Open(_ string) (fs.File, error) {
 	return nil, nil
 }
 
-func (rfs) ReadFile(name string) ([]byte, error) {
+func (rfs) ReadFile(_ string) ([]byte, error) {
 	return []byte(`- key_id: "123"
   user: user1
   token: token1
