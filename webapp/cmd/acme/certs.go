@@ -13,6 +13,7 @@ import (
 	"cloudeng.io/aws/awscertstore"
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/cmdutil/subcmd"
+	"cloudeng.io/errors"
 	"cloudeng.io/webapp"
 )
 
@@ -41,7 +42,7 @@ func certSubCmd() *subcmd.Command {
 
 func newCertStore(ctx context.Context, cl webapp.TLSCertStoreFlags, awscl awsconfig.AWSFlags) (webapp.CertStore, error) {
 	if cl.ListStoreTypes {
-		return nil, fmt.Errorf(strings.Join(webapp.RegisteredCertStores(), "\n"))
+		return nil, errors.New(strings.Join(webapp.RegisteredCertStores(), "\n"))
 	}
 	if !awscl.AWS {
 		return webapp.NewCertStore(ctx, cl.CertStoreType, cl.CertStore)

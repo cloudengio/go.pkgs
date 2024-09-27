@@ -25,9 +25,9 @@ func ExampleCallTrace() {
 	for i := 0; i < n; i++ {
 		ct := ct.GoLogf(1, "goroutine launch")
 		go func(i int) {
-			ct.Logf(1, fmt.Sprintf("inside goroutine %v", i))
+			ct.Logf(1, "%s", fmt.Sprintf("inside goroutine %v", i))
 			wg.Done()
-			ct.Logf(1, fmt.Sprintf("inside goroutine %v", i))
+			ct.Logf(1, "%s", fmt.Sprintf("inside goroutine %v", i))
 		}(i)
 	}
 	wg.Wait()

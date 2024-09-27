@@ -9,7 +9,6 @@ replace cloudeng.io/webapp => ../..
 require github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693
 
 require (
-	cloudeng.io/file v0.0.0-20240214044655-223c29824207 // indirect
-	golang.org/x/crypto v0.19.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
