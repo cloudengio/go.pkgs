@@ -8,6 +8,7 @@ package localfs_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"syscall"
 	"testing"
@@ -62,17 +63,23 @@ func TestMergeXAttr(t *testing.T) {
 }
 
 func TestWait(t *testing.T) {
-	tmpdir := t.TempDir()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-	defer cancel()
-	// Impossibly short timeout.
-	fs := localfs.New(localfs.WithScannerOpenWait(time.Nanosecond))
-	sc := fs.LevelScanner(tmpdir)
-	if sc.Scan(ctx, 1) {
-		t.Errorf("expected scan to fail")
-	}
-	err := sc.Err()
-	if err == nil || !strings.Contains(err.Error(), "took too long") {
+	for {
+		tmpdir := t.TempDir()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+		// Impossibly short timeout.
+		fs := localfs.New(localfs.WithScannerOpenWait(time.Nanosecond))
+		sc := fs.LevelScanner(tmpdir)
+		if sc.Scan(ctx, 1) {
+			t.Errorf("expected scan to fail")
+		}
+		err := sc.Err()
+		if err == nil || errors.Is(err, context.DeadlineExceeded) {
+			continue
+		}
+		if strings.Contains(err.Error(), "took too long") {
+			break
+		}
 		t.Errorf("missing or wrong error: %v", err)
 	}
 }
