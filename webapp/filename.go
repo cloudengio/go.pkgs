@@ -5,7 +5,7 @@
 package webapp
 
 import (
-	"fmt"
+	"errors"
 	"regexp"
 )
 
@@ -32,7 +32,7 @@ var (
 func SafePath(path string) error {
 	for _, rule := range rules {
 		if rule.re.MatchString(path) {
-			return fmt.Errorf(rule.err)
+			return errors.New(rule.err)
 		}
 	}
 	return nil

@@ -79,7 +79,7 @@ func (s *scanner) openTimed(ctx context.Context, path string, waitDuration time.
 	ch := make(chan openState, 1)
 	start := time.Now()
 	go func() {
-		// This will leak a gorooutine if os.Open hangs.
+		// This will leak a goroutine if os.Open hangs.
 		f, err := os.Open(path)
 		ch <- openState{file: f, err: err}
 	}()
