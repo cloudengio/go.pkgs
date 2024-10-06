@@ -8,10 +8,10 @@ package keychain
 
 import "errors"
 
-func WriteSecureNote(account, service string, data []byte) error {
+func WriteSecureNote(_, _ string, _ []byte) error {
 	return errors.New("not implemented on this platform")
 }
 
-func ReadSecureNote(account, service string) ([]byte, error) {
+func ReadSecureNote(_, _ string) ([]byte, error) {
 	return nil, errors.New("not implemented on this platform")
 }
