@@ -8,8 +8,11 @@ package keychainfs
 
 import (
 	"bytes"
+	"context"
 	"io/fs"
+	"net/url"
 	"os/user"
+	"strings"
 	"time"
 
 	"cloudeng.io/file"
@@ -21,12 +24,14 @@ type SecureNoteFS struct {
 	options
 }
 
+// Option provides options for configuring a SecureNoteFS.
 type Option func(*options)
 
 type options struct {
 	account string
 }
 
+// DefaultAccount returns the current user's account name.
 func DefaultAccount() string {
 	user, err := user.Current()
 	if err != nil {
@@ -39,12 +44,14 @@ func defaultOptions(o *options) {
 	o.account = DefaultAccount()
 }
 
+// WithAccount specifies the account name to use with New.
 func WithAccount(account string) Option {
 	return func(o *options) {
 		o.account = account
 	}
 }
 
+// New creates a new SecureNoteFS.
 func New(opts ...Option) *SecureNoteFS {
 	fs := &SecureNoteFS{}
 	defaultOptions(&fs.options)
@@ -52,6 +59,14 @@ func New(opts ...Option) *SecureNoteFS {
 		fn(&fs.options)
 	}
 	return fs
+}
+
+// NewFromURL creates a new context containing a SecureNoteFS based on the
+// supplied URL and the name of the note within the keychain.
+// The URL should be of the form keychain:///note?account=accountname
+func NewFromURL(ctx context.Context, u url.URL) (nctx context.Context, notename string) {
+	kcfs := New(WithAccount(u.Query().Get("account")))
+	return file.ContextWithFS(ctx, kcfs), strings.TrimPrefix(u.Path, "/")
 }
 
 func (fs *SecureNoteFS) Open(name string) (fs.File, error) {
