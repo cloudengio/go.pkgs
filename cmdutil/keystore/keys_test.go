@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"cloudeng.io/cmdutil/keystore"
+	"cloudeng.io/file"
 )
 
 type rfs struct{}
@@ -26,7 +27,9 @@ func (rfs) ReadFile(string) ([]byte, error) {
 }
 
 func TestParse(t *testing.T) {
-	am, err := keystore.ParseFile(&rfs{}, "filename")
+	ctx := context.Background()
+	ctx = file.ContextWithFS(ctx, &rfs{})
+	am, err := keystore.ParseConfigFile(ctx, "filename")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
