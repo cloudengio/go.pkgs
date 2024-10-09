@@ -51,8 +51,8 @@ func WithAccount(account string) Option {
 	}
 }
 
-// New creates a new SecureNoteFS.
-func New(opts ...Option) *SecureNoteFS {
+// NewSecureNoteFS creates a new SecureNoteFS.
+func NewSecureNoteFS(opts ...Option) *SecureNoteFS {
 	fs := &SecureNoteFS{}
 	defaultOptions(&fs.options)
 	for _, fn := range opts {
@@ -61,11 +61,11 @@ func New(opts ...Option) *SecureNoteFS {
 	return fs
 }
 
-// NewFromURL creates a new context containing a SecureNoteFS based on the
+// NewSecureNoteFSFromURL creates a new context containing a new SecureNoteFS based on the
 // supplied URL and the name of the note within the keychain.
 // The URL should be of the form keychain:///note?account=accountname
-func NewFromURL(ctx context.Context, u url.URL) (nctx context.Context, notename string) {
-	kcfs := New(WithAccount(u.Query().Get("account")))
+func NewSecureNoteFSFromURL(ctx context.Context, u *url.URL) (nctx context.Context, notename string) {
+	kcfs := NewSecureNoteFS(WithAccount(u.Query().Get("account")))
 	return file.ContextWithFS(ctx, kcfs), strings.TrimPrefix(u.Path, "/")
 }
 
