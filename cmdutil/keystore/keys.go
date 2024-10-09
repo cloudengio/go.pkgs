@@ -3,7 +3,6 @@ package keystore
 import (
 	"context"
 	"fmt"
-	"io/fs"
 
 	"cloudeng.io/cmdutil/cmdyaml"
 )
@@ -23,22 +22,25 @@ func (k KeyInfo) String() string {
 	return k.ID + "[" + k.User + "]	"
 }
 
-// ParseFile parses an auth file into an AuthInfo map and stores that
-// in the returned context. The file may be stored in any
-func ParseFile(fs fs.ReadFileFS, filename string) (Keys, error) {
-	data, err := fs.ReadFile(filename)
-	if err != nil {
+// ParseConfigFile calls cmdyaml.ParseConfigFile for Keys.
+func ParseConfigFile(ctx context.Context, filename string) (Keys, error) {
+	var auth []KeyInfo
+	if err := cmdyaml.ParseConfigFile(ctx, filename, &auth); err != nil {
 		return nil, err
 	}
-	return Parse(data)
+	return newKeys(auth)
 }
 
-// Parse parses the supplied data into an AuthInfo map.
-func Parse(data []byte) (Keys, error) {
+// ParseConfigURI calls cmdyaml.ParseConfigURI for Keys.
+func ParseConfigURI(ctx context.Context, filename string, handlers map[string]cmdyaml.URLHandler) (Keys, error) {
 	var auth []KeyInfo
-	if err := cmdyaml.ParseConfig(data, &auth); err != nil {
+	if err := cmdyaml.ParseConfigURI(ctx, filename, &auth, handlers); err != nil {
 		return nil, err
 	}
+	return newKeys(auth)
+}
+
+func newKeys(auth []KeyInfo) (Keys, error) {
 	am := Keys{}
 	for _, a := range auth {
 		if a.ID == "" {
@@ -53,6 +55,15 @@ func Parse(data []byte) (Keys, error) {
 		am[a.ID] = a
 	}
 	return am, nil
+}
+
+// Parse parses the supplied data into an AuthInfo map.
+func Parse(data []byte) (Keys, error) {
+	var auth []KeyInfo
+	if err := cmdyaml.ParseConfig(data, &auth); err != nil {
+		return nil, err
+	}
+	return newKeys(auth)
 }
 
 type ctxKey struct{}
