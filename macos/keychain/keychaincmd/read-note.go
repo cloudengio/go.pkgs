@@ -23,10 +23,10 @@ func main() {
 	flag.Parse()
 
 	for _, arg := range flag.Args() {
-		fs := keychainfs.New(keychainfs.WithAccount(account))
+		fs := keychainfs.NewSecureNoteFS(keychainfs.WithAccount(account))
 		data, err := fs.ReadFile(arg)
 		if err != nil {
-			fmt.Printf("error: secure note %v: %v\n", arg, err)
+			fmt.Printf("error: secure note %q: %v\n", arg, err)
 			return
 		}
 		fmt.Print(string(data))
