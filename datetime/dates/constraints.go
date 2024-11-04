@@ -9,31 +9,24 @@ import (
 	"time"
 )
 
-// DateConstraints represents constraints on date values such
+// Constraints represents constraints on date values such
 // as weekends or custom dates. Custom dates take precedence
 // over weekdays and weekends.
-type DateConstraints struct {
-	Weekdays      bool     // If true, include weekdays
-	Weekends      bool     // If true, include weekends
-	ExcludeCustom bool     // If true, exclude custom dates
-	Custom        DateList // If non-empty, include these dates
+type Constraints struct {
+	Weekdays       bool             `yaml:"weekdays"`               // If true, include weekdays
+	Weekends       bool             `yaml:"weekends"`               // If true, include weekends
+	Custom         DateList         `yaml:"exclude_dates"`          // If non-empty, exclude these dates
+	CustomCalendar CalendarDateList `yaml:"exclude_calendar_dates"` // If non-empty, exclude these calendar dates
+	//ExcludeCustom bool `yaml:"exclude_custom"` // If true, exclude custom dates
 }
 
-func (dc DateConstraints) String() string {
+func (dc Constraints) String() string {
 	var out strings.Builder
-	if len(dc.Custom) > 0 {
-		if dc.ExcludeCustom {
-			out.WriteString("excluding custom dates: ")
-		} else {
-			out.WriteString("including custom dates: ")
-		}
-		for i, d := range dc.Custom {
-			if i > 0 && i < len(dc.Custom)-1 {
-				out.WriteString(", ")
-			}
-			out.WriteString(d.String())
-		}
-		out.WriteString(" : ")
+	if len(dc.Custom) > 0 || len(dc.CustomCalendar) > 0 {
+		out.WriteString("excluding custom dates: ")
+		out.WriteString(dc.Custom.String())
+		out.WriteString(dc.CustomCalendar.String())
+		out.WriteString(": ")
 	}
 	switch {
 	case dc.Weekdays && dc.Weekends:
@@ -50,23 +43,17 @@ func (dc DateConstraints) String() string {
 
 // Include returns true if the given date satisfies the constraints.
 // Custom dates are evaluated before weekdays and weekends.
-func (dc DateConstraints) Include(when time.Time) bool {
+// An empty set Constraints will return true, ie. include all dates.
+func (dc Constraints) Include(when time.Time) bool {
 	if len(dc.Custom) > 0 {
 		month, day := Month(when.Month()), when.Day()
-		if !dc.ExcludeCustom {
-			for _, d := range dc.Custom {
-				if d.Month == month && d.Day == day {
-					return true
-				}
-			}
-		} else {
-			for _, d := range dc.Custom {
-				if d.Month == month && d.Day == day {
-					return false
-				}
-			}
-			return true
-		}
+		contains := dc.Custom.Contains(Date{month, day})
+		return !contains
+	}
+	if len(dc.CustomCalendar) > 0 {
+		year, month, day := when.Year(), Month(when.Month()), when.Day()
+		contains := dc.CustomCalendar.Contains(CalendarDate{year, month, day})
+		return !contains
 	}
 	switch {
 	case dc.Weekdays && dc.Weekends:
@@ -76,5 +63,9 @@ func (dc DateConstraints) Include(when time.Time) bool {
 	case dc.Weekends:
 		return when.Weekday() == time.Sunday || when.Weekday() == time.Saturday
 	}
-	return false
+	return true
+}
+
+func (dc Constraints) Empty() bool {
+	return !dc.Weekdays && !dc.Weekends && len(dc.Custom) == 0 && len(dc.CustomCalendar) == 0
 }
