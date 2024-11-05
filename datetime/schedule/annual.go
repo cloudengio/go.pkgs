@@ -8,16 +8,16 @@ package schedule
 import (
 	"slices"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 )
 
 // Dates represents a set of dates expressed as a combination of
 // months, date ranges and constraints on those dates (eg. weekdays in March).
 type Dates struct {
-	For          dates.MonthList     // Whole months to include.
+	For          datetime.MonthList     // Whole months to include.
 	MirrorMonths bool                // Include the 'mirror' months of those in For.
-	Ranges       dates.DateRangeList // Include specific date ranges.
-	Constraints  dates.Constraints   // Constraints to be applied, such as weekdays/weekends etc.
+	Ranges       datetime.DateRangeList // Include specific date ranges.
+	Constraints  datetime.Constraints   // Constraints to be applied, such as weekdays/weekends etc.
 }
 
 func (d Dates) clone() Dates {
@@ -31,16 +31,16 @@ func (d Dates) clone() Dates {
 
 // EvaluateDateRanges returns the list of date ranges that are represented
 // by the totality of the information represented by Dates instance.
-func (d Dates) EvaluateDateRanges(year int) dates.DateRangeList {
+func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 	months := slices.Clone(d.For)
 	if d.MirrorMonths {
 		for _, m := range d.For {
-			months = append(months, dates.MirrorMonth(m))
+			months = append(months, datetime.MirrorMonth(m))
 		}
 	}
 	slices.Sort(months)
-	merged := dates.MergeMonthsAndRanges(year, months, d.Ranges)
-	drl := make(dates.DateRangeList, 0, len(merged))
+	merged := datetime.MergeMonthsAndRanges(year, months, d.Ranges)
+	drl := make(datetime.DateRangeList, 0, len(merged))
 	for _, r := range merged {
 		for dr := range r.RangesConstrained(year, d.Constraints) {
 			drl = append(drl, dr)
@@ -52,13 +52,13 @@ func (d Dates) EvaluateDateRanges(year int) dates.DateRangeList {
 // Active represents a set of actions that are 'active', ie. which are due
 // to be executed according to the schedule.
 type Active[T any] struct {
-	Date    dates.Date
+	Date    datetime.Date
 	Actions []Action[T] // Ordered by name.
 }
 
 // Action represents an event that the schedule should trigger at a specific day and time.
 type Action[T any] struct {
-	Due    dates.TimeOfDay
+	Due    datetime.TimeOfDay
 	Name   string
 	Action T
 }

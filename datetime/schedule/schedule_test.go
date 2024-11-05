@@ -9,23 +9,23 @@ import (
 	"strings"
 	"testing"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 	"cloudeng.io/datetime/schedule"
 )
 
-func parseDateRangeList(year int, s ...string) dates.DateRangeList {
+func parseDateRangeList(year int, s ...string) datetime.DateRangeList {
 	if len(s) == 0 || len(s[0]) == 0 {
-		return dates.DateRangeList{}
+		return datetime.DateRangeList{}
 	}
-	var dr dates.DateRangeList
+	var dr datetime.DateRangeList
 	if err := dr.Parse(year, s); err != nil {
 		panic(err)
 	}
 	return dr
 }
 
-func parseMontList(s string) dates.MonthList {
-	var ml dates.MonthList
+func parseMontList(s string) datetime.MonthList {
+	var ml datetime.MonthList
 	if err := ml.Parse(s); err != nil {
 		panic(err)
 	}
@@ -35,13 +35,13 @@ func parseMontList(s string) dates.MonthList {
 func TestDates(t *testing.T) {
 	pdrl := parseDateRangeList
 	pml := parseMontList
-	unconstrained := dates.Constraints{}
-	noFeb29 := dates.Constraints{Custom: []dates.Date{{Month: 2, Day: 29}}}
+	unconstrained := datetime.Constraints{}
+	noFeb29 := datetime.Constraints{Custom: []datetime.Date{{Month: 2, Day: 29}}}
 	for _, tc := range []struct {
 		monthsFor   string
 		mirror      bool
 		ranges      string
-		constraints dates.Constraints
+		constraints datetime.Constraints
 		year        int
 		expected    string
 	}{

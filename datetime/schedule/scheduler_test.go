@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 	"cloudeng.io/datetime/schedule"
 )
 
@@ -20,7 +20,7 @@ type testAction struct {
 
 func newActive[T any](mnth, day int, actions ...schedule.Action[T]) schedule.Active[T] {
 	return schedule.Active[T]{
-		Date:    dates.Date{Month: dates.Month(mnth), Day: day},
+		Date:    datetime.Date{Month: datetime.Month(mnth), Day: day},
 		Actions: actions,
 	}
 }
@@ -28,17 +28,17 @@ func newActive[T any](mnth, day int, actions ...schedule.Action[T]) schedule.Act
 func newAction[T any](name string, hour, min, sec int, action T) schedule.Action[T] {
 	return schedule.Action[T]{
 		Name:   name,
-		Due:    dates.TimeOfDay{Hour: hour, Minute: min, Second: sec},
+		Due:    datetime.TimeOfDay{Hour: hour, Minute: min, Second: sec},
 		Action: action,
 	}
 }
 
 func expectedActiveForMonth[T any](year, mnth int, actions ...schedule.Action[T]) []schedule.Active[T] {
-	days := dates.DaysInMonth(year, dates.Month(mnth))
+	days := datetime.DaysInMonth(year, datetime.Month(mnth))
 	r := make([]schedule.Active[T], days)
 	for i := range days {
 		r[i] = schedule.Active[T]{
-			Date:    dates.Date{Month: dates.Month(mnth), Day: i + 1},
+			Date:    datetime.Date{Month: datetime.Month(mnth), Day: i + 1},
 			Actions: actions,
 		}
 	}
@@ -66,12 +66,12 @@ func TestScheduler(t *testing.T) {
 	sched := schedule.Annual[testAction]{
 		Name: "test",
 		Dates: schedule.Dates{
-			For: dates.MonthList{1, 2},
+			For: datetime.MonthList{1, 2},
 		},
 		Actions: []schedule.Action[testAction]{action1, action2},
 	}
 	scheduler := schedule.NewAnnualScheduler(sched)
-	yp := dates.YearAndPlace{Year: 2024, Place: time.UTC}
+	yp := datetime.YearAndPlace{Year: 2024, Place: time.UTC}
 	active := []schedule.Active[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp) {
 		active = append(active, scheduled)
@@ -115,7 +115,7 @@ func TestScheduler(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	yp = dates.YearAndPlace{Year: 2023, Place: time.UTC}
+	yp = datetime.YearAndPlace{Year: 2023, Place: time.UTC}
 	active = []schedule.Active[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp) {
 		active = append(active, scheduled)

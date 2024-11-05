@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sort"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 )
 
 type Scheduler[T any] struct {
@@ -63,7 +63,7 @@ func (s *Scheduler[T]) prepareActions() {
 }
 
 // Scheduled returns an iterator over the scheduled actions for the given year and place.
-func (s Scheduler[T]) Scheduled(yp dates.YearAndPlace) iter.Seq[Active[T]] {
+func (s Scheduler[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
 	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
 	return func(yield func(Active[T]) bool) {
 		for _, dr := range drl {
