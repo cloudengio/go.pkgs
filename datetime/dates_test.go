@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package dates_test
+package datetime_test
 
 import (
 	"fmt"
@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 )
 
 func TestDateParse(t *testing.T) {
 	nd := newDate
 	for _, tc := range []struct {
 		val  string
-		when dates.Date
+		when datetime.Date
 	}{
 		{"01/02", nd(1, 2)},
 		{"1/2", nd(1, 2)},
@@ -32,7 +32,7 @@ func TestDateParse(t *testing.T) {
 		{"FEB-29", nd(2, 29)},
 		{"FeB-29", nd(2, 29)},
 	} {
-		var when dates.Date
+		var when datetime.Date
 		if err := when.Parse(2024, tc.val); err != nil {
 			t.Errorf("failed: %v: %v", tc.val, err)
 		}
@@ -54,17 +54,17 @@ func TestDateParse(t *testing.T) {
 		{"Jan Feb"},
 		{"13-01"},
 	} {
-		var md dates.Date
+		var md datetime.Date
 		if err := md.Parse(2023, tc.val); err == nil {
 			t.Errorf("failed to return an error: %v", tc.val)
 		}
 	}
 
-	var dl dates.DateList
+	var dl datetime.DateList
 	if err := dl.Parse(2024, "01/02,02/29,11/4"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
-	if got, want := dl, (dates.DateList{nd(1, 2), nd(2, 29), nd(11, 4)}); !reflect.DeepEqual(got, want) {
+	if got, want := dl, (datetime.DateList{nd(1, 2), nd(2, 29), nd(11, 4)}); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -73,7 +73,7 @@ func TestDates(t *testing.T) {
 	nd := newDate
 
 	for _, tc := range []struct {
-		d  dates.Date
+		d  datetime.Date
 		dy int
 	}{
 		{nd(1, 1), 1},
@@ -94,7 +94,7 @@ func TestDates(t *testing.T) {
 		if got, want := dayOf, tc.dy; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
-		if got, want := dates.DateFromDay(year, dayOf), tc.d; got != want {
+		if got, want := datetime.DateFromDay(year, dayOf), tc.d; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
 		year = 2024
@@ -105,7 +105,7 @@ func TestDates(t *testing.T) {
 		if got, want := dayOf, tc.dy; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
-		if got, want := dates.DateFromDay(year, dayOf), tc.d; got != want {
+		if got, want := datetime.DateFromDay(year, dayOf), tc.d; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
 	}
@@ -135,22 +135,22 @@ func TestDates(t *testing.T) {
 		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
 	}
 
-	if got, want := dates.DateFromDay(2023, 0), nd(1, 1); got != want {
+	if got, want := datetime.DateFromDay(2023, 0), nd(1, 1); got != want {
 		t.Errorf("%v: got %v, want %v", 2023, got, want)
 	}
-	if got, want := dates.DateFromDay(2023, 366), nd(12, 31); got != want {
+	if got, want := datetime.DateFromDay(2023, 366), nd(12, 31); got != want {
 		t.Errorf("%v: got %v, want %v", 2023, got, want)
 	}
 
-	if got, want := dates.DateFromDay(2024, 0), nd(1, 1); got != want {
+	if got, want := datetime.DateFromDay(2024, 0), nd(1, 1); got != want {
 		t.Errorf("%v: got %v, want %v", 2024, got, want)
 	}
-	if got, want := dates.DateFromDay(2024, 367), nd(12, 31); got != want {
+	if got, want := datetime.DateFromDay(2024, 367), nd(12, 31); got != want {
 		t.Errorf("%v: got %v, want %v", 2024, got, want)
 	}
 
 	for _, tc := range []struct {
-		cd, nd, yd dates.Date
+		cd, nd, yd datetime.Date
 		year       int
 	}{
 		{nd(1, 1), nd(1, 2), nd(1, 1), 2023},
@@ -172,7 +172,7 @@ func TestDates(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		a, b   dates.Date
+		a, b   datetime.Date
 		before bool
 	}{
 		{nd(1, 1), nd(1, 1), false},
@@ -189,13 +189,13 @@ func TestDates(t *testing.T) {
 
 func TestYearAndPlace(t *testing.T) {
 	for _, tc := range []struct {
-		yp    dates.YearAndPlace
+		yp    datetime.YearAndPlace
 		isset bool
 	}{
-		{dates.YearAndPlace{}, false},
-		{dates.YearAndPlace{2023, nil}, false},
-		{dates.YearAndPlace{0, time.UTC}, false},
-		{dates.YearAndPlace{2025, time.UTC}, true},
+		{datetime.YearAndPlace{}, false},
+		{datetime.YearAndPlace{2023, nil}, false},
+		{datetime.YearAndPlace{0, time.UTC}, false},
+		{datetime.YearAndPlace{2025, time.UTC}, true},
 	} {
 		if got, want := tc.yp.IsSet(), tc.isset; got != want {
 			t.Errorf("%v: got %v, want %v", tc.yp, got, want)
@@ -207,7 +207,7 @@ func daysFromDatesString(year int, datelist string) []int {
 	parts := strings.Split(datelist, ",")
 	days := make([]int, 0, len(parts))
 	for _, p := range parts {
-		var date dates.Date
+		var date datetime.Date
 		if err := date.Parse(year, p); err != nil {
 			panic(err)
 		}
@@ -221,23 +221,23 @@ func TestMergeDatesAndRanges(t *testing.T) {
 	ndr := newDateRange
 	year := 2024
 	for _, tc := range []struct {
-		dates  []dates.Date
-		merged dates.DateRangeList
+		dates  []datetime.Date
+		merged datetime.DateRangeList
 	}{
-		{[]dates.Date{nd(1, 1), nd(1, 1)}, ndr(nd(1, 1), nd(1, 1))},
-		{[]dates.Date{nd(1, 1), nd(1, 2)}, ndr(nd(1, 1), nd(1, 2))},
-		{[]dates.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndr(nd(1, 31), nd(2, 2))},
-		{[]dates.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndr(nd(1, 1), nd(1, 3))},
-		{[]dates.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndr(nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
+		{[]datetime.Date{nd(1, 1), nd(1, 1)}, ndr(nd(1, 1), nd(1, 1))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2)}, ndr(nd(1, 1), nd(1, 2))},
+		{[]datetime.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndr(nd(1, 31), nd(2, 2))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndr(nd(1, 1), nd(1, 3))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndr(nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
 	} {
-		merged := dates.MergeDates(year, tc.dates)
+		merged := datetime.MergeDates(year, tc.dates)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 	for _, tc := range []struct {
-		ranges dates.DateRangeList
-		merged dates.DateRangeList
+		ranges datetime.DateRangeList
+		merged datetime.DateRangeList
 	}{
 		{ndr(nd(1, 1), nd(1, 2)), ndr(nd(1, 1), nd(1, 2))},
 		{ndr(nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndr(nd(1, 1), nd(1, 2))},
@@ -245,21 +245,21 @@ func TestMergeDatesAndRanges(t *testing.T) {
 		{ndr(nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndr(nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
 		{ndr(nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndr(nd(2, 27), nd(3, 10))},
 	} {
-		merged := dates.MergeRanges(year, tc.ranges)
+		merged := datetime.MergeRanges(year, tc.ranges)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
 	for _, tc := range []struct {
-		months dates.MonthList
-		ranges dates.DateRangeList
-		merged dates.DateRangeList
+		months datetime.MonthList
+		ranges datetime.DateRangeList
+		merged datetime.DateRangeList
 	}{
-		{dates.MonthList{1}, ndr(nd(2, 1), nd(2, 28)), ndr(nd(1, 1), nd(2, 28))},
-		{dates.MonthList{1}, ndr(nd(2, 2), nd(2, 28)), ndr(nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
+		{datetime.MonthList{1}, ndr(nd(2, 1), nd(2, 28)), ndr(nd(1, 1), nd(2, 28))},
+		{datetime.MonthList{1}, ndr(nd(2, 2), nd(2, 28)), ndr(nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
 	} {
-		merged := dates.MergeMonthsAndRanges(year, tc.months, tc.ranges)
+		merged := datetime.MergeMonthsAndRanges(year, tc.months, tc.ranges)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
@@ -269,7 +269,7 @@ func TestMergeDatesAndRanges(t *testing.T) {
 func TestMirrorMonths(t *testing.T) {
 	solstice := []int{}
 	for i := 1; i <= 12; i++ {
-		if dates.MirrorMonth(dates.Month(i)) == dates.Month(i) {
+		if datetime.MirrorMonth(datetime.Month(i)) == datetime.Month(i) {
 			solstice = append(solstice, i)
 		}
 	}
@@ -278,7 +278,7 @@ func TestMirrorMonths(t *testing.T) {
 	}
 
 	for i := 1; i <= 11; i++ {
-		if got, want := dates.MirrorMonth(dates.Month(i)), dates.Month(12-i); got != want {
+		if got, want := datetime.MirrorMonth(datetime.Month(i)), datetime.Month(12-i); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
@@ -287,18 +287,18 @@ func TestMirrorMonths(t *testing.T) {
 func TestTimeOfDayParse(t *testing.T) {
 	for _, tc := range []struct {
 		val  string
-		when dates.TimeOfDay
+		when datetime.TimeOfDay
 	}{
-		{"08:12", dates.TimeOfDay{8, 12, 0}},
-		{"08-12", dates.TimeOfDay{8, 12, 0}},
-		{"20:01", dates.TimeOfDay{20, 01, 0}},
-		{"21-01", dates.TimeOfDay{21, 01, 0}},
-		{"08:12:13", dates.TimeOfDay{8, 12, 13}},
-		{"08-12-13", dates.TimeOfDay{8, 12, 13}},
-		{"20:01:13", dates.TimeOfDay{20, 01, 13}},
-		{"21-01-13", dates.TimeOfDay{21, 01, 13}},
+		{"08:12", datetime.TimeOfDay{8, 12, 0}},
+		{"08-12", datetime.TimeOfDay{8, 12, 0}},
+		{"20:01", datetime.TimeOfDay{20, 01, 0}},
+		{"21-01", datetime.TimeOfDay{21, 01, 0}},
+		{"08:12:13", datetime.TimeOfDay{8, 12, 13}},
+		{"08-12-13", datetime.TimeOfDay{8, 12, 13}},
+		{"20:01:13", datetime.TimeOfDay{20, 01, 13}},
+		{"21-01-13", datetime.TimeOfDay{21, 01, 13}},
 	} {
-		var tod dates.TimeOfDay
+		var tod datetime.TimeOfDay
 		if err := tod.Parse(tc.val); err != nil {
 			t.Errorf("failed: %v: %v", tc.val, err)
 		}
@@ -314,15 +314,15 @@ func TestTimeOfDayParse(t *testing.T) {
 		"08:61-15",
 		"08-61:15",
 	} {
-		var tod dates.TimeOfDay
+		var tod datetime.TimeOfDay
 		if err := tod.Parse(tc); err == nil {
 			t.Errorf("failed to return an error: %v", tc)
 		}
 	}
 
-	tods := dates.TimeOfDayList{}
+	tods := datetime.TimeOfDayList{}
 	for _, s := range []string{"08:13", "07:13", "09:14:12", "09:14:9", "09:14"} {
-		var tod dates.TimeOfDay
+		var tod datetime.TimeOfDay
 		if err := tod.Parse(s); err != nil {
 			t.Errorf("failed: %v", err)
 		}
@@ -330,22 +330,22 @@ func TestTimeOfDayParse(t *testing.T) {
 	}
 	tods.Sort()
 
-	if got, want := tods, []dates.TimeOfDay{{7, 13, 0}, {8, 13, 0}, {9, 14, 0}, {9, 14, 9}, {9, 14, 12}}; !slices.Equal(got, want) {
+	if got, want := tods, []datetime.TimeOfDay{{7, 13, 0}, {8, 13, 0}, {9, 14, 0}, {9, 14, 9}, {9, 14, 12}}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
 func TestMonthRangeParse(t *testing.T) {
 	months := "Dec,Jan,12,Novem,12"
-	var ml dates.MonthList
+	var ml datetime.MonthList
 	if err := ml.Parse(months); err != nil {
 		t.Errorf("failed: %v", err)
 	}
 
-	want := dates.MonthList{
-		dates.Month(1),
-		dates.Month(11),
-		dates.Month(12),
+	want := datetime.MonthList{
+		datetime.Month(1),
+		datetime.Month(11),
+		datetime.Month(12),
 	}
 	if got := ml; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -356,7 +356,7 @@ func TestMonthRangeParse(t *testing.T) {
 		"Decx",
 		"jan,fex",
 	} {
-		var ml dates.MonthList
+		var ml datetime.MonthList
 		if err := ml.Parse(tc); err == nil {
 			t.Errorf("failed to return an error: %v", tc)
 		}
@@ -367,22 +367,22 @@ func stringSlice(s ...string) []string {
 	return s
 }
 
-func newDateRange(d ...dates.Date) []dates.DateRange {
-	r := make([]dates.DateRange, 0, len(d)/2)
+func newDateRange(d ...datetime.Date) []datetime.DateRange {
+	r := make([]datetime.DateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, dates.DateRange{d[i], d[i+1]})
+		r = append(r, datetime.DateRange{d[i], d[i+1]})
 	}
 	return r
 }
 
-func newDate(m, d int) dates.Date {
-	return dates.Date{
-		Month: dates.Month(m),
+func newDate(m, d int) datetime.Date {
+	return datetime.Date{
+		Month: datetime.Month(m),
 		Day:   d,
 	}
 }
 
-type dateList []dates.Date
+type dateList []datetime.Date
 
 func (dr *dateList) String() string {
 	var out strings.Builder
@@ -403,7 +403,7 @@ func TestMonthAndRangeMerge(t *testing.T) {
 	for _, tc := range []struct {
 		months   string
 		ranges   []string
-		expected dates.DateRangeList
+		expected datetime.DateRangeList
 	}{
 		{"jan,dec",
 			nil,
@@ -415,8 +415,8 @@ func TestMonthAndRangeMerge(t *testing.T) {
 			sl("aug-02:sep-03", "jan-01:jan-02"),
 			dr(nd(1, 1), nd(1, 2), nd(2, 1), nd(2, 28), nd(4, 1), nd(4, 30), nd(8, 2), nd(9, 3))},
 	} {
-		var months dates.MonthList
-		var ranges dates.DateRangeList
+		var months datetime.MonthList
+		var ranges datetime.DateRangeList
 		if len(tc.months) > 0 {
 			if err := months.Parse(tc.months); err != nil {
 				t.Errorf("failed: %v", err)
@@ -427,7 +427,7 @@ func TestMonthAndRangeMerge(t *testing.T) {
 				t.Errorf("failed: %v", err)
 			}
 		}
-		merged := dates.MergeMonthsAndRanges(year, months, ranges)
+		merged := datetime.MergeMonthsAndRanges(year, months, ranges)
 		if got, want := merged, tc.expected; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}

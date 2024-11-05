@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package dates provides support for working with dates and date ranges.
-package dates
+package datetime
 
 // TODO: multiyear date ranges.
 

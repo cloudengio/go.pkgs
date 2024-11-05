@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package dates_test
+package datetime_test
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 )
 
 func TestDateRangeParse(t *testing.T) {
@@ -27,20 +27,20 @@ func TestDateRangeParse(t *testing.T) {
 		"feb:feb",
 	}
 
-	want := dates.DateRangeList{
-		{dates.Date{1, 2}, dates.Date{3, 4}},
-		{dates.Date{1, 2}, dates.Date{3, 4}},
-		{dates.Date{1, 1}, dates.Date{3, 31}},
-		{dates.Date{1, 1}, dates.Date{3, 31}},
-		{dates.Date{1, 1}, dates.Date{3, 31}},
-		{dates.Date{1, 1}, dates.Date{3, 31}},
-		{dates.Date{11, 1}, dates.Date{12, 31}},
-		{dates.Date{11, 1}, dates.Date{12, 20}},
-		{dates.Date{2, 1}, dates.Date{2, 29}},
+	want := datetime.DateRangeList{
+		{datetime.Date{1, 2}, datetime.Date{3, 4}},
+		{datetime.Date{1, 2}, datetime.Date{3, 4}},
+		{datetime.Date{1, 1}, datetime.Date{3, 31}},
+		{datetime.Date{1, 1}, datetime.Date{3, 31}},
+		{datetime.Date{1, 1}, datetime.Date{3, 31}},
+		{datetime.Date{1, 1}, datetime.Date{3, 31}},
+		{datetime.Date{11, 1}, datetime.Date{12, 31}},
+		{datetime.Date{11, 1}, datetime.Date{12, 20}},
+		{datetime.Date{2, 1}, datetime.Date{2, 29}},
 	}
 
 	for i, tc := range ranges {
-		var dr dates.DateRange
+		var dr datetime.DateRange
 		if err := dr.Parse(2024, tc); err != nil {
 			t.Errorf("failed: %v: %v", tc, err)
 		}
@@ -49,17 +49,17 @@ func TestDateRangeParse(t *testing.T) {
 		}
 	}
 
-	var dr dates.DateRangeList
+	var dr datetime.DateRangeList
 	if err := dr.Parse(2024, ranges); err != nil {
 		t.Errorf("failed: %v", err)
 	}
 
-	want = dates.DateRangeList{
-		{dates.Date{1, 1}, dates.Date{3, 31}},
-		{dates.Date{1, 2}, dates.Date{3, 4}},
-		{dates.Date{2, 1}, dates.Date{2, 29}},
-		{dates.Date{11, 1}, dates.Date{12, 20}},
-		{dates.Date{11, 1}, dates.Date{12, 31}},
+	want = datetime.DateRangeList{
+		{datetime.Date{1, 1}, datetime.Date{3, 31}},
+		{datetime.Date{1, 2}, datetime.Date{3, 4}},
+		{datetime.Date{2, 1}, datetime.Date{2, 29}},
+		{datetime.Date{11, 1}, datetime.Date{12, 20}},
+		{datetime.Date{11, 1}, datetime.Date{12, 31}},
 	}
 
 	if got := dr; !reflect.DeepEqual(got, want) {
@@ -67,11 +67,11 @@ func TestDateRangeParse(t *testing.T) {
 	}
 
 	// non-leap year
-	var ldc dates.DateRange
+	var ldc datetime.DateRange
 	if err := ldc.Parse(2023, "02:feb"); err != nil {
 		t.Errorf("failed: %v", err)
 	}
-	if got, want := ldc, (dates.DateRange{dates.Date{2, 1}, dates.Date{2, 28}}); !reflect.DeepEqual(got, want) {
+	if got, want := ldc, (datetime.DateRange{datetime.Date{2, 1}, datetime.Date{2, 28}}); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -82,7 +82,7 @@ func TestDateRangeParse(t *testing.T) {
 		"feb-20:feb:02",
 		"feb-20:feb-29",
 	} {
-		var dr dates.DateRange
+		var dr datetime.DateRange
 		if err := dr.Parse(2023, tc); err == nil {
 			t.Errorf("failed to return an error: %v", tc)
 		}
@@ -91,14 +91,14 @@ func TestDateRangeParse(t *testing.T) {
 
 func TestDateRange(t *testing.T) {
 	nd := newDate
-	dra := dates.NewDateRange(2024, nd(1, 0), nd(3, 0))
+	dra := datetime.NewDateRange(2024, nd(1, 0), nd(3, 0))
 	if got, want := dra.From, nd(1, 1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	if got, want := dra.To, nd(3, 31); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	dra = dates.NewDateRange(2024, nd(3, 0), nd(1, 0))
+	dra = datetime.NewDateRange(2024, nd(3, 0), nd(1, 0))
 	if got, want := dra.From, nd(1, 1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -128,7 +128,7 @@ func TestDataRangeIterator(t *testing.T) {
 		{"02/27:02", "02/27,02/28,02/29"},
 		{"03/30:05/02", "03/30,03/31," + m(4, 30) + "05/01,05/02"},
 	} {
-		var dr dates.DateRange
+		var dr datetime.DateRange
 		var dates dateList
 		var days []int
 		if err := dr.Parse(year, tc.input); err != nil {
@@ -149,7 +149,7 @@ func TestDataRangeIterator(t *testing.T) {
 	}
 	// non-leap year
 	year = 2023
-	var dr dates.DateRange
+	var dr datetime.DateRange
 	if err := dr.Parse(year, "02/27:03/02"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
@@ -171,20 +171,20 @@ func TestDataRangeIterator(t *testing.T) {
 
 func TestDataRangeIteratorConstrained(t *testing.T) {
 	year := 2024
-	weekdays := dates.Constraints{Weekdays: true}
-	weekends := dates.Constraints{Weekends: true}
-	custom := dates.Constraints{Custom: []dates.Date{{2, 2}, {2, 5}, {2, 20}}}
+	weekdays := datetime.Constraints{Weekdays: true}
+	weekends := datetime.Constraints{Weekends: true}
+	custom := datetime.Constraints{Custom: []datetime.Date{{2, 2}, {2, 5}, {2, 20}}}
 
 	for _, tc := range []struct {
 		input      string
-		constraint dates.Constraints
+		constraint datetime.Constraints
 		output     string
 	}{
 		{"02:02", weekdays, "02/01,02/02,02/05,02/06,02/07,02/08,02/09,02/12,02/13,02/14,02/15,02/16,02/19,02/20,02/21,02/22,02/23,02/26,02/27,02/28,02/29"},
 		{"02:02", weekends, "02/03,02/04,02/10,02/11,02/17,02/18,02/24,02/25"},
 		{"02:02", custom, "02/01,02/03,02/04,02/06,02/07,02/08,02/09,02/10,02/11,02/12,02/13,02/14,02/15,02/16,02/17,02/18,02/19,02/21,02/22,02/23,02/24,02/25,02/26,02/27,02/28,02/29"},
 	} {
-		var dr dates.DateRange
+		var dr datetime.DateRange
 		var dates dateList
 		var days []int
 		if err := dr.Parse(year, tc.input); err != nil {
@@ -204,7 +204,7 @@ func TestDataRangeIteratorConstrained(t *testing.T) {
 		}
 	}
 	// non-leap year
-	var dr dates.DateRange
+	var dr datetime.DateRange
 	if err := dr.Parse(2023, "02/27:03/02"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
@@ -219,14 +219,14 @@ func TestDataRangeIteratorConstrained(t *testing.T) {
 
 func TestDataRangeRangesIterator(t *testing.T) {
 	year := 2024
-	unconstrained := dates.Constraints{}
-	weekdays := dates.Constraints{Weekdays: true}
-	weekends := dates.Constraints{Weekends: true}
-	customExclusion := dates.Constraints{Custom: []dates.Date{{2, 2}, {2, 5}, {2, 20}}}
+	unconstrained := datetime.Constraints{}
+	weekdays := datetime.Constraints{Weekdays: true}
+	weekends := datetime.Constraints{Weekends: true}
+	customExclusion := datetime.Constraints{Custom: []datetime.Date{{2, 2}, {2, 5}, {2, 20}}}
 
 	for _, tc := range []struct {
 		input      string
-		constraint dates.Constraints
+		constraint datetime.Constraints
 		output     string
 	}{
 		{"02/01:02/01", unconstrained, "2/1:2/1"},
@@ -237,8 +237,8 @@ func TestDataRangeRangesIterator(t *testing.T) {
 		{"01:02", unconstrained, "1/1:2/29"},
 		{"01:01", unconstrained, "1/1:1/31"},
 	} {
-		var dr dates.DateRange
-		var ranges dates.DateRangeList
+		var dr datetime.DateRange
+		var ranges datetime.DateRangeList
 		if err := dr.Parse(year, tc.input); err != nil {
 			t.Errorf("failed: %v", err)
 			continue
@@ -247,7 +247,7 @@ func TestDataRangeRangesIterator(t *testing.T) {
 			ranges = append(ranges, r)
 		}
 
-		var expected dates.DateRangeList
+		var expected datetime.DateRangeList
 		if err := expected.Parse(year, strings.Split(tc.output, ",")); err != nil {
 			t.Errorf("failed: %v: %v", tc.output, err)
 		}
@@ -257,15 +257,15 @@ func TestDataRangeRangesIterator(t *testing.T) {
 	}
 
 	// non-leap year
-	var dr dates.DateRange
+	var dr datetime.DateRange
 	if err := dr.Parse(2023, "02:02"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
-	var ranges dates.DateRangeList
+	var ranges datetime.DateRangeList
 	for r := range dr.RangesConstrained(2023, weekdays) {
 		ranges = append(ranges, r)
 	}
-	var expected dates.DateRangeList
+	var expected datetime.DateRangeList
 	if err := expected.Parse(year, strings.Split("2/1:2/3,2/6:2/10,2/13:2/17,2/20:2/24,2/27:2/28", ",")); err != nil {
 		t.Errorf("failed: %v", err)
 	}

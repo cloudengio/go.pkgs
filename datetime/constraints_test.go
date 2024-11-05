@@ -2,13 +2,13 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package dates_test
+package datetime_test
 
 import (
 	"testing"
 	"time"
 
-	"cloudeng.io/datetime/dates"
+	"cloudeng.io/datetime"
 )
 
 func TestConstraints(t *testing.T) {
@@ -16,8 +16,8 @@ func TestConstraints(t *testing.T) {
 	md := func(m, d int) time.Time {
 		return time.Date(2024, time.Month(m), d, 0, 0, 0, 0, time.UTC)
 	}
-	ct := func(weekday, weekend bool, custom ...dates.Date) dates.Constraints {
-		return dates.Constraints{
+	ct := func(weekday, weekend bool, custom ...datetime.Date) datetime.Constraints {
+		return datetime.Constraints{
 			Weekdays: weekday,
 			Weekends: weekend,
 			Custom:   custom,
@@ -26,7 +26,7 @@ func TestConstraints(t *testing.T) {
 
 	for i, tc := range []struct {
 		when       time.Time
-		constraint dates.Constraints
+		constraint datetime.Constraints
 		result     bool
 	}{
 		{md(1, 2), ct(false, false), true},
