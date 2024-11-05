@@ -116,9 +116,8 @@ func (d DateRange) RangesConstrained(year int, dc Constraints) func(yield func(D
 		for td := d.From; td.BeforeOrOn(d.To); td = td.tomorrow(dm) {
 			if !dc.Include(time.Date(year, time.Month(td.Month), td.Day, 0, 0, 0, 0, time.UTC)) {
 				if inrange {
-					dr := NewDateRange(year, start, stop)
 					// Range ends
-					if !yield(dr) {
+					if !yield(NewDateRange(year, start, stop)) {
 						return
 					}
 				}
@@ -193,7 +192,7 @@ func MergeMonthsAndRanges(year int, months MonthList, ranges DateRangeList) Date
 	}
 	drl = append(drl, ranges...)
 	sort.Slice(drl, func(i, j int) bool { return drl[i].Before(drl[j]) })
-	return drl
+	return MergeRanges(year, drl)
 }
 
 // Parse ranges in formats '01:03', 'Jan:Mar', '01-02:03-04' or 'Jan-02:Mar-04'.
@@ -216,9 +215,7 @@ func (dr *DateRangeList) Parse(year int, ranges []string) error {
 		drs = append(drs, dr)
 		seen[dr] = struct{}{}
 	}
-	//sort.Slice(drs, func(i, j int) bool { return drs[i].Before(drs[j]) })
 	drs.Sort()
-
 	*dr = drs
 	return nil
 }

@@ -10,14 +10,13 @@ import (
 )
 
 // Constraints represents constraints on date values such
-// as weekends or custom dates. Custom dates take precedence
+// as weekends or custom dates to exclude. Custom dates take precedence
 // over weekdays and weekends.
 type Constraints struct {
-	Weekdays       bool             `yaml:"weekdays"`               // If true, include weekdays
-	Weekends       bool             `yaml:"weekends"`               // If true, include weekends
-	Custom         DateList         `yaml:"exclude_dates"`          // If non-empty, exclude these dates
-	CustomCalendar CalendarDateList `yaml:"exclude_calendar_dates"` // If non-empty, exclude these calendar dates
-	//ExcludeCustom bool `yaml:"exclude_custom"` // If true, exclude custom dates
+	Weekdays       bool             // If true, include weekdays
+	Weekends       bool             // If true, include weekends
+	Custom         DateList         // If non-empty, exclude these dates
+	CustomCalendar CalendarDateList // If non-empty, exclude these calendar dates
 }
 
 func (dc Constraints) String() string {

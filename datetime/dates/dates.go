@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Month as an int.
@@ -305,8 +303,4 @@ func (ml *MonthList) Parse(val string) error {
 	slices.Sort[MonthList](drs)
 	*ml = drs
 	return nil
-}
-
-func (ml *MonthList) UnmarshalYAML(node *yaml.Node) error {
-	return ml.Parse(node.Value)
 }

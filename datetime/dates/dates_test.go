@@ -250,6 +250,20 @@ func TestMergeDatesAndRanges(t *testing.T) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
+
+	for _, tc := range []struct {
+		months dates.MonthList
+		ranges dates.DateRangeList
+		merged dates.DateRangeList
+	}{
+		{dates.MonthList{1}, ndr(nd(2, 1), nd(2, 28)), ndr(nd(1, 1), nd(2, 28))},
+		{dates.MonthList{1}, ndr(nd(2, 2), nd(2, 28)), ndr(nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
+	} {
+		merged := dates.MergeMonthsAndRanges(year, tc.months, tc.ranges)
+		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
 }
 
 func TestMirrorMonths(t *testing.T) {

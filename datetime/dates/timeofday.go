@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // TimeOfDay represents a time of day.
@@ -67,10 +65,6 @@ func (t *TimeOfDay) Parse(val string) error {
 	return fmt.Errorf("invalid format, expected '08:12[:10]' or '08-12[-10]'")
 }
 
-func (t *TimeOfDay) UnmarshalYAML(node *yaml.Node) error {
-	return t.Parse(node.Value)
-}
-
 // Before returns true if t is before t2.
 func (t TimeOfDay) Before(t2 TimeOfDay) bool {
 	if t.Hour != t2.Hour {
@@ -80,6 +74,11 @@ func (t TimeOfDay) Before(t2 TimeOfDay) bool {
 		return t.Minute < t2.Minute
 	}
 	return t.Second < t2.Second
+}
+
+// Equal returns true if t is equal to t2.
+func (t TimeOfDay) Equal(t2 TimeOfDay) bool {
+	return t == t2
 }
 
 type TimeOfDayList []TimeOfDay
