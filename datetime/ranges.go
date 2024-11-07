@@ -12,27 +12,31 @@ import (
 )
 
 // DateRange represents a range of dates, inclusive of From and To.
+// NewDateRange and Parse create or initialize a DateRange. If the
+// From Day is zero, it is set to 1. If the To Day is zero, it is set
+// to the last day of the month, however, an internal record is kept
+// and Dates iterator will reevaluate the last day of the month for
 type DateRange struct {
-	From, To Date
+	From, To  Date
+	toDayZero bool
 }
 
 // NewDateRange returns a DateRange for the from/to dates for the
 // specified year.
-// If the from date has a day of zero then it is interpreted as the first
-// day of the month, similary if the to date has a day of zero then it is
-// interpreted as the last day of the month.
 // If the from date is after the to date then the dates are swapped.
 func NewDateRange(year int, from, to Date) DateRange {
 	if to.Before(from) {
 		return NewDateRange(year, to, from)
 	}
+	toDayZero := false
 	if from.Day == 0 {
 		from.Day = 1
 	}
 	if to.Day == 0 {
 		to.Day = daysInMonthForYear(year)[to.Month-1]
+		toDayZero = true
 	}
-	return DateRange{from, to}
+	return DateRange{From: from, To: to, toDayZero: toDayZero}
 }
 
 // Before returns true if date is before d. It returns false if the
@@ -71,6 +75,7 @@ func (d *DateRange) Parse(year int, val string) error {
 	}
 	if to.Day == 0 {
 		to.Day = DaysInMonth(year, to.Month)
+		d.toDayZero = true
 	}
 	if to.Before(from) {
 		return fmt.Errorf("from is later than to: %s %s", from, to)
@@ -83,6 +88,9 @@ func (d *DateRange) Parse(year int, val string) error {
 // given year.
 func (d DateRange) Dates(year int) func(yield func(Date) bool) {
 	dm := daysInMonthForYear(year)
+	if d.toDayZero {
+		d.To.Day = dm[d.To.Month-1]
+	}
 	return func(yield func(Date) bool) {
 		for td := d.From; td.BeforeOrOn(d.To); td = td.tomorrow(dm) {
 			if !yield(td) {
@@ -247,6 +255,9 @@ func MergeDates(year int, dates []Date) DateRangeList {
 }
 
 func MergeRanges(year int, ranges []DateRange) DateRangeList {
+	if len(ranges) == 0 {
+		return nil
+	}
 	sort.Slice(ranges, func(i, j int) bool { return ranges[i].Before(ranges[j]) })
 	leap := IsLeap(year)
 	var merged []DateRange

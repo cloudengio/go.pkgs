@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package dates provides support for working with dates and date ranges.
+// Package datetime provides support for working with dates, time of day and associated ranges.
 package datetime
 
 // TODO: multiyear date ranges.
@@ -64,6 +64,10 @@ func (m *Month) Parse(val string) error {
 type Date struct {
 	Month Month
 	Day   int
+}
+
+func NewDate(when time.Time) Date {
+	return Date{Month: Month(when.Month()), Day: when.Day()}
 }
 
 func (d Date) String() string {
@@ -248,6 +252,7 @@ func (dl *DateList) Parse(year int, val string) error {
 	parts := strings.Split(val, ",")
 	d := make(DateList, 0, len(parts))
 	for _, part := range parts {
+		part = strings.TrimSpace(part)
 		var date Date
 		if err := date.Parse(year, part); err != nil {
 			return err

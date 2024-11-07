@@ -15,7 +15,7 @@ import (
 // months, date ranges and constraints on those dates (eg. weekdays in March).
 type Dates struct {
 	For          datetime.MonthList     // Whole months to include.
-	MirrorMonths bool                // Include the 'mirror' months of those in For.
+	MirrorMonths bool                   // Include the 'mirror' months of those in For.
 	Ranges       datetime.DateRangeList // Include specific date ranges.
 	Constraints  datetime.Constraints   // Constraints to be applied, such as weekdays/weekends etc.
 }

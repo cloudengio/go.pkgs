@@ -87,6 +87,10 @@ func (tl TimeOfDayList) Sort() {
 	sort.Slice(tl, func(i, j int) bool { return tl[i].Before(tl[j]) })
 }
 
-func DateTime(yp YearAndPlace, date Date, tod TimeOfDay) time.Time {
+func Time(yp YearAndPlace, date Date, tod TimeOfDay) time.Time {
 	return time.Date(yp.Year, time.Month(date.Month), date.Day, tod.Hour, tod.Minute, tod.Second, 0, yp.Place)
+}
+
+func NewTimeOfDay(t time.Time) TimeOfDay {
+	return TimeOfDay{Hour: t.Hour(), Minute: t.Minute(), Second: t.Second()}
 }
