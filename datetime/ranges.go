@@ -11,47 +11,47 @@ import (
 	"time"
 )
 
-// DateRange represents a range of dates, inclusive of From and To.
+// DateRange represents a range of dates, inclusive of the start and end dates.
 // NewDateRange and Parse create or initialize a DateRange. If the
-// From Day is zero, it is set to 1. If the To Day is zero, it is set
-// to the last day of the month, however, an internal record is kept
-// and Dates iterator will reevaluate the last day of the month for
+// From Day is zero, it is treated as 1. If the To Day is zero, it is treated
+// as the last day of the month,
 type DateRange struct {
-	From, To  Date
-	toDayZero bool
+	From, To Date
+}
+
+// ToForYear returns the end date of the range for the specified year.
+// Feb 29 is treated as Feb
+func (dr DateRange) ToForYear(year int) Date {
+	if dr.To.YearSpecific() {
+		if dr.To.Day == 29 {
+			return Date{Month: 2, Day: DaysInFeb(year)}
+		}
+	}
+	return dr.To
 }
 
 // NewDateRange returns a DateRange for the from/to dates for the
 // specified year.
 // If the from date is after the to date then the dates are swapped.
 func NewDateRange(year int, from, to Date) DateRange {
-	if to.Before(from) {
-		return NewDateRange(year, to, from)
-	}
-	toDayZero := false
+	ofrom, oto := from, to
 	if from.Day == 0 {
 		from.Day = 1
 	}
 	if to.Day == 0 {
 		to.Day = daysInMonthForYear(year)[to.Month-1]
-		toDayZero = true
 	}
-	return DateRange{From: from, To: to, toDayZero: toDayZero}
+	if to.Before(from) {
+		return NewDateRange(year, oto, ofrom)
+	}
+	return DateRange{from: from, to: to}
 }
 
-// Before returns true if date is before d. It returns false if the
-// dates are equal.
-func (d Date) Before(date Date) bool {
-	return d.Month < date.Month || (d.Month == date.Month && d.Day < date.Day)
-}
-
-// BeforeOrOn returns true if date is before or on d. It returns true if the
-func (d Date) BeforeOrOn(date Date) bool {
-	return d.Month < date.Month || (d.Month == date.Month && d.Day <= date.Day)
-}
-
-func (d DateRange) String() string {
-	return fmt.Sprintf("%s - %s", d.From, d.To)
+func (dr DateRange) String() string {
+	if dr.LeapYearSpecific() {
+		return fmt.Sprintf("%s - %s*", dr.from, dr.to)
+	}
+	return fmt.Sprintf("%s - %s", dr.from, dr.to)
 }
 
 // Parse ranges in formats '01:03', 'Jan:Mar', '01/02:03-04' or 'Jan-02:Mar-04'.
@@ -75,24 +75,30 @@ func (d *DateRange) Parse(year int, val string) error {
 	}
 	if to.Day == 0 {
 		to.Day = DaysInMonth(year, to.Month)
-		d.toDayZero = true
+		d.leapYearSpecific = to.Month == 2 && (to.Day == 0 || to.Day == 29)
 	}
 	if to.Before(from) {
 		return fmt.Errorf("from is later than to: %s %s", from, to)
 	}
-	d.From, d.To = from, to
+	d.from, d.to = from, to
 	return nil
+}
+
+func (dr DateRange) Equal(dr2 DateRange) bool {
+	return dr.from == dr2.from && dr.to == dr2.to
+}
+
+func (dr DateRange) EqualForYear(dr2 DateRange) bool {
+	return dr.from == dr2.from && dr.to == dr2.to
 }
 
 // Dates returns an iterator that yields each date in the range for the
 // given year.
 func (d DateRange) Dates(year int) func(yield func(Date) bool) {
 	dm := daysInMonthForYear(year)
-	if d.toDayZero {
-		d.To.Day = dm[d.To.Month-1]
-	}
+	to := d.ToForYear(year)
 	return func(yield func(Date) bool) {
-		for td := d.From; td.BeforeOrOn(d.To); td = td.tomorrow(dm) {
+		for td := d.From(); td.BeforeOrOn(to); td = td.tomorrow(dm) {
 			if !yield(td) {
 				return
 			}
@@ -102,10 +108,11 @@ func (d DateRange) Dates(year int) func(yield func(Date) bool) {
 
 // DatesConstrained returns an iterator that yields each date in the range for the
 // given year constrained by the given DateConstraints.
-func (d DateRange) DatesConstrained(year int, dc Constraints) func(yield func(Date) bool) {
+func (dr DateRange) DatesConstrained(year int, dc Constraints) func(yield func(Date) bool) {
 	return func(yield func(Date) bool) {
 		dm := daysInMonthForYear(year)
-		for td := d.From; td.BeforeOrOn(d.To); td = td.tomorrow(dm) {
+		to := dr.ToForYear(year)
+		for td := dr.From(); td.BeforeOrOn(to); td = td.tomorrow(dm) {
 			if !dc.Include(time.Date(year, time.Month(td.Month), td.Day, 0, 0, 0, 0, time.UTC)) {
 				continue
 			}
@@ -116,12 +123,13 @@ func (d DateRange) DatesConstrained(year int, dc Constraints) func(yield func(Da
 	}
 }
 
-func (d DateRange) RangesConstrained(year int, dc Constraints) func(yield func(DateRange) bool) {
+func (dr DateRange) RangesConstrained(year int, dc Constraints) func(yield func(DateRange) bool) {
 	dm := daysInMonthForYear(year)
 	return func(yield func(DateRange) bool) {
-		start, stop := d.From, d.To
+		start, stop := dr.From(), dr.ToForYear(year)
+		to := stop
 		inrange := dc.Include(time.Date(year, time.Month(start.Month), start.Day, 0, 0, 0, 0, time.UTC))
-		for td := d.From; td.BeforeOrOn(d.To); td = td.tomorrow(dm) {
+		for td := dr.From(); td.BeforeOrOn(to); td = td.tomorrow(dm) {
 			if !dc.Include(time.Date(year, time.Month(td.Month), td.Day, 0, 0, 0, 0, time.UTC)) {
 				if inrange {
 					// Range ends
@@ -146,10 +154,10 @@ func (d DateRange) RangesConstrained(year int, dc Constraints) func(yield func(D
 
 // Days returns an iterator that yields each day in the range for the
 // given year.
-func (d DateRange) Days(year int) func(yield func(int) bool) {
+func (dr DateRange) Days(year int) func(yield func(int) bool) {
 	return func(yield func(int) bool) {
-		last := d.To.DayOfYear(year)
-		for yd := d.From.DayOfYear(year); yd <= last; yd++ {
+		last := dr.ToForYear(year).DayOfYear(year)
+		for yd := dr.From().DayOfYear(year); yd <= last; yd++ {
 			if !yield(yd) {
 				return
 			}
@@ -159,11 +167,11 @@ func (d DateRange) Days(year int) func(yield func(int) bool) {
 
 // DaysConstrained returns an iterator that yields each day in the range for the
 // given year constrained by the given DateConstraints.
-func (d DateRange) DaysConstrained(year int, dc Constraints) func(yield func(int) bool) {
+func (dr DateRange) DaysConstrained(year int, dc Constraints) func(yield func(int) bool) {
 	dm := daysInMonthForYear(year)
 	return func(yield func(int) bool) {
-		to := d.To.DayOfYear(year)
-		for d := d.From.DayOfYear(year); d <= to; d++ {
+		to := dr.ToForYear(year).DayOfYear(year)
+		for d := dr.From().DayOfYear(year); d <= to; d++ {
 			tm := dateFromDay(d, dm)
 			if !dc.Include(time.Date(year, time.Month(tm.Month), tm.Day, 0, 0, 0, 0, time.UTC)) {
 				continue
@@ -177,16 +185,16 @@ func (d DateRange) DaysConstrained(year int, dc Constraints) func(yield func(int
 
 // Before returns true if d is before a. If the months and start days are identical
 // then the end days are used to determine the order, ie. which range ends first.
-func (d DateRange) Before(a DateRange) bool {
-	if d.From.Month != a.From.Month {
-		return d.From.Month < a.From.Month
+func (dr DateRange) Before(a DateRange) bool {
+	if dr.from.Month != a.from.Month {
+		return dr.from.Month < a.from.Month
 	}
 	// From.Day may be zero, but that doesn't affect the ordering.
-	if d.From.Day != a.From.Day {
-		return d.From.Day < a.From.Day
+	if dr.from.Day != a.from.Day {
+		return dr.from.Day < a.from.Day
 	}
 	// If the start dates are identical then use the end date to determine the order.
-	return d.To.Day < a.To.Day
+	return dr.to.Day < a.to.Day
 }
 
 type DateRangeList []DateRange
@@ -232,6 +240,18 @@ func (dr DateRangeList) Sort() {
 	sort.Slice(dr, func(i, j int) bool { return dr[i].Before(dr[j]) })
 }
 
+func (dr DateRangeList) Equal(dr2 DateRangeList) bool {
+	if len(dr) != len(dr2) {
+		return false
+	}
+	for i, d := range dr {
+		if !d.Equal(dr2[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func MergeDates(year int, dates []Date) DateRangeList {
 	sort.Slice(dates, func(i, j int) bool { return dates[i].Before(dates[j]) })
 	dm := daysInMonthForYear(year)
@@ -262,18 +282,18 @@ func MergeRanges(year int, ranges []DateRange) DateRangeList {
 	leap := IsLeap(year)
 	var merged []DateRange
 
-	from := ranges[0].From
-	to := ranges[0].To
+	from := ranges[0].From()
+	to := ranges[0].ToForYear(year)
 	for i := 1; i < len(ranges); i++ {
-		fd := ranges[i-1].To.dayOfYear(leap)
-		td := ranges[i].From.dayOfYear(leap)
+		fd := ranges[i-1].ToForYear(year).dayOfYear(leap)
+		td := ranges[i].From().dayOfYear(leap)
 		if fd >= (td - 1) {
-			to = ranges[i].To
+			to = ranges[i].ToForYear(year)
 			continue
 		}
 		merged = append(merged, NewDateRange(year, from, to))
-		from = ranges[i].From
-		to = ranges[i].To
+		from = ranges[i].From()
+		to = ranges[i].ToForYear(year)
 	}
 	merged = append(merged, NewDateRange(year, from, to))
 	return merged

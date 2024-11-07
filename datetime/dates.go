@@ -58,7 +58,7 @@ func (m *Month) Parse(val string) error {
 }
 
 // Date as Month and Day. Use CalendarDate to specify a year.
-// Day may be zero in which case the Date is refers to the entire month with the
+// Day may be zero in which case the Date refers to the entire month with the
 // interpretation of the day determined by the context (eg. a start date may refer
 // to the first day of the month, and an end date may refer to the last day of the month).
 type Date struct {
@@ -151,6 +151,14 @@ func (d *Date) Parse(year int, val string) error {
 	return nil
 }
 
+// YearSpecific returns true if the date requires a specific year to be
+// meaningful. For example, Feb-29 is only meaningful in a leap year,
+// and Feb with a day of zero depends on the context within it is being
+// used (eg. as a To date in a range).
+func (d Date) YearSpecific() bool {
+	return d.Month == 2 && (d.Day == 0 || d.Day == 29)
+}
+
 // DayOfYear returns the day of the year for the given year as
 // 1-365 for non-leap years and 1-366 for leap years.
 // It will silently treat days that exceed those for a given month to the last
@@ -172,6 +180,17 @@ func (d Date) dayOfYear(leap bool) int {
 		md = daysInMonth[d.Month-1]
 	}
 	return dayOfYear[time.Month(d.Month)-1] + md
+}
+
+// Before returns true if date is before d. It returns false if the
+// dates are equal.
+func (d Date) Before(date Date) bool {
+	return d.Month < date.Month || (d.Month == date.Month && d.Day < date.Day)
+}
+
+// BeforeOrOn returns true if date is before or on d. It returns true if the
+func (d Date) BeforeOrOn(date Date) bool {
+	return d.Month < date.Month || (d.Month == date.Month && d.Day <= date.Day)
 }
 
 // Tomorrow returns the date of the next day.

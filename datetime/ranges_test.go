@@ -27,51 +27,54 @@ func TestDateRangeParse(t *testing.T) {
 		"feb:feb",
 	}
 
+	year := 2024
+	nd := newDate
 	want := datetime.DateRangeList{
-		{datetime.Date{1, 2}, datetime.Date{3, 4}},
-		{datetime.Date{1, 2}, datetime.Date{3, 4}},
-		{datetime.Date{1, 1}, datetime.Date{3, 31}},
-		{datetime.Date{1, 1}, datetime.Date{3, 31}},
-		{datetime.Date{1, 1}, datetime.Date{3, 31}},
-		{datetime.Date{1, 1}, datetime.Date{3, 31}},
-		{datetime.Date{11, 1}, datetime.Date{12, 31}},
-		{datetime.Date{11, 1}, datetime.Date{12, 20}},
-		{datetime.Date{2, 1}, datetime.Date{2, 29}},
+		datetime.NewDateRange(year, nd(1, 2), nd(3, 4)),
+		datetime.NewDateRange(year, nd(1, 2), nd(3, 4)),
+		datetime.NewDateRange(year, nd(1, 1), nd(3, 31)),
+		datetime.NewDateRange(year, nd(1, 1), nd(3, 31)),
+		datetime.NewDateRange(year, nd(1, 1), nd(3, 31)),
+		datetime.NewDateRange(year, nd(1, 1), nd(3, 31)),
+		datetime.NewDateRange(year, nd(11, 1), nd(12, 31)),
+		datetime.NewDateRange(year, nd(11, 1), nd(12, 20)),
+		datetime.NewDateRange(year, nd(2, 1), nd(2, 29)),
 	}
 
 	for i, tc := range ranges {
 		var dr datetime.DateRange
-		if err := dr.Parse(2024, tc); err != nil {
+		if err := dr.Parse(year, tc); err != nil {
 			t.Errorf("failed: %v: %v", tc, err)
 		}
-		if got, want := dr, want[i]; !reflect.DeepEqual(got, want) {
+		if got, want := dr, want[i]; !got.Equal(want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
 	var dr datetime.DateRangeList
-	if err := dr.Parse(2024, ranges); err != nil {
+	if err := dr.Parse(year, ranges); err != nil {
 		t.Errorf("failed: %v", err)
 	}
 
 	want = datetime.DateRangeList{
-		{datetime.Date{1, 1}, datetime.Date{3, 31}},
-		{datetime.Date{1, 2}, datetime.Date{3, 4}},
-		{datetime.Date{2, 1}, datetime.Date{2, 29}},
-		{datetime.Date{11, 1}, datetime.Date{12, 20}},
-		{datetime.Date{11, 1}, datetime.Date{12, 31}},
+		datetime.NewDateRange(year, nd(1, 1), nd(3, 31)),
+		datetime.NewDateRange(year, nd(1, 2), nd(3, 4)),
+		datetime.NewDateRange(year, nd(2, 1), nd(2, 29)),
+		datetime.NewDateRange(year, nd(11, 1), nd(12, 20)),
+		datetime.NewDateRange(year, nd(11, 1), nd(12, 31)),
 	}
 
-	if got := dr; !reflect.DeepEqual(got, want) {
+	if got := dr; !got.Equal(want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	// non-leap year
+	year = 2023
 	var ldc datetime.DateRange
-	if err := ldc.Parse(2023, "02:feb"); err != nil {
+	if err := ldc.Parse(year, "02:feb"); err != nil {
 		t.Errorf("failed: %v", err)
 	}
-	if got, want := ldc, (datetime.DateRange{datetime.Date{2, 1}, datetime.Date{2, 28}}); !reflect.DeepEqual(got, want) {
+	if got, want := ldc, datetime.NewDateRange(year, nd(2, 1), nd(2, 28)); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -83,28 +86,43 @@ func TestDateRangeParse(t *testing.T) {
 		"feb-20:feb-29",
 	} {
 		var dr datetime.DateRange
-		if err := dr.Parse(2023, tc); err == nil {
+		if err := dr.Parse(year, tc); err == nil {
 			t.Errorf("failed to return an error: %v", tc)
 		}
 	}
 }
 
 func TestDateRange(t *testing.T) {
+	year := 2024
 	nd := newDate
-	dra := datetime.NewDateRange(2024, nd(1, 0), nd(3, 0))
-	if got, want := dra.From, nd(1, 1); got != want {
+	dra := datetime.NewDateRange(year, nd(1, 0), nd(3, 0))
+	if got, want := dra.From(), nd(1, 1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := dra.To, nd(3, 31); got != want {
+	if got, want := dra.To(), nd(3, 31); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	dra = datetime.NewDateRange(2024, nd(3, 0), nd(1, 0))
-	if got, want := dra.From, nd(1, 1); got != want {
+	dra = datetime.NewDateRange(year, nd(3, 0), nd(1, 0))
+	if got, want := dra.From(), nd(1, 1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := dra.To, nd(3, 31); got != want {
+	if got, want := dra.To(), nd(3, 31); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	dra = datetime.NewDateRange(year, nd(1, 29), nd(3, 1))
+	if got, want := dra.From(), nd(1, 29); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	dra = datetime.NewDateRange(year-1, nd(1, 29), nd(3, 1))
+	if got, want := dra.From(), nd(1, 29); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// test different years, test equality.
+
+	// test reversing of from/to in NewDateRange.
+	t.Fail()
 }
 
 func datesAsString(m, d int) string {
@@ -116,7 +134,7 @@ func datesAsString(m, d int) string {
 }
 
 func TestDataRangeIterator(t *testing.T) {
-	m := datesAsString
+	ds := datesAsString
 	year := 2024
 	for _, tc := range []struct {
 		input  string
@@ -126,7 +144,7 @@ func TestDataRangeIterator(t *testing.T) {
 		{"01/02:01/03", "01/02,01/03"},
 		{"01/30:02/02", "01/30,01/31,02/01,02/02"},
 		{"02/27:02", "02/27,02/28,02/29"},
-		{"03/30:05/02", "03/30,03/31," + m(4, 30) + "05/01,05/02"},
+		{"03/30:05/02", "03/30,03/31," + ds(4, 30) + "05/01,05/02"},
 	} {
 		var dr datetime.DateRange
 		var dates dateList
