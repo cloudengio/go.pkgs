@@ -17,7 +17,7 @@ import (
 )
 
 // Month as an int.
-type Month time.Month
+type Month uint8
 
 // ParseNumericMonth parses a 1 or 2 digit numeric month value in the range 1-12.
 func ParseNumericMonth(val string) (Month, error) {
@@ -149,14 +149,6 @@ func (d *Date) Parse(year int, val string) error {
 	}
 	d.Month = month
 	return nil
-}
-
-// YearSpecific returns true if the date requires a specific year to be
-// meaningful. For example, Feb-29 is only meaningful in a leap year,
-// and Feb with a day of zero depends on the context within it is being
-// used (eg. as a To date in a range).
-func (d Date) YearSpecific() bool {
-	return d.Month == 2 && (d.Day == 0 || d.Day == 29)
 }
 
 // DayOfYear returns the day of the year for the given year as

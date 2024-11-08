@@ -218,17 +218,17 @@ func daysFromDatesString(year int, datelist string) []int {
 
 func TestMergeDatesAndRanges(t *testing.T) {
 	nd := newDate
-	ndr := newDateRange
+	ndrl := newDateRangeList
 	year := 2024
 	for _, tc := range []struct {
 		dates  []datetime.Date
 		merged datetime.DateRangeList
 	}{
-		{[]datetime.Date{nd(1, 1), nd(1, 1)}, ndr(year, nd(1, 1), nd(1, 1))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2)}, ndr(year, nd(1, 1), nd(1, 2))},
-		{[]datetime.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndr(year, nd(1, 31), nd(2, 2))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndr(year, nd(1, 1), nd(1, 3))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndr(year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
+		{[]datetime.Date{nd(1, 1), nd(1, 1)}, ndrl(t, year, nd(1, 1), nd(1, 1))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2)}, ndrl(t, year, nd(1, 1), nd(1, 2))},
+		{[]datetime.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndrl(t, year, nd(1, 31), nd(2, 2))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndrl(t, year, nd(1, 1), nd(1, 3))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndrl(t, year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
 	} {
 		merged := datetime.MergeDates(year, tc.dates)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
@@ -239,11 +239,11 @@ func TestMergeDatesAndRanges(t *testing.T) {
 		ranges datetime.DateRangeList
 		merged datetime.DateRangeList
 	}{
-		{ndr(year, nd(1, 1), nd(1, 2)), ndr(year, nd(1, 1), nd(1, 2))},
-		{ndr(year, nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndr(year, nd(1, 1), nd(1, 2))},
-		{ndr(year, nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndr(year, nd(1, 1), nd(1, 10))},
-		{ndr(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndr(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
-		{ndr(year, nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndr(year, nd(2, 27), nd(3, 10))},
+		{ndrl(t, year, nd(1, 1), nd(1, 2)), ndrl(t, year, nd(1, 1), nd(1, 2))},
+		{ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndrl(t, year, nd(1, 1), nd(1, 2))},
+		{ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndrl(t, year, nd(1, 1), nd(1, 10))},
+		{ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
+		{ndrl(t, year, nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndrl(t, year, nd(2, 27), nd(3, 10))},
 	} {
 		merged := datetime.MergeRanges(year, tc.ranges)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
@@ -256,8 +256,8 @@ func TestMergeDatesAndRanges(t *testing.T) {
 		ranges datetime.DateRangeList
 		merged datetime.DateRangeList
 	}{
-		{datetime.MonthList{1}, ndr(year, nd(2, 1), nd(2, 28)), ndr(year, nd(1, 1), nd(2, 28))},
-		{datetime.MonthList{1}, ndr(year, nd(2, 2), nd(2, 28)), ndr(year, nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
+		{datetime.MonthList{1}, ndrl(t, year, nd(2, 1), nd(2, 28)), ndrl(t, year, nd(1, 1), nd(2, 28))},
+		{datetime.MonthList{1}, ndrl(t, year, nd(2, 2), nd(2, 28)), ndrl(t, year, nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
 	} {
 		merged := datetime.MergeMonthsAndRanges(year, tc.months, tc.ranges)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
@@ -367,10 +367,22 @@ func stringSlice(s ...string) []string {
 	return s
 }
 
-func newDateRange(year int, d ...datetime.Date) []datetime.DateRange {
+func newDateRange(t *testing.T, year int, a, b datetime.Date) datetime.DateRange {
+	dr, err := datetime.NewDateRange(year, a, b)
+	if err != nil {
+		t.Fatalf("failed: %v", err)
+	}
+	return dr
+}
+
+func newDateRangeList(t *testing.T, year int, d ...datetime.Date) []datetime.DateRange {
 	r := make([]datetime.DateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, datetime.NewDateRange(year, d[i], d[i+1]))
+		dr, err := datetime.NewDateRange(year, d[i], d[i+1])
+		if err != nil {
+			t.Fatalf("failed: %v", err)
+		}
+		r = append(r, dr)
 	}
 	return r
 }
@@ -397,7 +409,7 @@ func (dr *dateList) String() string {
 
 func TestMonthAndRangeMerge(t *testing.T) {
 	nd := newDate
-	ndr := newDateRange
+	ndrl := newDateRangeList
 	sl := stringSlice
 	year := 2021
 	for _, tc := range []struct {
@@ -407,13 +419,13 @@ func TestMonthAndRangeMerge(t *testing.T) {
 	}{
 		{"jan,dec",
 			nil,
-			ndr(year, nd(1, 1), nd(1, 31), nd(12, 1), nd(12, 31))},
+			ndrl(t, year, nd(1, 1), nd(1, 31), nd(12, 1), nd(12, 31))},
 		{"",
 			sl("aug-02:sep-03", "jan-01:jan-02"),
-			ndr(year, nd(1, 1), nd(1, 2), nd(8, 2), nd(9, 3))},
+			ndrl(t, year, nd(1, 1), nd(1, 2), nd(8, 2), nd(9, 3))},
 		{"feb,apr",
 			sl("aug-02:sep-03", "jan-01:jan-02"),
-			ndr(year, nd(1, 1), nd(1, 2), nd(2, 1), nd(2, 28), nd(4, 1), nd(4, 30), nd(8, 2), nd(9, 3))},
+			ndrl(t, year, nd(1, 1), nd(1, 2), nd(2, 1), nd(2, 28), nd(4, 1), nd(4, 30), nd(8, 2), nd(9, 3))},
 	} {
 		var months datetime.MonthList
 		var ranges datetime.DateRangeList
