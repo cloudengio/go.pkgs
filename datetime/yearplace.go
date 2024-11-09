@@ -10,13 +10,13 @@ import (
 )
 
 var (
-	dayOfYear       []int // per month cumulative days in year so [0, 31, 28 etc]
-	dayOfYearLeap   []int // per month cumulative days in leap year [0, 31, 29 etc]
-	daysInMonth     []int // days in each month
-	daysInMonthLeap []int
+	dayOfYear       []int   // per month cumulative days in year so [0, 31, 28 etc]
+	dayOfYearLeap   []int   // per month cumulative days in leap year [0, 31, 29 etc]
+	daysInMonth     []uint8 // days in each month
+	daysInMonthLeap []uint8
 	months          = []string{"january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"}
 
-	mirrorMonths = []int{
+	mirrorMonths = []uint8{
 		11 - 1, // jan, nov
 		10 - 1, // feb, oct
 		9 - 1,  // mar, sep
@@ -39,7 +39,7 @@ func MirrorMonth(month Month) Month {
 	return Month(mirrorMonths[month-1] + 1)
 }
 
-func daysInMonthForYearInit(year int, month int) int {
+func daysInMonthForYearInit(year int, month uint8) uint8 {
 	switch month {
 	case 2:
 		return DaysInFeb(year)
@@ -51,30 +51,30 @@ func daysInMonthForYearInit(year int, month int) int {
 }
 
 func init() {
-	daysInMonth = make([]int, 12)
-	daysInMonthLeap = make([]int, 12)
+	daysInMonth = make([]uint8, 12)
+	daysInMonthLeap = make([]uint8, 12)
 	dayOfYear = make([]int, 12)
 	dayOfYearLeap = make([]int, 12)
 
-	for i := 0; i < 12; i++ {
+	for i := uint8(0); i < 12; i++ {
 		daysInMonth[i] = daysInMonthForYearInit(2023, i+1)
 		daysInMonthLeap[i] = daysInMonthForYearInit(2024, i+1)
 	}
-	for i := 0; i < 11; i++ {
-		dayOfYear[i+1] += dayOfYear[i] + daysInMonth[i]
-		dayOfYearLeap[i+1] += dayOfYearLeap[i] + daysInMonthLeap[i]
+	for i := uint8(0); i < 11; i++ {
+		dayOfYear[i+1] += dayOfYear[i] + int(daysInMonth[i])
+		dayOfYearLeap[i+1] += dayOfYearLeap[i] + int(daysInMonthLeap[i])
 	}
 }
 
 // DaysInMonth returns the number of days in the given month for the given year.
-func DaysInMonth(year int, month Month) int {
+func DaysInMonth(year int, month Month) uint8 {
 	if IsLeap(year) {
 		return daysInMonthLeap[month-1]
 	}
 	return daysInMonth[month-1]
 }
 
-func daysInMonthForYear(year int) []int {
+func daysInMonthForYear(year int) []uint8 {
 	if IsLeap(year) {
 		return daysInMonthLeap
 	}
@@ -87,11 +87,19 @@ func IsLeap(year int) bool {
 }
 
 // DaysInFeb returns the number of days in February for the given year.
-func DaysInFeb(year int) int {
+func DaysInFeb(year int) uint8 {
 	if IsLeap(year) {
 		return 29
 	}
 	return 28
+}
+
+// DaysInYear returns the number of days in the given year.
+func DaysInYear(year int) int {
+	if IsLeap(year) {
+		return 366
+	}
+	return 365
 }
 
 // YearAndPlace represents a year and a location.

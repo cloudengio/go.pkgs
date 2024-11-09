@@ -36,7 +36,7 @@ func TestDates(t *testing.T) {
 	pdrl := parseDateRangeList
 	pml := parseMontList
 	unconstrained := datetime.Constraints{}
-	noFeb29 := datetime.Constraints{Custom: []datetime.Date{{Month: 2, Day: 29}}}
+	noFeb29 := datetime.Constraints{Custom: []datetime.Date{datetime.NewDate(2, 29)}}
 	for _, tc := range []struct {
 		monthsFor   string
 		mirror      bool

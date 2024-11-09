@@ -35,9 +35,10 @@ func TestDateParse(t *testing.T) {
 		var when datetime.Date
 		if err := when.Parse(2024, tc.val); err != nil {
 			t.Errorf("failed: %v: %v", tc.val, err)
+			continue
 		}
-		if !reflect.DeepEqual(when, tc.when) {
-			t.Errorf("got %v, want %v", when, tc.when)
+		if got, want := when, tc.when; got != want {
+			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
@@ -98,7 +99,7 @@ func TestDates(t *testing.T) {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
 		year = 2024
-		if (tc.d.Month == 2 && tc.d.Day >= 29) || tc.d.Month > 2 {
+		if (tc.d.Month() == 2 && tc.d.Day() >= 29) || tc.d.Month() > 2 {
 			tc.dy++
 		}
 		dayOf = tc.d.DayOfYear(year)
@@ -180,7 +181,7 @@ func TestDates(t *testing.T) {
 		{nd(2, 28), nd(3, 1), true},
 		{nd(2, 29), nd(3, 1), true},
 	} {
-		if got, want := tc.a.Before(tc.b), tc.before; got != want {
+		if got, want := tc.a < tc.b, tc.before; got != want {
 			t.Errorf("%v - %v: got %v, want %v", tc.a, tc.b, got, want)
 		}
 	}
@@ -203,19 +204,6 @@ func TestYearAndPlace(t *testing.T) {
 	}
 }
 
-func daysFromDatesString(year int, datelist string) []int {
-	parts := strings.Split(datelist, ",")
-	days := make([]int, 0, len(parts))
-	for _, p := range parts {
-		var date datetime.Date
-		if err := date.Parse(year, p); err != nil {
-			panic(err)
-		}
-		days = append(days, date.DayOfYear(year))
-	}
-	return days
-}
-
 func TestMergeDatesAndRanges(t *testing.T) {
 	nd := newDate
 	ndrl := newDateRangeList
@@ -224,11 +212,11 @@ func TestMergeDatesAndRanges(t *testing.T) {
 		dates  []datetime.Date
 		merged datetime.DateRangeList
 	}{
-		{[]datetime.Date{nd(1, 1), nd(1, 1)}, ndrl(t, year, nd(1, 1), nd(1, 1))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2)}, ndrl(t, year, nd(1, 1), nd(1, 2))},
-		{[]datetime.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndrl(t, year, nd(1, 31), nd(2, 2))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndrl(t, year, nd(1, 1), nd(1, 3))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndrl(t, year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
+		{[]datetime.Date{nd(1, 1), nd(1, 1)}, ndrl(year, nd(1, 1), nd(1, 1))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2)}, ndrl(year, nd(1, 1), nd(1, 2))},
+		{[]datetime.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndrl(year, nd(1, 31), nd(2, 2))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndrl(year, nd(1, 1), nd(1, 3))},
+		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndrl(year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
 	} {
 		merged := datetime.MergeDates(year, tc.dates)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
@@ -239,11 +227,11 @@ func TestMergeDatesAndRanges(t *testing.T) {
 		ranges datetime.DateRangeList
 		merged datetime.DateRangeList
 	}{
-		{ndrl(t, year, nd(1, 1), nd(1, 2)), ndrl(t, year, nd(1, 1), nd(1, 2))},
-		{ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndrl(t, year, nd(1, 1), nd(1, 2))},
-		{ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndrl(t, year, nd(1, 1), nd(1, 10))},
-		{ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndrl(t, year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
-		{ndrl(t, year, nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndrl(t, year, nd(2, 27), nd(3, 10))},
+		{ndrl(year, nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
+		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
+		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndrl(year, nd(1, 1), nd(1, 10))},
+		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndrl(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
+		{ndrl(year, nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndrl(year, nd(2, 27), nd(3, 10))},
 	} {
 		merged := datetime.MergeRanges(year, tc.ranges)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
@@ -256,8 +244,8 @@ func TestMergeDatesAndRanges(t *testing.T) {
 		ranges datetime.DateRangeList
 		merged datetime.DateRangeList
 	}{
-		{datetime.MonthList{1}, ndrl(t, year, nd(2, 1), nd(2, 28)), ndrl(t, year, nd(1, 1), nd(2, 28))},
-		{datetime.MonthList{1}, ndrl(t, year, nd(2, 2), nd(2, 28)), ndrl(t, year, nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
+		{datetime.MonthList{1}, ndrl(year, nd(2, 1), nd(2, 28)), ndrl(year, nd(1, 1), nd(2, 28))},
+		{datetime.MonthList{1}, ndrl(year, nd(2, 2), nd(2, 28)), ndrl(year, nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
 	} {
 		merged := datetime.MergeMonthsAndRanges(year, tc.months, tc.ranges)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
@@ -289,14 +277,14 @@ func TestTimeOfDayParse(t *testing.T) {
 		val  string
 		when datetime.TimeOfDay
 	}{
-		{"08:12", datetime.TimeOfDay{8, 12, 0}},
-		{"08-12", datetime.TimeOfDay{8, 12, 0}},
-		{"20:01", datetime.TimeOfDay{20, 01, 0}},
-		{"21-01", datetime.TimeOfDay{21, 01, 0}},
-		{"08:12:13", datetime.TimeOfDay{8, 12, 13}},
-		{"08-12-13", datetime.TimeOfDay{8, 12, 13}},
-		{"20:01:13", datetime.TimeOfDay{20, 01, 13}},
-		{"21-01-13", datetime.TimeOfDay{21, 01, 13}},
+		{"08:12", datetime.NewTimeOfDay(8, 12, 0)},
+		{"08-12", datetime.NewTimeOfDay(8, 12, 0)},
+		{"20:01", datetime.NewTimeOfDay(20, 01, 0)},
+		{"21-01", datetime.NewTimeOfDay(21, 01, 0)},
+		{"08:12:13", datetime.NewTimeOfDay(8, 12, 13)},
+		{"08-12-13", datetime.NewTimeOfDay(8, 12, 13)},
+		{"20:01:13", datetime.NewTimeOfDay(20, 01, 13)},
+		{"21-01-13", datetime.NewTimeOfDay(21, 01, 13)},
 	} {
 		var tod datetime.TimeOfDay
 		if err := tod.Parse(tc.val); err != nil {
@@ -321,18 +309,37 @@ func TestTimeOfDayParse(t *testing.T) {
 	}
 
 	tods := datetime.TimeOfDayList{}
-	for _, s := range []string{"08:13", "07:13", "09:14:12", "09:14:9", "09:14"} {
+	examples := []string{"08:13", "07:13", "09:14:12", "09:14:9", "09:14"}
+	for _, s := range examples {
 		var tod datetime.TimeOfDay
 		if err := tod.Parse(s); err != nil {
 			t.Errorf("failed: %v", err)
 		}
 		tods = append(tods, tod)
 	}
-	tods.Sort()
+	slices.Sort(tods)
 
-	if got, want := tods, []datetime.TimeOfDay{{7, 13, 0}, {8, 13, 0}, {9, 14, 0}, {9, 14, 9}, {9, 14, 12}}; !slices.Equal(got, want) {
+	nt := datetime.NewTimeOfDay
+	expected := newTimeOfDayList(
+		nt(7, 13, 0),
+		nt(8, 13, 0),
+		nt(9, 14, 0),
+		nt(9, 14, 9),
+		nt(9, 14, 12))
+
+	if got, want := tods, expected; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	tods = datetime.TimeOfDayList{}
+	if err := tods.Parse(strings.Join(examples, ",")); err != nil {
+		t.Errorf("failed: %v", err)
+	}
+
+	if got, want := tods, expected; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
 }
 
 func TestMonthRangeParse(t *testing.T) {
@@ -363,43 +370,12 @@ func TestMonthRangeParse(t *testing.T) {
 	}
 }
 
-func stringSlice(s ...string) []string {
-	return s
-}
-
-func newDateRange(t *testing.T, year int, a, b datetime.Date) datetime.DateRange {
-	dr, err := datetime.NewDateRange(year, a, b)
-	if err != nil {
-		t.Fatalf("failed: %v", err)
-	}
-	return dr
-}
-
-func newDateRangeList(t *testing.T, year int, d ...datetime.Date) []datetime.DateRange {
-	r := make([]datetime.DateRange, 0, len(d)/2)
-	for i := 0; i < len(d); i += 2 {
-		dr, err := datetime.NewDateRange(year, d[i], d[i+1])
-		if err != nil {
-			t.Fatalf("failed: %v", err)
-		}
-		r = append(r, dr)
-	}
-	return r
-}
-
-func newDate(m, d int) datetime.Date {
-	return datetime.Date{
-		Month: datetime.Month(m),
-		Day:   d,
-	}
-}
-
 type dateList []datetime.Date
 
 func (dr *dateList) String() string {
 	var out strings.Builder
 	for _, d := range *dr {
-		out.WriteString(fmt.Sprintf("%02d/%02d,", d.Month, d.Day))
+		out.WriteString(fmt.Sprintf("%02d/%02d,", d.Month(), d.Day()))
 	}
 	if out.Len() == 0 {
 		return ""
@@ -419,13 +395,13 @@ func TestMonthAndRangeMerge(t *testing.T) {
 	}{
 		{"jan,dec",
 			nil,
-			ndrl(t, year, nd(1, 1), nd(1, 31), nd(12, 1), nd(12, 31))},
+			ndrl(year, nd(1, 1), nd(1, 31), nd(12, 1), nd(12, 31))},
 		{"",
 			sl("aug-02:sep-03", "jan-01:jan-02"),
-			ndrl(t, year, nd(1, 1), nd(1, 2), nd(8, 2), nd(9, 3))},
+			ndrl(year, nd(1, 1), nd(1, 2), nd(8, 2), nd(9, 3))},
 		{"feb,apr",
 			sl("aug-02:sep-03", "jan-01:jan-02"),
-			ndrl(t, year, nd(1, 1), nd(1, 2), nd(2, 1), nd(2, 28), nd(4, 1), nd(4, 30), nd(8, 2), nd(9, 3))},
+			ndrl(year, nd(1, 1), nd(1, 2), nd(2, 1), nd(2, 28), nd(4, 1), nd(4, 30), nd(8, 2), nd(9, 3))},
 	} {
 		var months datetime.MonthList
 		var ranges datetime.DateRangeList

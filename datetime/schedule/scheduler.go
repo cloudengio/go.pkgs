@@ -43,7 +43,7 @@ func (s *Scheduler[T]) prepareActions() {
 		if merged[i].Due == merged[j].Due {
 			return merged[i].Name < merged[j].Name
 		}
-		return merged[i].Due.Before(merged[j].Due)
+		return merged[i].Due < merged[j].Due
 	})
 	s.actions = s.actionsStorage[:1]
 	s.actions[0] = s.actionStorage[:1]

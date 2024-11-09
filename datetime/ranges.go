@@ -6,59 +6,73 @@ package datetime
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
 
 // DateRange represents a range of dates, inclusive of the start and end dates.
-// NewDateRange and Parse create or initialize a DateRange.
-type DateRange struct {
-	from, to Date
+// NewDateRange and Parse create or initialize a DateRange. The from and to months
+// are stored in the top 8 bits and the from and to days in the lower 8 bits to
+// allow for sorting.
+type DateRange uint32
+
+func (dr DateRange) from() (Month, uint8) {
+	return Month(dr >> 24 & 0xff), uint8(dr >> 8 & 0xff)
+}
+
+func (dr DateRange) to() (Month, uint8) {
+	return Month(dr >> 16 & 0xff), uint8(dr & 0xff)
+}
+
+func (dr DateRange) fromDate() Date {
+	return newDate8(Month(dr>>24&0xff), uint8(dr>>8&0xff))
+}
+
+func (dr DateRange) toDate() Date {
+	return newDate8(Month(dr>>16&0xff), uint8(dr&0xff))
+}
+
+func newDateRange(from, to Date) DateRange {
+	fm, fd := DateRange(from.Month()), DateRange(from.Day())
+	tm, td := DateRange(to.Month()), DateRange(to.Day())
+	return DateRange(fm<<24 | tm<<16 | fd<<8 | td)
 }
 
 // From returns the start date of the range for the specified year.
 // Feb 29 is returned as Feb 28 for non-leap years.
 func (dr DateRange) From(year int) Date {
-	if dr.from.Month == 2 && dr.from.Day == 29 && !IsLeap(year) {
-		return Date{Month: dr.from.Month, Day: 28}
+	fromMonth, fromDay := dr.from()
+	if fromMonth == 2 && fromDay == 29 && !IsLeap(year) {
+		return newDate8(fromMonth, 28)
 	}
-	return dr.from
+	return newDate8(fromMonth, fromDay)
 }
 
 // To returns the end date of the range for the specified year.
 // Feb 29 is returned as Feb 28 for non-leap years.
 func (dr DateRange) To(year int) Date {
-	if dr.to.Month == 2 && dr.to.Day == 29 && !IsLeap(year) {
-		return Date{Month: 2, Day: 28}
+	toMonth, toDay := dr.to()
+	if toMonth == 2 && toDay == 29 && !IsLeap(year) {
+		return newDate8(2, 28)
 	}
-	return dr.to
+	return newDate8(toMonth, toDay)
 }
 
 // NewDateRange returns a DateRange for the from/to dates for the specified year.
-// If the from day is zero then it is treated as the first day of the month.
-// If the from day is 29 for a non-leap year then it is left as 29.
-// If the to day is zero then it is treated as the last day of the month taking
-// the year into account for Feb.
-func NewDateRange(year int, from, to Date) (DateRange, error) {
-
-	if from.Day <= 0 {
-		from.Day = 1
-	} else if n := DaysInMonth(year, from.Month); from.Day > n {
-		from.Day = n
+// If the from date is later than the to date then they are swapped.
+// The resulting from and to dates are then normalized using
+// date.Normalize(year, true) for the from date and date.Normalize(year, false) for the to date.
+func NewDateRange(year int, from, to Date) DateRange {
+	if from > to {
+		from, to = to, from
 	}
-
-	if n := DaysInMonth(year, to.Month); to.Day == 0 {
-		to.Day = n
-	} else if to.Day > n {
-		to.Day = n
-	}
-
-	return DateRange{from: from, to: to}, nil
+	from, to = from.Normalize(year, true), to.Normalize(year, false)
+	return newDateRange(from, to)
 }
 
 func (dr DateRange) String() string {
-	return fmt.Sprintf("%s - %s", dr.from, dr.to)
+	return fmt.Sprintf("%s - %s", dr.fromDate().String(), dr.toDate().String())
 }
 
 // Parse ranges in formats '01:03', 'Jan:Mar', '01/02:03-04' or 'Jan-02:Mar-04'.
@@ -66,7 +80,8 @@ func (dr DateRange) String() string {
 // If the from day is 29 for a non-leap year then it is left as 29.
 // If the to day is zero then it is treated as the last day of the month taking
 // the year into account for Feb.
-// The start date must be before the end date.
+// The start date must be before the end date after normalization as per
+// the above rules.
 func (d *DateRange) Parse(year int, val string) error {
 	parts := strings.Split(val, ":")
 	if len(parts) != 2 {
@@ -79,16 +94,12 @@ func (d *DateRange) Parse(year int, val string) error {
 	if err := to.Parse(year, parts[1]); err != nil {
 		return fmt.Errorf("invalid to: %s", parts[1])
 	}
-	if from.Day == 0 {
-		from.Day = 1
-	}
-	if to.Day == 0 {
-		to.Day = DaysInMonth(year, to.Month)
-	}
-	if to.Before(from) {
+	from = from.Normalize(year, true)
+	to = to.Normalize(year, false)
+	if to < from {
 		return fmt.Errorf("from is later than to: %s %s", from, to)
 	}
-	d.from, d.to = from, to
+	*d = newDateRange(from, to)
 	return nil
 }
 
@@ -100,13 +111,13 @@ func (dr DateRange) Equal(year int, dr2 DateRange) bool {
 	return af == bf && at == bt
 }
 
-// Dates returns an iterator that yields each date in the range for the
+// Dates returns an iterator that yields each Date in the range for the
 // given year.
 func (d DateRange) Dates(year int) func(yield func(Date) bool) {
 	dm := daysInMonthForYear(year)
 	to := d.To(year)
 	return func(yield func(Date) bool) {
-		for td := d.From(year); td.BeforeOrOn(to); td = td.tomorrow(dm) {
+		for td := d.From(year); td <= to; td = td.tomorrow(dm) {
 			if !yield(td) {
 				return
 			}
@@ -114,14 +125,14 @@ func (d DateRange) Dates(year int) func(yield func(Date) bool) {
 	}
 }
 
-// DatesConstrained returns an iterator that yields each date in the range for the
+// DatesConstrained returns an iterator that yields each Date in the range for the
 // given year constrained by the given DateConstraints.
 func (dr DateRange) DatesConstrained(year int, dc Constraints) func(yield func(Date) bool) {
 	return func(yield func(Date) bool) {
 		dm := daysInMonthForYear(year)
 		to := dr.To(year)
-		for td := dr.From(year); td.BeforeOrOn(to); td = td.tomorrow(dm) {
-			if !dc.Include(time.Date(year, time.Month(td.Month), td.Day, 0, 0, 0, 0, time.UTC)) {
+		for td := dr.From(year); td <= to; td = td.tomorrow(dm) {
+			if !dc.Include(time.Date(year, time.Month(td.Month()), td.Day(), 0, 0, 0, 0, time.UTC)) {
 				continue
 			}
 			if !yield(td) {
@@ -131,17 +142,19 @@ func (dr DateRange) DatesConstrained(year int, dc Constraints) func(yield func(D
 	}
 }
 
+// Ranges returns an iterator that yields each DateRange in the range for the
+// given year constrained by the given DateConstraints.
 func (dr DateRange) RangesConstrained(year int, dc Constraints) func(yield func(DateRange) bool) {
 	dm := daysInMonthForYear(year)
 	return func(yield func(DateRange) bool) {
 		start, stop := dr.From(year), dr.To(year)
 		to := stop
-		inrange := dc.Include(time.Date(year, time.Month(start.Month), start.Day, 0, 0, 0, 0, time.UTC))
-		for td := dr.From(year); td.BeforeOrOn(to); td = td.tomorrow(dm) {
-			if !dc.Include(time.Date(year, time.Month(td.Month), td.Day, 0, 0, 0, 0, time.UTC)) {
+		inrange := dc.Include(time.Date(year, time.Month(start.Month()), start.Day(), 0, 0, 0, 0, time.UTC))
+		for td := dr.From(year); td <= to; td = td.tomorrow(dm) {
+			if !dc.Include(time.Date(year, time.Month(td.Month()), td.Day(), 0, 0, 0, 0, time.UTC)) {
 				if inrange {
 					// Range ends
-					if !yield(DateRange{from: start, to: stop}) {
+					if !yield(newDateRange(start, stop)) {
 						return
 					}
 				}
@@ -155,7 +168,7 @@ func (dr DateRange) RangesConstrained(year int, dc Constraints) func(yield func(
 			stop = td
 		}
 		if inrange {
-			yield(DateRange{from: start, to: stop})
+			yield(newDateRange(start, stop))
 		}
 	}
 }
@@ -181,7 +194,7 @@ func (dr DateRange) DaysConstrained(year int, dc Constraints) func(yield func(in
 		to := dr.To(year).DayOfYear(year)
 		for d := dr.From(year).DayOfYear(year); d <= to; d++ {
 			tm := dateFromDay(d, dm)
-			if !dc.Include(time.Date(year, time.Month(tm.Month), tm.Day, 0, 0, 0, 0, time.UTC)) {
+			if !dc.Include(time.Date(year, time.Month(tm.Month()), tm.Day(), 0, 0, 0, 0, time.UTC)) {
 				continue
 			}
 			if !yield(d) {
@@ -191,20 +204,8 @@ func (dr DateRange) DaysConstrained(year int, dc Constraints) func(yield func(in
 	}
 }
 
-// Before returns true if d is before a. If the months and start days are identical
-// then the end days are used to determine the order, ie. which range ends first.
-func (dr DateRange) Before(a DateRange) bool {
-	if dr.from.Month != a.from.Month {
-		return dr.from.Month < a.from.Month
-	}
-	// From.Day may be zero, but that doesn't affect the ordering.
-	if dr.from.Day != a.from.Day {
-		return dr.from.Day < a.from.Day
-	}
-	// If the start dates are identical then use the end date to determine the order.
-	return dr.to.Day < a.to.Day
-}
-
+// DateRangeList represents a list of DateRange values, it can be sorted and searched
+// using the slices package.
 type DateRangeList []DateRange
 
 // MergeMonthsAndRanges creates an ordered list of DateRange values from the given
@@ -212,10 +213,10 @@ type DateRangeList []DateRange
 func MergeMonthsAndRanges(year int, months MonthList, ranges DateRangeList) DateRangeList {
 	drl := make(DateRangeList, 0, len(months)+len(ranges))
 	for _, m := range months {
-		drl = append(drl, DateRange{from: Date{Month: m, Day: 1}, to: Date{Month: m, Day: DaysInMonth(year, m)}})
+		drl = append(drl, newDateRange(newDate8(m, 1), newDate8(m, DaysInMonth(year, m))))
 	}
 	drl = append(drl, ranges...)
-	sort.Slice(drl, func(i, j int) bool { return drl[i].Before(drl[j]) })
+	slices.Sort(drl)
 	return MergeRanges(year, drl)
 }
 
@@ -239,15 +240,12 @@ func (dr *DateRangeList) Parse(year int, ranges []string) error {
 		drs = append(drs, dr)
 		seen[dr] = struct{}{}
 	}
-	drs.Sort()
+	slices.Sort(drs)
 	*dr = drs
 	return nil
 }
 
-func (dr DateRangeList) Sort() {
-	sort.Slice(dr, func(i, j int) bool { return dr[i].Before(dr[j]) })
-}
-
+// Equal returns true if the two DateRangeList values are equal for the given year.
 func (dr DateRangeList) Equal(year int, dr2 DateRangeList) bool {
 	if len(dr) != len(dr2) {
 		return false
@@ -261,11 +259,11 @@ func (dr DateRangeList) Equal(year int, dr2 DateRangeList) bool {
 }
 
 func MergeDates(year int, dates []Date) DateRangeList {
-	sort.Slice(dates, func(i, j int) bool { return dates[i].Before(dates[j]) })
+	slices.Sort(dates)
 	dm := daysInMonthForYear(year)
 	var drs []DateRange
-	from := dates[0]
-	to := dates[0]
+	from := dates[0].Normalize(year, true)
+	to := dates[0].Normalize(year, false)
 	for i := 1; i < len(dates); i++ {
 		if dates[i-1] == dates[i] {
 			continue
@@ -274,11 +272,11 @@ func MergeDates(year int, dates []Date) DateRangeList {
 			to = dates[i]
 			continue
 		}
-		drs = append(drs, DateRange{from: from, to: to})
-		from = dates[i]
-		to = dates[i]
+		drs = append(drs, newDateRange(from, to))
+		from = dates[i].Normalize(year, false)
+		to = from
 	}
-	drs = append(drs, DateRange{from: from, to: to})
+	drs = append(drs, newDateRange(from, to))
 	return drs
 }
 
@@ -286,7 +284,7 @@ func MergeRanges(year int, ranges []DateRange) DateRangeList {
 	if len(ranges) == 0 {
 		return nil
 	}
-	sort.Slice(ranges, func(i, j int) bool { return ranges[i].Before(ranges[j]) })
+	slices.Sort(ranges)
 	leap := IsLeap(year)
 	var merged []DateRange
 
@@ -299,10 +297,10 @@ func MergeRanges(year int, ranges []DateRange) DateRangeList {
 			to = ranges[i].To(year)
 			continue
 		}
-		merged = append(merged, DateRange{from: from, to: to})
+		merged = append(merged, newDateRange(from, to))
 		from = ranges[i].From(year)
 		to = ranges[i].To(year)
 	}
-	merged = append(merged, DateRange{from: from, to: to})
+	merged = append(merged, newDateRange(from, to))
 	return merged
 }

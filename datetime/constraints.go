@@ -5,6 +5,7 @@
 package datetime
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -45,14 +46,10 @@ func (dc Constraints) String() string {
 // An empty set Constraints will return true, ie. include all dates.
 func (dc Constraints) Include(when time.Time) bool {
 	if len(dc.Custom) > 0 {
-		month, day := Month(when.Month()), when.Day()
-		contains := dc.Custom.Contains(Date{month, day})
-		return !contains
+		return !slices.Contains(dc.Custom, DateFromTime(when))
 	}
 	if len(dc.CustomCalendar) > 0 {
-		year, month, day := when.Year(), Month(when.Month()), when.Day()
-		contains := dc.CustomCalendar.Contains(CalendarDate{year, month, day})
-		return !contains
+		return !slices.Contains(dc.CustomCalendar, CalendarDateFromTime(when))
 	}
 	switch {
 	case dc.Weekdays && dc.Weekends:

@@ -2,10 +2,9 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package datetime provides support for working with dates, time of day and associated ranges.
+// Package datetime provides support for working with dates, the time of day
+// and associated ranges.
 package datetime
-
-// TODO: multiyear date ranges.
 
 import (
 	"fmt"
@@ -16,12 +15,31 @@ import (
 	"time"
 )
 
-// Month as an int.
+// Month as a uint8
 type Month uint8
+
+const (
+	January Month = 1 + iota
+	February
+	March
+	April
+	May
+	June
+	July
+	August
+	September
+	October
+	November
+	December
+)
+
+func (m Month) String() string {
+	return time.Month(m).String()
+}
 
 // ParseNumericMonth parses a 1 or 2 digit numeric month value in the range 1-12.
 func ParseNumericMonth(val string) (Month, error) {
-	n, err := strconv.Atoi(val)
+	n, err := strconv.ParseUint(val, 10, 8)
 	if err != nil {
 		return 0, err
 	}
@@ -61,17 +79,64 @@ func (m *Month) Parse(val string) error {
 // Day may be zero in which case the Date refers to the entire month with the
 // interpretation of the day determined by the context (eg. a start date may refer
 // to the first day of the month, and an end date may refer to the last day of the month).
-type Date struct {
-	Month Month
-	Day   int
+
+// Date as a uint16 with the month in the high byte and the day in the low byte.
+type Date uint16
+
+// NewDate returns a Date for the given month and day. Both are assumed to
+// valid for the context in which they are used. Normalize should be used to
+// to adjust for a given year and intepretation of zero day value.
+func NewDate(month Month, day int) Date {
+	return Date(month)&0xff<<8 | Date(uint8(day&0xff))
 }
 
-func NewDate(when time.Time) Date {
-	return Date{Month: Month(when.Month()), Day: when.Day()}
+func newDate8(month Month, day uint8) Date {
+	return Date(month)&0xff<<8 | Date(day&0xff)
+}
+
+// Month returns the month for the date.
+func (d Date) Month() Month {
+	return Month(d >> 8)
+}
+
+// Day returns the day for the date.
+func (d Date) Day() int {
+	return int(d & 0xff)
+}
+
+// DateFromTime returns the Date for the given time.Time.
+func DateFromTime(when time.Time) Date {
+	return NewDate(Month(when.Month()), when.Day())
 }
 
 func (d Date) String() string {
-	return fmt.Sprintf("%s %02d", time.Month(d.Month), d.Day)
+	return fmt.Sprintf("%s %02d", d.Month().String(), d.Day())
+}
+
+// Normalize adjusts the date for the given year. If the day is zero
+// then firstOfMonth is used to determine the interpretation of the day.
+// If firstOfMonth is true then the day is set to the first day of the month,
+// otherwise it is set to the last day of the month.
+// Month is normalized to be in the range 1-12.
+func (d Date) Normalize(year int, firstOfMonth bool) Date {
+	month := Month(d >> 8)
+	if month == 0 {
+		month = 1
+	} else if month > 12 {
+		month = 12
+	}
+	dm := daysInMonthForYear(year)[month-1]
+	day := uint8(d & 0xff)
+	if day == 0 {
+		if firstOfMonth {
+			day = 1
+		} else {
+			day = dm
+		}
+	} else if day > dm {
+		day = dm
+	}
+	return newDate8(month, day)
 }
 
 var numericDateRe = regexp.MustCompile(`^([0-1]+)-([0-9]{1,2})$`)
@@ -81,20 +146,22 @@ var numericDateRe = regexp.MustCompile(`^([0-1]+)-([0-9]{1,2})$`)
 func ParseNumericDate(year int, val string) (Date, error) {
 	parts := strings.Split(val, "/")
 	if len(parts) != 2 {
-		return Date{}, fmt.Errorf("invalid value %q, expected format 'Jan-02'", val)
+		return Date(0), fmt.Errorf("invalid value %q, expected format 'Jan-02'", val)
 	}
-	month, err := ParseNumericMonth(parts[0])
+	tmp, err := strconv.ParseUint(parts[0], 10, 8)
 	if err != nil {
-		return Date{}, err
+		return Date(0), err
 	}
-	day, err := strconv.Atoi(parts[1])
+	month := Month(tmp & 0xff)
+	tmp, err = strconv.ParseUint(parts[1], 10, 8)
 	if err != nil {
-		return Date{}, fmt.Errorf("invalid day: %s", parts[1])
+		return Date(0), fmt.Errorf("invalid day: %s", parts[1])
 	}
+	day := uint8(tmp & 0xff)
 	if day < 1 || day > DaysInMonth(year, month) {
-		return Date{}, fmt.Errorf("invalid day for %v %v: %d", day, month, day)
+		return Date(0), fmt.Errorf("invalid day for %v %v: %d", day, month, day)
 	}
-	return Date{Month: month, Day: day}, nil
+	return newDate8(month, day), nil
 }
 
 // ParseDate parses a date in the forma 'Jan-02' with error checking
@@ -102,20 +169,21 @@ func ParseNumericDate(year int, val string) (Date, error) {
 func ParseDate(year int, val string) (Date, error) {
 	parts := strings.Split(val, "-")
 	if len(parts) != 2 {
-		return Date{}, fmt.Errorf("invalid date %q, expected format 'Jan-02'", val)
+		return Date(0), fmt.Errorf("invalid date %q, expected format 'Jan-02'", val)
 	}
 	month, err := ParseMonth(parts[0])
 	if err != nil {
-		return Date{}, err
+		return Date(0), err
 	}
-	day, err := strconv.Atoi(parts[1])
+	tmp, err := strconv.ParseUint(parts[1], 10, 8)
 	if err != nil {
-		return Date{}, fmt.Errorf("invalid day: %s", parts[1])
+		return Date(0), fmt.Errorf("invalid day: %s", parts[1])
 	}
-	if day < 1 || day > DaysInMonth(year, month) {
-		return Date{}, fmt.Errorf("invalid day for %v %v: %d", day, month, day)
+	day := uint8(tmp)
+	if day < 1 || uint8(day) > DaysInMonth(year, month) {
+		return Date(0), fmt.Errorf("invalid day for %v %s: %d", day, month, day)
 	}
-	return Date{Month: month, Day: day}, nil
+	return newDate8(month, day), nil
 }
 
 const expectedDateFormats = "01, Jan, 01/02 or Jan-02"
@@ -147,7 +215,7 @@ func (d *Date) Parse(year int, val string) error {
 	if err != nil {
 		return fmt.Errorf("invalid month %q, expected %s", val, expectedDateFormats)
 	}
-	d.Month = month
+	*d = NewDate(month, 0)
 	return nil
 }
 
@@ -161,49 +229,37 @@ func (d Date) DayOfYear(year int) int {
 }
 
 func (d Date) dayOfYear(leap bool) int {
-	md := d.Day
+	day := uint8(d & 0xff)
+	month := (d >> 8) - 1
 	if leap {
-		if md > daysInMonthLeap[d.Month-1] {
-			md = daysInMonthLeap[d.Month-1]
+		if day > daysInMonthLeap[month] {
+			day = daysInMonthLeap[month]
 		}
-		return dayOfYearLeap[time.Month(d.Month)-1] + md
+		return dayOfYearLeap[month] + int(day)
 	}
-	if md > daysInMonth[d.Month-1] {
-		md = daysInMonth[d.Month-1]
+	if day > daysInMonth[month] {
+		day = daysInMonth[month]
 	}
-	return dayOfYear[time.Month(d.Month)-1] + md
-}
-
-// Before returns true if date is before d. It returns false if the
-// dates are equal.
-func (d Date) Before(date Date) bool {
-	return d.Month < date.Month || (d.Month == date.Month && d.Day < date.Day)
-}
-
-// BeforeOrOn returns true if date is before or on d. It returns true if the
-func (d Date) BeforeOrOn(date Date) bool {
-	return d.Month < date.Month || (d.Month == date.Month && d.Day <= date.Day)
+	return dayOfYear[month] + int(day)
 }
 
 // Tomorrow returns the date of the next day.
 // It will silently treat days that exceed those for a given month as the last
-// day of that month.
-// 12/31 wraps to 1/1.
+// day of that month. 12/31 wraps to 1/1.
 func (d Date) Tomorrow(year int) Date {
 	return d.tomorrow(daysInMonthForYear(year))
 }
 
-func (d Date) tomorrow(daysInMonth []int) Date {
-	if d.Month == 12 && d.Day == 31 {
-		return Date{Month(1), 1}
+func (d Date) tomorrow(daysInMonth []uint8) Date {
+	day := uint8(d & 0xff)
+	month := Month(d >> 8)
+	if month == 12 && day == 31 {
+		return NewDate(1, 1)
 	}
-	if d.Day >= daysInMonth[d.Month-1] {
-		d.Month++
-		d.Day = 1
-		return d
+	if day >= daysInMonth[month-1] {
+		return NewDate(month+1, 1)
 	}
-	d.Day++
-	return d
+	return NewDate(month, int(day+1))
 }
 
 // Yesterday returns the date of the previous day.
@@ -212,25 +268,25 @@ func (d Date) Yesterday(year int) Date {
 	return d.yesterday(daysInMonthForYear(year))
 }
 
-func (d Date) yesterday(daysInMonth []int) Date {
-	if d.Month == 1 && d.Day == 1 {
-		return Date{Month(12), 31}
+func (d Date) yesterday(daysInMonth []uint8) Date {
+	day := uint8(d & 0xff)
+	month := Month(d >> 8)
+	if month == 1 && day == 1 {
+		return NewDate(12, 31)
 	}
-	if d.Day <= 1 {
-		d.Month--
-		d.Day = daysInMonth[d.Month-1]
-		return d
+	if day <= 1 {
+		return newDate8(month-1, daysInMonth[month-2])
 	}
-	d.Day--
-	return d
+	return newDate8(month, day-1)
 }
 
-func dateFromDay(day int, daysInMonth []int) Date {
-	for month := 0; month < 12; month++ {
-		if day < daysInMonth[month] {
-			return Date{Month(month + 1), day}
+func dateFromDay(day int, daysInMonth []uint8) Date {
+	for month := uint8(0); month < 12; month++ {
+		dm := int(daysInMonth[month])
+		if day < dm {
+			return NewDate(Month(month+1), day)
 		}
-		day -= daysInMonth[month]
+		day -= dm
 	}
 	panic("unreachable")
 }
@@ -239,20 +295,21 @@ func dateFromDay(day int, daysInMonth []int) Date {
 // <= 0 is treated as Jan-01 and a day of > 365/366 is treated as Dec-31.
 func DateFromDay(year, day int) Date {
 	if day <= 0 {
-		return Date{Month(1), 1}
+		return NewDate(1, 1)
 	}
 	if IsLeap(year) {
 		if day > 366 {
-			return Date{Month(12), 31}
+			return NewDate(12, 31)
 		}
 		return dateFromDay(day, daysInMonthLeap)
 	}
 	if day > 365 {
-		return Date{Month(12), 31}
+		return NewDate(12, 31)
 	}
 	return dateFromDay(day, daysInMonth)
 }
 
+// DateList represents a list of Dates, it can be sorted and searched the slices package.
 type DateList []Date
 
 // Parse a comma separated list of Dates.
@@ -280,20 +337,12 @@ func (dl DateList) String() string {
 		if i > 0 && i < len(dl)-1 {
 			out.WriteString(", ")
 		}
-		out.WriteString(fmt.Sprintf("%02d-%02d", d.Month, d.Day))
+		out.WriteString(fmt.Sprintf("%02d-%02d", d.Month(), d.Day()))
 	}
 	return out.String()
 }
 
-func (dl DateList) Contains(d Date) bool {
-	for _, dd := range dl {
-		if dd == d {
-			return true
-		}
-	}
-	return false
-}
-
+// MonthList represents a list of Months, it can be sorted and searched the slices package.
 type MonthList []Month
 
 // Parse val in formats 'Jan,12,Nov'. The parsed list is sorted

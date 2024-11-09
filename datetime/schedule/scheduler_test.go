@@ -20,7 +20,7 @@ type testAction struct {
 
 func newActive[T any](mnth, day int, actions ...schedule.Action[T]) schedule.Active[T] {
 	return schedule.Active[T]{
-		Date:    datetime.Date{Month: datetime.Month(mnth), Day: day},
+		Date:    datetime.NewDate(datetime.Month(mnth), day),
 		Actions: actions,
 	}
 }
@@ -28,7 +28,7 @@ func newActive[T any](mnth, day int, actions ...schedule.Action[T]) schedule.Act
 func newAction[T any](name string, hour, min, sec int, action T) schedule.Action[T] {
 	return schedule.Action[T]{
 		Name:   name,
-		Due:    datetime.TimeOfDay{Hour: hour, Minute: min, Second: sec},
+		Due:    datetime.NewTimeOfDay(hour, min, sec),
 		Action: action,
 	}
 }
@@ -38,7 +38,7 @@ func expectedActiveForMonth[T any](year, mnth int, actions ...schedule.Action[T]
 	r := make([]schedule.Active[T], days)
 	for i := range days {
 		r[i] = schedule.Active[T]{
-			Date:    datetime.Date{Month: datetime.Month(mnth), Day: i + 1},
+			Date:    datetime.NewDate(datetime.Month(mnth), int(i+1)),
 			Actions: actions,
 		}
 	}
@@ -48,7 +48,7 @@ func expectedActiveForMonth[T any](year, mnth int, actions ...schedule.Action[T]
 func sortActive[T any](active []schedule.Active[T]) {
 	sort.Slice(active, func(i, j int) bool {
 		if active[i].Date != active[j].Date {
-			return active[i].Date.Before(active[j].Date)
+			return active[i].Date < active[j].Date
 		}
 		// assume # actions is the same.
 		for n := range active[i].Actions {
