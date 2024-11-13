@@ -20,7 +20,7 @@ var spawned chan struct{}
 func runner(delay time.Duration, ch, dch chan struct{}) {
 	go func() {
 		for i := 1; i < 10000; i++ {
-			_ = rand.Int63n(int64(i))
+			_ = rand.Int63n(int64(i)) // #nosec G404
 		}
 		close(spawned)
 		time.Sleep(delay)

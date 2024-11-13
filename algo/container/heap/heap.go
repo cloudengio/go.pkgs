@@ -20,7 +20,7 @@ func NewMax[K Ordered, V any](opts ...Option[K, V]) *T[K, V] {
 	return newT(true, opts)
 }
 
-func newT[K Ordered, V any](max bool, opts []Option[K, V]) *T[K, V] {
+func newT[K Ordered, V any](maxv bool, opts []Option[K, V]) *T[K, V] {
 	var o options[K, V]
 	for _, fn := range opts {
 		fn(&o)
@@ -29,7 +29,7 @@ func newT[K Ordered, V any](max bool, opts []Option[K, V]) *T[K, V] {
 		h := &T[K, V]{
 			Keys:     o.keys,
 			Vals:     o.vals,
-			max:      max,
+			max:      maxv,
 			callback: o.callback,
 		}
 		h.heapify()
@@ -39,7 +39,7 @@ func newT[K Ordered, V any](max bool, opts []Option[K, V]) *T[K, V] {
 	n := &T[K, V]{
 		Keys:     make([]K, 0, o.sliceCap),
 		Vals:     make([]V, 0, o.sliceCap),
-		max:      max,
+		max:      maxv,
 		callback: o.callback,
 	}
 	return n

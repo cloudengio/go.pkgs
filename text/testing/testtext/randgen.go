@@ -36,7 +36,7 @@ func IncludeControlOpt(v bool) Option {
 // NewRandom returns a new instance of Random.
 func NewRandom(opts ...Option) *Random {
 	r := &Random{
-		r: rand.New(rand.NewSource(time.Now().UnixNano())),
+		r: rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404
 	}
 	for _, fn := range opts {
 		fn(&r.options)

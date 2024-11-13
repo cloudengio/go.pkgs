@@ -12,7 +12,7 @@ import (
 
 func GoBuild(ctx context.Context, binary string, args ...string) (string, error) {
 	binary = ExecName(binary)
-	cmd := exec.CommandContext(ctx, "go", append([]string{"build", "-o", binary}, args...)...)
+	cmd := exec.CommandContext(ctx, "go", append([]string{"build", "-o", binary}, args...)...) // #nosec G204
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%s: %v", out, err)

@@ -98,8 +98,7 @@ func (s *Sequencer[T]) order(ctx context.Context) {
 				heap.Push(&s.heap, item)
 			}
 			for len(s.heap) > 0 {
-				min := (s.heap)[0]
-				if min.s != expected {
+				if m := (s.heap)[0]; m.s != expected {
 					break
 				}
 				item := heap.Remove(&s.heap, 0).(Item[T])

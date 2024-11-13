@@ -169,33 +169,33 @@ func pop(t *testing.T, h heapIfc[int, int]) []int {
 
 func TestHeap(t *testing.T) {
 	for i := 0; i < 33; i++ {
-		min := heap.NewMin[int, int]()
-		output := testData(t, min, ascending(i))
+		minv := heap.NewMin[int, int]()
+		output := testData(t, minv, ascending(i))
 		if got, want := output, ascending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		output = testData(t, min, descending(i))
+		output = testData(t, minv, descending(i))
 		if got, want := output, ascending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		min = heap.NewMin(heap.WithData(ascending(i), ascending(i)))
-		min.Verify(t)
-		if got, want := pop(t, min), ascending(i); !reflect.DeepEqual(got, want) {
+		minv = heap.NewMin(heap.WithData(ascending(i), ascending(i)))
+		minv.Verify(t)
+		if got, want := pop(t, minv), ascending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 
-		max := heap.NewMax[int, int]()
-		output = testData(t, max, ascending(i))
+		maxv := heap.NewMax[int, int]()
+		output = testData(t, maxv, ascending(i))
 		if got, want := output, descending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		output = testData(t, max, descending(i))
+		output = testData(t, maxv, descending(i))
 		if got, want := output, descending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
-		max = heap.NewMax(heap.WithData(ascending(i), ascending(i)))
-		min.Verify(t)
-		if got, want := pop(t, max), descending(i); !reflect.DeepEqual(got, want) {
+		maxv = heap.NewMax(heap.WithData(ascending(i), ascending(i)))
+		minv.Verify(t)
+		if got, want := pop(t, maxv), descending(i); !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
@@ -236,7 +236,7 @@ func TestUpdate(t *testing.T) {
 
 	push(t, h, ascending(20))
 	for i := 100; i > 0; i-- {
-		elem := rand.Intn(h.Len())
+		elem := rand.Intn(h.Len()) // #nosec: G404
 		if i&1 == 0 {
 			h.Update(elem, i*2, i*2)
 		} else {
@@ -252,7 +252,7 @@ func TestUpdate(t *testing.T) {
 
 	used := []int{}
 	for range r1 {
-		v := rand.Intn(100)
+		v := rand.Intn(100) // #nosec: G404
 		used = append(used, v)
 		h.Update(0, v, v)
 		h.Verify(t)

@@ -78,11 +78,11 @@ func WithRateController(rc *ratecontrol.Controller, retryErr error) Option {
 // supplid channel. If close is true the progress channel will be closed
 // when the downloader has finished. Close should be set to false if the same
 // channel is shared across multiplied downloader instances.
-func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option {
+func WithProgress(interval time.Duration, ch chan<- Progress, closeProgress bool) Option {
 	return func(o *options) {
 		o.progressInterval = interval
 		o.progressCh = ch
-		o.progressClose = close
+		o.progressClose = closeProgress
 	}
 }
 

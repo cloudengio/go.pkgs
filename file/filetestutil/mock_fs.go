@@ -54,7 +54,7 @@ type fsOptions struct {
 func FSWithRandomContents(src rand.Source, maxSize int) FSOption {
 	return func(o *fsOptions) {
 		o.random = true
-		o.rnd = rand.New(src)
+		o.rnd = rand.New(src) // #nosec G404
 		o.maxSize = maxSize
 	}
 }
@@ -74,7 +74,7 @@ func FSWithConstantContents(val []byte, repeat int) FSOption {
 func FSWithRandomContentsAfterRetry(src rand.Source, maxSize, numRetries int, err error) FSOption {
 	return func(o *fsOptions) {
 		o.numRetries = numRetries
-		o.rnd = rand.New(src)
+		o.rnd = rand.New(src) // #nosec G404
 		o.maxSize = maxSize
 		o.retryErr = err
 	}

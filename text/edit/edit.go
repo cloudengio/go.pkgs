@@ -162,12 +162,6 @@ func overwrite(a, b []byte) []byte {
 // are concatenated.
 // All position values are with respect to the original value of contents.
 func Do(contents []byte, deltas ...Delta) []byte {
-	max := func(a, b int) int {
-		if a > b {
-			return a
-		}
-		return b
-	}
 	sortDeltas(deltas)
 
 	// Offset is the start index of the unprocessed portion of the
