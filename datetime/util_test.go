@@ -43,10 +43,6 @@ func daysFromCalendarDatesString(datelist string) []datetime.YearDay {
 	return days
 }
 
-func stringSlice(s ...string) []string {
-	return s
-}
-
 func newDateRange(year int, a, b datetime.Date) datetime.DateRange {
 	return datetime.NewDateRange(year, a, b)
 }

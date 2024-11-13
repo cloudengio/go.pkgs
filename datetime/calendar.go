@@ -16,6 +16,7 @@ import (
 type CalendarDate uint32
 
 // NewCalendarDate creates a new CalendarDate from the specified year, month and day.
+// Year must be in the range 0..65535, month in the range 0..12 and day in the range 0..31.
 func NewCalendarDate(year int, month Month, day int) CalendarDate {
 	return CalendarDate(uint32(year&0xffff)<<16 | uint32(month)<<8 | uint32(day))
 }
@@ -177,12 +178,8 @@ func ParseAnyDate(year int, val string) (CalendarDate, error) {
 // Month is normalized to be in the range 1-12.
 func (cd CalendarDate) Normalize(firstOfMonth bool) CalendarDate {
 	year := cd.Year()
-	month := cd.Month()
-	if month == 0 {
-		month = 1
-	} else if month > 12 {
-		month = 12
-	}
+	month := max(cd.Month(), 1)
+	month = min(month, 12)
 	dm := daysInMonthForYear(year)[month-1]
 	day := cd.day8()
 	if day == 0 {
@@ -191,9 +188,8 @@ func (cd CalendarDate) Normalize(firstOfMonth bool) CalendarDate {
 		} else {
 			day = dm
 		}
-	} else if day > dm {
-		day = dm
 	}
+	day = min(day, dm)
 	return NewCalendarDate(year, month, int(day))
 }
 
@@ -236,7 +232,7 @@ func (cd CalendarDate) YearDay() YearDay {
 }
 
 func (cd CalendarDate) String() string {
-	return fmt.Sprintf("%02d %02d %04d", Month(cd.Month()), cd.Day(), cd.Year())
+	return fmt.Sprintf("%02d %02d %04d", cd.Month(), cd.Day(), cd.Year())
 }
 
 // Tomorrow returns the CalendarDate for the day after the specified date, wrapping
@@ -251,7 +247,7 @@ func (cd CalendarDate) Tomorrow() CalendarDate {
 	if day == int(DaysInMonth(year, month)) {
 		return NewCalendarDate(year, month+1, 1)
 	}
-	return NewCalendarDate(year, month, int(day)+1)
+	return NewCalendarDate(year, month, day+1)
 }
 
 // Yesterday returns the CalendarDate for the day before the specified date, wrapping

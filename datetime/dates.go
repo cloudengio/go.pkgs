@@ -84,7 +84,7 @@ type Date uint16
 
 // NewDate returns a Date for the given month and day. Both are assumed to
 // valid for the context in which they are used. Normalize should be used to
-// to adjust for a given year and intepretation of zero day value.
+// to adjust for a given year and interpretation of zero day value.
 func NewDate(month Month, day int) Date {
 	return Date(month)&0xff<<8 | Date(uint8(day&0xff))
 }
@@ -122,12 +122,8 @@ func (d Date) CalendarDate(year int) CalendarDate {
 // otherwise it is set to the last day of the month.
 // Month is normalized to be in the range 1-12.
 func (d Date) Normalize(year int, firstOfMonth bool) Date {
-	month := Month(d >> 8)
-	if month == 0 {
-		month = 1
-	} else if month > 12 {
-		month = 12
-	}
+	month := max(Month(d>>8), 1)
+	month = min(month, 12)
 	dm := daysInMonthForYear(year)[month-1]
 	day := uint8(d & 0xff)
 	if day == 0 {
@@ -136,9 +132,8 @@ func (d Date) Normalize(year int, firstOfMonth bool) Date {
 		} else {
 			day = dm
 		}
-	} else if day > dm {
-		day = dm
 	}
+	day = min(day, dm)
 	return newDate8(month, day)
 }
 
@@ -181,7 +176,7 @@ func ParseDate(year int, val string) (Date, error) {
 		return Date(0), fmt.Errorf("invalid day: %s: %v", parts[1], err)
 	}
 	day := uint8(tmp)
-	if day < 1 || uint8(day) > DaysInMonth(year, month) {
+	if day < 1 || day > DaysInMonth(year, month) {
 		return Date(0), fmt.Errorf("invalid day %v for %s in %d", day, month, year)
 	}
 	return newDate8(month, day), nil

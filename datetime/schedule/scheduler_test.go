@@ -18,13 +18,6 @@ type testAction struct {
 	action string
 }
 
-func newActive[T any](mnth, day int, actions ...schedule.Action[T]) schedule.Active[T] {
-	return schedule.Active[T]{
-		Date:    datetime.NewDate(datetime.Month(mnth), day),
-		Actions: actions,
-	}
-}
-
 func newAction[T any](name string, hour, min, sec int, action T) schedule.Action[T] {
 	return schedule.Action[T]{
 		Name:   name,

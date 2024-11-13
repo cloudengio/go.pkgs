@@ -118,6 +118,11 @@ func TestDates(t *testing.T) {
 		}
 	}
 
+}
+
+func TestDatesYearDay(t *testing.T) {
+	nd := newDate
+
 	for _, tc := range []struct {
 		month, day, year int
 		dayOfYear        int

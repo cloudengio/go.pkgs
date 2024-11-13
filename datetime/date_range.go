@@ -86,7 +86,7 @@ func (dr DateRange) String() string {
 // the year into account for Feb.
 // The start date must be before the end date after normalization as per
 // the above rules.
-func (d *DateRange) Parse(year int, val string) error {
+func (dr *DateRange) Parse(year int, val string) error {
 	parts := strings.Split(val, ":")
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid format, %q expected '<from>:<to>'", val)
@@ -103,7 +103,7 @@ func (d *DateRange) Parse(year int, val string) error {
 	if to < from {
 		return fmt.Errorf("from is later than to: %s %s", from, to)
 	}
-	*d = newDateRange(from, to)
+	*dr = newDateRange(from, to)
 	return nil
 }
 
@@ -196,7 +196,7 @@ func (dl DateList) ExpandMonths(year int) DateRangeList {
 	return drl.Merge(year)
 }
 
-// Merge returns a new list of date ranges that containes merged consecutive
+// Merge returns a new list of date ranges that contains merged consecutive
 // dates into ranges. All dates are normalized using date.Normalize(year, true).
 // The date list is assumed to be sorted.
 func (dl DateList) Merge(year int) DateRangeList {
@@ -236,18 +236,12 @@ func (drl DateRangeList) Merge(year int) DateRangeList {
 	for i := 1; i < len(drl); i++ {
 		prevTo, curFrom := drl[i-1].To(year), drl[i].From(year)
 		if prevTo.calcDayOfYear(leap) >= (curFrom.calcDayOfYear(leap) - 1) {
-			to = drl[i].To(year)
-			if prevTo > to {
-				to = prevTo
-			}
+			to = max(drl[i].To(year), prevTo)
 			continue
 		}
 		merged = append(merged, newDateRange(from, to))
 		from = curFrom
-		to = drl[i].To(year)
-		if prevTo > to {
-			to = prevTo
-		}
+		to = max(drl[i].To(year), prevTo)
 	}
 	return slices.Clip(append(merged, newDateRange(from, to)))
 }

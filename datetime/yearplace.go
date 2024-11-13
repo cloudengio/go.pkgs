@@ -18,18 +18,18 @@ var (
 	months          = []string{"january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"}
 
 	mirrorMonths = []uint8{
-		11 - 1, // jan, nov
-		10 - 1, // feb, oct
-		9 - 1,  // mar, sep
-		8 - 1,  // apr, aug
-		7 - 1,  // may, jul
-		6 - 1,  // jun
-		5 - 1,  // jul, may
-		4 - 1,  // aug, apr
-		3 - 1,  // sep, mar
-		2 - 1,  // oct, feb
-		1 - 1,  // nov, jan
-		12 - 1, // dec
+		10, // jan, nov
+		9,  // feb, oct
+		8,  // mar, sep
+		7,  // apr, aug
+		6,  // may, jul
+		5,  // jun
+		4,  // jul, may
+		3,  // aug, apr
+		2,  // sep, mar
+		1,  // oct, feb
+		0,  // nov, jan
+		11, // dec
 	}
 )
 

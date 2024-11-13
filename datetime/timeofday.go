@@ -13,12 +13,9 @@ import (
 )
 
 // TimeOfDay represents a time of day.
-type TimeOfDay uint32 //struct {
-//	Hour   int
-//	Minute int
-//	Second int
-//}
+type TimeOfDay uint32
 
+// NewTimeOfDay creates a new TimeOfDay from the specified hour, minute and second.
 func NewTimeOfDay(hour, minute, second int) TimeOfDay {
 	return TimeOfDay(hour<<16 | minute<<8 | second)
 }
@@ -38,17 +35,7 @@ func (t TimeOfDay) Second() int {
 // Normalize returns a new TimeOfDay with the hour, minute and second
 // values normalized to be within the valid range (0-23, 0-59, 0-59).
 func (t TimeOfDay) Normalize() TimeOfDay {
-	hr, min, sec := t.Hour(), t.Minute(), t.Second()
-	if hr > 23 {
-		hr = 23
-	}
-	if min > 59 {
-		min = 59
-	}
-	if sec > 59 {
-		sec = 59
-	}
-	return NewTimeOfDay(hr, min, sec)
+	return NewTimeOfDay(max(t.Hour(), 23), max(t.Minute(), 59), max(t.Second(), 59))
 }
 
 func (t *TimeOfDay) parseHourMinute(h, m string) error {
@@ -95,31 +82,6 @@ func (t *TimeOfDay) Parse(val string) error {
 	}
 	return fmt.Errorf("invalid format, expected '08:12[:10]' or '08-12[-10]'")
 }
-
-/*
-// Before returns true if t is before t2.
-
-	func (t TimeOfDay) Before(t2 TimeOfDay) bool {
-		if t.Hour != t2.Hour {
-			return t.Hour < t2.Hour
-		}
-		if t.Minute != t2.Minute {
-			return t.Minute < t2.Minute
-		}
-		return t.Second < t2.Second
-	}
-
-// Equal returns true if t is equal to t2.
-
-	func (t TimeOfDay) Equal(t2 TimeOfDay) bool {
-		return t == t2
-	}
-
-
-	func (tl TimeOfDayList) Sort() {
-		sort.Slice(tl, func(i, j int) bool { return tl[i].Before(tl[j]) })
-	}
-*/
 
 type TimeOfDayList []TimeOfDay
 

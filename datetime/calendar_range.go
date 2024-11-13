@@ -223,7 +223,7 @@ func (cdrl *CalendarDateRangeList) Parse(ranges []string) error {
 	return nil
 }
 
-// Merge returns a new list of date ranges that containes merged consecutive
+// Merge returns a new list of date ranges that contains merged consecutive
 // calendar dates into ranges. The dates are normalized using date.Normalize(true).
 // The date list is assumed to be sorted.
 func (cdl CalendarDateList) Merge() CalendarDateRangeList {
@@ -262,18 +262,12 @@ func (cdrl CalendarDateRangeList) Merge() CalendarDateRangeList {
 	for i := 1; i < len(cdrl); i++ {
 		prevTo, curFrom := cdrl[i-1].To(), cdrl[i].From()
 		if prevTo.YearDay() >= (curFrom.YearDay()-1) || curFrom.Yesterday() == prevTo {
-			to = cdrl[i].To()
-			if prevTo > to {
-				to = prevTo
-			}
+			to = max(cdrl[i].To(), prevTo)
 			continue
 		}
 		merged = append(merged, newCalendarDateRange(from, to))
 		from = curFrom
-		to = cdrl[i].To()
-		if prevTo > to {
-			to = prevTo
-		}
+		to = max(cdrl[i].To(), prevTo)
 	}
 	return slices.Clip(append(merged, newCalendarDateRange(from, to)))
 }
