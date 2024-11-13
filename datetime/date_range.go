@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 )
 
 // DateRange represents a range of dates, inclusive of the start and end dates.
@@ -36,7 +35,7 @@ func (dr DateRange) toDate() Date {
 func newDateRange(from, to Date) DateRange {
 	fm, fd := DateRange(from.Month()), DateRange(from.Day())
 	tm, td := DateRange(to.Month()), DateRange(to.Day())
-	return DateRange(fm<<24 | tm<<16 | fd<<8 | td)
+	return fm<<24 | tm<<16 | fd<<8 | td
 }
 
 // From returns the start date of the range for the specified year.
@@ -71,6 +70,11 @@ func NewDateRange(year int, from, to Date) DateRange {
 	return newDateRange(from, to)
 }
 
+func (dr DateRange) CalendarDateRange(year int) CalendarDateRange {
+	from, to := dr.From(year).CalendarDate(year), dr.To(year).CalendarDate(year)
+	return NewCalendarDateRange(from, to)
+}
+
 func (dr DateRange) String() string {
 	return fmt.Sprintf("%s - %s", dr.fromDate().String(), dr.toDate().String())
 }
@@ -89,10 +93,10 @@ func (d *DateRange) Parse(year int, val string) error {
 	}
 	var from, to Date
 	if err := from.Parse(year, parts[0]); err != nil {
-		return fmt.Errorf("invalid from: %s", parts[0])
+		return fmt.Errorf("invalid from: %s: %v", parts[0], err)
 	}
 	if err := to.Parse(year, parts[1]); err != nil {
-		return fmt.Errorf("invalid to: %s", parts[1])
+		return fmt.Errorf("invalid to: %s: %v", parts[1], err)
 	}
 	from = from.Normalize(year, true)
 	to = to.Normalize(year, false)
@@ -111,119 +115,45 @@ func (dr DateRange) Equal(year int, dr2 DateRange) bool {
 	return af == bf && at == bt
 }
 
-// Dates returns an iterator that yields each Date in the range for the
-// given year.
-func (d DateRange) Dates(year int) func(yield func(Date) bool) {
-	dm := daysInMonthForYear(year)
-	to := d.To(year)
-	return func(yield func(Date) bool) {
-		for td := d.From(year); td <= to; td = td.tomorrow(dm) {
-			if !yield(td) {
-				return
-			}
-		}
-	}
+// Dates returns an iterator that yields each CalendarDate in the range for the
+// given year. All of the CalendarDate values will have the same year.
+func (dr DateRange) Dates(year int) func(yield func(CalendarDate) bool) {
+	return dr.CalendarDateRange(year).Dates()
 }
 
-// DatesConstrained returns an iterator that yields each Date in the range for the
-// given year constrained by the given DateConstraints.
-func (dr DateRange) DatesConstrained(year int, dc Constraints) func(yield func(Date) bool) {
-	return func(yield func(Date) bool) {
-		dm := daysInMonthForYear(year)
-		to := dr.To(year)
-		for td := dr.From(year); td <= to; td = td.tomorrow(dm) {
-			if !dc.Include(time.Date(year, time.Month(td.Month()), td.Day(), 0, 0, 0, 0, time.UTC)) {
-				continue
-			}
-			if !yield(td) {
-				return
-			}
-		}
-	}
+// DatesConstrained returns an iterator that yields each CalendarDate in the range for the
+// given year constrained by the given DateConstraints. All of the CalendarDate values
+// will have the same year.
+func (dr DateRange) DatesConstrained(year int, dc Constraints) func(yield func(CalendarDate) bool) {
+	return dr.CalendarDateRange(year).DatesConstrained(dc)
 }
 
 // Ranges returns an iterator that yields each DateRange in the range for the
 // given year constrained by the given DateConstraints.
-func (dr DateRange) RangesConstrained(year int, dc Constraints) func(yield func(DateRange) bool) {
-	dm := daysInMonthForYear(year)
-	return func(yield func(DateRange) bool) {
-		start, stop := dr.From(year), dr.To(year)
-		to := stop
-		inrange := dc.Include(time.Date(year, time.Month(start.Month()), start.Day(), 0, 0, 0, 0, time.UTC))
-		for td := dr.From(year); td <= to; td = td.tomorrow(dm) {
-			if !dc.Include(time.Date(year, time.Month(td.Month()), td.Day(), 0, 0, 0, 0, time.UTC)) {
-				if inrange {
-					// Range ends
-					if !yield(newDateRange(start, stop)) {
-						return
-					}
-				}
-				inrange = false
-				continue
-			}
-			if !inrange {
-				start = td
-				inrange = true
-			}
-			stop = td
-		}
-		if inrange {
-			yield(newDateRange(start, stop))
-		}
-	}
+func (dr DateRange) RangesConstrained(year int, dc Constraints) func(yield func(CalendarDateRange) bool) {
+	return dr.CalendarDateRange(year).RangesConstrained(dc)
 }
 
 // Days returns an iterator that yields each day in the range for the
 // given year.
-func (dr DateRange) Days(year int) func(yield func(int) bool) {
-	return func(yield func(int) bool) {
-		last := dr.To(year).DayOfYear(year)
-		for yd := dr.From(year).DayOfYear(year); yd <= last; yd++ {
-			if !yield(yd) {
-				return
-			}
-		}
-	}
+func (dr DateRange) Days(year int) func(yield func(YearDay) bool) {
+	return dr.CalendarDateRange(year).Days()
 }
 
 // DaysConstrained returns an iterator that yields each day in the range for the
 // given year constrained by the given DateConstraints.
-func (dr DateRange) DaysConstrained(year int, dc Constraints) func(yield func(int) bool) {
-	dm := daysInMonthForYear(year)
-	return func(yield func(int) bool) {
-		to := dr.To(year).DayOfYear(year)
-		for d := dr.From(year).DayOfYear(year); d <= to; d++ {
-			tm := dateFromDay(d, dm)
-			if !dc.Include(time.Date(year, time.Month(tm.Month()), tm.Day(), 0, 0, 0, 0, time.UTC)) {
-				continue
-			}
-			if !yield(d) {
-				return
-			}
-		}
-	}
+func (dr DateRange) DaysConstrained(year int, dc Constraints) func(yield func(YearDay) bool) {
+	return dr.CalendarDateRange(year).DaysConstrained(dc)
 }
 
 // DateRangeList represents a list of DateRange values, it can be sorted and searched
 // using the slices package.
 type DateRangeList []DateRange
 
-// MergeMonthsAndRanges creates an ordered list of DateRange values from the given
-// MonthList and DateRangeList.
-func MergeMonthsAndRanges(year int, months MonthList, ranges DateRangeList) DateRangeList {
-	drl := make(DateRangeList, 0, len(months)+len(ranges))
-	for _, m := range months {
-		drl = append(drl, newDateRange(newDate8(m, 1), newDate8(m, DaysInMonth(year, m))))
-	}
-	drl = append(drl, ranges...)
-	slices.Sort(drl)
-	return MergeRanges(year, drl)
-}
-
 // Parse ranges in formats '01:03', 'Jan:Mar', '01-02:03-04' or 'Jan-02:Mar-04'.
 // The parsed list is sorted and without duplicates. If the start date is
 // identical then the end date is used to determine the order.
-func (dr *DateRangeList) Parse(year int, ranges []string) error {
+func (drl *DateRangeList) Parse(year int, ranges []string) error {
 	if len(ranges) == 0 {
 		return nil
 	}
@@ -241,16 +171,16 @@ func (dr *DateRangeList) Parse(year int, ranges []string) error {
 		seen[dr] = struct{}{}
 	}
 	slices.Sort(drs)
-	*dr = drs
+	*drl = drs
 	return nil
 }
 
 // Equal returns true if the two DateRangeList values are equal for the given year.
-func (dr DateRangeList) Equal(year int, dr2 DateRangeList) bool {
-	if len(dr) != len(dr2) {
+func (drl DateRangeList) Equal(year int, dr2 DateRangeList) bool {
+	if len(drl) != len(dr2) {
 		return false
 	}
-	for i, d := range dr {
+	for i, d := range drl {
 		if !d.Equal(year, dr2[i]) {
 			return false
 		}
@@ -258,49 +188,78 @@ func (dr DateRangeList) Equal(year int, dr2 DateRangeList) bool {
 	return true
 }
 
-func MergeDates(year int, dates []Date) DateRangeList {
-	slices.Sort(dates)
-	dm := daysInMonthForYear(year)
-	var drs []DateRange
-	from := dates[0].Normalize(year, true)
-	to := dates[0].Normalize(year, false)
-	for i := 1; i < len(dates); i++ {
-		if dates[i-1] == dates[i] {
-			continue
-		}
-		if dates[i-1] == dates[i].yesterday(dm) {
-			to = dates[i]
-			continue
-		}
-		drs = append(drs, newDateRange(from, to))
-		from = dates[i].Normalize(year, false)
-		to = from
+func (dl DateList) ExpandMonths(year int) DateRangeList {
+	drl := make(DateRangeList, 0, len(dl))
+	for _, d := range dl {
+		drl = append(drl, newDateRange(d, d))
 	}
-	drs = append(drs, newDateRange(from, to))
-	return drs
+	return drl.Merge(year)
 }
 
-func MergeRanges(year int, ranges []DateRange) DateRangeList {
-	if len(ranges) == 0 {
-		return nil
-	}
-	slices.Sort(ranges)
-	leap := IsLeap(year)
-	var merged []DateRange
+// Merge returns a new list of date ranges that containes merged consecutive
+// dates into ranges. All dates are normalized using date.Normalize(year, true).
+// The date list is assumed to be sorted.
+func (dl DateList) Merge(year int) DateRangeList {
+	dm := daysInMonthForYear(year)
+	merged := make(DateRangeList, 0, len(dl))
 
-	from := ranges[0].From(year)
-	to := ranges[0].To(year)
-	for i := 1; i < len(ranges); i++ {
-		fd := ranges[i-1].To(year).dayOfYear(leap)
-		td := ranges[i].From(year).dayOfYear(leap)
-		if fd >= (td - 1) {
-			to = ranges[i].To(year)
+	from := dl[0].Normalize(year, true)
+	to := dl[0].Normalize(year, true)
+	for i := 1; i < len(dl); i++ {
+		prev, cur := dl[i-1].Normalize(year, true), dl[i].Normalize(year, true)
+		if prev == cur {
+			// duplicate
+			continue
+		}
+		if prev == cur.yesterday(dm) {
+			to = cur
 			continue
 		}
 		merged = append(merged, newDateRange(from, to))
-		from = ranges[i].From(year)
-		to = ranges[i].To(year)
+		from = cur
+		to = cur
 	}
-	merged = append(merged, newDateRange(from, to))
-	return merged
+	return slices.Clip(append(merged, newDateRange(from, to)))
+}
+
+// Merge returns a new list of date ranges that contains merged consecutive
+// overlapping ranges.
+// The date list is assumed to be sorted.
+func (drl DateRangeList) Merge(year int) DateRangeList {
+	if len(drl) == 0 {
+		return drl
+	}
+	leap := IsLeap(year)
+	merged := make(DateRangeList, 0, len(drl))
+	from := drl[0].From(year)
+	to := drl[0].To(year)
+	for i := 1; i < len(drl); i++ {
+		prevTo, curFrom := drl[i-1].To(year), drl[i].From(year)
+		if prevTo.calcDayOfYear(leap) >= (curFrom.calcDayOfYear(leap) - 1) {
+			to = drl[i].To(year)
+			if prevTo > to {
+				to = prevTo
+			}
+			continue
+		}
+		merged = append(merged, newDateRange(from, to))
+		from = curFrom
+		to = drl[i].To(year)
+		if prevTo > to {
+			to = prevTo
+		}
+	}
+	return slices.Clip(append(merged, newDateRange(from, to)))
+}
+
+// MergeMonths returns a merged list of date ranges that contains the specified
+// months for the given year.
+func (drl DateRangeList) MergeMonths(year int, months MonthList) DateRangeList {
+	ndrl := make(DateRangeList, 0, len(months)+len(drl))
+	for _, m := range months {
+		ndrl = append(ndrl, newDateRange(newDate8(m, 1), newDate8(m, DaysInMonth(year, m))))
+	}
+	ndrl = append(ndrl, drl...)
+	slices.Sort(ndrl)
+	return ndrl.Merge(year)
 }

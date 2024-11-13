@@ -8,7 +8,6 @@ package datetime
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -113,6 +112,10 @@ func (d Date) String() string {
 	return fmt.Sprintf("%s %02d", d.Month().String(), d.Day())
 }
 
+func (d Date) CalendarDate(year int) CalendarDate {
+	return NewCalendarDate(year, d.Month(), d.Day())
+}
+
 // Normalize adjusts the date for the given year. If the day is zero
 // then firstOfMonth is used to determine the interpretation of the day.
 // If firstOfMonth is true then the day is set to the first day of the month,
@@ -139,14 +142,12 @@ func (d Date) Normalize(year int, firstOfMonth bool) Date {
 	return newDate8(month, day)
 }
 
-var numericDateRe = regexp.MustCompile(`^([0-1]+)-([0-9]{1,2})$`)
-
-// Parse a numeric date in formats '01/02' with error checking
+// Parse a numeric date in the format '01/02' with error checking
 // for valid month and day.
 func ParseNumericDate(year int, val string) (Date, error) {
 	parts := strings.Split(val, "/")
 	if len(parts) != 2 {
-		return Date(0), fmt.Errorf("invalid value %q, expected format 'Jan-02'", val)
+		return Date(0), fmt.Errorf("invalid value %q, expected format '01/02'", val)
 	}
 	tmp, err := strconv.ParseUint(parts[0], 10, 8)
 	if err != nil {
@@ -173,15 +174,15 @@ func ParseDate(year int, val string) (Date, error) {
 	}
 	month, err := ParseMonth(parts[0])
 	if err != nil {
-		return Date(0), err
+		return Date(0), fmt.Errorf("invalid month: %s: %v", parts[0], err)
 	}
 	tmp, err := strconv.ParseUint(parts[1], 10, 8)
 	if err != nil {
-		return Date(0), fmt.Errorf("invalid day: %s", parts[1])
+		return Date(0), fmt.Errorf("invalid day: %s: %v", parts[1], err)
 	}
 	day := uint8(tmp)
 	if day < 1 || uint8(day) > DaysInMonth(year, month) {
-		return Date(0), fmt.Errorf("invalid day for %v %s: %d", day, month, day)
+		return Date(0), fmt.Errorf("invalid day %v for %s in %d", day, month, year)
 	}
 	return newDate8(month, day), nil
 }
@@ -197,7 +198,7 @@ func (d *Date) Parse(year int, val string) error {
 	if strings.Contains(val, "/") {
 		date, err := ParseNumericDate(year, val)
 		if err != nil {
-			return fmt.Errorf("invalid numeric date %q, expected %s", val, expectedDateFormats)
+			return fmt.Errorf("invalid numeric date: %v", err)
 		}
 		*d = date
 		return nil
@@ -205,7 +206,7 @@ func (d *Date) Parse(year int, val string) error {
 	if strings.Contains(val, "-") {
 		date, err := ParseDate(year, val)
 		if err != nil {
-			return fmt.Errorf("invalid date %q, expected %s", val, expectedDateFormats)
+			return fmt.Errorf("invalid date: %v", err)
 		}
 		*d = date
 		return nil
@@ -225,12 +226,15 @@ func (d *Date) Parse(year int, val string) error {
 // day of that month. A day of zero can be used to refer to the last
 // day of the previous month.
 func (d Date) DayOfYear(year int) int {
-	return d.dayOfYear(IsLeap(year))
+	return calcDayOfYear(uint8(d>>8&0xff), uint8(d&0xff), IsLeap(year))
 }
 
-func (d Date) dayOfYear(leap bool) int {
-	day := uint8(d & 0xff)
-	month := (d >> 8) - 1
+func (d Date) calcDayOfYear(leap bool) int {
+	return calcDayOfYear(uint8(d>>8&0xff), uint8(d&0xff), leap)
+}
+
+func calcDayOfYear(month, day uint8, leap bool) int {
+	month--
 	if leap {
 		if day > daysInMonthLeap[month] {
 			day = daysInMonthLeap[month]
@@ -241,6 +245,10 @@ func (d Date) dayOfYear(leap bool) int {
 		day = daysInMonth[month]
 	}
 	return dayOfYear[month] + int(day)
+}
+
+func (d Date) YearDay(year int) YearDay {
+	return NewYearDay(year, d.DayOfYear(year))
 }
 
 // Tomorrow returns the date of the next day.
@@ -278,35 +286,6 @@ func (d Date) yesterday(daysInMonth []uint8) Date {
 		return newDate8(month-1, daysInMonth[month-2])
 	}
 	return newDate8(month, day-1)
-}
-
-func dateFromDay(day int, daysInMonth []uint8) Date {
-	for month := uint8(0); month < 12; month++ {
-		dm := int(daysInMonth[month])
-		if day < dm {
-			return NewDate(Month(month+1), day)
-		}
-		day -= dm
-	}
-	panic("unreachable")
-}
-
-// DateFromDay returns the Date for the given day of the year. A day of
-// <= 0 is treated as Jan-01 and a day of > 365/366 is treated as Dec-31.
-func DateFromDay(year, day int) Date {
-	if day <= 0 {
-		return NewDate(1, 1)
-	}
-	if IsLeap(year) {
-		if day > 366 {
-			return NewDate(12, 31)
-		}
-		return dateFromDay(day, daysInMonthLeap)
-	}
-	if day > 365 {
-		return NewDate(12, 31)
-	}
-	return dateFromDay(day, daysInMonth)
 }
 
 // DateList represents a list of Dates, it can be sorted and searched the slices package.

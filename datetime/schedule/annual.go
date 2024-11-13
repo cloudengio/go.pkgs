@@ -39,11 +39,11 @@ func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 		}
 	}
 	slices.Sort(months)
-	merged := datetime.MergeMonthsAndRanges(year, months, d.Ranges)
+	merged := d.Ranges.MergeMonths(year, months)
 	drl := make(datetime.DateRangeList, 0, len(merged))
 	for _, r := range merged {
 		for dr := range r.RangesConstrained(year, d.Constraints) {
-			drl = append(drl, dr)
+			drl = append(drl, dr.DateRange(year))
 		}
 	}
 	return drl

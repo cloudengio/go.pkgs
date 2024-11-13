@@ -5,7 +5,6 @@
 package datetime_test
 
 import (
-	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -91,63 +90,76 @@ func TestDates(t *testing.T) {
 		{nd(12, 2), 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30 + 2},
 	} {
 		year := 2023
-		dayOf := tc.d.DayOfYear(year)
-		if got, want := dayOf, tc.dy; got != want {
+		yd := tc.d.YearDay(year)
+
+		if got, want := yd.Day(), tc.dy; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
-		if got, want := datetime.DateFromDay(year, dayOf), tc.d; got != want {
+		if got, want := yd.Date(), tc.d; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
+		if got, want := yd.CalendarDate(), tc.d.CalendarDate(year); got != want {
+			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
+		}
+
 		year = 2024
 		if (tc.d.Month() == 2 && tc.d.Day() >= 29) || tc.d.Month() > 2 {
 			tc.dy++
 		}
-		dayOf = tc.d.DayOfYear(year)
-		if got, want := dayOf, tc.dy; got != want {
+		yd = tc.d.YearDay(year)
+		if got, want := yd.Day(), tc.dy; got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
-		if got, want := datetime.DateFromDay(year, dayOf), tc.d; got != want {
+		if got, want := yd.Date(), tc.d; got != want {
+			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
+		}
+		if got, want := yd.CalendarDate(), tc.d.CalendarDate(year); got != want {
 			t.Errorf("%v (%v): got %v, want %v", tc.d, year, got, want)
 		}
 	}
 
-	if got, want := nd(1, 60).DayOfYear(2023), 31; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(2, 60).DayOfYear(2023), 31+28; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(2, 60).DayOfYear(2024), 31+29; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(12, 60).DayOfYear(2023), 365; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(12, 60).DayOfYear(2024), 366; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(1, 0).DayOfYear(2023), 0; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(3, 0).DayOfYear(2023), 31+28; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
-	}
-	if got, want := nd(3, 0).DayOfYear(2024), 31+29; got != want {
-		t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
+	for _, tc := range []struct {
+		month, day, year int
+		dayOfYear        int
+	}{
+
+		{1, 1, 2023, 1},
+		{1, 60, 2023, 31},
+		{2, 60, 2023, 31 + 28},
+		{2, 60, 2024, 31 + 29},
+		{12, 60, 2023, 365},
+		{12, 60, 2024, 366},
+		{1, 0, 2023, 0},
+		{3, 0, 2023, 31 + 28},
+		{3, 0, 2024, 31 + 29},
+	} {
+
+		yd := datetime.NewYearDay(tc.month, tc.dayOfYear)
+		if got, want := nd(tc.month, tc.day).DayOfYear(tc.year), yd.Day(); got != want {
+			t.Errorf("%v: got %v, want %v", nd(1, 1), got, want)
+		}
 	}
 
-	if got, want := datetime.DateFromDay(2023, 0), nd(1, 1); got != want {
-		t.Errorf("%v: got %v, want %v", 2023, got, want)
-	}
-	if got, want := datetime.DateFromDay(2023, 366), nd(12, 31); got != want {
-		t.Errorf("%v: got %v, want %v", 2023, got, want)
-	}
-
-	if got, want := datetime.DateFromDay(2024, 0), nd(1, 1); got != want {
-		t.Errorf("%v: got %v, want %v", 2024, got, want)
-	}
-	if got, want := datetime.DateFromDay(2024, 367), nd(12, 31); got != want {
-		t.Errorf("%v: got %v, want %v", 2024, got, want)
+	for _, tc := range []struct {
+		year, dayOfYear int
+		date            datetime.Date
+	}{
+		{2023, 0, nd(1, 1)},
+		{2023, 366, nd(12, 31)},
+		{2024, 0, nd(1, 1)},
+		{2024, 367, nd(12, 31)},
+		{2024, 4000, nd(12, 31)},
+		{2023, 367, nd(12, 31)},
+		{2023, 366, nd(12, 31)},
+		{2023, 365, nd(12, 31)},
+	} {
+		yd := datetime.NewYearDay(tc.year, tc.dayOfYear)
+		if got, want := yd.Date(), tc.date; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := yd.CalendarDate(), yd.Date().CalendarDate(tc.year); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 
 	for _, tc := range []struct {
@@ -204,53 +216,37 @@ func TestYearAndPlace(t *testing.T) {
 	}
 }
 
-func TestMergeDatesAndRanges(t *testing.T) {
+func TestMergeDates(t *testing.T) {
 	nd := newDate
+	ndl := newDateList
 	ndrl := newDateRangeList
 	year := 2024
 	for _, tc := range []struct {
-		dates  []datetime.Date
+		dates  datetime.DateList
 		merged datetime.DateRangeList
 	}{
-		{[]datetime.Date{nd(1, 1), nd(1, 1)}, ndrl(year, nd(1, 1), nd(1, 1))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2)}, ndrl(year, nd(1, 1), nd(1, 2))},
-		{[]datetime.Date{nd(1, 31), nd(2, 1), nd(2, 2)}, ndrl(year, nd(1, 31), nd(2, 2))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(1, 3)}, ndrl(year, nd(1, 1), nd(1, 3))},
-		{[]datetime.Date{nd(1, 1), nd(1, 2), nd(3, 4)}, ndrl(year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
+		{ndl(nd(1, 1), nd(1, 1)), ndrl(year, nd(1, 1), nd(1, 1))},
+		{ndl(nd(1, 1), nd(1, 1), nd(1, 1)), ndrl(year, nd(1, 1), nd(1, 1))},
+		{ndl(nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
+		{ndl(nd(1, 0), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
+		{ndl(nd(1, 0), nd(1, 0)), ndrl(year, nd(1, 1), nd(1, 1))},
+		{ndl(nd(0, 0), nd(0, 0)), ndrl(year, nd(1, 1), nd(1, 1))},
+		{ndl(nd(2, 28), nd(2, 29)), ndrl(year, nd(2, 28), nd(2, 29))},
+		{ndl(nd(1, 31), nd(2, 1), nd(2, 2)), ndrl(year, nd(1, 31), nd(2, 2))},
+		{ndl(nd(1, 1), nd(1, 2), nd(1, 3)), ndrl(year, nd(1, 1), nd(1, 3))},
+		{ndl(nd(1, 1), nd(1, 2), nd(3, 4)), ndrl(year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
 	} {
-		merged := datetime.MergeDates(year, tc.dates)
-		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
-			t.Errorf("got %v, want %v", got, want)
-		}
-	}
-	for _, tc := range []struct {
-		ranges datetime.DateRangeList
-		merged datetime.DateRangeList
-	}{
-		{ndrl(year, nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
-		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
-		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndrl(year, nd(1, 1), nd(1, 10))},
-		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndrl(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
-		{ndrl(year, nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndrl(year, nd(2, 27), nd(3, 10))},
-	} {
-		merged := datetime.MergeRanges(year, tc.ranges)
+		slices.Sort(tc.dates)
+		merged := tc.dates.Merge(year)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
-	for _, tc := range []struct {
-		months datetime.MonthList
-		ranges datetime.DateRangeList
-		merged datetime.DateRangeList
-	}{
-		{datetime.MonthList{1}, ndrl(year, nd(2, 1), nd(2, 28)), ndrl(year, nd(1, 1), nd(2, 28))},
-		{datetime.MonthList{1}, ndrl(year, nd(2, 2), nd(2, 28)), ndrl(year, nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
-	} {
-		merged := datetime.MergeMonthsAndRanges(year, tc.months, tc.ranges)
-		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
-			t.Errorf("got %v, want %v", got, want)
-		}
+	year = 2023
+	dates := ndl(nd(2, 28), nd(2, 29)) // 2/29 will be treated as 2/28.
+	if got, want := dates.Merge(year), ndrl(year, nd(2, 28), nd(2, 28)); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
@@ -366,58 +362,6 @@ func TestMonthRangeParse(t *testing.T) {
 		var ml datetime.MonthList
 		if err := ml.Parse(tc); err == nil {
 			t.Errorf("failed to return an error: %v", tc)
-		}
-	}
-}
-
-type dateList []datetime.Date
-
-func (dr *dateList) String() string {
-	var out strings.Builder
-	for _, d := range *dr {
-		out.WriteString(fmt.Sprintf("%02d/%02d,", d.Month(), d.Day()))
-	}
-	if out.Len() == 0 {
-		return ""
-	}
-	return out.String()[:out.Len()-1]
-}
-
-func TestMonthAndRangeMerge(t *testing.T) {
-	nd := newDate
-	ndrl := newDateRangeList
-	sl := stringSlice
-	year := 2021
-	for _, tc := range []struct {
-		months   string
-		ranges   []string
-		expected datetime.DateRangeList
-	}{
-		{"jan,dec",
-			nil,
-			ndrl(year, nd(1, 1), nd(1, 31), nd(12, 1), nd(12, 31))},
-		{"",
-			sl("aug-02:sep-03", "jan-01:jan-02"),
-			ndrl(year, nd(1, 1), nd(1, 2), nd(8, 2), nd(9, 3))},
-		{"feb,apr",
-			sl("aug-02:sep-03", "jan-01:jan-02"),
-			ndrl(year, nd(1, 1), nd(1, 2), nd(2, 1), nd(2, 28), nd(4, 1), nd(4, 30), nd(8, 2), nd(9, 3))},
-	} {
-		var months datetime.MonthList
-		var ranges datetime.DateRangeList
-		if len(tc.months) > 0 {
-			if err := months.Parse(tc.months); err != nil {
-				t.Errorf("failed: %v", err)
-			}
-		}
-		if len(tc.ranges) > 0 {
-			if err := ranges.Parse(year, tc.ranges); err != nil {
-				t.Errorf("failed: %v", err)
-			}
-		}
-		merged := datetime.MergeMonthsAndRanges(year, months, ranges)
-		if got, want := merged, tc.expected; !reflect.DeepEqual(got, want) {
-			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 }

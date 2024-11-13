@@ -12,22 +12,22 @@ import (
 	"cloudeng.io/datetime"
 )
 
-type Scheduler[T any] struct {
+type AnnualSchedular[T any] struct {
 	schedule       Annual[T]
 	actionsStorage [2][]Action[T]
 	actionStorage  [2]Action[T]
 	actions        [][]Action[T]
 }
 
-func NewAnnualScheduler[T any](schedule Annual[T]) *Scheduler[T] {
-	scheduler := &Scheduler[T]{
+func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualSchedular[T] {
+	scheduler := &AnnualSchedular[T]{
 		schedule: schedule.clone(),
 	}
 	scheduler.prepareActions()
 	return scheduler
 }
 
-func (s *Scheduler[T]) prepareActions() {
+func (s *AnnualSchedular[T]) prepareActions() {
 	s.actions = s.actionsStorage[:0]
 	if len(s.schedule.Actions) == 0 {
 		return
@@ -63,16 +63,15 @@ func (s *Scheduler[T]) prepareActions() {
 }
 
 // Scheduled returns an iterator over the scheduled actions for the given year and place.
-func (s Scheduler[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
+func (s AnnualSchedular[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
 	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
 	return func(yield func(Active[T]) bool) {
 		for _, dr := range drl {
 			for day := range dr.Dates(yp.Year) {
 				for _, da := range s.actions {
-					if !yield(Active[T]{Date: day, Actions: da}) {
+					if !yield(Active[T]{Date: day.Date(), Actions: da}) {
 						return
 					}
-
 				}
 			}
 		}

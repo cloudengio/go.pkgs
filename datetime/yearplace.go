@@ -6,6 +6,7 @@ package datetime
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -94,7 +95,7 @@ func DaysInFeb(year int) uint8 {
 	return 28
 }
 
-// DaysInYear returns the number of days in the given year.
+// DaysInYear returns the number of days in the given year.dc
 func DaysInYear(year int) int {
 	if IsLeap(year) {
 		return 366
@@ -146,4 +147,65 @@ func YearAndPlaceFromContext(ctx context.Context) YearAndPlace {
 		return YearAndPlace{}
 	}
 	return yp
+}
+
+// YearDay represents a year and the day in that year as 1-365/366.
+type YearDay uint32
+
+func (yd YearDay) Year() int {
+	return int(yd >> 16)
+}
+
+func (yd YearDay) Day() int {
+	return int(yd & 0xffff)
+}
+
+func (yd YearDay) String() string {
+	return fmt.Sprintf("%04d(%03d)", yd.Year(), yd.Day())
+}
+
+func dateFromDay(day int, daysInMonth []uint8) Date {
+	for month := uint8(0); month < 12; month++ {
+		dm := int(daysInMonth[month])
+		if day <= dm {
+			return NewDate(Month(month+1), day)
+		}
+		day -= dm
+	}
+	panic("unreachable")
+}
+
+// Date returns the Date for the given day of the year. A day of
+// <= 0 is treated as Jan-01 and a day of > 365/366 is treated as Dec-31.
+func (yd YearDay) Date() Date {
+	day := yd.Day()
+	if day <= 0 {
+		return NewDate(1, 1)
+	}
+	year := yd.Year()
+	if IsLeap(year) {
+		if day > 366 {
+			return NewDate(12, 31)
+		}
+		return dateFromDay(day, daysInMonthLeap)
+	}
+	if day > 365 {
+		return NewDate(12, 31)
+	}
+	return dateFromDay(day, daysInMonth)
+}
+
+func (yd YearDay) CalendarDate() CalendarDate {
+	date := yd.Date()
+	return NewCalendarDate(yd.Year(), date.Month(), date.Day())
+}
+
+// NewYearDay returns a YearDay for the given year and day. If the day is greater
+// than the number of days in the year then the last day of the year is used.
+func NewYearDay(year, day int) YearDay {
+	n := DaysInYear(year)
+	if day > n {
+		day = n
+	}
+	return YearDay(uint32(year)<<16 | uint32(day))
 }
