@@ -255,7 +255,7 @@ type randGen struct {
 }
 
 func newRandGen() *randGen {
-	return &randGen{src: rand.New(rand.NewSource(1234))}
+	return &randGen{src: rand.New(rand.NewSource(1234))} // #nosec: G404
 }
 
 func (r *randGen) Int63n(n int64) int64 {

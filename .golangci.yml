@@ -6,6 +6,9 @@ run:
 linters-settings:
   gocyclo:
     min-complexity: 15
+  gosec:
+    excludes:
+      - G115 # this is just too poorly implemented to be useful.
 
 linters:
   enable:
@@ -23,3 +26,4 @@ linters:
     - typecheck
     - unconvert
     - unused
+    - gosec

@@ -62,9 +62,9 @@ func TestTransform(t *testing.T) {
 		go func() {
 			defer func() { <-sem }()
 
-			time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-			chunkWords := roundDownToPowerOf2(rand.Intn(maxChunkWords) + 1)
-			offset := rand.Intn(chunkWords)
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)    // #nosec G404
+			chunkWords := roundDownToPowerOf2(rand.Intn(maxChunkWords) + 1) // #nosec G404
+			offset := rand.Intn(chunkWords)                                 // #nosec G404
 
 			err := lockedfile.Transform(path, func(data []byte) (chunk []byte, err error) {
 				chunk = buf[offset*8 : (offset+chunkWords)*8]

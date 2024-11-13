@@ -87,6 +87,7 @@ func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string, s
 	}
 	return &tls.Config{
 		GetCertificate: NewCertServingCache(cache, opts...).GetCertificate,
+		MinVersion:     tls.VersionTLS12,
 	}, nil
 }
 
@@ -114,6 +115,7 @@ func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
 	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
 	}, nil
 }
 

@@ -5,7 +5,7 @@
 package path
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec: G505
 	"encoding/hex"
 )
 
@@ -52,7 +52,7 @@ type sha1Sharder struct {
 // name (prefix) and filename (suffix) to be used for storing/accessing
 // the file.
 func (s *sha1Sharder) Assign(p string) (prefix, suffix string) {
-	sum := sha1.Sum([]byte(p))
+	sum := sha1.Sum([]byte(p)) // #nosec G401
 	hexsum := hex.EncodeToString(sum[:])
 	return hexsum[:s.prefix], hexsum[s.prefix:]
 }

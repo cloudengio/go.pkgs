@@ -9,7 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	mrand "math/rand"
+	mrand "math/rand" // #nosec: G404
 	"reflect"
 	"sync"
 	"testing"
@@ -48,7 +48,7 @@ func partitionSlices[T any](seq *syncsort.Sequencer[[]T], data []T, blockSize in
 func shuffle[T any](items []syncsort.Item[T]) []syncsort.Item[T] {
 	numItems := len(items)
 	indices := map[int]bool{}
-	rnd := mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	rnd := mrand.New(mrand.NewSource(time.Now().UnixNano())) // #nosec: G404
 	for {
 		guess := rnd.Intn(numItems)
 		if _, ok := indices[guess]; !ok {
@@ -175,7 +175,7 @@ func TestStreamingCancel(t *testing.T) {
 
 	i := 0
 
-	rnd := mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	rnd := mrand.New(mrand.NewSource(time.Now().UnixNano())) // #nosec: G404
 	stop := rnd.Intn(64)
 
 	for seq.Scan() {

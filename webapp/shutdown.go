@@ -66,10 +66,9 @@ func newServer(addr, def string, handler http.Handler, cfg *tls.Config) (net.Lis
 	if len(addr) == 0 {
 		addr = def
 	}
-
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, nil, err
 	}
-	return ln, &http.Server{Addr: addr, Handler: handler, TLSConfig: cfg}, nil
+	return ln, &http.Server{Addr: addr, Handler: handler, TLSConfig: cfg, ReadHeaderTimeout: time.Minute}, nil
 }

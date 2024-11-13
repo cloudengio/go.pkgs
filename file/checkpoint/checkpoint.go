@@ -134,7 +134,7 @@ func (d *dirop) Checkpoint(ctx context.Context, label string, data []byte) (id s
 		}
 		next = formatFilename(n+1, label)
 	}
-	err = os.WriteFile(filepath.Join(d.dir, next), data, 0644)
+	err = os.WriteFile(filepath.Join(d.dir, next), data, 0644) // #nosec G306
 	return next, err
 }
 
@@ -185,7 +185,7 @@ func (d *dirop) Compact(ctx context.Context, label string) error {
 		}
 	}
 	zero := formatFilename(0, label)
-	return os.WriteFile(filepath.Join(d.dir, zero), data, 0644)
+	return os.WriteFile(filepath.Join(d.dir, zero), data, 0644) // #nosec G306
 }
 
 func readDirSorted(ctx context.Context, path string) ([]string, error) {

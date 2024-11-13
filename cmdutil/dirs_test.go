@@ -5,7 +5,7 @@
 package cmdutil_test
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505
 	"encoding/hex"
 	"math/rand"
 	"os"
@@ -33,7 +33,7 @@ func list(t *testing.T, root string) ([]string, []string, []string) {
 			if isWindows() {
 				fn = strings.ReplaceAll(strings.TrimPrefix(path, root), `\`, `/`)
 			}
-			s := sha1.Sum([]byte(fn))
+			s := sha1.Sum([]byte(fn)) // #nosec G401
 			shas = append(shas, hex.EncodeToString(s[:]))
 			return err
 		}
@@ -41,7 +41,7 @@ func list(t *testing.T, root string) ([]string, []string, []string) {
 		if err != nil {
 			return err
 		}
-		s := sha1.Sum(buf)
+		s := sha1.Sum(buf) // #nosec G401
 		shas = append(shas, hex.EncodeToString(s[:]))
 		return nil
 	})
@@ -206,9 +206,9 @@ func TestMirrorDirTree(t *testing.T) {
 }
 
 func randContents(t *testing.T, src rand.Source, n int) []byte {
-	rnd := rand.New(src)
+	rnd := rand.New(src) // #nosec G404
 	buf := make([]byte, n)
-	n, err := rnd.Read(buf)
+	n, err := rnd.Read(buf) // #nosec G404
 	if err != nil {
 		t.Fatalf("math.Rand: %v", err)
 	}
@@ -232,7 +232,8 @@ func TestCopyFile(t *testing.T) {
 
 	newRandFile := func(name string) string {
 		buf := randContents(t, src, 576)
-		tmp := sha1.Sum(buf)
+		tmp := sha1.Sum(buf) // #nosec G401
+		// #nosec G306
 		if err := os.WriteFile(name, buf, 0677); err != nil {
 			t.Fatalf("failed to create source file")
 		}
