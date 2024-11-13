@@ -42,7 +42,7 @@ func createTestDir(tmpDir string) error {
 		err := os.MkdirAll(j(tmpDir, dir), 0777)
 		errs.Append(err)
 		for _, file := range []string{"f0", "f1", "f2"} {
-			err = os.WriteFile(j(tmpDir, dir, file), []byte{'1', '2', '3'}, 0666)
+			err = os.WriteFile(j(tmpDir, dir, file), []byte{'1', '2', '3'}, 0666) // #nosec G306
 			errs.Append(err)
 		}
 	}

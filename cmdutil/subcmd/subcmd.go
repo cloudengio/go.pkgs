@@ -310,20 +310,20 @@ func splitArgument(arg, sep string) (name, detail string) {
 
 func splitArguments(args []string, sep string) (names, details []string) {
 	var dl []string
-	max := 0
+	maxa := 0
 	for _, arg := range args {
 		n, d := splitArgument(arg, sep)
 		names = append(names, n)
 		dl = append(dl, d)
-		if len(n) > max {
-			max = len(n)
+		if len(n) > maxa {
+			maxa = len(n)
 		}
 	}
 	for i, d := range dl {
 		if len(d) == 0 {
 			continue
 		}
-		detail := fmt.Sprintf("%*s%s%s", max, names[i], sep, d)
+		detail := fmt.Sprintf("%*s%s%s", maxa, names[i], sep, d)
 		details = append(details, detail)
 	}
 	return names, details
@@ -557,11 +557,11 @@ func (cmds *CommandSet) Document(doc string) {
 // Summary returns a summary of the command set that includes its top
 // level documentation and a list of its sub-commands.
 func (cmds *CommandSet) Summary() string {
-	max := 0
+	maxc := 0
 	for _, cmd := range cmds.cmds {
 		name, _ := cmd.summary()
-		if l := len(name); l > max {
-			max = l
+		if l := len(name); l > maxc {
+			maxc = l
 		}
 	}
 	out := &strings.Builder{}
@@ -570,7 +570,7 @@ func (cmds *CommandSet) Summary() string {
 	}
 	for i, cmd := range cmds.cmds {
 		name, desc := cmd.summary()
-		fmt.Fprintf(out, " %v%v - %v", strings.Repeat(" ", max-len(name)), name, desc)
+		fmt.Fprintf(out, " %v%v - %v", strings.Repeat(" ", maxc-len(name)), name, desc)
 		if i < len(cmds.cmds)-1 {
 			out.WriteByte('\n')
 		}

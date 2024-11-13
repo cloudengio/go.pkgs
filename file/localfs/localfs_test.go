@@ -21,6 +21,7 @@ func TestXAttr(t *testing.T) {
 	ctx := context.Background()
 	fs := localfs.New()
 	name := fs.Join(tmpdir, "testfile")
+	// #nosec G306
 	if err := os.WriteFile(name, make([]byte, 4096), 0644); err != nil {
 		t.Fatal(err)
 	}

@@ -94,17 +94,17 @@ func reverseSearch[T comparable](a, b []T, d int32, forward, reverse []int32, of
 }
 
 func middleSnake[T comparable](a, b []T) (d, x1, y1, x2, y2 int32) {
-	max := int32(len(a) + len(b)) // max # edits (delete all a, insert all of b)
+	maxe := int32(len(a) + len(b)) // max # edits (delete all a, insert all of b)
 
 	// forward and reverse are accessed using k which is in the
 	// range -d .. +d, hence offset must be added to k.
-	forward := make([]int32, max+2)
-	reverse := make([]int32, max+2)
+	forward := make([]int32, maxe+2)
+	reverse := make([]int32, maxe+2)
 	offset := int32(len(forward) / 2)
 
 	// Only need to search for D halfway through the table.
-	halfway := max / 2
-	if max%2 != 0 {
+	halfway := maxe / 2
+	if maxe%2 != 0 {
 		halfway++
 	}
 	for d := int32(0); d <= halfway; d++ {

@@ -88,10 +88,10 @@ type Description struct {
 // number of spaces to be prefixed and indent increases the prefix for each
 // sub field.
 func FormatFields(prefix, indent int, fields []Field) string {
-	max := 0
+	maxf := 0
 	for _, field := range fields {
-		if l := len(field.Name); l > max {
-			max = l
+		if l := len(field.Name); l > maxf {
+			maxf = l
 		}
 	}
 	out := &strings.Builder{}
@@ -102,7 +102,7 @@ func FormatFields(prefix, indent int, fields []Field) string {
 			if field.Slice {
 				doc = "[]" + doc
 			}
-			doc = linewrap.Paragraph(max-len(field.Name)+1, max+prefix+2, 80, doc)
+			doc = linewrap.Paragraph(maxf-len(field.Name)+1, maxf+prefix+2, 80, doc)
 			out.WriteString(spaces)
 			out.WriteString(field.Name)
 			out.WriteString(":")

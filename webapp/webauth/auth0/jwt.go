@@ -113,7 +113,7 @@ func (a *Authenticator) CheckJWT(token string) error {
 
 func JWKSForDomain(tenant string) (*JWKS, error) {
 	endpoint := ensureHTTPS(tenant) + jwksEndpoint
-	resp, err := http.Get(endpoint)
+	resp, err := http.Get(endpoint) // #nosec G107
 	if err != nil {
 		return nil, err
 	}

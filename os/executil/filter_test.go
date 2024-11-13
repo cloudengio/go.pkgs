@@ -30,7 +30,7 @@ func Example() {
 	ctx := context.Background()
 	all := &bytes.Buffer{}
 	// Use go run testdata/cat.go for compatibility across windows and unix.
-	cmd := exec.CommandContext(ctx, "go", "run", filepath.Join("testdata", "cat.go"), filepath.Join("testdata", "example"))
+	cmd := exec.CommandContext(ctx, "go", "run", filepath.Join("testdata", "cat.go"), filepath.Join("testdata", "example")) // #nosec G204
 	ch := make(chan []byte, 1)
 	filter := executil.NewLineFilter(all, regexp.MustCompile("filter me:"), ch)
 	cmd.Stdout = filter

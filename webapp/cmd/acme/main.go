@@ -167,10 +167,12 @@ func manageCerts(ctx context.Context, values interface{}, _ []string) error {
 	})
 
 	cfg := mgr.TLSConfig()
+	cfg.MinVersion = tls.VersionTLS12
 	port443Srv := &http.Server{
-		Addr:      ":https",
-		Handler:   mux,
-		TLSConfig: cfg,
+		Addr:              ":https",
+		Handler:           mux,
+		TLSConfig:         cfg,
+		ReadHeaderTimeout: time.Minute,
 	}
 
 	go func() {
@@ -252,10 +254,13 @@ func customTLSConfig(rootCAPemFile string) *tls.Config {
 		if err != nil {
 			log.Printf("Failed to obtain cert pool containing %v", rootCAPemFile)
 		} else {
-			return &tls.Config{RootCAs: certPool}
+			return &tls.Config{
+				RootCAs:    certPool,
+				MinVersion: tls.VersionTLS12,
+			}
 		}
 	}
-	return &tls.Config{}
+	return &tls.Config{MinVersion: tls.VersionTLS12}
 }
 
 func pingHost(client *http.Client, hostName string) {

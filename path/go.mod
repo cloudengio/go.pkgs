@@ -6,5 +6,5 @@ toolchain go1.23.1
 
 require (
 	cloudeng.io/errors v0.0.9
-	golang.org/x/mod v0.21.0
+	golang.org/x/mod v0.22.0
 )

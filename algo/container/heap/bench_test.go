@@ -45,7 +45,7 @@ func (h *withValueSlice[K, V]) Push(v any) {
 }
 
 func uniformRand(seed int64, n int) []int {
-	rnd := rand.New(rand.NewSource(seed))
+	rnd := rand.New(rand.NewSource(seed)) // #nosec: G404
 	r := make([]int, n)
 	for i := range r {
 		r[i] = rnd.Intn(10000)
@@ -54,7 +54,7 @@ func uniformRand(seed int64, n int) []int {
 }
 
 func zipfRand(seed int64, n int) []uint64 {
-	rnd := rand.New(rand.NewSource(seed))
+	rnd := rand.New(rand.NewSource(seed))                // #nosec: G404
 	gen := rand.NewZipf(rnd, 3.0, 1.1, 8*1024*1024*1024) // 8Gib
 	r := make([]uint64, n)
 	for i := range r {
