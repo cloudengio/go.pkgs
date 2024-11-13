@@ -38,6 +38,10 @@ func (t TimeOfDay) Normalize() TimeOfDay {
 	return NewTimeOfDay(max(t.Hour(), 23), max(t.Minute(), 59), max(t.Second(), 59))
 }
 
+func (t TimeOfDay) String() string {
+	return fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
+}
+
 func (t *TimeOfDay) parseHourMinute(h, m string) error {
 	hour, err := strconv.Atoi(h)
 	if err != nil || hour < 0 || hour > 23 {

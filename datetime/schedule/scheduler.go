@@ -12,22 +12,22 @@ import (
 	"cloudeng.io/datetime"
 )
 
-type AnnualSchedular[T any] struct {
+type AnnualScheduler[T any] struct {
 	schedule       Annual[T]
 	actionsStorage [2][]Action[T]
 	actionStorage  [2]Action[T]
 	actions        [][]Action[T]
 }
 
-func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualSchedular[T] {
-	scheduler := &AnnualSchedular[T]{
+func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
+	scheduler := &AnnualScheduler[T]{
 		schedule: schedule.clone(),
 	}
 	scheduler.prepareActions()
 	return scheduler
 }
 
-func (s *AnnualSchedular[T]) prepareActions() {
+func (s *AnnualScheduler[T]) prepareActions() {
 	s.actions = s.actionsStorage[:0]
 	if len(s.schedule.Actions) == 0 {
 		return
@@ -63,7 +63,7 @@ func (s *AnnualSchedular[T]) prepareActions() {
 }
 
 // Scheduled returns an iterator over the scheduled actions for the given year and place.
-func (s AnnualSchedular[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
+func (s AnnualScheduler[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
 	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
 	return func(yield func(Active[T]) bool) {
 		for _, dr := range drl {

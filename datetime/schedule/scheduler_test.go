@@ -129,3 +129,56 @@ func TestScheduler(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestSchedulerDifferentYear(t *testing.T) {
+	action1 := newAction("action1", 1, 2, 3, testAction{"action1"})
+	schedMonth := schedule.Annual[testAction]{
+		Name: "testMonth",
+		Dates: schedule.Dates{
+			For: datetime.MonthList{2},
+		},
+		Actions: []schedule.Action[testAction]{action1},
+	}
+	schedRange := schedule.Annual[testAction]{
+		Name: "testRabge",
+		Dates: schedule.Dates{
+			Ranges: datetime.DateRangeList{
+				datetime.NewDateRange(2023, datetime.NewDate(2, 1), datetime.NewDate(2, 29)),
+			},
+		},
+		Actions: []schedule.Action[testAction]{action1},
+	}
+	for _, sched := range []schedule.Annual[testAction]{
+		schedMonth, schedRange,
+	} {
+		scheduler := schedule.NewAnnualScheduler(sched)
+		yp := datetime.YearAndPlace{Year: 2023, Place: time.UTC}
+		active := []schedule.Active[testAction]{}
+		for scheduled := range scheduler.Scheduled(yp) {
+			active = append(active, scheduled)
+		}
+		if got, want := len(active), 28; got != want {
+			t.Errorf("got %v, want %v", got, want)
+			continue
+		}
+		if got, want := active[27].Date, datetime.NewDate(2, 28); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+
+		yp.Year = 2024
+		active = []schedule.Active[testAction]{}
+		for scheduled := range scheduler.Scheduled(yp) {
+			active = append(active, scheduled)
+		}
+		if got, want := len(active), 29; got != want {
+			t.Errorf("got %v, want %v", got, want)
+			continue
+		}
+		if got, want := active[27].Date, datetime.NewDate(2, 28); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := active[28].Date, datetime.NewDate(2, 29); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
