@@ -211,7 +211,6 @@ func TestGoContext(t *testing.T) {
 
 	invocations := 10
 	for i := 0; i < invocations; i++ {
-		i := i
 		g.GoContext(ctx, func() error {
 			atomic.AddInt64(&started, 1)
 			if i == 0 {
