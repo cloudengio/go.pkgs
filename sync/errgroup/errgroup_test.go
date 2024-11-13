@@ -26,7 +26,6 @@ func ExampleT() {
 	var g errgroup.T
 	msg := []string{"a", "b", "c"}
 	for _, m := range msg {
-		m := m
 		g.Go(func() error {
 			return errors.New(m)
 		})
@@ -54,7 +53,6 @@ func ExampleT_parallel() {
 	msg := []string{"a", "b", "c"}
 	out := make([]string, len(msg))
 	for i, m := range msg {
-		i, m := i, m
 		g.Go(func() error {
 			out[i] = m
 			return nil
@@ -77,7 +75,6 @@ func ExampleWithContext() {
 	g, ctx := errgroup.WithContext(context.Background())
 	var msg = []string{"a", "b", "c"}
 	for i, m := range msg {
-		i, m := i, m
 		g.Go(func() error {
 			if i == 1 {
 				return errors.New("first")
@@ -109,7 +106,6 @@ func ExampleWithCancel() {
 	g := errgroup.WithCancel(cancel)
 	var msg = []string{"a", "b", "c"}
 	for _, m := range msg {
-		m := m
 		g.Go(func() error {
 			ctx.Done()
 			// deadline is already past.
