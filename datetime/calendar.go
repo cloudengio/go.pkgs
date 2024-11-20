@@ -141,7 +141,7 @@ func ParseAnyDate(year int, val string) (CalendarDate, error) {
 	switch strings.Count(val, "/") {
 	case 0:
 	case 1:
-		d, err := ParseNumericDate(year, val)
+		d, err := ParseNumericDate(val)
 		if err != nil {
 			return CalendarDate(0), err
 		}
@@ -154,7 +154,7 @@ func ParseAnyDate(year int, val string) (CalendarDate, error) {
 	switch strings.Count(val, "-") {
 	case 0:
 	case 1:
-		d, err := ParseDate(year, val)
+		d, err := ParseDate(val)
 		if err != nil {
 			return CalendarDate(0), err
 		}

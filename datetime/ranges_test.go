@@ -24,152 +24,124 @@ func TestDateRangeParse(t *testing.T) {
 		"nov:dec",
 		"nov:dec-20",
 		"feb:feb",
+		"feb-29:feb-29", // normalizes to 2/28 for non-leap years.
 	}
 
-	year := 2024
 	nd := newDate
 	ndr := datetime.NewDateRange
 	want := datetime.DateRangeList{
-		ndr(year, nd(1, 2), nd(3, 4)),
-		ndr(year, nd(1, 2), nd(3, 4)),
-		ndr(year, nd(1, 1), nd(3, 31)),
-		ndr(year, nd(1, 1), nd(3, 31)),
-		ndr(year, nd(1, 1), nd(3, 31)),
-		ndr(year, nd(1, 1), nd(3, 31)),
-		ndr(year, nd(11, 1), nd(12, 31)),
-		ndr(year, nd(11, 1), nd(12, 20)),
-		ndr(year, nd(2, 1), nd(2, 29)),
+		ndr(nd(1, 2), nd(3, 4)),
+		ndr(nd(1, 2), nd(3, 4)),
+		ndr(nd(1, 1), nd(3, 31)),
+		ndr(nd(1, 1), nd(3, 31)),
+		ndr(nd(1, 1), nd(3, 31)),
+		ndr(nd(1, 1), nd(3, 31)),
+		ndr(nd(11, 1), nd(12, 31)),
+		ndr(nd(11, 1), nd(12, 20)),
+		ndr(nd(2, 1), nd(2, 29)),  // normalizes to 2/28 for non-leap years.
+		ndr(nd(2, 29), nd(2, 29)), // normalizes to 2/28 for non-leap years.
 	}
 
 	for i, tc := range ranges {
 		var dr datetime.DateRange
-		if err := dr.Parse(year, tc); err != nil {
+		if err := dr.Parse(tc); err != nil {
 			t.Errorf("failed: %v: %v", tc, err)
 		}
-		if got, want := dr, want[i]; !got.Equal(year, want) {
+
+		// The dates will be normalized for the equality test,
+		// so 2/29 will be treated as 2/28 in 2023 and any zero
+		// days will be treated as either the first or last day of
+		// the month.
+		if got, want := dr, want[i]; !got.Equal(2024, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := dr, want[i]; !got.Equal(2023, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}
 
-	var dr datetime.DateRangeList
-	if err := dr.Parse(year, ranges); err != nil {
+	// non-leap year
+	var ldc datetime.DateRange
+	if err := ldc.Parse("02:feb"); err != nil {
 		t.Errorf("failed: %v", err)
 	}
-
-	want = datetime.DateRangeList{
-		ndr(year, nd(1, 1), nd(3, 31)),
-		ndr(year, nd(1, 2), nd(3, 4)),
-		ndr(year, nd(2, 1), nd(2, 29)),
-		ndr(year, nd(11, 1), nd(12, 20)),
-		ndr(year, nd(11, 1), nd(12, 31)),
-	}
-
-	if got := dr; !got.Equal(year, want) {
+	if got, want := ldc, ndr(nd(2, 0), nd(2, 0)); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
-	// non-leap year
-	year = 2023
-	var ldc datetime.DateRange
-	if err := ldc.Parse(year, "02:feb"); err != nil {
-		t.Errorf("failed: %v", err)
-	}
-	if got, want := ldc, ndr(year, nd(2, 1), nd(2, 28)); !reflect.DeepEqual(got, want) {
+	if got, want := ldc.Normalize(2023), ndr(nd(2, 1), nd(2, 28)); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	for _, tc := range []string{
+		"",
 		"xxx",
-		"feb:jan",
-		"feb-20:feb-02",
 		"feb-20:feb:02",
-		"feb-20:feb-29",
+		"feb-20:feb:29",
 	} {
 		var dr datetime.DateRange
-		if err := dr.Parse(year, tc); err == nil {
+		if err := dr.Parse(tc); err == nil {
 			t.Errorf("failed to return an error: %v", tc)
 		}
 	}
 }
 
 func TestDateRanges(t *testing.T) {
-	year := 2024
 	nd := newDate
 	ncd := newCalendarDate
-	ndr := newDateRange
+	ndr := datetime.NewDateRange
 	ncdr := newCalendarDateRange
-	dra := ndr(year, nd(1, 0), nd(3, 0))
-	if got, want := dra, ndr(year, nd(1, 1), nd(3, 31)); got != want {
+
+	dra := ndr(nd(1, 0), nd(2, 0))
+	if got, want := dra, ndr(nd(1, 0), nd(2, 0)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	cdra := ncdr(ncd(2024, 1, 0), ncd(2024, 3, 0))
-	if got, want := cdra, ncdr(ncd(2024, 1, 1), ncd(2024, 3, 31)); got != want {
+	// The to/from dates are swapped when created.
+	dra = ndr(nd(2, 0), nd(1, 0))
+	if got, want := dra, ndr(nd(1, 0), nd(2, 0)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	// The to/from dates are swapped and then normalized
-	// when a date range is created.
-	dra = ndr(year, nd(3, 0), nd(1, 0))
-	if got, want := dra, ndr(year, nd(1, 1), nd(3, 31)); got != want {
+	// test normalization.
+	if got, want := dra.Normalize(2024), ndr(nd(1, 1), nd(2, 29)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	dra = ndr(year, nd(2, 28), nd(2, 0))
-	if got, want := dra, ndr(year, nd(2, 1), nd(2, 28)); got != want {
+	if got, want := dra.Normalize(2023), ndr(nd(1, 1), nd(2, 28)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	dra = ndr(year, nd(2, 28), nd(2, 1))
-	if got, want := dra, ndr(year, nd(2, 1), nd(2, 28)); got != want {
+	// date ranges are normalized before creating calendar date ranges.
+	dra = ndr(nd(2, 0), nd(2, 0))
+	cdra := dra.CalendarDateRange(2023)
+	if got, want := cdra, ncdr(ncd(2023, 2, 1), ncd(2023, 2, 28)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	cdra = ncdr(ncd(year, 3, 0), ncd(year, 1, 0))
-	if got, want := cdra, ncdr(ncd(year, 1, 1), ncd(year, 3, 31)); got != want {
+	cdra = dra.CalendarDateRange(2024)
+	if got, want := cdra, ncdr(ncd(2024, 2, 1), ncd(2024, 2, 29)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestCalendarDateRanges(t *testing.T) {
+	ncd := newCalendarDate
+	ncdr := datetime.NewCalendarDateRange
+
+	// from, to are swapped and then normalized.
+	cdra := ncdr(ncd(2024, 1, 0), ncd(2024, 2, 0))
+	if got, want := cdra, ncdr(ncd(2024, 1, 1), ncd(2024, 2, 29)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	cdra = ncdr(ncd(year, 2, 28), ncd(year, 2, 0))
-	if got, want := cdra, ncdr(ncd(year, 2, 1), ncd(year, 2, 28)); got != want {
+	cdra = ncdr(ncd(2024, 2, 0), ncd(2024, 0, 0))
+	if got, want := cdra, ncdr(ncd(2024, 1, 1), ncd(2024, 2, 29)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	cdra = ncdr(ncd(year, 2, 28), ncd(year, 2, 1))
-	if got, want := cdra, ncdr(ncd(year, 2, 1), ncd(year, 2, 28)); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	// In a non leap year Feb 29 is normalized to Feb 28.
-	dra = ndr(year, nd(2, 29), nd(2, 0))
-	if got, want := dra, ndr(year, nd(2, 1), nd(2, 29)); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	cdra = ncdr(ncd(year, 2, 29), ncd(year, 2, 0))
-	if got, want := cdra, ncdr(ncd(year, 2, 1), ncd(year, 2, 29)); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	nonLeapYear := 2023
-
-	cdra = ncdr(ncd(nonLeapYear, 2, 29), ncd(nonLeapYear, 2, 0))
-	if got, want := cdra, ncdr(ncd(nonLeapYear, 2, 1), ncd(nonLeapYear, 2, 29)); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	dra = ndr(nonLeapYear, nd(2, 29), nd(2, 0))
-	if got, want := dra, ndr(nonLeapYear, nd(2, 1), nd(2, 28)); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	dra = ndr(nonLeapYear, nd(2, 0), nd(2, 0))
-	if got, want := dra, ndr(nonLeapYear, nd(2, 1), nd(2, 28)); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	dra = ndr(nonLeapYear, nd(2, 0), nd(2, 29))
-	if got, want := dra, ndr(nonLeapYear, nd(2, 1), nd(2, 28)); got != want {
+	// test non-leap year.
+	cdra = ncdr(ncd(2023, 1, 0), ncd(2023, 2, 0))
+	if got, want := cdra, ncdr(ncd(2023, 1, 1), ncd(2023, 2, 28)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -177,7 +149,7 @@ func TestDateRanges(t *testing.T) {
 func TestDateRangeSorting(t *testing.T) {
 	ndrl := newDateRangeList
 	nd := newDate
-	r1 := ndrl(2024,
+	r1 := ndrl(
 		nd(1, 2), nd(2, 11),
 		nd(1, 2), nd(1, 13),
 		nd(3, 1), nd(3, 10),
@@ -188,7 +160,7 @@ func TestDateRangeSorting(t *testing.T) {
 		nd(3, 1), nd(3, 9),
 	)
 	slices.Sort(r1)
-	if got, want := r1, ndrl(2024,
+	if got, want := r1, ndrl(
 		nd(1, 1), nd(1, 31),
 		nd(1, 2), nd(1, 11),
 		nd(1, 2), nd(1, 13),
@@ -239,11 +211,11 @@ func TestCalendarDateRangeSorting(t *testing.T) {
 func TestDateRangeEquality(t *testing.T) {
 	ndrl := newDateRangeList
 	nd := newDate
-	r1 := ndrl(2024,
+	r1 := ndrl(
 		nd(2, 1), nd(2, 29),
 		nd(1, 1), nd(2, 31),
 	)
-	r2 := ndrl(2024,
+	r2 := ndrl(
 		nd(2, 1), nd(2, 29),
 		nd(1, 1), nd(2, 31),
 	)
@@ -254,7 +226,7 @@ func TestDateRangeEquality(t *testing.T) {
 	if got, want := r1.Equal(2023, r2), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	r2 = ndrl(2024,
+	r2 = ndrl(
 		nd(2, 1), nd(2, 28),
 		nd(1, 1), nd(2, 31),
 	)
@@ -284,7 +256,7 @@ func TestDateRangeIterator(t *testing.T) {
 		var dr datetime.DateRange
 		var dates dateList
 		var yearDay []datetime.YearDay
-		if err := dr.Parse(year, tc.input); err != nil {
+		if err := dr.Parse(tc.input); err != nil {
 			t.Errorf("failed: %v: %v", tc.input, err)
 		}
 		for cd := range dr.Dates(year) {
@@ -306,7 +278,7 @@ func TestDateRangeIterator(t *testing.T) {
 	// non-leap year
 	year = 2023
 	var dr datetime.DateRange
-	if err := dr.Parse(year, "02/27:03/02"); err != nil {
+	if err := dr.Parse("02/27:03/02"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
 	var dates dateList
@@ -386,7 +358,7 @@ func TestDataRangeIteratorConstrained(t *testing.T) {
 		var dr datetime.DateRange
 		var dates dateList
 		var yearDay []datetime.YearDay
-		if err := dr.Parse(year, tc.input); err != nil {
+		if err := dr.Parse(tc.input); err != nil {
 			t.Errorf("failed: %v", err)
 		}
 		for d := range dr.DatesConstrained(year, tc.constraint) {
@@ -406,7 +378,7 @@ func TestDataRangeIteratorConstrained(t *testing.T) {
 	// non-leap year
 	year = 2023
 	var dr datetime.DateRange
-	if err := dr.Parse(year, "02/27:03/02"); err != nil {
+	if err := dr.Parse("02/27:03/02"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
 	var out dateList
@@ -480,7 +452,7 @@ func TestDataRangeRangesIterator(t *testing.T) {
 	} {
 		var dr datetime.DateRange
 		var ranges datetime.CalendarDateRangeList
-		if err := dr.Parse(year, tc.input); err != nil {
+		if err := dr.Parse(tc.input); err != nil {
 			t.Errorf("failed: %v", err)
 			continue
 		}
@@ -501,7 +473,7 @@ func TestDataRangeRangesIterator(t *testing.T) {
 	// non-leap year
 	year = 2023
 	var dr datetime.DateRange
-	if err := dr.Parse(year, "02:02"); err != nil {
+	if err := dr.Parse("02:02"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
 	var ranges datetime.CalendarDateRangeList
@@ -561,13 +533,13 @@ func TestMergeDateRanges(t *testing.T) {
 		ranges datetime.DateRangeList
 		merged datetime.DateRangeList
 	}{
-		{ndrl(year, nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
-		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
-		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndrl(year, nd(1, 1), nd(1, 10))},
-		{ndrl(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndrl(year, nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
-		{ndrl(year, nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndrl(year, nd(2, 27), nd(3, 10))},
-		{ndrl(year, nd(1, 1), nd(12, 1), nd(2, 2), nd(4, 2)), ndrl(year, nd(1, 1), nd(12, 1))},
-		{ndrl(year, nd(1, 1), nd(11, 1), nd(1, 1), nd(12, 1)), ndrl(year, nd(1, 1), nd(12, 1))},
+		{ndrl(nd(1, 1), nd(1, 2)), ndrl(nd(1, 1), nd(1, 2))},
+		{ndrl(nd(1, 1), nd(1, 2), nd(1, 1), nd(1, 2)), ndrl(nd(1, 1), nd(1, 2))},
+		{ndrl(nd(1, 1), nd(1, 2), nd(1, 3), nd(1, 10)), ndrl(nd(1, 1), nd(1, 10))},
+		{ndrl(nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10)), ndrl(nd(1, 1), nd(1, 2), nd(1, 4), nd(1, 10))},
+		{ndrl(nd(2, 27), nd(2, 29), nd(3, 1), nd(3, 10)), ndrl(nd(2, 27), nd(3, 10))},
+		{ndrl(nd(1, 1), nd(12, 1), nd(2, 2), nd(4, 2)), ndrl(nd(1, 1), nd(12, 1))},
+		{ndrl(nd(1, 1), nd(11, 1), nd(1, 1), nd(12, 1)), ndrl(nd(1, 1), nd(12, 1))},
 	} {
 		if got, want := tc.ranges.Merge(year), tc.merged; !slices.Equal(got, want) {
 			t.Errorf("got %v, want %v", got, want)
@@ -616,9 +588,9 @@ func TestDatesMonthsMerge(t *testing.T) {
 		ranges datetime.DateRangeList
 		merged datetime.DateRangeList
 	}{
-		{datetime.MonthList{1}, ndrl(year, nd(2, 1), nd(2, 28)), ndrl(year, nd(1, 1), nd(2, 28))},
-		{datetime.MonthList{}, ndrl(year, nd(2, 1), nd(2, 28)), ndrl(year, nd(2, 1), nd(2, 28))},
-		{datetime.MonthList{1}, ndrl(year, nd(2, 2), nd(2, 28)), ndrl(year, nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
+		{datetime.MonthList{1}, ndrl(nd(2, 1), nd(2, 28)), ndrl(nd(1, 1), nd(2, 28))},
+		{datetime.MonthList{}, ndrl(nd(2, 1), nd(2, 28)), ndrl(nd(2, 1), nd(2, 28))},
+		{datetime.MonthList{1}, ndrl(nd(2, 2), nd(2, 28)), ndrl(nd(1, 1), nd(1, 31), nd(2, 2), nd(2, 28))},
 	} {
 		merged := tc.ranges.MergeMonths(year, tc.months)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {

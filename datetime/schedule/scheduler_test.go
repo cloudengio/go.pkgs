@@ -143,7 +143,7 @@ func TestSchedulerDifferentYear(t *testing.T) {
 		Name: "testRabge",
 		Dates: schedule.Dates{
 			Ranges: datetime.DateRangeList{
-				datetime.NewDateRange(2023, datetime.NewDate(2, 1), datetime.NewDate(2, 29)),
+				datetime.NewDateRange(datetime.NewDate(2, 1), datetime.NewDate(2, 29)),
 			},
 		},
 		Actions: []schedule.Action[testAction]{action1},

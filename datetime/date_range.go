@@ -60,18 +60,27 @@ func (dr DateRange) To(year int) Date {
 
 // NewDateRange returns a DateRange for the from/to dates for the specified year.
 // If the from date is later than the to date then they are swapped.
-// The resulting from and to dates are then normalized using
-// date.Normalize(year, true) for the from date and date.Normalize(year, false) for the to date.
-func NewDateRange(year int, from, to Date) DateRange {
+func NewDateRange(from, to Date) DateRange {
 	if from > to {
 		from, to = to, from
 	}
-	from, to = from.Normalize(year, true), to.Normalize(year, false)
 	return newDateRange(from, to)
 }
 
+// Normalize rerturns a new DateRange with the from and to dates normalized to the
+// specified year. This is equivalent to calling date.Normalize(year, true) for
+// the from date and date.Normalize(year, false) for the to date.
+func (dr DateRange) Normalize(year int) DateRange {
+	from, to := dr.From(year).Normalize(year, true), dr.To(year).Normalize(year, false)
+	return newDateRange(from, to)
+}
+
+// CalendarDateRange returns a CalendarDateRange for the DateRange for the
+// specified year. The date range is first normalized to the specified year
+// before creating the CalendarDateRange.
 func (dr DateRange) CalendarDateRange(year int) CalendarDateRange {
-	from, to := dr.From(year).CalendarDate(year), dr.To(year).CalendarDate(year)
+	ndr := dr.Normalize(year)
+	from, to := ndr.From(year).CalendarDate(year), ndr.To(year).CalendarDate(year)
 	return NewCalendarDateRange(from, to)
 }
 
@@ -80,38 +89,30 @@ func (dr DateRange) String() string {
 }
 
 // Parse ranges in formats '01:03', 'Jan:Mar', '01/02:03-04' or 'Jan-02:Mar-04'.
-// If the from day is zero then it is treated as the first day of the month.
-// If the from day is 29 for a non-leap year then it is left as 29.
-// If the to day is zero then it is treated as the last day of the month taking
-// the year into account for Feb.
-// The start date must be before the end date after normalization as per
-// the above rules.
-func (dr *DateRange) Parse(year int, val string) error {
+func (dr *DateRange) Parse(val string) error {
 	parts := strings.Split(val, ":")
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid format, %q expected '<from>:<to>'", val)
 	}
 	var from, to Date
-	if err := from.Parse(year, parts[0]); err != nil {
+	if err := from.Parse(parts[0]); err != nil {
 		return fmt.Errorf("invalid from: %s: %v", parts[0], err)
 	}
-	if err := to.Parse(year, parts[1]); err != nil {
+	if err := to.Parse(parts[1]); err != nil {
 		return fmt.Errorf("invalid to: %s: %v", parts[1], err)
-	}
-	from = from.Normalize(year, true)
-	to = to.Normalize(year, false)
-	if to < from {
-		return fmt.Errorf("from is later than to: %s %s", from, to)
 	}
 	*dr = newDateRange(from, to)
 	return nil
 }
 
 // Equal returns true if the two DateRange values are equal
-// for the given year.
+// for the given year. Both ranges are first normalized before
+// comparison.
 func (dr DateRange) Equal(year int, dr2 DateRange) bool {
-	af, bf := dr.From(year), dr2.From(year)
-	at, bt := dr.To(year), dr2.To(year)
+	ndr := dr.Normalize(year)
+	ndr2 := dr2.Normalize(year)
+	af, bf := ndr.From(year), ndr2.From(year)
+	at, bt := ndr.To(year), ndr2.To(year)
 	return af == bf && at == bt
 }
 
@@ -153,7 +154,7 @@ type DateRangeList []DateRange
 // Parse ranges in formats '01:03', 'Jan:Mar', '01-02:03-04' or 'Jan-02:Mar-04'.
 // The parsed list is sorted and without duplicates. If the start date is
 // identical then the end date is used to determine the order.
-func (drl *DateRangeList) Parse(year int, ranges []string) error {
+func (drl *DateRangeList) Parse(ranges []string) error {
 	if len(ranges) == 0 {
 		return nil
 	}
@@ -161,7 +162,7 @@ func (drl *DateRangeList) Parse(year int, ranges []string) error {
 	seen := map[DateRange]struct{}{}
 	for _, rg := range ranges {
 		var dr DateRange
-		if err := dr.Parse(year, rg); err != nil {
+		if err := dr.Parse(rg); err != nil {
 			return err
 		}
 		if _, ok := seen[dr]; ok {

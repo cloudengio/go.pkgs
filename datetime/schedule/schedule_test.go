@@ -13,12 +13,12 @@ import (
 	"cloudeng.io/datetime/schedule"
 )
 
-func parseDateRangeList(year int, s ...string) datetime.DateRangeList {
+func parseDateRangeList(s ...string) datetime.DateRangeList {
 	if len(s) == 0 || len(s[0]) == 0 {
 		return datetime.DateRangeList{}
 	}
 	var dr datetime.DateRangeList
-	if err := dr.Parse(year, s); err != nil {
+	if err := dr.Parse(s); err != nil {
 		panic(err)
 	}
 	return dr
@@ -55,11 +55,15 @@ func TestDates(t *testing.T) {
 	} {
 		sd := schedule.Dates{
 			For:          pml(tc.monthsFor),
-			Ranges:       pdrl(tc.year, strings.Split(tc.ranges, ",")...),
+			Ranges:       pdrl(strings.Split(tc.ranges, ",")...),
 			MirrorMonths: tc.mirror,
 			Constraints:  tc.constraints,
 		}
-		if got, want := sd.EvaluateDateRanges(tc.year), pdrl(tc.year, strings.Split(tc.expected, ",")...); !reflect.DeepEqual(got, want) {
+		expected := pdrl(strings.Split(tc.expected, ",")...)
+		for i := range expected {
+			expected[i] = expected[i].Normalize(tc.year)
+		}
+		if got, want := sd.EvaluateDateRanges(tc.year), expected; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}

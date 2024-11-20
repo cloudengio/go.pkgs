@@ -19,7 +19,7 @@ func daysFromDatesString(year int, datelist string) []datetime.YearDay {
 		if len(p) == 0 {
 			continue
 		}
-		if err := date.Parse(year, p); err != nil {
+		if err := date.Parse(p); err != nil {
 			panic(err)
 		}
 		days = append(days, datetime.NewYearDay(year, date.DayOfYear(year)))
@@ -43,10 +43,6 @@ func daysFromCalendarDatesString(datelist string) []datetime.YearDay {
 	return days
 }
 
-func newDateRange(year int, a, b datetime.Date) datetime.DateRange {
-	return datetime.NewDateRange(year, a, b)
-}
-
 func newCalendarDateRange(a, b datetime.CalendarDate) datetime.CalendarDateRange {
 	return datetime.NewCalendarDateRange(a, b)
 }
@@ -63,10 +59,10 @@ func newCalendarDateList(d ...datetime.CalendarDate) datetime.CalendarDateList {
 	return r
 }
 
-func newDateRangeList(year int, d ...datetime.Date) datetime.DateRangeList {
+func newDateRangeList(d ...datetime.Date) datetime.DateRangeList {
 	r := make([]datetime.DateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, datetime.NewDateRange(year, d[i], d[i+1]))
+		r = append(r, datetime.NewDateRange(d[i], d[i+1]))
 	}
 	return r
 }

@@ -31,7 +31,7 @@ func TestDateParse(t *testing.T) {
 		{"FeB-29", nd(2, 29)},
 	} {
 		var when datetime.Date
-		if err := when.Parse(2024, tc.val); err != nil {
+		if err := when.Parse(tc.val); err != nil {
 			t.Errorf("failed: %v: %v", tc.val, err)
 			continue
 		}
@@ -48,19 +48,18 @@ func TestDateParse(t *testing.T) {
 		{"01-02"},
 		{"01-02-03"},
 		{"Jan-32"},
-		{"Feb-29"},
 		{"Feb 02"},
 		{"Jan Feb"},
 		{"13-01"},
 	} {
 		var md datetime.Date
-		if err := md.Parse(2023, tc.val); err == nil {
+		if err := md.Parse(tc.val); err == nil {
 			t.Errorf("failed to return an error: %v", tc.val)
 		}
 	}
 
 	var dl datetime.DateList
-	if err := dl.Parse(2024, "01/02,02/29,11/4"); err != nil {
+	if err := dl.Parse("01/02,02/29,11/4"); err != nil {
 		t.Fatalf("failed: %v", err)
 	}
 	if got, want := dl, (datetime.DateList{nd(1, 2), nd(2, 29), nd(11, 4)}); !reflect.DeepEqual(got, want) {
@@ -229,16 +228,16 @@ func TestMergeDates(t *testing.T) {
 		dates  datetime.DateList
 		merged datetime.DateRangeList
 	}{
-		{ndl(nd(1, 1), nd(1, 1)), ndrl(year, nd(1, 1), nd(1, 1))},
-		{ndl(nd(1, 1), nd(1, 1), nd(1, 1)), ndrl(year, nd(1, 1), nd(1, 1))},
-		{ndl(nd(1, 1), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
-		{ndl(nd(1, 0), nd(1, 2)), ndrl(year, nd(1, 1), nd(1, 2))},
-		{ndl(nd(1, 0), nd(1, 0)), ndrl(year, nd(1, 1), nd(1, 1))},
-		{ndl(nd(0, 0), nd(0, 0)), ndrl(year, nd(1, 1), nd(1, 1))},
-		{ndl(nd(2, 28), nd(2, 29)), ndrl(year, nd(2, 28), nd(2, 29))},
-		{ndl(nd(1, 31), nd(2, 1), nd(2, 2)), ndrl(year, nd(1, 31), nd(2, 2))},
-		{ndl(nd(1, 1), nd(1, 2), nd(1, 3)), ndrl(year, nd(1, 1), nd(1, 3))},
-		{ndl(nd(1, 1), nd(1, 2), nd(3, 4)), ndrl(year, nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
+		{ndl(nd(1, 1), nd(1, 1)), ndrl(nd(1, 1), nd(1, 1))},
+		{ndl(nd(1, 1), nd(1, 1), nd(1, 1)), ndrl(nd(1, 1), nd(1, 1))},
+		{ndl(nd(1, 1), nd(1, 2)), ndrl(nd(1, 1), nd(1, 2))},
+		{ndl(nd(1, 0), nd(1, 2)), ndrl(nd(1, 1), nd(1, 2))},
+		{ndl(nd(1, 0), nd(1, 0)), ndrl(nd(1, 1), nd(1, 1))},
+		{ndl(nd(0, 0), nd(0, 0)), ndrl(nd(1, 1), nd(1, 1))},
+		{ndl(nd(2, 28), nd(2, 29)), ndrl(nd(2, 28), nd(2, 29))},
+		{ndl(nd(1, 31), nd(2, 1), nd(2, 2)), ndrl(nd(1, 31), nd(2, 2))},
+		{ndl(nd(1, 1), nd(1, 2), nd(1, 3)), ndrl(nd(1, 1), nd(1, 3))},
+		{ndl(nd(1, 1), nd(1, 2), nd(3, 4)), ndrl(nd(1, 1), nd(1, 2), nd(3, 4), nd(3, 4))},
 	} {
 		slices.Sort(tc.dates)
 		merged := tc.dates.Merge(year)
@@ -249,7 +248,7 @@ func TestMergeDates(t *testing.T) {
 
 	year = 2023
 	dates := ndl(nd(2, 28), nd(2, 29)) // 2/29 will be treated as 2/28.
-	if got, want := dates.Merge(year), ndrl(year, nd(2, 28), nd(2, 28)); !slices.Equal(got, want) {
+	if got, want := dates.Merge(year), ndrl(nd(2, 28), nd(2, 28)); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

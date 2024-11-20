@@ -14,9 +14,9 @@ import (
 
 type AnnualScheduler[T any] struct {
 	schedule       Annual[T]
-	actionsStorage [2][]Action[T]
+	actionsStorage [2]Actions[T]
 	actionStorage  [2]Action[T]
-	actions        [][]Action[T]
+	actions        []Actions[T]
 }
 
 func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
@@ -56,9 +56,7 @@ func (s *AnnualScheduler[T]) prepareActions() {
 		s.actions = append(s.actions, []Action[T]{merged[i]})
 	}
 	for i := range s.actions {
-		sort.Slice(s.actions[i], func(j, k int) bool {
-			return s.actions[i][j].Name < s.actions[i][k].Name
-		})
+		s.actions[i].Sort()
 	}
 }
 

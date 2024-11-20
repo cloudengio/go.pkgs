@@ -75,6 +75,10 @@ func DaysInMonth(year int, month Month) uint8 {
 	return daysInMonth[month-1]
 }
 
+func (m Month) Days(year int) uint8 {
+	return DaysInMonth(year, m)
+}
+
 func daysInMonthForYear(year int) []uint8 {
 	if IsLeap(year) {
 		return daysInMonthLeap

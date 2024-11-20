@@ -138,8 +138,8 @@ func (d Date) Normalize(year int, firstOfMonth bool) Date {
 }
 
 // Parse a numeric date in the format '01/02' with error checking
-// for valid month and day.
-func ParseNumericDate(year int, val string) (Date, error) {
+// for valid month and day (Feb is treated as having 29 days)
+func ParseNumericDate(val string) (Date, error) {
 	parts := strings.Split(val, "/")
 	if len(parts) != 2 {
 		return Date(0), fmt.Errorf("invalid value %q, expected format '01/02'", val)
@@ -154,15 +154,15 @@ func ParseNumericDate(year int, val string) (Date, error) {
 		return Date(0), fmt.Errorf("invalid day: %s", parts[1])
 	}
 	day := uint8(tmp & 0xff)
-	if day < 1 || day > DaysInMonth(year, month) {
+	if day < 1 || day > daysInMonthLeap[month-1] {
 		return Date(0), fmt.Errorf("invalid day for %v %v: %d", day, month, day)
 	}
 	return newDate8(month, day), nil
 }
 
 // ParseDate parses a date in the forma 'Jan-02' with error checking
-// for valid month and day.
-func ParseDate(year int, val string) (Date, error) {
+// for valid month and day (Feb is treated as having 29 days)
+func ParseDate(val string) (Date, error) {
 	parts := strings.Split(val, "-")
 	if len(parts) != 2 {
 		return Date(0), fmt.Errorf("invalid date %q, expected format 'Jan-02'", val)
@@ -176,22 +176,22 @@ func ParseDate(year int, val string) (Date, error) {
 		return Date(0), fmt.Errorf("invalid day: %s: %v", parts[1], err)
 	}
 	day := uint8(tmp)
-	if day < 1 || day > DaysInMonth(year, month) {
-		return Date(0), fmt.Errorf("invalid day %v for %s in %d", day, month, year)
+	if day < 1 || day > daysInMonthLeap[month-1] {
+		return Date(0), fmt.Errorf("invalid day %v for %s", day, month)
 	}
 	return newDate8(month, day), nil
 }
 
 const expectedDateFormats = "01, Jan, 01/02 or Jan-02"
 
-// Parse date in formats '01', 'Jan','01/02' or 'Jan-02'. The year
-// is required for correct validation of Feb.
-func (d *Date) Parse(year int, val string) error {
+// Parse date in formats '01', 'Jan','01/02' or 'Jan-02' with error checking
+// for valid month and day (Feb is treated as having 29 days)
+func (d *Date) Parse(val string) error {
 	if len(val) == 0 {
 		return fmt.Errorf("empty value, expected %s", expectedDateFormats)
 	}
 	if strings.Contains(val, "/") {
-		date, err := ParseNumericDate(year, val)
+		date, err := ParseNumericDate(val)
 		if err != nil {
 			return fmt.Errorf("invalid numeric date: %v", err)
 		}
@@ -199,7 +199,7 @@ func (d *Date) Parse(year int, val string) error {
 		return nil
 	}
 	if strings.Contains(val, "-") {
-		date, err := ParseDate(year, val)
+		date, err := ParseDate(val)
 		if err != nil {
 			return fmt.Errorf("invalid date: %v", err)
 		}
@@ -287,7 +287,7 @@ func (d Date) yesterday(daysInMonth []uint8) Date {
 type DateList []Date
 
 // Parse a comma separated list of Dates.
-func (dl *DateList) Parse(year int, val string) error {
+func (dl *DateList) Parse(val string) error {
 	if len(val) == 0 {
 		return nil
 	}
@@ -296,7 +296,7 @@ func (dl *DateList) Parse(year int, val string) error {
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		var date Date
-		if err := date.Parse(year, part); err != nil {
+		if err := date.Parse(part); err != nil {
 			return err
 		}
 		d = append(d, date)

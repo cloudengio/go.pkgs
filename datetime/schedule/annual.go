@@ -7,6 +7,7 @@ package schedule
 
 import (
 	"slices"
+	"sort"
 
 	"cloudeng.io/datetime"
 )
@@ -53,7 +54,7 @@ func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 // to be executed according to the schedule.
 type Active[T any] struct {
 	Date    datetime.Date
-	Actions []Action[T] // Ordered by name.
+	Actions Actions[T] // Ordered by name.
 }
 
 // Action represents an event that the schedule should trigger at a specific day and time.
@@ -63,13 +64,24 @@ type Action[T any] struct {
 	Action T
 }
 
+type Actions[T any] []Action[T]
+
+func (a Actions[T]) Sort() {
+	sort.Slice(a, func(i, j int) bool {
+		if a[i].Due == a[j].Due {
+			return a[i].Name < a[j].Name
+		}
+		return a[i].Due < a[j].Due
+	})
+}
+
 // Annual represents a schedule of actions to be taken at specific dates
 // and times each year. Each action results in one or more events at a specific
 // time on a specific date within any given year.
 type Annual[T any] struct {
 	Name    string
 	Dates   Dates
-	Actions []Action[T]
+	Actions Actions[T]
 }
 
 func (a Annual[T]) clone() Annual[T] {

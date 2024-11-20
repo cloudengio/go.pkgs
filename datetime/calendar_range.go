@@ -6,6 +6,7 @@ package datetime
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"strings"
 	"time"
@@ -74,7 +75,7 @@ func (cdr CalendarDateRange) String() string {
 
 // Dates returns an iterator that yields each Date in the range for the
 // given year.
-func (cdr CalendarDateRange) Dates() func(yield func(CalendarDate) bool) {
+func (cdr CalendarDateRange) Dates() iter.Seq[CalendarDate] {
 	to := cdr.To()
 	return func(yield func(CalendarDate) bool) {
 		for td := cdr.From(); td <= to; td = td.Tomorrow() {
@@ -118,12 +119,12 @@ func (cdr CalendarDateRange) DateRange(year int) DateRange {
 	if cdr.From().Year() != year || cdr.To().Year() != year {
 		return DateRange(0)
 	}
-	return NewDateRange(year, cdr.From().Date(), cdr.To().Date())
+	return NewDateRange(cdr.From().Date(), cdr.To().Date())
 }
 
 // DatesConstrained returns an iterator that yields each Date in the range for the
 // given year constrained by the given DateConstraints.
-func (cdr CalendarDateRange) DatesConstrained(dc Constraints) func(yield func(CalendarDate) bool) {
+func (cdr CalendarDateRange) DatesConstrained(dc Constraints) iter.Seq[CalendarDate] {
 	return func(yield func(CalendarDate) bool) {
 		to := cdr.To()
 		for td := cdr.From(); td <= to; td = td.Tomorrow() {
@@ -139,7 +140,7 @@ func (cdr CalendarDateRange) DatesConstrained(dc Constraints) func(yield func(Ca
 
 // Ranges returns an iterator that yields each DateRange in the range for the
 // given year constrained by the given DateConstraints.
-func (cdr CalendarDateRange) RangesConstrained(dc Constraints) func(yield func(CalendarDateRange) bool) {
+func (cdr CalendarDateRange) RangesConstrained(dc Constraints) iter.Seq[CalendarDateRange] {
 	return func(yield func(CalendarDateRange) bool) {
 		start, stop := cdr.From(), cdr.To()
 		to := stop
@@ -169,7 +170,7 @@ func (cdr CalendarDateRange) RangesConstrained(dc Constraints) func(yield func(C
 
 // Days returns an iterator that yields each day in the range for the
 // given year.
-func (cdr CalendarDateRange) Days() func(yield func(YearDay) bool) {
+func (cdr CalendarDateRange) Days() iter.Seq[YearDay] {
 	to := cdr.To()
 	return func(yield func(YearDay) bool) {
 		for td := cdr.From(); td <= to; td = td.Tomorrow() {
@@ -183,7 +184,7 @@ func (cdr CalendarDateRange) Days() func(yield func(YearDay) bool) {
 
 // DaysConstrained returns an iterator that yields each day in the range for the
 // given year constrained by the given DateConstraints.
-func (cdr CalendarDateRange) DaysConstrained(dc Constraints) func(yield func(YearDay) bool) {
+func (cdr CalendarDateRange) DaysConstrained(dc Constraints) iter.Seq[YearDay] {
 	to := cdr.To()
 	return func(yield func(YearDay) bool) {
 		for td := cdr.From(); td <= to; td = td.Tomorrow() {
