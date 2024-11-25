@@ -6,6 +6,7 @@ package schedule_test
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,5 +67,44 @@ func TestDates(t *testing.T) {
 		if got, want := sd.EvaluateDateRanges(tc.year), expected; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
+	}
+}
+
+func TestActions(t *testing.T) {
+	a := schedule.Actions[int]{
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", Action: 2},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", Action: 3},
+		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", Action: 4},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", Action: 5},
+		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", Action: 6},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", Action: 7},
+	}
+	b := slices.Clone(a)
+
+	a.Sort()
+	if got, want := a, []schedule.Action[int]{
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", Action: 7},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", Action: 5},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", Action: 3},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", Action: 2},
+		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", Action: 4},
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},
+		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", Action: 6},
+	}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	b.SortStable()
+	if got, want := b, []schedule.Action[int]{
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", Action: 3},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", Action: 5},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", Action: 7},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", Action: 2},
+		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", Action: 4},
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},
+		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", Action: 6},
+	}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }

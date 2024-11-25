@@ -66,12 +66,26 @@ type Action[T any] struct {
 
 type Actions[T any] []Action[T]
 
+// Sort by due time and then by name.
 func (a Actions[T]) Sort() {
 	sort.Slice(a, func(i, j int) bool {
 		if a[i].Due == a[j].Due {
 			return a[i].Name < a[j].Name
 		}
 		return a[i].Due < a[j].Due
+	})
+}
+
+// Sort by due time, but preserve the order of actions with
+// the same due time.
+func (a Actions[T]) SortStable() {
+	slices.SortStableFunc(a, func(a, b Action[T]) int {
+		if a.Due < b.Due {
+			return -1
+		} else if a.Due > b.Due {
+			return 1
+		}
+		return 0
 	})
 }
 
