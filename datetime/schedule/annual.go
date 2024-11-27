@@ -15,10 +15,11 @@ import (
 // Dates represents a set of dates expressed as a combination of
 // months, date ranges and constraints on those dates (eg. weekdays in March).
 type Dates struct {
-	For          datetime.MonthList     // Whole months to include.
-	MirrorMonths bool                   // Include the 'mirror' months of those in For.
-	Ranges       datetime.DateRangeList // Include specific date ranges.
-	Constraints  datetime.Constraints   // Constraints to be applied, such as weekdays/weekends etc.
+	For          datetime.MonthList            // Whole months to include.
+	MirrorMonths bool                          // Include the 'mirror' months of those in For.
+	Ranges       datetime.DateRangeList        // Include specific date ranges.
+	Dynamic      datetime.DynamicDateRangeList // Functions to generate dates that vary by year, such as solstices, seasons or holidays.
+	Constraints  datetime.Constraints          // Constraints to be applied, such as weekdays/weekends etc.
 }
 
 func (d Dates) clone() Dates {
@@ -28,6 +29,14 @@ func (d Dates) clone() Dates {
 		Ranges:       slices.Clone(d.Ranges),
 		Constraints:  d.Constraints,
 	}
+}
+
+func truncateCalendarDates(year int, cdrl datetime.CalendarDateRangeList) datetime.DateRangeList {
+	dr := make(datetime.DateRangeList, len(cdrl))
+	for i, cdr := range cdrl {
+		dr[i] = cdr.Truncate(year)
+	}
+	return dr
 }
 
 // EvaluateDateRanges returns the list of date ranges that are represented
@@ -41,6 +50,9 @@ func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 	}
 	slices.Sort(months)
 	merged := d.Ranges.MergeMonths(year, months)
+	merged = append(merged, truncateCalendarDates(year, d.Dynamic.Evaluate(year))...)
+	slices.Sort(merged)
+	merged = merged.Merge(year)
 	drl := make(datetime.DateRangeList, 0, len(merged))
 	for _, r := range merged {
 		for dr := range r.RangesConstrained(year, d.Constraints) {

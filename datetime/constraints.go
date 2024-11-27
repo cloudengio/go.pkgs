@@ -14,10 +14,11 @@ import (
 // as weekends or custom dates to exclude. Custom dates take precedence
 // over weekdays and weekends.
 type Constraints struct {
-	Weekdays       bool             // If true, include weekdays
-	Weekends       bool             // If true, include weekends
-	Custom         DateList         // If non-empty, exclude these dates
-	CustomCalendar CalendarDateList // If non-empty, exclude these calendar dates
+	Weekdays       bool                 // If true, include weekdays
+	Weekends       bool                 // If true, include weekends
+	Custom         DateList             // If non-empty, exclude these dates
+	CustomCalendar CalendarDateList     // If non-empty, exclude these calendar dates
+	Dynamic        DynamicDateRangeList // If non-nil, exclude dates based on the evaluation of the dynamic date range functions.
 }
 
 func (dc Constraints) String() string {
@@ -27,6 +28,10 @@ func (dc Constraints) String() string {
 		out.WriteString(dc.Custom.String())
 		out.WriteString(dc.CustomCalendar.String())
 		out.WriteString(": ")
+	}
+	if len(dc.Dynamic) > 0 {
+		out.WriteString("excluding dynamic dates: ")
+		out.WriteString(dc.Dynamic.String())
 	}
 	switch {
 	case dc.Weekdays && dc.Weekends:
@@ -50,6 +55,16 @@ func (dc Constraints) Include(when time.Time) bool {
 	}
 	if len(dc.CustomCalendar) > 0 {
 		return !slices.Contains(dc.CustomCalendar, CalendarDateFromTime(when))
+	}
+	if len(dc.Dynamic) > 0 {
+		cd := CalendarDateFromTime(when)
+		for _, d := range dc.Dynamic {
+			dd := d.Evaluate(when.Year())
+			if dd.Include(cd) {
+				return false
+			}
+		}
+		return true
 	}
 	switch {
 	case dc.Weekdays && dc.Weekends:

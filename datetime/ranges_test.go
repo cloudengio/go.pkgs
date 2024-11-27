@@ -122,6 +122,23 @@ func TestDateRanges(t *testing.T) {
 	if got, want := cdra, ncdr(ncd(2024, 2, 1), ncd(2024, 2, 29)); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	dr := ndr(nd(1, 1), nd(2, 20))
+	if got, want := dr, nd(1, 1); !got.Include(want) {
+		t.Errorf("got %v does not include %v", got, want)
+	}
+	if got, want := dr, nd(2, 1); !got.Include(want) {
+		t.Errorf("got %v does not include %v", got, want)
+	}
+	if got, want := dr, nd(2, 20); !got.Include(want) {
+		t.Errorf("got %v does not include %v", got, want)
+	}
+	if got, want := dr, nd(2, 21); got.Include(want) {
+		t.Errorf("got %v does include %v", got, want)
+	}
+	if got, want := dr, nd(12, 31); got.Include(want) {
+		t.Errorf("got %v does include %v", got, want)
+	}
 }
 
 func TestCalendarDateRanges(t *testing.T) {
@@ -143,6 +160,23 @@ func TestCalendarDateRanges(t *testing.T) {
 	cdra = ncdr(ncd(2023, 1, 0), ncd(2023, 2, 0))
 	if got, want := cdra, ncdr(ncd(2023, 1, 1), ncd(2023, 2, 28)); got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+
+	dr := ncdr(ncd(2023, 1, 1), ncd(2024, 2, 20))
+	if got, want := dr, ncd(2023, 1, 1); !got.Include(want) {
+		t.Errorf("got %v does not include %v", got, want)
+	}
+	if got, want := dr, ncd(2023, 12, 1); !got.Include(want) {
+		t.Errorf("got %v does not include %v", got, want)
+	}
+	if got, want := dr, ncd(2024, 2, 20); !got.Include(want) {
+		t.Errorf("got %v does not include %v", got, want)
+	}
+	if got, want := dr, ncd(2022, 1, 1); got.Include(want) {
+		t.Errorf("got %v does include %v", got, want)
+	}
+	if got, want := dr, ncd(2024, 3, 2); got.Include(want) {
+		t.Errorf("got %v does include %v", got, want)
 	}
 }
 
@@ -626,6 +660,30 @@ func TestCalendarMonthsMerge(t *testing.T) {
 	} {
 		merged := tc.ranges.MergeMonths(tc.mergeMonth, tc.months)
 		if got, want := merged, tc.merged; !reflect.DeepEqual(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestCalendarTruncate(t *testing.T) {
+	nd := datetime.NewDate
+	ndr := datetime.NewDateRange
+	ncd := datetime.NewCalendarDate
+	ncdr := datetime.NewCalendarDateRange
+
+	for _, tc := range []struct {
+		cdr datetime.CalendarDateRange
+		dr  datetime.DateRange
+	}{
+		{ncdr(ncd(2024, 1, 1), ncd(2024, 1, 31)), ndr(nd(1, 1), nd(1, 31))},
+		{ncdr(ncd(2023, 1, 1), ncd(2024, 1, 31)), ndr(nd(1, 1), nd(1, 31))},
+		{ncdr(ncd(2024, 12, 1), ncd(2025, 1, 31)), ndr(nd(12, 1), nd(12, 31))},
+		{ncdr(ncd(2020, 1, 1), ncd(2024, 1, 31)), datetime.DateRange(0)},
+		{ncdr(ncd(2024, 1, 1), ncd(2026, 1, 31)), datetime.DateRange(0)},
+		{ncdr(ncd(2020, 1, 1), ncd(2026, 1, 31)), datetime.DateRange(0)},
+	} {
+		truncated := tc.cdr.Truncate(2024)
+		if got, want := truncated, tc.dr; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	}

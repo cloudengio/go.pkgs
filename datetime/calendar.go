@@ -235,6 +235,11 @@ func (cd CalendarDate) String() string {
 	return fmt.Sprintf("%02d %02d %04d", cd.Month(), cd.Day(), cd.Year())
 }
 
+// Include returns true if the specified date is within the range.
+func (cd CalendarDateRange) Include(d CalendarDate) bool {
+	return cd.fromDate() <= d && cd.toDate() >= d
+}
+
 // Tomorrow returns the CalendarDate for the day after the specified date, wrapping
 // to the next month or year as needed.
 func (cd CalendarDate) Tomorrow() CalendarDate {
@@ -279,18 +284,3 @@ func (cdl CalendarDateList) String() string {
 	}
 	return out.String()
 }
-
-/*
-// Dates returns the list of dates in the CalendarDateList for
-// the specified year.
-func (cdl CalendarDateList) Dates(year int) DateList {
-	dl := make(DateList, 0, len(cdl))
-	for i, cd := range cdl {
-		if cd.Year() != year {
-			continue
-		}
-		dl[i] = cd.Date()
-	}
-	return slices.Clone(dl)
-}
-*/

@@ -122,6 +122,23 @@ func (cdr CalendarDateRange) DateRange(year int) DateRange {
 	return NewDateRange(cdr.From().Date(), cdr.To().Date())
 }
 
+// Truncate returns a DateRange that is truncated to
+// the start or end of specified year iff the range spans
+// consecutive years, otherwise it returns DateRange(0).
+func (cdr CalendarDateRange) Truncate(year int) DateRange {
+	fy, ty := cdr.From().Year(), cdr.To().Year()
+	if fy == year && ty == year {
+		return NewDateRange(cdr.From().Date(), cdr.To().Date())
+	}
+	if fy == year && ty == year+1 {
+		return NewDateRange(cdr.From().Date(), NewCalendarDate(year, 12, 31).Date())
+	}
+	if fy == year-1 && ty == year {
+		return NewDateRange(NewCalendarDate(year, 1, 1).Date(), cdr.To().Date())
+	}
+	return DateRange(0)
+}
+
 // DatesConstrained returns an iterator that yields each Date in the range for the
 // given year constrained by the given DateConstraints.
 func (cdr CalendarDateRange) DatesConstrained(dc Constraints) iter.Seq[CalendarDate] {

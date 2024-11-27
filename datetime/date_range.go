@@ -67,6 +67,11 @@ func NewDateRange(from, to Date) DateRange {
 	return newDateRange(from, to)
 }
 
+// Include returns true if the specified date is within the range.
+func (dr DateRange) Include(d Date) bool {
+	return dr.fromDate() <= d && dr.toDate() >= d
+}
+
 // Normalize rerturns a new DateRange with the from and to dates normalized to the
 // specified year. This is equivalent to calling date.Normalize(year, true) for
 // the from date and date.Normalize(year, false) for the to date.
