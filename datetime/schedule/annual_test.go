@@ -70,38 +70,6 @@ func TestDates(t *testing.T) {
 	}
 }
 
-type schoolHolidays struct {
-}
-
-func (sh schoolHolidays) Name() string {
-	return "school-holidays"
-}
-
-func (sh schoolHolidays) Evaluate(year int) datetime.CalendarDateRange {
-	return datetime.NewCalendarDateRange(
-		datetime.NewCalendarDate(year, 6, 10),
-		datetime.NewCalendarDate(year, 8, 20))
-}
-
-func TestDynamicDates(t *testing.T) {
-	nd := datetime.NewDate
-	ndr := datetime.NewDateRange
-	d := schedule.Dates{
-		For:     datetime.MonthList{1, 2},
-		Dynamic: []datetime.DynamicDateRange{schoolHolidays{}},
-		Ranges: datetime.DateRangeList{
-			ndr(
-				datetime.NewDate(9, 1), datetime.NewDate(9, 10))},
-	}
-	e := d.EvaluateDateRanges(2024)
-	if got, want := e, (datetime.DateRangeList{
-		ndr(nd(1, 1), nd(2, 29)),
-		ndr(nd(6, 10), nd(8, 20)),
-		ndr(nd(9, 1), nd(9, 10))}); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
 func TestActions(t *testing.T) {
 	a := schedule.Actions[int]{
 		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},

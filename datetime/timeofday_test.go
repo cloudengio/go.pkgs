@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/datetime"
 )
@@ -80,5 +81,24 @@ func TestTimeOfDayParse(t *testing.T) {
 	if got, want := tods, expected; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
 
+func TestTimeOfDayAdd(t *testing.T) {
+	nt := datetime.NewTimeOfDay
+	tod := nt(8, 1, 2)
+	if got, want := tod.Add(time.Hour), nt(9, 1, 2); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := tod.Add(time.Hour*11), nt(19, 1, 2); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := tod.Add(time.Hour*23), nt(23, 59, 59); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := tod.Add(-time.Hour), nt(7, 1, 2); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := tod.Add(-time.Hour*24), nt(0, 0, 0); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }

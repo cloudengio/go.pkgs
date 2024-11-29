@@ -87,6 +87,23 @@ func (t *TimeOfDay) Parse(val string) error {
 	return fmt.Errorf("invalid format, expected '08:12[:10]' or '08-12[-10]'")
 }
 
+// Add delta to the time of day. The result will be normalized to
+// 00:00:00 to 23:59:59.
+func (tod TimeOfDay) Add(delta time.Duration) TimeOfDay {
+	if delta == 0 {
+		return tod
+	}
+	t := time.Date(0, 1, 1, tod.Hour(), tod.Minute(), tod.Second(), 0, time.UTC)
+	nt := t.Add(delta)
+	if t.Year() != nt.Year() || t.Month() != nt.Month() || t.Day() != nt.Day() {
+		if delta > 0 {
+			return NewTimeOfDay(23, 59, 59)
+		}
+		return NewTimeOfDay(0, 0, 0)
+	}
+	return NewTimeOfDay(nt.Hour(), nt.Minute(), nt.Second())
+}
+
 type TimeOfDayList []TimeOfDay
 
 // Parse val as a comma separated list of TimeOfDay values.

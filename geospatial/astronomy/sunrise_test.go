@@ -2,24 +2,25 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package astronomy
+package astronomy_test
 
 import (
 	"testing"
-	"time"
 
 	"cloudeng.io/datetime"
+	"cloudeng.io/geospatial/astronomy"
 )
 
 func TestSunrise(t *testing.T) {
-	loc, _ := time.LoadLocation("America/Los_Angeles")
+	//loc, err := time.LoadLocation("America/Los_Angeles")
 	lat, long := 37.3229978, -122.0321823
-	rise, set := SunRise(datetime.NewCalendarDate(2024, 1, 1), lat, long)
+	rise, set := astronomy.SunRiseAndSet(datetime.NewCalendarDate(2024, 1, 1), lat, long)
 
-	if got, want := rise.In(loc), time.Date(2024, 1, 1, 7, 22, 13, 0, loc); !got.Equal(want) {
+	// UTC time of sunrise and sunset.
+	if got, want := rise, datetime.NewTimeOfDay(7, 22, 13); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := set.In(loc), time.Date(2024, 1, 1, 17, 00, 33, 0, loc); !got.Equal(want) {
+	if got, want := set, datetime.NewTimeOfDay(17, 00, 33); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

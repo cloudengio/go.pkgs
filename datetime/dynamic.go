@@ -19,7 +19,7 @@ type DynamicDateRange interface {
 // to calculate events such as sunrise, sunset etc.
 type DynamicTimeOfDay interface {
 	Name() string
-	Evaluate(year int, month Month, day int) time.Time
+	Evaluate(CalendarDate, *time.Location) TimeOfDay
 }
 
 type DynamicDateRangeList []DynamicDateRange
@@ -41,25 +41,4 @@ func (dl DynamicDateRangeList) Evaluate(year int) []CalendarDateRange {
 		result[i] = f.Evaluate(year)
 	}
 	return result
-}
-
-type DynamicTimeOfDayList []DynamicTimeOfDay
-
-func (dl DynamicTimeOfDayList) Evaluate(year int, month Month, day int) []time.Time {
-	result := make([]time.Time, len(dl))
-	for i, f := range dl {
-		result[i] = f.Evaluate(year, month, day)
-	}
-	return result
-}
-
-func (dl DynamicTimeOfDayList) String() string {
-	var out string
-	for i, d := range dl {
-		if i > 0 {
-			out += ", "
-		}
-		out += d.Name()
-	}
-	return out
 }

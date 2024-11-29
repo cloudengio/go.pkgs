@@ -23,7 +23,6 @@ func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
 	scheduler := &AnnualScheduler[T]{
 		schedule: schedule.clone(),
 	}
-	scheduler.prepareActions()
 	return scheduler
 }
 

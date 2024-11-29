@@ -69,14 +69,34 @@ type Active[T any] struct {
 	Actions Actions[T] // Ordered by name.
 }
 
-// Action represents an event that the schedule should trigger at a specific day and time.
+// Action represents an event that the schedule should trigger
+// at a specific day and time. If present, and Due is zero,
+// DueDynamic must be evaluated to obtain the actual due time.
 type Action[T any] struct {
-	Due    datetime.TimeOfDay
+	Due datetime.TimeOfDay
+	//DueDynamic datetime.DynamicTimeOfDay
 	Name   string
 	Action T
 }
 
+/*
+func (a Action[T]) Evaluate(cd datetime.CalendarDate, loc *time.Location) datetime.TimeOfDay {
+	if a.DueDynamic == nil || a.Due != 0 {
+		return a.Due
+	}
+	return a.DueDynamic.Evaluate(cd, loc)
+}*/
+
 type Actions[T any] []Action[T]
+
+/*
+func (a Actions[T]) Evaluate(cd datetime.CalendarDate, loc *time.Location) {
+	for i := range a {
+		if a[i].DueDynamic != nil && a[i].Due == 0 {
+			a[i].Due = a[i].Evaluate(cd, loc)
+		}
+	}
+}*/
 
 // Sort by due time and then by name.
 func (a Actions[T]) Sort() {
