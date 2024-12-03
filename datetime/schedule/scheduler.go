@@ -6,26 +6,27 @@ package schedule
 
 import (
 	"iter"
-	"slices"
-	"sort"
 
 	"cloudeng.io/datetime"
 )
 
 type AnnualScheduler[T any] struct {
-	schedule       Annual[T]
-	actionsStorage [2]Actions[T]
-	actionStorage  [2]Action[T]
-	actions        []Actions[T]
+	schedule Annual[T]
+	//actionsStorage [2]Actions[T]
+	//actionStorage  [2]Action[T]
+	//actions        []Actions[T]
 }
 
 func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
 	scheduler := &AnnualScheduler[T]{
 		schedule: schedule.clone(),
 	}
+	//scheduler.prepareActions()
+	scheduler.schedule.Actions.Sort()
 	return scheduler
 }
 
+/*
 func (s *AnnualScheduler[T]) prepareActions() {
 	s.actions = s.actionsStorage[:0]
 	if len(s.schedule.Actions) == 0 {
@@ -38,12 +39,7 @@ func (s *AnnualScheduler[T]) prepareActions() {
 		return
 	}
 	merged := slices.Clone(s.schedule.Actions)
-	sort.Slice(merged, func(i, j int) bool {
-		if merged[i].Due == merged[j].Due {
-			return merged[i].Name < merged[j].Name
-		}
-		return merged[i].Due < merged[j].Due
-	})
+	merged.Sort()
 	s.actions = s.actionsStorage[:1]
 	s.actions[0] = s.actionStorage[:1]
 	s.actions[0][0] = merged[0]
@@ -54,21 +50,22 @@ func (s *AnnualScheduler[T]) prepareActions() {
 		}
 		s.actions = append(s.actions, []Action[T]{merged[i]})
 	}
-	for i := range s.actions {
-		s.actions[i].Sort()
-	}
+	//for i := range s.actions {
+	//	s.actions[i].Sort()
+	//}
 }
+*/
 
-// Scheduled returns an iterator over the scheduled actions for the given year and place.
+// Scheduled returns an iterator over the scheduled actions for the given year
+// and place that returns all of the scheduled actions for each day that has
+// scheduled Actions.
 func (s AnnualScheduler[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
 	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
 	return func(yield func(Active[T]) bool) {
 		for _, dr := range drl {
 			for day := range dr.Dates(yp.Year) {
-				for _, da := range s.actions {
-					if !yield(Active[T]{Date: day.Date(), Actions: da}) {
-						return
-					}
+				if !yield(Active[T]{Date: day.Date(), Actions: s.schedule.Actions}) {
+					return
 				}
 			}
 		}

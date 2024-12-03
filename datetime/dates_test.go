@@ -298,3 +298,70 @@ func TestMonthRangeParse(t *testing.T) {
 		}
 	}
 }
+
+func TestDST(t *testing.T) {
+
+	ncd := datetime.NewCalendarDate
+	nd := newDate
+	tod := datetime.NewTimeOfDay
+
+	caTZ, _ := time.LoadLocation("America/Los_Angeles")
+	saTZ, err := time.LoadLocation("Australia/South")
+	if err != nil {
+		t.Fatalf("failed to load Australia/South: %v", err)
+	}
+	for _, tc := range []struct {
+		year, month, day int
+		isDST            bool
+		loc              *time.Location
+	}{
+		{2024, 3, 9, false, caTZ},
+		{2024, 3, 10, true, caTZ},
+		{2024, 11, 2, true, caTZ},
+		{2024, 11, 3, false, caTZ},
+		{2024, 10, 5, false, saTZ},
+		{2024, 10, 6, true, saTZ},
+		{2025, 4, 5, true, saTZ},
+		{2025, 4, 6, false, saTZ},
+	} {
+		if got, want := ncd(tc.year, datetime.Month(tc.month), tc.day).IsDST(tc.loc), tc.isDST; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+
+	for i, tc := range []struct {
+		fromDate                 datetime.Date
+		fromTime                 datetime.TimeOfDay
+		toDate                   datetime.Date
+		toTime                   datetime.TimeOfDay
+		year                     int
+		loc                      *time.Location
+		same, stdToDST, dstToStd bool
+	}{
+		{nd(1, 1), tod(11, 0, 0), nd(1, 1), tod(11, 1, 0), 2024, caTZ, true, false, false},
+		{nd(3, 10), tod(1, 59, 58), nd(3, 10), tod(2, 59, 59), 2024, caTZ, true, false, false}, {nd(3, 10), tod(2, 59, 58), nd(3, 10), tod(2, 59, 59), 2024, caTZ, true, false, false},
+		{nd(3, 10), tod(1, 59, 59), nd(3, 10), tod(3, 0, 0), 2024, caTZ, false, true, false},
+		{nd(3, 11), tod(1, 59, 59), nd(3, 11), tod(3, 0, 0), 2024, caTZ, true, false, false},
+		{nd(11, 3), tod(1, 59, 59), nd(11, 3), tod(2, 0, 0), 2024, caTZ, false, false, true},
+		{nd(11, 3), tod(2, 59, 59), nd(11, 3), tod(3, 0, 0), 2024, caTZ, true, false, false},
+		{nd(3, 10), tod(1, 59, 59), nd(3, 10), tod(3, 0, 0), 2024, saTZ, true, false, false},
+		{nd(11, 3), tod(1, 59, 59), nd(11, 3), tod(2, 0, 0), 2024, saTZ, true, false, false},
+		{nd(10, 6), tod(1, 59, 59), nd(10, 6), tod(3, 0, 0), 2024, saTZ, false, true, false},
+		{nd(4, 6), tod(1, 59, 59), nd(4, 6), tod(3, 0, 0), 2025, saTZ, false, false, true},
+	} {
+		yp := datetime.YearAndPlace{Year: tc.year, Place: tc.loc}
+
+		now := datetime.Time(yp, tc.fromDate, tc.fromTime)
+		same, stdToDST, dstToStd := datetime.DSTTransition(yp, now, tc.toDate, tc.toTime)
+		if got, want := same, tc.same; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+		if got, want := stdToDST, tc.stdToDST; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+		if got, want := dstToStd, tc.dstToStd; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+
+	}
+}

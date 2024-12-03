@@ -27,6 +27,7 @@ func (d Dates) clone() Dates {
 		For:          slices.Clone(d.For),
 		MirrorMonths: d.MirrorMonths,
 		Ranges:       slices.Clone(d.Ranges),
+		Dynamic:      slices.Clone(d.Dynamic),
 		Constraints:  d.Constraints,
 	}
 }
@@ -40,7 +41,8 @@ func truncateCalendarDates(year int, cdrl datetime.CalendarDateRangeList) dateti
 }
 
 // EvaluateDateRanges returns the list of date ranges that are represented
-// by the totality of the information represented by Dates instance.
+// by the totality of the information represented by Dates instance,
+// including the evaluation of any dynamic date ranges.
 func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 	months := slices.Clone(d.For)
 	if d.MirrorMonths {
@@ -73,30 +75,12 @@ type Active[T any] struct {
 // at a specific day and time. If present, and Due is zero,
 // DueDynamic must be evaluated to obtain the actual due time.
 type Action[T any] struct {
-	Due datetime.TimeOfDay
-	//DueDynamic datetime.DynamicTimeOfDay
+	Due    datetime.TimeOfDay
 	Name   string
 	Action T
 }
 
-/*
-func (a Action[T]) Evaluate(cd datetime.CalendarDate, loc *time.Location) datetime.TimeOfDay {
-	if a.DueDynamic == nil || a.Due != 0 {
-		return a.Due
-	}
-	return a.DueDynamic.Evaluate(cd, loc)
-}*/
-
 type Actions[T any] []Action[T]
-
-/*
-func (a Actions[T]) Evaluate(cd datetime.CalendarDate, loc *time.Location) {
-	for i := range a {
-		if a[i].DueDynamic != nil && a[i].Due == 0 {
-			a[i].Due = a[i].Evaluate(cd, loc)
-		}
-	}
-}*/
 
 // Sort by due time and then by name.
 func (a Actions[T]) Sort() {

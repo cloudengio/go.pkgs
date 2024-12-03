@@ -235,6 +235,13 @@ func (cd CalendarDate) String() string {
 	return fmt.Sprintf("%02d %02d %04d", cd.Month(), cd.Day(), cd.Year())
 }
 
+// IsDST returns true if the date is within daylight savings time for the specified
+// location assuming that the time is 12:00 hours. DST generally starts at 2am and ends
+// at 3am.
+func (cd CalendarDate) IsDST(loc *time.Location) bool {
+	return time.Date(cd.Year(), time.Month(cd.Month()), cd.Day(), 12, 0, 0, 0, loc).IsDST()
+}
+
 // Include returns true if the specified date is within the range.
 func (cd CalendarDateRange) Include(d CalendarDate) bool {
 	return cd.fromDate() <= d && cd.toDate() >= d

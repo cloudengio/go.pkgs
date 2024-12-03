@@ -70,13 +70,11 @@ func TestScheduler(t *testing.T) {
 		active = append(active, scheduled)
 	}
 
-	expected := expectedActiveForMonth(yp.Year, 1, action1)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 1, action2)...)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action1)...)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action2)...)
+	expected := expectedActiveForMonth(yp.Year, 1, action1, action2)
+	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action1, action2)...)
 	sortActive(expected)
 
-	if got, want := len(active), (31+29)*2; got != want {
+	if got, want := len(active), (31 + 29); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -84,6 +82,7 @@ func TestScheduler(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	// Add a third action, test that sorting by due time works.
 	action3 := newAction("action3", 1, 2, 3, testAction{"action3"})
 	sched.Actions = append(sched.Actions, action3)
 	scheduler = schedule.NewAnnualScheduler(sched)
@@ -93,39 +92,34 @@ func TestScheduler(t *testing.T) {
 		active = append(active, scheduled)
 	}
 
-	expected = expectedActiveForMonth(yp.Year, 1, action1, action3)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 1, action2)...)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action1, action3)...)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action2)...)
+	expected = expectedActiveForMonth(yp.Year, 1, action1, action3, action2)
+	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action1, action3, action2)...)
 	sortActive(expected)
 
-	if got, want := len(active), (31+29)*2; got != want {
+	if got, want := len(active), (31 + 29); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	if got, want := active, expected; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", len(got), len(want))
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	// Check non-leap year.
 	yp = datetime.YearAndPlace{Year: 2023, Place: time.UTC}
 	active = []schedule.Active[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp) {
 		active = append(active, scheduled)
 	}
 
-	expected = expectedActiveForMonth(yp.Year, 1, action1, action3)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 1, action2)...)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action1, action3)...)
-	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action2)...)
+	expected = expectedActiveForMonth(yp.Year, 1, action1, action3, action2)
+	expected = append(expected, expectedActiveForMonth(yp.Year, 2, action1, action3, action2)...)
 	sortActive(expected)
 
-	if got, want := len(active), (31+28)*2; got != want {
+	if got, want := len(active), (31 + 28); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	if got, want := active, expected; !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", len(got), len(want))
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
