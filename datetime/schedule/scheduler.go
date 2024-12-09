@@ -12,54 +12,20 @@ import (
 
 type AnnualScheduler[T any] struct {
 	schedule Annual[T]
-	//actionsStorage [2]Actions[T]
-	//actionStorage  [2]Action[T]
-	//actions        []Actions[T]
 }
 
 func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
 	scheduler := &AnnualScheduler[T]{
 		schedule: schedule.clone(),
 	}
-	//scheduler.prepareActions()
 	scheduler.schedule.Actions.Sort()
 	return scheduler
 }
 
-/*
-func (s *AnnualScheduler[T]) prepareActions() {
-	s.actions = s.actionsStorage[:0]
-	if len(s.schedule.Actions) == 0 {
-		return
-	}
-	if len(s.schedule.Actions) == 1 {
-		s.actions = s.actionsStorage[:1]
-		s.actions[0] = s.actionStorage[:1]
-		s.actions[0][0] = s.schedule.Actions[0]
-		return
-	}
-	merged := slices.Clone(s.schedule.Actions)
-	merged.Sort()
-	s.actions = s.actionsStorage[:1]
-	s.actions[0] = s.actionStorage[:1]
-	s.actions[0][0] = merged[0]
-	for i := 1; i < len(merged); i++ {
-		if merged[i].Due == merged[i-1].Due {
-			s.actions[len(s.actions)-1] = append(s.actions[len(s.actions)-1], merged[i])
-			continue
-		}
-		s.actions = append(s.actions, []Action[T]{merged[i]})
-	}
-	//for i := range s.actions {
-	//	s.actions[i].Sort()
-	//}
-}
-*/
-
 // Scheduled returns an iterator over the scheduled actions for the given year
 // and place that returns all of the scheduled actions for each day that has
 // scheduled Actions.
-func (s AnnualScheduler[T]) Scheduled(yp datetime.YearAndPlace) iter.Seq[Active[T]] {
+func (s AnnualScheduler[T]) Scheduled(yp datetime.YearPlace) iter.Seq[Active[T]] {
 	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
 	return func(yield func(Active[T]) bool) {
 		for _, dr := range drl {

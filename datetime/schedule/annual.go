@@ -109,15 +109,15 @@ func (a Actions[T]) SortStable() {
 // and times each year. Each action results in one or more events at a specific
 // time on a specific date within any given year.
 type Annual[T any] struct {
-	Name    string
-	Dates   Dates
-	Actions Actions[T]
+	Name   string
+	Dates  Dates
+	PerDay Actions[T]
 }
 
 func (a Annual[T]) clone() Annual[T] {
 	return Annual[T]{
-		Name:    a.Name,
-		Dates:   a.Dates.clone(),
-		Actions: slices.Clone(a.Actions),
+		Name:   a.Name,
+		Dates:  a.Dates.clone(),
+		PerDay: slices.Clone(a.Actions),
 	}
 }

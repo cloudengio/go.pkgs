@@ -107,28 +107,28 @@ func DaysInYear(year int) int {
 	return 365
 }
 
-// YearAndPlace represents a year and a location.
-type YearAndPlace struct {
+// YearPlace represents a year and a location.
+type YearPlace struct {
 	Year  int
 	Place *time.Location
 }
 
 // IsSet returns true if the Year and Place fields are both set.
-func (yp YearAndPlace) IsSet() bool {
+func (yp YearPlace) IsSet() bool {
 	return yp.Year != 0 && yp.Place != nil
 }
 
-// YearAndPlaceFromTime returns a YearAndPlace value from the given time.
-func YearAndPlaceFromTime(t time.Time) YearAndPlace {
-	return YearAndPlace{
+// YearPlaceFromTime returns a YearPlace value from the given time.
+func YearPlaceFromTime(t time.Time) YearPlace {
+	return YearPlace{
 		Year:  t.Year(),
 		Place: t.Location(),
 	}
 }
 
-// NewYearAndPlace returns a YearAndPlace value from the given year and location.
-func NewYearAndPlace(year int, place *time.Location) YearAndPlace {
-	return YearAndPlace{
+// NewYearPlace returns a YearPlace value for the given year and location.
+func NewYearPlace(year int, place *time.Location) YearPlace {
+	return YearPlace{
 		Year:  year,
 		Place: place,
 	}
@@ -136,19 +136,19 @@ func NewYearAndPlace(year int, place *time.Location) YearAndPlace {
 
 type ypKey struct{}
 
-// ContextWithYearAndPlace returns a new context with the given YearAndPlace value
+// ContextWithYearPlace returns a new context with the given YearPlace value
 // stored in it.
-func ContextWithYearAndPlace(ctx context.Context, yp YearAndPlace) context.Context {
+func ContextWithYearPlace(ctx context.Context, yp YearPlace) context.Context {
 	return context.WithValue(ctx, ypKey{}, yp)
 }
 
-// YearAndPlaceFromContext returns the YearAndPlace value stored in the given context,
-// if there is no value stored then an empty YearAndPlace is returned for
+// YearPlaceFromContext returns the YearPlace value stored in the given context,
+// if there is no value stored then an empty YearPlace is returned for
 // which is IsNotset will be true.
-func YearAndPlaceFromContext(ctx context.Context) YearAndPlace {
-	yp, ok := ctx.Value(ypKey{}).(YearAndPlace)
+func YearPlaceFromContext(ctx context.Context) YearPlace {
+	yp, ok := ctx.Value(ypKey{}).(YearPlace)
 	if !ok {
-		return YearAndPlace{}
+		return YearPlace{}
 	}
 	return yp
 }

@@ -21,6 +21,11 @@ func NewCalendarDate(year int, month Month, day int) CalendarDate {
 	return CalendarDate(uint32(year&0xffff)<<16 | uint32(month)<<8 | uint32(day))
 }
 
+// NewCalendarDateFromTime creates a new CalendarDate from the specified time.Time.
+func NewCalendarDateFromTime(t time.Time) CalendarDate {
+	return NewCalendarDate(t.Year(), Month(t.Month()), t.Day())
+}
+
 func newCalendarDate8(year uint16, month Month, day uint8) CalendarDate {
 	return CalendarDate(uint32(year&0xffff)<<16 | uint32(month)<<8 | uint32(day))
 }
@@ -236,10 +241,14 @@ func (cd CalendarDate) String() string {
 }
 
 // IsDST returns true if the date is within daylight savings time for the specified
-// location assuming that the time is 12:00 hours. DST generally starts at 2am and ends
+// location assuming that the time is 12:00 hours. DST starts at 2am and ends
 // at 3am.
 func (cd CalendarDate) IsDST(loc *time.Location) bool {
 	return time.Date(cd.Year(), time.Month(cd.Month()), cd.Day(), 12, 0, 0, 0, loc).IsDST()
+}
+
+func (cd CalendarDate) Time(tod TimeOfDay, loc *time.Location) time.Time {
+	return time.Date(cd.Year(), time.Month(cd.Month()), cd.Day(), tod.Hour(), tod.Minute(), tod.Second(), 0, loc)
 }
 
 // Include returns true if the specified date is within the range.

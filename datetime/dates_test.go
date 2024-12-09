@@ -203,15 +203,15 @@ func TestDatesYearDay(t *testing.T) {
 
 }
 
-func TestYearAndPlace(t *testing.T) {
+func TestYearPlace(t *testing.T) {
 	for _, tc := range []struct {
-		yp    datetime.YearAndPlace
+		yp    datetime.YearPlace
 		isset bool
 	}{
-		{datetime.YearAndPlace{}, false},
-		{datetime.YearAndPlace{2023, nil}, false},
-		{datetime.YearAndPlace{0, time.UTC}, false},
-		{datetime.YearAndPlace{2025, time.UTC}, true},
+		{datetime.YearPlace{}, false},
+		{datetime.YearPlace{2023, nil}, false},
+		{datetime.YearPlace{0, time.UTC}, false},
+		{datetime.YearPlace{2025, time.UTC}, true},
 	} {
 		if got, want := tc.yp.IsSet(), tc.isset; got != want {
 			t.Errorf("%v: got %v, want %v", tc.yp, got, want)
@@ -349,7 +349,7 @@ func TestDST(t *testing.T) {
 		{nd(10, 6), tod(1, 59, 59), nd(10, 6), tod(3, 0, 0), 2024, saTZ, false, true, false},
 		{nd(4, 6), tod(1, 59, 59), nd(4, 6), tod(3, 0, 0), 2025, saTZ, false, false, true},
 	} {
-		yp := datetime.YearAndPlace{Year: tc.year, Place: tc.loc}
+		yp := datetime.YearPlace{Year: tc.year, Place: tc.loc}
 
 		now := datetime.Time(yp, tc.fromDate, tc.fromTime)
 		same, stdToDST, dstToStd := datetime.DSTTransition(yp, now, tc.toDate, tc.toTime)

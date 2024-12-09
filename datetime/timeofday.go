@@ -95,7 +95,7 @@ func (tod TimeOfDay) Add(delta time.Duration) TimeOfDay {
 	}
 	t := time.Date(0, 1, 1, tod.Hour(), tod.Minute(), tod.Second(), 0, time.UTC)
 	nt := t.Add(delta)
-	if t.Year() != nt.Year() || t.Month() != nt.Month() || t.Day() != nt.Day() {
+	if t.Day() != nt.Day() || t.Month() != nt.Month() || t.Year() != nt.Year() {
 		if delta > 0 {
 			return NewTimeOfDay(23, 59, 59)
 		}
@@ -122,10 +122,11 @@ func (tl *TimeOfDayList) Parse(val string) error {
 
 // Time returns a time.Time for the specified YearAndPlace, Date and TimeOfDay
 // using time.Date, and hence, implicitly normalizing the date.
-func Time(yp YearAndPlace, date Date, tod TimeOfDay) time.Time {
+func Time(yp YearPlace, date Date, tod TimeOfDay) time.Time {
 	return time.Date(yp.Year, time.Month(date.Month()), date.Day(), tod.Hour(), tod.Minute(), tod.Second(), 0, yp.Place)
 }
 
+// TimeOfDayFromTime returns a TimeOfDay from the specified time.Time.
 func TimeOfDayFromTime(t time.Time) TimeOfDay {
 	return NewTimeOfDay(t.Hour(), t.Minute(), t.Second())
 }
@@ -135,7 +136,7 @@ func TimeOfDayFromTime(t time.Time) TimeOfDay {
 // noTransition is true when both times are in the same timezone.
 // standardToDST is true when the transition is from standard time to daylight saving
 // time and DSTToStandard is true when the transition is from daylight saving time to
-func DSTTransition(yp YearAndPlace, now time.Time, toDate Date, toTime TimeOfDay) (noTransition, standardToDST, DSTToStandard bool) {
+func DSTTransition(yp YearPlace, now time.Time, toDate Date, toTime TimeOfDay) (noTransition, standardToDST, DSTToStandard bool) {
 	fromDST := now.IsDST()
 	toDST := Time(yp, toDate, toTime).IsDST()
 	if fromDST == toDST {
