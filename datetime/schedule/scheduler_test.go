@@ -123,9 +123,6 @@ func TestScheduler(t *testing.T) {
 	}
 
 	if got, want := active, expected; !reflect.DeepEqual(got, want) {
-		t.Logf(" got: %v", got[0])
-		t.Logf("want: %v", want[0])
-
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

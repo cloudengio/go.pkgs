@@ -57,6 +57,30 @@ func (cdr CalendarDateRange) To() CalendarDate {
 	return newCalendarDate8(toYear, toMonth, toDay)
 }
 
+// OnOrAfter returns a new DateRange with the from date set to on
+// or after the specified date.
+func (cdr CalendarDateRange) OnOrAfter(start CalendarDate) CalendarDateRange {
+	if cdr.fromDate() >= start {
+		return cdr
+	}
+	if start > cdr.toDate() {
+		return CalendarDateRange(0)
+	}
+	return newCalendarDateRange(start, cdr.toDate())
+}
+
+// OnOrBefore returns a new DateRange with the to date set to on
+// or before the specified date.
+func (cdr CalendarDateRange) OnOrBefore(end CalendarDate) CalendarDateRange {
+	if cdr.toDate() <= end {
+		return cdr
+	}
+	if end < cdr.fromDate() {
+		return CalendarDateRange(0)
+	}
+	return newCalendarDateRange(cdr.fromDate(), end)
+}
+
 // NewCalendarDateRange returns a CalendarDateRange for the from/to dates.
 // If the from date is later than the to date then they are swapped.
 // The resulting from and to dates are then normalized using
@@ -300,4 +324,26 @@ func (cdrl CalendarDateRangeList) MergeMonths(year int, months MonthList) Calend
 	ncdrl = append(ncdrl, cdrl...)
 	slices.Sort(ncdrl)
 	return ncdrl.Merge()
+}
+
+func (cdrl CalendarDateRangeList) OnOrAfter(start CalendarDate) CalendarDateRangeList {
+	if len(cdrl) == 0 {
+		return cdrl
+	}
+	ndr := make(CalendarDateRangeList, len(cdrl))
+	for i, dr := range cdrl {
+		ndr[i] = dr.OnOrAfter(start)
+	}
+	return ndr
+}
+
+func (cdrl CalendarDateRangeList) OnOrBefore(end CalendarDate) CalendarDateRangeList {
+	if len(cdrl) == 0 {
+		return cdrl
+	}
+	ncdr := make(CalendarDateRangeList, len(cdrl))
+	for i, dr := range cdrl {
+		ncdr[i] = dr.OnOrBefore(end)
+	}
+	return ncdr
 }
