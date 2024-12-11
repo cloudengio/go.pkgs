@@ -49,7 +49,6 @@ func (rm *repeatManager[T]) hasActions() bool {
 func (rm *repeatManager[T]) manage(loc *time.Location) (time.Time, heapEntry[T]) {
 	secs, he := rm.h.Pop()
 	when := time.Unix(secs, 0).In(loc)
-	//fmt.Printf("% 8v: pop %v (%v)\n", he.name, secs, he.repeat)
 	if he.repeat == 0 || (he.bounded && he.numRepeats == 0) {
 		return when, he
 	}
@@ -63,7 +62,6 @@ func (rm *repeatManager[T]) manage(loc *time.Location) (time.Time, heapEntry[T])
 	if he.bounded {
 		he.numRepeats--
 	}
-	//fmt.Printf("% 8v: push %v\n", he.name, nextTime)
 	rm.h.Push(nextTime.Unix(), he)
 	return when, he
 }
