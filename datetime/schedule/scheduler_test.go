@@ -18,10 +18,10 @@ type testAction struct {
 	action string
 }
 
-func newSpec[T any](name string, hour, min, sec int, action T) schedule.ActionSpec[T] {
+func newSpec[T any](name string, h, m, s int, action T) schedule.ActionSpec[T] {
 	return schedule.ActionSpec[T]{
 		Name: name,
-		Due:  datetime.NewTimeOfDay(hour, min, sec),
+		Due:  datetime.NewTimeOfDay(h, m, s),
 		T:    action,
 	}
 }
