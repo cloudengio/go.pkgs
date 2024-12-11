@@ -95,7 +95,7 @@ func TestDailyRepeat(t *testing.T) {
 				}
 				expected := expectedRepeats(ncd(2024, 1, 1).Time(start, loc), repeat)
 				delta := findDelta(expected, tc.date.Time(start, loc), repeat)
-				if got, want := len(active), int(expected)+delta; got != want {
+				if got, want := len(active), expected+delta; got != want {
 					if repeat == time.Minute*13 && tc.date.Day() == 10 {
 						fmt.Printf("%v: %v: %v: got %v, want %v", tc.date, start, repeat, got, want)
 					}

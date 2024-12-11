@@ -11,7 +11,7 @@ import (
 	"cloudeng.io/geospatial/zipcode"
 )
 
-const sample_data = `
+const sampleData = `
 US	99553	Akutan	Alaska	AK	Aleutians East	013			54.143	-165.7854	1
 GB	BN91	Worthing	England	ENG					50.818	-0.3754	
 GB	AL3 8QE	Slip End	England	ENG	Bedfordshire		Central Bedfordshire	E06000056	51.8479	-0.4474	6
@@ -20,7 +20,7 @@ GB	AL3 8QE	Slip End	England	ENG	Bedfordshire		Central Bedfordshire	E06000056	51.
 func TestLatLong(t *testing.T) {
 	// Test the latitude and longitude of a zipcode.
 	zdb := zipcode.NewDB()
-	if err := zdb.Load([]byte(sample_data)); err != nil {
+	if err := zdb.Load([]byte(sampleData)); err != nil {
 		t.Fatalf("failed to load sample data: %v", err)
 	}
 	ll, _ := zdb.LatLong("AK", "99553")

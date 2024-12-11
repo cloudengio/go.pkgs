@@ -12,7 +12,7 @@ import (
 
 func JDEToCalendar(jde float64) datetime.CalendarDate {
 	y, m, d := julian.JDToCalendar(jde)
-	return datetime.NewCalendarDate(int(y), datetime.Month(m), int(d))
+	return datetime.NewCalendarDate(y, datetime.Month(m), int(d))
 }
 
 // December returns the winter solstice.

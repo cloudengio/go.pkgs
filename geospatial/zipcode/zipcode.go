@@ -38,7 +38,7 @@ type options struct {
 	tag string
 }
 
-// LookupLatLong returns the latitude and longitude for the
+// LatLong returns the latitude and longitude for the
 // specified postal code and admin code (eg. AK 99553).
 // GB and CA postal codes come in two formats, either the
 // short form or long form:
@@ -50,7 +50,7 @@ func (zdb *DB) LatLong(admin, postal string) (LatLong, bool) {
 	return ll, ok
 }
 
-func (zdb *DB) Load(data []byte, opts ...Option) error {
+func (zdb *DB) Load(data []byte, _ ...Option) error {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		if len(scanner.Text()) == 0 {
@@ -75,6 +75,5 @@ func (zdb *DB) Load(data []byte, opts ...Option) error {
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("failed to read data: %v", err)
 	}
-	fmt.Printf("loaded %v entries\n", zdb.lookup)
 	return nil
 }

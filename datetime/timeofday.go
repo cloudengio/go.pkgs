@@ -89,13 +89,13 @@ func (t *TimeOfDay) Parse(val string) error {
 
 // Add delta to the time of day. The result will be normalized to
 // 00:00:00 to 23:59:59.
-func (tod TimeOfDay) Add(delta time.Duration) TimeOfDay {
+func (t TimeOfDay) Add(delta time.Duration) TimeOfDay {
 	if delta == 0 {
-		return tod
+		return t
 	}
-	t := time.Date(0, 1, 1, tod.Hour(), tod.Minute(), tod.Second(), 0, time.UTC)
-	nt := t.Add(delta)
-	if t.Day() != nt.Day() || t.Month() != nt.Month() || t.Year() != nt.Year() {
+	dt := time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+	nt := dt.Add(delta)
+	if dt.Day() != nt.Day() || dt.Month() != nt.Month() || dt.Year() != nt.Year() {
 		if delta > 0 {
 			return NewTimeOfDay(23, 59, 59)
 		}
@@ -104,8 +104,9 @@ func (tod TimeOfDay) Add(delta time.Duration) TimeOfDay {
 	return NewTimeOfDay(nt.Hour(), nt.Minute(), nt.Second())
 }
 
-func (tod TimeOfDay) Duration() time.Duration {
-	return time.Duration(tod.Hour())*time.Hour + time.Duration(tod.Minute())*time.Minute + time.Duration(tod.Second())*time.Second
+// Duration returns the time.Duration for the TimeOfDay.
+func (t TimeOfDay) Duration() time.Duration {
+	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute + time.Duration(t.Second())*time.Second
 }
 
 type TimeOfDayList []TimeOfDay
