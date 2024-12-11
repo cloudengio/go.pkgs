@@ -104,6 +104,10 @@ func (tod TimeOfDay) Add(delta time.Duration) TimeOfDay {
 	return NewTimeOfDay(nt.Hour(), nt.Minute(), nt.Second())
 }
 
+func (tod TimeOfDay) Duration() time.Duration {
+	return time.Duration(tod.Hour())*time.Hour + time.Duration(tod.Minute())*time.Minute + time.Duration(tod.Second())*time.Second
+}
+
 type TimeOfDayList []TimeOfDay
 
 // Parse val as a comma separated list of TimeOfDay values.
@@ -123,7 +127,7 @@ func (tl *TimeOfDayList) Parse(val string) error {
 // Time returns a time.Time for the specified YearAndPlace, Date and TimeOfDay
 // using time.Date, and hence, implicitly normalizing the date.
 func Time(yp YearPlace, date Date, tod TimeOfDay) time.Time {
-	return time.Date(yp.Year, time.Month(date.Month()), date.Day(), tod.Hour(), tod.Minute(), tod.Second(), 0, yp.Place)
+	return time.Date(yp.Year, time.Month(date.Month()), date.Day(), tod.Hour(), tod.Minute(), tod.Second(), 0, yp.TZ)
 }
 
 // TimeOfDayFromTime returns a TimeOfDay from the specified time.Time.
@@ -131,6 +135,7 @@ func TimeOfDayFromTime(t time.Time) TimeOfDay {
 	return NewTimeOfDay(t.Hour(), t.Minute(), t.Second())
 }
 
+/*
 // DSTTransition determines if there is a transition from standard time to daylight
 // saving time. The from date/time must be before the to/ date/time.
 // noTransition is true when both times are in the same timezone.
@@ -147,3 +152,4 @@ func DSTTransition(yp YearPlace, now time.Time, toDate Date, toTime TimeOfDay) (
 	}
 	return false, true, false
 }
+*/

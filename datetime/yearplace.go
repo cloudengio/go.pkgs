@@ -107,31 +107,24 @@ func DaysInYear(year int) int {
 	return 365
 }
 
-// YearPlace represents a year and a location.
+// Place a location in terms of timezone and a latitude and longitude.
+type Place struct {
+	TZ                  *time.Location
+	Latitude, Longitude float64
+}
+
+// YearPlace represents a year at a given place.
 type YearPlace struct {
-	Year  int
-	Place *time.Location
+	Year int
+	Place
 }
 
-// IsSet returns true if the Year and Place fields are both set.
-func (yp YearPlace) IsSet() bool {
-	return yp.Year != 0 && yp.Place != nil
+func NewYearTZ(year int, tz *time.Location) YearPlace {
+	return YearPlace{Year: year, Place: Place{TZ: tz}}
 }
 
-// YearPlaceFromTime returns a YearPlace value from the given time.
-func YearPlaceFromTime(t time.Time) YearPlace {
-	return YearPlace{
-		Year:  t.Year(),
-		Place: t.Location(),
-	}
-}
-
-// NewYearPlace returns a YearPlace value for the given year and location.
-func NewYearPlace(year int, place *time.Location) YearPlace {
-	return YearPlace{
-		Year:  year,
-		Place: place,
-	}
+func NewYearPlace(year int, place Place) YearPlace {
+	return YearPlace{Year: year, Place: place}
 }
 
 type ypKey struct{}

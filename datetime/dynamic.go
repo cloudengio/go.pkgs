@@ -4,8 +4,6 @@
 
 package datetime
 
-import "time"
-
 // DynamicDateRange is a function that returns a DateRange for
 // a given year and is intended to be evaluated once per year
 // to calculate events such as solstices, seasons or holidays.
@@ -19,7 +17,7 @@ type DynamicDateRange interface {
 // to calculate events such as sunrise, sunset etc.
 type DynamicTimeOfDay interface {
 	Name() string
-	Evaluate(CalendarDate, *time.Location) TimeOfDay
+	Evaluate(cd CalendarDate, yp Place) TimeOfDay
 }
 
 type DynamicDateRangeList []DynamicDateRange

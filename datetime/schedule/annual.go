@@ -64,26 +64,8 @@ func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 	return drl
 }
 
-// Active represents a set of actions that are 'active', ie. which are due
-// to be executed according to the schedule.
-type Active[T any] struct {
-	Date    datetime.Date
-	Actions Actions[T] // Ordered by name.
-}
-
-// Action represents an event that the schedule should trigger
-// at a specific day and time. If present, and Due is zero,
-// DueDynamic must be evaluated to obtain the actual due time.
-type Action[T any] struct {
-	Due    datetime.TimeOfDay
-	Name   string
-	Action T
-}
-
-type Actions[T any] []Action[T]
-
 // Sort by due time and then by name.
-func (a Actions[T]) Sort() {
+func (a ActionSpecs[T]) Sort() {
 	sort.Slice(a, func(i, j int) bool {
 		if a[i].Due == a[j].Due {
 			return a[i].Name < a[j].Name
@@ -94,8 +76,8 @@ func (a Actions[T]) Sort() {
 
 // Sort by due time, but preserve the order of actions with
 // the same due time.
-func (a Actions[T]) SortStable() {
-	slices.SortStableFunc(a, func(a, b Action[T]) int {
+func (a ActionSpecs[T]) SortStable() {
+	slices.SortStableFunc(a, func(a, b ActionSpec[T]) int {
 		if a.Due < b.Due {
 			return -1
 		} else if a.Due > b.Due {
@@ -105,19 +87,19 @@ func (a Actions[T]) SortStable() {
 	})
 }
 
-// Annual represents a schedule of actions to be taken at specific dates
-// and times each year. Each action results in one or more events at a specific
-// time on a specific date within any given year.
+// Annual represents a schedule of actions to be taken on specific dates
+// of that year. The actions are specified on a per-day basis in the form
+// as a specification of the times of the day the action is to be taken.
 type Annual[T any] struct {
-	Name   string
-	Dates  Dates
-	PerDay Actions[T]
+	Name  string
+	Dates Dates
+	Specs ActionSpecs[T]
 }
 
 func (a Annual[T]) clone() Annual[T] {
 	return Annual[T]{
-		Name:   a.Name,
-		Dates:  a.Dates.clone(),
-		PerDay: slices.Clone(a.Actions),
+		Name:  a.Name,
+		Dates: a.Dates.clone(),
+		Specs: slices.Clone(a.Specs),
 	}
 }

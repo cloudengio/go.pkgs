@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/datetime"
 	"cloudeng.io/datetime/schedule"
@@ -71,39 +72,73 @@ func TestDates(t *testing.T) {
 }
 
 func TestActions(t *testing.T) {
-	a := schedule.Actions[int]{
-		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},
-		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", Action: 2},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", Action: 3},
-		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", Action: 4},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", Action: 5},
-		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", Action: 6},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", Action: 7},
+	a := schedule.ActionSpecs[int]{
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", T: 1},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", T: 2},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", T: 3},
+		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", T: 4},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 5},
+		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", T: 6},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", T: 7},
 	}
 	b := slices.Clone(a)
 
 	a.Sort()
-	if got, want := a, []schedule.Action[int]{
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", Action: 7},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", Action: 5},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", Action: 3},
-		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", Action: 2},
-		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", Action: 4},
-		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},
-		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", Action: 6},
+	if got, want := a, []schedule.ActionSpec[int]{
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", T: 7},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 5},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", T: 3},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", T: 2},
+		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", T: 4},
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", T: 1},
+		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", T: 6},
 	}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	b.SortStable()
-	if got, want := b, []schedule.Action[int]{
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", Action: 3},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", Action: 5},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", Action: 7},
-		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", Action: 2},
-		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", Action: 4},
-		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", Action: 1},
-		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", Action: 6},
+	if got, want := b, []schedule.ActionSpec[int]{
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "e", T: 3},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 5},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "a", T: 7},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "f", T: 2},
+		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", T: 4},
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", T: 1},
+		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", T: 6},
+	}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+type DynamicTimeOfDay struct {
+	name string
+	val  datetime.TimeOfDay
+}
+
+func (d DynamicTimeOfDay) Name() string {
+	return d.name
+}
+
+func (d DynamicTimeOfDay) Evaluate(_ datetime.CalendarDate, _ datetime.Place) datetime.TimeOfDay {
+	return d.val
+}
+
+func TestDynamic(t *testing.T) {
+	breakfast := DynamicTimeOfDay{name: "breakfast", val: datetime.NewTimeOfDay(8, 0, 0)}
+	a := schedule.ActionSpecs[int]{
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "a", T: 1},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "b", T: 2},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 3},
+		{Dynamic: schedule.DynamicTimeOfDaySpec{Due: breakfast, Offset: time.Minute * 30}, Name: "d", T: 4},
+	}
+	b := a.Evaluate(datetime.NewCalendarDate(2024, 1, 1), datetime.Place{TZ: time.Local})
+	b.Sort()
+
+	if got, want := b, []schedule.ActionSpec[int]{
+		{Due: datetime.NewTimeOfDay(8, 30, 0), Name: "d", T: 4},
+		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 3},
+		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "b", T: 2},
+		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "a", T: 1},
 	}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}

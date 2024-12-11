@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"slices"
 	"testing"
-	"time"
 
 	"cloudeng.io/datetime"
 )
@@ -203,22 +202,6 @@ func TestDatesYearDay(t *testing.T) {
 
 }
 
-func TestYearPlace(t *testing.T) {
-	for _, tc := range []struct {
-		yp    datetime.YearPlace
-		isset bool
-	}{
-		{datetime.YearPlace{}, false},
-		{datetime.YearPlace{2023, nil}, false},
-		{datetime.YearPlace{0, time.UTC}, false},
-		{datetime.YearPlace{2025, time.UTC}, true},
-	} {
-		if got, want := tc.yp.IsSet(), tc.isset; got != want {
-			t.Errorf("%v: got %v, want %v", tc.yp, got, want)
-		}
-	}
-}
-
 func TestMergeDates(t *testing.T) {
 	nd := newDate
 	ndl := newDateList
@@ -299,6 +282,7 @@ func TestMonthRangeParse(t *testing.T) {
 	}
 }
 
+/*
 func TestDST(t *testing.T) {
 
 	ncd := datetime.NewCalendarDate
@@ -365,3 +349,4 @@ func TestDST(t *testing.T) {
 
 	}
 }
+*/
