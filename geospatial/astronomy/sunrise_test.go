@@ -13,8 +13,9 @@ import (
 )
 
 func TestSunrise(t *testing.T) {
+	loc, _ := time.LoadLocation("America/Los_Angeles")
 	place := datetime.Place{
-		TZ:        time.Local,
+		TZ:        loc,
 		Latitude:  37.3229978,
 		Longitude: -122.0321823}
 	cd := datetime.NewCalendarDate(2024, 1, 1)
