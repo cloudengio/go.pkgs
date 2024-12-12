@@ -58,6 +58,30 @@ func (dr DateRange) To(year int) Date {
 	return newDate8(toMonth, toDay)
 }
 
+// OnOrAfter returns a new DateRange with the from date set to on
+// or after the specified date.
+func (dr DateRange) OnOrAfter(start Date) DateRange {
+	if dr.fromDate() >= start {
+		return dr
+	}
+	if start > dr.toDate() {
+		return DateRange(0)
+	}
+	return newDateRange(start, dr.toDate())
+}
+
+// OnOrBefore returns a new DateRange with the to date set to on
+// or before the specified date.
+func (dr DateRange) OnOrBefore(end Date) DateRange {
+	if dr.toDate() <= end {
+		return dr
+	}
+	if end < dr.fromDate() {
+		return DateRange(0)
+	}
+	return newDateRange(dr.fromDate(), end)
+}
+
 // NewDateRange returns a DateRange for the from/to dates for the specified year.
 // If the from date is later than the to date then they are swapped.
 func NewDateRange(from, to Date) DateRange {
@@ -262,4 +286,26 @@ func (drl DateRangeList) MergeMonths(year int, months MonthList) DateRangeList {
 	ndrl = append(ndrl, drl...)
 	slices.Sort(ndrl)
 	return ndrl.Merge(year)
+}
+
+func (drl DateRangeList) OnOrAfter(start Date) DateRangeList {
+	if len(drl) == 0 {
+		return drl
+	}
+	ndr := make(DateRangeList, len(drl))
+	for i, dr := range drl {
+		ndr[i] = dr.OnOrAfter(start)
+	}
+	return ndr
+}
+
+func (drl DateRangeList) OnOrBefore(end Date) DateRangeList {
+	if len(drl) == 0 {
+		return drl
+	}
+	ndr := make(DateRangeList, len(drl))
+	for i, dr := range drl {
+		ndr[i] = dr.OnOrBefore(end)
+	}
+	return ndr
 }
