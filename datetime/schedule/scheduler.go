@@ -28,12 +28,12 @@ func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
 // and place that returns all of the scheduled actions for each day that has
 // scheduled Actions. It will evaluate any dynamic due times and sort the
 // actions by their evaluated due time.
-func (s AnnualScheduler[T]) Scheduled(yp datetime.YearPlace) iter.Seq[Scheduled[T]] {
-	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
+func (s *AnnualScheduler[T]) Scheduled(yp datetime.YearPlace, dates Dates, bounds datetime.DateRange) iter.Seq[Scheduled[T]] {
+	drl := dates.EvaluateDateRanges(yp.Year, bounds)
 	return func(yield func(Scheduled[T]) bool) {
 		for _, dr := range drl {
 			for day := range dr.Dates(yp.Year) {
-				evaluated := s.schedule.Specs.Evaluate(day, yp.Place)
+				evaluated := s.schedule.DailyActions.Evaluate(day, yp.Place)
 				evaluated.Sort()
 				if !yield(Scheduled[T]{Date: day, Specs: evaluated}) {
 					return

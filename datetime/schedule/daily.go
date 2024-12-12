@@ -6,16 +6,12 @@ package schedule
 
 import (
 	"iter"
+	"slices"
+	"sort"
 	"time"
 
 	"cloudeng.io/datetime"
 )
-
-// Scheduled specifies the set of actions scheduled for a given date.
-type Scheduled[T any] struct {
-	Date  datetime.CalendarDate
-	Specs ActionSpecs[T]
-}
 
 // DynamicTimeOfDaySpec represents a time of day that is dynamically evaluated
 // and offset with a fixed duration.
@@ -68,12 +64,41 @@ func (a ActionSpecs[T]) Evaluate(cd datetime.CalendarDate, place datetime.Place)
 	return result
 }
 
+// Sort by due time and then by name.
+func (a ActionSpecs[T]) Sort() {
+	sort.Slice(a, func(i, j int) bool {
+		if a[i].Due == a[j].Due {
+			return a[i].Name < a[j].Name
+		}
+		return a[i].Due < a[j].Due
+	})
+}
+
+// Sort by due time, but preserve the order of actions with
+// the same due time.
+func (a ActionSpecs[T]) SortStable() {
+	slices.SortStableFunc(a, func(a, b ActionSpec[T]) int {
+		if a.Due < b.Due {
+			return -1
+		} else if a.Due > b.Due {
+			return 1
+		}
+		return 0
+	})
+}
+
 // Active represents the next scheduled action, ie. the one to be 'active'
 // at time 'When'.
 type Active[T any] struct {
 	Name string
 	When time.Time
 	T    T
+}
+
+// Scheduled specifies the set of actions scheduled for a given date.
+type Scheduled[T any] struct {
+	Date  datetime.CalendarDate
+	Specs ActionSpecs[T]
 }
 
 // Active is an iterator that returns the next scheduled action for the

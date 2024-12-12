@@ -57,16 +57,14 @@ func TestScheduler(t *testing.T) {
 	action1 := newSpec("action1", 1, 2, 3, testAction{"action1"})
 	action2 := newSpec("action2", 4, 5, 6, testAction{"action2"})
 	sched := schedule.Annual[testAction]{
-		Name: "test",
-		Dates: schedule.Dates{
-			For: datetime.MonthList{1, 2},
-		},
-		Specs: []schedule.ActionSpec[testAction]{action1, action2},
+		Name:         "test",
+		DailyActions: []schedule.ActionSpec[testAction]{action1, action2},
 	}
+	dates := schedule.Dates{For: datetime.MonthList{1, 2}}
 	scheduler := schedule.NewAnnualScheduler(sched)
 	yp := datetime.NewYearTZ(2024, time.UTC)
 	active := []schedule.Scheduled[testAction]{}
-	for scheduled := range scheduler.Scheduled(yp) {
+	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
 		active = append(active, scheduled)
 	}
 
@@ -84,11 +82,11 @@ func TestScheduler(t *testing.T) {
 
 	// Add a third action, test that sorting by due time works.
 	action3 := newSpec("action3", 1, 2, 3, testAction{"action3"})
-	sched.Specs = append(sched.Specs, action3)
+	sched.DailyActions = append(sched.DailyActions, action3)
 	scheduler = schedule.NewAnnualScheduler(sched)
 
 	active = []schedule.Scheduled[testAction]{}
-	for scheduled := range scheduler.Scheduled(yp) {
+	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
 		active = append(active, scheduled)
 	}
 
@@ -110,7 +108,7 @@ func TestScheduler(t *testing.T) {
 	// Check non-leap year.
 	yp = datetime.NewYearTZ(2023, time.UTC)
 	active = []schedule.Scheduled[testAction]{}
-	for scheduled := range scheduler.Scheduled(yp) {
+	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
 		active = append(active, scheduled)
 	}
 
@@ -129,30 +127,32 @@ func TestScheduler(t *testing.T) {
 
 func TestSchedulerDifferentYear(t *testing.T) {
 	cd := datetime.NewCalendarDate
+	ndr := datetime.NewDateRange
+	nd := datetime.NewDate
 	action1 := newSpec("action1", 1, 2, 3, testAction{"action1"})
 	schedMonth := schedule.Annual[testAction]{
-		Name: "testMonth",
-		Dates: schedule.Dates{
-			For: datetime.MonthList{2},
-		},
-		Specs: []schedule.ActionSpec[testAction]{action1},
-	}
+		Name:         "testMonth",
+		DailyActions: []schedule.ActionSpec[testAction]{action1}}
+	schedMonthDates := schedule.Dates{For: datetime.MonthList{2}}
 	schedRange := schedule.Annual[testAction]{
-		Name: "testRange",
-		Dates: schedule.Dates{
-			Ranges: datetime.DateRangeList{
-				datetime.NewDateRange(datetime.NewDate(2, 1), datetime.NewDate(2, 29)),
-			},
-		},
-		Specs: []schedule.ActionSpec[testAction]{action1},
-	}
-	for _, sched := range []schedule.Annual[testAction]{
-		schedMonth, schedRange,
+		Name:         "testRange",
+		DailyActions: []schedule.ActionSpec[testAction]{action1}}
+	schedRangeDates := schedule.Dates{
+		Ranges: datetime.DateRangeList{
+			ndr(nd(2, 1), nd(2, 29)),
+		}}
+
+	for _, tc := range []struct {
+		sched schedule.Annual[testAction]
+		dates schedule.Dates
+	}{
+		{schedMonth, schedMonthDates},
+		{schedRange, schedRangeDates},
 	} {
-		scheduler := schedule.NewAnnualScheduler(sched)
+		scheduler := schedule.NewAnnualScheduler(tc.sched)
 		yp := datetime.NewYearTZ(2023, time.UTC)
 		active := []schedule.Scheduled[testAction]{}
-		for scheduled := range scheduler.Scheduled(yp) {
+		for scheduled := range scheduler.Scheduled(yp, tc.dates, datetime.DateRangeYear()) {
 			active = append(active, scheduled)
 		}
 		if got, want := len(active), 28; got != want {
@@ -165,7 +165,7 @@ func TestSchedulerDifferentYear(t *testing.T) {
 
 		yp.Year = 2024
 		active = []schedule.Scheduled[testAction]{}
-		for scheduled := range scheduler.Scheduled(yp) {
+		for scheduled := range scheduler.Scheduled(yp, tc.dates, datetime.DateRangeYear()) {
 			active = append(active, scheduled)
 		}
 		if got, want := len(active), 29; got != want {
