@@ -10,18 +10,18 @@ import (
 	"cloudeng.io/datetime"
 )
 
-// AnnualScheduler provides a way to iterate over the scheduled actions for a
+// AnnualScheduler provides a way to iterate over the specified actions for a
 // single year.
 type AnnualScheduler[T any] struct {
-	schedule Annual[T]
+	name    string
+	actions ActionSpecs[T]
 }
 
 // NewAnnualScheduler returns a new annual scheduler with the supplied schedule.
-func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
-	scheduler := &AnnualScheduler[T]{
-		schedule: schedule.clone(),
+func NewAnnualScheduler[T any](actions ActionSpecs[T]) *AnnualScheduler[T] {
+	return &AnnualScheduler[T]{
+		actions: actions,
 	}
-	return scheduler
 }
 
 // Scheduled returns an iterator over the scheduled actions for the given year
@@ -33,7 +33,7 @@ func (s *AnnualScheduler[T]) Scheduled(yp datetime.YearPlace, dates Dates, bound
 	return func(yield func(Scheduled[T]) bool) {
 		for _, dr := range drl {
 			for day := range dr.Dates(yp.Year) {
-				evaluated := s.schedule.DailyActions.Evaluate(day, yp.Place)
+				evaluated := s.actions.Evaluate(day, yp.Place)
 				evaluated.Sort()
 				if !yield(Scheduled[T]{Date: day, Specs: evaluated}) {
 					return

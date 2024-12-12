@@ -56,12 +56,9 @@ func sortForDate[T any](active []schedule.Scheduled[T]) {
 func TestScheduler(t *testing.T) {
 	action1 := newSpec("action1", 1, 2, 3, testAction{"action1"})
 	action2 := newSpec("action2", 4, 5, 6, testAction{"action2"})
-	sched := schedule.Annual[testAction]{
-		Name:         "test",
-		DailyActions: []schedule.ActionSpec[testAction]{action1, action2},
-	}
+	actions := []schedule.ActionSpec[testAction]{action1, action2}
 	dates := schedule.Dates{For: datetime.MonthList{1, 2}}
-	scheduler := schedule.NewAnnualScheduler(sched)
+	scheduler := schedule.NewAnnualScheduler(actions)
 	yp := datetime.NewYearTZ(2024, time.UTC)
 	active := []schedule.Scheduled[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
@@ -82,8 +79,8 @@ func TestScheduler(t *testing.T) {
 
 	// Add a third action, test that sorting by due time works.
 	action3 := newSpec("action3", 1, 2, 3, testAction{"action3"})
-	sched.DailyActions = append(sched.DailyActions, action3)
-	scheduler = schedule.NewAnnualScheduler(sched)
+	actions = append(actions, action3)
+	scheduler = schedule.NewAnnualScheduler(actions)
 
 	active = []schedule.Scheduled[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
@@ -129,27 +126,22 @@ func TestSchedulerDifferentYear(t *testing.T) {
 	cd := datetime.NewCalendarDate
 	ndr := datetime.NewDateRange
 	nd := datetime.NewDate
-	action1 := newSpec("action1", 1, 2, 3, testAction{"action1"})
-	schedMonth := schedule.Annual[testAction]{
-		Name:         "testMonth",
-		DailyActions: []schedule.ActionSpec[testAction]{action1}}
 	schedMonthDates := schedule.Dates{For: datetime.MonthList{2}}
-	schedRange := schedule.Annual[testAction]{
-		Name:         "testRange",
-		DailyActions: []schedule.ActionSpec[testAction]{action1}}
 	schedRangeDates := schedule.Dates{
 		Ranges: datetime.DateRangeList{
 			ndr(nd(2, 1), nd(2, 29)),
 		}}
+	action := newSpec("action1", 1, 2, 3, testAction{"action1"})
+	actions := []schedule.ActionSpec[testAction]{action}
 
 	for _, tc := range []struct {
-		sched schedule.Annual[testAction]
-		dates schedule.Dates
+		actions []schedule.ActionSpec[testAction]
+		dates   schedule.Dates
 	}{
-		{schedMonth, schedMonthDates},
-		{schedRange, schedRangeDates},
+		{actions, schedMonthDates},
+		{actions, schedRangeDates},
 	} {
-		scheduler := schedule.NewAnnualScheduler(tc.sched)
+		scheduler := schedule.NewAnnualScheduler(tc.actions)
 		yp := datetime.NewYearTZ(2023, time.UTC)
 		active := []schedule.Scheduled[testAction]{}
 		for scheduled := range scheduler.Scheduled(yp, tc.dates, datetime.DateRangeYear()) {

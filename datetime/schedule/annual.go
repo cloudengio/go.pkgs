@@ -63,21 +63,3 @@ func (d Dates) EvaluateDateRanges(year int, bounds datetime.DateRange) datetime.
 	}
 	return drl.Bound(year, bounds)
 }
-
-/*
-// Annual represents a schedule of actions to be taken on specific dates
-// of that year. The actions are specified on a per-day basis in the form
-// as a specification of the times of the day the action is to be taken.
-// The dates that the actions are to be taken on are provided
-type Annual[T any] struct {
-	Name         string
-	DailyActions ActionSpecs[T]
-}
-
-func (a Annual[T]) clone() Annual[T] {
-	return Annual[T]{
-		Name:         a.Name,
-		DailyActions: slices.Clone(a.DailyActions),
-	}
-}
-*/
