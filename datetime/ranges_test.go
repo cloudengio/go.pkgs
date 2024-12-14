@@ -763,6 +763,12 @@ func TestRangeBounds(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+	if got, want := drl.Bound(2024, ndr(nd(12, 1), nd(12, 31))), (datetime.DateRangeList{}); !slices.Equal(got, want) {
+		if !slices.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+
 	cdrl := datetime.CalendarDateRangeList{
 		ncdr(ncd(2024, 1, 1), ncd(2024, 1, 10)),
 		ncdr(ncd(2024, 1, 15), ncd(2024, 2, 0)),
@@ -776,6 +782,10 @@ func TestRangeBounds(t *testing.T) {
 	if got, want := cdrl.Bound(ncdr(ncd(2024, 1, 8), ncd(2024, 2, 5))), (datetime.CalendarDateRangeList{
 		ncdr(ncd(2024, 1, 8), ncd(2024, 1, 10)),
 		ncdr(ncd(2024, 1, 15), ncd(2024, 2, 5))}); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := cdrl.Bound(ncdr(ncd(2027, 1, 8), ncd(2028, 2, 5))), (datetime.CalendarDateRangeList{}); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

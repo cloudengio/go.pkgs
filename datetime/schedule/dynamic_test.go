@@ -30,7 +30,7 @@ func TestDynamicDates(t *testing.T) {
 	nd := datetime.NewDate
 	ndr := datetime.NewDateRange
 	d := schedule.Dates{
-		For:     datetime.MonthList{1, 2},
+		Months:  datetime.MonthList{1, 2},
 		Dynamic: []datetime.DynamicDateRange{schoolHolidays{}},
 		Ranges: datetime.DateRangeList{
 			ndr(

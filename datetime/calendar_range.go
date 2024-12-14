@@ -315,9 +315,11 @@ func (cdrl CalendarDateRangeList) Bound(bound CalendarDateRange) CalendarDateRan
 	if len(cdrl) == 0 {
 		return cdrl
 	}
-	ndr := make(CalendarDateRangeList, len(cdrl))
-	for i, dr := range cdrl {
-		ndr[i] = dr.Bound(bound)
+	ndr := make(CalendarDateRangeList, 0, len(cdrl))
+	for _, dr := range cdrl {
+		if b := dr.Bound(bound); b != 0 {
+			ndr = append(ndr, b)
+		}
 	}
-	return ndr
+	return slices.Clip(ndr)
 }

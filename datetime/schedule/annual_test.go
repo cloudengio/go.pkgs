@@ -55,7 +55,7 @@ func TestDates(t *testing.T) {
 		{"2", false, "", noFeb29, 2023, "2/1:2/28"},
 	} {
 		sd := schedule.Dates{
-			For:          pml(tc.monthsFor),
+			Months:       pml(tc.monthsFor),
 			Ranges:       pdrl(strings.Split(tc.ranges, ",")...),
 			MirrorMonths: tc.mirror,
 			Constraints:  tc.constraints,

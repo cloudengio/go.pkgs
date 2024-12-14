@@ -286,9 +286,11 @@ func (drl DateRangeList) Bound(year int, bound DateRange) DateRangeList {
 	if len(drl) == 0 {
 		return drl
 	}
-	ndr := make(DateRangeList, len(drl))
-	for i, dr := range drl {
-		ndr[i] = dr.Bound(year, bound)
+	ndr := make(DateRangeList, 0, len(drl))
+	for _, dr := range drl {
+		if b := dr.Bound(year, bound); b != 0 {
+			ndr = append(ndr, b)
+		}
 	}
-	return ndr
+	return slices.Clip(ndr)
 }

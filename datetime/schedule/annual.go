@@ -14,7 +14,7 @@ import (
 // Dates represents a set of dates expressed as a combination of
 // months, date ranges and constraints on those dates (eg. weekdays in March).
 type Dates struct {
-	For          datetime.MonthList            // Whole months to include.
+	Months       datetime.MonthList            // Whole months to include.
 	MirrorMonths bool                          // Include the 'mirror' months of those in For.
 	Ranges       datetime.DateRangeList        // Include specific date ranges.
 	Dynamic      datetime.DynamicDateRangeList // Functions to generate dates that vary by year, such as solstices, seasons or holidays.
@@ -23,7 +23,7 @@ type Dates struct {
 
 func (d Dates) clone() Dates {
 	return Dates{
-		For:          slices.Clone(d.For),
+		Months:       slices.Clone(d.Months),
 		MirrorMonths: d.MirrorMonths,
 		Ranges:       slices.Clone(d.Ranges),
 		Dynamic:      slices.Clone(d.Dynamic),
@@ -44,9 +44,9 @@ func truncateCalendarDates(year int, cdrl datetime.CalendarDateRangeList) dateti
 // including the evaluation of dynamic date ranges. The result is bounded
 // by supplied bounds date range.
 func (d Dates) EvaluateDateRanges(year int, bounds datetime.DateRange) datetime.DateRangeList {
-	months := slices.Clone(d.For)
+	months := slices.Clone(d.Months)
 	if d.MirrorMonths {
-		for _, m := range d.For {
+		for _, m := range d.Months {
 			months = append(months, datetime.MirrorMonth(m))
 		}
 	}

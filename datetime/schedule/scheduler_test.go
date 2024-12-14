@@ -57,7 +57,7 @@ func TestScheduler(t *testing.T) {
 	action1 := newSpec("action1", 1, 2, 3, testAction{"action1"})
 	action2 := newSpec("action2", 4, 5, 6, testAction{"action2"})
 	actions := []schedule.ActionSpec[testAction]{action1, action2}
-	dates := schedule.Dates{For: datetime.MonthList{1, 2}}
+	dates := schedule.Dates{Months: datetime.MonthList{1, 2}}
 	scheduler := schedule.NewAnnualScheduler(actions)
 	yp := datetime.NewYearTZ(2024, time.UTC)
 	active := []schedule.Scheduled[testAction]{}
@@ -122,11 +122,27 @@ func TestScheduler(t *testing.T) {
 	}
 }
 
+func TestEmptySchedule(t *testing.T) {
+	action1 := newSpec("action1", 1, 2, 3, testAction{"action1"})
+	actions := []schedule.ActionSpec[testAction]{action1}
+	dates := schedule.Dates{Months: datetime.MonthList{1, 2}}
+	scheduler := schedule.NewAnnualScheduler(actions)
+	yp := datetime.NewYearTZ(2024, time.UTC)
+	active := []schedule.Scheduled[testAction]{}
+	dec := datetime.NewDateRange(datetime.NewDate(12, 1), datetime.NewDate(12, 31))
+	for scheduled := range scheduler.Scheduled(yp, dates, dec) {
+		active = append(active, scheduled)
+	}
+	if got, want := len(active), 0; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestSchedulerDifferentYear(t *testing.T) {
 	cd := datetime.NewCalendarDate
 	ndr := datetime.NewDateRange
 	nd := datetime.NewDate
-	schedMonthDates := schedule.Dates{For: datetime.MonthList{2}}
+	schedMonthDates := schedule.Dates{Months: datetime.MonthList{2}}
 	schedRangeDates := schedule.Dates{
 		Ranges: datetime.DateRangeList{
 			ndr(nd(2, 1), nd(2, 29)),
