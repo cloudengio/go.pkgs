@@ -10,30 +10,29 @@ import (
 	"cloudeng.io/datetime"
 )
 
-// AnnualScheduler provides a way to iterate over the scheduled actions for a
+// AnnualScheduler provides a way to iterate over the specified actions for a
 // single year.
 type AnnualScheduler[T any] struct {
-	schedule Annual[T]
+	actions ActionSpecs[T]
 }
 
 // NewAnnualScheduler returns a new annual scheduler with the supplied schedule.
-func NewAnnualScheduler[T any](schedule Annual[T]) *AnnualScheduler[T] {
-	scheduler := &AnnualScheduler[T]{
-		schedule: schedule.clone(),
+func NewAnnualScheduler[T any](actions ActionSpecs[T]) *AnnualScheduler[T] {
+	return &AnnualScheduler[T]{
+		actions: actions,
 	}
-	return scheduler
 }
 
 // Scheduled returns an iterator over the scheduled actions for the given year
 // and place that returns all of the scheduled actions for each day that has
 // scheduled Actions. It will evaluate any dynamic due times and sort the
 // actions by their evaluated due time.
-func (s AnnualScheduler[T]) Scheduled(yp datetime.YearPlace) iter.Seq[Scheduled[T]] {
-	drl := s.schedule.Dates.EvaluateDateRanges(yp.Year)
+func (s *AnnualScheduler[T]) Scheduled(yp datetime.YearPlace, dates Dates, bounds datetime.DateRange) iter.Seq[Scheduled[T]] {
+	drl := dates.EvaluateDateRanges(yp.Year, bounds)
 	return func(yield func(Scheduled[T]) bool) {
 		for _, dr := range drl {
 			for day := range dr.Dates(yp.Year) {
-				evaluated := s.schedule.Specs.Evaluate(day, yp.Place)
+				evaluated := s.actions.Evaluate(day, yp.Place)
 				evaluated.Sort()
 				if !yield(Scheduled[T]{Date: day, Specs: evaluated}) {
 					return

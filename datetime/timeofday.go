@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // TimeOfDay represents a time of day.
@@ -42,49 +43,74 @@ func (t TimeOfDay) String() string {
 	return fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
 }
 
-func (t *TimeOfDay) parseHourMinute(h, m string) error {
+func isDigits(s string) bool {
+	for _, c := range s {
+		if !unicode.IsNumber(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *TimeOfDay) parseHour(h string, ampmState int) (int, error) {
 	hour, err := strconv.Atoi(h)
 	if err != nil || hour < 0 || hour > 23 {
-		return fmt.Errorf("invalid hour: %s", h)
+		return 0, fmt.Errorf("invalid hour: %s", h)
+	}
+	if ampmState != 0 && hour > 12 {
+		return 0, fmt.Errorf("invalid hour: %s with am/pm", h)
+	}
+	if ampmState == 2 {
+		hour += 12
+	}
+	return hour, nil
+}
+
+func (t *TimeOfDay) parseHourMinuteSec(h, m, s string, ampmState int) error {
+	if !isDigits(s) || !isDigits(h) || !isDigits(m) {
+		return fmt.Errorf("invalid second: %s", s)
+	}
+	hour, err := t.parseHour(h, ampmState)
+	if err != nil {
+		return err
 	}
 	minute, err := strconv.Atoi(m)
 	if err != nil || minute < 0 || minute > 59 {
 		return fmt.Errorf("invalid minute: %s", m)
 	}
-	*t = NewTimeOfDay(hour, minute, 0)
-	return nil
-}
-
-func (t *TimeOfDay) parseHourMinuteSec(h, m, s string) error {
-	if err := t.parseHourMinute(h, m); err != nil {
-		return err
-	}
 	sec, err := strconv.Atoi(s)
 	if err != nil || sec < 0 || sec > 59 {
 		return fmt.Errorf("invalid second: %s", s)
 	}
-	*t = NewTimeOfDay(t.Hour(), t.Minute(), sec)
+	*t = NewTimeOfDay(hour, minute, sec)
 	return nil
 }
 
-// Parse val in formats '08:12[:10]' or '08-12[-10]'.
+// Parse val in formats '08[:12[:10]][am|pm]'
 func (t *TimeOfDay) Parse(val string) error {
 	if len(val) == 0 {
-		return fmt.Errorf("empty value, expected '08:12[:10]' or '08-12[-10]'")
+		return fmt.Errorf("empty value, expected '08[:12][:10][am|pm]'")
 	}
-	var parts []string
-	if strings.Contains(val, ":") {
-		parts = strings.Split(val, ":")
-	} else if strings.Contains(val, "-") {
-		parts = strings.Split(val, "-")
+	tl := strings.TrimSpace(strings.ToLower(val))
+	ampmState := 0
+	if strings.HasSuffix(tl, "am") {
+		val = strings.TrimSpace(tl[:len(tl)-2])
+		ampmState = 1
 	}
-	if len(parts) == 2 {
-		return t.parseHourMinute(parts[0], parts[1])
+	if strings.HasSuffix(tl, "pm") {
+		val = strings.TrimSpace(tl[:len(tl)-2])
+		ampmState = 2
 	}
-	if len(parts) == 3 {
-		return t.parseHourMinuteSec(parts[0], parts[1], parts[2])
+	parts := strings.Split(val, ":")
+	switch len(parts) {
+	case 1:
+		return t.parseHourMinuteSec(parts[0], "0", "0", ampmState)
+	case 2:
+		return t.parseHourMinuteSec(parts[0], parts[1], "0", ampmState)
+	case 3:
+		return t.parseHourMinuteSec(parts[0], parts[1], parts[2], ampmState)
 	}
-	return fmt.Errorf("invalid format, expected '08:12[:10]' or '08-12[-10]'")
+	return fmt.Errorf("invalid format, expected '08:12[:10]'")
 }
 
 // Add delta to the time of day. The result will be normalized to

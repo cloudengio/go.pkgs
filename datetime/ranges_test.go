@@ -689,82 +689,103 @@ func TestCalendarTruncate(t *testing.T) {
 	}
 }
 
-func TestRangeRestrictions(t *testing.T) {
+func TestRangeBounds(t *testing.T) {
 	nd := datetime.NewDate
 	ndr := datetime.NewDateRange
-	emptyDate := datetime.DateRange(0)
+	emptyDateRange := datetime.DateRange(0)
 
-	dr := ndr(nd(1, 10), nd(3, 30))
+	dfrom := nd(1, 10)
+	dto := nd(2, 0)
+	dr := ndr(dfrom, dto)
 	for i, tc := range []struct {
-		arg                   datetime.Date
-		onOrAfter, onOrBefore datetime.DateRange
+		year   int
+		bound  datetime.DateRange
+		result datetime.DateRange
 	}{
-		{nd(12, 1), emptyDate, dr},
-		{nd(1, 1), dr, emptyDate},
-		{nd(2, 1), ndr(nd(2, 1), nd(3, 30)), ndr(nd(1, 10), nd(2, 1))},
-		{nd(1, 10), dr, ndr(nd(1, 10), nd(1, 10))},
-		{nd(3, 30), ndr(nd(3, 30), nd(3, 30)), dr},
+		{2024, ndr(nd(12, 1), nd(12, 2)), emptyDateRange},
+		{2024, ndr(nd(1, 1), nd(1, 2)), emptyDateRange},
+		{2024, ndr(nd(1, 20), nd(2, 0)), ndr(nd(1, 20), nd(2, 29))},
+		{2023, ndr(nd(1, 20), nd(2, 0)), ndr(nd(1, 20), nd(2, 28))},
+		{2024, ndr(nd(1, 20), nd(2, 28)), ndr(nd(1, 20), nd(2, 28))},
+		{2024, ndr(nd(1, 20), nd(2, 29)), ndr(nd(1, 20), nd(2, 29))},
+		{2023, ndr(nd(1, 20), nd(2, 29)), ndr(nd(1, 20), nd(2, 28))},
+
+		{2024, ndr(nd(1, 1), nd(3, 10)), dr.Normalize(2024)},
+		{2023, ndr(nd(1, 1), nd(3, 10)), dr.Normalize(2023)},
+
+		{2024, ndr(nd(2, 0), nd(2, 0)), ndr(nd(2, 1), dto.Normalize(2024, false))},
+		{2024, ndr(nd(1, 1), nd(1, 10)), ndr(dfrom, nd(1, 10))},
+		{2024, ndr(nd(1, 1), nd(3, 20)), dr.Normalize(2024)},
 	} {
-		if got, want := dr.OnOrAfter(tc.arg), tc.onOrAfter; got != want {
+		if got, want := dr.Bound(tc.year, tc.bound), tc.result; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
 		}
-		if got, want := dr.OnOrBefore(tc.arg), tc.onOrBefore; got != want {
-			t.Errorf("%v: got %v, want %v", i, got, want)
-		}
+
 	}
 
 	ncd := datetime.NewCalendarDate
 	ncdr := datetime.NewCalendarDateRange
-	emptyCalendarDate := datetime.CalendarDateRange(0)
+	emptyCalendarDateRange := datetime.CalendarDateRange(0)
 
-	cdr := ncdr(ncd(2024, 1, 10), ncd(2025, 3, 30))
+	cfrom := ncd(2023, 1, 10)
+	cto := ncd(2024, 2, 0)
+	cdr := ncdr(cfrom, cto)
 	for i, tc := range []struct {
-		arg                   datetime.CalendarDate
-		onOrAfter, onOrBefore datetime.CalendarDateRange
+		bound  datetime.CalendarDateRange
+		result datetime.CalendarDateRange
 	}{
-		{ncd(2025, 12, 1), emptyCalendarDate, cdr},
-		{ncd(2024, 1, 1), cdr, emptyCalendarDate},
-		{ncd(2024, 12, 1), ncdr(ncd(2024, 12, 1), ncd(2025, 3, 30)), ncdr(ncd(2024, 1, 10), ncd(2024, 12, 1))},
-		{ncd(2024, 1, 10), cdr, ncdr(ncd(2024, 1, 10), ncd(2024, 1, 10))},
-		{ncd(2025, 3, 30), ncdr(ncd(2025, 3, 30), ncd(2025, 3, 30)), cdr},
+		{ncdr(ncd(2025, 12, 1), ncd(2025, 12, 2)), emptyCalendarDateRange},
+		{ncdr(ncd(2023, 1, 1), ncd(2023, 1, 2)), emptyCalendarDateRange},
+		{ncdr(ncd(2023, 1, 1), ncd(2024, 2, 0)), cdr},
+		{ncdr(ncd(2023, 1, 1), ncd(2024, 3, 20)), cdr},
+		{ncdr(ncd(2023, 12, 1), ncd(2025, 1, 2)), ncdr(ncd(2023, 12, 1), cto)},
+		{ncdr(ncd(2023, 1, 1), ncd(2024, 1, 4)), ncdr(cfrom, ncd(2024, 1, 4))},
 	} {
-		if got, want := cdr.OnOrAfter(tc.arg), tc.onOrAfter; got != want {
+		if got, want := cdr.Bound(tc.bound), tc.result; got != want {
 			t.Errorf("%v: got %v, want %v", i, got, want)
 		}
-		if got, want := cdr.OnOrBefore(tc.arg), tc.onOrBefore; got != want {
-			t.Errorf("%v: got %v, want %v", i, got, want)
-		}
+
 	}
 
 	drl := datetime.DateRangeList{
 		ndr(nd(1, 1), nd(1, 10)),
-		ndr(nd(1, 15), nd(1, 20)),
+		ndr(nd(1, 15), nd(3, 20)),
 	}
-	if got, want := drl.OnOrAfter(nd(1, 5)), (datetime.DateRangeList{
+	if got, want := drl.Bound(2024, ndr(nd(1, 5), nd(2, 0))), (datetime.DateRangeList{
 		ndr(nd(1, 5), nd(1, 10)),
+		ndr(nd(1, 15), nd(2, 29))}); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := drl.Bound(2024, ndr(nd(1, 8), nd(1, 20))), (datetime.DateRangeList{
+		ndr(nd(1, 8), nd(1, 10)),
 		ndr(nd(1, 15), nd(1, 20))}); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := drl.OnOrBefore(nd(1, 16)), (datetime.DateRangeList{
-		ndr(nd(1, 1), nd(1, 10)),
-		ndr(nd(1, 15), nd(1, 16))}); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	if got, want := drl.Bound(2024, ndr(nd(12, 1), nd(12, 31))), (datetime.DateRangeList{}); !slices.Equal(got, want) {
+		if !slices.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 
 	cdrl := datetime.CalendarDateRangeList{
 		ncdr(ncd(2024, 1, 1), ncd(2024, 1, 10)),
-		ncdr(ncd(2024, 1, 15), ncd(2024, 1, 20)),
+		ncdr(ncd(2024, 1, 15), ncd(2024, 2, 0)),
 	}
-	if got, want := cdrl.OnOrAfter(ncd(2024, 1, 5)), (datetime.CalendarDateRangeList{
+	if got, want := cdrl.Bound(ncdr(ncd(2024, 1, 5), ncd(2024, 2, 0))), (datetime.CalendarDateRangeList{
 		ncdr(ncd(2024, 1, 5), ncd(2024, 1, 10)),
-		ncdr(ncd(2024, 1, 15), ncd(2024, 1, 20))}); !slices.Equal(got, want) {
+		ncdr(ncd(2024, 1, 15), ncd(2024, 2, 29))}); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := cdrl.OnOrBefore(ncd(2024, 1, 16)), (datetime.CalendarDateRangeList{
-		ncdr(ncd(2024, 1, 1), ncd(2024, 1, 10)),
-		ncdr(ncd(2024, 1, 15), ncd(2024, 1, 16))}); !slices.Equal(got, want) {
+	if got, want := cdrl.Bound(ncdr(ncd(2024, 1, 8), ncd(2024, 2, 5))), (datetime.CalendarDateRangeList{
+		ncdr(ncd(2024, 1, 8), ncd(2024, 1, 10)),
+		ncdr(ncd(2024, 1, 15), ncd(2024, 2, 5))}); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := cdrl.Bound(ncdr(ncd(2027, 1, 8), ncd(2028, 2, 5))), (datetime.CalendarDateRangeList{}); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

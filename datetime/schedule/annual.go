@@ -7,7 +7,6 @@ package schedule
 
 import (
 	"slices"
-	"sort"
 
 	"cloudeng.io/datetime"
 )
@@ -15,21 +14,11 @@ import (
 // Dates represents a set of dates expressed as a combination of
 // months, date ranges and constraints on those dates (eg. weekdays in March).
 type Dates struct {
-	For          datetime.MonthList            // Whole months to include.
+	Months       datetime.MonthList            // Whole months to include.
 	MirrorMonths bool                          // Include the 'mirror' months of those in For.
 	Ranges       datetime.DateRangeList        // Include specific date ranges.
 	Dynamic      datetime.DynamicDateRangeList // Functions to generate dates that vary by year, such as solstices, seasons or holidays.
 	Constraints  datetime.Constraints          // Constraints to be applied, such as weekdays/weekends etc.
-}
-
-func (d Dates) clone() Dates {
-	return Dates{
-		For:          slices.Clone(d.For),
-		MirrorMonths: d.MirrorMonths,
-		Ranges:       slices.Clone(d.Ranges),
-		Dynamic:      slices.Clone(d.Dynamic),
-		Constraints:  d.Constraints,
-	}
 }
 
 func truncateCalendarDates(year int, cdrl datetime.CalendarDateRangeList) datetime.DateRangeList {
@@ -42,11 +31,12 @@ func truncateCalendarDates(year int, cdrl datetime.CalendarDateRangeList) dateti
 
 // EvaluateDateRanges returns the list of date ranges that are represented
 // by the totality of the information represented by Dates instance,
-// including the evaluation of any dynamic date ranges.
-func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
-	months := slices.Clone(d.For)
+// including the evaluation of dynamic date ranges. The result is bounded
+// by supplied bounds date range.
+func (d Dates) EvaluateDateRanges(year int, bounds datetime.DateRange) datetime.DateRangeList {
+	months := slices.Clone(d.Months)
 	if d.MirrorMonths {
-		for _, m := range d.For {
+		for _, m := range d.Months {
 			months = append(months, datetime.MirrorMonth(m))
 		}
 	}
@@ -61,45 +51,5 @@ func (d Dates) EvaluateDateRanges(year int) datetime.DateRangeList {
 			drl = append(drl, dr.DateRange(year))
 		}
 	}
-	return drl
-}
-
-// Sort by due time and then by name.
-func (a ActionSpecs[T]) Sort() {
-	sort.Slice(a, func(i, j int) bool {
-		if a[i].Due == a[j].Due {
-			return a[i].Name < a[j].Name
-		}
-		return a[i].Due < a[j].Due
-	})
-}
-
-// Sort by due time, but preserve the order of actions with
-// the same due time.
-func (a ActionSpecs[T]) SortStable() {
-	slices.SortStableFunc(a, func(a, b ActionSpec[T]) int {
-		if a.Due < b.Due {
-			return -1
-		} else if a.Due > b.Due {
-			return 1
-		}
-		return 0
-	})
-}
-
-// Annual represents a schedule of actions to be taken on specific dates
-// of that year. The actions are specified on a per-day basis in the form
-// as a specification of the times of the day the action is to be taken.
-type Annual[T any] struct {
-	Name  string
-	Dates Dates
-	Specs ActionSpecs[T]
-}
-
-func (a Annual[T]) clone() Annual[T] {
-	return Annual[T]{
-		Name:  a.Name,
-		Dates: a.Dates.clone(),
-		Specs: slices.Clone(a.Specs),
-	}
+	return drl.Bound(year, bounds)
 }

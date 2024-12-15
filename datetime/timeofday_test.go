@@ -19,18 +19,21 @@ func TestTimeOfDayParse(t *testing.T) {
 		val  string
 		when datetime.TimeOfDay
 	}{
+		{"2pm", datetime.NewTimeOfDay(14, 0, 0)},
+		{"2am", datetime.NewTimeOfDay(2, 0, 0)},
 		{"08:12", datetime.NewTimeOfDay(8, 12, 0)},
-		{"08-12", datetime.NewTimeOfDay(8, 12, 0)},
+		{"08:12 AM  ", datetime.NewTimeOfDay(8, 12, 0)},
+		{"08:01pm", datetime.NewTimeOfDay(20, 1, 0)},
 		{"20:01", datetime.NewTimeOfDay(20, 01, 0)},
-		{"21-01", datetime.NewTimeOfDay(21, 01, 0)},
 		{"08:12:13", datetime.NewTimeOfDay(8, 12, 13)},
-		{"08-12-13", datetime.NewTimeOfDay(8, 12, 13)},
+		{"08:12:13am", datetime.NewTimeOfDay(8, 12, 13)},
+		{"8:01:13pm", datetime.NewTimeOfDay(20, 01, 13)},
 		{"20:01:13", datetime.NewTimeOfDay(20, 01, 13)},
-		{"21-01-13", datetime.NewTimeOfDay(21, 01, 13)},
 	} {
 		var tod datetime.TimeOfDay
 		if err := tod.Parse(tc.val); err != nil {
 			t.Errorf("failed: %v: %v", tc.val, err)
+			continue
 		}
 		if !reflect.DeepEqual(tod, tc.when) {
 			t.Errorf("got %v, want %v", tod, tc.when)
@@ -39,6 +42,9 @@ func TestTimeOfDayParse(t *testing.T) {
 
 	for _, tc := range []string{
 		"",
+		"02x",
+		"08:",
+		"23pm",
 		"08:61",
 		"08 16",
 		"08:61-15",

@@ -58,28 +58,26 @@ func (dr DateRange) To(year int) Date {
 	return newDate8(toMonth, toDay)
 }
 
-// OnOrAfter returns a new DateRange with the from date set to on
-// or after the specified date.
-func (dr DateRange) OnOrAfter(start Date) DateRange {
-	if dr.fromDate() >= start {
-		return dr
-	}
-	if start > dr.toDate() {
-		return DateRange(0)
-	}
-	return newDateRange(start, dr.toDate())
+var dateRangeYear = newDateRange(NewDate(1, 1), NewDate(12, 31))
+
+// DateRangeYear returns a DateRange for the entire year.
+func DateRangeYear() DateRange {
+	return dateRangeYear
 }
 
-// OnOrBefore returns a new DateRange with the to date set to on
-// or before the specified date.
-func (dr DateRange) OnOrBefore(end Date) DateRange {
-	if dr.toDate() <= end {
-		return dr
-	}
-	if end < dr.fromDate() {
+// Bound returns a new DateRange that is bounded by the specified DateRange,
+// namely the from date is the later of the two from dates and the to date
+// is the earlier of the two to dates. If the resulting range is empty then
+// the zero value is returned.
+func (dr DateRange) Bound(year int, bound DateRange) DateRange {
+	drn := dr.Normalize(year)
+	bn := bound.Normalize(year)
+	from := max(drn.From(year), bn.From(year))
+	to := min(drn.To(year), bn.To(year))
+	if from > to {
 		return DateRange(0)
 	}
-	return newDateRange(dr.fromDate(), end)
+	return newDateRange(from, to)
 }
 
 // NewDateRange returns a DateRange for the from/to dates for the specified year.
@@ -288,24 +286,17 @@ func (drl DateRangeList) MergeMonths(year int, months MonthList) DateRangeList {
 	return ndrl.Merge(year)
 }
 
-func (drl DateRangeList) OnOrAfter(start Date) DateRangeList {
+// Bound returns a new list of date ranges that are bounded by the specified
+// date range.
+func (drl DateRangeList) Bound(year int, bound DateRange) DateRangeList {
 	if len(drl) == 0 {
 		return drl
 	}
-	ndr := make(DateRangeList, len(drl))
-	for i, dr := range drl {
-		ndr[i] = dr.OnOrAfter(start)
+	ndr := make(DateRangeList, 0, len(drl))
+	for _, dr := range drl {
+		if b := dr.Bound(year, bound); b != 0 {
+			ndr = append(ndr, b)
+		}
 	}
-	return ndr
-}
-
-func (drl DateRangeList) OnOrBefore(end Date) DateRangeList {
-	if len(drl) == 0 {
-		return drl
-	}
-	ndr := make(DateRangeList, len(drl))
-	for i, dr := range drl {
-		ndr[i] = dr.OnOrBefore(end)
-	}
-	return ndr
+	return slices.Clip(ndr)
 }

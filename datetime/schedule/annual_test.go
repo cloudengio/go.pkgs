@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"cloudeng.io/datetime"
 	"cloudeng.io/datetime/schedule"
@@ -56,7 +55,7 @@ func TestDates(t *testing.T) {
 		{"2", false, "", noFeb29, 2023, "2/1:2/28"},
 	} {
 		sd := schedule.Dates{
-			For:          pml(tc.monthsFor),
+			Months:       pml(tc.monthsFor),
 			Ranges:       pdrl(strings.Split(tc.ranges, ",")...),
 			MirrorMonths: tc.mirror,
 			Constraints:  tc.constraints,
@@ -65,8 +64,15 @@ func TestDates(t *testing.T) {
 		for i := range expected {
 			expected[i] = expected[i].Normalize(tc.year)
 		}
-		if got, want := sd.EvaluateDateRanges(tc.year), expected; !reflect.DeepEqual(got, want) {
+		if got, want := sd.EvaluateDateRanges(tc.year, datetime.DateRangeYear()), expected; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
+		}
+
+		bound := pdrl("1/10:12/10")[0]
+		for _, bounded := range sd.EvaluateDateRanges(tc.year, bound) {
+			if bounded.From(tc.year) < bound.From(tc.year) || bounded.To(tc.year) > bound.To(tc.year) {
+				t.Errorf("got %v, want %v", bounded, bound)
+			}
 		}
 	}
 }
@@ -105,40 +111,6 @@ func TestActions(t *testing.T) {
 		{Due: datetime.NewTimeOfDay(12, 1, 3), Name: "d", T: 4},
 		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "g", T: 1},
 		{Due: datetime.NewTimeOfDay(12, 50, 2), Name: "b", T: 6},
-	}; !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
-type DynamicTimeOfDay struct {
-	name string
-	val  datetime.TimeOfDay
-}
-
-func (d DynamicTimeOfDay) Name() string {
-	return d.name
-}
-
-func (d DynamicTimeOfDay) Evaluate(_ datetime.CalendarDate, _ datetime.Place) datetime.TimeOfDay {
-	return d.val
-}
-
-func TestDynamic(t *testing.T) {
-	breakfast := DynamicTimeOfDay{name: "breakfast", val: datetime.NewTimeOfDay(8, 0, 0)}
-	a := schedule.ActionSpecs[int]{
-		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "a", T: 1},
-		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "b", T: 2},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 3},
-		{Dynamic: schedule.DynamicTimeOfDaySpec{Due: breakfast, Offset: time.Minute * 30}, Name: "d", T: 4},
-	}
-	b := a.Evaluate(datetime.NewCalendarDate(2024, 1, 1), datetime.Place{TZ: time.Local})
-	b.Sort()
-
-	if got, want := b, []schedule.ActionSpec[int]{
-		{Due: datetime.NewTimeOfDay(8, 30, 0), Name: "d", T: 4},
-		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 3},
-		{Due: datetime.NewTimeOfDay(12, 1, 1), Name: "b", T: 2},
-		{Due: datetime.NewTimeOfDay(12, 3, 0), Name: "a", T: 1},
 	}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}

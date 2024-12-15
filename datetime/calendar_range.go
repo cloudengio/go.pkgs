@@ -57,28 +57,17 @@ func (cdr CalendarDateRange) To() CalendarDate {
 	return newCalendarDate8(toYear, toMonth, toDay)
 }
 
-// OnOrAfter returns a new DateRange with the from date set to on
-// or after the specified date.
-func (cdr CalendarDateRange) OnOrAfter(start CalendarDate) CalendarDateRange {
-	if cdr.fromDate() >= start {
-		return cdr
-	}
-	if start > cdr.toDate() {
+// Bound returns a new CalendarDateRange that is bounded by the specified
+// CalendarDateRange, namely the from date is the later of the two from dates
+// and the to date is the earlier of the two to dates. If the resulting range
+// is empty then the zero value is returned.
+func (cdr CalendarDateRange) Bound(bound CalendarDateRange) CalendarDateRange {
+	from := max(cdr.fromDate(), bound.fromDate())
+	to := min(cdr.toDate(), bound.toDate())
+	if from > to {
 		return CalendarDateRange(0)
 	}
-	return newCalendarDateRange(start, cdr.toDate())
-}
-
-// OnOrBefore returns a new DateRange with the to date set to on
-// or before the specified date.
-func (cdr CalendarDateRange) OnOrBefore(end CalendarDate) CalendarDateRange {
-	if cdr.toDate() <= end {
-		return cdr
-	}
-	if end < cdr.fromDate() {
-		return CalendarDateRange(0)
-	}
-	return newCalendarDateRange(cdr.fromDate(), end)
+	return newCalendarDateRange(from, to)
 }
 
 // NewCalendarDateRange returns a CalendarDateRange for the from/to dates.
@@ -326,24 +315,17 @@ func (cdrl CalendarDateRangeList) MergeMonths(year int, months MonthList) Calend
 	return ncdrl.Merge()
 }
 
-func (cdrl CalendarDateRangeList) OnOrAfter(start CalendarDate) CalendarDateRangeList {
+// Bound returns a new list of date ranges that are bounded by the supplied
+// calendar date range.
+func (cdrl CalendarDateRangeList) Bound(bound CalendarDateRange) CalendarDateRangeList {
 	if len(cdrl) == 0 {
 		return cdrl
 	}
-	ndr := make(CalendarDateRangeList, len(cdrl))
-	for i, dr := range cdrl {
-		ndr[i] = dr.OnOrAfter(start)
+	ndr := make(CalendarDateRangeList, 0, len(cdrl))
+	for _, dr := range cdrl {
+		if b := dr.Bound(bound); b != 0 {
+			ndr = append(ndr, b)
+		}
 	}
-	return ndr
-}
-
-func (cdrl CalendarDateRangeList) OnOrBefore(end CalendarDate) CalendarDateRangeList {
-	if len(cdrl) == 0 {
-		return cdrl
-	}
-	ncdr := make(CalendarDateRangeList, len(cdrl))
-	for i, dr := range cdrl {
-		ncdr[i] = dr.OnOrBefore(end)
-	}
-	return ncdr
+	return slices.Clip(ndr)
 }
