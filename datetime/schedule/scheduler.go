@@ -13,7 +13,6 @@ import (
 // AnnualScheduler provides a way to iterate over the specified actions for a
 // single year.
 type AnnualScheduler[T any] struct {
-	name    string
 	actions ActionSpecs[T]
 }
 

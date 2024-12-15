@@ -21,16 +21,6 @@ type Dates struct {
 	Constraints  datetime.Constraints          // Constraints to be applied, such as weekdays/weekends etc.
 }
 
-func (d Dates) clone() Dates {
-	return Dates{
-		Months:       slices.Clone(d.Months),
-		MirrorMonths: d.MirrorMonths,
-		Ranges:       slices.Clone(d.Ranges),
-		Dynamic:      slices.Clone(d.Dynamic),
-		Constraints:  d.Constraints,
-	}
-}
-
 func truncateCalendarDates(year int, cdrl datetime.CalendarDateRangeList) datetime.DateRangeList {
 	dr := make(datetime.DateRangeList, len(cdrl))
 	for i, cdr := range cdrl {
