@@ -52,19 +52,27 @@ func isDigits(s string) bool {
 	return true
 }
 
+func (t *TimeOfDay) parseHour(h string, ampmState int) (int, error) {
+	hour, err := strconv.Atoi(h)
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, fmt.Errorf("invalid hour: %s", h)
+	}
+	if ampmState != 0 && hour > 12 {
+		return 0, fmt.Errorf("invalid hour: %s with am/pm", h)
+	}
+	if ampmState == 2 {
+		hour += 12
+	}
+	return hour, nil
+}
+
 func (t *TimeOfDay) parseHourMinuteSec(h, m, s string, ampmState int) error {
 	if !isDigits(s) || !isDigits(h) || !isDigits(m) {
 		return fmt.Errorf("invalid second: %s", s)
 	}
-	hour, err := strconv.Atoi(h)
-	if err != nil || hour < 0 || hour > 23 {
-		return fmt.Errorf("invalid hour: %s", h)
-	}
-	if ampmState != 0 && hour > 12 {
-		return fmt.Errorf("invalid hour: %s with am/pm", h)
-	}
-	if ampmState == 2 {
-		hour += 12
+	hour, err := t.parseHour(h, ampmState)
+	if err != nil {
+		return err
 	}
 	minute, err := strconv.Atoi(m)
 	if err != nil || minute < 0 || minute > 59 {
