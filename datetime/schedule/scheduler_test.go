@@ -118,6 +118,7 @@ func TestScheduler(t *testing.T) {
 	}
 
 	if got, want := active, expected; !reflect.DeepEqual(got, want) {
+<<<<<<< HEAD
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -134,6 +135,8 @@ func TestEmptySchedule(t *testing.T) {
 		active = append(active, scheduled)
 	}
 	if got, want := len(active), 0; got != want {
+=======
+>>>>>>> main
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

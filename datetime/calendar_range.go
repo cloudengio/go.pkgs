@@ -57,6 +57,10 @@ func (cdr CalendarDateRange) To() CalendarDate {
 	return newCalendarDate8(toYear, toMonth, toDay)
 }
 
+// Bound returns a new CalendarDateRange that is bounded by the specified
+// CalendarDateRange, namely the from date is the later of the two from dates
+// and the to date is the earlier of the two to dates. If the resulting range
+// is empty then the zero value is returned.
 func (cdr CalendarDateRange) Bound(bound CalendarDateRange) CalendarDateRange {
 	from := max(cdr.fromDate(), bound.fromDate())
 	to := min(cdr.toDate(), bound.toDate())
@@ -311,6 +315,8 @@ func (cdrl CalendarDateRangeList) MergeMonths(year int, months MonthList) Calend
 	return ncdrl.Merge()
 }
 
+// Bound returns a new list of date ranges that are bounded by the supplied
+// calendar date range.
 func (cdrl CalendarDateRangeList) Bound(bound CalendarDateRange) CalendarDateRangeList {
 	if len(cdrl) == 0 {
 		return cdrl

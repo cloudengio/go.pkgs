@@ -65,6 +65,10 @@ func DateRangeYear() DateRange {
 	return dateRangeYear
 }
 
+// Bound returns a new DateRange that is bounded by the specified DateRange,
+// namely the from date is the later of the two from dates and the to date
+// is the earlier of the two to dates. If the resulting range is empty then
+// the zero value is returned.
 func (dr DateRange) Bound(year int, bound DateRange) DateRange {
 	drn := dr.Normalize(year)
 	bn := bound.Normalize(year)
@@ -282,6 +286,8 @@ func (drl DateRangeList) MergeMonths(year int, months MonthList) DateRangeList {
 	return ndrl.Merge(year)
 }
 
+// Bound returns a new list of date ranges that are bounded by the specified
+// date range.
 func (drl DateRangeList) Bound(year int, bound DateRange) DateRangeList {
 	if len(drl) == 0 {
 		return drl
