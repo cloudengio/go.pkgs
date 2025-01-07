@@ -8,10 +8,16 @@ import (
 	"iter"
 )
 
-// Double is a doubly linked list.
+// Double provides a doubly linked list.
 type Double[T any] struct {
-	sentinel item[T] // sentinel to avoid having to handle head/tail corner cases.
+	sentinel doubleItem[T] // sentinel to avoid having to handle head/tail corner cases.
 	len      int
+}
+
+type doubleItem[T any] struct {
+	next *doubleItem[T]
+	prev *doubleItem[T]
+	T    T
 }
 
 func NewDouble[T any]() *Double[T] {
@@ -28,12 +34,6 @@ func (dl *Double[T]) Reset() {
 
 func (dl *Double[T]) Len() int {
 	return dl.len
-}
-
-type item[T any] struct {
-	next *item[T]
-	prev *item[T]
-	T    T
 }
 
 func (dl *Double[T]) Forward() iter.Seq[T] {
@@ -56,8 +56,8 @@ func (dl *Double[T]) Reverse() iter.Seq[T] {
 	}
 }
 
-func (dl *Double[T]) insertAfterItem(val T, it *item[T]) *item[T] {
-	n := &item[T]{T: val}
+func (dl *Double[T]) insertAfterItem(val T, it *doubleItem[T]) *doubleItem[T] {
+	n := &doubleItem[T]{T: val}
 	n.prev = it
 	n.next = it.next
 	n.prev.next = n
@@ -80,23 +80,25 @@ func (dl *Double[T]) Tail() T {
 	return dl.sentinel.prev.T
 }
 
-func (dl *Double[T]) Append(val T) *item[T] {
+func (dl *Double[T]) Append(val T) DoubleID[T] {
 	return dl.insertAfterItem(val, dl.sentinel.prev)
 }
 
-func (dl *Double[T]) Prepend(val T) *item[T] {
+func (dl *Double[T]) Prepend(val T) DoubleID[T] {
 	return dl.insertAfterItem(val, &dl.sentinel)
 }
 
-func (dl *Double[T]) removeItem(it *item[T]) {
+func (dl *Double[T]) removeItem(it *doubleItem[T]) {
 	dl.len--
 	it.prev.next = it.next
 	it.next.prev = it.prev
-	*it = item[T]{}
+	*it = doubleItem[T]{}
 }
 
-func (dl *Double[T]) RemoveItem(it *item[T]) {
-	dl.removeItem(it)
+type DoubleID[T any] *doubleItem[T]
+
+func (dl *Double[T]) RemoveItem(id DoubleID[T]) {
+	dl.removeItem(id)
 }
 
 func (dl *Double[T]) Remove(val T, cmp func(a, b T) bool) {
