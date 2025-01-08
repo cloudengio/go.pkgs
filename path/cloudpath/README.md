@@ -36,7 +36,7 @@ For manipulation, the path is converted to a cloudpath.T.
 // AWSS3 is the scheme for Amazon Web Service's S3 object store.
 AWSS3 = "s3"
 // GoogleCloudStorage is the scheme for Google's Cloud Storage object store.
-GoogleCloudStorage = "GoogleCloudStorage"
+GoogleCloudStorage = "gs"
 // UnixFileSystem is the scheme for unix like systems such as linux, macos etc.
 UnixFileSystem = "unix"
 // WindowsFileSystem is the scheme for msdos and windows filesystems.
@@ -51,6 +51,19 @@ HTTPS = "https"
 
 
 ## Functions
+### Func Base
+```go
+func Base(scheme string, separator byte, path string) string
+```
+Base is like path.Base but for cloud storage paths which may include a
+scheme (eg. s3://). It does not support URI host names, parameters etc.
+In particular:
+  - the scheme parameter should include the trailing :// or be the empty
+    string.
+  - a trailing separator means that the path is a prefix with an empty base
+    and hence Base returns "".
+  - the returned basename never includes the supplied scheme.
+
 ### Func HasPrefix
 ```go
 func HasPrefix(path, prefix []string) bool
@@ -69,6 +82,21 @@ func IsLocal(path string) bool
 ```
 IsLocal calls DefaultMatchers.IsLocal(path).
 
+### Func Join
+```go
+func Join(sep byte, components []string) string
+```
+Join will join the supplied components using the supplied separator
+behaviour appropriate for cloud storage paths that do not elide multiple
+contiguous separators. It behaves as follows:
+  - empty components are ignored.
+  - trailing instances of sep are preserved.
+  - separators are added only when not already present as a trailing
+    character in the previous component and leading character in the next
+    component.
+  - a leading separator is ignored/removed if the previous component ended
+    with a separator and the next component starts with a separator.
+
 ### Func Key
 ```go
 func Key(path string) (string, rune)
@@ -86,6 +114,18 @@ Parameters calls DefaultMatchers.Parameters(path).
 func Path(path string) (string, rune)
 ```
 Path calls DefaultMatchers.Path(path).
+
+### Func Prefix
+```go
+func Prefix(scheme string, separator byte, path string) string
+```
+Prefix is like path.Dir but for cloud storage paths which may include a
+scheme (eg. s3:///). It does not support URI host names, parameters etc.
+In particular:
+  - the scheme parameter should include the trailing :// or be the empty
+    string.
+  - the returned prefix never includes the supplied scheme.
+  - the returned prefix never includes a trailing separator.
 
 ### Func Region
 ```go
@@ -144,8 +184,13 @@ Match is the result of a successful match.
 ```go
 func AWSS3Matcher(p string) Match
 ```
-AWSS3Matcher implements Matcher for AWS S3 object names. It returns AWSS3
-for its scheme result.
+AWSS3Matcher implements Matcher for AWS S3 object names assuming '/' as the
+separator. It returns AWSS3 for its scheme result.
+
+
+```go
+func AWSS3MatcherSep(p string, sep byte) Match
+```
 
 
 ```go

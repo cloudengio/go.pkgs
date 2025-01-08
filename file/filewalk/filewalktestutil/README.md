@@ -7,6 +7,24 @@ import cloudeng.io/file/filewalk/filewalktestutil
 Package filewalktestutil provides utilities for testing code that uses
 filewalk.FS.
 
+## Functions
+### Func Scan
+```go
+func Scan(ctx context.Context, fs filewalk.FS, prefix string) ([]filewalk.Entry, error)
+```
+
+### Func ScanNames
+```go
+func ScanNames(ctx context.Context, fs filewalk.FS, prefix string) ([]string, error)
+```
+
+### Func WalkContents
+```go
+func WalkContents(ctx context.Context, fs filewalk.FS, roots ...string) (prefixes, names []string, err error)
+```
+
+
+
 ## Types
 ### Type MockFS
 ```go
@@ -117,6 +135,35 @@ func WithYAMLConfig(config string) Option
 ```
 WithYAMLConfig specifies the YAML config to use for creating a mock
 filesystem.
+
+
+
+
+### Type Walker
+```go
+type Walker struct {
+	sync.Mutex
+	FS       filewalk.FS
+	Prefixes []string
+	Names    []string
+}
+```
+
+### Methods
+
+```go
+func (w *Walker) Contents(ctx context.Context, _ *struct{}, prefix string, contents []filewalk.Entry) (file.InfoList, error)
+```
+
+
+```go
+func (w *Walker) Done(_ context.Context, _ *struct{}, _ string, err error) error
+```
+
+
+```go
+func (w *Walker) Prefix(_ context.Context, _ *struct{}, prefix string, _ file.Info, _ error) (bool, file.InfoList, error)
+```
 
 
 

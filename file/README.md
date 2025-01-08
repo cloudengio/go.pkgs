@@ -4,36 +4,48 @@
 import cloudeng.io/file
 ```
 
-go:build darwin
+
+## Variables
+### ErrNotImplemented
+```go
+ErrNotImplemented = fmt.Errorf("not implemented")
+
+```
+ErrNotImplemented is returned by methods that are not implemented by a
+particular filesystem.
+
+
 
 ## Functions
 ### Func ContextWithFS
 ```go
-func ContextWithFS(ctx context.Context, container fs.ReadFileFS) context.Context
+func ContextWithFS(ctx context.Context, container ...fs.ReadFileFS) context.Context
 ```
-ContextWithFS returns a new context that contains the provided instance of
-fs.ReadFileFS stored with as a valye within it.
+ContextWithFS returns a new context that contains the provided instances of
+fs.ReadFileFS stored with as a value within it.
 
 ### Func FSFromContext
 ```go
-func FSFromContext(ctx context.Context) (fs.ReadFileFS, bool)
+func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool)
 ```
-FSFromContext returns the fs.ReadFileFS instance, if any, stored within the
-context.
+FSFromContext returns the list of fs.ReadFileFS instancees, if any, stored
+within the context.
 
 ### Func FSOpen
 ```go
-func FSOpen(ctx context.Context, name string) (fs.File, error)
+func FSOpen(ctx context.Context, filename string) (fs.File, error)
 ```
-FSOpen will open name using the context's fs.ReadFileFS instance if one is
-present, otherwise it will use os.Open.
+FSOpen will attempt to open filename using the context's set of
+fs.ReadFileFS instances (if any), in the order in which they were provided
+to ContextWithFS, returning the first successful result. If no fs.ReadFileFS
+instances are present in the context or none successfully open the file,
+then os.Open is used.
 
 ### Func FSReadFile
 ```go
 func FSReadFile(ctx context.Context, name string) ([]byte, error)
 ```
-FSreadAll will read name using the context's fs.ReadFileFS instance if one
-is present, otherwise it will use os.ReadFile.
+FSreadFile is like FSOpen but calls ReadFile instead of Open.
 
 
 
@@ -85,35 +97,6 @@ type FS interface {
 }
 ```
 FS extends fs.FS with Scheme and OpenCtx.
-
-### Functions
-
-```go
-func LocalFS() FS
-```
-LocalFS returns an instance of file.FS that provides access to the local
-filesystem.
-
-
-
-
-### Type FSFactory
-```go
-type FSFactory interface {
-	New(ctx context.Context, scheme string) (FS, error)
-	NewFromMatch(ctx context.Context, m cloudpath.Match) (FS, error)
-}
-```
-FSFactory is implemented by types that can create a file.FS for a given
-URI scheme or for a cloudpath.Match. New is used for the common case
-where an FS can be created for an entire filesystem instance, whereas
-NewMatch is intended for the case where more granular approach is required.
-The implementations of FSFactory will typically store the authentication
-credentials required to create the FS when New or NewMatch is called.
-For AWS S3 for example, the information required to create an aws.Config
-will be stored in used when New or NewMatch are called. New will create an
-FS for S3 in general, whereas NewMatch can take more specific action such as
-creating an FS for a specific bucket or region with different credentials.
 
 
 ### Type Info
@@ -280,6 +263,22 @@ func (il *InfoList) UnmarshalBinary(data []byte) (err error)
 UnmarshalBinary implements encoding.BinaryUnmarshaler.
 
 
+
+
+### Type ObjectFS
+```go
+type ObjectFS interface {
+	Get(ctx context.Context, path string) ([]byte, error)
+	Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error
+	EnsurePrefix(ctx context.Context, path string, perm fs.FileMode) error
+	Delete(ctx context.Context, path string) error
+	// DeleteAll delets all objects with the specified prefix.
+	DeleteAll(ctx context.Context, prefix string) error
+}
+```
+ObjectFS represents a writeable object store. It is intended to backed
+by cloud or local filesystems. The permissions may be ignored by some
+implementations.
 
 
 ### Type XAttr

@@ -12,6 +12,13 @@ sort of hierarchical naming scheme, whether it be directory based (as per
 Unix/POSIX filesystems) or by convention (as per S3).
 
 ## Variables
+### SkipAll, SkipDir
+```go
+SkipAll = fs.SkipDir
+SkipDir = fs.SkipDir
+
+```
+
 ### DefaultScanSize, DefaultConcurrentScans
 ```go
 // DefaultScansize is the default ScanSize used when the WithScanSize
@@ -26,6 +33,16 @@ DefaultConcurrentScans = 100
 
 
 
+## Functions
+### Func ContentsOnly
+```go
+func ContentsOnly(ctx context.Context, fs FS, start string, h ContentsHandler, opts ...Option) error
+```
+ContentsOnly provides a simplified API for walking the contents (files) of a
+directory hierarchy. Inovations of the ContentsHandler may be concurrent.
+
+
+
 ## Types
 ### Type Configuration
 ```go
@@ -34,6 +51,16 @@ type Configuration struct {
 	ScanSize        int
 }
 ```
+
+
+### Type ContentsHandler
+```go
+type ContentsHandler func(ctx context.Context, prefix string, contents []Entry, err error) error
+```
+ContentsHandler can return an error of fs.SkipAll or fs.SkipDir to skip all
+subsequent content or the current directory only respectively. All other
+errors are treated as fatal. Note that SkipDir, depending on the order that
+entires are encountered may result in subdirectories being skipped also.
 
 
 ### Type Entry
@@ -202,6 +229,14 @@ func WithConcurrentScans(n int) Option
 ```
 WithConcurrentScans can be used to change the number of prefixes/directories
 that can be scanned concurrently. The default is DefaultConcurrentScans.
+
+
+```go
+func WithDepth(d int) Option
+```
+WithDepth sets the maximum depth of the traversal. A depth of 0 will only
+traverse the specified roots. A depth of 1, one level below the roots etc.
+The default is -1 which denotes no limit on the depth.
 
 
 ```go

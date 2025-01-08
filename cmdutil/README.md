@@ -65,44 +65,10 @@ func ListRegular(dir string) ([]string, error)
 ListRegular returns the lexicographically ordered regular files that lie
 beneath dir.
 
-### Func ParseYAMLConfig
-```go
-func ParseYAMLConfig(spec []byte, cfg interface{}) error
-```
-ParseYAMLConfig will parse the yaml config in spec into the requested type.
-It provides improved error reporting via YAMLErrorWithSource.
-
-### Func ParseYAMLConfigFile
-```go
-func ParseYAMLConfigFile(ctx context.Context, filename string, cfg interface{}) error
-```
-ParseYAMLConfigFile reads a yaml config file as per ParseYAMLConfig using
-file.FSReadFile to read the file. The use of FSReadFile allows for the
-configuration file to be read from storage system, including from embed.FS,
-instead of the local filesystem if an instance of fs.ReadFileFS is stored in
-the context.
-
-### Func ParseYAMLConfigString
-```go
-func ParseYAMLConfigString(spec string, cfg interface{}) error
-```
-ParseYAMLConfigString is like ParseYAMLConfig but for a string.
-
 ### Func VCSInfo
 ```go
 func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool)
 ```
-
-### Func YAMLErrorWithSource
-```go
-func YAMLErrorWithSource(spec []byte, err error) error
-```
-YAMLErrorWithSource returns an error that includes the yaml source code that
-was the cause of the error to help with debugging YAML errors. Note that the
-errors reported for the yaml parser may be inaccurate in terms of the lines
-the error is reported on. This seems to be particularly true for lists where
-errors with use of tabs to indent are often reported against the previous
-line rather than the offending one.
 
 
 

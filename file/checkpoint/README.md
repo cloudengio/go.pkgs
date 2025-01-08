@@ -14,6 +14,15 @@ recorded as a 'checkpoint'.
 ### Type Operation
 ```go
 type Operation interface {
+	Init(ctx context.Context, root string) error
+
+	// Clear all existing checkpoints.
+	Clear(context.Context) error
+
+	// Compact removes all but the most recent checkpoint and
+	// renames as the first checkpoint in the sequence.
+	Compact(ctx context.Context, label string) error
+
 	// Checkpoint records the successful completion of a step in the
 	// operation.
 	Checkpoint(ctx context.Context, label string, data []byte) (id string, err error)
@@ -35,7 +44,7 @@ Operation is the interface for checkpointing an operation.
 ### Functions
 
 ```go
-func NewDirectoryOperation(dir string) (Operation, error)
+func NewDirectoryOperation() Operation
 ```
 NewDirectoryOperation returns an implementation of Operation that
 uses a directory on the local file system to record checkpoints. This

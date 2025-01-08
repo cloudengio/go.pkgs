@@ -103,6 +103,16 @@ the number of expected arguments.
  3. If there is a single item in the list and it is enclosed in [] (in a
     quoted string), then 0 or 1 arguments are expected.
 
+Note that the arguments may be structured into a short form name and a
+description, eg. arg - description, where ' - ' is used to separate the
+short form and description. The usage displayed will use the short form
+name to display a summary of the command line and the description will be
+detailed below, eg:
+
+    my-command <arg1> <arg2>
+      <arg1> - description of arg1
+      <arg2> - description of arg2
+
 To define a simple command line, with no sub-commands, specify only the
 name:, summary: and arguments: fields.
 
