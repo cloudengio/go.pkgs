@@ -343,3 +343,14 @@ func (ml *MonthList) Parse(val string) error {
 	*ml = drs
 	return nil
 }
+
+func (ml MonthList) String() string {
+	var out strings.Builder
+	for i, m := range ml {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(m.String())
+	}
+	return out.String()
+}

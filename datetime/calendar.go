@@ -237,7 +237,11 @@ func (cd CalendarDate) YearDay() YearDay {
 }
 
 func (cd CalendarDate) String() string {
-	return fmt.Sprintf("%02d %02d %04d", cd.Month(), cd.Day(), cd.Year())
+	day := cd.Day()
+	if day == 0 {
+		return fmt.Sprintf("%02d/%04d", cd.Month(), cd.Year())
+	}
+	return fmt.Sprintf("%02d/%02d/%04d", cd.Month(), day, cd.Year())
 }
 
 // IsDST returns true if the date is within daylight savings time for the specified

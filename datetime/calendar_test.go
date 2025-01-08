@@ -36,6 +36,14 @@ func TestParseCalendarDates(t *testing.T) {
 		if cd != tc.cd {
 			t.Errorf("%v: got %v, want %v", tc.input, cd, tc.cd)
 		}
+		str := cd.String()
+		if err := cd.Parse(str); err != nil {
+			t.Errorf("%v: %v", tc.input, err)
+			continue
+		}
+		if cd != tc.cd {
+			t.Errorf("%v: got %v, want %v", tc.input, cd, tc.cd)
+		}
 	}
 
 	for _, tc := range []string{

@@ -47,10 +47,10 @@ func newKeys(auth []KeyInfo) (Keys, error) {
 			return nil, fmt.Errorf("key_id is required")
 		}
 		if a.User == "" {
-			return nil, fmt.Errorf("user is required")
+			return nil, fmt.Errorf("user is required for key_id: %v", a.ID)
 		}
 		if a.Token == "" {
-			return nil, fmt.Errorf("token is required")
+			return nil, fmt.Errorf("token is required for key_id: %v", a.ID)
 		}
 		am[a.ID] = a
 	}
