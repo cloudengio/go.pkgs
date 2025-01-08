@@ -48,7 +48,7 @@ If not specified the default of runtime.GOMAXPROCS(0) is used.
 
 
 ```go
-func WithProgress(interval time.Duration, ch chan<- Progress, close bool) Option
+func WithProgress(interval time.Duration, ch chan<- Progress, closeProgress bool) Option
 ```
 WithProgress requests that progress messages are sent over the supplid
 channel. If close is true the progress channel will be closed when the
@@ -82,6 +82,7 @@ Progress is used to communicate the progress of a download run.
 ### Type Request
 ```go
 type Request interface {
+	Requester() string
 	Container() file.FS
 	FileMode() fs.FileMode // FileMode to use for the downloaded contents.
 	Names() []string
@@ -112,9 +113,10 @@ Result represents the result of the download for a single object.
 ### Type SimpleRequest
 ```go
 type SimpleRequest struct {
-	FS        file.FS
-	Filenames []string
-	Mode      fs.FileMode
+	RequestedBy string
+	FS          file.FS
+	Filenames   []string
+	Mode        fs.FileMode
 }
 ```
 SimpleRequest is a simple implementation of Request.
@@ -133,6 +135,11 @@ func (cr SimpleRequest) FileMode() fs.FileMode
 
 ```go
 func (cr SimpleRequest) Names() []string
+```
+
+
+```go
+func (cr SimpleRequest) Requester() string
 ```
 
 

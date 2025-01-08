@@ -47,6 +47,17 @@ or ; characters are found.
 
 
 ## Types
+### Type FS
+```go
+type FS interface {
+	file.FS
+	file.ObjectFS
+}
+```
+FS represents the interface to a filesystem/object store that is used to
+back Store.
+
+
 ### Type Object
 ```go
 type Object[Value, Response any] struct {
@@ -55,7 +66,7 @@ type Object[Value, Response any] struct {
 	Response Response
 }
 ```
-Object represents the result of object/file download/crawl operation.
+Object represents the result of an object/file download/crawl operation.
 As such it contains both the value that was downloaded and the result of the
 operation. The Value field represents the typed value of the result of the
 download or API operation. The Response field is the actual response for the
@@ -105,11 +116,19 @@ Encode encodes the object using the requested encodings.
 
 
 ```go
-func (o *Object[V, R]) WriteObjectFile(path string, valueEncoding, responseEncoding ObjectEncoding) error
+func (o *Object[V, R]) Load(ctx context.Context, s ObjectStore, prefix, name string) (Type, error)
 ```
-WriteObject will encode the object using the requested encoding to the
-specified file. It will create the directory that the file is to be written
-to if it does not exist.
+Load reads the serialized data from the supplied store at the specified
+prefix and name and deserializes it into the object. The caller is
+responsible for ensuring that the type of the stored object and the type of
+the object are identical.
+
+
+```go
+func (o *Object[V, R]) Store(ctx context.Context, s ObjectStore, prefix, name string, valueEncoding, responseEncoding ObjectEncoding) error
+```
+Store serializes the object and writes the resulting data the supplied store
+at the specified prefix and name.
 
 
 
@@ -120,6 +139,17 @@ type ObjectEncoding int
 ```
 ObjectEncoding represents the encoding to be used for the object's Value and
 Response fields.
+
+
+### Type ObjectStore
+```go
+type ObjectStore interface {
+	Read(ctx context.Context, prefix, name string) (Type, []byte, error)
+	Write(ctx context.Context, prefix, name string, data []byte) error
+}
+```
+ObjectStore represents the interface used by Objects to store and retrieve
+their data.
 
 
 ### Type Registry
@@ -190,14 +220,6 @@ func Clean(ctype Type) Type
 ```
 Clean removes any spaces around the ; separator if present. That is,
 "text/plain ; charset=utf-8" becomes "text/plain;charset=utf-8".
-
-
-```go
-func ReadObjectFile(path string) (Type, []byte, error)
-```
-ReadObjectFile will read the specified file and return the object type,
-encoding and the the contents of that file. The returned byte slice can be
-used to decode the object using its Decode method.
 
 
 ```go
