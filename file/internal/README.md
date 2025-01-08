@@ -1,7 +1,7 @@
-# Package [cloudeng.io/file/filewalk/internal](https://pkg.go.dev/cloudeng.io/file/filewalk/internal?tab=doc)
+# Package [cloudeng.io/file/internal](https://pkg.go.dev/cloudeng.io/file/internal?tab=doc)
 
 ```go
-import cloudeng.io/file/filewalk/internal
+import cloudeng.io/file/internal
 ```
 
 

@@ -12,16 +12,16 @@ of a crawl via yaml.
 ### Type Config
 ```go
 type Config struct {
-	Name          string           `yaml:"name"`
-	Depth         int              `yaml:"depth"`
-	Seeds         []string         `yaml:"seeds"`
-	NoFollowRules []string         `yaml:"nofollow"`
-	FollowRules   []string         `yaml:"follow"`
-	RewriteRules  []string         `yaml:"rewrite"`
-	Download      DownloadConfig   `yaml:"download"`
-	NumExtractors int              `yaml:"num_extractors"`
-	Extractors    []content.Type   `yaml:"extractors"`
-	Cache         CrawlCacheConfig `yaml:"cache"`
+	Name          string           `yaml:"name" cmd:"the name of the crawl"`
+	Depth         int              `yaml:"depth" cmd:"the maximum depth to crawl"`
+	Seeds         []string         `yaml:"seeds" cmd:"the initial set of URIs to crawl"`
+	NoFollowRules []string         `yaml:"nofollow" cmd:"a set of regular expressions that will be used to determine which links to not follow. The regular expressions are applied to the full URL."`
+	FollowRules   []string         `yaml:"follow" cmd:"a set of regular expressions that will be used to determine which links to follow. The regular expressions are applied to the full URL."`
+	RewriteRules  []string         `yaml:"rewrite" cmd:"a set of regular expressions that will be used to rewrite links. The regular expressions are applied to the full URL."`
+	Download      DownloadConfig   `yaml:"download" cmd:"the configuration for downloading documents"`
+	NumExtractors int              `yaml:"num_extractors" cmd:"the number of concurrent link extractors to use"`
+	Extractors    []content.Type   `yaml:"extractors" cmd:"the content types to extract links from"`
+	Cache         CrawlCacheConfig `yaml:"cache" cmd:"the configuration for the cache of downloaded documents"`
 }
 ```
 Config represents the configuration for a single crawl.
@@ -29,7 +29,11 @@ Config represents the configuration for a single crawl.
 ### Methods
 
 ```go
-func (c Config) CreateSeedCrawlRequests(ctx context.Context, factories map[string]file.FSFactory, seeds map[string][]cloudpath.Match) ([]download.Request, error)
+func (c Config) CreateSeedCrawlRequests(
+	ctx context.Context,
+	factories map[string]FSFactory,
+	seeds map[string][]cloudpath.Match,
+) ([]download.Request, error)
 ```
 CreateSeedCrawlRequests creates a set of crawl requests for the supplied
 seeds. It use the factories to create a file.FS for the URI scheme of each
@@ -39,7 +43,7 @@ seed.
 ```go
 func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*content.Registry[outlinks.Extractor], error)
 ```
-ExtractorRegistry returns a content.Registry containing for
+ExtractorRegistry returns a content.Registry containing the
 outlinks.Extractor that can be used with outlinks.Extract.
 
 
@@ -62,25 +66,52 @@ that are not recognised by the supplied cloudpath.MatcherSpec.
 ### Type CrawlCacheConfig
 ```go
 type CrawlCacheConfig struct {
-	Prefix            string `yaml:"cache_prefix"`
-	ClearBeforeCrawl  bool   `yaml:"cache_clear_before_crawl"`
-	Checkpoint        string `yaml:"cache_checkpoint"`
-	ShardingPrefixLen int    `yaml:"cache_sharding_prefix_len"`
+	Downloads         string    `yaml:"downloads" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
+	ClearBeforeCrawl  bool      `yaml:"clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
+	Checkpoint        string    `yaml:"checkpoint" cmd:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
+	ShardingPrefixLen int       `yaml:"sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
+	Concurrency       int       `yaml:"concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
+	ServiceConfig     yaml.Node `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
 }
 ```
 Each crawl may specify its own cache directory and configuration. This
-will be used to store the results of the crawl. The cache is intended to be
-relative to the
+will be used to store the results of the crawl. The ServiceSpecific field
+is intended to be parametized to some service specific configuration for
+cache services that require it, such as AWS S3. This is deliberately left to
+client packages to avoid depenedency bloat in core packages such as this.
+The type of the ServiceConfig file is generally determined using the
+scheme of the Downloads path (e.g s3://... would imply an AWS specific
+configuration).
 
 ### Methods
 
 ```go
-func (c CrawlCacheConfig) Initialize(root string) (cachePath, checkpointPath string, err error)
+func (c CrawlCacheConfig) CheckpointPath() string
 ```
-Initialize creates the cache and checkpoint directories relative to
-the specified root, and optionally clears them before the crawl (if
-Cache.ClearBeforeCrawl is true). Any environment variables in the root or
-Cache.Prefix will be expanded.
+CheckpointPath returns the expanded checkpoint path.
+
+
+```go
+func (c CrawlCacheConfig) DownloadPath() string
+```
+DownloadPath returns the expanded downloads path.
+
+
+```go
+func (c CrawlCacheConfig) PrepareCheckpoint(ctx context.Context, op checkpoint.Operation) error
+```
+PrepareCheckpoint initializes the checkpoint operation (ie. calls
+op.Init(ctx, checkpointPath)) and optionally clears the checkpoint if
+ClearBeforeCrawl is true. It returns an error if the checkpoint cannot be
+initialized or cleared.
+
+
+```go
+func (c CrawlCacheConfig) PrepareDownloads(ctx context.Context, fs content.FS) error
+```
+PrepareDownloads ensures that the cache directory exists and is empty if
+ClearBeforeCrawl is true. It returns an error if the directory cannot be
+created or cleared.
 
 
 
@@ -88,18 +119,27 @@ Cache.Prefix will be expanded.
 ### Type Crawler
 ```go
 type Crawler struct {
-	Config
-	Extractors func() map[content.Type]outlinks.Extractor
 	// contains filtered or unexported fields
 }
 ```
 Crawler represents a crawler instance and contains global configuration
 information.
 
+### Functions
+
+```go
+func NewCrawler(cfg Config, resources Resources) *Crawler
+```
+NewCrawler creates a new crawler instance using the supplied configuration
+and resources.
+
+
+
 ### Methods
 
 ```go
-func (c *Crawler) Run(ctx context.Context, fsMap map[string]file.FSFactory, cacheRoot string, displayOutlinks, displayProgress bool) error
+func (c *Crawler) Run(ctx context.Context,
+	displayOutlinks, displayProgress bool) error
 ```
 Run runs the crawler.
 
@@ -118,12 +158,12 @@ type DownloadConfig struct {
 ### Type DownloadFactoryConfig
 ```go
 type DownloadFactoryConfig struct {
-	DefaultConcurrency       int   `yaml:"default_concurrency"`
-	DefaultRequestChanSize   int   `yaml:"default_request_chan_size"`
-	DefaultCrawledChanSize   int   `yaml:"default_crawled_chan_size"`
-	PerDepthConcurrency      []int `yaml:"per_depth_concurrency"`
-	PerDepthRequestChanSizes []int `yaml:"per_depth_request_chan_sizes"`
-	PerDepthCrawledChanSizes []int `yaml:"per_depth_crawled_chan_sizes"`
+	DefaultConcurrency       int   `yaml:"default_concurrency" cmd:"the number of concurrent downloads (defaults to GOMAXPROCS(0)), used when a per crawl depth value is not specified via per_depth_concurrency."`
+	DefaultRequestChanSize   int   `yaml:"default_request_chan_size" cmd:"the size of the channel used to queue download requests, used when a per crawl depth value is not specified via per_depth_request_chan_sizes. Increased values allow for more concurrency between discovering new items to crawl and crawling them."`
+	DefaultCrawledChanSize   int   `yaml:"default_crawled_chan_size" cmd:"the size of the channel used to queue downloaded items, used when a per crawl depth value is not specified via per_depth_crawled_chan_sizes. Increased values allow for more concurrency between downloading documents and processing them."`
+	PerDepthConcurrency      []int `yaml:"per_depth_concurrency" cmd:"per crawl depth values for the number of concurrent downloads"`
+	PerDepthRequestChanSizes []int `yaml:"per_depth_request_chan_sizes" cmd:"per crawl depth values for the size of the channel used to queue download requests"`
+	PerDepthCrawledChanSizes []int `yaml:"per_depth_crawled_chan_sizes" cmd:"per crawl depth values for the size of the channel used to queue downloaded items"`
 }
 ```
 DownloadFactoryConfig is the configuration for a crawl.DownloaderFactory.
@@ -150,21 +190,28 @@ parametised via its DownloadFactoryConfig receiver.
 ### Type ExponentialBackoff
 ```go
 type ExponentialBackoff struct {
-	InitialDelay time.Duration `yaml:"initial_delay"`
-	Steps        int           `yaml:"steps"`
-	StatusCodes  []int         `yaml:"status_codes,flow"`
+	InitialDelay time.Duration `yaml:"initial_delay" cmd:"the initial delay between retries for exponential backoff"`
+	Steps        int           `yaml:"steps" cmd:"the number of steps of exponential backoff before giving up"`
+	StatusCodes  []int         `yaml:"status_codes,flow" cmd:"the status codes that trigger a retry"`
 }
 ```
 ExponentialBackoffConfig is the configuration for an exponential backoff
 retry strategy for downloads.
 
 
+### Type FSFactory
+```go
+type FSFactory func(context.Context) (file.FS, error)
+```
+FSFactory is a function that returns a file.FS used to crawl a given FS.
+
+
 ### Type Rate
 ```go
 type Rate struct {
-	Tick            time.Duration `yaml:"tick"`
-	RequestsPerTick int           `yaml:"requests_per_tick"`
-	BytesPerTick    int           `yaml:"bytes_per_tick"`
+	Tick            time.Duration `yaml:"tick" cmd:"the duration of a tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick" cmd:"the number of requests per tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick" cmd:"the number of bytes per tick"`
 }
 ```
 Rate specifies a rate in one of several forms, only one should be used.
@@ -173,8 +220,8 @@ Rate specifies a rate in one of several forms, only one should be used.
 ### Type RateControl
 ```go
 type RateControl struct {
-	Rate               Rate               `yaml:"rate_control"`
-	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff"`
+	Rate               Rate               `yaml:"rate_control" cmd:"the rate control parameters"`
+	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff" cmd:"the exponential backoff parameters"`
 }
 ```
 RateControl is the configuration for rate based control of download
@@ -190,6 +237,28 @@ contained in RateControl.
 
 
 
+
+### Type Resources
+```go
+type Resources struct {
+	// Extractors are used to extract outlinks from crawled documents
+	// based on their content type.
+	Extractors map[content.Type]outlinks.Extractor
+	// CrawlStoreFactories are used to create file.FS instances for
+	// the files being crawled based on their scheme.
+	CrawlStoreFactories map[string]FSFactory
+	// ContentStoreFactory is a function that returns a content.FS used to store
+	// the downloaded content.
+	NewContentFS func(context.Context, CrawlCacheConfig) (content.FS, error)
+}
+```
+Resources contains the resources required by the crawler.
+
+
+
+
+## Examples
+### [ExampleCrawlCacheConfig](https://pkg.go.dev/cloudeng.io/file/crawl/crawlcmd?tab=doc#example-CrawlCacheConfig)
 
 
 
