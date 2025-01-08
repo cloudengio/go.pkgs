@@ -7,6 +7,7 @@ package schedule
 
 import (
 	"slices"
+	"strings"
 
 	"cloudeng.io/datetime"
 )
@@ -52,4 +53,30 @@ func (d Dates) EvaluateDateRanges(year int, bounds datetime.DateRange) datetime.
 		}
 	}
 	return drl.Bound(year, bounds)
+}
+
+func (d Dates) String() string {
+	var out strings.Builder
+	if len(d.Months) > 0 {
+		out.WriteString("months: ")
+		out.WriteString(d.Months.String())
+		out.WriteRune('\n')
+	}
+	if d.MirrorMonths {
+		out.WriteString("mirror\n")
+	}
+	if len(d.Ranges) > 0 {
+		out.WriteString("ranges: ")
+		out.WriteString(d.Ranges.String())
+		out.WriteRune('\n')
+	}
+	if len(d.Dynamic) > 0 {
+		out.WriteString("dynamic: ")
+		out.WriteString(d.Dynamic.String())
+		out.WriteRune('\n')
+	}
+	if c := d.Constraints.String(); len(c) > 0 {
+		out.WriteRune('\n')
+	}
+	return out.String()
 }

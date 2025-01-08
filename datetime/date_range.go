@@ -300,3 +300,14 @@ func (drl DateRangeList) Bound(year int, bound DateRange) DateRangeList {
 	}
 	return slices.Clip(ndr)
 }
+
+func (drl DateRangeList) String() string {
+	var out strings.Builder
+	for i, dr := range drl {
+		if i > 0 && i < len(drl)-1 {
+			out.WriteString(", ")
+		}
+		out.WriteString(dr.String())
+	}
+	return out.String()
+}
