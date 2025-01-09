@@ -157,7 +157,6 @@ func AsISO8601Period(dur time.Duration) string {
 	}
 	if seconds := dur / time.Second; seconds > 0 {
 		fmt.Fprintf(&out, "%dS", seconds)
-		dur -= seconds * time.Second
 	}
 	return out.String()
 }
