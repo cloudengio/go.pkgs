@@ -35,12 +35,34 @@ func TestISO8601Duration(t *testing.T) {
 		{"P2MT1M", month*2 + (time.Minute)},
 		{"P1Y1M1W1DT1H1M1S", year + month + week + day + time.Hour + time.Minute + time.Second},
 	} {
-		d, err := datetime.ParseISO8601Duration(tc.input)
+		d, err := datetime.ParseISO8601Period(tc.input)
 		if err != nil {
 			t.Errorf("%v: %v", i, err)
 			continue
 		}
 		if got, want := d, tc.output; got != want {
+			t.Errorf("%v: got %v, want %v", tc.input, got, want)
+		}
+	}
+
+	for _, tc := range []struct {
+		input  time.Duration
+		output string
+	}{
+		{year, "P1Y"},
+		{month, "P1M"},
+		{week, "P1W"},
+		{day, "P1D"},
+		{time.Hour, "PT1H"},
+		{time.Minute, "PT1M"},
+		{time.Minute + 30*time.Second, "PT1M30S"},
+		{time.Second * 10, "PT10S"},
+		{year + month + week + day + time.Hour + time.Minute + time.Second, "P1Y1M1W1DT1H1M1S"},
+	} {
+		if got, want := datetime.AsISO8601Period(tc.input), tc.output; got != want {
+			t.Errorf("%v: got %v, want %v", tc.input, got, want)
+		}
+		if got, want := datetime.AsISO8601Period(-tc.input), "-"+tc.output; got != want {
 			t.Errorf("%v: got %v, want %v", tc.input, got, want)
 		}
 	}
