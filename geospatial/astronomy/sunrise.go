@@ -17,7 +17,7 @@ import (
 func SunRiseAndSet(date datetime.CalendarDate, place datetime.Place) (time.Time, time.Time) {
 	rise, set := sunrise.SunriseSunset(
 		place.Latitude, place.Longitude, date.Year(), time.Month(date.Month()), date.Day())
-	return rise.In(place.TZ), set.In(place.TZ)
+	return rise.In(place.Location), set.In(place.Location)
 }
 
 // SunRise implements datetime.DynamicTimeOfDay for sunrise.

@@ -37,7 +37,7 @@ func newRepeatManager[T any](actions ActionSpecs[T], cd datetime.CalendarDate, p
 		if a.Repeat.Interval != 0 && a.Repeat.Repeats != 0 {
 			he.bounded = true
 		}
-		rm.h.Push(cd.Time(a.Due, place.TZ).Unix(), he)
+		rm.h.Push(cd.Time(a.Due, place.TimeLocation).Unix(), he)
 	}
 	return rm
 }

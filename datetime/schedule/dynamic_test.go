@@ -66,7 +66,7 @@ func TestDynamic(t *testing.T) {
 		{Due: datetime.NewTimeOfDay(12, 0, 2), Name: "c", T: 3},
 		{Dynamic: schedule.DynamicTimeOfDaySpec{Due: breakfast, Offset: time.Minute * 30}, Name: "d", T: 4},
 	}
-	b := a.Evaluate(datetime.NewCalendarDate(2024, 1, 1), datetime.Place{TZ: time.Local})
+	b := a.Evaluate(datetime.NewCalendarDate(2024, 1, 1), datetime.Place{TimeLocation: time.Local})
 	b.Sort()
 
 	if got, want := b, []schedule.ActionSpec[int]{

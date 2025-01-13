@@ -59,7 +59,7 @@ func TestScheduler(t *testing.T) {
 	actions := []schedule.ActionSpec[testAction]{action1, action2}
 	dates := schedule.Dates{Months: datetime.MonthList{1, 2}}
 	scheduler := schedule.NewAnnualScheduler(actions)
-	yp := datetime.NewYearTZ(2024, time.UTC)
+	yp := datetime.NewYearLocation(2024, time.UTC)
 	active := []schedule.Scheduled[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
 		active = append(active, scheduled)
@@ -103,7 +103,7 @@ func TestScheduler(t *testing.T) {
 	}
 
 	// Check non-leap year.
-	yp = datetime.NewYearTZ(2023, time.UTC)
+	yp = datetime.NewYearLocation(2023, time.UTC)
 	active = []schedule.Scheduled[testAction]{}
 	for scheduled := range scheduler.Scheduled(yp, dates, datetime.DateRangeYear()) {
 		active = append(active, scheduled)
@@ -127,7 +127,7 @@ func TestEmptySchedule(t *testing.T) {
 	actions := []schedule.ActionSpec[testAction]{action1}
 	dates := schedule.Dates{Months: datetime.MonthList{1, 2}}
 	scheduler := schedule.NewAnnualScheduler(actions)
-	yp := datetime.NewYearTZ(2024, time.UTC)
+	yp := datetime.NewYearLocation(2024, time.UTC)
 	active := []schedule.Scheduled[testAction]{}
 	dec := datetime.NewDateRange(datetime.NewDate(12, 1), datetime.NewDate(12, 31))
 	for scheduled := range scheduler.Scheduled(yp, dates, dec) {
@@ -158,7 +158,7 @@ func TestSchedulerDifferentYear(t *testing.T) {
 		{actions, schedRangeDates},
 	} {
 		scheduler := schedule.NewAnnualScheduler(tc.actions)
-		yp := datetime.NewYearTZ(2023, time.UTC)
+		yp := datetime.NewYearLocation(2023, time.UTC)
 		active := []schedule.Scheduled[testAction]{}
 		for scheduled := range scheduler.Scheduled(yp, tc.dates, datetime.DateRangeYear()) {
 			active = append(active, scheduled)
