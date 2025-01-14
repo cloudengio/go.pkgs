@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    uses: cloudengio/.github/.github/workflows/go-test.yml@main
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
       go-versions: |
         [
