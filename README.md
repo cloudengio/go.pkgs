@@ -1,6 +1,7 @@
-![linux](https://github.com/cloudengio/go.pkgs/actions/workflows/linux.yml/badge.svg)
-![macos](https://github.com/cloudengio/go.pkgs/actions/workflows/macos.yml/badge.svg)
-![windows](https://github.com/cloudengio/go.pkgs/actions/workflows/windows.yml/badge.svg)
+[![linux](https://github.com/cloudengio/go.pkgs/actions/workflows/linux.yml/badge.svg)](https://github.com/cloudengio/go.pkgs/actions/workflows/linux.yml)
+[![macos](https://github.com/cloudengio/go.pkgs/actions/workflows/macos.yml/badge.svg)](https://github.com/cloudengio/go.pkgs/actions/workflows/macos.yml)
+[![windows](https://github.com/cloudengio/go.pkgs/actions/workflows/windows.yml/badge.svg)](https://github.com/cloudengio/go.pkgs/actions/workflows/windows.yml)
+
 [![CodeQL](https://github.com/cloudengio/go.pkgs/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cloudengio/go.pkgs/actions/workflows/github-code-scanning/codeql)
 
 # go.pkgs contains a set of broadly useful go packages.
