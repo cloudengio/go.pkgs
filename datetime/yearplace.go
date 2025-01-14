@@ -107,9 +107,9 @@ func DaysInYear(year int) int {
 	return 365
 }
 
-// Place a location in terms of timezone and a latitude and longitude.
+// Place a location in terms of time.Location and a latitude and longitude.
 type Place struct {
-	TZ                  *time.Location
+	TimeLocation        *time.Location
 	Latitude, Longitude float64
 }
 
@@ -119,8 +119,8 @@ type YearPlace struct {
 	Place
 }
 
-func NewYearTZ(year int, tz *time.Location) YearPlace {
-	return YearPlace{Year: year, Place: Place{TZ: tz}}
+func NewYearLocation(year int, loc *time.Location) YearPlace {
+	return YearPlace{Year: year, Place: Place{TimeLocation: loc}}
 }
 
 func NewYearPlace(year int, place Place) YearPlace {

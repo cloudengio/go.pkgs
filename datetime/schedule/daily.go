@@ -107,7 +107,7 @@ func (s Scheduled[T]) Active(place datetime.Place) iter.Seq[Active[T]] {
 	rm := newRepeatManager(s.Specs, s.Date, place)
 	return func(yield func(Active[T]) bool) {
 		for rm.hasActions() {
-			when, he := rm.manage(place.TZ)
+			when, he := rm.manage(place.TimeLocation)
 			active := Active[T]{
 				Name: he.name,
 				When: when,

@@ -15,17 +15,17 @@ import (
 func TestSunrise(t *testing.T) {
 	loc, _ := time.LoadLocation("America/Los_Angeles")
 	place := datetime.Place{
-		TZ:        loc,
-		Latitude:  37.3229978,
-		Longitude: -122.0321823}
+		TimeLocation: loc,
+		Latitude:     37.3229978,
+		Longitude:    -122.0321823}
 	cd := datetime.NewCalendarDate(2024, 1, 1)
 	rise, set := astronomy.SunRiseAndSet(cd, place)
 
 	// UTC time of sunrise and sunset.
-	if got, want := rise, cd.Time(datetime.NewTimeOfDay(7, 22, 13), place.TZ); got != want {
+	if got, want := rise, cd.Time(datetime.NewTimeOfDay(7, 22, 13), place.TimeLocation); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := set, cd.Time(datetime.NewTimeOfDay(17, 00, 33), place.TZ); got != want {
+	if got, want := set, cd.Time(datetime.NewTimeOfDay(17, 00, 33), place.TimeLocation); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
