@@ -1,40 +1,20 @@
-name: macos
+name: go-macos
 
-on:
+on:   
   push:
-    branches: [main, master]
+    branches: [ main ]
   pull_request:
-    branches: [main, master]
+    branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
   test:
-    strategy:
-      matrix:
-        go-version: [1.23.x]
-        os: [macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Cache modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Install tools
-        run: |
-          go install cloudeng.io/citools/multimod@latest
-
-      - name: Test
-        run: multimod --config=.multimod.yaml test
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+    with:
+      go-versions: |
+        [
+          "1.23.x"
+        ]
+      os-version: macos-latest
