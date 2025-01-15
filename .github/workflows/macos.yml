@@ -12,9 +12,3 @@ permissions:
 jobs:
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
-    with:
-      go-versions: |
-        [
-          "1.23.x"
-        ]
-      os-version: macos-latest
