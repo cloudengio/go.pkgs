@@ -12,8 +12,7 @@ import (
 )
 
 // SunRiseAndSet returns the time of sunrise and sunset for the specified
-// date, latitude and longitude. The returned times are in UTC and must
-// adjusted for the local timezone that lat/long correspond to.
+// date, latitude and longitude.
 func SunRiseAndSet(date datetime.CalendarDate, place datetime.Place) (time.Time, time.Time) {
 	rise, set := sunrise.SunriseSunset(
 		place.Latitude, place.Longitude, date.Year(), time.Month(date.Month()), date.Day())

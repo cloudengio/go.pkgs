@@ -28,4 +28,10 @@ func TestSunrise(t *testing.T) {
 	if got, want := set, cd.Time(datetime.NewTimeOfDay(17, 00, 33), place.TimeLocation); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
+	sn := astronomy.ApparentSolarNoon(cd, place)
+
+	if got, want := sn, cd.Time(datetime.NewTimeOfDay(12, 11, 23), place.TimeLocation); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
