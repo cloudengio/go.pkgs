@@ -79,3 +79,45 @@ func ExampleNewJSONLogger() {
 
 	// Output will be JSON formatted logs
 }
+
+func TestLogLevels(t *testing.T) {
+	ctx := context.Background()
+	buf := &bytes.Buffer{}
+	ctx = ctxlog.NewJSONLogger(ctx, buf, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+
+	// Test Info
+	ctxlog.Info(ctx, "info message", "key", "value")
+	if !bytes.Contains(buf.Bytes(), []byte("info message")) {
+		t.Error("expected info message in log output")
+	}
+	buf.Reset()
+
+	// Test Error
+	ctxlog.Error(ctx, "error message", "err", "something failed")
+	if !bytes.Contains(buf.Bytes(), []byte("error message")) {
+		t.Error("expected error message in log output")
+	}
+	buf.Reset()
+
+	// Test Debug
+	ctxlog.Debug(ctx, "debug message", "debug", true)
+	if !bytes.Contains(buf.Bytes(), []byte("debug message")) {
+		t.Error("expected debug message in log output")
+	}
+	buf.Reset()
+
+	// Test Warn
+	ctxlog.Warn(ctx, "warning message", "warning", "careful")
+	if !bytes.Contains(buf.Bytes(), []byte("warning message")) {
+		t.Error("expected warning message in log output")
+	}
+	buf.Reset()
+
+	// Test Log with custom level
+	ctxlog.Log(ctx, slog.LevelInfo+1, "custom level", "level", "custom")
+	if !bytes.Contains(buf.Bytes(), []byte("custom level")) {
+		t.Error("expected custom level message in log output")
+	}
+}
