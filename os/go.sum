@@ -1,4 +1,4 @@
 cloudeng.io/errors v0.0.10 h1:M/UgEEjD1v9MiGAw4QFkSREPdmScPt1YVuKESbRy8zU=
 cloudeng.io/errors v0.0.10/go.mod h1:GO+C05d4kZnEqUC5Po9vajcyG8ibIzYCcOuomXHEznQ=
-cloudeng.io/sys v0.0.0-20241215221655-bd556f44d3de h1:2dR/6jXgP9389VRmITTf5Tq/Y6ZR4eOslv7eCp1QjBA=
-cloudeng.io/sys v0.0.0-20241215221655-bd556f44d3de/go.mod h1:+M7NyebWG0PtPqAn6kdlQMbZqnJ8JR5lrYb/WrMJBJw=
+cloudeng.io/sys v0.0.0-20250119024745-8a46e9bdda10 h1:A+45DKSFriLzKE418FjYqD9Ft1+9Am1gzY67Hzr4cPs=
+cloudeng.io/sys v0.0.0-20250119024745-8a46e9bdda10/go.mod h1:DTZ/0U2Qj6+6HoD2x22VI5E1KdEY/eS5cZLaQ78P9j8=

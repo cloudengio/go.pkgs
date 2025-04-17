@@ -1,5 +1,5 @@
-cloudeng.io/debug v0.0.0-20241215221655-bd556f44d3de h1:72yp7voq+gmaqpfJhxgHUXFGxrv+TceUuMxZCEzFVr4=
-cloudeng.io/debug v0.0.0-20241215221655-bd556f44d3de/go.mod h1:sOPyiLGVoUIKbEPKoFnaME0mK/ky7K7EJUHMs43MFp8=
+cloudeng.io/debug v0.0.0-20250119024745-8a46e9bdda10 h1:M1HRlh9+80cwldTm3kyFS60r0dvpzywEmdJMQHU2HHU=
+cloudeng.io/debug v0.0.0-20250119024745-8a46e9bdda10/go.mod h1:nykMC+qVKv2fD6X5pjlBL/mFsSKjX/IU8+gdG1q2QRI=
 cloudeng.io/errors v0.0.10 h1:M/UgEEjD1v9MiGAw4QFkSREPdmScPt1YVuKESbRy8zU=
 cloudeng.io/errors v0.0.10/go.mod h1:GO+C05d4kZnEqUC5Po9vajcyG8ibIzYCcOuomXHEznQ=
 cloudeng.io/path v0.0.9 h1:4kqfJ2OJwScl4E+iTo41ofV+pc4y8ZevAfUVkGSNALI=
