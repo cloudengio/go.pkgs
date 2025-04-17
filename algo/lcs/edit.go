@@ -147,13 +147,13 @@ func (es *EditScript[T]) FormatVertical(out io.Writer, a []T) {
 		switch op.Op {
 		case Identical:
 			f := fmt.Sprintf(format, a[op.A])
-			_, _ = out.Write([]byte(fmt.Sprintf("  %s\n", f)))
+			fmt.Fprintf(out, "  %s\n", f)
 		case Delete:
 			f := fmt.Sprintf(format, a[op.A])
-			_, _ = out.Write([]byte(fmt.Sprintf("- %s\n", f)))
+			fmt.Fprintf(out, "- %s\n", f)
 		case Insert:
 			f := fmt.Sprintf(format, op.Val)
-			_, _ = out.Write([]byte(fmt.Sprintf("+ %s\n", f)))
+			fmt.Fprintf(out, "+ %s\n", f)
 		}
 	}
 }

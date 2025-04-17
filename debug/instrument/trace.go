@@ -189,7 +189,7 @@ func printArgs(args interface{}) string {
 		out := &strings.Builder{}
 		out.WriteRune(' ')
 		for i, v := range sl {
-			out.WriteString(fmt.Sprintf("%v", v))
+			fmt.Fprintf(out, "%v", v)
 			if i < len(sl)-1 {
 				out.WriteString(", ")
 			}

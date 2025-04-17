@@ -230,10 +230,7 @@ func mergePair(a, b MessageRecords) MessageRecords {
 	var i, j int
 	na, nb := len(a), len(b)
 	out := make([]MessageRecord, 0, na+nb)
-	for {
-		if i >= na || j >= nb {
-			break
-		}
+	for i < na && j < nb {
 		if sorter(a[i], b[j]) {
 			out = append(out, a[i])
 			i++

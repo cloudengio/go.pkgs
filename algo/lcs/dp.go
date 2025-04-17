@@ -192,10 +192,10 @@ func (dp *DP[T]) Fprint(out io.Writer) {
 	for y := 0; y < my; y++ {
 		for x := 0; x < mx; x++ {
 			dir := dp.directions[x][y]
-			row.WriteString(fmt.Sprintf("  %c%c ", firstArrow(dir), secondArrow(dir)))
+			fmt.Fprintf(row, "  %c%c ", firstArrow(dir), secondArrow(dir))
 		}
 		row.WriteString("\n")
-		out.Write([]byte(row.String())) //nolint:errcheck
+		fmt.Fprintf(out, "%s", row.String()) //nolint:errcheck
 		row.Reset()
 	}
 }

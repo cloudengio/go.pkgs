@@ -1,6 +1,6 @@
 module cloudeng.io/os
 
-go 1.21
+go 1.23.3
 
 require (
 	cloudeng.io/errors v0.0.10

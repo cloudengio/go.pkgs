@@ -128,7 +128,7 @@ func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) er
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		return fmt.Errorf("Failed to generate serial number: %v", err)
+		return fmt.Errorf("failed to generate serial number: %v", err)
 	}
 
 	template := x509.Certificate{
@@ -147,33 +147,33 @@ func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) er
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(opts.key), opts.key)
 	if err != nil {
-		return fmt.Errorf("Failed to create certificate: %v", err)
+		return fmt.Errorf("failed to create certificate: %v", err)
 	}
 
 	certOut, err := os.Create(certFile)
 	if err != nil {
-		return fmt.Errorf("Failed to open %v for writing: %v", certFile, err)
+		return fmt.Errorf("failed to open %v for writing: %v", certFile, err)
 	}
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return fmt.Errorf("Failed to write data to %v: %v", certFile, err)
+		return fmt.Errorf("failed to write data to %v: %v", certFile, err)
 	}
 	if err := certOut.Close(); err != nil {
-		return fmt.Errorf("Error closing %v: %v", certFile, err)
+		return fmt.Errorf("error closing %v: %v", certFile, err)
 	}
 
 	keyOut, err := os.OpenFile(keyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		return fmt.Errorf("Failed to open %v for writing: %v", keyFile, err)
+		return fmt.Errorf("failed to open %v for writing: %v", keyFile, err)
 	}
 	privBytes, err := x509.MarshalPKCS8PrivateKey(opts.key)
 	if err != nil {
-		return fmt.Errorf("Unable to marshal private key: %v", err)
+		return fmt.Errorf("unable to marshal private key: %v", err)
 	}
 	if err := pem.Encode(keyOut, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}); err != nil {
-		return fmt.Errorf("Failed to write data to %v: %v", keyFile, err)
+		return fmt.Errorf("failed to write data to %v: %v", keyFile, err)
 	}
 	if err := keyOut.Close(); err != nil {
-		return fmt.Errorf("Error closing %v: %v", keyFile, err)
+		return fmt.Errorf("error closing %v: %v", keyFile, err)
 	}
 	return nil
 }

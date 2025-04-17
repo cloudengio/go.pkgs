@@ -42,7 +42,7 @@ func OpenFile(name string, flag int, perm os.FileMode) (*File, error) {
 		f   = new(File)
 		err error
 	)
-	f.osFile.File, err = openFile(name, flag, perm)
+	f.File, err = openFile(name, flag, perm)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (f *File) Close() error {
 	}
 	f.closed = true
 
-	err := closeFile(f.osFile.File)
+	err := closeFile(f.File)
 	runtime.SetFinalizer(f, nil)
 	return err
 }

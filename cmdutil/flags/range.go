@@ -141,12 +141,12 @@ func parseRangeSpec(sep byte, val string) (RangeSpec, error) {
 		return RangeSpec{}, &ErrInvalidRange{msg: "invalid range: empty range"}
 	}
 	dashes := strings.Count(val, string(sep))
-	switch {
-	case dashes == 0:
+	switch dashes {
+	case 0:
 		return RangeSpec{From: val}, nil
-	case dashes == 1:
+	case 1:
 		return parseSingleDash(sep, val)
-	case dashes == 2:
+	case 2:
 		return parseDoubleDash(sep, val)
 	default:
 		return RangeSpec{}, &ErrInvalidRange{msg: fmt.Sprintf("invalid range, too many %c's: %v", sep, val)}

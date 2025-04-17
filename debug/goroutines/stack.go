@@ -53,7 +53,7 @@ func Parse(buf []byte, ignore ...string) ([]*Goroutine, error) {
 		}
 		g, err := parseGoroutine(scanner)
 		if err != nil {
-			return out, fmt.Errorf("Error parsing trace: %v\n%s", err, string(buf))
+			return out, fmt.Errorf("error parsing trace: %v\n%s", err, string(buf))
 		}
 		if !shouldIgnore(g, ignore) {
 			out = append(out, g)
@@ -80,7 +80,7 @@ func parseGoroutine(scanner *bufio.Scanner) (*Goroutine, error) {
 	g := &Goroutine{}
 	matches := goroutineHeaderRE.FindSubmatch(scanner.Bytes())
 	if len(matches) != 3 {
-		return nil, fmt.Errorf("Could not parse goroutine header from: %s", scanner.Text())
+		return nil, fmt.Errorf("could not parse goroutine header from: %s", scanner.Text())
 	}
 	id, err := strconv.ParseInt(string(matches[1]), 10, 64)
 	if err != nil {
@@ -129,7 +129,7 @@ type Frame struct {
 func parseFrame(scanner *bufio.Scanner) (*Frame, error) {
 	f := &Frame{Call: scanner.Text()}
 	if !scanner.Scan() {
-		return nil, fmt.Errorf("Frame lacked a second line %s", f.Call)
+		return nil, fmt.Errorf("frame lacked a second line %s", f.Call)
 	}
 	var err error
 	f.File, f.Line, f.Offset, err = parseFileLine(scanner.Bytes())

@@ -30,12 +30,12 @@ func isSorted(t *testing.T, mr instrument.MessageRecords) {
 			case prev.Time.After(cur.Time):
 				t.Errorf("line %v: younger recorded preceded by older one: %v: %v not younger than %v", line, i, prev, cur)
 			case prev.Time.Equal(cur.Time):
-				switch {
-				case cur.Status == instrument.MessageWait:
+				switch cur.Status {
+				case instrument.MessageWait:
 					if prev.Status != instrument.MessageWait {
 						t.Errorf("line %v: wait preceded by non wait: %v: %v %v", line, i, prev, cur)
 					}
-				case cur.Status == instrument.MessageSent:
+				case instrument.MessageSent:
 					if prev.Status == instrument.MessageReceived {
 						t.Errorf("line %v: received preceded by sent: %v: %v %v", line, i, prev, cur)
 					}

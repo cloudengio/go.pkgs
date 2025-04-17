@@ -26,7 +26,7 @@ type Errors struct {
 func (e Errors) String() string {
 	var out strings.Builder
 	for _, detail := range e.Errors {
-		fmt.Fprintf(&out, "%v: %v\n", detail.Result.Name, detail.Error.Error())
+		fmt.Fprintf(&out, "%v: %v\n", detail.Name, detail.Error.Error())
 	}
 	return out.String()
 }
