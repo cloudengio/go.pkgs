@@ -133,6 +133,11 @@ evaluation of dynamic date ranges. The result is bounded by supplied bounds
 date range.
 
 
+```go
+func (d Dates) String() string
+```
+
+
 
 
 ### Type DynamicTimeOfDaySpec

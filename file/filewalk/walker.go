@@ -220,7 +220,6 @@ func (w *Walker[T]) Walk(ctx context.Context, roots ...string) error {
 	}
 
 	for _, root := range roots {
-		root := root
 		rootInfo, rootErr := w.fs.Lstat(ctx, root)
 		walkers.Go(func() error {
 			return w.walkPrefix(ctx, root, 0, rootInfo, rootErr, walkerLimitCh)
@@ -252,7 +251,6 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, depth int, ch
 	// Take care to catch all context cancellations as quickly as possible
 	// to avoid unnecessary work.
 	for _, child := range children {
-		child := child
 		select {
 		case <-limitCh:
 		case <-ctx.Done():

@@ -1,6 +1,6 @@
-cloudeng.io/file v0.0.0-20241215221655-bd556f44d3de h1:IHcgIgQ/v3GIjAXSMw1Hlr4TmjzxdamuAjjjfNczz0Y=
-cloudeng.io/file v0.0.0-20241215221655-bd556f44d3de/go.mod h1:jZh77Yx2aZZm637+RMC6jHUc1skXFdtmuW+yU7lLqC8=
-github.com/aws/aws-sdk-go-v2/service/s3 v1.72.0 h1:SAfh4pNx5LuTafKKWR02Y+hL3A+3TX8cTKG1OIAJaBk=
-github.com/aws/aws-sdk-go-v2/service/s3 v1.72.0/go.mod h1:r+xl5yzMk9083rMR+sJ5TYj9Tihvf/l1oxzZXDgGj2Q=
-github.com/aws/smithy-go v1.22.1 h1:/HPHZQ0g7f4eUeK6HKglFz8uwVfZKgoI25rb/J+dnro=
-github.com/aws/smithy-go v1.22.1/go.mod h1:irrKGvNn1InZwb2d7fkIRNucdfwR8R+Ts3wxYa/cJHg=
+cloudeng.io/file v0.0.0-20250119024745-8a46e9bdda10 h1:beVESn7Y/6FM4aW3Z9ATTPaPEeDf/mDjD10r+VIxnD8=
+cloudeng.io/file v0.0.0-20250119024745-8a46e9bdda10/go.mod h1:cpn65256dvwrs7+iULJk+DSTiCtzVdb9ojENSHNQUkE=
+github.com/aws/aws-sdk-go-v2/service/s3 v1.79.2 h1:tWUG+4wZqdMl/znThEk9tcCy8tTMxq8dW0JTgamohrY=
+github.com/aws/aws-sdk-go-v2/service/s3 v1.79.2/go.mod h1:U5SNqwhXB3Xe6F47kXvWihPl/ilGaEDe8HD/50Z9wxc=
+github.com/aws/smithy-go v1.22.3 h1:Z//5NuZCSW6R4PhQ93hShNbyBbn8BWCmCVCt+Q8Io5k=
+github.com/aws/smithy-go v1.22.3/go.mod h1:t1ufH5HMublsJYulve2RKmHDC15xu1f26kHCp/HgceI=

@@ -566,7 +566,7 @@ func (d *dbScanner) Contents(ctx context.Context, _ *bool, prefix string, conten
 			d.db[path] = fi
 		} else {
 			existing := d.db[path]
-			if fi.ModTime() == existing.ModTime() &&
+			if fi.ModTime().Equal(existing.ModTime()) &&
 				fi.Mode() == existing.Mode() {
 				d.unchanged[path] = true
 			}
@@ -592,7 +592,7 @@ func (d *dbScanner) Prefix(_ context.Context, state *bool, prefix string, fi fil
 		d.db[prefix] = fi
 		return false, nil, nil
 	}
-	*state = fi.ModTime() == existing.ModTime() &&
+	*state = fi.ModTime().Equal(existing.ModTime()) &&
 		fi.Mode() == existing.Mode()
 	return false, nil, nil
 }

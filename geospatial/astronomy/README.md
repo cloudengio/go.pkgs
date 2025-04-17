@@ -6,6 +6,11 @@ import cloudeng.io/geospatial/astronomy
 
 
 ## Functions
+### Func ApparentSolarNoon
+```go
+func ApparentSolarNoon(date datetime.CalendarDate, place datetime.Place) time.Time
+```
+
 ### Func December
 ```go
 func December(year int) datetime.CalendarDate
@@ -40,8 +45,7 @@ September returns the autumnal equinox.
 func SunRiseAndSet(date datetime.CalendarDate, place datetime.Place) (time.Time, time.Time)
 ```
 SunRiseAndSet returns the time of sunrise and sunset for the specified date,
-latitude and longitude. The returned times are in UTC and must adjusted for
-the local timezone that lat/long correspond to.
+latitude and longitude.
 
 
 
@@ -81,6 +85,27 @@ func (s AutumnEquinox) Evaluate(year int) datetime.CalendarDateRange
 
 ```go
 func (s AutumnEquinox) Name() string
+```
+
+
+
+
+### Type SolarNoon
+```go
+type SolarNoon struct{}
+```
+SolarNoon implements datetime.DynamicTimeOfDay for the solar noon (aka
+Zenith).
+
+### Methods
+
+```go
+func (s SolarNoon) Evaluate(cd datetime.CalendarDate, place datetime.Place) datetime.TimeOfDay
+```
+
+
+```go
+func (s SolarNoon) Name() string
 ```
 
 

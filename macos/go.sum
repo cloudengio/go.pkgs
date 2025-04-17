@@ -1,4 +1,4 @@
-cloudeng.io/file v0.0.0-20241215221655-bd556f44d3de h1:IHcgIgQ/v3GIjAXSMw1Hlr4TmjzxdamuAjjjfNczz0Y=
-cloudeng.io/file v0.0.0-20241215221655-bd556f44d3de/go.mod h1:jZh77Yx2aZZm637+RMC6jHUc1skXFdtmuW+yU7lLqC8=
-github.com/keybase/go-keychain v0.0.0-20250107162724-3747e5bfbb71 h1:1+B+0oORGfgT2adCEqDAdWwm7uX6PJMIwloZ4KkWo+o=
-github.com/keybase/go-keychain v0.0.0-20250107162724-3747e5bfbb71/go.mod h1:5IIEcwnPTxFTdFEYdyIjJvRuZnTkf+R4nTxSXRrKDT4=
+cloudeng.io/file v0.0.0-20250119024745-8a46e9bdda10 h1:beVESn7Y/6FM4aW3Z9ATTPaPEeDf/mDjD10r+VIxnD8=
+cloudeng.io/file v0.0.0-20250119024745-8a46e9bdda10/go.mod h1:cpn65256dvwrs7+iULJk+DSTiCtzVdb9ojENSHNQUkE=
+github.com/keybase/go-keychain v0.0.1 h1:way+bWYa6lDppZoZcgMbYsvC7GxljxrskdNInRtuthU=
+github.com/keybase/go-keychain v0.0.1/go.mod h1:PdEILRW3i9D8JcdM+FmY6RwkHGnhHxXwkPPMeUgOK1k=

@@ -140,7 +140,7 @@ not d0/world....`; got != want {
 		t.Errorf("missing or wrong error: %v", err)
 	}
 
-	if _, err := dynamic.Open(path.Join("statwillfail", "statwillfail.txt")); err == nil || !(strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "Access is denied")) {
+	if _, err := dynamic.Open(path.Join("statwillfail", "statwillfail.txt")); err == nil || (!strings.Contains(err.Error(), "permission denied") && !strings.Contains(err.Error(), "Access is denied")) {
 		t.Errorf("missing or wrong error: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestLogging(t *testing.T) {
 
 	out := &strings.Builder{}
 	logger := func(action reloadfs.Action, name, path string, err error) {
-		out.WriteString(fmt.Sprintf("%s: %s -> %s: %v", action, name, path, err))
+		fmt.Fprintf(out, "%s: %s -> %s: %v", action, name, path, err)
 	}
 
 	dynamic := reloadfs.New(tmpDir, "testdata", content, reloadfs.UseLogger(logger))
@@ -198,7 +198,7 @@ func TestModTime(t *testing.T) {
 
 	out := &strings.Builder{}
 	logger := func(action reloadfs.Action, name, path string, err error) {
-		out.WriteString(fmt.Sprintf("%s: %s -> %s: %v", action, name, path, err))
+		fmt.Fprintf(out, "%s: %s -> %s: %v", action, name, path, err)
 	}
 
 	cleanup := createMirror(t, tmpDir)

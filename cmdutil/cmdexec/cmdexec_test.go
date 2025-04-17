@@ -23,7 +23,7 @@ type logger struct {
 }
 
 func (l *logger) Logf(format string, args ...interface{}) (int, error) {
-	return l.buf.WriteString(fmt.Sprintf(format, args...))
+	return fmt.Fprintf(l.buf, format, args...)
 }
 
 func newLogger() *logger {

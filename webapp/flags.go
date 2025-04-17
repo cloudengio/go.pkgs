@@ -81,7 +81,7 @@ func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string, s
 	if len(testingCA) > 0 {
 		certPool, err := CertPoolForTesting(testingCA)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to obtain cert pool containing %v", testingCA)
+			return nil, fmt.Errorf("failed to obtain cert pool containing %v", testingCA)
 		}
 		opts = append(opts, CertCacheRootCAs(certPool))
 	}

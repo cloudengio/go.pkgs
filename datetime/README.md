@@ -7,7 +7,21 @@ import cloudeng.io/datetime
 Package datetime provides support for working with dates, the time of day
 and associated ranges.
 
+## Variables
+### ErrInvalidISO8601Duration
+```go
+ErrInvalidISO8601Duration = errors.New("invalid ISO8601 duration")
+
+```
+
+
+
 ## Functions
+### Func AsISO8601Period
+```go
+func AsISO8601Period(dur time.Duration) string
+```
+
 ### Func ContextWithYearPlace
 ```go
 func ContextWithYearPlace(ctx context.Context, yp YearPlace) context.Context
@@ -39,6 +53,12 @@ DaysInYear returns the number of days in the given year.dc
 func IsLeap(year int) bool
 ```
 IsLeap returns true if the given year is a leap year.
+
+### Func ParseISO8601Period
+```go
+func ParseISO8601Period(dur string) (time.Duration, error)
+```
+ParseISO8601Period parses an ISO 8601 'period' of the form [-]PnYnMnDTnHnMnS
 
 ### Func Time
 ```go
@@ -718,6 +738,11 @@ Parse ranges in formats '01:03', 'Jan:Mar', '01-02:03-04' or
 start date is identical then the end date is used to determine the order.
 
 
+```go
+func (drl DateRangeList) String() string
+```
+
+
 
 
 ### Type DynamicDateRange
@@ -850,16 +875,21 @@ Parse val in formats 'Jan,12,Nov'. The parsed list is sorted and without
 duplicates.
 
 
+```go
+func (ml MonthList) String() string
+```
+
+
 
 
 ### Type Place
 ```go
 type Place struct {
-	TZ                  *time.Location
+	TimeLocation        *time.Location
 	Latitude, Longitude float64
 }
 ```
-Place a location in terms of timezone and a latitude and longitude.
+Place a location in terms of time.Location and a latitude and longitude.
 
 
 ### Type TimeOfDay
@@ -1009,12 +1039,12 @@ YearPlace represents a year at a given place.
 ### Functions
 
 ```go
-func NewYearPlace(year int, place Place) YearPlace
+func NewYearLocation(year int, loc *time.Location) YearPlace
 ```
 
 
 ```go
-func NewYearTZ(year int, tz *time.Location) YearPlace
+func NewYearPlace(year int, place Place) YearPlace
 ```
 
 

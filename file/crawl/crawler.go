@@ -82,7 +82,6 @@ func (cr *crawler) Run(ctx context.Context,
 	crlgrp := errgroup.T{}
 	chainedInput := input
 	for depth := 0; depth <= cr.depth; depth++ {
-		depth := depth
 		reqs, dld := downloaders[depth].requests, downloaders[depth].downloaded
 		currentInput := chainedInput
 		var nextInput chan download.Request
@@ -114,7 +113,6 @@ func (cr *crawler) createAndRunDownloaders(ctx context.Context, factory Download
 	}
 	grp := &errgroup.T{}
 	for _, dls := range downloaders {
-		dls := dls
 		grp.Go(func() error {
 			return dls.dl.Run(ctx, dls.requests, dls.downloaded)
 		})

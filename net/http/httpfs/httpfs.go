@@ -35,7 +35,7 @@ func WithHTTPScheme() Option {
 // New creates a new instance of file.FS backed by http/https.
 func New(client *http.Client, options ...Option) file.FS {
 	fs := &httpfs{client: client}
-	fs.options.scheme = "https"
+	fs.scheme = "https"
 	for _, fn := range options {
 		fn(&fs.options)
 	}
