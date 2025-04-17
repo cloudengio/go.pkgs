@@ -99,13 +99,13 @@ func prodServe(ctx context.Context, values interface{}, _ []string) error {
 		return err
 	}
 
-	ln, srv, err := webapp.NewTLSServer(cl.HTTPServerFlags.Address, router, cfg)
+	ln, srv, err := webapp.NewTLSServer(cl.Address, router, cfg)
 	if err != nil {
 		return err
 	}
 
 	// Force all http traffic to an https port.
-	if err := webapp.RedirectPort80(ctx, cl.HTTPServerFlags.Address, cl.AcmeRedirectTarget); err != nil {
+	if err := webapp.RedirectPort80(ctx, cl.Address, cl.AcmeRedirectTarget); err != nil {
 		return err
 	}
 
@@ -129,7 +129,7 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 		return err
 	}
 
-	ln, srv, err := webapp.NewTLSServer(cl.HTTPServerFlags.Address, router, cfg)
+	ln, srv, err := webapp.NewTLSServer(cl.Address, router, cfg)
 	if err != nil {
 		return err
 	}
