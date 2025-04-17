@@ -45,3 +45,23 @@ func ContextWith(ctx context.Context, attributes ...any) context.Context {
 	}
 	return Context(ctx, l.(*slog.Logger).With(attributes...))
 }
+
+func Info(ctx context.Context, msg string, args ...any) {
+	Logger(ctx).Log(ctx, slog.LevelInfo, msg, args...)
+}
+
+func Error(ctx context.Context, msg string, args ...any) {
+	Logger(ctx).Log(ctx, slog.LevelError, msg, args...)
+}
+
+func Debug(ctx context.Context, msg string, args ...any) {
+	Logger(ctx).Log(ctx, slog.LevelDebug, msg, args...)
+}
+
+func Warn(ctx context.Context, msg string, args ...any) {
+	Logger(ctx).Log(ctx, slog.LevelWarn, msg, args...)
+}
+
+func Log(ctx context.Context, level slog.Level, msg string, args ...any) {
+	Logger(ctx).Log(ctx, level, msg, args...)
+}
