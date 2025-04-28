@@ -31,7 +31,7 @@ func TestContextLogger(t *testing.T) {
 	}
 
 	// Test context with attributes
-	attrCtx := ctxlog.WithAtrributes(jsonCtx, "attr1", "val1")
+	attrCtx := ctxlog.WithAttributes(jsonCtx, "attr1", "val1")
 	attrLogger := ctxlog.Logger(attrCtx)
 	attrLogger.Info("test")
 	if !bytes.Contains(buf.Bytes(), []byte("attr1")) {
@@ -56,7 +56,7 @@ func ExampleLogger() {
 	logger.Info("hello world", "user", "alice")
 
 	// Add attributes to logger
-	ctx = ctxlog.WithAtrributes(ctx, "requestID", "123")
+	ctx = ctxlog.WithAttributes(ctx, "requestID", "123")
 	logger = ctxlog.Logger(ctx)
 	logger.Info("processing request")
 

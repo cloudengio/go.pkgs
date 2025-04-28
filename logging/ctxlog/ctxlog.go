@@ -36,9 +36,9 @@ func Logger(ctx context.Context) *slog.Logger {
 	return l.(*slog.Logger)
 }
 
-// WithAtrributes returns a new context with the embedded logger
+// WithAttributes returns a new context with the embedded logger
 // updated with the given logger attributes.
-func WithAtrributes(ctx context.Context, attributes ...any) context.Context {
+func WithAttributes(ctx context.Context, attributes ...any) context.Context {
 	l := ctx.Value(ctxKey(struct{}{}))
 	if l == nil {
 		return ctx
