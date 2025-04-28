@@ -16,17 +16,17 @@ type ctxKey struct{}
 
 // NewJSONLogger returns a new context with a JSON logger.
 func NewJSONLogger(ctx context.Context, w io.Writer, opts *slog.HandlerOptions) context.Context {
-	return Context(ctx, slog.New(slog.NewJSONHandler(w, opts)))
+	return WithLogger(ctx, slog.New(slog.NewJSONHandler(w, opts)))
 }
 
-// ContextWithLogger returns a new context with the given logger.
-func Context(ctx context.Context, logger *slog.Logger) context.Context {
+// WithLogger returns a new context with the given logger.
+func WithLogger(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, ctxKey(struct{}{}), logger)
 }
 
 var discardLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 
-// LoggerFromContext returns the logger from the given context.
+// Logger returns the logger from the given context.
 // If no logger is set, it returns a discard logger.
 func Logger(ctx context.Context) *slog.Logger {
 	l := ctx.Value(ctxKey(struct{}{}))
@@ -36,14 +36,14 @@ func Logger(ctx context.Context) *slog.Logger {
 	return l.(*slog.Logger)
 }
 
-// ContextWithLoggerAttributes returns a new context with the embedded logger
+// WithAtrributes returns a new context with the embedded logger
 // updated with the given logger attributes.
-func ContextWith(ctx context.Context, attributes ...any) context.Context {
+func WithAtrributes(ctx context.Context, attributes ...any) context.Context {
 	l := ctx.Value(ctxKey(struct{}{}))
 	if l == nil {
 		return ctx
 	}
-	return Context(ctx, l.(*slog.Logger).With(attributes...))
+	return WithLogger(ctx, l.(*slog.Logger).With(attributes...))
 }
 
 func Info(ctx context.Context, msg string, args ...any) {
