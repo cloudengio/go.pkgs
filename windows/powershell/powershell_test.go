@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"cloudeng.io/sys/windows/powershell"
+	"cloudeng.io/windows/powershell"
 )
 
 func TestSimple(t *testing.T) {
