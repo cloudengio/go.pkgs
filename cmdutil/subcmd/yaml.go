@@ -49,8 +49,13 @@ type commandDef struct {
 type CommandSetYAML struct {
 	*CommandSet
 
+	spec       string
 	extensions []Extension
 	cmdDict    map[string]*Command
+}
+
+func (c *CommandSetYAML) String() string {
+	return c.spec
 }
 
 type CurrentCommand struct {
@@ -148,6 +153,7 @@ func FromYAML(spec []byte) (*CommandSetYAML, error) {
 		cmdSet.CommandSet = NewCommandSet(tlcmd)
 		cmdSet.cmd = tlcmd
 	}
+	cmdSet.spec = string(spec)
 	return cmdSet, nil
 }
 
