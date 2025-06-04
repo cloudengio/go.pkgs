@@ -18,6 +18,10 @@ var errInterrupt = errors.New("interrupt")
 // It will exit with an error if the context is cancelled with an interrupt
 // signal or if the CommandSetYAML returns an error.
 func Dispatch(ctx context.Context, cli *CommandSetYAML) {
+	if cli == nil {
+		cmdutil.Exit("CommandSetYAML instance provided to Dispatch is nil")
+		return
+	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	cmdutil.HandleSignals(func() { cancel(errInterrupt) }, os.Interrupt)
 	err := cli.Dispatch(ctx)
@@ -26,5 +30,6 @@ func Dispatch(ctx context.Context, cli *CommandSetYAML) {
 	}
 	if err != nil {
 		cmdutil.Exit("%v", err)
+		return
 	}
 }
