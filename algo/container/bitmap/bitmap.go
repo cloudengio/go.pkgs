@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"iter"
+	"math"
 	"strconv"
 )
 
@@ -82,12 +83,17 @@ func (b T) NextSet(start, size int) iter.Seq[int] {
 		if start < 0 || start >= last {
 			return
 		}
-		for nb := start; nb < last; nb++ {
+		for nb := start; nb < last; {
+			if nb%64 == 0 && b[nb/64] == 0 {
+				nb += 64
+				continue
+			}
 			if b[nb/64]&(1<<(nb%64)) != 0 {
 				if !yield(nb) {
 					return
 				}
 			}
+			nb++
 		}
 
 	}
@@ -102,17 +108,22 @@ func (b T) NextClear(start, size int) iter.Seq[int] {
 		if start < 0 || start >= last {
 			return
 		}
-		for nb := start; nb < last; nb++ {
+		for nb := start; nb < last; {
+			if nb%64 == 0 && b[nb/64] == math.MaxUint64 {
+				nb += 64
+				continue
+			}
 			if b[nb/64]&(1<<(nb%64)) == 0 {
 				if !yield(nb) {
 					return
 				}
 			}
+			nb++
 		}
 	}
 }
 
-func MarshalJSON(b T) ([]byte, error) {
+func (b T) MarshalJSON() ([]byte, error) {
 	buf := make([]byte, 0, len(b)*12) // Estimate size for JSON encoding.
 	wr := bytes.NewBuffer(buf)
 	wr.WriteString("[")
@@ -133,21 +144,21 @@ func MarshalJSON(b T) ([]byte, error) {
 	return wr.Bytes(), nil
 }
 
-func UnmarshalJSON(data []byte) (T, error) {
+func (b *T) UnmarshalJSON(data []byte) error {
 	var vals []string
 	if err := json.Unmarshal(data, &vals); err != nil {
-		return nil, err
+		return err
 	}
 	if len(vals) == 0 {
-		return nil, nil // Empty bitmap.
+		return nil // Empty bitmap.
 	}
-	b := make(T, len(vals))
+	*b = make(T, len(vals))
 	for i, v := range vals {
 		num, err := strconv.ParseUint(v, 16, 64)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		b[i] = num
+		(*b)[i] = num
 	}
-	return b, nil
+	return nil
 }

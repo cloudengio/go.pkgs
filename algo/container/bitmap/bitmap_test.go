@@ -286,11 +286,12 @@ func TestBitmap_NextClear(t *testing.T) {
 				t.Errorf("Bitmap.NextClear(test %s, start %d, size %d) sequence = %v, want %v (bm: %064b)", tt.name, tt.startIndex, tt.size, gotSeq, tt.wantSeq, tt.bm)
 			}
 
-			buf, err := bitmap.MarshalJSON(tt.bm)
+			buf, err := tt.bm.MarshalJSON()
 			if err != nil {
 				t.Errorf("Bitmap.MarshalJSON(test %s) = %v", tt.name, err)
 			}
-			unmarshaled, err := bitmap.UnmarshalJSON(buf)
+			var unmarshaled bitmap.T
+			err = unmarshaled.UnmarshalJSON(buf)
 			if err != nil {
 				t.Errorf("Bitmap.UnmarshalJSON(test %s) = %v", tt.name, err)
 			}
