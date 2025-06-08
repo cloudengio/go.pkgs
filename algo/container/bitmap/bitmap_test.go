@@ -126,12 +126,12 @@ func TestBitmap_IsSet(t *testing.T) {
 	}
 }
 
-func TestBitmap_Operations(t *testing.T) {
+func TestBitmap_Operations(t *testing.T) { //nolint:gocyclo
 	size := 130 // Will require 3 uint64
 	bm := bitmap.New(size)
 
 	// Test initial state (all clear)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if bm.IsSet(i) {
 			t.Errorf("New bitmap: bit %d should be clear, but is set", i)
 		}
@@ -147,14 +147,8 @@ func TestBitmap_Operations(t *testing.T) {
 	}
 
 	// Verify set bits
-	for i := 0; i < size; i++ {
-		expectedSet := false
-		for _, setToCheck := range bitsToSet {
-			if i == setToCheck {
-				expectedSet = true
-				break
-			}
-		}
+	for i := range size {
+		expectedSet := slices.Contains(bitsToSet, i)
 		if bm.IsSet(i) != expectedSet {
 			t.Errorf("After Set: bit %d, IsSet() = %v, want %v", i, bm.IsSet(i), expectedSet)
 		}
@@ -174,14 +168,8 @@ func TestBitmap_Operations(t *testing.T) {
 
 	// Verify cleared bits and remaining set bits
 	remainingSetBits := []int{0, 63, 65, 127}
-	for i := 0; i < size; i++ {
-		expectedSet := false
-		for _, setToCheck := range remainingSetBits {
-			if i == setToCheck {
-				expectedSet = true
-				break
-			}
-		}
+	for i := range size {
+		expectedSet := slices.Contains(remainingSetBits, i)
 		if bm.IsSet(i) != expectedSet {
 			t.Errorf("After Clear: bit %d, IsSet() = %v, want %v", i, bm.IsSet(i), expectedSet)
 		}
