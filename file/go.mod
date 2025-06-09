@@ -19,4 +19,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require cloudeng.io/debug v0.0.0-20231026032435-4ad1389db593 // indirect
+require (
+	cloudeng.io/debug v0.0.0-20231026032435-4ad1389db593 // indirect
+	cloudeng.io/windows v0.0.0-20250609004730-15d7065649f1 // indirect
+)
