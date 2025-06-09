@@ -67,6 +67,14 @@ func (f *T) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
 	return f.ReadFile(name)
 }
 
+func (f *T) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return os.WriteFile(name, data, perm)
+}
+
+func (f *T) WriteFileCtx(_ context.Context, name string, data []byte, perm fs.FileMode) error {
+	return os.WriteFile(name, data, perm)
+}
+
 func (f *T) Stat(_ context.Context, path string) (file.Info, error) {
 	info, err := os.Stat(path)
 	if err != nil {
