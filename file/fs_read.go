@@ -20,7 +20,7 @@ func ContextWithFS(ctx context.Context, container ...fs.ReadFileFS) context.Cont
 	return context.WithValue(ctx, fsKeyVal, container)
 }
 
-// FSFromContext returns the list of fs.ReadFileFS instancees, if any,
+// FSFromContext returns the list of fs.ReadFileFS instances, if any,
 // stored within the context.
 func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool) {
 	c, ok := ctx.Value(fsKeyVal).([]fs.ReadFileFS)

@@ -64,6 +64,12 @@ type FS interface {
 	SysXAttr(existing any, merge XAttr) any
 }
 
+// WriteFileFS defines an FS style interface for writing files.
+type WriteFileFS interface {
+	WriteFile(name string, data []byte, perm fs.FileMode) error
+	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
+}
+
 // ErrNotImplemented is returned by methods that are not implemented
 // by a particular filesystem.
 var ErrNotImplemented = fmt.Errorf("not implemented")

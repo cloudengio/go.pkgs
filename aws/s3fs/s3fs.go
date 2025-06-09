@@ -196,6 +196,14 @@ func (s3fs *T) SysXAttr(existing any, merge file.XAttr) any {
 	return existing
 }
 
+func (s3fs *T) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return s3fs.Put(context.Background(), name, perm, data)
+}
+
+func (s3fs *T) WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
+	return s3fs.Put(ctx, name, perm, data)
+}
+
 type s3Readble struct {
 	obj    *s3.GetObjectOutput
 	isDir  bool

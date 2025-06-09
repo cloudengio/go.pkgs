@@ -247,6 +247,24 @@ func TestPutGet(t *testing.T) {
 	}
 }
 
+func TestWrite(t *testing.T) {
+	awstestutil.SkipAWSTests(t)
+	ctx := context.Background()
+	fs := newS3ObjFS()
+
+	if err := fs.WriteFileCtx(ctx, "s3://bucket-a/a/b/c/33", []byte("33\n"), 0x00); err != nil {
+		t.Fatal(err)
+	}
+
+	obj, err := fs.Get(ctx, "s3://bucket-a/a/b/c/33")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(obj), "33\n"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
 	ctx := context.Background()
