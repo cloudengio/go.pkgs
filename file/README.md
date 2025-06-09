@@ -28,7 +28,7 @@ fs.ReadFileFS stored with as a value within it.
 ```go
 func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool)
 ```
-FSFromContext returns the list of fs.ReadFileFS instancees, if any, stored
+FSFromContext returns the list of fs.ReadFileFS instances, if any, stored
 within the context.
 
 ### Func FSOpen
@@ -279,6 +279,16 @@ type ObjectFS interface {
 ObjectFS represents a writeable object store. It is intended to backed
 by cloud or local filesystems. The permissions may be ignored by some
 implementations.
+
+
+### Type WriteFileFS
+```go
+type WriteFileFS interface {
+	WriteFile(name string, data []byte, perm fs.FileMode) error
+	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
+}
+```
+WriteFileFS defines an FS style interface for writing files.
 
 
 ### Type XAttr

@@ -129,6 +129,14 @@ Note that this package will never call flag.Parse and will not associate any
 flags with flag.CommandLine.
 
 ## Functions
+### Func Dispatch
+```go
+func Dispatch(ctx context.Context, cli *CommandSetYAML)
+```
+Dispatch runs the supplied CommandSetYAML with support for signal handling.
+It will exit with an error if the context is cancelled with an interrupt
+signal or if the CommandSetYAML returns an error.
+
 ### Func SanitizeYAML
 ```go
 func SanitizeYAML(spec string) string
@@ -382,6 +390,11 @@ Set looks up the command specified by names. Each sub-command in a
 multi-level command should be specified separately. The returned
 CurrentCommand should be used to set the Runner and FlagSet to associate
 with that command.
+
+
+```go
+func (c *CommandSetYAML) String() string
+```
 
 
 

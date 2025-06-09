@@ -226,6 +226,16 @@ func (s3fs *T) SysXAttr(existing any, merge file.XAttr) any
 
 
 ```go
+func (s3fs *T) WriteFile(name string, data []byte, perm fs.FileMode) error
+```
+
+
+```go
+func (s3fs *T) WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
+```
+
+
+```go
 func (s3fs *T) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error)
 ```
 

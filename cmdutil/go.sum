@@ -1,8 +1,8 @@
 cloudeng.io/errors v0.0.8/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
 cloudeng.io/errors v0.0.10 h1:M/UgEEjD1v9MiGAw4QFkSREPdmScPt1YVuKESbRy8zU=
 cloudeng.io/errors v0.0.10/go.mod h1:GO+C05d4kZnEqUC5Po9vajcyG8ibIzYCcOuomXHEznQ=
-cloudeng.io/file v0.0.0-20250119024745-8a46e9bdda10 h1:beVESn7Y/6FM4aW3Z9ATTPaPEeDf/mDjD10r+VIxnD8=
-cloudeng.io/file v0.0.0-20250119024745-8a46e9bdda10/go.mod h1:cpn65256dvwrs7+iULJk+DSTiCtzVdb9ojENSHNQUkE=
+cloudeng.io/file v0.0.0-20250609000856-e90addcdd7e2 h1:foUmuGAnWjjL3JsHoWGOVqMnxXjQICyyPATUPs+HLvc=
+cloudeng.io/file v0.0.0-20250609000856-e90addcdd7e2/go.mod h1:hynWoNEuDZzS3kA+hZXSHaVa9pcmRqrSQxWuFMeypaM=
 cloudeng.io/text v0.0.11 h1:q3+p3gxwNdr/V+k4+77fj9QxVpUU8G7B4+v26m+sE8I=
 cloudeng.io/text v0.0.11/go.mod h1:99L3CQ55YhUy2+lHlFPowYyCoXO86fmkvNtcMT2X3GU=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=

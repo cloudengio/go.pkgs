@@ -145,6 +145,16 @@ func (f *T) SysXAttr(existing any, merge file.XAttr) any
 
 
 ```go
+func (f *T) WriteFile(name string, data []byte, perm fs.FileMode) error
+```
+
+
+```go
+func (f *T) WriteFileCtx(_ context.Context, name string, data []byte, perm fs.FileMode) error
+```
+
+
+```go
 func (f *T) XAttr(_ context.Context, name string, info file.Info) (file.XAttr, error)
 ```
 

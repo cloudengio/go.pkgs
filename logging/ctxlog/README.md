@@ -8,31 +8,56 @@ Package ctxlog provides a context key and functions for logging to a
 context.
 
 ## Functions
-### Func Context
+### Func Debug
 ```go
-func Context(ctx context.Context, logger *slog.Logger) context.Context
+func Debug(ctx context.Context, msg string, args ...any)
 ```
-ContextWithLogger returns a new context with the given logger.
 
-### Func ContextWith
+### Func Error
 ```go
-func ContextWith(ctx context.Context, attributes ...any) context.Context
+func Error(ctx context.Context, msg string, args ...any)
 ```
-ContextWithLoggerAttributes returns a new context with the embedded logger
-updated with the given logger attributes.
+
+### Func Info
+```go
+func Info(ctx context.Context, msg string, args ...any)
+```
+
+### Func Log
+```go
+func Log(ctx context.Context, level slog.Level, msg string, args ...any)
+```
 
 ### Func Logger
 ```go
 func Logger(ctx context.Context) *slog.Logger
 ```
-LoggerFromContext returns the logger from the given context. If no logger is
-set, it returns a discard logger.
+Logger returns the logger from the given context. If no logger is set,
+it returns a discard logger.
 
 ### Func NewJSONLogger
 ```go
 func NewJSONLogger(ctx context.Context, w io.Writer, opts *slog.HandlerOptions) context.Context
 ```
 NewJSONLogger returns a new context with a JSON logger.
+
+### Func Warn
+```go
+func Warn(ctx context.Context, msg string, args ...any)
+```
+
+### Func WithAttributes
+```go
+func WithAttributes(ctx context.Context, attributes ...any) context.Context
+```
+WithAttributes returns a new context with the embedded logger updated with
+the given logger attributes.
+
+### Func WithLogger
+```go
+func WithLogger(ctx context.Context, logger *slog.Logger) context.Context
+```
+WithLogger returns a new context with the given logger.
 
 
 

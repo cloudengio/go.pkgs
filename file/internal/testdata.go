@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"cloudeng.io/errors"
-	"cloudeng.io/sys/windows/win32testutil"
+	"cloudeng.io/windows/win32testutil"
 )
 
 func CreateTestTree() string {
