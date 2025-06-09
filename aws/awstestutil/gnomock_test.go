@@ -84,7 +84,7 @@ func getFile(ctx context.Context, t *testing.T, client *s3.Client, bucket, key s
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("GetObject: %v %v -> %v", bucket, key, err)
 	}
 	a, err := io.ReadAll(obj.Body)
 	if err != nil {

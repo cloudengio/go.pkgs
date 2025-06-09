@@ -5,11 +5,11 @@ go 1.23.3
 toolchain go1.24.2
 
 require (
-	cloudeng.io/algo v0.0.0-20250608220057-e84d87a5b1b4
-	cloudeng.io/cmdutil v0.0.0-20250608220057-e84d87a5b1b4
+	cloudeng.io/algo v0.0.0-20250609000856-e90addcdd7e2
+	cloudeng.io/cmdutil v0.0.0-20250609000856-e90addcdd7e2
 	cloudeng.io/errors v0.0.10
-	cloudeng.io/net v0.0.0-20250608220057-e84d87a5b1b4
-	cloudeng.io/os v0.0.0-20250608220057-e84d87a5b1b4
+	cloudeng.io/net v0.0.0-20250609000856-e90addcdd7e2
+	cloudeng.io/os v0.0.0-20250609000856-e90addcdd7e2
 	cloudeng.io/path v0.0.9
 	cloudeng.io/sync v0.0.8
 	cloudeng.io/sys v0.0.0-20250119024745-8a46e9bdda10
@@ -21,5 +21,5 @@ require (
 
 require (
 	cloudeng.io/debug v0.0.0-20231026032435-4ad1389db593 // indirect
-	cloudeng.io/windows v0.0.0-20250604221029-1c63f81ea555 // indirect
+	cloudeng.io/windows v0.0.0-20250609004730-15d7065649f1 // indirect
 )

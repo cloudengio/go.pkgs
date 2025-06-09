@@ -1,7 +1,7 @@
-# Package [cloudeng.io/sys/windows/win32testutil](https://pkg.go.dev/cloudeng.io/sys/windows/win32testutil?tab=doc)
+# Package [cloudeng.io/windows/win32testutil](https://pkg.go.dev/cloudeng.io/windows/win32testutil?tab=doc)
 
 ```go
-import cloudeng.io/sys/windows/win32testutil
+import cloudeng.io/windows/win32testutil
 ```
 
 
