@@ -17,7 +17,7 @@ import (
 func TestNoop(t *testing.T) {
 	ctx := context.Background()
 	c := ratecontrol.New()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backoff := c.Backoff()
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
@@ -35,7 +35,7 @@ func TestNoop(t *testing.T) {
 func waitForRequests(ctx context.Context, t *testing.T, c *ratecontrol.Controller, n, b int) time.Duration {
 	c.BytesTransferred(b)
 	then := time.Now()
-	for i := 0; i < n; i++ {
+	for range n {
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +69,7 @@ func TestRequestRateConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(4)
 	then := time.Now()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		go func() {
 			waitForRequests(ctx, t, c, 2, 0)
 			wg.Done()
@@ -90,7 +90,7 @@ func TestDataRateConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(4)
 	then := time.Now()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		go func() {
 			waitForRequests(ctx, t, c, 10, 10)
 			wg.Done()
@@ -226,8 +226,8 @@ type customBackoff struct {
 	resp *http.Response
 }
 
-func (b *customBackoff) Wait(_ context.Context, resp *http.Response) (bool, error) {
-	b.resp = resp
+func (b *customBackoff) Wait(_ context.Context, resp any) (bool, error) {
+	b.resp = resp.(*http.Response)
 	return false, nil
 }
 
