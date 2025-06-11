@@ -21,7 +21,6 @@ func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option {
 }
 
 // WithBytesPerTick sets the approximate rate in bytes per tick
-
 // The algorithm used is very simple and will simply stop sending data
 // wait for a single tick if the limit is reached without taking into account
 // how long the tick is, nor how much excess data was sent over the
@@ -46,13 +45,24 @@ func WithExponentialBackoff(first time.Duration, steps int) Option {
 	}
 }
 
+// WithCustomBackoff allows the use of a custom backoff function.
 func WithCustomBackoff(backoff func() Backoff) Option {
 	return func(o *options) {
 		o.customBackoff = backoff
 	}
 }
 
+// WithNoBackoff creates a Controller that returns immediately
+// and offers no backoff. It can be used as a default when no
+// rate control is desired.
+func WithNoRateControl() Option {
+	return func(o *options) {
+		o.noRateControl = true
+	}
+}
+
 type options struct {
+	noRateControl bool // if true, no rate control is applied
 	reqsInterval  time.Duration
 	reqsPerTick   int
 	bytesInterval time.Duration

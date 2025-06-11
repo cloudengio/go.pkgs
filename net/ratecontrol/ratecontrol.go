@@ -63,6 +63,9 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 // takes priority over rate limiting of bytes. That is, bytes are
 // only considered when a new request can be made.
 func (c *Controller) Wait(ctx context.Context) error {
+	if c.opts.noRateControl {
+		return nil
+	}
 	c.reqsPerTick.Add(1)
 	if c.remaining(&c.reqsPerTick, c.opts.reqsPerTick) {
 		return c.waitBytesPerTick(ctx)
@@ -87,6 +90,9 @@ func (c *Controller) BytesTransferred(nBytes int) {
 }
 
 func (c *Controller) Backoff() Backoff {
+	if c.opts.noRateControl {
+		return noBackoff{}
+	}
 	if c.opts.customBackoff != nil {
 		return c.opts.customBackoff()
 	}
