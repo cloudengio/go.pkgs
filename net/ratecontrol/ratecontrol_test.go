@@ -35,7 +35,7 @@ func TestNoop(t *testing.T) {
 func waitForRequests(ctx context.Context, t *testing.T, c *ratecontrol.Controller, n, b int) time.Duration {
 	c.BytesTransferred(b)
 	then := time.Now()
-	for _ = range n {
+	for range n {
 		if err := c.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -90,7 +90,7 @@ func TestDataRateConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(4)
 	then := time.Now()
-	for _ = range 4 {
+	for range 4 {
 		go func() {
 			waitForRequests(ctx, t, c, 10, 10)
 			wg.Done()
