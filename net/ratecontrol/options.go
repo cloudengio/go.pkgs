@@ -52,7 +52,7 @@ func WithCustomBackoff(backoff func() Backoff) Option {
 	}
 }
 
-// WithNoBackoff creates a Controller that returns immediately
+// WithNoRateControl creates a Controller that returns immediately
 // and offers no backoff. It can be used as a default when no
 // rate control is desired.
 func WithNoRateControl() Option {

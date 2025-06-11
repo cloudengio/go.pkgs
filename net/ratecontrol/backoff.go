@@ -15,7 +15,10 @@ type Backoff interface {
 	// should be terminated, i.e. no more requests should be attempted.
 	// The error returned is nil when the backoff algorithm has reached
 	// its limit and will generally only be non-nil for an internal error
-	// such as the context being cancelled.
+	// such as the context being canceled.
+	// The second argument is a placeholder for any additional data that
+	// the backoff algorithm may need to process, such as an HTTP response
+	// or a retry response. It can be nil if no such data is needed.
 	Wait(context.Context, any) (bool, error)
 
 	// Retries returns the number of retries that the backoff aglorithm
