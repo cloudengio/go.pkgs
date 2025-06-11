@@ -69,7 +69,7 @@ func TestRequestRateConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(4)
 	then := time.Now()
-	for _ = range 4 {
+	for range 4 {
 		go func() {
 			waitForRequests(ctx, t, c, 2, 0)
 			wg.Done()
