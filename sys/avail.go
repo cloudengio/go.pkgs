@@ -5,7 +5,7 @@
 package sys
 
 type filesystemInfo struct {
-	BlockSize   int64
+	BlockSize   int
 	Blocks      int64
 	BlocksFree  int64
 	BlocksAvail int64
@@ -18,5 +18,5 @@ func AvailableBytes(filename string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return fi.BlocksAvail * fi.BlockSize, nil
+	return fi.BlocksAvail * int64(fi.BlockSize), nil
 }

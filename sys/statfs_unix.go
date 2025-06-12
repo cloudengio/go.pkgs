@@ -24,7 +24,7 @@ func statFS(filename string) (*filesystemInfo, error) {
 	}
 
 	return &filesystemInfo{
-		BlockSize:   int64(buf.Bsize),
+		BlockSize:   int(buf.Bsize),
 		Blocks:      int64(buf.Blocks),
 		BlocksFree:  int64(buf.Bfree),
 		BlocksAvail: int64(buf.Bavail),
