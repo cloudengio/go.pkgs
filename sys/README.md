@@ -4,6 +4,8 @@
 import cloudeng.io/sys
 ```
 
+Package sys provides system-level utilities that are supported across
+different operating systems.
 
 ## Functions
 ### Func AvailableBytes

@@ -2,6 +2,8 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+// Package sys provides system-level utilities that are supported across
+// different operating systems.
 package sys
 
 type filesystemInfo struct {
