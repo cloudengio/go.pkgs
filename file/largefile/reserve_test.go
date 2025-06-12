@@ -18,7 +18,6 @@ func TestReserveSpace(t *testing.T) {
 	os.Remove(filename) // Ensure the file does not exist before the test
 
 	size := int64(1024*1024*10) + 33 // 10 MB
-	size = 30
 	if err := ReserveSpace(ctx, filename, size, 4096, 4); err != nil {
 		t.Fatalf("%v: %v", filename, err)
 	}
