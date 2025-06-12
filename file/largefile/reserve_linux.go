@@ -14,5 +14,5 @@ import (
 )
 
 func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concurrency int) error {
-	return unix.Fallocate(fs.Fd(), 0, 0, size)
+	return unix.Fallocate(int(fs.Fd()), 0, 0, size)
 }
