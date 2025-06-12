@@ -34,11 +34,11 @@ func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, c
 		return err
 	}
 
-	file, err = os.Open(filename)
+	nfile, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("failed to reopen cache file %s: %w", filename, err)
 	}
-	defer file.Close()
+	defer nfile.Close()
 	allocated, err := allocated(file, size)
 	if err != nil {
 		return err
