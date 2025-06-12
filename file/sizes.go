@@ -95,38 +95,37 @@ func (s SizeUnit) Value(v int64) float64 {
 }
 
 func DecimalUnitForSize(size int64) SizeUnit {
-	if size < 0 {
+	switch {
+	case size < int64(KB):
 		return Byte
-	} else if size < int64(KB) {
-		return Byte
-	} else if size < int64(MB) {
+	case size < int64(MB):
 		return KB
-	} else if size < int64(GB) {
+	case size < int64(GB):
 		return MB
-	} else if size < int64(TB) {
+	case size < int64(TB):
 		return GB
-	} else if size < int64(PB) {
+	case size < int64(PB):
 		return TB
-	} else if size < int64(EB) {
+	case size < int64(EB):
 		return PB
+	default:
+		return EB
 	}
-	return EB
 }
 
 func BinaryUnitForSize(size int64) SizeUnit {
-	if size < 0 {
+	switch {
+	case size < int64(Kib):
 		return Byte
-	} else if size < int64(Kib) {
-		return Byte
-	} else if size < int64(Mib) {
+	case size < int64(Mib):
 		return Kib
-	} else if size < int64(Gib) {
+	case size < int64(Gib):
 		return Mib
-	} else if size < int64(Tib) {
+	case size < int64(Tib):
 		return Gib
-	} else if size < int64(Pib) {
+	case size < int64(Pib):
 		return Tib
-	} else if size < int64(Eib) {
+	case size < int64(Eib):
 		return Pib
 	}
 	return Eib
@@ -139,6 +138,5 @@ func BinarySize(width, precision int, val int64) string {
 
 func DecimalSize(width, precision int, val int64) string {
 	unit := DecimalUnitForSize(val)
-	fmt.Printf("unit: %v, value: %d => %v\n", unit, val, unit.Value(val))
 	return fmt.Sprintf("%[1]*.[2]*[3]f%v", width, precision, unit.Value(val), unit.String())
 }
