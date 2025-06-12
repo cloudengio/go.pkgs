@@ -162,7 +162,7 @@ func (m *M) squash(target error) error {
 		return nil
 	}
 	c := &M{errs: make([]error, 0, len(m.errs))}
-	squashed := &M{errs: make([]error, 1, 1)}
+	squashed := &M{errs: make([]error, 1)}
 	for _, err := range m.errs {
 		if errors.Is(err, target) {
 			if squashed.numSquashed == 0 {
