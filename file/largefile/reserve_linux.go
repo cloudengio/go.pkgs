@@ -13,6 +13,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concurrency int) error {
+func reserveSpace(_ context.Context, fs *os.File, size int64, _, _ int) error {
 	return unix.Fallocate(int(fs.Fd()), 0, 0, size)
 }

@@ -15,7 +15,7 @@ func TestAllocated(t *testing.T) {
 	filename := filepath.Join(td, "testfile")
 	size := int64(1024*1024*1) + 33 // 1 MB + 33 bytes
 	buf := make([]byte, size)
-	if err := os.WriteFile(filename, buf, 0644); err != nil {
+	if err := os.WriteFile(filename, buf, 0600); err != nil {
 		t.Fatalf("failed to write file %s: %v", filename, err)
 	}
 
