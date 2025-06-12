@@ -5,4 +5,14 @@ import cloudeng.io/sys
 ```
 
 
+## Functions
+### Func AvailableBytes
+```go
+func AvailableBytes(filename string) (int64, error)
+```
+AvailableBytes returns the number of available bytes on the filesystem where
+the file is located.
+
+
+
 
