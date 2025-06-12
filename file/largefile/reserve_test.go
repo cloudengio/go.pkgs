@@ -6,10 +6,8 @@ package largefile
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 )
 
@@ -24,14 +22,4 @@ func TestReserveSpace(t *testing.T) {
 	if err := ReserveSpace(ctx, filename, size, 4096, 4); err != nil {
 		t.Fatalf("%v: %v", filename, err)
 	}
-	t.Fail()
-
-	fi, err := os.Stat(filename)
-	if err != nil {
-		t.Fatalf("failed to stat file %s: %v", filename, err)
-	}
-	s := fi.Sys().(*syscall.Stat_t)
-	fmt.Printf("File %s: Size %d, Blocks %d, Blksize %d\n", filename, fi.Size(), s.Blocks, s.Blksize)
-	ns := s.Blocks * int64(s.Blksize)
-	fmt.Printf("%v -- %v (%v)\n", size, ns, ns/size)
 }

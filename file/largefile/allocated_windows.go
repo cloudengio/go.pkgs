@@ -17,5 +17,5 @@ func allocated(file *os.File, size int64) (bool, error) {
 		return false, err
 	}
 	var fiSize int64 = int64(fi.FileSizeHigh)<<32 | int64(fi.FileSizeLow)
-	return size >= fiSize, nil
+	return fiSize >= size, nil
 }
