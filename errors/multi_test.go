@@ -126,14 +126,22 @@ func TestUnWrap(t *testing.T) {
 	e1 := errors.New("1")
 	e2 := errors.New("2")
 	m.Append(e1, e2)
-	if got, want := errors.Unwrap(m), e1; got != want {
+	if got, want := m.Unwrap(), []error{e1, e2}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := errors.Unwrap(m).Error(), e2.Error(); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
+	// Unwrap will not unwrap errors that support Unwrap() []error.
 	if errors.Unwrap(m) != nil {
 		t.Errorf("not empty")
+	}
+}
+
+func TestClone(t *testing.T) {
+	t1 := os.ErrExist
+	t2 := &ErrorStruct{X: 2, S: "2"}
+	m := &errors.M{}
+	m.Append(t1, t2)
+	if got, want := m.Unwrap(), []error{t1, t2}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
@@ -168,23 +176,6 @@ func TestAsIs(t *testing.T) {
 	}
 }
 
-func TestClone(t *testing.T) {
-	t1 := os.ErrExist
-	t2 := &ErrorStruct{X: 2, S: "2"}
-	m := &errors.M{}
-	m.Append(t1, t2)
-	c := m.Clone()
-	if err := m.Unwrap(); err == nil {
-		t.Fatal("error expected")
-	}
-	if got, want := m.Unwrap(), t2; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := c.Unwrap(), t1; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
 func TestErr(t *testing.T) {
 	m := &errors.M{}
 	if m.Err() != nil {
@@ -200,7 +191,22 @@ func TestErr(t *testing.T) {
 	}
 }
 
-func TestSquashl(t *testing.T) {
+func TestSquashNop(t *testing.T) {
+	m := &errors.M{}
+	m.Append(os.ErrExist)
+	if got, want := m.Squash(os.ErrExist).Error(), `file already exists`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	err := m.Squash(os.ErrInvalid)
+	if got, want := err.Error(), `file already exists`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := errors.Is(err, os.ErrExist), true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestSquash(t *testing.T) {
 	m := &errors.M{}
 	m.Append(context.Canceled)
 	m.Append(os.ErrExist)
@@ -220,12 +226,11 @@ func TestSquashl(t *testing.T) {
 	}
 	msg = fmt.Sprintf("%v", m.Squash(context.Canceled))
 	if got, want := msg, `  --- 1 of 3 errors
-  context canceled
-  --- 2 of 3 errors
   file already exists
-  --- 3 of 3 errors
+  --- 2 of 3 errors
   invalid argument
-  --- context canceled squashed 2 times`; got != want {
+  --- 3 of 3 errors
+  context canceled (repeated 2 times)`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -236,20 +241,36 @@ func TestSquashl(t *testing.T) {
 	m1.Append(context.Canceled)
 	m.Append(m1)
 	m.Append(os.ErrExist)
+	m.Append(context.DeadlineExceeded)
 	m.Append(context.Canceled)
 	m.Append(context.Canceled)
+	m.Append(context.DeadlineExceeded)
 
 	if got, want := strings.Count(m.Error(), "context canceled"), 4; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, want := m.Squash(context.Canceled).Error(), `  --- 1 of 3 errors
-  context canceled
-  --- 2 of 3 errors
+	if got, want := m.Squash(context.Canceled).Error(), `  --- 1 of 5 errors
   invalid argument
-  --- 3 of 3 errors
+  --- 2 of 5 errors
   file already exists
-  --- context canceled squashed 4 times`; got != want {
+  --- 3 of 5 errors
+  context deadline exceeded
+  --- 4 of 5 errors
+  context deadline exceeded
+  --- 5 of 5 errors
+  context canceled (repeated 4 times)`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := m.Squash(context.Canceled).(*errors.M).Squash(context.DeadlineExceeded).Error(), `  --- 1 of 4 errors
+  invalid argument
+  --- 2 of 4 errors
+  file already exists
+  --- 3 of 4 errors
+  context canceled (repeated 4 times)
+  --- 4 of 4 errors
+  context deadline exceeded (repeated 2 times)`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -258,9 +279,7 @@ func TestSquashl(t *testing.T) {
 	m.Append(fmt.Errorf("e2 %w", context.Canceled))
 	m.Append(fmt.Errorf("e2 %w", context.Canceled))
 
-	if got, want := m.Squash(context.Canceled).Error(), `  --- 1 of 1 errors
-  e1 context canceled
-  --- context canceled squashed 3 times`; got != want {
+	if got, want := m.Squash(context.Canceled).Error(), `e1 context canceled (repeated 3 times)`; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -275,13 +294,9 @@ func TestAppend(t *testing.T) {
 	n.Append(os.ErrInvalid)
 	m.Append(n, os.ErrExist)
 
-	all := []error{}
-	for {
-		e := m.Unwrap()
-		if e == nil {
-			break
-		}
-		all = append(all, e)
+	all := m.Unwrap()
+	if all == nil {
+		t.Fatalf("expected non-nil error")
 	}
 
 	if got, want := len(all), 5; got != want {
