@@ -362,7 +362,7 @@ func TestSquashRecursive(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	m1s := m1.Squash(context.Canceled) //.(*errors.M).Squash(context.DeadlineExceeded)
+	m1s := m1.Squash(context.Canceled)
 	if got, want := m1s.Error(), `  --- 1 of 6 errors
   context canceled (repeated 2 times)
   --- 2 of 6 errors
