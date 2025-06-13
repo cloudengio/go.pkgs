@@ -187,8 +187,6 @@ func (m *M) squashLevel(target error) *M {
 	n := &M{
 		errs: slices.Clone(serr),
 	}
-	defer fmt.Printf("squashLevel: done: %p -> %v (%v .. %v)\n", m, n, len(n.errs), n.numSquashed)
-
 	return n
 }
 
