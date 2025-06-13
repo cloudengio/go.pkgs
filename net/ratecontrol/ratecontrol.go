@@ -12,9 +12,16 @@ import (
 	"time"
 )
 
-// Controller is used to control the rate at which requests are made and
-// to implement backoff when the remote server is unwilling to process a
-// request. Controller is safe to use concurrently.
+// Limiter is an interface that defines a generic rate limiter.
+type Limiter interface {
+	Wait(context.Context) error
+	BytesTransferred(int)
+	Backoff() Backoff
+}
+
+// Controller implements Limiter and is used to control the rate at which
+// requests are made and to implement backoff when the remote server is
+// unwilling to process a request. Controller is safe to use concurrently.
 type Controller struct {
 	opts         options
 	reqsTicker   *time.Ticker

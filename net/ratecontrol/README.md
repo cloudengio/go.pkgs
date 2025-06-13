@@ -19,8 +19,11 @@ type Backoff interface {
 	// should be terminated, i.e. no more requests should be attempted.
 	// The error returned is nil when the backoff algorithm has reached
 	// its limit and will generally only be non-nil for an internal error
-	// such as the context being cancelled.
-	Wait(context.Context, *http.Response) (bool, error)
+	// such as the context being canceled.
+	// The second argument is a placeholder for any additional data that
+	// the backoff algorithm may need to process, such as an HTTP response
+	// or a retry response. It can be nil if no such data is needed.
+	Wait(context.Context, any) (bool, error)
 
 	// Retries returns the number of retries that the backoff aglorithm
 	// has recorded, ie. the number of times that Backoff was called and
@@ -48,9 +51,9 @@ type Controller struct {
 	// contains filtered or unexported fields
 }
 ```
-Controller is used to control the rate at which requests are made and to
-implement backoff when the remote server is unwilling to process a request.
-Controller is safe to use concurrently.
+Controller implements Limiter and is used to control the rate at which
+requests are made and to implement backoff when the remote server is
+unwilling to process a request. Controller is safe to use concurrently.
 
 ### Functions
 
@@ -102,11 +105,22 @@ Retries implements Backoff.
 
 
 ```go
-func (eb *ExponentialBackoff) Wait(ctx context.Context, _ *http.Response) (bool, error)
+func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error)
 ```
 Wait implements Backoff.
 
 
+
+
+### Type Limiter
+```go
+type Limiter interface {
+	Wait(context.Context) error
+	BytesTransferred(int)
+	Backoff() Backoff
+}
+```
+Limiter is an interface that defines a generic rate limiter.
 
 
 ### Type Option
@@ -120,17 +134,19 @@ Option represents an option for configuring a ratecontrol Controller.
 ```go
 func WithBytesPerTick(tickInterval time.Duration, bpt int) Option
 ```
-The algorithm used is very simple and will simply stop sending data wait for
-a single tick if the limit is reached without taking into account how long
-the tick is, nor how much excess data was sent over the previous tick (ie.
-no attempt is made to smooth out the rate and for now it's a simple
-start/stop model). The bytes to be accounted for are reported to the
-Controller via its BytesTransferred method.
+WithBytesPerTick sets the approximate rate in bytes per tick The algorithm
+used is very simple and will simply stop sending data wait for a single tick
+if the limit is reached without taking into account how long the tick is,
+nor how much excess data was sent over the previous tick (ie. no attempt is
+made to smooth out the rate and for now it's a simple start/stop model).
+The bytes to be accounted for are reported to the Controller via its
+BytesTransferred method.
 
 
 ```go
 func WithCustomBackoff(backoff func() Backoff) Option
 ```
+WithCustomBackoff allows the use of a custom backoff function.
 
 
 ```go
@@ -140,6 +156,13 @@ WithExponentialBackoff enables an exponential backoff algorithm. First
 defines the first backoff delay, which is then doubled for every consecutive
 retry until the download either succeeds or the specified number of steps
 (attempted requests) is exceeded.
+
+
+```go
+func WithNoRateControl() Option
+```
+WithNoRateControl creates a Controller that returns immediately and offers
+no backoff. It can be used as a default when no rate control is desired.
 
 
 ```go
