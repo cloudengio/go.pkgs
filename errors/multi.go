@@ -7,6 +7,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -41,7 +42,6 @@ func As(err error, target interface{}) bool {
 type M struct {
 	mu          sync.RWMutex
 	errs        []error // GUARDED_BY(mu)
-	squashed    error
 	numSquashed int
 }
 
@@ -66,33 +66,15 @@ func (m *M) Append(errs ...error) {
 		if err == nil {
 			continue
 		}
-		if merr, ok := err.(*M); ok {
-			m.errs = append(m.errs, merr.errs...)
-			continue
-		}
 		m.errs = append(m.errs, err)
 	}
 }
 
-// Unwrap implements errors.Unwrap. It returns the first stored error
-// and then removes that error.
-func (m *M) Unwrap() error {
+// Unwrap implements errors.Unwrap() []error.
+func (m *M) Unwrap() []error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	switch len(m.errs) {
-	case 0:
-		return nil
-	case 1:
-		err := m.errs[0]
-		m.errs = nil
-		return err
-	default:
-		err := m.errs[0]
-		n := make([]error, len(m.errs)-1)
-		copy(n, m.errs[1:])
-		m.errs = n
-		return err
-	}
+	return slices.Clone(m.errs)
 }
 
 // Is supports errors.Is.
@@ -121,6 +103,10 @@ func (m *M) As(target interface{}) bool {
 
 // Error implements error.error
 func (m *M) Error() string {
+	return m.error("  ")
+}
+
+func (m *M) error(indent string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	l := len(m.errs)
@@ -128,32 +114,42 @@ func (m *M) Error() string {
 	case 0:
 		return ""
 	case 1:
-		if m.numSquashed == 0 {
+		if m.numSquashed <= 1 {
 			return m.errs[0].Error()
 		}
+		return fmt.Sprintf("%v (repeated %d times)", m.errs[0], m.numSquashed)
 	}
 	out := &strings.Builder{}
 	for i, err := range m.errs {
-		fmt.Fprintf(out, "  --- %v of %v errors\n  ", i+1, l)
-		out.WriteString(err.Error())
+		out.WriteString(indent)
+		fmt.Fprintf(out, "--- %v of %v errors\n", i+1, l)
+		if me, ok := err.(*M); ok {
+			if len(me.errs) < 2 {
+				out.WriteString(indent)
+			}
+			out.WriteString(me.error(indent + "  "))
+		} else {
+			out.WriteString(indent)
+			out.WriteString(err.Error())
+		}
 		out.WriteString("\n")
-	}
-	if m.numSquashed > 0 {
-		fmt.Fprintf(out, "  --- %v squashed %v times\n", m.squashed, m.numSquashed)
 	}
 	return strings.TrimSuffix(out.String(), "\n")
 }
 
 // Format implements fmt.Formatter.Format.
 func (m *M) Format(f fmt.State, c rune) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	m.format(f, c, "  ")
+}
+
+func (m *M) format(f fmt.State, c rune, indent string) {
 	format := "%" + string(c)
 	if !f.Flag('+') && !f.Flag('#') {
 		fmt.Fprintf(f, format, m.Error())
 		return
 	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	switch {
 	case f.Flag('+'):
 		format = "%+" + string(c)
@@ -167,46 +163,64 @@ func (m *M) Format(f fmt.State, c rune) {
 	}
 	format += "\n"
 	for i, err := range m.errs {
-		fmt.Fprintf(f, "  --- %v of %v errors\n  ", i+1, l)
+		fmt.Fprintf(f, "%v--- %v of %v errors\n%s", indent, i+1, l, indent)
 		fmt.Fprintf(f, format, err)
-	}
-
-	if m.numSquashed > 0 {
-		fmt.Fprintf(f, "  --- %v squashed %v times\n", m.squashed, m.numSquashed)
 	}
 }
 
-func (m *M) squash(target error, first bool) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if len(m.errs) == 0 {
-		return nil
-	}
-	c := &M{}
-	c.errs = make([]error, 0, len(m.errs))
-	for _, err := range m.errs {
-		if rr, ok := err.(*M); ok {
-			c.Append(rr.squash(target, first))
+func (m *M) squashLevel(target error) *M {
+	serr := make([]error, 0, len(m.errs))
+	var squashed *M
+	for _, child := range m.errs {
+		_, ok := child.(*M)
+		if !ok && errors.Is(child, target) {
+			if squashed == nil {
+				squashed = &M{errs: []error{child}, numSquashed: 1}
+				serr = append(serr, squashed)
+			} else {
+				squashed.numSquashed++
+			}
 			continue
 		}
-		if errors.Is(err, target) {
-			if !first {
-				c.numSquashed++
-				continue
-			}
-			first = false
-			c.squashed = target
-			c.numSquashed = 1
-		}
-		c.errs = append(c.errs, err)
+		serr = append(serr, child)
 	}
+	n := &M{
+		errs: slices.Clone(serr),
+	}
+	defer fmt.Printf("squashLevel: done: %p -> %v (%v .. %v)\n", m, n, len(n.errs), n.numSquashed)
+
+	return n
+}
+
+func (m *M) squash(target error) *M {
+	switch len(m.errs) {
+	case 0:
+		return nil
+	case 1:
+		return m
+	}
+	c := &M{errs: make([]error, 0, len(m.errs))}
+	for _, child := range m.errs {
+		if mChild, ok := child.(*M); ok {
+			c.errs = append(c.errs, mChild.squash(target))
+			continue
+		}
+		c.errs = append(c.errs, child)
+	}
+	c = c.squashLevel(target)
 	return c
 }
 
-// Squash returns an error.M with at most one instance of target per
-// level in the error tree.
-func (m *M) Squash(target error) error {
-	return m.squash(target, true)
+// Squash returns an error.M with at most one instance of each of the
+// targets per level in the error tree.
+func (m *M) Squash(targets ...error) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	s := m.Clone()
+	for _, target := range targets {
+		s = s.squash(target)
+	}
+	return s
 }
 
 // Err returns nil if m contains no errors, or itself otherwise.
@@ -227,4 +241,19 @@ func (m *M) Clone() *M {
 	c.errs = make([]error, len(m.errs))
 	copy(c.errs, m.errs)
 	return c
+}
+
+// Squash returns an error that contains at most one instance of targets
+// per level in the error tree. If err is nil, it returns nil.
+// If err is an *M, it calls Squash on that instance. Otherwise, it returns
+// the original error.
+func Squash(err error, targets ...error) error {
+	if err == nil {
+		return nil
+	}
+	m, ok := err.(*M)
+	if ok {
+		return m.Squash(targets...)
+	}
+	return err
 }

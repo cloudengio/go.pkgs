@@ -96,6 +96,14 @@ NewM is equivalent to:
     ...
     return errs.Err()
 
+### Func Squash
+```go
+func Squash(err error, target error) error
+```
+Squash returns an error that contains at most one instance of target per
+level in the error tree. If err is nil, it returns nil. If err is an *M,
+it calls Squash on that instance. Otherwise, it returns the original error.
+
 ### Func Unwrap
 ```go
 func Unwrap(err error) error
@@ -185,10 +193,9 @@ the error tree.
 
 
 ```go
-func (m *M) Unwrap() error
+func (m *M) Unwrap() []error
 ```
-Unwrap implements errors.Unwrap. It returns the first stored error and then
-removes that error.
+Unwrap implements errors.Unwrap() []error.
 
 
 
