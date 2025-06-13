@@ -15,7 +15,7 @@ import (
 // Limiter is an interface that defines a generic rate limiter.
 type Limiter interface {
 	Wait(context.Context) error
-	BytesTransferred(int64)
+	BytesTransferred(int)
 	Backoff() Backoff
 }
 
@@ -89,11 +89,11 @@ func (c *Controller) Wait(ctx context.Context) error {
 // BytesTransferred notifies the controller that the specified number of bytes
 // have been transferred and is used when byte based rate control is configured
 // via WithBytesPerTick.
-func (c *Controller) BytesTransferred(nBytes int64) {
+func (c *Controller) BytesTransferred(nBytes int) {
 	if c.opts.bytesPerTick == 0 {
 		return
 	}
-	c.bytesPerTick.Add(nBytes)
+	c.bytesPerTick.Add(int64(nBytes))
 }
 
 func (c *Controller) Backoff() Backoff {
