@@ -12,9 +12,16 @@ import (
 	"time"
 )
 
-// Controller is used to control the rate at which requests are made and
-// to implement backoff when the remote server is unwilling to process a
-// request. Controller is safe to use concurrently.
+// Limiter is an interface that defines a generic rate limiter.
+type Limiter interface {
+	Wait(context.Context) error
+	BytesTransferred(int64)
+	Backoff() Backoff
+}
+
+// Controller implements Limiter and is used to control the rate at which
+// requests are made and to implement backoff when the remote server is
+// unwilling to process a request. Controller is safe to use concurrently.
 type Controller struct {
 	opts         options
 	reqsTicker   *time.Ticker
@@ -82,11 +89,11 @@ func (c *Controller) Wait(ctx context.Context) error {
 // BytesTransferred notifies the controller that the specified number of bytes
 // have been transferred and is used when byte based rate control is configured
 // via WithBytesPerTick.
-func (c *Controller) BytesTransferred(nBytes int) {
+func (c *Controller) BytesTransferred(nBytes int64) {
 	if c.opts.bytesPerTick == 0 {
 		return
 	}
-	c.bytesPerTick.Add(int64(nBytes))
+	c.bytesPerTick.Add(nBytes)
 }
 
 func (c *Controller) Backoff() Backoff {
