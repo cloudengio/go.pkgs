@@ -160,11 +160,11 @@ func (br *ByteRanges) NumBlocks() int {
 // If the content size is not a multiple of the block size, it adds an additional
 // block to cover the remaining bytes.
 func NumBlocks(contentSize int64, blockSize int) int {
-	nb := int(contentSize) / blockSize
+	nb := contentSize / int64(blockSize)
 	if contentSize%int64(blockSize) != 0 {
 		nb++
 	}
-	return nb
+	return int(nb)
 }
 
 // MarshalJSON implements the json.Marshaler interface for ByteRanges.
