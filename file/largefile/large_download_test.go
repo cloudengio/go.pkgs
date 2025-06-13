@@ -463,6 +463,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		// The values vary depending on when the context was cancelled,
 		// so we set them to 0.
 		st.DownloadedBlocks, st.DownloadedBytes = 0, 0
+		st.CachedBlocks, st.CachedBytes = 0, 0
 		p := defaultIncompleteState
 		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
