@@ -35,7 +35,7 @@ func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concu
 				case <-ctx.Done():
 					return ctx.Err()
 				default:
-					if _, err := fs.WriteAt(buf, r.From); err != nil {
+					if _, err := fs.WriteAt(buf[:r.Size()], r.From); err != nil {
 						return err
 					}
 				}

@@ -8,6 +8,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"cloudeng.io/file"
+	"cloudeng.io/sys"
 )
 
 // ReserveSpace creates a file with the specified filename and allocates the
@@ -18,33 +22,48 @@ import (
 // a download operations never fails because of insufficient local space once
 // it has been initiated.
 func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int) error {
-	file, err := os.Create(filename)
+
+	availBytes, err := sys.AvailableBytes(filepath.Dir(filename))
+	if err != nil {
+		return fmt.Errorf("failed to determine available bytes for %s: %w", filename, err)
+	}
+
+	if availBytes < size {
+		return fmt.Errorf("not enough space available for %s: %v MB available, %v MB requested", filename, file.MB.Value(availBytes), file.MB.Value(size))
+	}
+
+	f1, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer f1.Close()
 
-	if err := reserveSpace(ctx, file, size, blockSize, concurrency); err != nil {
+	if err := reserveSpace(ctx, f1, size, blockSize, concurrency); err != nil {
 		return err
 	}
-	if err := file.Sync(); err != nil {
-		return err
-	}
-	if err := file.Close(); err != nil {
+	if err := f1.Sync(); err != nil {
 		return err
 	}
 
-	nfile, err := os.Open(filename)
+	f2, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("failed to reopen cache file %s: %w", filename, err)
 	}
-	defer nfile.Close()
-	allocated, err := allocated(nfile, size)
+	defer f2.Close()
+	allocated, err := allocated(f2, size)
 	if err != nil {
 		return err
 	}
 	if !allocated {
-		return fmt.Errorf("file %s was not allocated with size %d", filename, size)
+		return fmt.Errorf("file %s was not allocated with size %v", filename, file.MB.Value(size))
+	}
+
+	fi, err := f2.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat file %s: %w", filename, err)
+	}
+	if fi.Size() != size {
+		return fmt.Errorf("file %s size %d is not equal to requested size %d", filename, fi.Size(), size)
 	}
 	return nil
 }
