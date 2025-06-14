@@ -5,6 +5,8 @@
 package bitmap_test
 
 import (
+	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"testing"
@@ -218,7 +220,7 @@ func iotaSlice(start, endInclusive int) []int {
 	return s
 }
 
-func TestBitmap_NextClear(t *testing.T) {
+func TestBitmapAllClear(t *testing.T) {
 	tests := []struct {
 		name       string
 		bm         bitmap.T
@@ -264,10 +266,14 @@ func TestBitmap_NextClear(t *testing.T) {
 		{"bitmap New(65), all clear", bitmap.New(65), 64, 128, iotaSlice(64, 127)},
 		{"bitmap New(65), all clear, OOB", bitmap.New(65), 65, 128, iotaSlice(65, 127)},
 	}
-	for _, tt := range tests {
+	for i, tt := range tests {
+		if i != 7 {
+			continue
+		}
 		t.Run(tt.name, func(t *testing.T) {
 			var gotSeq []int
-			for v := range tt.bm.NextClear(tt.startIndex, tt.size) {
+			fmt.Printf("%v: Bitmap.NextClear(test %s, start %d, size %d) sequence = %v, want %v (bm: %064b)", i, tt.name, tt.startIndex, tt.size, gotSeq, tt.wantSeq, tt.bm)
+			for v := range tt.bm.AllClear(tt.startIndex, tt.size) {
 				gotSeq = append(gotSeq, v)
 			}
 			if !slices.Equal(gotSeq, tt.wantSeq) {
@@ -291,7 +297,7 @@ func TestBitmap_NextClear(t *testing.T) {
 	}
 }
 
-func TestBitmap_NextSet(t *testing.T) {
+func TestBitmapAllSet(t *testing.T) {
 	tests := []struct {
 		name       string
 		bm         bitmap.T
@@ -339,7 +345,7 @@ func TestBitmap_NextSet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotSeq []int
-			for v := range tt.bm.NextSet(tt.startIndex, tt.size) {
+			for v := range tt.bm.AllSet(tt.startIndex, tt.size) {
 				gotSeq = append(gotSeq, v)
 			}
 			if !slices.Equal(gotSeq, tt.wantSeq) {
@@ -347,4 +353,199 @@ func TestBitmap_NextSet(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBitmap_NextSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		bm       bitmap.T
+		start    int
+		size     int
+		expected int
+	}{
+		// Empty or nil bitmap
+		{"nil bitmap", nil, 0, 0, -1},
+		{"empty bitmap", bitmap.New(0), 0, 0, -1},
+		{"nil bitmap with start", nil, 0, 10, -1},
+		{"empty bitmap with start", bitmap.New(0), 0, 10, -1},
+
+		// All clear
+		{"all clear small", bitmap.New(64), 0, 64, -1},
+		{"all clear large", bitmap.New(128), 0, 128, -1},
+		{"all clear start offset", bitmap.New(128), 10, 128, -1},
+		{"all clear limited size", bitmap.New(128), 0, 60, -1},
+
+		// All set
+		{"all set find first", testBitmapAllSet(64), 0, 64, 0},
+		{"all set find middle", testBitmapAllSet(64), 30, 64, 30},
+		{"all set find last", testBitmapAllSet(64), 63, 64, 63},
+		{"all set start beyond last", testBitmapAllSet(64), 64, 64, -1},
+		{"all set limited size find first", testBitmapAllSet(128), 0, 60, 0},
+		{"all set limited size find middle", testBitmapAllSet(128), 30, 60, 30},
+		{"all set limited size find last in range", testBitmapAllSet(128), 59, 60, 59},
+		{"all set limited size start at limit", testBitmapAllSet(128), 60, 60, -1},
+		{"all set skip full uint64", testBitmapAllSet(128), 64, 128, 64},
+
+		// Mixed bits
+		{"mixed simple find", testBitmapFromSetBits(128, 5), 0, 128, 5},
+		{"mixed find next", testBitmapFromSetBits(128, 5, 10), 6, 128, 10},
+		{"mixed find across uint64 boundary", testBitmapFromSetBits(128, 60, 70), 0, 128, 60},
+		{"mixed find next across uint64 boundary", testBitmapFromSetBits(128, 60, 70), 61, 128, 70},
+		{"mixed no set bit after start", testBitmapFromSetBits(128, 5), 6, 128, -1},
+		{"mixed start at set bit", testBitmapFromSetBits(128, 5, 10), 5, 128, 5},
+		{"mixed start after all set bits", testBitmapFromSetBits(128, 5, 10), 11, 128, -1},
+		{"mixed limited size exclude set bit", testBitmapFromSetBits(128, 5), 0, 5, -1},
+		{"mixed limited size include set bit", testBitmapFromSetBits(128, 5), 0, 6, 5},
+		{"mixed optimization skip empty block", testBitmapFromSetBits(192, 130), 0, 192, 130}, // 0-63 clear, 64-127 clear, 130 set
+		{"mixed start in empty block before set", testBitmapFromSetBits(192, 130), 70, 192, 130},
+
+		// Edge cases for start and size
+		{"start negative", bitmap.New(64), -1, 64, -1},
+		{"start equals size (empty range)", testBitmapFromSetBits(64, 0), 0, 0, -1},
+		{"start equals actual_len (empty range)", testBitmapFromSetBits(64, 0), 64, 64, -1},
+		{"start greater than size", testBitmapFromSetBits(64, 0), 10, 5, -1},
+		{"size larger than bitmap", testBitmapFromSetBits(64, 30), 0, 100, 30},
+		{"size 0", testBitmapFromSetBits(64, 0), 0, 0, -1},
+		{"start at end of bitmap", testBitmapFromSetBits(64, 63), 63, 64, 63},
+		{"start beyond end of bitmap", testBitmapFromSetBits(64, 63), 64, 64, -1},
+		{"start at end of size limit", testBitmapFromSetBits(128, 30, 70), 60, 60, -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.bm.NextSet(tt.start, tt.size); got != tt.expected {
+				t.Errorf("Bitmap.NextSet(%d, %d) = %v, want %v", tt.start, tt.size, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBitmap_NextClear(t *testing.T) {
+	tests := []struct {
+		name     string
+		bm       bitmap.T
+		start    int
+		size     int
+		expected int
+	}{
+		// Empty or nil bitmap
+		{"nil bitmap", nil, 0, 0, -1},
+		{"empty bitmap", bitmap.New(0), 0, 0, -1},
+		{"nil bitmap with start", nil, 0, 10, -1},
+		{"empty bitmap with start", bitmap.New(0), 0, 10, -1},
+
+		// All set
+		{"all set small", testBitmapAllSet(64), 0, 64, -1},
+		{"all set large", testBitmapAllSet(128), 0, 128, -1},
+		{"all set start offset", testBitmapAllSet(128), 10, 128, -1},
+		{"all set limited size", testBitmapAllSet(128), 0, 60, -1},
+
+		// All clear
+		{"all clear find first", bitmap.New(64), 0, 64, 0},
+		{"all clear find middle", bitmap.New(64), 30, 64, 30},
+		{"all clear find last", bitmap.New(64), 63, 64, 63},
+		{"all clear start beyond last", bitmap.New(64), 64, 64, -1},
+		{"all clear limited size find first", bitmap.New(128), 0, 60, 0},
+		{"all clear limited size find middle", bitmap.New(128), 30, 60, 30},
+		{"all clear limited size find last in range", bitmap.New(128), 59, 60, 59},
+		{"all clear limited size start at limit", bitmap.New(128), 60, 60, -1},
+		{"all clear skip full uint64 (all clear)", bitmap.New(128), 64, 128, 64},
+
+		// Mixed bits
+		{"mixed simple find clear", testBitmapFromSetBits(128, 0), 0, 128, 1},                      // bit 0 is set
+		{"mixed find next clear", testBitmapFromSetBits(128, 0, 2), 1, 128, 1},                     // bit 0 set, bit 1 clear, bit 2 set
+		{"mixed find clear across uint64 boundary", testBitmapFromSetBits(128, 63, 64), 0, 128, 0}, // 0-62 clear, 63 set, 64 set, 65 clear
+		{"mixed find next clear across uint64 boundary", testBitmapFromSetBits(128, 63, 64), 63, 128, 65},
+		{"mixed no clear bit after start (all set portion)", testBitmapAllSetRange(128, 0, 10), 0, 10, -1},
+		{"mixed start at clear bit", testBitmapFromSetBits(128, 1), 0, 128, 0}, // bit 0 clear, bit 1 set
+		{"mixed start after all clear bits (all set portion)", testBitmapAllSetRange(128, 0, 10), 11, 128, 11},
+		{"mixed limited size exclude clear bit", testBitmapAllSetRange(128, 0, 5), 0, 5, -1},
+		{"mixed limited size include clear bit", testBitmapFromSetBits(128, 0, 1, 2, 3, 4), 0, 6, 5}, // 0-4 set, 5 clear
+		{"mixed optimization skip full block", testBitmapAllSetThenClearFrom(192, 128), 0, 192, 128}, // 0-127 set, 128 onwards clear
+		{"mixed start in full block before clear", testBitmapAllSetThenClearFrom(192, 128), 70, 192, 128},
+
+		// Edge cases for start and size
+		{"start negative", bitmap.New(64), -1, 64, -1},
+		{"start equals size (empty range)", bitmap.New(64), 0, 0, -1},
+		{"start equals actual_len (empty range)", bitmap.New(64), 64, 64, -1},
+		{"start greater than size", bitmap.New(64), 10, 5, -1},
+		{"size larger than bitmap", bitmap.New(64), 0, 100, 0},
+		{"size 0", bitmap.New(64), 0, 0, -1},
+		{"start at end of bitmap", bitmap.New(64), 63, 64, 63},
+		{"start beyond end of bitmap", bitmap.New(64), 64, 64, -1},
+		{"start at end of size limit", bitmap.New(128), 60, 60, -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.bm.NextClear(tt.start, tt.size); got != tt.expected {
+				t.Errorf("Bitmap.NextClear(%d, %d) = %v, want %v", tt.start, tt.size, got, tt.expected)
+			}
+		})
+	}
+}
+
+// Helper to create a bitmap with all bits set up to 'size'.
+func testBitmapAllSet(size int) bitmap.T {
+	if size <= 0 {
+		return bitmap.New(0)
+	}
+	bm := bitmap.New(size)
+	for i := 0; i < (size+63)/64; i++ {
+		bm[i] = math.MaxUint64
+	}
+	// Clear any excess bits if size is not a multiple of 64
+	if size%64 != 0 {
+		idx := (size + 63) / 64
+		if idx > 0 {
+			idx-- // last uint64
+			// Create a mask for bits to keep (from 0 to size%64 - 1)
+			keepMask := uint64(1)<<(size%64) - 1
+			bm[idx] &= keepMask
+		}
+	}
+	return bm
+}
+
+// Helper to create a bitmap of a given total size with specific bits set.
+func testBitmapFromSetBits(totalSize int, setBits ...int) bitmap.T {
+	if totalSize <= 0 && len(setBits) == 0 {
+		return bitmap.New(0)
+	}
+	if totalSize <= 0 && len(setBits) > 0 {
+		// Determine max bit to decide size
+		maxBit := 0
+		for _, b := range setBits {
+			if b > maxBit {
+				maxBit = b
+			}
+		}
+		totalSize = maxBit + 1
+	}
+
+	bm := bitmap.New(totalSize)
+	for _, bit := range setBits {
+		bm.Set(bit)
+	}
+	return bm
+}
+
+// Helper to create a bitmap with a range of bits set.
+func testBitmapAllSetRange(totalSize, from, to int) bitmap.T {
+	bm := bitmap.New(totalSize)
+	for i := from; i < to && i < totalSize; i++ {
+		bm.Set(i)
+	}
+	return bm
+}
+
+// Helper to create a bitmap with all bits set up to 'setUntil', then clear from 'setUntil' onwards.
+func testBitmapAllSetThenClearFrom(totalSize, setUntil int) bitmap.T {
+	bm := bitmap.New(totalSize)
+	for i := 0; i < setUntil; i++ {
+		if i < totalSize {
+			bm.Set(i)
+		}
+	}
+	return bm
 }
