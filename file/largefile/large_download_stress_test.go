@@ -303,3 +303,69 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	validateIndexFile(t, indexFile, cacheSize, blockSize)
 
 }
+
+func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize int, limiter ratecontrol.Limiter, concurrency int) largefile.DownloadStatus {
+	tmpDirAllCached := t.TempDir()
+	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
+	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
+
+	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency); err != nil {
+		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
+	}
+
+	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize}
+
+	dl := largefile.NewCachingDownloader(mf,
+		cache,
+		largefile.WithDownloadRateController(limiter),
+		largefile.WithDownloadConcurrency(concurrency))
+
+	st, err := dl.Run(ctx)
+	t.Logf("Run completed with status: %+v\n", st)
+	if err != nil {
+		if got, want := st.Resumeable, true; got != want {
+			t.Errorf("Run expected resumeable error, got %v", err)
+		}
+		if got, want := cache.Complete(), false; got != want {
+			t.Errorf("Run expected cache to be incomplete, got complete: %v", got)
+		}
+	} else {
+		if got, want := st.Complete, true; got != want {
+			t.Errorf("Run expected complete status, got %v", st)
+		}
+		if got, want := cache.Complete(), true; got != want {
+			t.Errorf("Run expected cache to be complete, got complete: %v", got)
+		}
+	}
+	if err := cache.Close(); err != nil {
+		t.Fatalf("failed to close cache: %v", err)
+	}
+
+	if !cache.Complete() {
+		t.Errorf("cache is not complete after retries, expected complete cache")
+	}
+
+	validateCacheFile(t, cacheFile, cacheSize)
+	validateIndexFile(t, indexFile, cacheSize, blockSize)
+
+	return st
+}
+
+func TestRateControl(t *testing.T) {
+	ctx := context.Background()
+	cacheSize := int64(file.KB * 7)
+	blockSize := 1024
+	rl := ratecontrol.New(ratecontrol.WithNoRateControl())
+	st := downloadFile(ctx, t, cacheSize, blockSize, rl, 10)
+
+	slower := ratecontrol.New(ratecontrol.WithBytesPerTick(time.Millisecond*30, 10))
+	sst := downloadFile(ctx, t, cacheSize, blockSize, slower, 10)
+
+	if (2 * st.Duration) > sst.Duration {
+		t.Errorf("expected faster download with no rate control, got %v vs %v", st.Duration, sst.Duration)
+	}
+}
