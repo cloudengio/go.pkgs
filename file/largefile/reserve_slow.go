@@ -46,10 +46,10 @@ func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concu
 	return g.Wait()
 }
 
-func generator(ctx context.Context, br *ByteRanges, ch chan<- ByteRange) error {
-	for r := range br.NextClear(0) {
+func generator(ctx context.Context, brs *ByteRanges, ch chan<- ByteRange) error {
+	for br := range brs.AllClear(0) {
 		select {
-		case ch <- r:
+		case ch <- br:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

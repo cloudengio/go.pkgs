@@ -16,6 +16,30 @@ duration. The backoff will continue for the specified number of steps,
 after which it will return true to indicate that no more retries should be
 attempted.
 
+### Func NewFilesForCache
+```go
+func NewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int) error
+```
+NewFilesForCache creates a new cache file and an index file for caching byte
+ranges of large files. It reserves space for the cache file and initializes
+the index file with the specified content size and block size. It returns
+an error if the files cannot be created or if the space cannot be reserved.
+The index file is used to track which byte ranges have been written to the
+cache. The cache file is used to store the actual data. The contentSize is
+the total size of the file in bytes, blockSize is the preferred block size
+for downloading the file, and concurrency is the number of concurrent writes
+used to reserve space for the cache file on systems that require writing to
+the file to reserve space (e.g., non-Linux systems).
+
+### Func NumBlocks
+```go
+func NumBlocks(contentSize int64, blockSize int) int
+```
+NumBlocks calculates the number of blocks required to cover the content size
+given the specified block size. It returns the number of blocks needed. If
+the content size is not a multiple of the block size, it adds an additional
+block to cover the remaining bytes.
+
 ### Func ReserveSpace
 ```go
 func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int) error
@@ -28,14 +52,14 @@ the file to ensure that the space is allocated. The intent is to ensure that
 a download operations never fails because of insufficient local space once
 it has been initiated.
 
-### Func TestLocalDownloadCache_Get_Errors
+### Func TestLocalDownloadCacheGetErrors
 ```go
-func TestLocalDownloadCache_Get_Errors(t *testing.T)
+func TestLocalDownloadCacheGetErrors(t *testing.T)
 ```
 
-### Func TestLocalDownloadCache_Put_Errors
+### Func TestLocalDownloadCachePutErrors
 ```go
-func TestLocalDownloadCache_Put_Errors(t *testing.T)
+func TestLocalDownloadCachePutErrors(t *testing.T)
 ```
 
 
@@ -45,12 +69,12 @@ func TestLocalDownloadCache_Put_Errors(t *testing.T)
 ```go
 type ByteRange struct {
 	From int64 // Inclusive start of the range.
-	To   int64 // Exclusive end of the range.
+	To   int64 // Inclusive end of the range.
 }
 ```
 ByteRange represents a range of bytes in a file. The range is inclusive
 of the 'From' byte and the 'To' byte as per the HTTP Range header
-specification.
+specification/convention.
 
 ### Methods
 
@@ -72,9 +96,13 @@ type ByteRanges struct {
 	// contains filtered or unexported fields
 }
 ```
-ByteRange represents a collection of equally sized, contiguous, byte ranges
-that can be used to track which parts of a file to download or that have
-been downloaded.
+ByteRange represents a collection of equally sized (apart from the last
+range), contiguous, byte ranges that can be used to track which parts of a
+file have or have not been 'processed', e.g downloaded, cached, uploaded
+etc. The ranges are represented as a bitmap, where each bit corresponds to
+a block of bytes of the specified size. The bitmap is used to efficiently
+track which byte ranges are set (processed) and which are clear (not
+processed).
 
 ### Functions
 
@@ -88,6 +116,25 @@ bytes, and the block size is the size of each byte range in bytes.
 
 
 ### Methods
+
+```go
+func (br *ByteRanges) AllClear(start int) iter.Seq[ByteRange]
+```
+AllClear returns an iterator for all clear byte ranges starting from
+'start'. A read lock is held while iterating over the byte ranges, hence
+calling any other method, such as Set, which takes a write lock will block
+until the iteration is complete. Use NextClear if finer-grained control is
+needed.
+
+
+```go
+func (br *ByteRanges) AllSet(start int) iter.Seq[ByteRange]
+```
+AllSet returns an iterator for all set byte ranges starting from 'start'.
+A read lock is held while iterating over the byte ranges, hence calling any
+other method, such as Set, which takes a write lock will block until the
+iteration is complete. Use NextSet if finer-grained control is needed.
+
 
 ```go
 func (br *ByteRanges) BlockSize() int
@@ -118,17 +165,31 @@ MarshalJSON implements the json.Marshaler interface for ByteRanges.
 
 
 ```go
-func (br *ByteRanges) NextClear(start int) iter.Seq[ByteRange]
+func (br *ByteRanges) NextClear(start int, nbr *ByteRange) int
 ```
-NextClear returns an iterator for the next clear byte range starting from
-'start'.
+NextClear returns the next clear byte range starting from 'start'. It starts
+searching from the specified start index and returns the index of the next
+outstanding range which can be used to continue searching for the next
+outstanding range. The index will be -1 if there are no more outstanding
+ranges.
+
+    for start := NextClear(0, &br); start >= 0; start = NextClear(start, &br) {
+        // Do something with the byte range br.
+    }
 
 
 ```go
-func (br *ByteRanges) NextSet(start int) iter.Seq[ByteRange]
+func (br *ByteRanges) NextSet(start int, nbr *ByteRange) int
 ```
-NextSet returns an iterator for the next set byte range starting from
-'start'.
+NextSet returns the next set byte range starting from 'start' and behaves
+similarly to NextClear.
+
+
+```go
+func (br *ByteRanges) NumBlocks() int
+```
+NumBlocks returns the number of blocks required to cover the byte ranges
+represented by this ByteRanges instance.
 
 
 ```go
@@ -152,21 +213,25 @@ type CachingDownloader struct {
 	// contains filtered or unexported fields
 }
 ```
+CachingDownloader is a downloader that caches streamed downloaded data to a
+local cache and supports resuming downloads from where they left off.
 
 ### Functions
 
 ```go
 func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOption) *CachingDownloader
 ```
+NewCachingDownloader creates a new CachingDownloader instance.
 
 
 
 ### Methods
 
 ```go
-func (dl *CachingDownloader) Run(ctx context.Context) error
+func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error)
 ```
-Run initializes the download.
+Run executes the downloaded process. If the downloader encounters any errors
+it will return an
 
 
 
@@ -197,9 +262,24 @@ type DownloadCache interface {
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the preferred block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
-	Outstanding() iter.Seq[ByteRange]
-	Cached() iter.Seq[ByteRange]
+	// NextOutstanding finds the next byte range that has not been cached
+	// starting from the specified 'start' index. Its return value is either
+	// -1 if there are no more outstanding ranges, or the value of the next
+	// starting index to continue searching at.
+	// To iterate over all outstanding ranges, call this method repeatedly
+	// until it returns -1 as follows:
+	//    for start := NextOutstanding(0, &br); start != -1; start = NextOutstanding(start, &br) {
+	//        // Do something with the byte range br.
+	//    }
+	NextOutstanding(start int, br *ByteRange) int
+	// NextCached finds the next byte range that has been cached in the same manner
+	// as NextOutstanding.
+	NextCached(start int, br *ByteRange) int
+	// Complete returns true if all byte ranges have been cached.
+	Complete() bool
+	// Put writes the specified byte range to the cache.
 	Put(r ByteRange, data []byte) error
+	// Get reads the specified byte range from the cache into the provided data slice.
 	Get(r ByteRange, data []byte) error
 }
 ```
@@ -225,20 +305,49 @@ func WithDownloadLogger(logger *slog.Logger) DownloadOption
 
 
 ```go
-func WithDownloadProgress(progress chan<- Progress) DownloadOption
+func WithDownloadProgress(progress chan<- DownloadState) DownloadOption
 ```
 
 
 ```go
-func WithDownloadRateController(rc *ratecontrol.Controller) DownloadOption
+func WithDownloadRateController(rc ratecontrol.Limiter) DownloadOption
 ```
 
 
 ```go
-func WithVerifyChecksum(verify bool) DownloadOption
+func WithDownloadWaitForCompletion(wait bool) DownloadOption
 ```
 
 
+
+
+### Type DownloadState
+```go
+type DownloadState struct {
+	CachedBytes      int64 // Total bytes cached.
+	CachedBlocks     int64 // Total blocks cached.
+	DownloadedBytes  int64 // Total bytes downloaded so far.
+	DownloadedBlocks int64 // Total blocks downloaded so far.
+	DownloadSize     int64 // Total size of the file in bytes.
+	DownloadBlocks   int64 // Total number of blocks to download.
+	Retries          int64 // Total number of retries made during the download.
+	Iterations       int64 // Number of iterations requiredd to complete the download.
+}
+```
+
+
+### Type DownloadStatus
+```go
+type DownloadStatus struct {
+	DownloadState
+	Resumeable bool          // Indicates if the download can be re-run.
+	Complete   bool          // Indicates if the download completed successfully.
+	Duration   time.Duration // Total duration of the download.
+}
+```
+DownloadStatus holds the status of a download operation, including the
+progress made, whether the download is resumable, completed and the total
+duration of operation.
 
 
 ### Type LocalDownloadCache
@@ -254,49 +363,65 @@ access.
 ### Functions
 
 ```go
-func NewLocalDownloadCache(filename, indexFileName string, contentSize int64, blockSize int) (*LocalDownloadCache, error)
+func NewLocalDownloadCache(filename, indexFileName string) (*LocalDownloadCache, error)
 ```
+NewLocalDownloadCache creates a new LocalDownloadCache instance. It opens
+the cache file and loads the index file containing the byte ranges that have
+been written to the cache. It returns an error if the files cannot be opened
+or if the index file cannot be loaded. The cache file is used to store the
+actual data, and the index file is used to track which byte ranges have been
+written to the cache. The cache and index files must already exist and are
+expected to be have been created using NewFilesForCache.
 
 
 
 ### Methods
 
 ```go
-func (c *LocalDownloadCache) Cached() iter.Seq[ByteRange]
+func (c *LocalDownloadCache) Close() error
 ```
+Close implements DownloadCache.
+
+
+```go
+func (c *LocalDownloadCache) Complete() bool
+```
+Complete implements DownloadCache. It returns true if all byte ranges have
+been cached, meaning there are no more uncached ranges.
 
 
 ```go
 func (c *LocalDownloadCache) ContentLengthAndBlockSize() (int64, int)
 ```
+ContentLengthAndBlockSize implements DownloadCache.
 
 
 ```go
-func (c *LocalDownloadCache) Get(r ByteRange, data []byte) ([]byte, error)
+func (c *LocalDownloadCache) Get(r ByteRange, data []byte) error
 ```
+Get implements DownloadCache.
 
 
 ```go
-func (c *LocalDownloadCache) Outstanding() iter.Seq[ByteRange]
+func (c *LocalDownloadCache) NextCached(start int, br *ByteRange) int
 ```
+NextCached implements DownloadCache. It returns the next, if any, cached
+byte range starting from the specified index.
+
+
+```go
+func (c *LocalDownloadCache) NextOutstanding(start int, br *ByteRange) int
+```
+NextOutstanding implements DownloadCache. It returns the next, if any,
+uncached byte range starting from the specified index.
 
 
 ```go
 func (c *LocalDownloadCache) Put(r ByteRange, data []byte) error
 ```
+Put implements DownloadCache.
 
 
-
-
-### Type Progress
-```go
-type Progress struct {
-	BytesDownloaded  int64 // Total bytes downloaded so far.
-	BlocksDownloaded int64 // Total blocks downloaded so far.
-	TotalSize        int64 // Total size of the file in bytes.
-	TotalBlocks      int64 // Total number of blocks to download.
-}
-```
 
 
 ### Type Reader
@@ -337,6 +462,40 @@ type RetryResponse interface {
 RetryResponse allows the caller to determine whether an operation that
 failed with a retryable error can be retried and how long to wait before
 retrying the operation.
+
+
+### Type StreamingDownloadOption
+```go
+type StreamingDownloadOption func(*downloadStreamingOptions)
+```
+
+### Functions
+
+```go
+func WithVerifyChecksum(verify bool) StreamingDownloadOption
+```
+
+
+
+
+### Type StreamingDownloader
+```go
+type StreamingDownloader struct {
+	// contains filtered or unexported fields
+}
+```
+StreamingDownloader is a downloader that streams data from a large file.
+The downloader uses concurrent byte range requests to fetch data and then
+serializes the responses into a single stream for reading.
+
+### Functions
+
+```go
+func NewStreamingDownloader(file Reader, opts ...StreamingDownloadOption) *StreamingDownloader
+```
+NewStreamingDownloader creates a new StreamingDownloader instance.
+
+
 
 
 ### Type Uploader
