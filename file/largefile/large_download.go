@@ -103,7 +103,6 @@ type downloader struct {
 	size      int64            // Total size of the file in bytes.
 	blockSize int              // Size of each block in bytes.
 	bufPool   sync.Pool        // Pool for byte slices to reduce allocations.
-	requestCh chan request     // Channel for byte ranges to fetch.
 }
 
 type terminalError struct {
@@ -134,8 +133,11 @@ func newDownloader(file Reader, opts ...DownloadOption) *downloader {
 	if d.rateController == nil {
 		d.rateController = ratecontrol.New(ratecontrol.WithNoRateControl()) // Default to no rate control.
 	}
+<<<<<<< Updated upstream
 	d.file = file
 	d.requestCh = make(chan request, d.concurrency) // Buffered channel for byte ranges to fetch.
+=======
+>>>>>>> Stashed changes
 	return d
 }
 
@@ -295,15 +297,36 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	// Any errors encountered during the download are considered resumable, ie,
 	// the download can be restarted with the same cache to continue from where it left off.
 	start := time.Now()
+<<<<<<< Updated upstream
+=======
+	if !dl.waitForCompletion {
+		st, err := dl.runOnce(ctx)
+		st.Duration = time.Since(start)
+		return st, err
+	}
+	for {
+		st, err := dl.runOnce(ctx)
+		if st.Complete && err == nil {
+			st.Duration = time.Since(start)
+			return st, nil
+		}
+		dl.progress.incrementIterations()
+	}
+}
+
+func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error) {
+	requestCh := make(chan request, dl.concurrency) // Buffered channel for byte ranges to fetch.
+
+>>>>>>> Stashed changes
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, dl.concurrency) // +1 for the generator goroutine
 	g.Go(func() error {
-		defer close(dl.requestCh)
-		return dl.generator(ctx, dl.requestCh)
+		defer close(requestCh)
+		return dl.generator(ctx, requestCh)
 	})
 	for range dl.concurrency {
 		g.Go(func() error {
-			return dl.fetcher(ctx, dl.requestCh, dl.handleResponse)
+			return dl.fetcher(ctx, requestCh, dl.handleResponse)
 		})
 	}
 

@@ -220,26 +220,38 @@ func (br *ByteRanges) BlockSize() int {
 	return br.blockSize
 }
 
+func runIteratorAsync(it iter.Seq[int], contentSize int64, blockSize int, ch chan<- ByteRange) {
+	go func() {
+		defer close(ch)
+		for i := range it {
+			from := int64(i * blockSize)
+			to := min(from+int64(blockSize), contentSize)
+			ch <- ByteRange{From: from, To: to - 1}
+		}
+	}()
+}
+
 // NextClear returns an iterator for the next clear byte range starting from 'start'.
 func (br *ByteRanges) NextClear(start int) iter.Seq[ByteRange] {
-	return func(yield func(ByteRange) bool) {
-		br.mu.RLock()
-		defer br.mu.RUnlock()
-		for i := range br.bitmap.NextClear(start, br.bitmapSize) {
-			from := int64(i * br.blockSize)
-			to := min(from+int64(br.blockSize), br.contentSize)
-			if !yield(ByteRange{From: from, To: to - 1}) {
-				return
+	ch := make(chan ByteRange)
+	runIteratorAsync(br.NextClear(start), br.contentSize, br.blockSize, ch)
+
+	/*
+		return func(yield func(ByteRange) bool) {
+			for i := range br.bitmap.NextClear(start, br.bitmapSize) {
+				from := int64(i * br.blockSize)
+				to := min(from+int64(br.blockSize), br.contentSize)
+				if !yield(ByteRange{From: from, To: to - 1}) {
+					return
+				}
 			}
 		}
-	}
+	*/
 }
 
 // NextSet returns an iterator for the next set byte range starting from 'start'.
 func (br *ByteRanges) NextSet(start int) iter.Seq[ByteRange] {
 	return func(yield func(ByteRange) bool) {
-		br.mu.RLock()
-		defer br.mu.RUnlock()
 		for i := range br.bitmap.NextSet(start, br.bitmapSize) {
 			from := int64(i * br.blockSize)
 			to := min(from+int64(br.blockSize), br.contentSize)
