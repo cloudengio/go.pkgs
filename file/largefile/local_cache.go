@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"iter"
 	"os"
 	"sync"
 )
@@ -19,13 +18,23 @@ type DownloadCache interface {
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the preferred block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
-	// Outstanding returns an iterator over the byte ranges that have not yet been cached.
-	Outstanding() iter.Seq[ByteRange]
-	// Cached returns an iterator over the byte ranges that have been cached.
-	Cached() iter.Seq[ByteRange]
+	// NextOutstanding finds the next byte range that has not been cached
+	// starting from the specified 'start' index. Its return value is either
+	// -1 if there are no more outstanding ranges, or the value of the next
+	// starting index to continue searching for outstanding ranges.
+	// To iterate over all outstanding ranges, call this method repeatedly
+	// until it returns -1 as follows:
+	//    for start := NextOutstanding(0, &br); start != -1; start = NextOutstanding(start, &br) {
+	//        // Do something with the byte range br.
+	//    }
+	NextOutstanding(start int, br *ByteRange) int
+	// NextCached finds the next byte range that has been cached
+	NextCached(start int, br *ByteRange) int
 	// Complete returns true if all byte ranges have been cached.
 	Complete() bool
+	// Put writes the specified byte range to the cache.
 	Put(r ByteRange, data []byte) error
+	// Get reads the specified byte range from the cache into the provided data slice.
 	Get(r ByteRange, data []byte) error
 }
 
@@ -121,19 +130,24 @@ func saveRanges(filename string, dr *ByteRanges) error {
 	return nil
 }
 
-func (c *LocalDownloadCache) Outstanding() iter.Seq[ByteRange] {
-	return c.written.NextClear(0)
+// NextOutstanding implements DownloadCache. It returns the next, if any,
+// uncached byte range starting from the specified index.
+func (c *LocalDownloadCache) NextOutstanding(start int, br *ByteRange) int {
+	return c.written.NextClear(start, br)
 }
 
-func (c *LocalDownloadCache) Cached() iter.Seq[ByteRange] {
-	return c.written.NextSet(0)
+// NextCached implements DownloadCache. It returns the next, if any,
+// cached byte range starting from the specified index.
+func (c *LocalDownloadCache) NextCached(start int, br *ByteRange) int {
+	return c.written.NextSet(start, br)
 }
 
+// Complete implements DownloadCache. It returns true if all byte ranges
+// have been cached, meaning there are no more uncached ranges.
 func (c *LocalDownloadCache) Complete() bool {
-	for range c.written.NextClear(0) {
-		return false
-	}
-	return true
+	var br ByteRange
+	i := c.written.NextClear(0, &br)
+	return i == -1
 }
 
 // Put implements DownloadCache.

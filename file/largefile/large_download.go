@@ -19,12 +19,21 @@ import (
 	"cloudeng.io/sync/errgroup"
 )
 
-type downloadOptions struct {
+type downloadOptionsCommon struct {
 	concurrency    int
-	verifyChecksum bool
 	rateController ratecontrol.Limiter
 	progressCh     chan<- DownloadState // Channel to report download progress.
 	logger         *slog.Logger
+}
+
+type downloadOptions struct {
+	downloadOptionsCommon // Common options for downloading.
+	waitForCompletion     bool
+}
+
+type downloadStreamingOptions struct {
+	downloadOptionsCommon
+	verifyChecksum bool // Whether to verify the checksum of downloaded data.
 }
 
 type DownloadOption func(*downloadOptions)
@@ -32,12 +41,6 @@ type DownloadOption func(*downloadOptions)
 func WithDownloadConcurrency(n int) DownloadOption {
 	return func(o *downloadOptions) {
 		o.concurrency = n
-	}
-}
-
-func WithVerifyChecksum(verify bool) DownloadOption {
-	return func(o *downloadOptions) {
-		o.verifyChecksum = verify
 	}
 }
 
@@ -59,6 +62,12 @@ func WithDownloadProgress(progress chan<- DownloadState) DownloadOption {
 	}
 }
 
+func WithDownloadWaitForCompletion(wait bool) DownloadOption {
+	return func(o *downloadOptions) {
+		o.waitForCompletion = wait
+	}
+}
+
 type DownloadState struct {
 	CachedBytes      int64 // Total bytes cached.
 	CachedBlocks     int64 // Total blocks cached.
@@ -66,6 +75,8 @@ type DownloadState struct {
 	DownloadedBlocks int64 // Total blocks downloaded so far.
 	DownloadSize     int64 // Total size of the file in bytes.
 	DownloadBlocks   int64 // Total number of blocks to download.
+	Retries          int64 // Total number of retries made during the download.
+	Iterations       int64 // Number of iterations requiredd to complete the download.
 }
 
 type progressTracker struct {
@@ -78,6 +89,13 @@ func (pt *progressTracker) incrementCache(blocks int, size int64) {
 	atomic.AddInt64(&pt.CachedBlocks, int64(blocks))
 }
 
+func (pt *progressTracker) incrementRetries(retries int) {
+	atomic.AddInt64(&pt.Retries, int64(retries))
+}
+
+func (pt *progressTracker) incrementIterations() {
+	atomic.AddInt64(&pt.Iterations, 1)
+}
 func (pt *progressTracker) incrementDownload(blocks int, size int64) {
 	tbytes := atomic.AddInt64(&pt.DownloadedBytes, size)
 	tblocks := atomic.AddInt64(&pt.DownloadedBlocks, int64(blocks))
@@ -96,13 +114,13 @@ func (pt *progressTracker) incrementDownload(blocks int, size int64) {
 }
 
 type downloader struct {
-	downloadOptions // Options for the downloader.
-
+	downloadOptionsCommon
 	progress  *progressTracker // Progress tracker for the download.
 	file      Reader           // The large file to download.
 	size      int64            // Total size of the file in bytes.
 	blockSize int              // Size of each block in bytes.
 	bufPool   sync.Pool        // Pool for byte slices to reduce allocations.
+	requestCh chan request     // Channel for byte ranges to fetch.
 }
 
 type terminalError struct {
@@ -122,22 +140,15 @@ func (te *terminalError) Is(target error) bool {
 	return ok
 }
 
-func newDownloader(file Reader, opts ...DownloadOption) *downloader {
-	d := &downloader{}
-	for _, opt := range opts {
-		opt(&d.downloadOptions)
-	}
+func newDownloader(file Reader, opts downloadOptionsCommon) *downloader {
+	d := &downloader{file: file, downloadOptionsCommon: opts}
 	if d.logger == nil {
 		d.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	if d.rateController == nil {
 		d.rateController = ratecontrol.New(ratecontrol.WithNoRateControl()) // Default to no rate control.
 	}
-<<<<<<< Updated upstream
-	d.file = file
 	d.requestCh = make(chan request, d.concurrency) // Buffered channel for byte ranges to fetch.
-=======
->>>>>>> Stashed changes
 	return d
 }
 
@@ -164,15 +175,18 @@ func (dl *downloader) init(ctx context.Context) error {
 
 func (dl *downloader) get(ctx context.Context, req request) (io.ReadCloser, error) {
 	backoff := dl.rateController.Backoff()
+	retries := 0
 	for {
 		rd, retry, err := dl.file.GetReader(ctx, req.From, req.To)
 		if err == nil {
+			dl.progress.incrementRetries(retries)
 			return rd, nil
 		}
 		if retry.IsRetryable() {
 			if done, _ := backoff.Wait(ctx, retry); done {
 				return nil, fmt.Errorf("application backoff giving up after %d retries: %w", backoff.Retries(), err)
 			}
+			retries++
 			continue
 		}
 		return nil, fmt.Errorf("failed to get byte range %v: %w", req.ByteRange, err)
@@ -236,7 +250,8 @@ func (dl *downloader) fetcher(ctx context.Context, in <-chan request, handler re
 // a local cache and supports resuming downloads from where they left off.
 type CachingDownloader struct {
 	*downloader
-	cache DownloadCache
+	waitForCompletion bool // Whether to wait for the download to complete or return after one iteration.
+	cache             DownloadCache
 }
 
 // NewCachingDownloader creates a new CachingDownloader instance.
@@ -244,7 +259,12 @@ func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOpti
 	d := &CachingDownloader{
 		cache: cache,
 	}
-	d.downloader = newDownloader(file, opts...)
+	var options downloadOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	d.waitForCompletion = options.waitForCompletion
+	d.downloader = newDownloader(file, options.downloadOptionsCommon)
 	return d
 }
 
@@ -286,19 +306,16 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 
 	var cachedBytes int64
 	var cachedBlocks int
-	for r := range dl.cache.Cached() {
-		cachedBytes += r.Size()
+	var br ByteRange
+	for n := dl.cache.NextCached(0, &br); n != -1; n = dl.cache.NextCached(n, &br) {
+		cachedBytes += br.Size()
 		cachedBlocks++
 	}
 	if cachedBytes != 0 {
 		dl.progress.incrementCache(cachedBlocks, cachedBytes)
 	}
 
-	// Any errors encountered during the download are considered resumable, ie,
-	// the download can be restarted with the same cache to continue from where it left off.
 	start := time.Now()
-<<<<<<< Updated upstream
-=======
 	if !dl.waitForCompletion {
 		st, err := dl.runOnce(ctx)
 		st.Duration = time.Since(start)
@@ -315,24 +332,23 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 }
 
 func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error) {
-	requestCh := make(chan request, dl.concurrency) // Buffered channel for byte ranges to fetch.
-
->>>>>>> Stashed changes
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, dl.concurrency) // +1 for the generator goroutine
 	g.Go(func() error {
-		defer close(requestCh)
-		return dl.generator(ctx, requestCh)
+		defer close(dl.requestCh)
+		return dl.generator(ctx, dl.requestCh)
 	})
 	for range dl.concurrency {
 		g.Go(func() error {
-			return dl.fetcher(ctx, requestCh, dl.handleResponse)
+			return dl.fetcher(ctx, dl.requestCh, dl.handleResponse)
 		})
 	}
 
 	err := g.Wait()
 	err = errors.Squash(err, context.Canceled, context.DeadlineExceeded)
 
+	// Any errors encountered during the download are considered resumable, ie,
+	// the download can be restarted with the same cache to continue from where it left off.
 	resumeable := true && err != nil
 	if errors.Is(err, &terminalError{}) {
 		// If the error is a terminal error, we consider it non-resumable.
@@ -343,7 +359,6 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 		DownloadState: dl.progress.DownloadState,
 		Complete:      dl.cache.Complete() && err == nil,
 		Resumeable:    resumeable,
-		Duration:      time.Since(start),
 	}
 	return st, err
 }
@@ -359,11 +374,13 @@ func (dl *CachingDownloader) handleResponse(_ context.Context, resp response) er
 
 func (dl *CachingDownloader) generator(ctx context.Context, reqCh chan<- request) error {
 	seq := 0
-	for dl := range dl.cache.Outstanding() {
+	var br ByteRange
+	// Start with the first uncached byte range.
+	for n := dl.cache.NextOutstanding(0, &br); n != -1; n = dl.cache.NextOutstanding(n, &br) {
 		select {
 		case reqCh <- request{
 			seq:       seq,
-			ByteRange: dl,
+			ByteRange: br,
 		}:
 		case <-ctx.Done():
 			return ctx.Err()
@@ -373,20 +390,34 @@ func (dl *CachingDownloader) generator(ctx context.Context, reqCh chan<- request
 	return nil
 }
 
+type StreamingDownloadOption func(*downloadStreamingOptions)
+
+func WithVerifyChecksum(verify bool) StreamingDownloadOption {
+	return func(o *downloadStreamingOptions) {
+		o.verifyChecksum = verify
+	}
+}
+
 // StreamingDownloader is a downloader that streams data from a large file.
 // The downloader uses concurrent byte range requests to fetch data and then
 // serializes the responses into a single stream for reading.
 type StreamingDownloader struct {
 	*downloader
-	pipeRd     io.ReadCloser  // Reader for streaming data.
-	pipeWr     io.WriteCloser // Writer for streaming data.
-	responseCh chan response  // Channel for responses from fetchers.
+	verifyChecksum bool           // Whether to verify the checksum of downloaded data.
+	pipeRd         io.ReadCloser  // Reader for streaming data.
+	pipeWr         io.WriteCloser // Writer for streaming data.
+	responseCh     chan response  // Channel for responses from fetchers.
 }
 
 // NewStreamingDownloader creates a new StreamingDownloader instance.
-func NewStreamingDownloader(file Reader, opts ...DownloadOption) *StreamingDownloader {
+func NewStreamingDownloader(file Reader, opts ...StreamingDownloadOption) *StreamingDownloader {
 	d := &StreamingDownloader{}
-	d.downloader = newDownloader(file, opts...)
+	var options downloadStreamingOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	d.verifyChecksum = options.verifyChecksum
+	d.downloader = newDownloader(file, options.downloadOptionsCommon)
 	d.responseCh = make(chan response, d.concurrency) // Buffered channel for responses from fetchers.
 	d.pipeRd, d.pipeWr = io.Pipe()                    // Create a pipe for streaming data.
 	return d

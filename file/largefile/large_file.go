@@ -220,42 +220,76 @@ func (br *ByteRanges) BlockSize() int {
 	return br.blockSize
 }
 
-func runIteratorAsync(it iter.Seq[int], contentSize int64, blockSize int, ch chan<- ByteRange) {
-	go func() {
-		defer close(ch)
-		for i := range it {
-			from := int64(i * blockSize)
-			to := min(from+int64(blockSize), contentSize)
-			ch <- ByteRange{From: from, To: to - 1}
-		}
-	}()
+func (br *ByteRanges) rangeForIndex(index int) ByteRange {
+	// rangeForIndex returns the byte range for the specified block index.
+	if index < 0 || index >= br.bitmapSize {
+		return ByteRange{} // Invalid index.
+	}
+	from := int64(index * br.blockSize)
+	to := min(from+int64(br.blockSize), br.contentSize) - 1
+	return ByteRange{From: from, To: to}
 }
 
-// NextClear returns an iterator for the next clear byte range starting from 'start'.
-func (br *ByteRanges) NextClear(start int) iter.Seq[ByteRange] {
-	ch := make(chan ByteRange)
-	runIteratorAsync(br.NextClear(start), br.contentSize, br.blockSize, ch)
+// NextClear returns the next clear byte range starting from 'start'.
+// It starts searching from the specified start index and returns the
+// index of the next outstanding range which can be used to continue
+// searching for the next outstanding range, by incrementing it
+// by one and calling NextOutstanding again. The index will be -1
+// if there are no more outstanding ranges.
+func (br *ByteRanges) NextClear(start int, nbr *ByteRange) int {
+	br.mu.RLock()
+	defer br.mu.RUnlock()
+	i := br.bitmap.NextClear(start, br.contentSize)
+	if i < 0 {
+		*nbr = ByteRange{}
+		return -1
+	}
+	*nbr = br.rangeForIndex(i)
+	return i + 1
+}
 
-	/*
-		return func(yield func(ByteRange) bool) {
-			for i := range br.bitmap.NextClear(start, br.bitmapSize) {
-				from := int64(i * br.blockSize)
-				to := min(from+int64(br.blockSize), br.contentSize)
-				if !yield(ByteRange{From: from, To: to - 1}) {
-					return
-				}
+// NextSet returns the next set byte range starting from 'start' and
+// behaves similarly to NextClear.
+func (br *ByteRanges) NextSet(start int, nbr *ByteRange) int {
+	br.mu.RLock()
+	defer br.mu.RUnlock()
+	i := br.bitmap.NextSet(start, br.contentSize)
+	if i < 0 {
+		*nbr = ByteRange{}
+		return -1
+	}
+	*nbr = br.rangeForIndex(i)
+	return i + 1
+}
+
+// AllClear returns an iterator for all clear byte ranges starting from 'start'.
+// A read lock is held while iterating over the byte ranges, hence
+// calling any other method, such as Set, which takes a write lock will
+// block until the iteration is complete. Use NextClear if finer-grained
+// control is needed.
+func (br *ByteRanges) AllClear(start int) iter.Seq[ByteRange] {
+	return func(yield func(ByteRange) bool) {
+		br.mu.RLock()
+		defer br.mu.RUnlock()
+		for i := range br.bitmap.AllClear(start, br.bitmapSize) {
+			if !yield(br.rangeForIndex(i)) {
+				return
 			}
 		}
-	*/
+	}
 }
 
-// NextSet returns an iterator for the next set byte range starting from 'start'.
-func (br *ByteRanges) NextSet(start int) iter.Seq[ByteRange] {
+// AllSet returns an iterator for all set byte ranges starting from 'start'.
+// A read lock is held while iterating over the byte ranges, hence
+// calling any other method, such as Set, which takes a write lock will
+// block until the iteration is complete. Use NextSet if finer-grained
+// control is needed.
+func (br *ByteRanges) AllSet(start int) iter.Seq[ByteRange] {
 	return func(yield func(ByteRange) bool) {
-		for i := range br.bitmap.NextSet(start, br.bitmapSize) {
-			from := int64(i * br.blockSize)
-			to := min(from+int64(br.blockSize), br.contentSize)
-			if !yield(ByteRange{From: from, To: to - 1}) {
+		br.mu.RLock()
+		defer br.mu.RUnlock()
+		for i := range br.bitmap.AllSet(start, br.bitmapSize) {
+			if !yield(br.rangeForIndex(i)) {
 				return
 			}
 		}
