@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -147,6 +148,9 @@ func newDownloader(file Reader, opts downloadOptionsCommon) *downloader {
 	}
 	if d.rateController == nil {
 		d.rateController = ratecontrol.New(ratecontrol.WithNoRateControl()) // Default to no rate control.
+	}
+	if d.concurrency <= 0 {
+		d.concurrency = runtime.NumCPU() // Default to number of CPU cores.
 	}
 	d.requestCh = make(chan request, d.concurrency) // Buffered channel for byte ranges to fetch.
 	return d
@@ -349,7 +353,7 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 
 	// Any errors encountered during the download are considered resumable, ie,
 	// the download can be restarted with the same cache to continue from where it left off.
-	resumeable := true && err != nil
+	resumeable := err != nil
 	if errors.Is(err, &terminalError{}) {
 		// If the error is a terminal error, we consider it non-resumable.
 		resumeable = false

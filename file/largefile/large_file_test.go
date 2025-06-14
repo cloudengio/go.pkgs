@@ -212,7 +212,7 @@ func TestRanges(t *testing.T) {
 		t.Errorf("NextSet(0) size = %d, want 250", allSet[0].Size())
 	}
 	if allSet[2].Size() != 10 {
-		t.Errorf("NextSet(1000) size = %d, want 10", allSet[4].Size())
+		t.Errorf("NextSet(1000) size = %d, want 10", allSet[2].Size())
 	}
 
 	allSet = []largefile.ByteRange{}
@@ -225,6 +225,6 @@ func TestRanges(t *testing.T) {
 		t.Errorf("NextSet(0) size = %d, want 250", allSet[0].Size())
 	}
 	if allSet[2].Size() != 10 {
-		t.Errorf("NextSet(1000) size = %d, want 10", allSet[4].Size())
+		t.Errorf("NextSet(1000) size = %d, want 10", allSet[2].Size())
 	}
 }

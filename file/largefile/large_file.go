@@ -106,10 +106,10 @@ type Reader interface {
 
 // ByteRange represents a range of bytes in a file.
 // The range is inclusive of the 'From' byte and the 'To' byte as per
-// the HTTP Range header specification.
+// the HTTP Range header specification/convention.
 type ByteRange struct {
 	From int64 // Inclusive start of the range.
-	To   int64 // Exclusive end of the range.
+	To   int64 // Inclusive end of the range.
 }
 
 func (br ByteRange) String() string {

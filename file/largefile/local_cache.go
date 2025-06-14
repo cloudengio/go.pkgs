@@ -153,7 +153,7 @@ func (c *LocalDownloadCache) Complete() bool {
 
 // Put implements DownloadCache.
 func (c *LocalDownloadCache) Put(r ByteRange, data []byte) error {
-	if r.From < 0 || r.To > c.written.ContentLength() || r.From >= r.To {
+	if r.From < 0 || r.To >= c.written.ContentLength() || r.From >= r.To {
 		return fmt.Errorf("invalid range: %s", r)
 	}
 	if int64(len(data)) != r.Size() {
@@ -173,7 +173,7 @@ func (c *LocalDownloadCache) Put(r ByteRange, data []byte) error {
 
 // Get implements DownloadCache.
 func (c *LocalDownloadCache) Get(r ByteRange, data []byte) error {
-	if r.From < 0 || r.To > c.written.ContentLength() || r.From >= r.To {
+	if r.From < 0 || r.To >= c.written.ContentLength() || r.From >= r.To {
 		return fmt.Errorf("invalid range: %s", r)
 	}
 	if int64(len(data)) != r.Size() {
