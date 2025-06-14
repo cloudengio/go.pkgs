@@ -333,7 +333,7 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 
 func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error) {
 	g, ctx := errgroup.WithContext(ctx)
-	g = errgroup.WithConcurrency(g, dl.concurrency) // +1 for the generator goroutine
+	g = errgroup.WithConcurrency(g, dl.concurrency+1) // +1 for the generator goroutine
 	g.Go(func() error {
 		defer close(dl.requestCh)
 		return dl.generator(ctx, dl.requestCh)

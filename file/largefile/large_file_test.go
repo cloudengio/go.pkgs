@@ -135,10 +135,10 @@ func TestByteRanges_MarshalUnmarshalJSON(t *testing.T) {
 }
 
 func isSetAndClear(br *largefile.ByteRanges) (set, clr []largefile.ByteRange) {
-	for s := range br.NextSet(0) {
+	for s := range br.AllSet(0) {
 		set = append(set, s)
 	}
-	for c := range br.NextClear(0) {
+	for c := range br.AllClear(0) {
 		clr = append(clr, c)
 	}
 	return
@@ -205,9 +205,22 @@ func TestRanges(t *testing.T) {
 	compareRanges(t, br, contentSize, blockSize, 0, 500, 600, 1001)
 
 	allSet := []largefile.ByteRange{}
-	for b := range br.NextSet(0) {
+	for b := range br.AllSet(0) {
 		allSet = append(allSet, b)
 	}
+	if allSet[0].Size() != 250 {
+		t.Errorf("NextSet(0) size = %d, want 250", allSet[0].Size())
+	}
+	if allSet[2].Size() != 10 {
+		t.Errorf("NextSet(1000) size = %d, want 10", allSet[4].Size())
+	}
+
+	allSet = []largefile.ByteRange{}
+	var b largefile.ByteRange
+	for n := br.NextSet(0, &b); n >= 0; n = br.NextSet(n+1, &b) {
+		allSet = append(allSet, b)
+	}
+
 	if allSet[0].Size() != 250 {
 		t.Errorf("NextSet(0) size = %d, want 250", allSet[0].Size())
 	}

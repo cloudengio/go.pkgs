@@ -21,14 +21,15 @@ type DownloadCache interface {
 	// NextOutstanding finds the next byte range that has not been cached
 	// starting from the specified 'start' index. Its return value is either
 	// -1 if there are no more outstanding ranges, or the value of the next
-	// starting index to continue searching for outstanding ranges.
+	// starting index to continue searching at.
 	// To iterate over all outstanding ranges, call this method repeatedly
 	// until it returns -1 as follows:
 	//    for start := NextOutstanding(0, &br); start != -1; start = NextOutstanding(start, &br) {
 	//        // Do something with the byte range br.
 	//    }
 	NextOutstanding(start int, br *ByteRange) int
-	// NextCached finds the next byte range that has been cached
+	// NextCached finds the next byte range that has been cached in the same manner
+	// as NextOutstanding.
 	NextCached(start int, br *ByteRange) int
 	// Complete returns true if all byte ranges have been cached.
 	Complete() bool

@@ -124,9 +124,12 @@ func (br ByteRange) Size() int64 {
 	return br.To - br.From + 1 // Inclusive range.
 }
 
-// ByteRange represents a collection of equally sized, contiguous, byte ranges
-// that can be used to track which parts of a file to download or that have
-// been downloaded.
+// ByteRange represents a collection of equally sized (apart from the last
+// range), contiguous, byte ranges that can be used to track which parts of
+// a file have or have not been 'processed', e.g downloaded, cached, uploaded
+// etc. The ranges are represented as a bitmap, where each bit corresponds to
+// a block of bytes of the specified size. The bitmap is used to efficiently
+// track which byte ranges are set (processed) and which are clear (not processed).
 type ByteRanges struct {
 	mu          sync.RWMutex
 	contentSize int64
@@ -233,13 +236,16 @@ func (br *ByteRanges) rangeForIndex(index int) ByteRange {
 // NextClear returns the next clear byte range starting from 'start'.
 // It starts searching from the specified start index and returns the
 // index of the next outstanding range which can be used to continue
-// searching for the next outstanding range, by incrementing it
-// by one and calling NextOutstanding again. The index will be -1
+// searching for the next outstanding range. The index will be -1
 // if there are no more outstanding ranges.
+//
+//	for start := NextClear(0, &br); start >= 0; start = NextClear(start, &br) {
+//	    // Do something with the byte range br.
+//	}
 func (br *ByteRanges) NextClear(start int, nbr *ByteRange) int {
 	br.mu.RLock()
 	defer br.mu.RUnlock()
-	i := br.bitmap.NextClear(start, br.contentSize)
+	i := br.bitmap.NextClear(start, br.bitmapSize)
 	if i < 0 {
 		*nbr = ByteRange{}
 		return -1
@@ -253,7 +259,7 @@ func (br *ByteRanges) NextClear(start int, nbr *ByteRange) int {
 func (br *ByteRanges) NextSet(start int, nbr *ByteRange) int {
 	br.mu.RLock()
 	defer br.mu.RUnlock()
-	i := br.bitmap.NextSet(start, br.contentSize)
+	i := br.bitmap.NextSet(start, br.bitmapSize)
 	if i < 0 {
 		*nbr = ByteRange{}
 		return -1

@@ -20,7 +20,8 @@ import (
 )
 
 // GenAI: gemini 2.5 wrote these tests, with some errors and a massive number of
-// lint errors.
+// lint errors. It could not keep up with ongoing changes and edits in a useful
+// way so much hand editing was required.
 
 // Helper to create a temporary file with specific content.
 func createTempFile(t *testing.T, dir, name string, content []byte) string {
@@ -35,10 +36,16 @@ func createTempFile(t *testing.T, dir, name string, content []byte) string {
 // Helper to collect iter.Seq[ByteRange] into a slice
 func collectByteRanges(seq iter.Seq[largefile.ByteRange]) []largefile.ByteRange {
 	var result []largefile.ByteRange
-	if seq == nil {
-		return nil
-	}
 	for br := range seq {
+		result = append(result, br)
+	}
+	return result
+}
+
+func collectCacheByteRanges(getter func(int, *largefile.ByteRange) int) []largefile.ByteRange {
+	var result []largefile.ByteRange
+	var br largefile.ByteRange
+	for n := getter(0, &br); n >= 0; n = getter(n, &br) {
 		result = append(result, br)
 	}
 	return result
@@ -95,7 +102,7 @@ func TestNewFilesForCache(t *testing.T) {
 	// Check if index file was created and is valid
 	br := loadIndexFile(t, indexFilePath, contentSize, blockSize)
 	// Initially, all ranges should be clear (outstanding)
-	outstanding := collectByteRanges(br.NextClear(0))
+	outstanding := collectByteRanges(br.AllClear(0))
 	numExpectedBlocks := (contentSize + int64(blockSize) - 1) / int64(blockSize)
 	if int64(len(outstanding)) != numExpectedBlocks {
 		t.Errorf("Expected %d outstanding blocks, got %d", numExpectedBlocks, len(outstanding))
@@ -158,7 +165,7 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		if bs != blockSize {
 			t.Errorf("BlockSize mismatch: got %v, want %v", bs, blockSize)
 		}
-		cachedRanges := collectByteRanges(cache.Cached())
+		cachedRanges := collectCacheByteRanges(cache.NextCached)
 		if len(cachedRanges) != 1 || cachedRanges[0].From != int64(blockSize) {
 			t.Errorf("Expected second block to be cached, got %v", cachedRanges)
 		}
@@ -367,8 +374,7 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 	}
 
 	t.Run("Cached", func(t *testing.T) {
-		cachedIter := cache.Cached()
-		gotRanges := collectByteRanges(cachedIter)
+		gotRanges := collectCacheByteRanges(cache.NextCached)
 		wantRanges := []largefile.ByteRange{
 			{From: 0, To: 63},
 			{From: 128, To: 191},
@@ -379,8 +385,7 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 	})
 
 	t.Run("Outstanding", func(t *testing.T) {
-		outstandingIter := cache.Outstanding()
-		gotRanges := collectByteRanges(outstandingIter)
+		gotRanges := collectCacheByteRanges(cache.NextOutstanding)
 		wantRanges := []largefile.ByteRange{
 			{From: 64, To: 127},  // Block 1
 			{From: 192, To: 255}, // Block 3
@@ -412,13 +417,13 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 			t.Fatalf("Put for second block in all_cached failed: %v", err)
 		}
 
-		gotCached := collectByteRanges(cacheAll.Cached())
+		gotCached := collectCacheByteRanges(cacheAll.NextCached)
 		wantCached := []largefile.ByteRange{{From: 0, To: 63}, {From: 64, To: 127}}
 		if !reflect.DeepEqual(gotCached, wantCached) {
 			t.Errorf("All Cached() got %v, want %v", gotCached, wantCached)
 		}
 
-		gotOutstanding := collectByteRanges(cacheAll.Outstanding())
+		gotOutstanding := collectCacheByteRanges(cacheAll.NextOutstanding)
 		if len(gotOutstanding) != 0 { // Expect empty slice
 			t.Errorf("All Cached - Outstanding() got %v, want empty", gotOutstanding)
 		}

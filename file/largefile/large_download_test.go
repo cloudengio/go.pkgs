@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"iter"
 	"log/slog"
 	"reflect"
 	"sort"
@@ -76,11 +75,11 @@ func (m *MockReader) ResetCalls() {
 // MockDownloadCache implements largefile.DownloadCache
 type MockDownloadCache struct {
 	ContentLengthAndBlockSizeFunc func() (size int64, blockSize int)
-	OutstandingFunc               func() iter.Seq[largefile.ByteRange]
+	OutstandingFunc               func(int, *largefile.ByteRange) int
 	CompleteFunc                  func() bool
 	PutFunc                       func(r largefile.ByteRange, data []byte) error
 	GetFunc                       func(r largefile.ByteRange, data []byte) error // Not used by CachingDownloader.Run
-	CachedFunc                    func() iter.Seq[largefile.ByteRange]           // Not used by CachingDownloader.Run
+	CachedFunc                    func(int, *largefile.ByteRange) int            // Not used by CachingDownloader.Run
 	PutCalls                      []struct {
 		Range largefile.ByteRange
 		Data  []byte
@@ -95,11 +94,18 @@ func (m *MockDownloadCache) ContentLengthAndBlockSize() (size int64, blockSize i
 	return 0, 0
 }
 
-func (m *MockDownloadCache) Outstanding() iter.Seq[largefile.ByteRange] {
+func (m *MockDownloadCache) NextOutstanding(s int, b *largefile.ByteRange) int {
 	if m.OutstandingFunc != nil {
-		return m.OutstandingFunc()
+		return m.OutstandingFunc(s, b)
 	}
-	return func(func(largefile.ByteRange) bool) {} // Empty iterator
+	return -1
+}
+
+func (m *MockDownloadCache) NextCached(s int, b *largefile.ByteRange) int {
+	if m.CachedFunc != nil {
+		return m.CachedFunc(s, b)
+	}
+	return -1
 }
 
 func (m *MockDownloadCache) Put(r largefile.ByteRange, data []byte) error {
@@ -124,13 +130,6 @@ func (m *MockDownloadCache) Get(r largefile.ByteRange, data []byte) error {
 	return errors.New("MockDownloadCache.GetFunc not implemented")
 }
 
-func (m *MockDownloadCache) Cached() iter.Seq[largefile.ByteRange] {
-	if m.CachedFunc != nil {
-		return m.CachedFunc()
-	}
-	return func(func(largefile.ByteRange) bool) {}
-}
-
 func (m *MockDownloadCache) Complete() bool {
 	if m.CompleteFunc != nil {
 		return m.CompleteFunc()
@@ -144,13 +143,13 @@ func (m *MockDownloadCache) ResetCalls() {
 	m.mu.Unlock()
 }
 
-func newByteRangeSeq(ranges ...largefile.ByteRange) iter.Seq[largefile.ByteRange] {
-	return func(yield func(largefile.ByteRange) bool) {
-		for _, r := range ranges {
-			if !yield(r) {
-				return
-			}
+func newByteRangeSeq(ranges ...largefile.ByteRange) func(s int, b *largefile.ByteRange) int {
+	return func(s int, b *largefile.ByteRange) int {
+		if s >= len(ranges) {
+			return -1
 		}
+		*b = ranges[s]
+		return s + 1
 	}
 }
 
@@ -201,8 +200,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 				return defaultContentSize, defaultBlockSize
 			},
 			PutFunc: func(largefile.ByteRange, []byte) error { return nil },
-			OutstandingFunc: func() iter.Seq[largefile.ByteRange] {
-				return newByteRangeSeq() // Default to no outstanding blocks
+			OutstandingFunc: func(s int, b *largefile.ByteRange) int {
+				return newByteRangeSeq()(s, b) // Default to no outstanding blocks
 			},
 		}
 	}
@@ -296,8 +295,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
 		outstandingRange := firstRange
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(outstandingRange)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(outstandingRange)(s, b)
 		}
 		mockCache.CompleteFunc = func() bool {
 			return true
@@ -342,8 +341,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	t.Run("fetcher handleResponse (cache.Put) error", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(firstRange)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(firstRange)(s, b)
 		}
 		putErr := errors.New("cache Put failed")
 		mockCache.PutFunc = func(largefile.ByteRange, []byte) error {
@@ -390,8 +389,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	t.Run("concurrency 0 - with outstanding (should block or complete if ctx cancelled)", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(firstRange)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(firstRange)(s, b)
 		}
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(0)...)
 
@@ -423,8 +422,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		for i := 0; i < numRanges; i++ {
 			ranges[i] = largefile.ByteRange{From: int64(i * defaultBlockSize), To: int64((i+1)*defaultBlockSize) - 1} // Corrected To
 		}
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(ranges...)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(ranges...)(s, b)
 		}
 		// ... (rest of this test case as you have it) ...
 		// Ensure mockReader.ContentLengthAndBlockSizeFunc and mockCache.ContentLengthAndBlockSizeFunc
@@ -474,9 +473,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	t.Run("fetcher GetReader error", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			// Corrected To
-			return newByteRangeSeq(firstRange)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(firstRange)(s, b)
 		}
 		fetchErr := errors.New("fetch failed")
 		mockReader.GetReaderFunc = func(_ context.Context, _, _ int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error) {
@@ -501,9 +499,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	t.Run("fetcher handleResponse (cache.Put) error", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			// Corrected To
-			return newByteRangeSeq(firstRange)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(firstRange)(s, b)
 		}
 		putErr := errors.New("cache Put failed")
 		mockCache.PutFunc = func(largefile.ByteRange, []byte) error {
@@ -530,9 +527,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	t.Run("concurrency 0 - with outstanding (should block or complete if ctx cancelled)", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			// Corrected To
-			return newByteRangeSeq(firstRange)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(firstRange)(s, b)
 		}
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(0)...)
 
@@ -572,8 +568,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			// Corrected To
 			ranges[i] = largefile.ByteRange{From: int64(i * defaultBlockSize), To: int64((i+1)*defaultBlockSize) - 1}
 		}
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(ranges...)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(ranges...)(s, b)
 		}
 		// ... (rest of this test case as you have it) ...
 		progressCh := make(chan largefile.DownloadState, numBlocks+1)
@@ -671,8 +667,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 				To:   int64((i+1)*defaultBlockSize) - 1,
 			}
 		}
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(expectedRanges...)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(expectedRanges...)(s, b)
 		}
 
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
@@ -763,8 +759,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			To:   currentContentSize - 1, // Last byte of the file
 		}
 
-		mockCache.OutstandingFunc = func() iter.Seq[largefile.ByteRange] {
-			return newByteRangeSeq(expectedRanges...)
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(expectedRanges...)(s, b)
 		}
 
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
