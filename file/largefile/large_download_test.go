@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"reflect"
@@ -151,6 +152,26 @@ func newByteRangeSeq(ranges ...largefile.ByteRange) func(s int, b *largefile.Byt
 		*b = ranges[s]
 		return s + 1
 	}
+}
+
+type slowRateLimiter struct{}
+
+func (s *slowRateLimiter) Wait(ctx context.Context) error {
+	select {
+	case <-time.After(time.Minute): // Simulate a slow rate limiter
+		return nil
+	case <-ctx.Done():
+		fmt.Printf("Rate limiter context cancelled: %v\n", ctx.Err())
+		return ctx.Err()
+	}
+}
+
+func (s *slowRateLimiter) BytesTransferred(int) {
+	// No-op for this mock, as we don't track bytes transferred.
+}
+
+func (s *slowRateLimiter) Backoff() ratecontrol.Backoff {
+	return &noBackoff{}
 }
 
 func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
@@ -392,7 +413,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
 			return newByteRangeSeq(firstRange)(s, b)
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(0)...)
+		dl := largefile.NewCachingDownloader(mockReader, mockCache,
+			largefile.WithDownloadRateController(&slowRateLimiter{}))
 
 		runCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
@@ -404,6 +426,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected context.DeadlineExceeded with concurrency 0 and outstanding blocks, got %v", err)
 		}
 		st.Duration = 0
+		st.CachedBlocks = 0
+		st.CachedBytes = 0
+		st.DownloadedBlocks = 0
+		st.DownloadedBytes = 0
 		p := defaultIncompleteState
 		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
