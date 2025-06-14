@@ -74,53 +74,72 @@ func (b T) IsSetUnsafe(i int) bool {
 	return (b[i/64] & (1 << (i % 64))) != 0
 }
 
-// NextSet returns an iterator over all set bits in the bitmap starting from
+// AllSet returns an iterator over all set bits in the bitmap starting from
 // the specified index and never exceeding the specified size or size of the
 // bitmap itself.
-func (b T) NextSet(start, size int) iter.Seq[int] {
+func (b T) AllSet(start, size int) iter.Seq[int] {
 	return func(yield func(int) bool) {
-		last := min(len(b)*64, size)
-		if start < 0 || start >= last {
-			return
-		}
-		for nb := start; nb < last; {
-			if nb%64 == 0 && b[nb/64] == 0 {
-				nb += 64
-				continue
+		for n := b.NextSet(start, size); n >= 0; n = b.NextSet(n+1, size) {
+			if !yield(n) {
+				return
 			}
-			if b[nb/64]&(1<<(nb%64)) != 0 {
-				if !yield(nb) {
-					return
-				}
-			}
-			nb++
 		}
-
 	}
 }
 
-// NextClear returns an iterator over all clear bits in the bitmap starting from
+// NextSet returns the index of the next set bit in the bitmap starting from
 // the specified index and never exceeding the specified size or size of the
 // bitmap itself.
-func (b T) NextClear(start, size int) iter.Seq[int] {
-	return func(yield func(int) bool) {
-		last := min(len(b)*64, size)
-		if start < 0 || start >= last {
-			return
+func (b T) NextSet(start, size int) int {
+	last := min(len(b)*64, size)
+	if start < 0 || start >= last {
+		return -1
+	}
+	for nb := start; nb < last; {
+		if nb%64 == 0 && b[nb/64] == 0 {
+			nb += 64
+			continue
 		}
-		for nb := start; nb < last; {
-			if nb%64 == 0 && b[nb/64] == math.MaxUint64 {
-				nb += 64
-				continue
+		if b[nb/64]&(1<<(nb%64)) != 0 {
+			return nb
+		}
+		nb++
+	}
+	return -1 // No set bit found.
+}
+
+// AllClear returns an iterator over all clear bits in the bitmap starting from
+// the specified index and never exceeding the specified size or size of the
+// bitmap itself.
+func (b T) AllClear(start, size int) iter.Seq[int] {
+	return func(yield func(int) bool) {
+		for n := b.NextClear(start, size); n >= 0; n = b.NextClear(n+1, size) {
+			if !yield(n) {
+				return
 			}
-			if b[nb/64]&(1<<(nb%64)) == 0 {
-				if !yield(nb) {
-					return
-				}
-			}
-			nb++
 		}
 	}
+}
+
+// NextClear returns the index of the next clear bit in the bitmap starting from
+// the specified index and never exceeding the specified size or size of the
+// bitmap itself.
+func (b T) NextClear(start, size int) int {
+	last := min(len(b)*64, size)
+	if start < 0 || start >= last {
+		return -1
+	}
+	for nb := start; nb < last; {
+		if nb%64 == 0 && b[nb/64] == math.MaxUint64 {
+			nb += 64
+			continue
+		}
+		if b[nb/64]&(1<<(nb%64)) == 0 {
+			return nb
+		}
+		nb++
+	}
+	return -1
 }
 
 func (b T) MarshalJSON() ([]byte, error) {
