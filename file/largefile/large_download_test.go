@@ -556,7 +556,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
 			return newByteRangeSeq(firstRange)(s, b)
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(0)...)
+		dl := largefile.NewCachingDownloader(mockReader, mockCache, largefile.WithDownloadRateController(&slowRateLimiter{}))
 
 		runCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
