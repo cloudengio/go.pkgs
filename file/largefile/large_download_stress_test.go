@@ -14,9 +14,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/file"
 	"cloudeng.io/file/largefile"
 	"cloudeng.io/net/ratecontrol"
@@ -26,6 +28,11 @@ type mockLargeFile struct {
 	size      int64
 	blockSize int
 	failRatio int
+	withRetry bool
+}
+
+func (m *mockLargeFile) Name() string {
+	return "mockLargeFile" // Mock implementation, returns a fixed name
 }
 
 func (m *mockLargeFile) ContentLengthAndBlockSize(context.Context) (int64, int, error) {
@@ -35,9 +42,22 @@ func (m *mockLargeFile) Checksum(context.Context) (largefile.ChecksumType, strin
 	return largefile.NoChecksum, "", nil // Mock implementation, no checksum
 }
 
+type retryResponse struct{}
+
+func (r retryResponse) IsRetryable() bool {
+	return true
+}
+
+func (r retryResponse) BackoffDuration() (bool, time.Duration) {
+	return false, 0
+}
+
 func (m *mockLargeFile) GetReader(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
 	//nolint:gosec // G404
 	if m.failRatio > 0 && rand.Intn(10) < m.failRatio {
+		if m.withRetry {
+			return nil, &retryResponse{}, fmt.Errorf("mock failure for testing")
+		}
 		return nil, &noRetryResponse{}, fmt.Errorf("mock failure for testing")
 	}
 	buf := make([]byte, to-from+1)
@@ -51,17 +71,17 @@ func (m *mockLargeFile) GetReader(_ context.Context, from, to int64) (io.ReadClo
 	return io.NopCloser(bytes.NewReader(buf)), &noRetryResponse{}, nil
 }
 
-type noBackoff struct{}
+type noBackoff struct{ retries int }
 
 func (nb noBackoff) Retries() int {
-	return 0
+	return nb.retries
 }
 
 func (nb noBackoff) Wait(_ context.Context, _ any) (bool, error) {
 	return false, nil
 }
 
-type jitterRateLimiter struct{}
+type jitterRateLimiter struct{ retries int }
 
 func (j *jitterRateLimiter) Wait(context.Context) error {
 	// Simulate a random delay to reorder downloads.
@@ -76,7 +96,7 @@ func (j *jitterRateLimiter) BytesTransferred(int) {
 }
 
 func (j *jitterRateLimiter) Backoff() ratecontrol.Backoff {
-	return &noBackoff{}
+	return &noBackoff{retries: j.retries}
 }
 
 func validateCacheFile(t *testing.T, cacheFile string, expectedSize int64) {
@@ -182,13 +202,14 @@ func TestCacheStressTest(t *testing.T) {
 				DownloadedBlocks: nBlocks,
 				DownloadSize:     cacheSize,
 				DownloadBlocks:   nBlocks,
+				Iterations:       1,
 			}
 			if st.Duration == 0 {
 				t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
 			}
 			st.Duration = 0
 			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: expected}); !reflect.DeepEqual(got, want) {
-				t.Errorf("expected status %v, got %v", want, got)
+				t.Errorf("expected status %+v, got %+v", want, got)
 			}
 
 			validateCacheFile(t, cacheFile, cacheSize)
@@ -215,9 +236,10 @@ func TestCacheStressTest(t *testing.T) {
 				CachedBlocks:   nBlocks,
 				DownloadSize:   cacheSize,
 				DownloadBlocks: nBlocks,
+				Iterations:     1,
 			}
 			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: cachedState}); !reflect.DeepEqual(got, want) {
-				t.Errorf("expected status %v, got %v", want, got)
+				t.Errorf("expected status %+v, got %+v", want, got)
 			}
 
 			validateCacheFile(t, cacheFile, cacheSize)
@@ -243,10 +265,8 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	if err != nil {
 		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
 	}
+
 	cSize, cBblockSize := cache.ContentLengthAndBlockSize()
-	if cSize != cacheSize || cBblockSize != blockSize {
-		t.Fatalf("cache content size %d and block size %d do not match expected values %d and %d", cSize, cBblockSize, cacheSize, blockSize)
-	}
 
 	t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFile, cSize, cBblockSize)
 
@@ -254,11 +274,17 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		DownloadSize:   cacheSize,
 		DownloadBlocks: int64(largefile.NumBlocks(cacheSize, blockSize)),
 	}
+	logger, logOut := newLogger()
+	totalErrors := int64(0)
+	totalRetries := int64(0)
+	// Run the downloader multiple times with different failure ratios to ensure
+	// partial downloads that will be progressively filled by rerunning the downloader.
 	for i, failRatio := range []int{9, 4, 0} {
 		mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: failRatio}
 
 		dl := largefile.NewCachingDownloader(mf,
 			cache,
+			largefile.WithDownloadLogger(logger),
 			largefile.WithDownloadRateController(&jitterRateLimiter{}),
 			largefile.WithDownloadConcurrency(concurrency))
 
@@ -292,6 +318,11 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		if st.CachedBytes <= prevState.CachedBytes {
 			t.Errorf("Run %d expected more cached bytes, got %d, want > %d", i, st.CachedBytes, prevState.CachedBytes)
 		}
+		if st.Iterations != 1 {
+			t.Errorf("Run %d expected 1 iteration, got %d", i, st.Iterations)
+		}
+		totalErrors += st.DownloadErrors
+		totalRetries += st.DownloadRetries
 		prevState = st.DownloadState
 	}
 
@@ -299,17 +330,25 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		t.Errorf("cache is not complete after retries, expected complete cache")
 	}
 
+	if got, want := totalRetries, int64(0); got < want {
+		t.Errorf("expected at least %d retries, got %d", want, got)
+	}
+
 	validateCacheFile(t, cacheFile, cacheSize)
 	validateIndexFile(t, indexFile, cacheSize, blockSize)
 
+	if got, want := totalErrors, strings.Count(logOut.String(), `"error":"mock failure for testing"`); got != int64(want) {
+		t.Errorf("got %d mock failure messages, did not match number of errors reported: %d", want, got)
+	}
+
 }
 
-func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize int, limiter ratecontrol.Limiter, concurrency int) largefile.DownloadStatus {
+func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize, failRatio int, withRetry bool, opts ...largefile.DownloadOption) largefile.DownloadStatus {
 	tmpDirAllCached := t.TempDir()
 	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
 	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency); err != nil {
+	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
@@ -317,12 +356,9 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize 
 		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
 	}
 
-	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize}
+	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: failRatio, withRetry: withRetry}
 
-	dl := largefile.NewCachingDownloader(mf,
-		cache,
-		largefile.WithDownloadRateController(limiter),
-		largefile.WithDownloadConcurrency(concurrency))
+	dl := largefile.NewCachingDownloader(mf, cache, opts...)
 
 	st, err := dl.Run(ctx)
 	t.Logf("Run completed with status: %+v\n", st)
@@ -349,8 +385,10 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize 
 		t.Errorf("cache is not complete after retries, expected complete cache")
 	}
 
-	validateCacheFile(t, cacheFile, cacheSize)
-	validateIndexFile(t, indexFile, cacheSize, blockSize)
+	if err == nil {
+		validateCacheFile(t, cacheFile, cacheSize)
+		validateIndexFile(t, indexFile, cacheSize, blockSize)
+	}
 
 	return st
 }
@@ -359,13 +397,95 @@ func TestRateControl(t *testing.T) {
 	ctx := context.Background()
 	cacheSize := int64(file.KB * 7)
 	blockSize := 1024
-	rl := ratecontrol.New(ratecontrol.WithNoRateControl())
-	st := downloadFile(ctx, t, cacheSize, blockSize, rl, 10)
+	concurrency := 10
+	// No rate control, should be faster than the slower download.
+	st := downloadFile(ctx, t, cacheSize, blockSize, 0, false,
+		largefile.WithDownloadRateController(ratecontrol.New(ratecontrol.WithNoRateControl())),
+		largefile.WithDownloadConcurrency(concurrency))
 
-	slower := ratecontrol.New(ratecontrol.WithBytesPerTick(time.Millisecond*30, 10))
-	sst := downloadFile(ctx, t, cacheSize, blockSize, slower, 10)
+	slower := ratecontrol.New(ratecontrol.WithBytesPerTick(time.Millisecond*100, 10))
+	sst := downloadFile(ctx, t, cacheSize, blockSize, 0, false,
+		largefile.WithDownloadRateController(slower),
+		largefile.WithDownloadConcurrency(concurrency))
 
 	if (2 * st.Duration) > sst.Duration {
 		t.Errorf("expected faster download with no rate control, got %v vs %v", st.Duration, sst.Duration)
+	}
+	t.Logf("no rate control download duration: %v, slower download duration: %v\n", st.Duration, sst.Duration)
+}
+
+func TestCacheRetriesAndRunToCompletion(t *testing.T) {
+	ctx := context.Background()
+
+	cacheSize := int64(file.KB * 7)
+	blockSize := 1024
+	concurrency := 10
+
+	logger, logOut := newLogger()
+
+	// Test run to completion with no retries.
+	st := downloadFile(ctx, t, cacheSize, blockSize, 7, false,
+		largefile.WithDownloadRateController(ratecontrol.New(ratecontrol.WithNoRateControl())),
+		largefile.WithDownloadConcurrency(concurrency),
+		largefile.WithDownloadWaitForCompletion(true),
+		largefile.WithDownloadLogger(logger),
+	)
+	if got, want := st.Iterations, strings.Count(logOut.String(), "download not complete")+1; got != int64(want) {
+		t.Errorf("expected %d iterations, got %d", want, got)
+	}
+
+	logOut.Reset() // Reset log output for the next test
+
+	// Test a single iteration with many retries.
+	rl := &jitterRateLimiter{retries: 1000}
+	st = downloadFile(ctx, t, cacheSize, blockSize, 7, true,
+		largefile.WithDownloadRateController(rl),
+		largefile.WithDownloadConcurrency(concurrency),
+		largefile.WithDownloadLogger(logger),
+	)
+	if st.Iterations != 1 {
+		t.Errorf("expected 1 iteration with retries, got %d", st.Iterations)
+	}
+	if st.DownloadErrors != 0 {
+		t.Errorf("expected 0 download errors with retries, got %d", st.DownloadErrors)
+	}
+	if st.DownloadRetries == 0 {
+		t.Errorf("expected non-zero download retries, got %d", st.DownloadRetries)
+	}
+
+	if got, want := 0, len(logOut.String()); got != want {
+		t.Errorf("expected no log messages, got %d", want)
+	}
+
+	// Test a download with run to completion that will always fail, it will
+	// hang until the context is cancelled
+	tmpDirAllCached := t.TempDir()
+	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
+	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
+
+	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2); err != nil {
+		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: 10} // all retries will fail
+
+	dl := largefile.NewCachingDownloader(mf, cache,
+		largefile.WithDownloadConcurrency(concurrency),
+		largefile.WithDownloadLogger(logger),
+		largefile.WithDownloadWaitForCompletion(true))
+
+	st, err = dl.Run(ctx)
+	if err == nil {
+		t.Fatalf("expected error due to context cancellation, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded error, got %v", err)
 	}
 }

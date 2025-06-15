@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"reflect"
@@ -41,6 +40,10 @@ type MockReader struct {
 	GetReaderFunc                 func(ctx context.Context, from, to int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error)
 	GetReaderCalls                []struct{ From, To int64 }
 	mu                            sync.Mutex
+}
+
+func (m *MockReader) Name() string {
+	return "MockReader"
 }
 
 func (m *MockReader) ContentLengthAndBlockSize(ctx context.Context) (size int64, blockSize int, err error) {
@@ -161,7 +164,6 @@ func (s *slowRateLimiter) Wait(ctx context.Context) error {
 	case <-time.After(time.Minute): // Simulate a slow rate limiter
 		return nil
 	case <-ctx.Done():
-		fmt.Printf("Rate limiter context cancelled: %v\n", ctx.Err())
 		return ctx.Err()
 	}
 }
@@ -172,6 +174,11 @@ func (s *slowRateLimiter) BytesTransferred(int) {
 
 func (s *slowRateLimiter) Backoff() ratecontrol.Backoff {
 	return &noBackoff{}
+}
+
+func newLogger() (*slog.Logger, *strings.Builder) {
+	out := &strings.Builder{}
+	return slog.New(slog.NewJSONHandler(out, nil)), out
 }
 
 func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
@@ -186,6 +193,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		DownloadedBlocks: int64(defaultBlocks),
 		DownloadSize:     defaultContentSize,
 		DownloadBlocks:   int64(defaultBlocks),
+		Iterations:       1,
 	}
 	defaultIncompleteState := largefile.DownloadState{
 		CachedBytes:      0,
@@ -194,6 +202,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		DownloadedBlocks: 0,
 		DownloadSize:     defaultContentSize,
 		DownloadBlocks:   int64(defaultBlocks),
+		Iterations:       1,
 	}
 	defaultConcurrency := 1
 
@@ -353,35 +362,9 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadedBlocks: 1,
 			DownloadSize:     defaultContentSize,
 			DownloadBlocks:   int64(defaultBlocks),
+			Iterations:       1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
-		}
-	})
-
-	t.Run("fetcher handleResponse (cache.Put) error", func(t *testing.T) {
-		mockReader := newDefaultMockReader()
-		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
-			return newByteRangeSeq(firstRange)(s, b)
-		}
-		putErr := errors.New("cache Put failed")
-		mockCache.PutFunc = func(largefile.ByteRange, []byte) error {
-			return putErr
-		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
-		st, err := dl.Run(ctx)
-		if err == nil {
-			t.Fatal("expected error from cache.Put, got nil")
-		}
-		if !strings.Contains(err.Error(), putErr.Error()) {
-			t.Errorf("expected error to contain %q, got %q", putErr.Error(), err.Error())
-		}
-		st.Duration = 0
-		p := defaultIncompleteState
-		p.DownloadedBytes = int64(defaultBlockSize)
-		p.DownloadedBlocks = 1
-		if got, want := st, (largefile.DownloadStatus{DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -484,6 +467,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("expected context.Canceled error, got %v", err)
 		}
+		if st.DownloadErrors == 0 {
+			t.Error("expected DownloadErrors to be > 0, got 0")
+		}
+		st.DownloadErrors = 0
 		st.Duration = 0
 		// The values vary depending on when the context was cancelled,
 		// so we set them to 0.
@@ -491,7 +478,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		st.CachedBlocks, st.CachedBytes = 0, 0
 		p := defaultIncompleteState
 		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
+			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
 
@@ -515,9 +502,13 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected error to contain %q, got %q", fetchErr.Error(), err.Error())
 		}
 		st.Duration = 0
+		if st.DownloadErrors == 0 {
+			t.Error("expected DownloadErrors to be > 0, got 0")
+		}
+		st.DownloadErrors = 0
 		p := defaultIncompleteState
 		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
+			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
 
@@ -542,10 +533,14 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := defaultIncompleteState
+		if st.CacheErrors == 0 {
+			t.Error("expected DownloadErrors to be > 0, got 0")
+		}
+		st.CacheErrors = 0
 		p.DownloadedBlocks = 1
 		p.DownloadedBytes = int64(defaultBlockSize)
 		if got, want := st, (largefile.DownloadStatus{DownloadState: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
+			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
 
@@ -590,7 +585,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 
 		ranges := make([]largefile.ByteRange, numBlocks)
-		for i := 0; i < numBlocks; i++ {
+		for i := range numBlocks {
 			// Corrected To
 			ranges[i] = largefile.ByteRange{From: int64(i * defaultBlockSize), To: int64((i+1)*defaultBlockSize) - 1}
 		}
@@ -648,7 +643,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		st.Duration = 0
 		p := defaultState
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
+			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
 
@@ -737,6 +732,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadedBlocks: int64(numBlocks),
 			DownloadSize:     currentContentSize,
 			DownloadBlocks:   int64(numBlocks),
+			Iterations:       1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
@@ -838,6 +834,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadedBlocks: int64(totalBlocks),
 			DownloadSize:     currentContentSize,
 			DownloadBlocks:   int64(totalBlocks),
+			Iterations:       1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)

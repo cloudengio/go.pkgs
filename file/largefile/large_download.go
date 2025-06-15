@@ -39,30 +39,40 @@ type downloadStreamingOptions struct {
 
 type DownloadOption func(*downloadOptions)
 
+// WithDownloadConcurrency sets the number of concurrent download goroutines.
 func WithDownloadConcurrency(n int) DownloadOption {
 	return func(o *downloadOptions) {
 		o.concurrency = n
 	}
 }
 
+// WithDownloadRateController sets the rate controller for the download.
 func WithDownloadRateController(rc ratecontrol.Limiter) DownloadOption {
 	return func(o *downloadOptions) {
 		o.rateController = rc
 	}
 }
 
+// WithDownloadLogger sets the logger for the download.
 func WithDownloadLogger(logger *slog.Logger) DownloadOption {
 	return func(o *downloadOptions) {
 		o.logger = logger
 	}
 }
 
+// WithDownloadProgress sets the channel to report download progress.
 func WithDownloadProgress(progress chan<- DownloadState) DownloadOption {
 	return func(o *downloadOptions) {
 		o.progressCh = progress
 	}
 }
 
+// WithDownloadWaitForCompletion sets whether the download should iterate,
+// until the download is successfully completed, or return after one iteration.
+// An iteration represents a single pass through the download process whereby
+// every outstsanding byte range is attempted to be downloaded once with retries.
+// A download will either complete after any specified retries or be left
+// outstanding for the next iteration.
 func WithDownloadWaitForCompletion(wait bool) DownloadOption {
 	return func(o *downloadOptions) {
 		o.waitForCompletion = wait
@@ -72,12 +82,31 @@ func WithDownloadWaitForCompletion(wait bool) DownloadOption {
 type DownloadState struct {
 	CachedBytes      int64 // Total bytes cached.
 	CachedBlocks     int64 // Total blocks cached.
+	CacheErrors      int64 // Total number of errors encountered while caching.
 	DownloadedBytes  int64 // Total bytes downloaded so far.
 	DownloadedBlocks int64 // Total blocks downloaded so far.
 	DownloadSize     int64 // Total size of the file in bytes.
 	DownloadBlocks   int64 // Total number of blocks to download.
-	Retries          int64 // Total number of retries made during the download.
+	DownloadRetries  int64 // Total number of retries made during the download.
+	DownloadErrors   int64 // Total number of errors encountered during the download.
 	Iterations       int64 // Number of iterations requiredd to complete the download.
+}
+
+func (ds DownloadState) updateAfterIteration(nds DownloadState) DownloadState {
+	// Update the download state after a 'wait for completion' iteration,
+	// do not update iterations and the overall download size and blocks
+	return DownloadState{
+		CachedBytes:      ds.CachedBytes + nds.CachedBytes,
+		CachedBlocks:     ds.CachedBlocks + nds.CachedBlocks,
+		CacheErrors:      ds.CacheErrors + nds.CacheErrors,
+		DownloadedBytes:  ds.DownloadedBytes + nds.DownloadedBytes,
+		DownloadedBlocks: ds.DownloadedBlocks + nds.DownloadedBlocks,
+		DownloadRetries:  ds.DownloadRetries + nds.DownloadRetries,
+		DownloadErrors:   ds.DownloadErrors + nds.DownloadErrors,
+		DownloadSize:     nds.DownloadSize,
+		DownloadBlocks:   nds.DownloadBlocks,
+		Iterations:       ds.Iterations + 1, // Increment iterations.
+	}
 }
 
 type progressTracker struct {
@@ -91,12 +120,17 @@ func (pt *progressTracker) incrementCache(blocks int, size int64) {
 }
 
 func (pt *progressTracker) incrementRetries(retries int) {
-	atomic.AddInt64(&pt.Retries, int64(retries))
+	atomic.AddInt64(&pt.DownloadRetries, int64(retries))
 }
 
-func (pt *progressTracker) incrementIterations() {
-	atomic.AddInt64(&pt.Iterations, 1)
+func (pt *progressTracker) incrementDownloadErrors() {
+	atomic.AddInt64(&pt.DownloadErrors, 1)
 }
+
+func (pt *progressTracker) incrementCacheErrors() {
+	atomic.AddInt64(&pt.CacheErrors, 1)
+}
+
 func (pt *progressTracker) incrementDownload(blocks int, size int64) {
 	tbytes := atomic.AddInt64(&pt.DownloadedBytes, size)
 	tblocks := atomic.AddInt64(&pt.DownloadedBlocks, int64(blocks))
@@ -121,7 +155,6 @@ type downloader struct {
 	size      int64            // Total size of the file in bytes.
 	blockSize int              // Size of each block in bytes.
 	bufPool   sync.Pool        // Pool for byte slices to reduce allocations.
-	requestCh chan request     // Channel for byte ranges to fetch.
 }
 
 type terminalError struct {
@@ -146,13 +179,14 @@ func newDownloader(file Reader, opts downloadOptionsCommon) *downloader {
 	if d.logger == nil {
 		d.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	d.logger = d.logger.With("pkg", "cloudeng.io/file/largefile", "download", file.Name())
+
 	if d.rateController == nil {
 		d.rateController = ratecontrol.New(ratecontrol.WithNoRateControl()) // Default to no rate control.
 	}
 	if d.concurrency <= 0 {
 		d.concurrency = runtime.NumCPU() // Default to number of CPU cores.
 	}
-	d.requestCh = make(chan request, d.concurrency) // Buffered channel for byte ranges to fetch.
 	return d
 }
 
@@ -188,11 +222,15 @@ func (dl *downloader) get(ctx context.Context, req request) (io.ReadCloser, erro
 		}
 		if retry.IsRetryable() {
 			if done, _ := backoff.Wait(ctx, retry); done {
+				dl.logger.Info("getReader: backoff exhausted", "byteRange", req.ByteRange, "retries", retries, "error", err)
 				return nil, fmt.Errorf("application backoff giving up after %d retries: %w", backoff.Retries(), err)
 			}
 			retries++
+			dl.progress.incrementRetries(retries)
 			continue
 		}
+		dl.progress.incrementDownloadErrors()
+		dl.logger.Info("getReader: non retryable error", "byteRange", req.ByteRange, "retries", retries, "error", err)
 		return nil, fmt.Errorf("failed to get byte range %v: %w", req.ByteRange, err)
 	}
 }
@@ -320,31 +358,42 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	}
 
 	start := time.Now()
-	if !dl.waitForCompletion {
-		st, err := dl.runOnce(ctx)
-		st.Duration = time.Since(start)
-		return st, err
-	}
+	var finalState DownloadState
 	for {
 		st, err := dl.runOnce(ctx)
 		if st.Complete && err == nil {
+			st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
 			st.Duration = time.Since(start)
 			return st, nil
 		}
-		dl.progress.incrementIterations()
+		dl.logger.Info("runOnce: download not complete, retrying", "iterations", st.Iterations, "error", err)
+		if !dl.waitForCompletion {
+			st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
+			st.Duration = time.Since(start)
+			return st, err
+		}
+		finalState = finalState.updateAfterIteration(dl.progress.DownloadState)
+		select {
+		case <-ctx.Done():
+			st.Duration = time.Since(start)
+			st.DownloadState = finalState
+			return st, ctx.Err()
+		default:
+		}
 	}
 }
 
 func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error) {
+	reqCh := make(chan request, dl.concurrency) // Buffered channel for requests to fetch.
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, dl.concurrency+1) // +1 for the generator goroutine
 	g.Go(func() error {
-		defer close(dl.requestCh)
-		return dl.generator(ctx, dl.requestCh)
+		defer close(reqCh)
+		return dl.generator(ctx, reqCh)
 	})
 	for range dl.concurrency {
 		g.Go(func() error {
-			return dl.fetcher(ctx, dl.requestCh, dl.handleResponse)
+			return dl.fetcher(ctx, reqCh, dl.handleResponse)
 		})
 	}
 
@@ -370,6 +419,8 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 func (dl *CachingDownloader) handleResponse(_ context.Context, resp response) error {
 	defer dl.bufPool.Put(resp.data) // Return the buffer to the pool after use.
 	if err := dl.cache.Put(resp.ByteRange, resp.data.Bytes()); err != nil {
+		dl.progress.incrementCacheErrors()
+		dl.logger.Info("handleResponse: cache write failed", "byteRange", resp.ByteRange, "error", err)
 		return &terminalError{err}
 	}
 	dl.progress.incrementCache(1, int64(len(resp.data.Bytes())))
