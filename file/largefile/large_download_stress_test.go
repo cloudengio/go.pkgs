@@ -411,7 +411,7 @@ func TestRateControl(t *testing.T) {
 	if (2 * st.Duration) > sst.Duration {
 		t.Errorf("expected faster download with no rate control, got %v vs %v", st.Duration, sst.Duration)
 	}
-	fmt.Printf("no rate control download duration: %v, slower download duration: %v\n", st.Duration, sst.Duration)
+	t.Logf("no rate control download duration: %v, slower download duration: %v\n", st.Duration, sst.Duration)
 }
 
 func TestCacheRetriesAndRunToCompletion(t *testing.T) {
