@@ -89,6 +89,8 @@ func (b *backoff) Wait(ctx context.Context, r any) (bool, error) {
 // Reader provides support for downloading very large files efficiently
 // concurrently and to allow for resumption of partial downloads.
 type Reader interface {
+	Name() string // Name returns the name of the file being read.
+
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the preferred block size used for downloading the file.
 	ContentLengthAndBlockSize(ctx context.Context) (int64, int, error)
