@@ -92,7 +92,7 @@ type DownloadState struct {
 	Iterations       int64 // Number of iterations requiredd to complete the download.
 }
 
-func (ds DownloadState) udpdateAfterIteration(nds DownloadState) DownloadState {
+func (ds DownloadState) updateAfterIteration(nds DownloadState) DownloadState {
 	// Update the download state after a 'wait for completion' iteration,
 	// do not update iterations and the overall download size and blocks
 	return DownloadState{
@@ -362,17 +362,17 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	for {
 		st, err := dl.runOnce(ctx)
 		if st.Complete && err == nil {
-			st.DownloadState = finalState.udpdateAfterIteration(dl.progress.DownloadState)
+			st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
 			st.Duration = time.Since(start)
 			return st, nil
 		}
 		dl.logger.Info("runOnce: download not complete, retrying", "iterations", st.Iterations, "error", err)
 		if !dl.waitForCompletion {
-			st.DownloadState = finalState.udpdateAfterIteration(dl.progress.DownloadState)
+			st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
 			st.Duration = time.Since(start)
 			return st, err
 		}
-		finalState = finalState.udpdateAfterIteration(dl.progress.DownloadState)
+		finalState = finalState.updateAfterIteration(dl.progress.DownloadState)
 		select {
 		case <-ctx.Done():
 			st.Duration = time.Since(start)
