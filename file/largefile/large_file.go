@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"iter"
 	"strconv"
@@ -16,16 +17,6 @@ import (
 
 	"cloudeng.io/algo/container/bitmap"
 	"cloudeng.io/net/ratecontrol"
-)
-
-// ChecksumType represents the type of checksum used for file integrity verification.
-type ChecksumType int
-
-const (
-	NoChecksum ChecksumType = iota
-	MD5
-	SHA1
-	CRC32C
 )
 
 // RetryResponse allows the caller to determine whether an operation
@@ -97,7 +88,7 @@ type Reader interface {
 
 	// Checksum returns the checksum type and the checksum value for the file,
 	// if none are available then it returns NoChecksum and an empty string.
-	Checksum(ctx context.Context) (ChecksumType, string, error)
+	Checksum(ctx context.Context) (hash.Hash, string, error)
 
 	// GetReader retrieves a byte range from the file and returns
 	// a reader that can be used to access that data range. In addition to the

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"hash"
 	"io"
 	"log/slog"
 	"reflect"
@@ -63,9 +64,9 @@ func (m *MockReader) GetReader(ctx context.Context, from, to int64) (rd io.ReadC
 	return nil, &noRetryResponse{}, errors.New("MockReader.GetReaderFunc not implemented")
 }
 
-func (m *MockReader) Checksum(context.Context) (largefile.ChecksumType, string, error) {
+func (m *MockReader) Checksum(context.Context) (hash.Hash, string, error) {
 	// Default implementation returns no checksum
-	return largefile.NoChecksum, "", nil
+	return nil, "", nil
 }
 
 // ResetCalls resets the GetReaderCalls slice to allow for fresh tests

@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"hash"
 	"io"
 	"math/rand"
 	"os"
@@ -38,8 +39,8 @@ func (m *mockLargeFile) Name() string {
 func (m *mockLargeFile) ContentLengthAndBlockSize(context.Context) (int64, int, error) {
 	return m.size, m.blockSize, nil // Mock implementation, returns size and block size
 }
-func (m *mockLargeFile) Checksum(context.Context) (largefile.ChecksumType, string, error) {
-	return largefile.NoChecksum, "", nil // Mock implementation, no checksum
+func (m *mockLargeFile) Checksum(context.Context) (hash.Hash, string, error) {
+	return nil, "", nil // Mock implementation, no checksum
 }
 
 type retryResponse struct{}
