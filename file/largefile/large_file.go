@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"io"
 	"iter"
 	"strconv"
@@ -86,9 +85,11 @@ type Reader interface {
 	// and the preferred block size used for downloading the file.
 	ContentLengthAndBlockSize(ctx context.Context) (int64, int, error)
 
-	// Checksum returns the checksum type and the checksum value for the file,
-	// if none are available then it returns NoChecksum and an empty string.
-	Checksum(ctx context.Context) (hash.Hash, string, error)
+	// Digest returns the digest of the file, if available, the
+	// format defined by RFC 9530's Repr-Digest header, eg.
+	// Repr-Digest: sha-256=:d435Qo+nKZ+gLcUHn7GQtQ72hiBVAgqoLsZnZPiTGPk=:
+	// An empty string is returned if no digest is available.
+	Digest(ctx context.Context) string
 
 	// GetReader retrieves a byte range from the file and returns
 	// a reader that can be used to access that data range. In addition to the
