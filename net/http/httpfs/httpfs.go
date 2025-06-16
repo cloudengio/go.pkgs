@@ -33,8 +33,8 @@ func WithHTTPScheme() Option {
 }
 
 // New creates a new instance of file.FS backed by http/https.
-func New(client *http.Client, options ...Option) file.FS {
-	fs := &httpfs{client: client}
+func New(client *http.Client, options ...Option) *FS {
+	fs := &FS{client: client}
 	fs.scheme = "https"
 	for _, fn := range options {
 		fn(&fs.options)
@@ -42,23 +42,23 @@ func New(client *http.Client, options ...Option) file.FS {
 	return fs
 }
 
-type httpfs struct {
+type FS struct {
 	client *http.Client
 	options
 }
 
 // Scheme implements fs.FS.
-func (fs *httpfs) Scheme() string {
+func (fs *FS) Scheme() string {
 	return fs.scheme
 }
 
 // Open implements fs.FS.
-func (fs *httpfs) Open(name string) (fs.File, error) {
+func (fs *FS) Open(name string) (fs.File, error) {
 	return fs.OpenCtx(context.Background(), name)
 }
 
 // OpenCtx implements file.FS.
-func (fs *httpfs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+func (fs *FS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	req, err := http.NewRequest("GET", name, nil)
 	if err != nil {
 		return nil, err
@@ -75,29 +75,29 @@ func (fs *httpfs) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 }
 
 // Readlink returns the contents of a redirect without following it.
-func (fs *httpfs) Readlink(_ context.Context, _ string) (string, error) {
+func (fs *FS) Readlink(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("Readlink is not implemented for https")
 }
 
 // Stat issues a head request and will follow redirects.
-func (fs *httpfs) Stat(_ context.Context, _ string) (file.Info, error) {
+func (fs *FS) Stat(_ context.Context, _ string) (file.Info, error) {
 	return file.Info{}, fmt.Errorf("Stat is not implemented for https")
 }
 
 // Lstat issues a head request but will not follow redirects.
-func (fs *httpfs) Lstat(_ context.Context, _ string) (file.Info, error) {
+func (fs *FS) Lstat(_ context.Context, _ string) (file.Info, error) {
 	return file.Info{}, fmt.Errorf("Lstat is not implemented for https")
 }
 
-func (fs *httpfs) Join(components ...string) string {
+func (fs *FS) Join(components ...string) string {
 	return path.Join(components...)
 }
 
-func (fs *httpfs) Base(p string) string {
+func (fs *FS) Base(p string) string {
 	return path.Base(p)
 }
 
-func (fs *httpfs) IsPermissionError(err error) bool {
+func (fs *FS) IsPermissionError(err error) bool {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.ErrorCode() == "AccessDenied"
@@ -105,7 +105,7 @@ func (fs *httpfs) IsPermissionError(err error) bool {
 	return false
 }
 
-func (fs *httpfs) IsNotExist(err error) bool {
+func (fs *FS) IsNotExist(err error) bool {
 	var nsk *types.NoSuchKey
 	var nsb *types.NoSuchBucket
 	return errors.As(err, &nsk) || errors.As(err, &nsb)
@@ -116,7 +116,7 @@ type httpXAttr struct {
 	obj   *http.Response
 }
 
-func (fs *httpfs) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error) {
+func (fs *FS) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr, error) {
 	sys := info.Sys()
 	if v, ok := sys.(*httpXAttr); ok {
 		return v.XAttr, nil
@@ -124,7 +124,7 @@ func (fs *httpfs) XAttr(_ context.Context, _ string, info file.Info) (file.XAttr
 	return file.XAttr{}, nil
 }
 
-func (fs *httpfs) SysXAttr(existing any, merge file.XAttr) any {
+func (fs *FS) SysXAttr(existing any, merge file.XAttr) any {
 	switch v := existing.(type) {
 	case *http.Response:
 		return &httpXAttr{XAttr: merge, obj: v}
