@@ -5,7 +5,40 @@ import cloudeng.io/file/diskusage
 ```
 
 
+## Constants
+### Byte, KB, MB, GB, TB, PB, EB, KiB, MiB, GiB, TiB, PiB, EiB
+```go
+Byte SizeUnit = 1
+// base 10
+KB = Byte * 1000
+MB = KB * 1000
+GB = MB * 1000
+TB = GB * 1000
+PB = TB * 1000
+EB = PB * 1000
+// base 2 quantities
+KiB = Byte << 10
+MiB = KiB << 10
+GiB = MiB << 10
+TiB = GiB << 10
+PiB = TiB << 10
+EiB = PiB << 10
+
+```
+
+
+
 ## Functions
+### Func BinarySize
+```go
+func BinarySize(width, precision int, val int64) string
+```
+
+### Func DecimalSize
+```go
+func DecimalSize(width, precision int, val int64) string
+```
+
 ### Func ParseToBytes
 ```go
 func ParseToBytes(val string) (float64, error)
@@ -14,36 +47,26 @@ func ParseToBytes(val string) (float64, error)
 
 
 ## Types
-### Type Base2Bytes
+### Type Binary
 ```go
-type Base2Bytes int64
+type Binary SizeUnit
 ```
-Base2Bytes represents a number of bytes in base 2.
-
-### Constants
-### KiB, MiB, GiB, TiB, PiB, EiB
-```go
-KiB Base2Bytes = 1024
-MiB Base2Bytes = KiB * 1024
-GiB Base2Bytes = MiB * 1024
-TiB Base2Bytes = GiB * 1024
-PiB Base2Bytes = TiB * 1024
-EiB Base2Bytes = PiB * 1024
-
-```
-Values for Base2Bytes.
-
-
+Binary represents a number of bytes in base 2.
 
 ### Methods
 
 ```go
-func (b Base2Bytes) Num(value int64) float64
+func (b Binary) Format(f fmt.State, verb rune)
 ```
 
 
 ```go
-func (b Base2Bytes) Standardize() (float64, string)
+func (b Binary) Standardize() (float64, string)
+```
+
+
+```go
+func (b Binary) Value(value int64) float64
 ```
 
 
@@ -109,36 +132,26 @@ func NewRoundup(blocksize int64) Calculator
 
 
 
-### Type DecimalBytes
+### Type Decimal
 ```go
-type DecimalBytes int64
+type Decimal SizeUnit
 ```
-Base2Bytes represents a number of bytes in base 10.
-
-### Constants
-### KB, MB, GB, TB, PB, EB
-```go
-KB DecimalBytes = 1000
-MB DecimalBytes = KB * 1000
-GB DecimalBytes = MB * 1000
-TB DecimalBytes = GB * 1000
-PB DecimalBytes = TB * 1000
-EB DecimalBytes = PB * 1000
-
-```
-Values for DecimalBytes.
-
-
+Decimal represents a number of bytes in base 10.
 
 ### Methods
 
 ```go
-func (b DecimalBytes) Num(value int64) float64
+func (b Decimal) Format(f fmt.State, verb rune)
 ```
 
 
 ```go
-func (b DecimalBytes) Standardize() (float64, string)
+func (b Decimal) Standardize() (float64, string)
+```
+
+
+```go
+func (b Decimal) Value(value int64) float64
 ```
 
 
@@ -210,12 +223,46 @@ func (s Roundup) String() string
 
 
 
+### Type SizeUnit
+```go
+type SizeUnit int64
+```
+SizeUnit represents a unit of size in bytes. It can be used to represent
+both decimal and binary sizes.
+
+### Functions
+
+```go
+func BinaryUnitForSize(size int64) SizeUnit
+```
+
+
+```go
+func DecimalUnitForSize(size int64) SizeUnit
+```
+
+
+
+### Methods
+
+```go
+func (s SizeUnit) String() string
+```
+
+
+```go
+func (s SizeUnit) Value(v int64) float64
+```
+
+
+
+
 
 
 ## Examples
-### [ExampleBase2Bytes](https://pkg.go.dev/cloudeng.io/file/diskusage?tab=doc#example-Base2Bytes)
+### [ExampleBinary](https://pkg.go.dev/cloudeng.io/file/diskusage?tab=doc#example-Binary)
 
-### [ExampleDecimalBytes](https://pkg.go.dev/cloudeng.io/file/diskusage?tab=doc#example-DecimalBytes)
+### [ExampleDecimal](https://pkg.go.dev/cloudeng.io/file/diskusage?tab=doc#example-Decimal)
 
 
 
