@@ -191,13 +191,13 @@ func newDownloader(file Reader, opts downloadOptionsCommon) *downloader {
 }
 
 func (dl *downloader) init() error {
-	var err error
-	dl.size, dl.blockSize, err = dl.file.ContentLengthAndBlockSize()
-	if err != nil {
-		return fmt.Errorf("failed to get file size: %w", err)
+	dl.size, dl.blockSize = dl.file.ContentLengthAndBlockSize()
+	if dl.blockSize <= 0 {
+		dl.blockSize = 4096 // Default block size is 4 KiB.
+		dl.logger.Warn("block size not set, using default", "blockSize", dl.blockSize)
 	}
 	dl.bufPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return bytes.NewBuffer(make([]byte, dl.blockSize))
 		},
 	}

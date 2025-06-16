@@ -83,7 +83,7 @@ type Reader interface {
 
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the preferred block size used for downloading the file.
-	ContentLengthAndBlockSize() (int64, int, error)
+	ContentLengthAndBlockSize() (int64, int)
 
 	// Digest returns the digest of the file, if available, the
 	// format defined by RFC 9530's Repr-Digest header, eg.
