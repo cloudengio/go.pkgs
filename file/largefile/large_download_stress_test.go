@@ -35,8 +35,8 @@ func (m *mockLargeFile) Name() string {
 	return "mockLargeFile" // Mock implementation, returns a fixed name
 }
 
-func (m *mockLargeFile) ContentLengthAndBlockSize() (int64, int, error) {
-	return m.size, m.blockSize, nil // Mock implementation, returns size and block size
+func (m *mockLargeFile) ContentLengthAndBlockSize() (int64, int) {
+	return m.size, m.blockSize // Mock implementation, returns size and block size
 }
 func (m *mockLargeFile) Digest() string {
 	return ""
