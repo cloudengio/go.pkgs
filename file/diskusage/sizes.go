@@ -143,7 +143,7 @@ func DecimalSize(width, precision int, val int64) string {
 	return fmt.Sprintf("%[1]*.[2]*[3]f%v", width, precision, unit.Value(val), unit.String())
 }
 
-func (b SizeUnit) format(f fmt.State, verb rune, binary bool) {
+func (s SizeUnit) format(f fmt.State, verb rune, binary bool) {
 	width, ok := f.Width()
 	if !ok {
 		width = 0
@@ -154,11 +154,11 @@ func (b SizeUnit) format(f fmt.State, verb rune, binary bool) {
 	}
 	var u SizeUnit
 	if binary {
-		u = BinaryUnitForSize(int64(b))
+		u = BinaryUnitForSize(int64(s))
 	} else {
-		u = DecimalUnitForSize(int64(b))
+		u = DecimalUnitForSize(int64(s))
 	}
-	v := u.Value(int64(b))
+	v := u.Value(int64(s))
 	switch verb {
 	case 'f':
 		fmt.Fprintf(f, "%*.*f %s", width, prec, v, u)
