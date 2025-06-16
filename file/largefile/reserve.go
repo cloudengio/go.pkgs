@@ -33,7 +33,6 @@ func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, c
 
 	if availBytes < size {
 		return fmt.Errorf("%s: needs %v, but filesystem has %v: %w", filename, diskusage.Decimal(size), diskusage.Decimal(availBytes), ErrNotEnoughSpace)
-
 	}
 
 	f1, err := os.Create(filename)
