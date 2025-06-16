@@ -190,9 +190,9 @@ func newDownloader(file Reader, opts downloadOptionsCommon) *downloader {
 	return d
 }
 
-func (dl *downloader) init(ctx context.Context) error {
+func (dl *downloader) init() error {
 	var err error
-	dl.size, dl.blockSize, err = dl.file.ContentLengthAndBlockSize(ctx)
+	dl.size, dl.blockSize, err = dl.file.ContentLengthAndBlockSize()
 	if err != nil {
 		return fmt.Errorf("failed to get file size: %w", err)
 	}
@@ -338,7 +338,7 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	if dl.cache == nil {
 		return DownloadStatus{}, fmt.Errorf("cache is not set for CachingDownloader")
 	}
-	if err := dl.init(ctx); err != nil {
+	if err := dl.init(); err != nil {
 		return DownloadStatus{}, err
 	}
 	csize, cblock := dl.cache.ContentLengthAndBlockSize()
