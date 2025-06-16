@@ -236,26 +236,6 @@ it will return an
 
 
 
-### Type ChecksumType
-```go
-type ChecksumType int
-```
-ChecksumType represents the type of checksum used for file integrity
-verification.
-
-### Constants
-### NoChecksum, MD5, SHA1, CRC32C
-```go
-NoChecksum ChecksumType = iota
-MD5
-SHA1
-CRC32C
-
-```
-
-
-
-
 ### Type DownloadCache
 ```go
 type DownloadCache interface {
@@ -297,26 +277,36 @@ type DownloadOption func(*downloadOptions)
 ```go
 func WithDownloadConcurrency(n int) DownloadOption
 ```
+WithDownloadConcurrency sets the number of concurrent download goroutines.
 
 
 ```go
 func WithDownloadLogger(logger *slog.Logger) DownloadOption
 ```
+WithDownloadLogger sets the logger for the download.
 
 
 ```go
 func WithDownloadProgress(progress chan<- DownloadState) DownloadOption
 ```
+WithDownloadProgress sets the channel to report download progress.
 
 
 ```go
 func WithDownloadRateController(rc ratecontrol.Limiter) DownloadOption
 ```
+WithDownloadRateController sets the rate controller for the download.
 
 
 ```go
 func WithDownloadWaitForCompletion(wait bool) DownloadOption
 ```
+WithDownloadWaitForCompletion sets whether the download should iterate,
+until the download is successfully completed, or return after one iteration.
+An iteration represents a single pass through the download process whereby
+every outstsanding byte range is attempted to be downloaded once with
+retries. A download will either complete after any specified retries or be
+left outstanding for the next iteration.
 
 
 
@@ -326,11 +316,13 @@ func WithDownloadWaitForCompletion(wait bool) DownloadOption
 type DownloadState struct {
 	CachedBytes      int64 // Total bytes cached.
 	CachedBlocks     int64 // Total blocks cached.
+	CacheErrors      int64 // Total number of errors encountered while caching.
 	DownloadedBytes  int64 // Total bytes downloaded so far.
 	DownloadedBlocks int64 // Total blocks downloaded so far.
 	DownloadSize     int64 // Total size of the file in bytes.
 	DownloadBlocks   int64 // Total number of blocks to download.
-	Retries          int64 // Total number of retries made during the download.
+	DownloadRetries  int64 // Total number of retries made during the download.
+	DownloadErrors   int64 // Total number of errors encountered during the download.
 	Iterations       int64 // Number of iterations requiredd to complete the download.
 }
 ```
@@ -427,13 +419,17 @@ Put implements DownloadCache.
 ### Type Reader
 ```go
 type Reader interface {
+	Name() string // Name returns the name of the file being read.
+
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the preferred block size used for downloading the file.
-	ContentLengthAndBlockSize(ctx context.Context) (int64, int, error)
+	ContentLengthAndBlockSize() (int64, int)
 
-	// Checksum returns the checksum type and the checksum value for the file,
-	// if none are available then it returns NoChecksum and an empty string.
-	Checksum(ctx context.Context) (ChecksumType, string, error)
+	// Digest returns the digest of the file, if available, the
+	// format defined by RFC 9530's Repr-Digest header, eg.
+	// Repr-Digest: sha-256=:d435Qo+nKZ+gLcUHn7GQtQ72hiBVAgqoLsZnZPiTGPk=:
+	// An empty string is returned if no digest is available.
+	Digest() string
 
 	// GetReader retrieves a byte range from the file and returns
 	// a reader that can be used to access that data range. In addition to the
@@ -472,7 +468,7 @@ type StreamingDownloadOption func(*downloadStreamingOptions)
 ### Functions
 
 ```go
-func WithVerifyChecksum(verify bool) StreamingDownloadOption
+func WithVerifyDigest(verify bool) StreamingDownloadOption
 ```
 
 

@@ -5,78 +5,41 @@
 package diskusage
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
 
-// Base2Bytes represents a number of bytes in base 2.
-type Base2Bytes int64
+// Binary represents a number of bytes in base 2.
+type Binary SizeUnit
 
-// Values for Base2Bytes.
-const (
-	KiB Base2Bytes = 1024
-	MiB Base2Bytes = KiB * 1024
-	GiB Base2Bytes = MiB * 1024
-	TiB Base2Bytes = GiB * 1024
-	PiB Base2Bytes = TiB * 1024
-	EiB Base2Bytes = PiB * 1024
-)
-
-// Base2Bytes represents a number of bytes in base 10.
-type DecimalBytes int64
-
-// Values for DecimalBytes.
-const (
-	KB DecimalBytes = 1000
-	MB DecimalBytes = KB * 1000
-	GB DecimalBytes = MB * 1000
-	TB DecimalBytes = GB * 1000
-	PB DecimalBytes = TB * 1000
-	EB DecimalBytes = PB * 1000
-)
-
-func (b Base2Bytes) Num(value int64) float64 {
+func (b Binary) Value(value int64) float64 {
 	return float64(value) / float64(b)
 }
 
-func (b Base2Bytes) Standardize() (float64, string) {
-	v := int64(b)
-	switch {
-	case b > EiB:
-		return EiB.Num(v), "EiB"
-	case b >= PiB:
-		return PiB.Num(v), "PiB"
-	case b >= TiB:
-		return TiB.Num(v), "TiB"
-	case b >= GiB:
-		return GiB.Num(v), "GiB"
-	case b >= MiB:
-		return MiB.Num(v), "MiB"
-	default:
-		return KiB.Num(v), "KiB"
-	}
+func (b Binary) Standardize() (float64, string) {
+	u := BinaryUnitForSize(int64(b))
+	return u.Value(int64(b)), u.String()
 }
 
-func (b DecimalBytes) Num(value int64) float64 {
+func (b Binary) Format(f fmt.State, verb rune) {
+	SizeUnit(b).format(f, verb, true)
+}
+
+// Decimal represents a number of bytes in base 10.
+type Decimal SizeUnit
+
+func (b Decimal) Value(value int64) float64 {
 	return float64(value) / float64(b)
 }
 
-func (b DecimalBytes) Standardize() (float64, string) {
-	v := int64(b)
-	switch {
-	case b >= EB:
-		return EB.Num(v), "EB"
-	case b >= PB:
-		return PB.Num(v), "PB"
-	case b >= TB:
-		return TB.Num(v), "TB"
-	case b >= GB:
-		return GB.Num(v), "GB"
-	case b >= MB:
-		return MB.Num(v), "MB"
-	default:
-		return KB.Num(v), "KB"
-	}
+func (b Decimal) Standardize() (float64, string) {
+	u := DecimalUnitForSize(int64(b))
+	return u.Value(int64(b)), u.String()
+}
+
+func (b Decimal) Format(f fmt.State, verb rune) {
+	SizeUnit(b).format(f, verb, false)
 }
 
 type suffixSpec struct {

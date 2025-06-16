@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"cloudeng.io/file"
+	"cloudeng.io/file/diskusage"
 	"cloudeng.io/sys"
 )
 
@@ -29,7 +29,7 @@ func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, c
 	}
 
 	if availBytes < size {
-		return fmt.Errorf("not enough space available for %s: %v MB available, %v MB requested", filename, file.MB.Value(availBytes), file.MB.Value(size))
+		return fmt.Errorf("not enough space available for %s: %v MB available, %v MB requested", filename, diskusage.Decimal(availBytes), diskusage.Decimal(size))
 	}
 
 	f1, err := os.Create(filename)
@@ -55,7 +55,7 @@ func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, c
 		return err
 	}
 	if !allocated {
-		return fmt.Errorf("file %s was not allocated with size %v", filename, file.MB.Value(size))
+		return fmt.Errorf("file %s was not allocated with size %v", filename, diskusage.Decimal(size))
 	}
 
 	fi, err := f2.Stat()

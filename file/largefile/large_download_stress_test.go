@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"cloudeng.io/errors"
-	"cloudeng.io/file"
+	"cloudeng.io/file/diskusage"
 	"cloudeng.io/file/largefile"
 	"cloudeng.io/net/ratecontrol"
 )
@@ -160,7 +160,7 @@ func TestCacheStressTest(t *testing.T) {
 	for _, concurrency := range []int{1, 10, 100} {
 		t.Run(fmt.Sprintf("concurrency=%d", concurrency), func(t *testing.T) {
 			t.Logf("Running stress test with concurrency %d", concurrency)
-			cacheSize := int64(file.KB * 7)
+			cacheSize := int64(diskusage.KB * 7)
 			blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
 			if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency); err != nil {
@@ -255,7 +255,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
 
 	concurrency := 10
-	cacheSize := int64(file.KB * 7)
+	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
 	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency); err != nil {
@@ -395,7 +395,7 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 
 func TestRateControl(t *testing.T) {
 	ctx := context.Background()
-	cacheSize := int64(file.KB * 7)
+	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 1024
 	concurrency := 10
 	// No rate control, should be faster than the slower download.
@@ -417,7 +417,7 @@ func TestRateControl(t *testing.T) {
 func TestCacheRetriesAndRunToCompletion(t *testing.T) {
 	ctx := context.Background()
 
-	cacheSize := int64(file.KB * 7)
+	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 1024
 	concurrency := 10
 
