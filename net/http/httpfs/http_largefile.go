@@ -47,23 +47,38 @@ type largeFileOptions struct {
 	transport *http.Transport
 	logger    *slog.Logger // Optional logger for debugging.
 	blockSize int
+	delay     time.Duration
 }
 
+// WithLargeFileBlockSize sets the block size for reading large files.
 func WithLargeFileBlockSize(blockSize int) LargeFileOption {
 	return func(o *largeFileOptions) {
 		o.blockSize = blockSize
 	}
 }
 
+// WithLargeFileLogger sets the logger. If not set, a discard logger is used.
 func WithLargeFileLogger(slog *slog.Logger) LargeFileOption {
 	return func(o *largeFileOptions) {
 		o.logger = slog
 	}
 }
 
+// WithLargeFileTransport sets the HTTP transport for making requests, if not
+// set a simple default is used.
 func WithLargeFileTransport(transport *http.Transport) LargeFileOption {
 	return func(o *largeFileOptions) {
 		o.transport = transport
+	}
+}
+
+// WithDefaultRetryDelay sets the default retry delay for HTTP requests.
+// This is used when the server responds with a 503 Service Unavailable status
+// but does not provide a Retry-After header or that header cannot be parsed.
+// The default value is 1 minute.
+func WithDetaultRetryDelay(delay time.Duration) LargeFileOption {
+	return func(o *largeFileOptions) {
+		o.delay = delay
 	}
 }
 
@@ -73,6 +88,7 @@ func NewLargeFile(ctx context.Context, name string, opts ...LargeFileOption) (la
 	lf.blockSize = 4096 // default block size is 4 KiB
 	lf.logger = slog.New(slog.DiscardHandler)
 	lf.transport = &http.Transport{}
+	lf.delay = time.Minute // default retry delay is 1 minute
 	for _, opt := range opts {
 		opt(&lf.largeFileOptions)
 	}
@@ -88,6 +104,7 @@ func NewLargeFile(ctx context.Context, name string, opts ...LargeFileOption) (la
 	if err := httperror.CheckResponse(err, resp); err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.Header.Get("Accept-Ranges") != "bytes" {
 		return nil, ErrNoRangeSupport
 	}
@@ -127,26 +144,43 @@ func (f *LargeFile) GetReader(ctx context.Context, from, to int64) (io.ReadClose
 	resp, err := client.Do(req)
 	if err == nil {
 		switch resp.StatusCode {
-		case http.StatusOK:
+		case http.StatusOK, http.StatusPartialContent:
 			return resp.Body, nil, nil
 		case http.StatusServiceUnavailable:
-			rr := f.newHTTRetryResponse(resp)
-			resp.Body.Close()
-			return nil, rr, nil
+			return nil, f.newHTTRetryResponse(resp), nil
 		default:
-			resp.Body.Close()
+			bodyPreview, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			f.logger.Error("unexpected status code",
+				"pkg", "cloudeng.io/net/http/httpfs",
+				"url", f.name,
+				"status", resp.Status,
+				"code", resp.StatusCode,
+				"body_preview", string(bodyPreview))
+			f.closeBody(resp)
 			return nil, nil, fmt.Errorf("bad status code: %v", resp.Status)
 		}
 	}
-	resp.Body.Close()
-	return nil, nil, fmt.Errorf("failed to get reader")
+	f.closeBody(resp)
+	return nil, nil, fmt.Errorf("failed to get reader: %w", err)
 }
 
-func (f *LargeFile) newHTTRetryResponse(response *http.Response) largefile.RetryResponse {
-	delay, err := parseRetryAfterHeader(response)
+func (f *LargeFile) closeBody(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		// Close the response body to avoid resource leaks.
+		resp.Body.Close()
+	}
+}
+
+func (f *LargeFile) newHTTRetryResponse(resp *http.Response) largefile.RetryResponse {
+	defer f.closeBody(resp)
+	delay, err := parseRetryAfterHeader(resp)
 	if err != nil {
-		f.logger.Error("failed to parse Retry-After header", "pkg", "cloudeng.io/net/http/httpfs", "retry-after", response.Header.Get("Retry-After"), "error", err)
-		return nil // If parsing fails, we cannot retry.
+		f.logger.Error("failed to parse Retry-After header",
+			"pkg", "cloudeng.io/net/http/httpfs",
+			"retry-after", resp.Header.Get("Retry-After"),
+			"error", err)
+		// Default delay if parsing fails.
+		delay = f.delay
 	}
 	return &httpRetryResponse{
 		duration: delay,
@@ -190,8 +224,7 @@ func parseRetryAfterHeader(response *http.Response) (time.Duration, error) {
 	}
 
 	// If it's not an integer, try to parse it as an HTTP-date.
-	// The standard format for HTTP-dates is RFC1123.
-	if retryAt, err := time.Parse(time.RFC1123, retryAfter); err == nil {
+	if retryAt, err := http.ParseTime(retryAfter); err == nil {
 		return time.Until(retryAt), nil
 	}
 
