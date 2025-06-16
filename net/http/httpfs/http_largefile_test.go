@@ -26,7 +26,7 @@ func newHTTTransport() *http.Transport {
 	return transport
 }
 
-func TestLargeFile_HeadAndRange(t *testing.T) {
+func TestLargeFile_HeadAndRange(t *testing.T) { //nolint:gocyclo
 	const fileContent = "abcdefghijklmnopqrstuvwxyz0123456789"
 	const blockSize = 8
 	const digestVal = "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:"
@@ -59,7 +59,7 @@ func TestLargeFile_HeadAndRange(t *testing.T) {
 			}
 			w.Header().Set("Content-Range", "bytes "+rangeSpec+"/"+strconv.Itoa(len(fileContent)))
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(fileContent[from : to+1]))
+			w.Write([]byte(fileContent[from : to+1])) //nolint:errcheck
 		default:
 			http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
 		}
@@ -111,7 +111,7 @@ func TestLargeFile_HeadAndRange(t *testing.T) {
 
 func TestLargeFile_NoRangeSupport(t *testing.T) {
 	// HEAD returns Accept-Ranges: none
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Accept-Ranges", "none")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -141,7 +141,7 @@ func TestLargeFile_GetReader_ServiceUnavailableWithRetryAfter(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Range", "bytes 0-3/36")
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusOK) //nolint:errcheck
 			w.Write([]byte(fileContent[0:4]))
 		}
 	}))
@@ -166,7 +166,7 @@ func TestLargeFile_GetReader_ServiceUnavailableWithRetryAfter(t *testing.T) {
 	}
 	retryable := retry.IsRetryable()
 	hasDelay, delay := retry.BackoffDuration()
-	if !retryable || !hasDelay || delay < 2*time.Second {
+	if !retryable || !hasDelay || delay != 2*time.Second {
 		t.Errorf("unexpected retry info: retryable=%v, hasDelay=%v, delay=%v", retryable, hasDelay, delay)
 	}
 }
