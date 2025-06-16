@@ -8,12 +8,16 @@ package largefile
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"sync/atomic"
+	"syscall"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/sync/errgroup"
 )
 
-func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concurrency int) error {
+func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concurrency int, progressCh chan<- int64) error {
 	if size <= 0 {
 		return nil
 	}
@@ -28,6 +32,9 @@ func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concu
 		defer close(brCh)
 		return generator(ctx, br, brCh)
 	})
+
+	var written int64
+
 	for range concurrency {
 		g.Go(func() error {
 			for r := range brCh {
@@ -36,14 +43,31 @@ func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concu
 					return ctx.Err()
 				default:
 					if _, err := fs.WriteAt(buf[:r.Size()], r.From); err != nil {
-						return err
+						if errors.Is(err, syscall.ENOSPC) {
+							return fmt.Errorf("%s: %w", fs.Name(), ErrNotEnoughSpace)
+						}
+						return fmt.Errorf("%s: %w", fs.Name(), err)
+					}
+					if progressCh != nil {
+						select {
+						case progressCh <- atomic.AddInt64(&written, r.Size()):
+						default:
+						}
 					}
 				}
 			}
 			return nil
 		})
 	}
-	return g.Wait()
+	err := g.Wait()
+	if progressCh != nil {
+		select {
+		case progressCh <- atomic.LoadInt64(&written):
+		default:
+		}
+		close(progressCh)
+	}
+	return err
 }
 
 func generator(ctx context.Context, brs *ByteRanges, ch chan<- ByteRange) error {

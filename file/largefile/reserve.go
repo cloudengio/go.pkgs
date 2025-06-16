@@ -6,6 +6,7 @@ package largefile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 	"cloudeng.io/sys"
 )
 
+var ErrNotEnoughSpace = errors.New("not enough space available for the requested operation")
+
 // ReserveSpace creates a file with the specified filename and allocates the
 // specified size bytes to it. It verifies that the file was created with the
 // requested storage allocated. On systems that support space reservation,
@@ -21,7 +24,7 @@ import (
 // the file to ensure that the space is allocated. The intent is to ensure that
 // a download operations never fails because of insufficient local space once
 // it has been initiated.
-func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int) error {
+func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int, progressCh chan<- int64) error {
 
 	availBytes, err := sys.AvailableBytes(filepath.Dir(filename))
 	if err != nil {
@@ -29,7 +32,8 @@ func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, c
 	}
 
 	if availBytes < size {
-		return fmt.Errorf("not enough space available for %s: %v MB available, %v MB requested", filename, diskusage.Decimal(availBytes), diskusage.Decimal(size))
+		return fmt.Errorf("%s: needs %v, but filesystem has %v: %w", filename, diskusage.Decimal(size), diskusage.Decimal(availBytes), ErrNotEnoughSpace)
+
 	}
 
 	f1, err := os.Create(filename)
@@ -38,7 +42,7 @@ func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, c
 	}
 	defer f1.Close()
 
-	if err := reserveSpace(ctx, f1, size, blockSize, concurrency); err != nil {
+	if err := reserveSpace(ctx, f1, size, blockSize, concurrency, progressCh); err != nil {
 		return err
 	}
 	if err := f1.Sync(); err != nil {
