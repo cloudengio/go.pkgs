@@ -36,7 +36,7 @@ func (r noRetryResponse) BackoffDuration() (bool, time.Duration) {
 
 // MockReader implements largefile.Reader
 type MockReader struct {
-	ContentLengthAndBlockSizeFunc func(ctx context.Context) (size int64, blockSize int, err error)
+	ContentLengthAndBlockSizeFunc func() (size int64, blockSize int, err error)
 	GetReaderFunc                 func(ctx context.Context, from, to int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error)
 	GetReaderCalls                []struct{ From, To int64 }
 	mu                            sync.Mutex
@@ -46,9 +46,9 @@ func (m *MockReader) Name() string {
 	return "MockReader"
 }
 
-func (m *MockReader) ContentLengthAndBlockSize(ctx context.Context) (size int64, blockSize int, err error) {
+func (m *MockReader) ContentLengthAndBlockSize() (size int64, blockSize int, err error) {
 	if m.ContentLengthAndBlockSizeFunc != nil {
-		return m.ContentLengthAndBlockSizeFunc(ctx)
+		return m.ContentLengthAndBlockSizeFunc()
 	}
 	return 0, 0, errors.New("MockReader.ContentLengthAndBlockSizeFunc not implemented")
 }
@@ -63,9 +63,9 @@ func (m *MockReader) GetReader(ctx context.Context, from, to int64) (rd io.ReadC
 	return nil, &noRetryResponse{}, errors.New("MockReader.GetReaderFunc not implemented")
 }
 
-func (m *MockReader) Checksum(context.Context) (largefile.ChecksumType, string, error) {
-	// Default implementation returns no checksum
-	return largefile.NoChecksum, "", nil
+func (m *MockReader) Digest() string {
+	// Default implementation returns no digest
+	return ""
 }
 
 // ResetCalls resets the GetReaderCalls slice to allow for fresh tests
@@ -210,7 +210,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 
 	newDefaultMockReader := func() *MockReader {
 		return &MockReader{
-			ContentLengthAndBlockSizeFunc: func(context.Context) (size int64, blockSize int, err error) {
+			ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int, err error) {
 				return defaultContentSize, defaultBlockSize, nil
 			},
 			GetReaderFunc: func(_ context.Context, from, to int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error) {
@@ -262,7 +262,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	t.Run("init fails - reader ContentLengthAndBlockSize error", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
-		mockReader.ContentLengthAndBlockSizeFunc = func(context.Context) (size int64, blockSize int, err error) {
+		mockReader.ContentLengthAndBlockSizeFunc = func() (size int64, blockSize int, err error) {
 			return 0, 0, errors.New("reader init error")
 		}
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
@@ -437,7 +437,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		// ... (rest of this test case as you have it) ...
 		// Ensure mockReader.ContentLengthAndBlockSizeFunc and mockCache.ContentLengthAndBlockSizeFunc
 		// are set to match defaultContentSize (or a size that accommodates numRanges) and defaultBlockSize.
-		mockReader.ContentLengthAndBlockSizeFunc = func(context.Context) (size int64, blockSize int, err error) {
+		mockReader.ContentLengthAndBlockSizeFunc = func() (size int64, blockSize int, err error) {
 			return int64(numRanges * defaultBlockSize), defaultBlockSize, nil
 		}
 		mockCache.ContentLengthAndBlockSizeFunc = func() (size int64, blockSize int) {
@@ -577,7 +577,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 
 		numBlocks := 4
 		currentContentSize := int64(numBlocks * defaultBlockSize)
-		mockReader.ContentLengthAndBlockSizeFunc = func(context.Context) (int64, int, error) {
+		mockReader.ContentLengthAndBlockSizeFunc = func() (int64, int, error) {
 			return currentContentSize, defaultBlockSize, nil
 		}
 		mockCache.ContentLengthAndBlockSizeFunc = func() (int64, int) {
@@ -659,7 +659,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		currentContentSize := int64(numBlocks * defaultBlockSize)
 
 		mockReader := &MockReader{
-			ContentLengthAndBlockSizeFunc: func(context.Context) (int64, int, error) {
+			ContentLengthAndBlockSizeFunc: func() (int64, int, error) {
 				return currentContentSize, defaultBlockSize, nil
 			},
 			GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
@@ -747,7 +747,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		concurrency := 2
 
 		mockReader := &MockReader{
-			ContentLengthAndBlockSizeFunc: func(context.Context) (int64, int, error) {
+			ContentLengthAndBlockSizeFunc: func() (int64, int, error) {
 				return currentContentSize, defaultBlockSize, nil
 			},
 			GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {

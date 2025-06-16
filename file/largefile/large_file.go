@@ -18,16 +18,6 @@ import (
 	"cloudeng.io/net/ratecontrol"
 )
 
-// ChecksumType represents the type of checksum used for file integrity verification.
-type ChecksumType int
-
-const (
-	NoChecksum ChecksumType = iota
-	MD5
-	SHA1
-	CRC32C
-)
-
 // RetryResponse allows the caller to determine whether an operation
 // that failed with a retryable error can be retried and how long to wait
 // before retrying the operation.
@@ -93,11 +83,13 @@ type Reader interface {
 
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the preferred block size used for downloading the file.
-	ContentLengthAndBlockSize(ctx context.Context) (int64, int, error)
+	ContentLengthAndBlockSize() (int64, int, error)
 
-	// Checksum returns the checksum type and the checksum value for the file,
-	// if none are available then it returns NoChecksum and an empty string.
-	Checksum(ctx context.Context) (ChecksumType, string, error)
+	// Digest returns the digest of the file, if available, the
+	// format defined by RFC 9530's Repr-Digest header, eg.
+	// Repr-Digest: sha-256=:d435Qo+nKZ+gLcUHn7GQtQ72hiBVAgqoLsZnZPiTGPk=:
+	// An empty string is returned if no digest is available.
+	Digest() string
 
 	// GetReader retrieves a byte range from the file and returns
 	// a reader that can be used to access that data range. In addition to the

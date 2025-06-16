@@ -34,7 +34,7 @@ type downloadOptions struct {
 
 type downloadStreamingOptions struct {
 	downloadOptionsCommon
-	verifyChecksum bool // Whether to verify the checksum of downloaded data.
+	verifyDigest bool // Whether to verify the digest of downloaded data.
 }
 
 type DownloadOption func(*downloadOptions)
@@ -190,9 +190,9 @@ func newDownloader(file Reader, opts downloadOptionsCommon) *downloader {
 	return d
 }
 
-func (dl *downloader) init(ctx context.Context) error {
+func (dl *downloader) init() error {
 	var err error
-	dl.size, dl.blockSize, err = dl.file.ContentLengthAndBlockSize(ctx)
+	dl.size, dl.blockSize, err = dl.file.ContentLengthAndBlockSize()
 	if err != nil {
 		return fmt.Errorf("failed to get file size: %w", err)
 	}
@@ -338,7 +338,7 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	if dl.cache == nil {
 		return DownloadStatus{}, fmt.Errorf("cache is not set for CachingDownloader")
 	}
-	if err := dl.init(ctx); err != nil {
+	if err := dl.init(); err != nil {
 		return DownloadStatus{}, err
 	}
 	csize, cblock := dl.cache.ContentLengthAndBlockSize()
@@ -447,9 +447,9 @@ func (dl *CachingDownloader) generator(ctx context.Context, reqCh chan<- request
 
 type StreamingDownloadOption func(*downloadStreamingOptions)
 
-func WithVerifyChecksum(verify bool) StreamingDownloadOption {
+func WithVerifyDigest(verify bool) StreamingDownloadOption {
 	return func(o *downloadStreamingOptions) {
-		o.verifyChecksum = verify
+		o.verifyDigest = verify
 	}
 }
 
@@ -458,10 +458,10 @@ func WithVerifyChecksum(verify bool) StreamingDownloadOption {
 // serializes the responses into a single stream for reading.
 type StreamingDownloader struct {
 	*downloader
-	verifyChecksum bool           // Whether to verify the checksum of downloaded data.
-	pipeRd         io.ReadCloser  // Reader for streaming data.
-	pipeWr         io.WriteCloser // Writer for streaming data.
-	responseCh     chan response  // Channel for responses from fetchers.
+	verifyDigest bool           // Whether to verify the digest of downloaded data.
+	pipeRd       io.ReadCloser  // Reader for streaming data.
+	pipeWr       io.WriteCloser // Writer for streaming data.
+	responseCh   chan response  // Channel for responses from fetchers.
 }
 
 // NewStreamingDownloader creates a new StreamingDownloader instance.
@@ -471,7 +471,7 @@ func NewStreamingDownloader(file Reader, opts ...StreamingDownloadOption) *Strea
 	for _, opt := range opts {
 		opt(&options)
 	}
-	d.verifyChecksum = options.verifyChecksum
+	d.verifyDigest = options.verifyDigest
 	d.downloader = newDownloader(file, options.downloadOptionsCommon)
 	d.responseCh = make(chan response, d.concurrency) // Buffered channel for responses from fetchers.
 	d.pipeRd, d.pipeWr = io.Pipe()                    // Create a pipe for streaming data.

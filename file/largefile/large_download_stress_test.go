@@ -35,11 +35,11 @@ func (m *mockLargeFile) Name() string {
 	return "mockLargeFile" // Mock implementation, returns a fixed name
 }
 
-func (m *mockLargeFile) ContentLengthAndBlockSize(context.Context) (int64, int, error) {
+func (m *mockLargeFile) ContentLengthAndBlockSize() (int64, int, error) {
 	return m.size, m.blockSize, nil // Mock implementation, returns size and block size
 }
-func (m *mockLargeFile) Checksum(context.Context) (largefile.ChecksumType, string, error) {
-	return largefile.NoChecksum, "", nil // Mock implementation, no checksum
+func (m *mockLargeFile) Digest() string {
+	return ""
 }
 
 type retryResponse struct{}
