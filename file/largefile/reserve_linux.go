@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func reserveSpace(_ context.Context, fs *os.File, size int64, _, concurrency int, progressCh chan<- int64) error {
+func reserveSpace(_ context.Context, fs *os.File, size int64, _, _ int, progressCh chan<- int64) error {
 	err := unix.Fallocate(int(fs.Fd()), 0, 0, size)
 	if progressCh != nil {
 		select {
