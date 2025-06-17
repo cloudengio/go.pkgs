@@ -574,22 +574,26 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return newByteRangeSeq(ranges...)(s, b)
 		}
 		// ... (rest of this test case as you have it) ...
-		progressCh := make(chan largefile.DownloadState, numBlocks+1)
+		progressCh := make(chan largefile.DownloadState, numBlocks*2)
 		optsWithProgress := defaultOpts(2) // Concurrency 2
 		optsWithProgress = append(optsWithProgress, largefile.WithDownloadProgress(progressCh))
+
+		ch := make(chan struct{})
+		var progressUpdates []largefile.DownloadState
+		go func() {
+			for p := range progressCh {
+				progressUpdates = append(progressUpdates, p)
+			}
+			close(ch)
+		}()
 
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, optsWithProgress...)
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run failed: %v", err)
 		}
-		close(progressCh)
 
-		var progressUpdates []largefile.DownloadState
-		for p := range progressCh {
-			progressUpdates = append(progressUpdates, p)
-		}
-
+		<-ch
 		if len(progressUpdates) == 0 {
 			t.Fatal("expected progress updates, got none")
 		}

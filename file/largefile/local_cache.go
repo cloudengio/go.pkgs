@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"sync"
+
+	"cloudeng.io/file/diskusage"
 )
 
 // DownloadCache is an interface for caching byte ranges of large files
@@ -71,8 +73,8 @@ func NewFilesForCache(ctx context.Context, filename, indexFileName string, conte
 		}
 	}
 
-	// Reserve space for the cache file.
-	if err := ReserveSpace(ctx, filename, contentSize, blockSize, concurrency, progressCh); err != nil {
+	// Reserve space for the cache file, use 64MiB block size for reservation.
+	if err := ReserveSpace(ctx, filename, contentSize, int(64*diskusage.MiB), concurrency, progressCh); err != nil {
 		return fmt.Errorf("failed to reserve space for cache file %s: %w", filename, err)
 	}
 

@@ -114,38 +114,41 @@ type progressTracker struct {
 	ch chan<- DownloadState
 }
 
-func (pt *progressTracker) incrementCache(blocks int, size int64) {
-	atomic.AddInt64(&pt.CachedBytes, size)
-	atomic.AddInt64(&pt.CachedBlocks, int64(blocks))
-}
-
-func (pt *progressTracker) incrementRetries(retries int) {
-	atomic.AddInt64(&pt.DownloadRetries, int64(retries))
-}
-
-func (pt *progressTracker) incrementDownloadErrors() {
-	atomic.AddInt64(&pt.DownloadErrors, 1)
-}
-
-func (pt *progressTracker) incrementCacheErrors() {
-	atomic.AddInt64(&pt.CacheErrors, 1)
-}
-
-func (pt *progressTracker) incrementDownload(blocks int, size int64) {
-	tbytes := atomic.AddInt64(&pt.DownloadedBytes, size)
-	tblocks := atomic.AddInt64(&pt.DownloadedBlocks, int64(blocks))
+func (pt *progressTracker) send() {
 	if pt.ch == nil {
 		return
 	}
 	select {
-	case pt.ch <- DownloadState{
-		DownloadedBytes:  tbytes,
-		DownloadedBlocks: tblocks,
-		DownloadSize:     pt.DownloadSize,
-		DownloadBlocks:   pt.DownloadBlocks,
-	}:
+	case pt.ch <- pt.DownloadState:
 	default:
 	}
+}
+
+func (pt *progressTracker) incrementCache(blocks int, size int64) {
+	atomic.AddInt64(&pt.CachedBytes, size)
+	atomic.AddInt64(&pt.CachedBlocks, int64(blocks))
+	pt.send()
+}
+
+func (pt *progressTracker) incrementRetries(retries int) {
+	atomic.AddInt64(&pt.DownloadRetries, int64(retries))
+	pt.send()
+}
+
+func (pt *progressTracker) incrementDownloadErrors() {
+	atomic.AddInt64(&pt.DownloadErrors, 1)
+	pt.send()
+}
+
+func (pt *progressTracker) incrementCacheErrors() {
+	atomic.AddInt64(&pt.CacheErrors, 1)
+	pt.send()
+}
+
+func (pt *progressTracker) incrementDownload(blocks int, size int64) {
+	atomic.AddInt64(&pt.DownloadedBytes, size)
+	atomic.AddInt64(&pt.DownloadedBlocks, int64(blocks))
+	pt.send() // Send the updated state to the channel.
 }
 
 type downloader struct {
@@ -220,7 +223,7 @@ func (dl *downloader) get(ctx context.Context, req request) (io.ReadCloser, erro
 			dl.progress.incrementRetries(retries)
 			return rd, nil
 		}
-		if retry.IsRetryable() {
+		if retry != nil && retry.IsRetryable() {
 			if done, _ := backoff.Wait(ctx, retry); done {
 				dl.logger.Info("getReader: backoff exhausted", "byteRange", req.ByteRange, "retries", retries, "error", err)
 				return nil, fmt.Errorf("application backoff giving up after %d retries: %w", backoff.Retries(), err)
@@ -362,25 +365,38 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	for {
 		st, err := dl.runOnce(ctx)
 		if st.Complete && err == nil {
-			st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
-			st.Duration = time.Since(start)
-			return st, nil
+			//st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
+			//st.Duration = time.Since(start)
+			return dl.finalize(st, finalState.updateAfterIteration(dl.progress.DownloadState), start, nil)
 		}
 		dl.logger.Info("runOnce: download not complete, retrying", "iterations", st.Iterations, "error", err)
 		if !dl.waitForCompletion {
-			st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
-			st.Duration = time.Since(start)
-			return st, err
+			return dl.finalize(st, finalState.updateAfterIteration(dl.progress.DownloadState), start, err)
 		}
 		finalState = finalState.updateAfterIteration(dl.progress.DownloadState)
 		select {
 		case <-ctx.Done():
-			st.Duration = time.Since(start)
-			st.DownloadState = finalState
-			return st, ctx.Err()
+			return dl.finalize(st, finalState, start, ctx.Err())
 		default:
 		}
 	}
+}
+
+func (dl *CachingDownloader) finalize(status DownloadStatus, state DownloadState, start time.Time, err error) (DownloadStatus, error) {
+	status.Duration = time.Since(start)
+	status.DownloadState = state
+	if dl.progressCh != nil {
+		dl.progress.DownloadState = status.DownloadState
+		// Send the final download state to the progress channel, taking
+		// care to ensure that a timeout is used, but also giving the
+		// receiver a chance to read the final state.
+		select {
+		case dl.progressCh <- dl.progress.DownloadState:
+		case <-time.After(time.Second):
+		}
+		close(dl.progressCh) // Ensure the progress channel is closed when done.
+	}
+	return status, err
 }
 
 func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error) {
