@@ -15,7 +15,7 @@ import (
 
 func reserveSpace(_ context.Context, fs *os.File, size int64, _, concurrency int, progressCh chan<- int64) error {
 	err := unix.Fallocate(int(fs.Fd()), 0, 0, size)
-	if progessCh != nil {
+	if progressCh != nil {
 		select {
 		case progressCh <- size:
 		default:
