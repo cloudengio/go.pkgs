@@ -61,7 +61,7 @@ type LocalDownloadCache struct {
 // block size for downloading the file, and concurrency is the number of concurrent
 // writes used to reserve space for the cache file on systems that require writing
 // to the file to reserve space (e.g., non-Linux systems).
-func NewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int) error {
+func NewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int, progressCh chan<- int64) error {
 	for _, fn := range []string{filename, indexFileName} {
 		if len(fn) == 0 {
 			return fmt.Errorf("filename cannot be empty")
@@ -72,7 +72,7 @@ func NewFilesForCache(ctx context.Context, filename, indexFileName string, conte
 	}
 
 	// Reserve space for the cache file.
-	if err := ReserveSpace(ctx, filename, contentSize, blockSize, concurrency); err != nil {
+	if err := ReserveSpace(ctx, filename, contentSize, blockSize, concurrency, progressCh); err != nil {
 		return fmt.Errorf("failed to reserve space for cache file %s: %w", filename, err)
 	}
 

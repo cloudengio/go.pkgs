@@ -20,7 +20,7 @@ func TestLocalDownloadCachePutErrors(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1)
+	err := NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestLocalDownloadCacheGetErrors(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1)
+	err := NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}

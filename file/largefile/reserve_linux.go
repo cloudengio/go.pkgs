@@ -13,6 +13,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func reserveSpace(_ context.Context, fs *os.File, size int64, _, _ int) error {
-	return unix.Fallocate(int(fs.Fd()), 0, 0, size)
+func reserveSpace(_ context.Context, fs *os.File, size int64, _, _ int, progressCh chan<- int64) error {
+	err := unix.Fallocate(int(fs.Fd()), 0, 0, size)
+	if progressCh != nil {
+		select {
+		case progressCh <- size:
+		default:
+		}
+		close(progressCh)
+	}
+	return err
 }

@@ -80,7 +80,7 @@ func TestNewFilesForCache(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency)
+	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache() error = %v", err)
 	}
@@ -109,11 +109,11 @@ func TestNewFilesForCache(t *testing.T) {
 	}
 
 	// Test with empty filename
-	err = largefile.NewFilesForCache(ctx, "", indexFilePath, contentSize, blockSize, concurrency)
+	err = largefile.NewFilesForCache(ctx, "", indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err == nil || !strings.Contains(err.Error(), "filename cannot be empty") {
 		t.Errorf("Expected error for empty cache filename, got %v", err)
 	}
-	err = largefile.NewFilesForCache(ctx, cacheFilePath, "", contentSize, blockSize, concurrency)
+	err = largefile.NewFilesForCache(ctx, cacheFilePath, "", contentSize, blockSize, concurrency, nil)
 	if err == nil || !strings.Contains(err.Error(), "filename cannot be empty") {
 		t.Errorf("Expected error for empty index filename, got %v", err)
 	}
@@ -121,7 +121,7 @@ func TestNewFilesForCache(t *testing.T) {
 	// Test removing existing files
 	createTempFile(t, tmpDir, "existing_cache.dat", []byte("old data"))
 	createTempFile(t, tmpDir, "existing_cache.idx", []byte("old index"))
-	err = largefile.NewFilesForCache(ctx, filepath.Join(tmpDir, "existing_cache.dat"), filepath.Join(tmpDir, "existing_cache.idx"), contentSize, blockSize, concurrency)
+	err = largefile.NewFilesForCache(ctx, filepath.Join(tmpDir, "existing_cache.dat"), filepath.Join(tmpDir, "existing_cache.idx"), contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache() on existing files error = %v", err)
 	}
@@ -139,7 +139,7 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
 		// Initialize files using NewFilesForCache
-		err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency)
+		err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 		if err != nil {
 			t.Fatalf("NewFilesForCache() failed: %v", err)
 		}
@@ -253,7 +253,7 @@ func TestLocalDownloadCachePutGetRoundtrip(t *testing.T) { //nolint:gocyclo
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency)
+	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency)
+	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 		cacheFileAll := filepath.Join(tmpDirAllCached, "cache.dat")
 		indexFileAll := filepath.Join(tmpDirAllCached, "cache.idx")
 
-		err := largefile.NewFilesForCache(ctx, cacheFileAll, indexFileAll, 128, 64, concurrency)
+		err := largefile.NewFilesForCache(ctx, cacheFileAll, indexFileAll, 128, 64, concurrency, nil)
 		if err != nil {
 			t.Fatalf("NewFilesForCache for all_cached failed: %v", err)
 		}
@@ -439,7 +439,7 @@ func TestLocalDownloadCache_ContentLengthAndBlockSize(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency)
+	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}

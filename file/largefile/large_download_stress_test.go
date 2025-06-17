@@ -163,7 +163,7 @@ func TestCacheStressTest(t *testing.T) {
 			cacheSize := int64(diskusage.KB * 7)
 			blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-			if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency); err != nil {
+			if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency, nil); err != nil {
 				t.Fatalf("NewFilesForCache failed: %v", err)
 			}
 
@@ -258,7 +258,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency); err != nil {
+	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency, nil); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
@@ -348,7 +348,7 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
 	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2); err != nil {
+	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2, nil); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
@@ -463,7 +463,7 @@ func TestCacheRetriesAndRunToCompletion(t *testing.T) {
 	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
 	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2); err != nil {
+	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2, nil); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
