@@ -119,7 +119,18 @@ func (pt *progressTracker) send() {
 		return
 	}
 	select {
-	case pt.ch <- pt.DownloadState:
+	case pt.ch <- DownloadState{
+		CachedBytes:      atomic.LoadInt64(&pt.CachedBytes),
+		CachedBlocks:     atomic.LoadInt64(&pt.CachedBlocks),
+		CacheErrors:      atomic.LoadInt64(&pt.CacheErrors),
+		DownloadedBytes:  atomic.LoadInt64(&pt.DownloadedBytes),
+		DownloadedBlocks: atomic.LoadInt64(&pt.DownloadedBlocks),
+		DownloadSize:     pt.DownloadSize,
+		DownloadBlocks:   pt.DownloadBlocks,
+		DownloadRetries:  atomic.LoadInt64(&pt.DownloadRetries),
+		DownloadErrors:   atomic.LoadInt64(&pt.DownloadErrors),
+		Iterations:       atomic.LoadInt64(&pt.Iterations),
+	}:
 	default:
 	}
 }
