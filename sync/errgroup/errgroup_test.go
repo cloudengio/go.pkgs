@@ -228,7 +228,7 @@ func TestGoContext(t *testing.T) {
 
 	if err := g.Wait(); err != nil {
 		errs := err.(*errors.M)
-		for err := errs.Unwrap(); err != nil; err = errs.Unwrap() {
+		for _, err := range errs.Unwrap() {
 			if got, want := err.Error(), "context canceled"; got != want {
 				t.Errorf("got %v, want %v", got, want)
 			}
