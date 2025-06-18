@@ -1,4 +1,13 @@
-package keystore
+// Copyright 2024 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+// Package unsafekeystore provides a simple key store for storing
+// key information such as user IDs and tokens. This is intended
+// for use in development and testing environments only, as it
+// encourages storing keys in plain text files. Use cmdutil/keychain
+// for production environments where security is a concern.
+package unsafekeystore
 
 import (
 	"context"
