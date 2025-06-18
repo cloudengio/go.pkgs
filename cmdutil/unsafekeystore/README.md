@@ -1,9 +1,14 @@
-# Package [cloudeng.io/cmdutil/keystore](https://pkg.go.dev/cloudeng.io/cmdutil/keystore?tab=doc)
+# Package [cloudeng.io/cmdutil/unsafekeystore](https://pkg.go.dev/cloudeng.io/cmdutil/unsafekeystore?tab=doc)
 
 ```go
-import cloudeng.io/cmdutil/keystore
+import cloudeng.io/cmdutil/unsafekeystore
 ```
 
+Package unsafekeystore provides a simple key store for storing key
+information such as user IDs and tokens. This is intended for use in
+development and testing environments only, as it does encourages storing
+keys in plain text files. Use cmdutil/keychain for production environments
+where security is a concern.
 
 ## Functions
 ### Func ContextWithAuth

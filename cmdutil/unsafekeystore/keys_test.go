@@ -1,4 +1,8 @@
-package keystore_test
+// Copyright 2024 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+package unsafekeystore_test
 
 import (
 	"context"
@@ -6,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"cloudeng.io/cmdutil/keystore"
+	"cloudeng.io/cmdutil/unsafekeystore"
 	"cloudeng.io/file"
 )
 
@@ -14,6 +18,14 @@ type rfs struct{}
 
 func (rfs) Open(string) (fs.File, error) {
 	return nil, nil
+}
+
+func (rfs) OpenCtx(_ context.Context, filename string) (fs.File, error) {
+	return nil, nil
+}
+
+func (r rfs) ReadFileCtx(_ context.Context, filename string) ([]byte, error) {
+	return r.ReadFile(filename)
 }
 
 func (rfs) ReadFile(string) ([]byte, error) {
@@ -29,11 +41,11 @@ func (rfs) ReadFile(string) ([]byte, error) {
 func TestParse(t *testing.T) {
 	ctx := context.Background()
 	ctx = file.ContextWithFS(ctx, &rfs{})
-	am, err := keystore.ParseConfigFile(ctx, "filename")
+	am, err := unsafekeystore.ParseConfigFile(ctx, "filename")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got, want := am, (keystore.Keys{
+	if got, want := am, (unsafekeystore.Keys{
 		"123": {
 			ID:    "123",
 			User:  "user1",
@@ -49,7 +61,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestKeysContext(t *testing.T) {
-	ai := keystore.Keys{
+	ai := unsafekeystore.Keys{
 		"123": {
 			ID:    "123",
 			User:  "user1",
@@ -61,9 +73,9 @@ func TestKeysContext(t *testing.T) {
 			Token: "token2",
 		},
 	}
-	ctx := keystore.ContextWithAuth(context.Background(), ai)
-	var empty keystore.KeyInfo
-	if got, want := keystore.AuthFromContextForID(ctx, "2356"), empty; !reflect.DeepEqual(got, want) {
+	ctx := unsafekeystore.ContextWithAuth(context.Background(), ai)
+	var empty unsafekeystore.KeyInfo
+	if got, want := unsafekeystore.AuthFromContextForID(ctx, "2356"), empty; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
