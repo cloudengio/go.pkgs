@@ -20,7 +20,7 @@ func (rfs) Open(string) (fs.File, error) {
 	return nil, nil
 }
 
-func (rfs) OpenCtx(_ context.Context, filename string) (fs.File, error) {
+func (rfs) OpenCtx(context.Context, string) (fs.File, error) {
 	return nil, nil
 }
 
