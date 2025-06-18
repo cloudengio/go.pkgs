@@ -6,9 +6,9 @@ import cloudeng.io/cmdutil/unsafekeystore
 
 Package unsafekeystore provides a simple key store for storing key
 information such as user IDs and tokens. This is intended for use in
-development and testing environments only, as it does encourages storing
-keys in plain text files. Use cmdutil/keychain for production environments
-where security is a concern.
+development and testing environments only, as it encourages storing keys
+in plain text files. Use cmdutil/keychain for production environments where
+security is a concern.
 
 ## Functions
 ### Func ContextWithAuth

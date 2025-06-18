@@ -4,7 +4,7 @@
 
 // Package unsafekeystore provides a simple key store for storing
 // key information such as user IDs and tokens. This is intended
-// for use in development and testing environments only, as it does
+// for use in development and testing environments only, as it
 // encourages storing keys in plain text files. Use cmdutil/keychain
 // for production environments where security is a concern.
 package unsafekeystore
