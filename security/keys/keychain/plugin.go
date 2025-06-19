@@ -25,7 +25,7 @@ import (
 	"cloudeng.io/security/keys/keychain/plugins"
 )
 
-// RunExtPlugin executes an external keychain plugin with the provided request
+// RunExtPlugin runs an external keychain plugin with the provided request
 // and returns the response. binary is either a command on the PATH or
 // an absolute path to the plugin executable. If binary is empty it defaults to
 // KeyChainPluginName. The default external plugin can be installed using
@@ -55,7 +55,7 @@ func RunExtPlugin(ctx context.Context, binary string, req plugins.Request) (plug
 	return resp, nil
 }
 
-// RunPlugin executes keychain plugin compiled into the running application.
+// RunPlugin executes the keychain plugin compiled into the running application.
 func RunPlugin(ctx context.Context, req plugins.Request) (plugins.Response, error) {
 	in := &bytes.Buffer{}
 	out := &bytes.Buffer{}
@@ -82,13 +82,17 @@ func isGoRun() bool {
 
 // RunAvailablePlugin decides whether to use the external plugin or the
 // compiled-in plugin based on whether the application is running via `go run`.
-// If it is running via `go run`, it uses the external plugin specified by
-// extPluginPath; otherwise, it uses the compiled-in plugin.
 func RunAvailablePlugin(ctx context.Context, req plugins.Request) (plugins.Response, error) {
 	if isGoRun() {
 		return RunExtPlugin(ctx, KeyChainPluginName, req)
 	}
 	return RunPlugin(ctx, req)
+}
+
+// IsExtPluginAvailable checks if the external keychain plugin is available.
+func IsExtPluginAvailable(ctx context.Context) bool {
+	_, err := exec.LookPath(KeyChainPluginName)
+	return err == nil
 }
 
 // GetKey retrieves a key from the keychain using the specified plugin (extPluginPath)

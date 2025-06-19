@@ -34,10 +34,10 @@ func (p *PluginFS) WriteFileCtx(ctx context.Context, name string, data []byte) e
 	return SetKey(ctx, p.account, name, data)
 }
 
-// NewPluginFS creates a new PluginFS instance with the specified binary and account.
-// If the binary is specified, and the process is run via 'go run' then the
-// external plugin will be used, otherwise the internal plugin is used.
-func NewPluginFS(binary, account string) *PluginFS {
+// NewPluginFS creates a new PluginFS instance with the specified account.
+// An external plugin, if installed, will be used when process is run
+// via 'go run', but not when run as a pre-compiled binary.
+func NewPluginFS(account string) *PluginFS {
 	return &PluginFS{
 		account: account,
 	}

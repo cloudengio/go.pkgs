@@ -39,20 +39,24 @@ GetKey retrieves a key from the keychain using the specified plugin
 (extPluginPath) if the application is running via `go run`, or directly if
 it is a compiled binary.
 
+### Func IsExtPluginAvailable
+```go
+func IsExtPluginAvailable(ctx context.Context) bool
+```
+IsExtPluginAvailable checks if the external keychain plugin is available.
+
 ### Func RunAvailablePlugin
 ```go
 func RunAvailablePlugin(ctx context.Context, req plugins.Request) (plugins.Response, error)
 ```
 RunAvailablePlugin decides whether to use the external plugin or the
 compiled-in plugin based on whether the application is running via `go run`.
-If it is running via `go run`, it uses the external plugin specified by
-extPluginPath; otherwise, it uses the compiled-in plugin.
 
 ### Func RunExtPlugin
 ```go
 func RunExtPlugin(ctx context.Context, binary string, req plugins.Request) (plugins.Response, error)
 ```
-RunExtPlugin executes an external keychain plugin with the provided request
+RunExtPlugin runs an external keychain plugin with the provided request
 and returns the response. binary is either a command on the PATH or an
 absolute path to the plugin executable. If binary is empty it defaults to
 KeyChainPluginName. The default external plugin can be installed using the
@@ -62,7 +66,8 @@ WithExternalPlugin function.
 ```go
 func RunPlugin(ctx context.Context, req plugins.Request) (plugins.Response, error)
 ```
-RunPlugin executes keychain plugin compiled into the running application.
+RunPlugin executes the keychain plugin compiled into the running
+application.
 
 ### Func SetKey
 ```go
@@ -121,12 +126,11 @@ an internal or external plugin.
 ### Functions
 
 ```go
-func NewPluginFS(binary, account string) *PluginFS
+func NewPluginFS(account string) *PluginFS
 ```
-NewPluginFS creates a new PluginFS instance with the specified binary and
-account. If the binary is specified, and the process is run via 'go run'
-then the external plugin will be used, otherwise the internal plugin is
-used.
+NewPluginFS creates a new PluginFS instance with the specified account.
+An external plugin, if installed, will be used when process is run via 'go
+run', but not when run as a pre-compiled binary.
 
 
 
