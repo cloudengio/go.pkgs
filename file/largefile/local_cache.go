@@ -7,7 +7,9 @@ package largefile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 
@@ -18,8 +20,11 @@ import (
 // to support resumable downloads.
 type DownloadCache interface {
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
-	// and the preferred block size used for downloading the file.
+	// and the block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
+	// Cached returns the total number of bytes and blocks already stored in
+	// the cache.
+	CachedBytesAndBlocks() (bytes, blocks int64)
 	// NextOutstanding finds the next byte range that has not been cached
 	// starting from the specified 'start' index. Its return value is either
 	// -1 if there are no more outstanding ranges, or the value of the next
@@ -35,25 +40,55 @@ type DownloadCache interface {
 	NextCached(start int, br *ByteRange) int
 	// Complete returns true if all byte ranges have been cached.
 	Complete() bool
-	// Put writes the specified byte range to the cache.
-	Put(r ByteRange, data []byte) error
-	// Get reads the specified byte range from the cache into the provided data slice.
-	Get(r ByteRange, data []byte) error
+	// WriteAt writes at most blocksize bytes starting at the specified offset.
+	// It returns an error if data is not exactly blocksize bytes long, unless
+	// the offset is at the end of the file, in which case it must
+	// be (content length % blocksize) bytes long.
+	WriteAt(data []byte, off int64) (int, error)
+	// ReadAt reads at most blocksize bytes starting at the specified offset.
+	// It returns an error if data is not exactly blocksize bytes long, unless
+	// the offset is at the end of the file, in which case it must
+	// be (content length % blocksize) bytes long.
+	ReadAt(data []byte, off int64) (int, error)
+}
+
+var (
+	ErrCacheInvalidBlockSize = errors.New("invalid block size")
+	ErrCacheInvalidOffset    = errors.New("invalid offset")
+	ErrCacheInternalError    = &internalCacheError{}
+)
+
+type internalCacheError struct {
+	err error
+}
+
+func (e *internalCacheError) Error() string {
+	return fmt.Sprintf("internal cache error: %v", e.err)
+}
+
+func (e *internalCacheError) Unwrap() error {
+	return e.err
+}
+
+func (e *internalCacheError) Is(target error) bool {
+	_, ok := target.(*internalCacheError)
+	return ok
 }
 
 // LocalDownloadCache is a concrete implementation of RangeCache that uses
 // a local file to cache byte ranges of large files.
 // It allows for concurrent access.
 type LocalDownloadCache struct {
-	indexName string     // Name of the index file for the cache.
-	mu        sync.Mutex // Protects access to the cache file.
-	cache     *os.File
-	written   *ByteRanges // Ranges that have been written to the cache.
-
+	mu              sync.Mutex // Protects access to the cache file.
+	data            CacheFileReadWriter
+	indexStore      *indexStore
+	lastBlockSize   int64 // size of last block
+	lastBlockOffset int64
 }
 
-// NewFilesForCache creates a new cache file and an index file for caching
-// byte ranges of large files. It reserves space for the cache file and
+// CreateNewFilesForCache creates a new cache file and an index file for caching
+// byte ranges of large files. It will remove any existing files with the same names
+// before creating new ones. It reserves space for the cache file and
 // initializes the index file with the specified content size and block size.
 // It returns an error if the files cannot be created or if the space cannot
 // be reserved.
@@ -63,7 +98,7 @@ type LocalDownloadCache struct {
 // block size for downloading the file, and concurrency is the number of concurrent
 // writes used to reserve space for the cache file on systems that require writing
 // to the file to reserve space (e.g., non-Linux systems).
-func NewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int, progressCh chan<- int64) error {
+func CreateNewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int, progressCh chan<- int64) error {
 	for _, fn := range []string{filename, indexFileName} {
 		if len(fn) == 0 {
 			return fmt.Errorf("filename cannot be empty")
@@ -78,12 +113,65 @@ func NewFilesForCache(ctx context.Context, filename, indexFileName string, conte
 		return fmt.Errorf("failed to reserve space for cache file %s: %w", filename, err)
 	}
 
-	// Save the index file
-	if err := saveRanges(indexFileName, NewByteRanges(contentSize, blockSize)); err != nil {
+	fs, err := os.Create(indexFileName)
+	if err != nil {
 		return fmt.Errorf("failed to create index file %s: %w", indexFileName, err)
 	}
-
+	defer fs.Close()
+	// Save the index file
+	idx := &indexStore{
+		ByteRanges: NewByteRanges(contentSize, blockSize),
+		wr:         fs,
+	}
+	if err := idx.save(); err != nil {
+		return fmt.Errorf("failed to create index file %s: %w", indexFileName, err)
+	}
 	return nil
+}
+
+// OpenCacheFiles opens the cache and index files for reading and writing.
+func OpenCacheFiles(data, index string) (CacheFileReadWriter, CacheFileReadWriter, error) {
+	dataFile, err := os.OpenFile(data, os.O_RDWR, 0600)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open cache file %s: %w", data, err)
+	}
+	indexFile, err := os.OpenFile(index, os.O_RDWR, 0600)
+	if err != nil {
+		dataFile.Close() // Close the data file if index file cannot be opened.
+		return nil, nil, fmt.Errorf("failed to open index file %s: %w", index, err)
+	}
+	return dataFile, indexFile, nil
+}
+
+// CacheFilesExist checks if the cache and index files exist.
+func CacheFilesExist(data, index string) (bool, bool, error) {
+	dataExists := false
+	indexExists := false
+	if _, err := os.Stat(data); err == nil {
+		dataExists = true
+	} else if !os.IsNotExist(err) {
+		return false, false, fmt.Errorf("failed to stat cache file %s: %w", data, err)
+	}
+	if _, err := os.Stat(index); err == nil {
+		indexExists = true
+	} else if !os.IsNotExist(err) {
+		return false, false, fmt.Errorf("failed to stat index file %s: %w", index, err)
+	}
+	return dataExists, indexExists, nil
+}
+
+// CacheFileReadWriter is an interface that combines the functionality of
+// io.Reader, io.ReaderAt, io.WriterAt, and io.Closer for reading and writing
+// to the cache and index files.
+// It also includes a Sync method to ensure that all writes are flushed to disk.
+type CacheFileReadWriter interface {
+	io.Reader
+	io.Writer
+	io.ReaderAt
+	io.WriterAt
+	io.Closer
+	Name() string // Name returns the name of the file.
+	Sync() error  // Sync ensures that all writes to the cache file are flushed to disk.
 }
 
 // NewLocalDownloadCache creates a new LocalDownloadCache instance.
@@ -94,41 +182,54 @@ func NewFilesForCache(ctx context.Context, filename, indexFileName string, conte
 // to track which byte ranges have been written to the cache.
 // The cache and index files must already exist and are expected to be have
 // been created using NewFilesForCache.
-func NewLocalDownloadCache(filename, indexFileName string) (*LocalDownloadCache, error) {
+func NewLocalDownloadCache(dataReadWriter, indexReadWriter CacheFileReadWriter) (*LocalDownloadCache, error) {
+	if dataReadWriter == nil || indexReadWriter == nil {
+		return nil, fmt.Errorf("data and index read/writer arguments must be non-nil: %w", ErrCacheInternalError)
+	}
 	cache := &LocalDownloadCache{
-		indexName: indexFileName,
+		data:       dataReadWriter,
+		indexStore: &indexStore{wr: indexReadWriter},
 	}
-	var err error
-	cache.cache, err = os.OpenFile(filename, os.O_RDWR, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open cache file %s: %w", filename, err)
+	if err := cache.indexStore.load(); err != nil {
+		return nil, fmt.Errorf("failed to load index file %s: %w", indexReadWriter.Name(), err)
+
 	}
-	cache.written, err = loadRanges(indexFileName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load ranges from index file %s: %w", indexFileName, err)
+	cache.lastBlockSize = cache.indexStore.ContentLength() % int64(cache.indexStore.blockSize)
+	cache.lastBlockOffset = cache.indexStore.ContentLength() - cache.lastBlockSize
+	if cache.lastBlockSize == 0 {
+		cache.lastBlockOffset -= int64(cache.indexStore.blockSize)
+		cache.lastBlockSize = int64(cache.indexStore.blockSize)
 	}
 	return cache, nil
 }
 
-func loadRanges(filename string) (*ByteRanges, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read index file %s: %w", filename, err)
-	}
-	var br ByteRanges
-	if err := json.Unmarshal(data, &br); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal index file %s: %w", filename, err)
-	}
-	return &br, nil
+type indexStore struct {
+	*ByteRanges
+	wr CacheFileReadWriter
 }
 
-func saveRanges(filename string, dr *ByteRanges) error {
-	data, err := json.Marshal(dr)
+func (i *indexStore) save() error {
+	data, err := json.Marshal(i.ByteRanges)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ranges to JSON: %w", err)
 	}
-	if err := os.WriteFile(filename, data, 0600); err != nil {
-		return fmt.Errorf("failed to write index file %s: %w", filename, err)
+	n, err := i.wr.WriteAt(data, 0)
+	if err != nil {
+		return fmt.Errorf("failed to write index file %s: %w", i.wr.Name(), err)
+	}
+	if n != len(data) {
+		return fmt.Errorf("failed to write all data to the index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), &internalCacheError{})
+	}
+	return nil
+}
+
+func (i *indexStore) load() error {
+	buf, err := io.ReadAll(i.wr)
+	if err != nil {
+		return fmt.Errorf("failed to read index file %s: %w", i.wr.Name(), err)
+	}
+	if err := json.Unmarshal(buf, &i.ByteRanges); err != nil {
+		return fmt.Errorf("failed to unmarshal index file %s: %w", i.wr.Name(), err)
 	}
 	return nil
 }
@@ -136,76 +237,128 @@ func saveRanges(filename string, dr *ByteRanges) error {
 // NextOutstanding implements DownloadCache. It returns the next, if any,
 // uncached byte range starting from the specified index.
 func (c *LocalDownloadCache) NextOutstanding(start int, br *ByteRange) int {
-	return c.written.NextClear(start, br)
+	return c.indexStore.NextClear(start, br)
 }
 
 // NextCached implements DownloadCache. It returns the next, if any,
 // cached byte range starting from the specified index.
 func (c *LocalDownloadCache) NextCached(start int, br *ByteRange) int {
-	return c.written.NextSet(start, br)
+	return c.indexStore.NextSet(start, br)
 }
 
 // Complete implements DownloadCache. It returns true if all byte ranges
 // have been cached, meaning there are no more uncached ranges.
 func (c *LocalDownloadCache) Complete() bool {
 	var br ByteRange
-	i := c.written.NextClear(0, &br)
+	i := c.indexStore.NextClear(0, &br)
 	return i == -1
 }
 
-// Put implements DownloadCache.
-func (c *LocalDownloadCache) Put(r ByteRange, data []byte) error {
-	if r.From < 0 || r.To >= c.written.ContentLength() || r.From >= r.To {
-		return fmt.Errorf("invalid range: %s", r)
+func (c *LocalDownloadCache) CachedBytesAndBlocks() (bytes, blocks int64) {
+	var br ByteRange
+	for n := c.indexStore.NextSet(0, &br); n != -1; n = c.indexStore.NextSet(n, &br) {
+		bytes += br.Size()
+		blocks++
 	}
-	if int64(len(data)) != r.Size() {
-		return fmt.Errorf("data length %d does not match range size %d", len(data), r.To-r.From)
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, err := c.cache.WriteAt(data, r.From); err != nil {
-		return fmt.Errorf("failed to write data to cache for range %s: %w", r, err)
-	}
-	if err := c.cache.Sync(); err != nil {
-		return fmt.Errorf("failed to sync cache file after writing range %s: %w", r, err)
-	}
-	c.written.Set(r.From) // Mark the range as cached.
-	return saveRanges(c.indexName, c.written)
+	// Return the total number of bytes cached.
+	return bytes, blocks
 }
 
-// Get implements DownloadCache.
-func (c *LocalDownloadCache) Get(r ByteRange, data []byte) error {
-	if r.From < 0 || r.To >= c.written.ContentLength() || r.From >= r.To {
-		return fmt.Errorf("invalid range: %s", r)
+func (c *LocalDownloadCache) validateOffsetAndSize(off, size int64) error {
+	if c.indexStore == nil {
+		return fmt.Errorf("index store is not initialized: %w", ErrCacheInternalError)
 	}
-	if int64(len(data)) != r.Size() {
-		return fmt.Errorf("data length %d does not match range size %d", len(data), r.To-r.From)
+	if off < 0 || off > c.lastBlockOffset {
+		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.lastBlockOffset, ErrCacheInvalidOffset)
+	}
+	if off%int64(c.indexStore.blockSize) != 0 {
+		return fmt.Errorf("offset %d is not aligned with block size %d: %w", off, c.indexStore.blockSize, ErrCacheInvalidOffset)
+	}
+	if size > int64(c.indexStore.blockSize) {
+		return fmt.Errorf("data size %d must be less than or equal to %d: %w", size, c.indexStore.blockSize, ErrCacheInvalidBlockSize)
+	}
+	if off == c.lastBlockOffset {
+		if size != c.lastBlockSize {
+			return fmt.Errorf("data size %d for last block at %d: must be %d: %w", size, off, c.lastBlockSize, ErrCacheInvalidBlockSize)
+		}
+		return nil
+	}
+	if size != int64(c.indexStore.blockSize) {
+		return fmt.Errorf("data size %d for offset %d: must be %d: %w", size, off, c.indexStore.blockSize, ErrCacheInvalidBlockSize)
+	}
+	return nil
+
+}
+
+// WriteAt implements DownloadCache.
+func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error) {
+	if err := c.validateOffsetAndSize(off, int64(len(data))); err != nil {
+		return 0, err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.written.IsClear(r.From) {
-		return fmt.Errorf("range %s is not cached", r)
+	if c.data == nil || c.indexStore.wr == nil {
+		return 0, fmt.Errorf("cache files are not initialized: %w", ErrCacheInternalError)
 	}
-	if _, err := c.cache.ReadAt(data, r.From); err != nil {
-		return fmt.Errorf("failed to read data from cache for range %s: %w", r, err)
+	n, err := c.data.WriteAt(data, off)
+	if err != nil {
+		return 0, fmt.Errorf("failed to write data to cache for offset %d: %w", off, &internalCacheError{err})
 	}
-	return nil
+	if n != len(data) {
+		return 0, fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d: %w", off, n, len(data), &internalCacheError{})
+	}
+	if err := c.data.Sync(); err != nil {
+		return 0, fmt.Errorf("failed to sync cache file after writing offset %d: %w", off, &internalCacheError{err})
+	}
+	c.indexStore.Set(off) // Mark the range as cached.
+	if err := c.indexStore.save(); err != nil {
+		return 0, fmt.Errorf("failed to save index file %s after writing offset %d: %w", c.indexStore.wr.Name(), off, &internalCacheError{err})
+	}
+	return n, nil
+}
+
+// ReadAt implements DownloadCache.
+func (c *LocalDownloadCache) ReadAt(data []byte, off int64) (int, error) {
+	if err := c.validateOffsetAndSize(off, int64(len(data))); err != nil {
+		return 0, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.data == nil || c.indexStore.wr == nil {
+		return 0, fmt.Errorf("cache files are not initialized: %w", ErrCacheInternalError)
+	}
+	if c.indexStore.IsClear(off) {
+		return 0, fmt.Errorf("offset %d is not cachedL: %w", off, ErrCacheInvalidOffset)
+	}
+	n, err := c.data.ReadAt(data, off)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read all data from cache for offset %d: %w", off, &internalCacheError{err})
+	}
+	if n != len(data) {
+		return 0, fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d: %w", off, n, len(data), &internalCacheError{})
+	}
+	return n, nil
 }
 
 // ContentLengthAndBlockSize implements DownloadCache.
 func (c *LocalDownloadCache) ContentLengthAndBlockSize() (int64, int) {
-	return c.written.contentSize, c.written.blockSize
+	return c.indexStore.contentSize, c.indexStore.blockSize
 }
 
 // Close implements DownloadCache.
 func (c *LocalDownloadCache) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.cache != nil {
-		if err := c.cache.Close(); err != nil {
-			return fmt.Errorf("failed to close cache file: %w", err)
+	for _, f := range []CacheFileReadWriter{c.data, c.indexStore.wr} {
+		if f == nil {
+			continue
 		}
-		c.cache = nil
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("failed to sync %s: %w", f.Name(), err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("failed to close %s: %w", f.Name(), err)
+		}
 	}
 	return nil
 }

@@ -23,7 +23,9 @@ var ErrNotEnoughSpace = errors.New("not enough space available for the requested
 // such as Linux, space is reserved accordingly, on others data is written to
 // the file to ensure that the space is allocated. The intent is to ensure that
 // a download operations never fails because of insufficient local space once
-// it has been initiated.
+// it has been initiated. Progress can be reported via the progressCh channel,
+// which will receive updates on the amount of space reserved. The channel
+// will be closed when ReserveSpace returns.
 func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int, progressCh chan<- int64) error {
 
 	availBytes, err := sys.AvailableBytes(filepath.Dir(filename))

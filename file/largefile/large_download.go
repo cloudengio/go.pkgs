@@ -135,9 +135,9 @@ func (pt *progressTracker) send() {
 	}
 }
 
-func (pt *progressTracker) incrementCache(blocks int, size int64) {
-	atomic.AddInt64(&pt.CachedBytes, size)
-	atomic.AddInt64(&pt.CachedBlocks, int64(blocks))
+func (pt *progressTracker) incrementCache(bytes, blocks int64) {
+	atomic.AddInt64(&pt.CachedBytes, bytes)
+	atomic.AddInt64(&pt.CachedBlocks, blocks)
 	pt.send()
 }
 
@@ -360,24 +360,14 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 		return DownloadStatus{}, fmt.Errorf("cache size (%d) or block size (%d) does not match file size (%d) or block size (%d)", csize, cblock, dl.size, dl.blockSize)
 	}
 
-	var cachedBytes int64
-	var cachedBlocks int
-	var br ByteRange
-	for n := dl.cache.NextCached(0, &br); n != -1; n = dl.cache.NextCached(n, &br) {
-		cachedBytes += br.Size()
-		cachedBlocks++
-	}
-	if cachedBytes != 0 {
-		dl.progress.incrementCache(cachedBlocks, cachedBytes)
-	}
+	cachedBytes, cachedBlocks := dl.cache.CachedBytesAndBlocks()
+	dl.progress.incrementCache(cachedBytes, cachedBlocks)
 
 	start := time.Now()
 	var finalState DownloadState
 	for {
 		st, err := dl.runOnce(ctx)
 		if st.Complete && err == nil {
-			//st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
-			//st.Duration = time.Since(start)
 			return dl.finalize(st, finalState.updateAfterIteration(dl.progress.DownloadState), start, nil)
 		}
 		dl.logger.Info("runOnce: download not complete, retrying", "iterations", st.Iterations, "error", err)
@@ -445,12 +435,13 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 
 func (dl *CachingDownloader) handleResponse(_ context.Context, resp response) error {
 	defer dl.bufPool.Put(resp.data) // Return the buffer to the pool after use.
-	if err := dl.cache.Put(resp.ByteRange, resp.data.Bytes()); err != nil {
+	n, err := dl.cache.WriteAt(resp.data.Bytes(), resp.From)
+	if err != nil {
 		dl.progress.incrementCacheErrors()
 		dl.logger.Info("handleResponse: cache write failed", "byteRange", resp.ByteRange, "error", err)
 		return &terminalError{err}
 	}
-	dl.progress.incrementCache(1, int64(len(resp.data.Bytes())))
+	dl.progress.incrementCache(int64(n), 1)
 	return nil
 }
 

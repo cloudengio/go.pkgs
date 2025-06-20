@@ -80,7 +80,7 @@ func TestNewFilesForCache(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
+	err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache() error = %v", err)
 	}
@@ -109,11 +109,11 @@ func TestNewFilesForCache(t *testing.T) {
 	}
 
 	// Test with empty filename
-	err = largefile.NewFilesForCache(ctx, "", indexFilePath, contentSize, blockSize, concurrency, nil)
+	err = largefile.CreateNewFilesForCache(ctx, "", indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err == nil || !strings.Contains(err.Error(), "filename cannot be empty") {
 		t.Errorf("Expected error for empty cache filename, got %v", err)
 	}
-	err = largefile.NewFilesForCache(ctx, cacheFilePath, "", contentSize, blockSize, concurrency, nil)
+	err = largefile.CreateNewFilesForCache(ctx, cacheFilePath, "", contentSize, blockSize, concurrency, nil)
 	if err == nil || !strings.Contains(err.Error(), "filename cannot be empty") {
 		t.Errorf("Expected error for empty index filename, got %v", err)
 	}
@@ -121,7 +121,7 @@ func TestNewFilesForCache(t *testing.T) {
 	// Test removing existing files
 	createTempFile(t, tmpDir, "existing_cache.dat", []byte("old data"))
 	createTempFile(t, tmpDir, "existing_cache.idx", []byte("old index"))
-	err = largefile.NewFilesForCache(ctx, filepath.Join(tmpDir, "existing_cache.dat"), filepath.Join(tmpDir, "existing_cache.idx"), contentSize, blockSize, concurrency, nil)
+	err = largefile.CreateNewFilesForCache(ctx, filepath.Join(tmpDir, "existing_cache.dat"), filepath.Join(tmpDir, "existing_cache.idx"), contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache() on existing files error = %v", err)
 	}
@@ -139,7 +139,7 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
 		// Initialize files using NewFilesForCache
-		err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
+		err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 		if err != nil {
 			t.Fatalf("NewFilesForCache() failed: %v", err)
 		}
@@ -152,7 +152,12 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 			t.Fatalf("Failed to write modified index: %v", err)
 		}
 
-		cache, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+		cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+		if err != nil {
+			t.Fatalf("Failed to open cache files: %v", err)
+		}
+
+		cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 		if err != nil {
 			t.Fatalf("NewLocalDownloadCache() error = %v", err)
 		}
@@ -178,11 +183,12 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		// Create a dummy cache file so OpenFile doesn't fail for that reason
 		createTempFile(t, tmpDir, "cache.dat", []byte{})
 
-		_, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+		_, _, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
 		if err == nil {
 			t.Fatal("NewLocalDownloadCache() error = nil, wantErr true for missing index")
 		}
-		if !strings.Contains(err.Error(), "failed to load ranges from index file") || !errors.Is(err, os.ErrNotExist) {
+
+		if !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("NewLocalDownloadCache() error = %q, want 'failed to load ranges' due to 'no such file or directory'", err.Error())
 		}
 	})
@@ -196,11 +202,12 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		idxData, _ := json.Marshal(br)
 		createTempFile(t, tmpDir, "cache.idx", idxData)
 
-		_, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+		_, _, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
 		if err == nil {
-			t.Fatal("NewLocalDownloadCache() error = nil, wantErr true for missing cache file")
+			t.Fatalf("Failed to open cache files: %v", err)
 		}
-		if !strings.Contains(err.Error(), "failed to open cache file") || !errors.Is(err, os.ErrNotExist) {
+
+		if !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("NewLocalDownloadCache() error = %q, want 'failed to open cache file' due to 'no such file or directory'", err.Error())
 		}
 	})
@@ -217,9 +224,9 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		idxData, _ := json.Marshal(br)
 		createTempFile(t, tmpDir, "cache.idx", idxData)
 
-		_, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+		_, _, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
 		if err == nil {
-			t.Fatal("NewLocalDownloadCache() error = nil, wantErr true for unwritable cache file path")
+			t.Fatalf("Failed to open cache files: %v", err)
 		}
 		// Error message might be OS-dependent ("is a directory" on Unix, "Access is denied" or similar on Win)
 		if !strings.Contains(err.Error(), "failed to open cache file") {
@@ -233,8 +240,11 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 		indexFilePath := filepath.Join(tmpDir, "cache.idx")
 		createTempFile(t, tmpDir, "cache.dat", []byte{}) // Dummy cache file
 		createTempFile(t, tmpDir, "cache.idx", []byte("this is not json"))
-
-		_, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+		cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+		if err != nil {
+			t.Fatalf("Failed to open cache files: %v", err)
+		}
+		_, err = largefile.NewLocalDownloadCache(cacheFile, indexFile)
 		if err == nil {
 			t.Fatal("NewLocalDownloadCache() error = nil, wantErr true for corrupt index")
 		}
@@ -253,12 +263,15 @@ func TestLocalDownloadCachePutGetRoundtrip(t *testing.T) { //nolint:gocyclo
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
+	err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
-
-	cache, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {
 		t.Fatalf("NewLocalDownloadCache failed: %v", err)
 	}
@@ -271,21 +284,21 @@ func TestLocalDownloadCachePutGetRoundtrip(t *testing.T) { //nolint:gocyclo
 	}
 
 	// Put the second block (offset 64)
-	putRange := largefile.ByteRange{From: 64, To: 127}
-	err = cache.Put(putRange, blockData)
+	putAt := int64(64)
+	_, err = cache.WriteAt(blockData, putAt)
 	if err != nil {
 		t.Fatalf("Put() error = %v", err)
 	}
 
 	// Verify index file was saved and reflects the change
 	idx := loadIndexFile(t, indexFilePath, contentSize, blockSize)
-	if !idx.IsSet(putRange.From) {
-		t.Errorf("Saved ranges in index do not reflect Put operation for offset %d", putRange.From)
+	if !idx.IsSet(putAt) {
+		t.Errorf("Saved ranges in index do not reflect Put operation for offset %d", putAt)
 	}
 
 	// Get the data back
 	readBuffer := make([]byte, blockSize)
-	err = cache.Get(putRange, readBuffer)
+	_, err = cache.ReadAt(readBuffer, putAt)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -294,8 +307,8 @@ func TestLocalDownloadCachePutGetRoundtrip(t *testing.T) { //nolint:gocyclo
 	}
 
 	// Try to Get a non-cached range
-	nonCachedRange := largefile.ByteRange{From: 0, To: 63}
-	err = cache.Get(nonCachedRange, readBuffer)
+	nonCachedRange := int64(0)
+	_, err = cache.ReadAt(readBuffer, nonCachedRange)
 	if err == nil {
 		t.Fatal("Get() on non-cached range expected error, got nil")
 	}
@@ -308,14 +321,14 @@ func TestLocalDownloadCachePutGetRoundtrip(t *testing.T) { //nolint:gocyclo
 	for i := range blockData2 {
 		blockData2[i] = byte(i + 100)
 	}
-	putRange2 := largefile.ByteRange{From: 0, To: 63}
-	err = cache.Put(putRange2, blockData2)
+	putAt2 := int64(0)
+	_, err = cache.WriteAt(blockData2, putAt2)
 	if err != nil {
 		t.Fatalf("Put() for second block error = %v", err)
 	}
 
 	// Get first block
-	err = cache.Get(putRange2, readBuffer)
+	_, err = cache.ReadAt(readBuffer, putAt2)
 	if err != nil {
 		t.Fatalf("Get() for second block error = %v", err)
 	}
@@ -324,22 +337,21 @@ func TestLocalDownloadCachePutGetRoundtrip(t *testing.T) { //nolint:gocyclo
 	}
 
 	// Test Put with invalid range (e.g., beyond content size)
-	invalidRange := largefile.ByteRange{From: contentSize, To: contentSize + int64(blockSize) - 1}
-	err = cache.Put(invalidRange, make([]byte, blockSize))
+	_, err = cache.WriteAt(make([]byte, blockSize), contentSize)
 	if err == nil {
 		t.Fatal("Put() with invalid range expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "invalid range") {
+	if !errors.Is(err, largefile.ErrCacheInvalidOffset) {
 		t.Errorf("Put() with invalid range error = %q, want to contain 'invalid range'", err.Error())
 	}
 
 	// Test Put with data size mismatch
 	mismatchData := make([]byte, blockSize-1)
-	err = cache.Put(putRange, mismatchData) // Use a valid range
+	_, err = cache.WriteAt(mismatchData, putAt)
 	if err == nil {
 		t.Fatal("Put() with data size mismatch expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "data length") || !strings.Contains(err.Error(), "does not match range size") {
+	if !errors.Is(err, largefile.ErrCacheInvalidBlockSize) {
 		t.Errorf("Put() with data size mismatch error = %q, want to contain 'data length ... does not match range size'", err.Error())
 	}
 }
@@ -353,22 +365,27 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
+	err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
-	cache, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {
 		t.Fatalf("NewLocalDownloadCache failed: %v", err)
 	}
 	defer cache.Close()
 
 	// Put blocks 0 and 2
-	err = cache.Put(largefile.ByteRange{From: 0, To: 63}, make([]byte, 64))
+	_, err = cache.WriteAt(make([]byte, 64), 0)
 	if err != nil {
 		t.Fatalf("Put for block 0 failed: %v", err)
 	}
-	err = cache.Put(largefile.ByteRange{From: 128, To: 191}, make([]byte, 64)) // Block 2
+	_, err = cache.WriteAt(make([]byte, 64), 128)
 	if err != nil {
 		t.Fatalf("Put for block 2 failed: %v", err)
 	}
@@ -400,20 +417,24 @@ func TestLocalDownloadCache_Iterators(t *testing.T) {
 		cacheFileAll := filepath.Join(tmpDirAllCached, "cache.dat")
 		indexFileAll := filepath.Join(tmpDirAllCached, "cache.idx")
 
-		err := largefile.NewFilesForCache(ctx, cacheFileAll, indexFileAll, 128, 64, concurrency, nil)
+		err := largefile.CreateNewFilesForCache(ctx, cacheFileAll, indexFileAll, 128, 64, concurrency, nil)
 		if err != nil {
 			t.Fatalf("NewFilesForCache for all_cached failed: %v", err)
 		}
-		cacheAll, err := largefile.NewLocalDownloadCache(cacheFileAll, indexFileAll)
+		cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFileAll, indexFileAll)
+		if err != nil {
+			t.Fatalf("Failed to open cache files: %v", err)
+		}
+		cacheAll, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 		if err != nil {
 			t.Fatalf("NewLocalDownloadCache for all_cached failed: %v", err)
 		}
 		defer cacheAll.Close()
 
-		if err := cacheAll.Put(largefile.ByteRange{From: 0, To: 63}, make([]byte, 64)); err != nil {
+		if _, err := cacheAll.WriteAt(make([]byte, 64), 0); err != nil {
 			t.Fatalf("Put for first block in all_cached failed: %v", err)
 		}
-		if err := cacheAll.Put(largefile.ByteRange{From: 64, To: 127}, make([]byte, 64)); err != nil {
+		if _, err := cacheAll.WriteAt(make([]byte, 64), 64); err != nil {
 			t.Fatalf("Put for second block in all_cached failed: %v", err)
 		}
 
@@ -439,11 +460,15 @@ func TestLocalDownloadCache_ContentLengthAndBlockSize(t *testing.T) {
 	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
 	indexFilePath := filepath.Join(tmpDir, "cache.idx")
 
-	err := largefile.NewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
+	err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, concurrency, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
-	cache, err := largefile.NewLocalDownloadCache(cacheFilePath, indexFilePath)
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {
 		t.Fatalf("NewLocalDownloadCache failed: %v", err)
 	}
