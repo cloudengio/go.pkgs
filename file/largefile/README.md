@@ -5,7 +5,47 @@ import cloudeng.io/file/largefile
 ```
 
 
+## Variables
+### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheInternalError
+```go
+ErrCacheInvalidBlockSize = errors.New("invalid block size")
+ErrCacheInvalidOffset = errors.New("invalid offset")
+ErrCacheInternalError = &internalCacheError{}
+
+```
+
+### ErrNotEnoughSpace
+```go
+ErrNotEnoughSpace = errors.New("not enough space available for the requested operation")
+
+```
+
+
+
 ## Functions
+### Func CacheFilesExist
+```go
+func CacheFilesExist(data, index string) (bool, bool, error)
+```
+CacheFilesExist checks if the cache and index files exist.
+
+### Func CreateNewFilesForCache
+```go
+func CreateNewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int, progressCh chan<- int64) error
+```
+CreateNewFilesForCache creates a new cache file and an index file for
+caching byte ranges of large files. It will remove any existing files with
+the same names before creating new ones. It reserves space for the cache
+file and initializes the index file with the specified content size and
+block size. It returns an error if the files cannot be created or if the
+space cannot be reserved. The index file is used to track which byte ranges
+have been written to the cache. The cache file is used to store the actual
+data. The contentSize is the total size of the file in bytes, blockSize is
+the preferred block size for downloading the file, and concurrency is the
+number of concurrent writes used to reserve space for the cache file on
+systems that require writing to the file to reserve space (e.g., non-Linux
+systems).
+
 ### Func NewBackoff
 ```go
 func NewBackoff(initial time.Duration, steps int) ratecontrol.Backoff
@@ -16,21 +56,6 @@ duration. The backoff will continue for the specified number of steps,
 after which it will return true to indicate that no more retries should be
 attempted.
 
-### Func NewFilesForCache
-```go
-func NewFilesForCache(ctx context.Context, filename, indexFileName string, contentSize int64, blockSize, concurrency int) error
-```
-NewFilesForCache creates a new cache file and an index file for caching byte
-ranges of large files. It reserves space for the cache file and initializes
-the index file with the specified content size and block size. It returns
-an error if the files cannot be created or if the space cannot be reserved.
-The index file is used to track which byte ranges have been written to the
-cache. The cache file is used to store the actual data. The contentSize is
-the total size of the file in bytes, blockSize is the preferred block size
-for downloading the file, and concurrency is the number of concurrent writes
-used to reserve space for the cache file on systems that require writing to
-the file to reserve space (e.g., non-Linux systems).
-
 ### Func NumBlocks
 ```go
 func NumBlocks(contentSize int64, blockSize int) int
@@ -40,9 +65,15 @@ given the specified block size. It returns the number of blocks needed. If
 the content size is not a multiple of the block size, it adds an additional
 block to cover the remaining bytes.
 
+### Func OpenCacheFiles
+```go
+func OpenCacheFiles(data, index string) (CacheFileReadWriter, CacheFileReadWriter, error)
+```
+OpenCacheFiles opens the cache and index files for reading and writing.
+
 ### Func ReserveSpace
 ```go
-func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int) error
+func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int, progressCh chan<- int64) error
 ```
 ReserveSpace creates a file with the specified filename and allocates the
 specified size bytes to it. It verifies that the file was created with the
@@ -50,17 +81,9 @@ requested storage allocated. On systems that support space reservation,
 such as Linux, space is reserved accordingly, on others data is written to
 the file to ensure that the space is allocated. The intent is to ensure that
 a download operations never fails because of insufficient local space once
-it has been initiated.
-
-### Func TestLocalDownloadCacheGetErrors
-```go
-func TestLocalDownloadCacheGetErrors(t *testing.T)
-```
-
-### Func TestLocalDownloadCachePutErrors
-```go
-func TestLocalDownloadCachePutErrors(t *testing.T)
-```
+it has been initiated. Progress can be reported via the progressCh channel,
+which will receive updates on the amount of space reserved. The channel will
+be closed when ReserveSpace returns.
 
 
 
@@ -207,6 +230,24 @@ UnmarshalJSON implements the json.Unmarshaler interface for ByteRanges.
 
 
 
+### Type CacheFileReadWriter
+```go
+type CacheFileReadWriter interface {
+	io.Reader
+	io.Writer
+	io.ReaderAt
+	io.WriterAt
+	io.Closer
+	Name() string // Name returns the name of the file.
+	Sync() error  // Sync ensures that all writes to the cache file are flushed to disk.
+}
+```
+CacheFileReadWriter is an interface that combines the functionality of
+io.Reader, io.ReaderAt, io.WriterAt, and io.Closer for reading and writing
+to the cache and index files. It also includes a Sync method to ensure that
+all writes are flushed to disk.
+
+
 ### Type CachingDownloader
 ```go
 type CachingDownloader struct {
@@ -240,8 +281,11 @@ it will return an
 ```go
 type DownloadCache interface {
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
-	// and the preferred block size used for downloading the file.
+	// and the block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
+	// Cached returns the total number of bytes and blocks already stored in
+	// the cache.
+	CachedBytesAndBlocks() (bytes, blocks int64)
 	// NextOutstanding finds the next byte range that has not been cached
 	// starting from the specified 'start' index. Its return value is either
 	// -1 if there are no more outstanding ranges, or the value of the next
@@ -257,10 +301,16 @@ type DownloadCache interface {
 	NextCached(start int, br *ByteRange) int
 	// Complete returns true if all byte ranges have been cached.
 	Complete() bool
-	// Put writes the specified byte range to the cache.
-	Put(r ByteRange, data []byte) error
-	// Get reads the specified byte range from the cache into the provided data slice.
-	Get(r ByteRange, data []byte) error
+	// WriteAt writes at most blocksize bytes starting at the specified offset.
+	// It returns an error if data is not exactly blocksize bytes long, unless
+	// the offset is at the end of the file, in which case it must
+	// be (content length % blocksize) bytes long.
+	WriteAt(data []byte, off int64) (int, error)
+	// ReadAt reads at most blocksize bytes starting at the specified offset.
+	// It returns an error if data is not exactly blocksize bytes long, unless
+	// the offset is at the end of the file, in which case it must
+	// be (content length % blocksize) bytes long.
+	ReadAt(data []byte, off int64) (int, error)
 }
 ```
 DownloadCache is an interface for caching byte ranges of large files to
@@ -355,7 +405,7 @@ access.
 ### Functions
 
 ```go
-func NewLocalDownloadCache(filename, indexFileName string) (*LocalDownloadCache, error)
+func NewLocalDownloadCache(dataReadWriter, indexReadWriter CacheFileReadWriter) (*LocalDownloadCache, error)
 ```
 NewLocalDownloadCache creates a new LocalDownloadCache instance. It opens
 the cache file and loads the index file containing the byte ranges that have
@@ -368,6 +418,11 @@ expected to be have been created using NewFilesForCache.
 
 
 ### Methods
+
+```go
+func (c *LocalDownloadCache) CachedBytesAndBlocks() (bytes, blocks int64)
+```
+
 
 ```go
 func (c *LocalDownloadCache) Close() error
@@ -389,12 +444,6 @@ ContentLengthAndBlockSize implements DownloadCache.
 
 
 ```go
-func (c *LocalDownloadCache) Get(r ByteRange, data []byte) error
-```
-Get implements DownloadCache.
-
-
-```go
 func (c *LocalDownloadCache) NextCached(start int, br *ByteRange) int
 ```
 NextCached implements DownloadCache. It returns the next, if any, cached
@@ -409,9 +458,15 @@ uncached byte range starting from the specified index.
 
 
 ```go
-func (c *LocalDownloadCache) Put(r ByteRange, data []byte) error
+func (c *LocalDownloadCache) ReadAt(data []byte, off int64) (int, error)
 ```
-Put implements DownloadCache.
+ReadAt implements DownloadCache.
+
+
+```go
+func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error)
+```
+WriteAt implements DownloadCache.
 
 
 

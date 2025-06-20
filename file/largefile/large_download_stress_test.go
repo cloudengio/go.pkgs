@@ -154,8 +154,8 @@ func validateIndexFile(t *testing.T, indexFile string, cacheSize int64, blockSiz
 func TestCacheStressTest(t *testing.T) {
 	ctx := context.Background()
 	tmpDirAllCached := t.TempDir()
-	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
-	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
+	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
+	indexFilePath := filepath.Join(tmpDirAllCached, "cache.idx")
 
 	for _, concurrency := range []int{1, 10, 100} {
 		t.Run(fmt.Sprintf("concurrency=%d", concurrency), func(t *testing.T) {
@@ -163,10 +163,13 @@ func TestCacheStressTest(t *testing.T) {
 			cacheSize := int64(diskusage.KB * 7)
 			blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-			if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency, nil); err != nil {
+			if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency, nil); err != nil {
 				t.Fatalf("NewFilesForCache failed: %v", err)
 			}
-
+			cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+			if err != nil {
+				t.Fatalf("Failed to open cache files: %v", err)
+			}
 			cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 			if err != nil {
 				t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
@@ -177,7 +180,7 @@ func TestCacheStressTest(t *testing.T) {
 				t.Fatalf("cache content size %d and block size %d do not match expected values %d and %d", cSize, cBblockSize, cacheSize, blockSize)
 			}
 
-			t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFile, cSize, cBblockSize)
+			t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFilePath, cSize, cBblockSize)
 
 			dl := largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
 				cache,
@@ -212,8 +215,8 @@ func TestCacheStressTest(t *testing.T) {
 				t.Errorf("expected status %+v, got %+v", want, got)
 			}
 
-			validateCacheFile(t, cacheFile, cacheSize)
-			validateIndexFile(t, indexFile, cacheSize, blockSize)
+			validateCacheFile(t, cacheFilePath, cacheSize)
+			validateIndexFile(t, indexFilePath, cacheSize, blockSize)
 			if !cache.Complete() {
 				t.Errorf("cache is not complete, expected complete cache")
 			}
@@ -242,7 +245,7 @@ func TestCacheStressTest(t *testing.T) {
 				t.Errorf("expected status %+v, got %+v", want, got)
 			}
 
-			validateCacheFile(t, cacheFile, cacheSize)
+			validateCacheFile(t, cacheFilePath, cacheSize)
 		})
 	}
 
@@ -251,16 +254,22 @@ func TestCacheStressTest(t *testing.T) {
 func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	ctx := context.Background()
 	tmpDirAllCached := t.TempDir()
-	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
-	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
+	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
+	indexFilePath := filepath.Join(tmpDirAllCached, "cache.idx")
 
 	concurrency := 10
 	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, concurrency, nil); err != nil {
+	if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency, nil); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
 	}
+
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {
 		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
@@ -268,7 +277,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 
 	cSize, cBblockSize := cache.ContentLengthAndBlockSize()
 
-	t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFile, cSize, cBblockSize)
+	t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFilePath, cSize, cBblockSize)
 
 	prevState := largefile.DownloadState{
 		DownloadSize:   cacheSize,
@@ -308,15 +317,26 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		if err := cache.Close(); err != nil {
 			t.Fatalf("failed to close cache: %v", err)
 		}
+
+		cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+		if err != nil {
+			t.Fatalf("Failed to open cache files: %v", err)
+		}
 		cache, err = largefile.NewLocalDownloadCache(cacheFile, indexFile)
 		if err != nil {
-			t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
+			t.Fatalf("failed to create and allocate space for %s: %v", cacheFilePath, err)
 		}
 		if st.CachedBlocks <= prevState.CachedBlocks {
 			t.Errorf("Run %d expected more cached blocks, got %d, want > %d", i, st.CachedBlocks, prevState.CachedBlocks)
 		}
 		if st.CachedBytes <= prevState.CachedBytes {
 			t.Errorf("Run %d expected more cached bytes, got %d, want > %d", i, st.CachedBytes, prevState.CachedBytes)
+		}
+		if st.DownloadSize != prevState.DownloadSize {
+			t.Errorf("Run %d expected download size %d, got %d", i, prevState.DownloadSize, st.DownloadSize)
+		}
+		if st.DownloadBlocks != prevState.DownloadBlocks {
+			t.Errorf("Run %d expected download blocks %d, got %d", i, prevState.DownloadBlocks, st.DownloadBlocks)
 		}
 		if st.Iterations != 1 {
 			t.Errorf("Run %d expected 1 iteration, got %d", i, st.Iterations)
@@ -334,8 +354,8 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		t.Errorf("expected at least %d retries, got %d", want, got)
 	}
 
-	validateCacheFile(t, cacheFile, cacheSize)
-	validateIndexFile(t, indexFile, cacheSize, blockSize)
+	validateCacheFile(t, cacheFilePath, cacheSize)
+	validateIndexFile(t, indexFilePath, cacheSize, blockSize)
 
 	if got, want := totalErrors, strings.Count(logOut.String(), `"error":"mock failure for testing"`); got != int64(want) {
 		t.Errorf("got %d mock failure messages, did not match number of errors reported: %d", want, got)
@@ -345,11 +365,15 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 
 func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize, failRatio int, withRetry bool, opts ...largefile.DownloadOption) largefile.DownloadStatus {
 	tmpDirAllCached := t.TempDir()
-	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
-	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
+	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
+	indexFilePath := filepath.Join(tmpDirAllCached, "cache.idx")
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2, nil); err != nil {
+	if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, 2, nil); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
 	}
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {
@@ -386,8 +410,8 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 	}
 
 	if err == nil {
-		validateCacheFile(t, cacheFile, cacheSize)
-		validateIndexFile(t, indexFile, cacheSize, blockSize)
+		validateCacheFile(t, cacheFilePath, cacheSize)
+		validateIndexFile(t, indexFilePath, cacheSize, blockSize)
 	}
 
 	return st
@@ -460,11 +484,16 @@ func TestCacheRetriesAndRunToCompletion(t *testing.T) {
 	// Test a download with run to completion that will always fail, it will
 	// hang until the context is cancelled
 	tmpDirAllCached := t.TempDir()
-	cacheFile := filepath.Join(tmpDirAllCached, "cache.dat")
-	indexFile := filepath.Join(tmpDirAllCached, "cache.idx")
+	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
+	indexFilePath := filepath.Join(tmpDirAllCached, "cache.idx")
 
-	if err := largefile.NewFilesForCache(ctx, cacheFile, indexFile, cacheSize, blockSize, 2, nil); err != nil {
+	if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, 2, nil); err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
 	}
 	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {

@@ -81,12 +81,13 @@ type MockDownloadCache struct {
 	ContentLengthAndBlockSizeFunc func() (size int64, blockSize int)
 	OutstandingFunc               func(int, *largefile.ByteRange) int
 	CompleteFunc                  func() bool
-	PutFunc                       func(r largefile.ByteRange, data []byte) error
-	GetFunc                       func(r largefile.ByteRange, data []byte) error // Not used by CachingDownloader.Run
-	CachedFunc                    func(int, *largefile.ByteRange) int            // Not used by CachingDownloader.Run
-	PutCalls                      []struct {
-		Range largefile.ByteRange
-		Data  []byte
+	PutFunc                       func(data []byte, off int64) (int, error)
+
+	GetFunc    func(data []byte, off int64) (int, error) // Not used by CachingDownloader.Run
+	CachedFunc func(int, *largefile.ByteRange) int       // Not used by CachingDownloader.Run
+	PutCalls   []struct {
+		Data []byte
+		Off  int64
 	}
 	mu sync.Mutex
 }
@@ -95,6 +96,11 @@ func (m *MockDownloadCache) ContentLengthAndBlockSize() (size int64, blockSize i
 	if m.ContentLengthAndBlockSizeFunc != nil {
 		return m.ContentLengthAndBlockSizeFunc()
 	}
+	return 0, 0
+}
+
+func (m *MockDownloadCache) CachedBytesAndBlocks() (int64, int64) {
+	// Default implementation returns no cached bytes or blocks
 	return 0, 0
 }
 
@@ -112,26 +118,26 @@ func (m *MockDownloadCache) NextCached(s int, b *largefile.ByteRange) int {
 	return -1
 }
 
-func (m *MockDownloadCache) Put(r largefile.ByteRange, data []byte) error {
+func (m *MockDownloadCache) WriteAt(data []byte, off int64) (int, error) {
 	m.mu.Lock()
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
 	m.PutCalls = append(m.PutCalls, struct {
-		Range largefile.ByteRange
-		Data  []byte
-	}{r, dataCopy})
+		Data []byte
+		Off  int64
+	}{dataCopy, off})
 	m.mu.Unlock()
 	if m.PutFunc != nil {
-		return m.PutFunc(r, data)
+		return m.PutFunc(data, off)
 	}
-	return nil
+	return len(data), nil
 }
 
-func (m *MockDownloadCache) Get(r largefile.ByteRange, data []byte) error {
+func (m *MockDownloadCache) ReadAt(data []byte, off int64) (int, error) {
 	if m.GetFunc != nil {
-		return m.GetFunc(r, data)
+		return m.GetFunc(data, off)
 	}
-	return errors.New("MockDownloadCache.GetFunc not implemented")
+	return 0, errors.New("MockDownloadCache.GetFunc not implemented")
 }
 
 func (m *MockDownloadCache) Complete() bool {
@@ -186,15 +192,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	defaultContentSize := int64(256)
 	defaultBlockSize := 64
 	defaultBlocks := largefile.NumBlocks(defaultContentSize, defaultBlockSize)
-	defaultState := largefile.DownloadState{
-		CachedBytes:      defaultContentSize,
-		CachedBlocks:     int64(defaultBlocks),
-		DownloadedBytes:  defaultContentSize,
-		DownloadedBlocks: int64(defaultBlocks),
-		DownloadSize:     defaultContentSize,
-		DownloadBlocks:   int64(defaultBlocks),
-		Iterations:       1,
-	}
+
 	defaultIncompleteState := largefile.DownloadState{
 		CachedBytes:      0,
 		CachedBlocks:     0,
@@ -229,7 +227,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int) {
 				return defaultContentSize, defaultBlockSize
 			},
-			PutFunc: func(largefile.ByteRange, []byte) error { return nil },
+			PutFunc: func(data []byte, off int64) (int, error) { return len(data), nil },
 			OutstandingFunc: func(s int, b *largefile.ByteRange) int {
 				return newByteRangeSeq()(s, b) // Default to no outstanding blocks
 			},
@@ -325,8 +323,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		if len(mockCache.PutCalls) != 1 {
 			t.Errorf("expected 1 PutCall, got %d", len(mockCache.PutCalls))
-		} else if mockCache.PutCalls[0].Range != outstandingRange {
-			t.Errorf("PutCall range mismatch: got %+v, want %+v", mockCache.PutCalls[0].Range, outstandingRange)
+		} else if mockCache.PutCalls[0].Off != outstandingRange.From {
+			t.Errorf("PutCall range mismatch: got %+v, want %+v", mockCache.PutCalls[0].Off, outstandingRange.From)
 		}
 		expectedData := make([]byte, defaultBlockSize)
 		for i := 0; i < defaultBlockSize; i++ {
@@ -501,8 +499,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return newByteRangeSeq(firstRange)(s, b)
 		}
 		putErr := errors.New("cache Put failed")
-		mockCache.PutFunc = func(largefile.ByteRange, []byte) error {
-			return putErr
+		mockCache.PutFunc = func(data []byte, off int64) (int, error) {
+			return 0, putErr
 		}
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
 		st, err := dl.Run(ctx)
@@ -599,15 +597,15 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 
 		sort.Slice(mockCache.PutCalls, func(i, j int) bool {
-			return mockCache.PutCalls[i].Range.From < mockCache.PutCalls[j].Range.From
+			return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
 		})
 
 		if len(mockCache.PutCalls) != numBlocks {
 			t.Errorf("expected %d PutCalls, got %d", numBlocks, len(mockCache.PutCalls))
 		}
 		for i, r := range ranges {
-			if i < len(mockCache.PutCalls) && mockCache.PutCalls[i].Range != r {
-				t.Errorf("PutCall %d range mismatch: got %v, want %v", i, mockCache.PutCalls[i].Range, r)
+			if i < len(mockCache.PutCalls) && mockCache.PutCalls[i].Off != r.From {
+				t.Errorf("PutCall %d range mismatch: got %v, want %v", i, mockCache.PutCalls[i].Off, r.From)
 			}
 		}
 
@@ -624,9 +622,16 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		if finalProgress.DownloadBlocks != int64(numBlocks) {
 			t.Errorf("final progress DownloadBlocks: got %d, want %d", finalProgress.DownloadBlocks, int64(numBlocks))
 		}
-
 		st.Duration = 0
-		p := defaultState
+		p := largefile.DownloadState{
+			CachedBytes:      defaultContentSize,
+			CachedBlocks:     int64(defaultBlocks),
+			DownloadedBytes:  defaultContentSize,
+			DownloadedBlocks: int64(defaultBlocks),
+			DownloadSize:     defaultContentSize,
+			DownloadBlocks:   int64(defaultBlocks),
+			Iterations:       1,
+		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
@@ -660,14 +665,14 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			ContentLengthAndBlockSizeFunc: func() (int64, int) {
 				return currentContentSize, defaultBlockSize
 			},
-			PutFunc: func(_ largefile.ByteRange, _ []byte) error { return nil },
+			PutFunc: func(data []byte, off int64) (int, error) { return len(data), nil },
 		}
 		mockCache.CompleteFunc = func() bool {
 			return true
 		}
 
 		expectedRanges := make([]largefile.ByteRange, numBlocks)
-		for i := 0; i < numBlocks; i++ {
+		for i := range numBlocks {
 			expectedRanges[i] = largefile.ByteRange{
 				From: int64(i * defaultBlockSize),
 				To:   int64((i+1)*defaultBlockSize) - 1,
@@ -692,7 +697,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 
 		// Sort PutCalls by From offset for deterministic checking
 		sort.Slice(mockCache.PutCalls, func(i, j int) bool {
-			return mockCache.PutCalls[i].Range.From < mockCache.PutCalls[j].Range.From
+			return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
 		})
 
 		for i, expectedRange := range expectedRanges {
@@ -701,8 +706,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 				continue
 			}
 			putCall := mockCache.PutCalls[i]
-			if putCall.Range != expectedRange {
-				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Range, expectedRange)
+			if putCall.Off != expectedRange.From {
+				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Off, expectedRange)
 			}
 			expectedDataSize := expectedRange.To - expectedRange.From + 1
 			if int64(len(putCall.Data)) != expectedDataSize {
@@ -748,7 +753,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			ContentLengthAndBlockSizeFunc: func() (int64, int) {
 				return currentContentSize, defaultBlockSize
 			},
-			PutFunc: func(_ largefile.ByteRange, _ []byte) error { return nil },
+			PutFunc: func(data []byte, off int64) (int, error) { return len(data), nil },
 		}
 		mockCache.CompleteFunc = func() bool {
 			return true
@@ -784,7 +789,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 
 		sort.Slice(mockCache.PutCalls, func(i, j int) bool {
-			return mockCache.PutCalls[i].Range.From < mockCache.PutCalls[j].Range.From
+			return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
 		})
 
 		for i, expectedRange := range expectedRanges {
@@ -793,8 +798,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 				continue
 			}
 			putCall := mockCache.PutCalls[i]
-			if putCall.Range != expectedRange {
-				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Range, expectedRange)
+			if putCall.Off != expectedRange.From {
+				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Off, expectedRange)
 			}
 			expectedDataSize := expectedRange.To - expectedRange.From + 1
 			if int64(len(putCall.Data)) != expectedDataSize {
