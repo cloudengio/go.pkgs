@@ -10,6 +10,7 @@ package keychain
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -37,6 +38,7 @@ func WriteSecureNote(account, service string, data []byte) error {
 // The note may be in plist format if it was created directly in the keychain
 // using keychain access.
 func ReadSecureNote(account, service string) ([]byte, error) {
+	fmt.Fprintf(os.Stderr, "READING secure note for account %q, service %q\n", account, service)
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
 	query.SetService(service)
@@ -46,9 +48,12 @@ func ReadSecureNote(account, service string) ([]byte, error) {
 	query.SetReturnAttributes(true)
 	results, err := keychain.QueryItem(query)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "WTF.... %v\n", err)
 		return nil, err
 	}
 	if len(results) == 0 {
+		fmt.Fprintf(os.Stderr, "WTF.... no results\n")
+		panic(fmt.Sprintf("WTF.... no results for account %q, service %q", account, service))
 		return nil, fs.ErrNotExist
 	}
 	data, err := extractKeychainNote(results[0].Data)
@@ -57,11 +62,14 @@ func ReadSecureNote(account, service string) ([]byte, error) {
 		if len(results[0].Data) > 0 {
 			return results[0].Data, nil
 		}
+		fmt.Fprintf(os.Stderr, "WTF.... EWOF... no results\n")
 		return nil, err
 	}
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "WTF.... error extracting keychain note: %v\n", err)
 		return nil, err
 	}
+	fmt.Fprintf(os.Stderr, "READING secure note for account %q, service %q: %d bytes\n", account, service, len(data))
 	return data, err
 }
 

@@ -23,7 +23,7 @@ func buildPluginCommand(t *testing.T, binary, sourceCode string) {
 	}
 }
 
-func TestPlugin(t *testing.T) {
+func TestExtPlugin(t *testing.T) {
 	ctx := context.Background()
 	pluginExec := filepath.Join(t.TempDir(), "testplugin")
 

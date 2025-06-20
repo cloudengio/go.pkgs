@@ -40,10 +40,6 @@ func DefaultAccount() string {
 	return user.Username
 }
 
-func defaultOptions(o *options) {
-	o.account = DefaultAccount()
-}
-
 // WithAccount specifies the account name to use with New.
 func WithAccount(account string) Option {
 	return func(o *options) {
@@ -54,9 +50,11 @@ func WithAccount(account string) Option {
 // NewSecureNoteFS creates a new SecureNoteFS.
 func NewSecureNoteFS(opts ...Option) *SecureNoteFS {
 	fs := &SecureNoteFS{}
-	defaultOptions(&fs.options)
 	for _, fn := range opts {
 		fn(&fs.options)
+	}
+	if fs.options.account == "" {
+		fs.options.account = DefaultAccount()
 	}
 	return fs
 }
@@ -75,6 +73,10 @@ func (fs *SecureNoteFS) Open(name string) (fs.File, error) {
 		return nil, err
 	}
 	return &nf{name: name, size: len(data), buf: bytes.NewBuffer(data)}, nil
+}
+
+func (fs *SecureNoteFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
+	return fs.Open(name)
 }
 
 type nf struct {
@@ -98,6 +100,10 @@ func (f *nf) Close() error {
 }
 
 func (fs *SecureNoteFS) ReadFile(name string) ([]byte, error) {
+	return keychain.ReadSecureNote(fs.account, name)
+}
+
+func (fs *SecureNoteFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
 	return keychain.ReadSecureNote(fs.account, name)
 }
 

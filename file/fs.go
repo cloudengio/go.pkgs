@@ -64,7 +64,18 @@ type FS interface {
 	SysXAttr(existing any, merge XAttr) any
 }
 
-// WriteFileFS defines an FS style interface for writing files.
+// ReadFileFS defines an FS style interface for reading files but includes
+// a context parameter to allow for cancellation and timeouts when working
+// with cloud filesystems or long-running operations.
+type ReadFileFS interface {
+	fs.ReadFileFS
+	OpenCtx(ctx context.Context, name string) (fs.File, error)
+	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+}
+
+// WriteFileFS defines an FS style interface for writing files. It provides
+// a context parameter to allow for cancellation and timeouts when working
+// with cloud filesystems or long-running operations.
 type WriteFileFS interface {
 	WriteFile(name string, data []byte, perm fs.FileMode) error
 	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error

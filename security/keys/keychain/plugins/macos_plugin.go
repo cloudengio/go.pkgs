@@ -31,23 +31,27 @@ func Plugin(in io.Reader, out io.Writer) error {
 		return fmt.Errorf("key cannot be empty")
 	}
 	fs := keychainfs.NewSecureNoteFS(keychainfs.WithAccount(account))
-	if !req.WriteKey {
-		return readSecureNote(fs, key, account, out)
+	if req.WriteKey {
+		if err := writeSecureNote(fs, account, key, req.Contents, out); err != nil {
+			return fmt.Errorf("keychain plugin write: account %q, key %q: %w", account, key, err)
+		}
+		return nil
 	}
-	if err := writeSecureNote(fs, key, account, req.Contents, out); err != nil {
-		return fmt.Errorf("failed to write secure note: %w", err)
+	err := readSecureNote(fs, account, key, out)
+	if err != nil {
+		return fmt.Errorf("keychain plugin read: account %q, key %q: %w", account, key, err)
 	}
 	return nil
 }
 
-func readSecureNote(fs *keychainfs.SecureNoteFS, key, account string, out io.Writer) error {
-
+func readSecureNote(fs *keychainfs.SecureNoteFS, account, key string, out io.Writer) error {
 	data, err := fs.ReadFile(key)
 	if err != nil {
-		return fmt.Errorf("failed to read secure note: %w", err)
+		return fmt.Errorf("failed to read secure note account: %w", err)
 	}
 	resp := Response{
 		Account:  account,
+		Keyname:  key,
 		Contents: base64.StdEncoding.EncodeToString(data),
 	}
 	if err := json.NewEncoder(out).Encode(resp); err != nil {
@@ -56,7 +60,7 @@ func readSecureNote(fs *keychainfs.SecureNoteFS, key, account string, out io.Wri
 	return nil
 }
 
-func writeSecureNote(fs *keychainfs.SecureNoteFS, key, account, contents string, out io.Writer) error {
+func writeSecureNote(fs *keychainfs.SecureNoteFS, account, key, contents string, out io.Writer) error {
 	if len(contents) == 0 {
 		return fmt.Errorf("contents cannot be empty when writing a secure note")
 	}

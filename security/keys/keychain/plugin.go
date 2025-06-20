@@ -36,21 +36,32 @@ func RunExtPlugin(ctx context.Context, binary string, req plugins.Request) (plug
 	}
 	in := &bytes.Buffer{}
 	out := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
 	enc := json.NewEncoder(in)
 	if err := enc.Encode(req); err != nil {
-		return plugins.Response{Error: err.Error()}, err
+		return plugins.Response{Error: fmt.Sprintf("encoding error: %v", err)}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = stderr
 	var resp plugins.Response
 	if err := cmd.Run(); err != nil {
-		return plugins.Response{Error: err.Error()}, err
+		fmt.Printf("Command %s failed with output: %s\n", binary, stderr.String())
+		return plugins.Response{
+			Account: req.Account,
+			Keyname: req.Keyname,
+			Error:   fmt.Sprintf("failed to run plugin: %v", err),
+		}, err
 	}
 	if err := json.NewDecoder(out).Decode(&resp); err != nil {
-		return plugins.Response{Error: err.Error()}, err
+		return plugins.Response{
+			Account: resp.Account,
+			Keyname: resp.Keyname,
+			Error:   fmt.Sprintf("failed to decode plugin response: %v", err),
+		}, err
 	}
 	return resp, nil
 }
@@ -75,9 +86,9 @@ func RunPlugin(ctx context.Context, req plugins.Request) (plugins.Response, erro
 
 // isGoRun checks if the current process was started via `go run`. It uses
 // a simple heuristic of checking if the executable name in os.Args[0]
-// contains "go-run".
+// contains "go-build".
 func isGoRun() bool {
-	return strings.Contains(os.Args[0], "go-run")
+	return strings.Contains(os.Args[0], "go-build")
 }
 
 // RunAvailablePlugin decides whether to use the external plugin or the
@@ -159,13 +170,17 @@ func ExtPluginBuildCommand(ctx context.Context) *exec.Cmd {
 // If the application is not running via `go run`, it does nothing and returns nil.
 // This function is intended to be called at the start of the application
 // to ensure that the external plugin is built and available for use.
-func WithExternalPlugin(ctx context.Context, extPluginPath string) error {
+func WithExternalPlugin(ctx context.Context) error {
 	if !isGoRun() {
+		return nil
+	}
+	if IsExtPluginAvailable(ctx) {
 		return nil
 	}
 	out, err := ExtPluginBuildCommand(ctx).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s: %w", out, err)
 	}
+	fmt.Printf("built keychain plugin: %s\n", out)
 	return nil
 }
