@@ -227,7 +227,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int) {
 				return defaultContentSize, defaultBlockSize
 			},
-			PutFunc: func(data []byte, off int64) (int, error) { return len(data), nil },
+			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
 			OutstandingFunc: func(s int, b *largefile.ByteRange) int {
 				return newByteRangeSeq()(s, b) // Default to no outstanding blocks
 			},
@@ -499,7 +499,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return newByteRangeSeq(firstRange)(s, b)
 		}
 		putErr := errors.New("cache Put failed")
-		mockCache.PutFunc = func(data []byte, off int64) (int, error) {
+		mockCache.PutFunc = func(_ []byte, _ int64) (int, error) {
 			return 0, putErr
 		}
 		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
@@ -665,7 +665,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			ContentLengthAndBlockSizeFunc: func() (int64, int) {
 				return currentContentSize, defaultBlockSize
 			},
-			PutFunc: func(data []byte, off int64) (int, error) { return len(data), nil },
+			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
 		}
 		mockCache.CompleteFunc = func() bool {
 			return true
@@ -753,7 +753,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			ContentLengthAndBlockSizeFunc: func() (int64, int) {
 				return currentContentSize, defaultBlockSize
 			},
-			PutFunc: func(data []byte, off int64) (int, error) { return len(data), nil },
+			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
 		}
 		mockCache.CompleteFunc = func() bool {
 			return true

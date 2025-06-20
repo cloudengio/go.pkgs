@@ -368,8 +368,6 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	for {
 		st, err := dl.runOnce(ctx)
 		if st.Complete && err == nil {
-			//st.DownloadState = finalState.updateAfterIteration(dl.progress.DownloadState)
-			//st.Duration = time.Since(start)
 			return dl.finalize(st, finalState.updateAfterIteration(dl.progress.DownloadState), start, nil)
 		}
 		dl.logger.Info("runOnce: download not complete, retrying", "iterations", st.Iterations, "error", err)
@@ -437,7 +435,7 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 
 func (dl *CachingDownloader) handleResponse(_ context.Context, resp response) error {
 	defer dl.bufPool.Put(resp.data) // Return the buffer to the pool after use.
-	n, err := dl.cache.WriteAt(resp.data.Bytes(), resp.ByteRange.From)
+	n, err := dl.cache.WriteAt(resp.data.Bytes(), resp.From)
 	if err != nil {
 		dl.progress.incrementCacheErrors()
 		dl.logger.Info("handleResponse: cache write failed", "byteRange", resp.ByteRange, "error", err)
