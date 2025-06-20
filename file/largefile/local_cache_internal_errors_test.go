@@ -235,7 +235,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		if !errors.Is(err, ErrCacheInternalError) {
 			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
 		}
-		if !strings.Contains(err.Error(), "failed to write all data index file") {
+		if !strings.Contains(err.Error(), "failed to write all data to the index file") {
 			t.Errorf("error message mismatch, got: %v", err)
 		}
 	})

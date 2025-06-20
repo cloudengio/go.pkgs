@@ -184,7 +184,7 @@ type CacheFileReadWriter interface {
 // been created using NewFilesForCache.
 func NewLocalDownloadCache(dataReadWriter, indexReadWriter CacheFileReadWriter) (*LocalDownloadCache, error) {
 	if dataReadWriter == nil || indexReadWriter == nil {
-		return nil, fmt.Errorf("dataReadWriter and indexReadWriter cannot be nil: %w", ErrCacheInternalError)
+		return nil, fmt.Errorf("data and index read/writer arguments must be non-nil: %w", ErrCacheInternalError)
 	}
 	cache := &LocalDownloadCache{
 		data:       dataReadWriter,
@@ -218,7 +218,7 @@ func (i *indexStore) save() error {
 		return fmt.Errorf("failed to write index file %s: %w", i.wr.Name(), err)
 	}
 	if n != len(data) {
-		return fmt.Errorf("failed to write all data index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), &internalCacheError{})
+		return fmt.Errorf("failed to write all data to the index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), &internalCacheError{})
 	}
 	return nil
 }
