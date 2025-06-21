@@ -9,6 +9,9 @@ using various algorithms such as SHA1, MD5, SHA256, and SHA512. The hashes
 are created from base64 encoded digests, which allows for easy storage and
 transmission of hash values.
 
+**Note**: MD5 and SHA1 are cryptographically weak and should not be used for
+security-sensitive applications.
+
 ## Functions
 ### Func FromBase64
 ```go
