@@ -23,6 +23,28 @@ const (
 	sha512HelloWorldB64 = "MJ7MSJwS1utMxA9QyQLytNDtd+5RGnx6m808qG1M2G+YndNbxf9JlnDaNCVbRbDP2DDoH2Bdz33FVC6TrpzXbw=="
 )
 
+func ExampleHash() {
+	// Example usage of the hash package.
+	h, err := hash.New("sha256", sha256HelloWorldB64)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = h.Write([]byte(helloWorld))
+	if err != nil {
+		panic(err)
+	}
+
+	if !h.Validate() {
+		panic("Validate() failed, expected true")
+	}
+
+	fmt.Printf("Base64 Digest: %s\n", hash.ToBase64(h.Digest))
+	// Output:
+	// Base64 Digest: uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=
+
+}
+
 func TestNew(t *testing.T) {
 	testCases := []struct {
 		algo    string

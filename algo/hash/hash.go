@@ -28,6 +28,9 @@ type Hash struct {
 // New creates a new Hash instance based on the specified algorithm and digest.
 // Supported algorithms are "sha1", "md5", "sha256", and "sha512" and the digest
 // is base64 encoded.
+//
+// Note: MD5 and SHA1 are cryptographically weak and should not be used for
+// security-sensitive applications.
 func New(algo, digest string) (Hash, error) {
 	db, err := base64.StdEncoding.DecodeString(digest)
 	if err != nil {
@@ -35,11 +38,10 @@ func New(algo, digest string) (Hash, error) {
 	}
 	// Create the hash instance based on the algorithm.
 	h := newHashInstance(algo, db)
-	if h.Hash == nil {
+	if h == nil {
 		return Hash{}, fmt.Errorf("unsupported hash algorithm: %s", algo)
 	}
-	h.Algo = algo
-	return h, nil
+	return Hash{Hash: h, Algo: algo, Digest: db}, nil
 }
 
 func FromBase64(digest string) ([]byte, error) {
@@ -50,24 +52,21 @@ func ToBase64(digest []byte) string {
 	return base64.StdEncoding.EncodeToString(digest)
 }
 
-func newHashInstance(algo string, digest []byte) Hash {
+func newHashInstance(algo string, digest []byte) hash.Hash {
 	switch algo {
 	case "sha1":
-		h := sha1.New()
-		return Hash{Hash: h, Digest: []byte(digest)}
+		return sha1.New()
 	case "md5":
-		h := md5.New()
-		return Hash{Hash: h, Digest: []byte(digest)}
+		return md5.New()
 	case "sha256":
-		h := sha256.New()
-		return Hash{Hash: h, Digest: []byte(digest)}
+		return sha256.New()
 	case "sha512":
-		h := sha512.New()
-		return Hash{Hash: h, Digest: []byte(digest)}
+		return sha512.New()
 	default:
-		return Hash{}
+		return nil
 	}
 }
+
 func (h Hash) Validate() bool {
 	return slices.Equal(h.Sum(nil), h.Digest)
 }

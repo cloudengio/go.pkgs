@@ -9,9 +9,6 @@ using various algorithms such as SHA1, MD5, SHA256, and SHA512. The hashes
 are created from base64 encoded digests, which allows for easy storage and
 transmission of hash values.
 
-**Note**: MD5 and SHA1 are cryptographically weak and should not be used for
-security-sensitive applications.
-
 ## Functions
 ### Func FromBase64
 ```go
@@ -44,6 +41,9 @@ New creates a new Hash instance based on the specified algorithm and digest.
 Supported algorithms are "sha1", "md5", "sha256", and "sha512" and the
 digest is base64 encoded.
 
+Note: MD5 and SHA1 are cryptographically weak and should not be used for
+security-sensitive applications.
+
 
 
 ### Methods
@@ -54,6 +54,11 @@ func (h Hash) Validate() bool
 
 
 
+
+
+
+## Examples
+### [ExampleHash](https://pkg.go.dev/cloudeng.io/algo/hash?tab=doc#example-Hash)
 
 
 
