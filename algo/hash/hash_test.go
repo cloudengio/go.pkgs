@@ -107,12 +107,8 @@ func TestHash_Validate(t *testing.T) {
 
 			if got := h.Validate(); got != tc.isValid {
 				t.Errorf("%v: Validate() = %v, want %v", tc.algo, got, tc.isValid)
-				h.Sum(nil)
-				fmt.Printf("%d .. %d: .... %x , want %x\n", len(h.Sum(nil)), len(h.Digest), h.Sum(nil), h.Digest)
 			}
-			if tc.isValid {
-				//fmt.Printf("%d .. %d: .... %x , want %x\n", len(h.Sum(nil)), len(h.Digest), h.Sum(nil), h.Digest)
-			}
+
 		})
 	}
 }
