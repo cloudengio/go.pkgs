@@ -5,13 +5,15 @@
 package bitmap
 
 // Contiguous supports following the tail of contiguous sub-range of
-// a bitmap as it is being updated.
+// a bitmap as it is updated. Clients use the Notify method to obtain
+// a channel that is closed whenever the tail of the the tracked contiguous
+// sub-range is extended.
 type Contiguous struct {
 	bits       T
 	last       int
 	start      int
 	firstClear int
-	ch         chan<- int
+	ch         chan struct{}
 }
 
 func newContiguous(bm T, start, size int) *Contiguous {
@@ -28,42 +30,45 @@ func newContiguous(bm T, start, size int) *Contiguous {
 	return c
 }
 
-// NewContiguous creates a new Contiguous instance that tracks a sub-range
-// of a bitmap of the given size (in bits) starting at the given index.
-// As the tail of the sub-range is extended, updates are sent on the
-// provided channel `ch`. The updates specify the index of the last bit
-// that is set in the contiguous range. The channel is closed when the
-// tail of the sub-range extends beyond the last index of the bitmap.
-// If size is less than or equal to zero, or start is negative, it returns nil.
+// NewContiguous creates an instance of Contiguous of the given size
+// with the tracked ranged starting at the given 'start' index.
 func NewContiguous(start, size int) *Contiguous {
 	return newContiguous(New(size), start, size)
 }
 
-// SetCh sets the channel on which updates are sent. If the channel is nil,
-// no updates will be sent. If the channel is set, an update is sent immediately
-// if the first clear bit is beyond the start index. The channel is closed
-// when all bits in the sub-range have been set. It is up to the caller
-// to ensure that the channel is deep enough and read frequently enough
-// to avoid blocking the sender.
-func (c *Contiguous) SetCh(ch chan<- int) *Contiguous {
-	if c == nil {
-		return nil
-	}
-	c.ch = ch
-	c.sendUpdate()
-	return c
-}
-
 // NewContiguousWithBitmap is like NewContiguous, but is initialized with
 // the supplied bitmap. The bitmap is not copied. Updates must be made
-// to the bitmap using the Set method of the Contiguous type. If the supplied
-// bitmap has set bits that overlap with the specified start index an update
-// will be sent on the channel immediately.
+// to the bitmap using the Set method of the Contiguous type.
 func NewContiguousWithBitmap(bm T, start, size int) *Contiguous {
 	if size > len(bm)*64 {
 		return nil
 	}
 	return newContiguous(bm, start, size)
+}
+
+// Notify can be used to notify the caller of an extension in the contiguous
+// sub-range of the bitmap. It returns a channel that will be closed whenever
+// the tail of the contiguous sub-range is extended. Closing a channel
+// is used as the notification mechanism (rather than sending updates
+// on the channel) because it allows for multiple listeners and avoids
+// the need for any synchronization between the contiguous bitmap
+// implementation and the listeners. Expected usage is of the form:
+//
+//	ch := cb.Notify()
+//	<-ch
+//	end := cb.Tail()
+//
+// Note that if the range has already reached the end of the bitmap, the
+// returned channel will have already been closed.
+func (c *Contiguous) Notify() <-chan struct{} {
+	if c.ch != nil {
+		return c.ch
+	}
+	c.ch = make(chan struct{})
+	if c.firstClear > c.last {
+		close(c.ch)
+	}
+	return c.ch
 }
 
 func (c *Contiguous) extend(start int) {
@@ -80,10 +85,8 @@ func (c *Contiguous) sendUpdate() {
 	if c.ch == nil || c.firstClear <= c.start {
 		return
 	}
-	c.ch <- c.firstClear - 1
-	if c.firstClear > c.last {
-		close(c.ch)
-	}
+	close(c.ch)
+	c.ch = nil
 }
 
 // Set sets the bit at index i in the bitmap to 1. If i is out of bounds,
@@ -100,9 +103,10 @@ func (c *Contiguous) Set(i int) {
 	c.sendUpdate()
 }
 
-// Last returns the last index in the bitmap subrange that has been set,
-// or -1 if no bits have been set.
-func (c *Contiguous) LastSet() int {
+// Tail returns the last index in the contiguous subrange that has been set,
+// or -1 if no bits have been set. The value of the returned value will be
+// that of the last index in the bitmap if entire range has been set.
+func (c *Contiguous) Tail() int {
 	if c.firstClear <= c.start {
 		return -1
 	}

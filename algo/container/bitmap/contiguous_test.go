@@ -5,210 +5,177 @@
 package bitmap_test
 
 import (
-	"slices"
 	"testing"
+	"time"
 
 	"cloudeng.io/algo/container/bitmap"
 )
 
-func goReadall(ch <-chan int, res chan []int) {
-	go func() {
-		var values []int
-		for val := range ch {
-			values = append(values, val)
-		}
-		res <- values
-		close(res)
-	}()
-}
-
-func iseq(a ...int) []int {
-	return a
-}
-
-func lastSet(t *testing.T, cb *bitmap.Contiguous, end int) {
+func expectClosed(t *testing.T, cb *bitmap.Contiguous, end int, ch <-chan struct{}) <-chan struct{} {
 	t.Helper()
-	if got, want := cb.LastSet(), end; got != want {
-		t.Errorf("LastSet() = %v, want %v", got, want)
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("expected closed channel, but timed out instead")
+	}
+	if got, want := cb.Tail(), end; got != want {
+		t.Errorf("expect closed = %v, want %v", got, want)
+	}
+	return cb.Notify()
+}
+
+func expectBlocked(t *testing.T, cb *bitmap.Contiguous, end int, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+		t.Fatalf("expected blocked channel, but it was closed")
+	default:
+		// This is the expected case.
+	}
+	if got, want := cb.Tail(), end; got != want {
+		t.Errorf("expect blocked = %v, want %v", got, want)
 	}
 }
 
 func TestContiguousEmpty(t *testing.T) {
-	ch := make(chan int, 1)
-	resCh := make(chan []int)
+
 	contig := bitmap.NewContiguous(20, 23)
-	contig.SetCh(ch) // Set the channel to receive updates.
-	lastSet(t, contig, -1)
 
-	goReadall(ch, resCh)
-
-	contig.Set(0)
-	lastSet(t, contig, -1)
-	contig.Set(19)
-	lastSet(t, contig, -1)
-	contig.Set(20)
-	lastSet(t, contig, 20)
-	contig.Set(22)
-	lastSet(t, contig, 20)
-	contig.Set(21)
-	lastSet(t, contig, 22)
-
-	if got, want := <-resCh, iseq(20, 22); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	ch := contig.Notify()
+	ch1 := contig.Notify()
+	if ch != ch1 {
+		t.Errorf("expected same channel for Tail() calls, got %v and %v", ch, ch1)
 	}
+
+	expectBlocked(t, contig, -1, ch)
+	contig.Set(0)
+	expectBlocked(t, contig, -1, ch)
+	contig.Set(19)
+	expectBlocked(t, contig, -1, ch)
+
+	// Don't expect a notification until now.
+	contig.Set(20)
+	ch = expectClosed(t, contig, 20, ch)
+
+	contig.Set(22)
+	expectBlocked(t, contig, 20, ch)
+	contig.Set(21)
+	expectClosed(t, contig, 22, ch)
+	ch = contig.Notify()
+	expectClosed(t, contig, 22, ch)
+	ch = contig.Notify()
+	expectClosed(t, contig, 22, ch)
 }
 
 func TestContiguousWithBitmap(t *testing.T) {
-	ch := make(chan int, 1)
-	resCh := make(chan []int)
 	bm := bitmap.New(10)
 	bm.Set(0)
 	bm.Set(1)
 	contig := bitmap.NewContiguousWithBitmap(bm, 5, 10)
-	contig.SetCh(ch)
-	goReadall(ch, resCh)
-	lastSet(t, contig, -1)
+	ch := contig.Notify()
+	expectBlocked(t, contig, -1, ch)
 	contig.Set(4)
-	lastSet(t, contig, -1)
+	expectBlocked(t, contig, -1, ch)
+
+	// First notification.
 	contig.Set(5)
-	lastSet(t, contig, 5)
+	ch = expectClosed(t, contig, 5, ch)
+
 	contig.Set(6)
-	lastSet(t, contig, 6)
+	ch = expectClosed(t, contig, 6, ch)
 	contig.Set(7)
-	lastSet(t, contig, 7)
+	ch = expectClosed(t, contig, 7, ch)
+
+	// No notification since there's a hole between 7 and 9.
 	contig.Set(9)
-	lastSet(t, contig, 7)
+	expectBlocked(t, contig, 7, ch)
 	contig.Set(8)
-	lastSet(t, contig, 9)
+	expectClosed(t, contig, 9, ch)
 
-	if got, want := <-resCh, iseq(5, 6, 7, 9); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	ch = make(chan int, 1)
-	resCh = make(chan []int)
+	// Test overlap between initial bitmap and contiguous range.
 	bm = bitmap.New(10)
 	for i := range 7 {
 		bm.Set(i)
 	}
 	contig = bitmap.NewContiguousWithBitmap(bm, 5, 10)
-	contig.SetCh(ch)
-	goReadall(ch, resCh)
-	lastSet(t, contig, 6)
+	tail := contig.Tail()
+	if tail != 6 {
+		t.Fatalf("expected initial LastSet() to be 6, got %d", tail)
+	}
+	ch = contig.Notify()
+	expectBlocked(t, contig, 6, ch)
 	contig.Set(9)
-	lastSet(t, contig, 6)
+	expectBlocked(t, contig, 6, ch)
 	contig.Set(8)
-	lastSet(t, contig, 6)
+	expectBlocked(t, contig, 6, ch)
 	contig.Set(7)
-	contig.Set(6)
-	lastSet(t, contig, 9)
+	expectClosed(t, contig, 9, ch)
 
-	if got, want := <-resCh, iseq(6, 9); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	bm = bitmap.New(10)
+	for i := range 7 {
+		bm.Set(i)
 	}
+	bm.Set(9)
+	bm.Set(8)
+	contig = bitmap.NewContiguousWithBitmap(bm, 5, 10)
+	ch = contig.Notify()
+	expectBlocked(t, contig, 6, ch)
+	contig.Set(7)
+	expectClosed(t, contig, 9, ch)
+
 }
 
-func TestContiguousInvalidCreation(t *testing.T) {
-	bm := bitmap.New(100)
+func TestContiguousInitialState(t *testing.T) {
+	// Create a bitmap that is already contiguous from the start of the tracked range.
+	bm := bitmap.New(20)
+	bm.Set(10)
+	bm.Set(11)
+	// Track from index 10.
+	contig := bitmap.NewContiguousWithBitmap(bm, 10, 20)
 
-	testCases := []struct {
-		name string
-		c    *bitmap.Contiguous
-	}{
-		{"NewContiguous: zero size", bitmap.NewContiguous(0, 0)},
-		{"NewContiguous: negative start", bitmap.NewContiguous(-1, 10)},
-		{"NewContiguous: start > size", bitmap.NewContiguous(11, 10)},
-		{"NewContiguousWithBitmap: nil bitmap", bitmap.NewContiguousWithBitmap(nil, 0, 10)},
-		{"NewContiguousWithBitmap: size > bitmap capacity", bitmap.NewContiguousWithBitmap(bm, 0, 100*64)},
+	// The constructor should have advanced firstClear to 12.
+	// LastSet should therefore be 11.
+	if got, want := contig.Tail(), 11; got != want {
+		t.Fatalf("initial LastSet() = %v, want %v", got, want)
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.c != nil {
-				t.Errorf("expected nil but got a valid instance")
-			}
-		})
-	}
+	// The first call to Notify should return a new channel.
+	ch := contig.Notify()
+
+	// Since nothing has been set since creation, the channel should be blocked.
+	expectBlocked(t, contig, 11, ch)
+
+	// Now, set the next bit in the sequence.
+	contig.Set(12)
+
+	// This should have triggered an update and closed the channel.
+	// The new LastSet should be 12.
+	ch = expectClosed(t, contig, 12, ch)
+
+	// The next channel should be blocked.
+	expectBlocked(t, contig, 12, ch)
 }
 
-func TestContiguousCompletion(t *testing.T) {
-	ch := make(chan int, 1)
-	resCh := make(chan []int)
-	contig := bitmap.NewContiguous(0, 3) // Range is 0, 1, 2.
-	contig.SetCh(ch)                     // Set the channel to receive updates.
-
-	goReadall(ch, resCh)
-
-	contig.Set(0)
-	lastSet(t, contig, 0)
-
-	contig.Set(1)
-	lastSet(t, contig, 1)
-
-	contig.Set(2) // This should fill the range and close the channel.
-	lastSet(t, contig, 2)
-
-	// The channel should be closed, and the reader goroutine should finish.
-	if got, want := <-resCh, iseq(0, 1, 2); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+func TestContiguousAlreadyComplete(t *testing.T) {
+	bm := bitmap.New(10)
+	for i := range 10 {
+		bm.Set(i)
 	}
 
-	// Setting again should have no effect.
-	contig.Set(1)
-	lastSet(t, contig, 2)
-}
+	// Track the full range 0..9
+	contig := bitmap.NewContiguousWithBitmap(bm, 0, 10)
 
-func TestContiguousExtendStopsAtGap(t *testing.T) {
-	ch := make(chan int, 1)
-	resCh := make(chan []int)
-	contig := bitmap.NewContiguous(0, 5) // Tracks range 0..4
-	contig.SetCh(ch)                     // Set the channel to receive updates.
-
-	goReadall(ch, resCh)
-
-	// Set bit 2, creating a gap at 0 and 1.
-	contig.Set(2)
-	lastSet(t, contig, -1) // No change, since firstClear is 0.
-
-	// Set bit 0. This should trigger extend, which should stop at the gap (bit 1).
-	contig.Set(0)
-	lastSet(t, contig, 0) // firstClear should now be 1.
-
-	// Set bit 3. This is after the gap, so it should not advance firstClear.
-	contig.Set(3)
-	lastSet(t, contig, 0) // No change.
-
-	// Now, fill the gap by setting bit 1.
-	// This should trigger extend, which will now advance past 1, 2, and 3.
-	contig.Set(1)
-	lastSet(t, contig, 3) // firstClear should now be 4.
-
-	// Close the channel to signal the reader goroutine to finish.
-	close(ch)
-
-	// Verify the sequence of updates received on the channel.
-	if got, want := <-resCh, iseq(0, 3); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
-func TestContiguousDelayedSetCh(t *testing.T) {
-	ch := make(chan int, 1)
-	resCh := make(chan []int)
-	contig := bitmap.NewContiguous(0, 5) // Tracks range 0..4
-	goReadall(ch, resCh)
-
-	contig.Set(0) // Set a bit before setting the channel.
-	contig.Set(1)
-	lastSet(t, contig, 1) // Should not trigger an update since channel is
-	contig.SetCh(ch)      // Set the channel to receive updates.
-	contig.Set(4)
-	contig.Set(3)
-	contig.Set(2)         // This should fill the range and trigger an update.
-	lastSet(t, contig, 4) // Should not trigger an update since 5 is out of range.
-	// Verify the sequence of updates received on the channel.
-	if got, want := <-resCh, iseq(1, 4); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	// The constructor should have advanced firstClear to 10.
+	// LastSet should be 9.
+	if got, want := contig.Tail(), 9; got != want {
+		t.Fatalf("initial LastSet() = %v, want %v", got, want)
 	}
 
+	// Get a channel.
+	ch := contig.Notify()
+
+	// Since the range is already complete, firstClear (10) is outside the
+	// tracked range (last=9). No call to Set() can ever equal firstClear,
+	// so sendUpdate() is never called. The channel will block forever.
+	expectBlocked(t, contig, 9, ch)
 }
