@@ -15,7 +15,8 @@ type Contiguous struct {
 Contiguous supports following the tail of contiguous sub-range of a bitmap
 as it is updated. Clients use the Notify method to obtain a channel that
 is closed whenever the tail of the the tracked contiguous sub-range is
-extended.
+extended. Contiguous is not thread-safe and callers must ensure appropriate
+synchronization when using it concurrently.
 
 ### Functions
 

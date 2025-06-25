@@ -7,7 +7,8 @@ package bitmap
 // Contiguous supports following the tail of contiguous sub-range of
 // a bitmap as it is updated. Clients use the Notify method to obtain
 // a channel that is closed whenever the tail of the the tracked contiguous
-// sub-range is extended.
+// sub-range is extended. Contiguous is not thread-safe and callers must
+// ensure appropriate synchronization when using it concurrently.
 type Contiguous struct {
 	bits       T
 	last       int
@@ -81,14 +82,6 @@ func (c *Contiguous) extend(start int) {
 	}
 }
 
-func (c *Contiguous) sendUpdate() {
-	if c.ch == nil || c.firstClear <= c.start {
-		return
-	}
-	close(c.ch)
-	c.ch = nil
-}
-
 // Set sets the bit at index i in the bitmap to 1. If i is out of bounds,
 // the function does nothing.
 func (c *Contiguous) Set(i int) {
@@ -100,7 +93,11 @@ func (c *Contiguous) Set(i int) {
 		return
 	}
 	c.extend(c.firstClear)
-	c.sendUpdate()
+	if c.ch == nil || c.firstClear <= c.start {
+		return
+	}
+	close(c.ch)
+	c.ch = nil
 }
 
 // Tail returns the last index in the contiguous subrange that has been set,
