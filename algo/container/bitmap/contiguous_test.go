@@ -174,8 +174,8 @@ func TestContiguousAlreadyComplete(t *testing.T) {
 	// Get a channel.
 	ch := contig.Notify()
 
-	// Since the range is already complete, firstClear (10) is outside the
-	// tracked range (last=9). No call to Set() can ever equal firstClear,
-	// so sendUpdate() is never called. The channel will block forever.
+	// Since the range is already complete, firstClear (10) is greater than
+	// the last index of the tracked range (last=9). The Notify method will
+	// therefore return an already closed channel.
 	expectClosed(t, contig, 9, ch)
 }
