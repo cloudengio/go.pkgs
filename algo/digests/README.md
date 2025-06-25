@@ -62,9 +62,8 @@ type Hash struct {
 ```go
 func New(algo string, digest []byte) (Hash, error)
 ```
-New creates a new Hash instance based on the specified algorithm and digest.
-Supported algorithms are "sha1", "md5", "sha256", and "sha512" and the
-digest is base64 encoded.
+New creates a new Hash instance based on the specified algorithm. Currently
+supported algorithms are "sha1", "md5", "sha256", and "sha512".
 
 Note: MD5 and SHA1 are cryptographically weak and should not be used for
 security-sensitive applications.
