@@ -6,15 +6,12 @@ package largefile
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"iter"
 	"strconv"
-	"sync"
 	"time"
 
-	"cloudeng.io/algo/container/bitmap"
 	"cloudeng.io/net/ratecontrol"
 )
 
@@ -118,40 +115,6 @@ func (br ByteRange) Size() int64 {
 	return br.To - br.From + 1 // Inclusive range.
 }
 
-// ByteRange represents a collection of equally sized (apart from the last
-// range), contiguous, byte ranges that can be used to track which parts of
-// a file have or have not been 'processed', e.g downloaded, cached, uploaded
-// etc. The ranges are represented as a bitmap, where each bit corresponds to
-// a block of bytes of the specified size. The bitmap is used to efficiently
-// track which byte ranges are set (processed) and which are clear (not processed).
-type ByteRanges struct {
-	mu          sync.RWMutex
-	contentSize int64
-	bitmapSize  int
-	blockSize   int
-	bitmap      bitmap.T
-}
-
-// NewByteRanges creates a new ByteRanges instance with the specified content size
-// and block size. The content size is the total size of the file in bytes, and
-// the block size is the size of each byte range in bytes.
-func NewByteRanges(contentSize int64, blockSize int) *ByteRanges {
-	nb := NumBlocks(contentSize, blockSize)
-	return &ByteRanges{
-		contentSize: contentSize,
-		blockSize:   blockSize,
-		bitmapSize:  nb,
-		bitmap:      bitmap.New(nb),
-	}
-}
-
-// NumBlocks returns the number of blocks required to cover the byte ranges
-// represented by this ByteRanges instance.
-func (br *ByteRanges) NumBlocks() int {
-	// NumBlocks returns the number of blocks in the byte ranges.
-	return br.bitmapSize
-}
-
 // NumBlocks calculates the number of blocks required to cover the content size
 // given the specified block size. It returns the number of blocks needed.
 // If the content size is not a multiple of the block size, it adds an additional
@@ -164,180 +127,38 @@ func NumBlocks(contentSize int64, blockSize int) int {
 	return int(nb)
 }
 
-// MarshalJSON implements the json.Marshaler interface for ByteRanges.
-func (br *ByteRanges) MarshalJSON() ([]byte, error) {
-	jr, err := br.bitmap.MarshalJSON()
-	if err != nil {
-		return nil, err
+// Ranges returns an iterator for all byte ranges over the specified range
+// and block size. Each range is inclusive of the 'From' byte and the 'To' byte.
+// The ranges are generated in blocks of the specified size, with the last block
+// potentially being smaller than the specified block size.
+func Ranges(from, to int64, blockSize int) iter.Seq[ByteRange] {
+	size := to - from + 1
+	return func(yield func(ByteRange) bool) {
+		if blockSize <= 0 {
+			return
+		}
+		nb := NumBlocks(size, blockSize)
+		for i := range nb {
+			start := from + int64(i*blockSize)
+			end := min(start+int64(blockSize), to+1) - 1
+			if !yield(ByteRange{From: start, To: end}) {
+				return
+			}
+		}
 	}
-	ranges := struct {
-		ContentSize string          `json:"content_size"`
-		BlockSize   int             `json:"block_size"`
-		Ranges      json.RawMessage `json:"ranges"`
-	}{
-		ContentSize: strconv.FormatInt(br.contentSize, 10),
-		BlockSize:   br.blockSize,
-		Ranges:      jr,
-	}
-	return json.Marshal(ranges)
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface for ByteRanges.
-func (br *ByteRanges) UnmarshalJSON(data []byte) error {
-	var ranges struct {
-		ContentSize string          `json:"content_size"`
-		BlockSize   int             `json:"block_size"`
-		Ranges      json.RawMessage `json:"ranges"`
-	}
-	if err := json.Unmarshal(data, &ranges); err != nil {
-		return err
-	}
-	if ranges.ContentSize == "" || ranges.BlockSize <= 0 || len(ranges.Ranges) == 0 {
-		return fmt.Errorf("invalid content size, block size, or empty ranges")
-	}
-	var err error
-	br.contentSize, err = strconv.ParseInt(ranges.ContentSize, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid content size: %w", err)
-	}
-	br.blockSize = ranges.BlockSize
-	br.bitmapSize = NumBlocks(br.contentSize, ranges.BlockSize)
-	err = br.bitmap.UnmarshalJSON(ranges.Ranges)
-	if err != nil {
-		return fmt.Errorf("invalid bitmap data: %w", err)
-	}
-	return nil
-}
-
-func (br *ByteRanges) ContentLength() int64 {
-	return br.contentSize
-}
-
-func (br *ByteRanges) BlockSize() int {
-	return br.blockSize
-}
-
-func (br *ByteRanges) rangeForIndex(index int) ByteRange {
+// RangeForIndex returns the byte range for the specified block index in
+// a series of blocks of the specified size over the content size.
+// The range is inclusive of the 'From' byte and the 'To' byte.
+// If the index is out of bounds, it returns an invalid range with From and To set
+// to -1.
+func RangeForIndex(index int, contentSize int64, blockSize int) ByteRange {
 	// rangeForIndex returns the byte range for the specified block index.
-	if index < 0 || index >= br.bitmapSize {
-		return ByteRange{} // Invalid index.
+	if index < 0 || contentSize <= 0 || blockSize <= 0 {
+		return ByteRange{From: -1, To: -1} // Invalid index or sizes.
 	}
-	from := int64(index * br.blockSize)
-	to := min(from+int64(br.blockSize), br.contentSize) - 1
+	from := int64(index * blockSize)
+	to := min(from+int64(blockSize), contentSize) - 1
 	return ByteRange{From: from, To: to}
-}
-
-// NextClear returns the next clear byte range starting from 'start'.
-// It starts searching from the specified start index and returns the
-// index of the next outstanding range which can be used to continue
-// searching for the next outstanding range. The index will be -1
-// if there are no more outstanding ranges.
-//
-//	for start := NextClear(0, &br); start >= 0; start = NextClear(start, &br) {
-//	    // Do something with the byte range br.
-//	}
-func (br *ByteRanges) NextClear(start int, nbr *ByteRange) int {
-	br.mu.RLock()
-	defer br.mu.RUnlock()
-	i := br.bitmap.NextClear(start, br.bitmapSize)
-	if i < 0 {
-		*nbr = ByteRange{}
-		return -1
-	}
-	*nbr = br.rangeForIndex(i)
-	return i + 1
-}
-
-// NextSet returns the next set byte range starting from 'start' and
-// behaves similarly to NextClear.
-func (br *ByteRanges) NextSet(start int, nbr *ByteRange) int {
-	br.mu.RLock()
-	defer br.mu.RUnlock()
-	i := br.bitmap.NextSet(start, br.bitmapSize)
-	if i < 0 {
-		*nbr = ByteRange{}
-		return -1
-	}
-	*nbr = br.rangeForIndex(i)
-	return i + 1
-}
-
-// AllClear returns an iterator for all clear byte ranges starting from 'start'.
-// A read lock is held while iterating over the byte ranges, hence
-// calling any other method, such as Set, which takes a write lock will
-// block until the iteration is complete. Use NextClear if finer-grained
-// control is needed.
-func (br *ByteRanges) AllClear(start int) iter.Seq[ByteRange] {
-	return func(yield func(ByteRange) bool) {
-		br.mu.RLock()
-		defer br.mu.RUnlock()
-		for i := range br.bitmap.AllClear(start, br.bitmapSize) {
-			if !yield(br.rangeForIndex(i)) {
-				return
-			}
-		}
-	}
-}
-
-// AllSet returns an iterator for all set byte ranges starting from 'start'.
-// A read lock is held while iterating over the byte ranges, hence
-// calling any other method, such as Set, which takes a write lock will
-// block until the iteration is complete. Use NextSet if finer-grained
-// control is needed.
-func (br *ByteRanges) AllSet(start int) iter.Seq[ByteRange] {
-	return func(yield func(ByteRange) bool) {
-		br.mu.RLock()
-		defer br.mu.RUnlock()
-		for i := range br.bitmap.AllSet(start, br.bitmapSize) {
-			if !yield(br.rangeForIndex(i)) {
-				return
-			}
-		}
-	}
-}
-
-// Set marks the byte range for the specified position as set.
-// It has no effect if the position is out of bounds.
-func (br *ByteRanges) Set(pos int64) {
-	br.mu.Lock()
-	defer br.mu.Unlock()
-	// Set the byte range for the specified position.
-	if pos < 0 || pos >= br.contentSize {
-		return
-	}
-	blockIndex := int(pos) / br.blockSize
-	if blockIndex < 0 || blockIndex >= br.bitmapSize {
-		return
-	}
-	br.bitmap.Set(blockIndex)
-}
-
-// IsSet checks if the byte range for the specified position is set.
-func (br *ByteRanges) IsSet(pos int64) bool {
-	br.mu.RLock()
-	defer br.mu.RUnlock()
-	// Check if the position is out of bounds.
-	if pos < 0 || pos >= br.contentSize {
-		return false
-	}
-	blockIndex := int(pos) / br.blockSize
-	if blockIndex < 0 || blockIndex >= br.bitmapSize {
-		return false
-	}
-	return br.bitmap.IsSet(blockIndex)
-}
-
-// IsClear checks if the byte range for the specified position is clear.
-func (br *ByteRanges) IsClear(pos int64) bool {
-	br.mu.RLock()
-	defer br.mu.RUnlock()
-	// Check if the position is out of bounds.
-	if pos < 0 || pos >= br.contentSize {
-		return false
-	}
-	blockIndex := int(pos) / br.blockSize
-	if blockIndex < 0 || blockIndex >= br.bitmapSize {
-		return false
-	}
-	return !br.bitmap.IsSet(blockIndex)
 }

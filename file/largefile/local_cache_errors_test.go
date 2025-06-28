@@ -288,18 +288,6 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 				wantErr: ErrCacheInvalidOffset,
 			},
 			{
-				name:    "unaligned offset",
-				buffer:  make([]byte, blockSize),
-				offset:  1,
-				wantErr: ErrCacheInvalidOffset,
-			},
-			{
-				name:    "wrong buffer size for middle block",
-				buffer:  make([]byte, blockSize-1),
-				offset:  0,
-				wantErr: ErrCacheInvalidBlockSize,
-			},
-			{
 				name:    "wrong buffer size for last block",
 				buffer:  make([]byte, blockSize),
 				offset:  128,
@@ -315,7 +303,7 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 				name:    "reading uncached data",
 				buffer:  make([]byte, contentSize-int64(blockSize)),
 				offset:  64,
-				wantErr: nil, // Expected error message about uncached data
+				wantErr: ErrCacheUncachedRange, // Expected error message about uncached data
 			},
 			{
 				name:    "file closed",

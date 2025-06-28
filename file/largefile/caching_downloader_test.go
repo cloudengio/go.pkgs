@@ -82,6 +82,7 @@ type MockDownloadCache struct {
 	OutstandingFunc               func(int, *largefile.ByteRange) int
 	CompleteFunc                  func() bool
 	PutFunc                       func(data []byte, off int64) (int, error)
+	TailFunc                      func(context.Context) largefile.ByteRange // Not used by CachingDownlun
 
 	GetFunc    func(data []byte, off int64) (int, error) // Not used by CachingDownloader.Run
 	CachedFunc func(int, *largefile.ByteRange) int       // Not used by CachingDownloader.Run
@@ -153,6 +154,13 @@ func (m *MockDownloadCache) ResetCalls() {
 	m.mu.Unlock()
 }
 
+func (m *MockDownloadCache) Tail(ctx context.Context) largefile.ByteRange {
+	if m.TailFunc != nil {
+		return m.TailFunc(ctx)
+	}
+	return largefile.ByteRange{}
+}
+
 func newByteRangeSeq(ranges ...largefile.ByteRange) func(s int, b *largefile.ByteRange) int {
 	return func(s int, b *largefile.ByteRange) int {
 		if s >= len(ranges) {
@@ -194,13 +202,13 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	defaultBlocks := largefile.NumBlocks(defaultContentSize, defaultBlockSize)
 
 	defaultIncompleteState := largefile.DownloadState{
-		CachedBytes:      0,
-		CachedBlocks:     0,
-		DownloadedBytes:  0,
-		DownloadedBlocks: 0,
-		DownloadSize:     defaultContentSize,
-		DownloadBlocks:   int64(defaultBlocks),
-		Iterations:       1,
+		CachedOrStreamedBytes:  0,
+		CachedOrStreamedBlocks: 0,
+		DownloadedBytes:        0,
+		DownloadedBlocks:       0,
+		DownloadSize:           defaultContentSize,
+		DownloadBlocks:         int64(defaultBlocks),
+		Iterations:             1,
 	}
 	defaultConcurrency := 1
 
@@ -335,13 +343,13 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := largefile.DownloadState{
-			CachedBytes:      int64(defaultBlockSize),
-			CachedBlocks:     1,
-			DownloadedBytes:  int64(defaultBlockSize),
-			DownloadedBlocks: 1,
-			DownloadSize:     defaultContentSize,
-			DownloadBlocks:   int64(defaultBlocks),
-			Iterations:       1,
+			CachedOrStreamedBytes:  int64(defaultBlockSize),
+			CachedOrStreamedBlocks: 1,
+			DownloadedBytes:        int64(defaultBlockSize),
+			DownloadedBlocks:       1,
+			DownloadSize:           defaultContentSize,
+			DownloadBlocks:         int64(defaultBlocks),
+			Iterations:             1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
@@ -388,8 +396,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected context.DeadlineExceeded with concurrency 0 and outstanding blocks, got %v", err)
 		}
 		st.Duration = 0
-		st.CachedBlocks = 0
-		st.CachedBytes = 0
+		st.CachedOrStreamedBlocks = 0
+		st.CachedOrStreamedBytes = 0
 		st.DownloadedBlocks = 0
 		st.DownloadedBytes = 0
 		p := defaultIncompleteState
@@ -454,7 +462,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		// The values vary depending on when the context was cancelled,
 		// so we set them to 0.
 		st.DownloadedBlocks, st.DownloadedBytes = 0, 0
-		st.CachedBlocks, st.CachedBytes = 0, 0
+		st.CachedOrStreamedBlocks, st.CachedOrStreamedBytes = 0, 0
 		p := defaultIncompleteState
 		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
@@ -624,13 +632,13 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := largefile.DownloadState{
-			CachedBytes:      defaultContentSize,
-			CachedBlocks:     int64(defaultBlocks),
-			DownloadedBytes:  defaultContentSize,
-			DownloadedBlocks: int64(defaultBlocks),
-			DownloadSize:     defaultContentSize,
-			DownloadBlocks:   int64(defaultBlocks),
-			Iterations:       1,
+			CachedOrStreamedBytes:  defaultContentSize,
+			CachedOrStreamedBlocks: int64(defaultBlocks),
+			DownloadedBytes:        defaultContentSize,
+			DownloadedBlocks:       int64(defaultBlocks),
+			DownloadSize:           defaultContentSize,
+			DownloadBlocks:         int64(defaultBlocks),
+			Iterations:             1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
@@ -716,13 +724,13 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := largefile.DownloadState{
-			CachedBytes:      currentContentSize,
-			CachedBlocks:     int64(numBlocks),
-			DownloadedBytes:  currentContentSize,
-			DownloadedBlocks: int64(numBlocks),
-			DownloadSize:     currentContentSize,
-			DownloadBlocks:   int64(numBlocks),
-			Iterations:       1,
+			CachedOrStreamedBytes:  currentContentSize,
+			CachedOrStreamedBlocks: int64(numBlocks),
+			DownloadedBytes:        currentContentSize,
+			DownloadedBlocks:       int64(numBlocks),
+			DownloadSize:           currentContentSize,
+			DownloadBlocks:         int64(numBlocks),
+			Iterations:             1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
@@ -818,13 +826,13 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := largefile.DownloadState{
-			CachedBytes:      currentContentSize,
-			CachedBlocks:     int64(totalBlocks),
-			DownloadedBytes:  currentContentSize,
-			DownloadedBlocks: int64(totalBlocks),
-			DownloadSize:     currentContentSize,
-			DownloadBlocks:   int64(totalBlocks),
-			Iterations:       1,
+			CachedOrStreamedBytes:  currentContentSize,
+			CachedOrStreamedBlocks: int64(totalBlocks),
+			DownloadedBytes:        currentContentSize,
+			DownloadedBlocks:       int64(totalBlocks),
+			DownloadSize:           currentContentSize,
+			DownloadBlocks:         int64(totalBlocks),
+			Iterations:             1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
