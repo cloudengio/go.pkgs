@@ -7,12 +7,15 @@ package localfs
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/file"
+	"cloudeng.io/file/largefile"
 )
 
 // T represents the local filesystem. It implements FS, ObjectFS
@@ -136,4 +139,78 @@ func (f *T) DeleteAll(_ context.Context, path string) error {
 
 func (f *T) EnsurePrefix(_ context.Context, path string, perm fs.FileMode) error {
 	return os.MkdirAll(path, perm)
+}
+
+type LargeFile struct {
+	f         *os.File
+	blockSize int
+	size      int64
+	digest    digests.Hash
+}
+
+const DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
+
+func NewLargeFile(filename string, blockSize int, digest digests.Hash) (*LargeFile, error) {
+	if blockSize <= 0 {
+		blockSize = DefaultLargeFileBlockSize
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	if info.IsDir() {
+		f.Close()
+		return nil, fs.ErrInvalid
+	}
+	size := info.Size()
+	return &LargeFile{
+		f:         f,
+		blockSize: blockSize,
+		size:      size,
+		digest:    digest,
+	}, nil
+}
+
+type noRetry struct{}
+
+func (noRetry) IsRetryable() bool {
+	return false
+}
+
+func (noRetry) BackoffDuration() (bool, time.Duration) {
+	return false, 0
+}
+
+func (lf *LargeFile) Name() string {
+	return lf.f.Name()
+}
+
+func (lf *LargeFile) ContentLengthAndBlockSize() (int64, int) {
+	return lf.size, lf.blockSize
+}
+
+func (lf *LargeFile) Digest() digests.Hash {
+	return lf.digest
+}
+
+func (lf *LargeFile) GetReader(ctx context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
+	return reader{f: lf.f, at: from}, noRetry{}, nil
+}
+
+type reader struct {
+	f  *os.File
+	at int64
+}
+
+func (r reader) Read(p []byte) (int, error) {
+	return r.f.ReadAt(p, r.at)
+}
+
+func (r reader) Close() error {
+	return nil
 }

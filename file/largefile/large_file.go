@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/net/ratecontrol"
 )
 
@@ -82,11 +83,10 @@ type Reader interface {
 	// and the preferred block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
 
-	// Digest returns the digest of the file, if available, the
-	// format defined by RFC 9530's Repr-Digest header, eg.
-	// Repr-Digest: sha-256=:d435Qo+nKZ+gLcUHn7GQtQ72hiBVAgqoLsZnZPiTGPk=:
-	// An empty string is returned if no digest is available.
-	Digest() string
+	// Digest returns an instance of digests.Hash that can be used to
+	// compute and validate the digest of the file.
+	// If the file does not have a digest digest.IsSet() will return false.
+	Digest() digests.Hash
 
 	// GetReader retrieves a byte range from the file and returns
 	// a reader that can be used to access that data range. In addition to the

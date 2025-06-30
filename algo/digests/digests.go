@@ -26,6 +26,13 @@ type Hash struct {
 	Digest []byte
 }
 
+const (
+	MD5    = "md5"
+	SHA1   = "sha1"
+	SHA256 = "sha256"
+	SHA512 = "sha512"
+)
+
 // New creates a new Hash instance based on the specified algorithm.
 // Currently supported algorithms are "sha1", "md5", "sha256", and "sha512".
 //
@@ -55,9 +62,16 @@ func ToHex(digest []byte) string {
 	return hex.EncodeToString(digest)
 }
 
+func (h Hash) IsSet() bool {
+	return h.Hash != nil && len(h.Digest) > 0
+}
+
 func IsSupported(algo string) bool {
 	switch algo {
 	case "sha1", "md5", "sha256", "sha512":
+		return true
+	case "sha-1", "sha-256", "sha-512":
+		// Allow for hyphenated versions for compatibility with some headers.
 		return true
 	default:
 		return false
@@ -70,13 +84,13 @@ func Supported() []string {
 
 func newHashInstance(algo string) hash.Hash {
 	switch algo {
-	case "sha1":
+	case "sha1", "sha-1":
 		return sha1.New() //nolint:gosec // G401: Use of weak cryptographic primitive
 	case "md5":
 		return md5.New() //nolint:gosec // G401: Use of weak cryptographic primitive
-	case "sha256":
+	case "sha256", "sha-256":
 		return sha256.New()
-	case "sha512":
+	case "sha512", "sha-512":
 		return sha512.New()
 	default:
 		return nil
@@ -85,7 +99,7 @@ func newHashInstance(algo string) hash.Hash {
 
 // Validate checks if the hash instance's computed sum matches the expected digest.
 func (h Hash) Validate() bool {
-	return slices.Equal(h.Sum(nil), h.Digest)
+	return h.IsSet() && slices.Equal(h.Sum(nil), h.Digest)
 }
 
 // ParseHex decodes a digest specification of the form <algo>=<hex-digits>.

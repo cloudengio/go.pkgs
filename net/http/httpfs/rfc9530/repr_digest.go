@@ -25,14 +25,14 @@ const ReprDigestHeader = "Repr-Digest"
 // The digest value is the raw base64 string from the header.
 func ParseReprDigest(headerValue string) (map[string]string, error) {
 	digests := make(map[string]string)
-	parts := strings.Split(headerValue, ",")
+	parts := strings.SplitSeq(headerValue, ",")
 
-	for _, part := range parts {
+	for part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		algo, base64Digest, err := ParseAlgoDigest(part)
+		algo, base64Digest, _, err := ParseAlgoDigest(part)
 		if err != nil {
 			return nil, err
 		}
@@ -46,34 +46,35 @@ func ParseReprDigest(headerValue string) (map[string]string, error) {
 	return digests, nil
 }
 
-func ParseAlgoDigest(value string) (algo, base64Digest string, err error) {
+func ParseAlgoDigest(value string) (algo, base64Digest string, bytes []byte, err error) {
 	// Split algorithm from the digest value on the first '=' character.
 	algo, digest, found := strings.Cut(value, "=")
 	if !found {
-		return "", "", fmt.Errorf("malformed digest value: %q; missing '=' separator", value)
+		return "", "", nil, fmt.Errorf("malformed digest value: %q; missing '=' separator", value)
 	}
 	algo = strings.TrimSpace(strings.ToLower(algo))
 	if algo == "" {
-		return "", "", fmt.Errorf("malformed digest value: %q; algorithm is missing", value)
+		return "", "", nil, fmt.Errorf("malformed digest value: %q; algorithm is missing", value)
 	}
 	digest = strings.TrimSpace(digest)
 	if len(digest) < 2 {
 		// likely missing the the = after the algo, and we've split on =
 		// padding of the checksum at the end of the digest value
-		return "", "", fmt.Errorf("malformed digest value: %q; digest value is too short", value)
+		return "", "", nil, fmt.Errorf("malformed digest value: %q; digest value is too short", value)
 	}
 	// The digest must be enclosed in colons
 	if digest[0] != ':' || digest[len(digest)-1] != ':' {
-		return "", "", fmt.Errorf("malformed digest value for algorithm %q: missing enclosing colons", algo)
+		return "", "", nil, fmt.Errorf("malformed digest value for algorithm %q: missing enclosing colons", algo)
 	}
 	base64Digest = digest[1 : len(digest)-1]
 
 	// Optional: Validate that the digest is valid Base64
-	if _, err := base64.StdEncoding.DecodeString(base64Digest); err != nil {
-		return "", "", fmt.Errorf("invalid base64 value for algorithm %q: %w", algo, err)
+	decoded, err := base64.StdEncoding.DecodeString(base64Digest)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("invalid base64 value for algorithm %q: %w", algo, err)
 	}
 
-	return algo, base64Digest, nil
+	return algo, base64Digest, decoded, nil
 }
 
 // AsHeaderValue formats the algorithm and base64 digest into a Repr-Digest header value.

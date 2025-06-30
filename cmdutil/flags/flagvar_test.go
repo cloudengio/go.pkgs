@@ -607,3 +607,22 @@ func TestExplicitValueAssignment(t *testing.T) {
 	assertSet(sm, &s0.H, "str")
 	assertSet(sm, &s0.V, "some-var")
 }
+
+func TestWithDefault(t *testing.T) {
+	// Test withDefault function.
+	assert := func(got, want any) {
+		_, file, line, _ := runtime.Caller(1)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%v:%v: got %v, want %v", filepath.Base(file), line, got, want)
+		}
+	}
+
+	assert(flags.WithDefault("", "default"), "default")
+	assert(flags.WithDefault("a", "default"), "a")
+	assert(flags.WithDefault("a", ""), "a")
+	assert(flags.WithDefault("a", "b"), "a")
+	assert(flags.WithDefault("", ""), "")
+	assert(flags.WithDefault(0, 1), 1)
+	assert(flags.WithDefault(2, 1), 2)
+	assert(flags.WithDefault(int64(0), 2), int64(2))
+}

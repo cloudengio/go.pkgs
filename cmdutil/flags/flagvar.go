@@ -435,3 +435,14 @@ func (sm *SetMap) IsSet(field interface{}) (string, bool) {
 	v, ok := sm.set[reflect.ValueOf(field).Pointer()]
 	return v, ok
 }
+
+// WithDefault returns a value if it is not the zero value for its type, otherwise
+// it returns the second value. This is useful for command line flags where
+// a default value should be used if the user does not provide one.
+func WithDefault[T comparable](a, b T) T {
+	var zero T
+	if a != zero {
+		return a
+	}
+	return b
+}

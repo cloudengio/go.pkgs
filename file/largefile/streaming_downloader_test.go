@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -45,11 +43,6 @@ func (m *mockStreamingReader) setOrder(reads ...int) chan struct{} {
 		m.scheduleAt[int64(r*m.blockSize)] = syncChain{before: prev, after: nCh}
 		prev = nCh
 	}
-	keys := slices.Sorted(maps.Keys(m.scheduleAt))
-	for _, k := range keys {
-		v := m.scheduleAt[k]
-		fmt.Printf("Scheduled read at %d: before %v, after %v\n", k, v.before, v.after)
-	}
 	return first
 }
 
@@ -77,7 +70,7 @@ func (m *mockStreamingReader) ContentLengthAndBlockSize() (int64, int) {
 	return int64(len(m.data)), m.blockSize
 }
 
-func (m *mockStreamingReader) Digest() string { return "" }
+func (m *mockStreamingReader) Digest() digests.Hash { return digests.Hash{} }
 
 func (m *mockStreamingReader) GetReader(ctx context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
 	m.mu.Lock()

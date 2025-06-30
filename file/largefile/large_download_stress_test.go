@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/errors"
 	"cloudeng.io/file/diskusage"
 	"cloudeng.io/file/largefile"
@@ -42,8 +43,8 @@ func (m *mockLargeFile) Name() string {
 func (m *mockLargeFile) ContentLengthAndBlockSize() (int64, int) {
 	return m.size, m.blockSize // Mock implementation, returns size and block size
 }
-func (m *mockLargeFile) Digest() string {
-	return ""
+func (m *mockLargeFile) Digest() digests.Hash {
+	return digests.Hash{}
 }
 
 type retryResponse struct{}
@@ -188,11 +189,13 @@ func TestCacheStressTest(t *testing.T) {
 
 			t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFilePath, cSize, cBblockSize)
 
-			dl := largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
+			dl, err := largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
 				cache,
 				largefile.WithDownloadRateController(&jitterRateLimiter{}),
 				largefile.WithDownloadConcurrency(concurrency))
-
+			if err != nil {
+				t.Fatalf("NewCachingDownloader failed: %v", err)
+			}
 			st, err := dl.Run(ctx)
 			if err != nil {
 				t.Fatalf("Run failed: %v", err)
@@ -228,10 +231,13 @@ func TestCacheStressTest(t *testing.T) {
 			}
 
 			// Make sure cache is used.
-			dl = largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
+			dl, err = largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
 				cache,
 				largefile.WithDownloadRateController(&jitterRateLimiter{}),
 				largefile.WithDownloadConcurrency(concurrency))
+			if err != nil {
+				t.Fatalf("NewCachingDownloader failed: %v", err)
+			}
 			st, err = dl.Run(ctx)
 			if err != nil {
 				t.Fatalf("Run failed: %v", err)
@@ -296,12 +302,14 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	for i, failRatio := range []int{9, 4, 0} {
 		mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: failRatio}
 
-		dl := largefile.NewCachingDownloader(mf,
+		dl, err := largefile.NewCachingDownloader(mf,
 			cache,
 			largefile.WithDownloadLogger(logger),
 			largefile.WithDownloadRateController(&jitterRateLimiter{}),
 			largefile.WithDownloadConcurrency(concurrency))
-
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		t.Logf("Run %d completed with status: %+v\n", i, st)
 		if err != nil {
@@ -393,8 +401,10 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 
 	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: failRatio, withRetry: withRetry}
 
-	dl := largefile.NewCachingDownloader(mf, cache, opts...)
-
+	dl, err := largefile.NewCachingDownloader(mf, cache, opts...)
+	if err != nil {
+		t.Fatalf("NewCachingDownloader failed: %v", err)
+	}
 	st, err := dl.Run(ctx)
 	t.Logf("Run completed with status: %+v\n", st)
 	if err != nil {
@@ -520,11 +530,13 @@ func TestCacheRetriesAndRunToCompletion(t *testing.T) {
 
 	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: 10} // all retries will fail
 
-	dl := largefile.NewCachingDownloader(mf, cache,
+	dl, err := largefile.NewCachingDownloader(mf, cache,
 		largefile.WithDownloadConcurrency(concurrency),
 		largefile.WithDownloadLogger(logger),
 		largefile.WithDownloadWaitForCompletion(true))
-
+	if err != nil {
+		t.Fatalf("NewCachingDownloader failed: %v", err)
+	}
 	st, err = dl.Run(ctx)
 	if err == nil {
 		t.Fatalf("expected error due to context cancellation, got nil")

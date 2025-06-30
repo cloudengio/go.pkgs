@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/file/largefile"
 	"cloudeng.io/net/ratecontrol"
 )
@@ -63,9 +64,9 @@ func (m *MockReader) GetReader(ctx context.Context, from, to int64) (rd io.ReadC
 	return nil, &noRetryResponse{}, errors.New("MockReader.GetReaderFunc not implemented")
 }
 
-func (m *MockReader) Digest() string {
+func (m *MockReader) Digest() digests.Hash {
 	// Default implementation returns no digest
-	return ""
+	return digests.Hash{}
 }
 
 // ResetCalls resets the GetReaderCalls slice to allow for fresh tests
@@ -252,16 +253,12 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 
 	t.Run("cache not set", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
-		dl := largefile.NewCachingDownloader(mockReader, nil, defaultOpts(defaultConcurrency)...)
-		st, err := dl.Run(ctx)
+		_, err := largefile.NewCachingDownloader(mockReader, nil, defaultOpts(defaultConcurrency)...)
 		if err == nil {
 			t.Fatal("expected error when cache is not set, got nil")
 		}
 		if !strings.Contains(err.Error(), "cache is not set") {
 			t.Errorf("expected error message to contain 'cache is not set', got %q", err.Error())
-		}
-		if got, want := st, (largefile.DownloadStatus{}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
 
@@ -271,16 +268,12 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.ContentLengthAndBlockSizeFunc = func() (size int64, blockSize int) {
 			return defaultContentSize + 10, defaultBlockSize
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
-		st, err := dl.Run(ctx)
+		_, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
 		if err == nil {
 			t.Fatal("expected error for cache size mismatch, got nil")
 		}
 		if !strings.Contains(err.Error(), "cache size") || !strings.Contains(err.Error(), "does not match file size") {
 			t.Errorf("expected error message for size mismatch, got %q", err.Error())
-		}
-		if got, want := st, (largefile.DownloadStatus{}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
 
@@ -290,7 +283,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.CompleteFunc = func() bool {
 			return true
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run failed for no outstanding blocks: %v", err)
@@ -319,7 +315,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return true
 		}
 
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run failed for one block: %v", err)
@@ -362,7 +361,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.CompleteFunc = func() bool {
 			return true
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(0)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(0)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run with concurrency 0 and no outstanding blocks failed: %v", err)
@@ -383,9 +385,11 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
 			return newByteRangeSeq(firstRange)(s, b)
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache,
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache,
 			largefile.WithDownloadRateController(&slowRateLimiter{}))
-
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		runCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
 
@@ -442,8 +446,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			}
 		}
 
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(currentConcurrency)...)
-
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(currentConcurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			cancel()
@@ -480,7 +486,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockReader.GetReaderFunc = func(_ context.Context, _, _ int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error) {
 			return nil, &noRetryResponse{}, fetchErr
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err == nil {
 			t.Fatal("expected error from fetcher, got nil")
@@ -510,7 +519,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.PutFunc = func(_ []byte, _ int64) (int, error) {
 			return 0, putErr
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(defaultConcurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err == nil {
 			t.Fatal("expected error from cache.Put, got nil")
@@ -538,8 +550,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
 			return newByteRangeSeq(firstRange)(s, b)
 		}
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, largefile.WithDownloadRateController(&slowRateLimiter{}))
-
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, largefile.WithDownloadRateController(&slowRateLimiter{}))
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		runCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
 
@@ -593,7 +607,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			close(ch)
 		}()
 
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, optsWithProgress...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, optsWithProgress...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run failed: %v", err)
@@ -690,7 +707,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return newByteRangeSeq(expectedRanges...)(s, b)
 		}
 
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run failed for multiple blocks: %v", err)
@@ -783,7 +803,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return newByteRangeSeq(expectedRanges...)(s, b)
 		}
 
-		dl := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
 		st, err := dl.Run(ctx)
 		if err != nil {
 			t.Fatalf("Run failed for non-multiple block size file: %v", err)

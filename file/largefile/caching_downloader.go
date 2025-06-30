@@ -21,16 +21,26 @@ type CachingDownloader struct {
 }
 
 // NewCachingDownloader creates a new CachingDownloader instance.
-func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOption) *CachingDownloader {
-	d := &CachingDownloader{
+func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOption) (*CachingDownloader, error) {
+	dl := &CachingDownloader{
 		cache: cache,
 	}
 	var options downloadOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
-	d.downloader = newDownloader(file, options)
-	return d
+	dl.downloader = newDownloader(file, options)
+	if dl.cache == nil {
+		return nil, fmt.Errorf("cache is not set for CachingDownloader")
+	}
+	if dl.hash.Algo != "" {
+		return nil, fmt.Errorf("digest calculation is not supported for CachingDownloader")
+	}
+	csize, cblock := dl.cache.ContentLengthAndBlockSize()
+	if csize != dl.size || cblock != dl.blockSize {
+		return nil, fmt.Errorf("cache size (%d) or block size (%d) does not match file size (%d) or block size (%d)", csize, cblock, dl.size, dl.blockSize)
+	}
+	return dl, nil
 }
 
 // DownloadStatus holds the status for a completed download operation, including
@@ -46,17 +56,6 @@ type DownloadStatus struct {
 // Run executes the downloaded process. If the downloader encounters any errors
 // it will return an
 func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
-	if dl.cache == nil {
-		return DownloadStatus{}, fmt.Errorf("cache is not set for CachingDownloader")
-	}
-	if dl.hash.Algo != "" {
-		return DownloadStatus{}, fmt.Errorf("digest calculation is not supported for CachingDownloader")
-	}
-
-	csize, cblock := dl.cache.ContentLengthAndBlockSize()
-	if csize != dl.size || cblock != dl.blockSize {
-		return DownloadStatus{}, fmt.Errorf("cache size (%d) or block size (%d) does not match file size (%d) or block size (%d)", csize, cblock, dl.size, dl.blockSize)
-	}
 
 	cachedBytes, cachedBlocks := dl.cache.CachedBytesAndBlocks()
 	dl.progress.incrementCacheOrStream(cachedBytes, cachedBlocks)

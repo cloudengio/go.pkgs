@@ -6,11 +6,13 @@ package localfs_test
 
 import (
 	"context"
+	"io"
 	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/file"
 	"cloudeng.io/file/localfs"
 )
@@ -80,5 +82,63 @@ func TestSetXAttr(t *testing.T) {
 
 	if got, want := fi.Sys(), x; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestLargeFile(t *testing.T) {
+	ctx := context.Background()
+	tmpdir := t.TempDir()
+	fs := localfs.New()
+	name := fs.Join(tmpdir, "largefile")
+	content := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+	if err := os.WriteFile(name, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	blockSize := 10
+	digest, _ := digests.New("sha-256", []byte("test-digest"))
+	lf, err := localfs.NewLargeFile(name, blockSize, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := lf.Name(), name; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	size, bs := lf.ContentLengthAndBlockSize()
+	if got, want := size, int64(len(content)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := bs, blockSize; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	if got, want := lf.Digest(), digest; got.Algo != want.Algo {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Test GetReader
+	from, to := int64(5), int64(15)
+	rd, retry, err := lf.GetReader(ctx, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.IsRetryable() {
+		t.Errorf("expected not to be retryable")
+	}
+
+	// The returned reader is not limited by 'to', so use a LimitReader.
+	readContent, err := io.ReadAll(io.LimitReader(rd, to-from+1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := string(readContent), string(content[from:to+1]); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	if err := rd.Close(); err != nil {
+		t.Errorf("close failed: %v", err)
 	}
 }

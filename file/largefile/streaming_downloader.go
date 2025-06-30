@@ -54,9 +54,8 @@ func NewStreamingDownloader(file Reader, opts ...DownloadOption) *StreamingDownl
 		opt(&options)
 	}
 	dl.downloader = newDownloader(file, options)
-	dl.responseCh = make(chan response, dl.concurrency) // Buffered channel for responses from fetchers.
-	dl.requestCh = make(chan request, dl.concurrency)   // Buffered channel for requests to fetch.
-	//d.requeueCh = make(chan request, d.concurrency)    // Channel for re-queued requests.
+	dl.responseCh = make(chan response, dl.concurrency)   // Buffered channel for responses from fetchers.
+	dl.requestCh = make(chan request, dl.concurrency)     // Buffered channel for requests to fetch.
 	dl.pipeRd, dl.pipeWr = io.Pipe()                      // Create a pipe for streaming data.
 	dl.outstanding = NewByteRanges(dl.size, dl.blockSize) // Create byte ranges for downloading.
 
@@ -71,7 +70,6 @@ func NewStreamingDownloader(file Reader, opts ...DownloadOption) *StreamingDownl
 
 func (dl *StreamingDownloader) Run(ctx context.Context) (StreamingStatus, error) {
 	start := time.Now()
-
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, dl.concurrency+1) // +1 for the generator goroutine
 	g.Go(func() error {

@@ -37,7 +37,7 @@ func (tf *Time) String() string {
 }
 
 // Value implements flag.Getter.
-func (tf *Time) Get() interface{} {
+func (tf *Time) Get() any {
 	return tf.value
 }
 
