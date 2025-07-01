@@ -87,6 +87,72 @@ type DoubleID[T any] *doubleItem[T]
 ```
 
 
+### Type Single
+```go
+type Single[T any] struct {
+	// contains filtered or unexported fields
+}
+```
+Double provides a doubly linked list.
+
+### Functions
+
+```go
+func NewSingle[T any]() *Single[T]
+```
+
+
+
+### Methods
+
+```go
+func (dl *Single[T]) Append(val T) SingleID[T]
+```
+
+
+```go
+func (dl *Single[T]) Forward() iter.Seq[T]
+```
+
+
+```go
+func (dl *Single[T]) Head() T
+```
+
+
+```go
+func (dl *Single[T]) Len() int
+```
+
+
+```go
+func (dl *Single[T]) Prepend(val T) SingleID[T]
+```
+
+
+```go
+func (dl *Single[T]) Remove(val T, cmp func(a, b T) bool)
+```
+
+
+```go
+func (dl *Single[T]) RemoveItem(id SingleID[T])
+```
+
+
+```go
+func (dl *Single[T]) Reset()
+```
+
+
+
+
+### Type SingleID
+```go
+type SingleID[T any] *singleItem[T]
+```
+
+
 
 
 
