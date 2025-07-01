@@ -119,7 +119,7 @@ func TestGenericHeap_String(t *testing.T) {
 	// Verify the result is sorted
 	expected := []string{"apple", "banana", "cherry", "date", "elderberry"}
 	for i, v := range result {
-		if v != expected[i] {
+		if !reflect.DeepEqual(v, expected[i]) {
 			t.Errorf("heap result[%d] = %s, want %s", i, v, expected[i])
 		}
 	}
@@ -149,7 +149,7 @@ func TestGenericHeap_CustomType(t *testing.T) {
 	// Verify ages are in ascending order
 	expectedAges := []int{20, 25, 30, 35, 40}
 	for i, age := range ages {
-		if age != expectedAges[i] {
+		if !reflect.DeepEqual(age, expectedAges[i]) {
 			t.Errorf("person age[%d] = %d, want %d", i, age, expectedAges[i])
 		}
 	}
