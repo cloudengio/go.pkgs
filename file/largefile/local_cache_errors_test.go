@@ -4,12 +4,109 @@
 package largefile
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func newBlock(size, start int) []byte {
+	buf := make([]byte, size)
+	for i := range buf {
+		buf[i] = byte(start + i)
+	}
+	return buf
+}
+
+func writeAt(t *testing.T, cache DownloadCache, off int64, buf []byte) {
+	t.Helper()
+	n, err := cache.WriteAt(buf, off)
+	if err != nil {
+		t.Fatalf("WriteAt failed: %v", err)
+	}
+	if got, want := int64(n), int64(len(buf)); got != want {
+		t.Errorf("WriteAt() = %v, want %v", got, want)
+	}
+}
+
+func readAt(t *testing.T, cache DownloadCache, off int64, expecting []byte) {
+	t.Helper()
+	buf := make([]byte, len(expecting))
+	n, err := cache.ReadAt(buf, off)
+	if err != nil {
+		t.Fatalf("ReadAt failed: %v", err)
+	}
+	if got, want := int64(n), int64(len(expecting)); got != want {
+		t.Errorf("ReadAt() = %v, want %v", got, want)
+	}
+	if got, want := buf, expecting; !bytes.Equal(got, want) {
+		t.Errorf("ReadAt() = %v, want %v", got, want)
+	}
+}
+
+func readAtWithError(t *testing.T, cache DownloadCache, off int64, size int, expectedError error) {
+	t.Helper()
+	buf := make([]byte, size)
+	n, err := cache.ReadAt(buf, off)
+	if err == nil {
+		t.Fatalf("ReadAt should have failed: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("ReadAt() = %v, want 0", n)
+	}
+	if !errors.Is(err, expectedError) {
+		t.Errorf("ReadAt() = %v, want %v", err, expectedError)
+	}
+}
+
+func TestCacheReadOffsetErrors(t *testing.T) {
+	ctx := context.Background()
+	const contentSize int64 = 57
+	const blockSize int = 8
+	tmpDir := t.TempDir()
+	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
+	indexFilePath := filepath.Join(tmpDir, "cache.idx")
+
+	err := CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
+	if err != nil {
+		t.Fatalf("CreateNewFilesForCache failed: %v", err)
+	}
+	cacheFile, indexFile, err := OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("NewLocalDownloadCache failed: %v", err)
+	}
+	defer cache.Close()
+
+	writeAt(t, cache, 8, newBlock(blockSize, 8))
+	writeAt(t, cache, 24, newBlock(blockSize, 24))
+	writeAt(t, cache, 32, newBlock(blockSize, 32))
+	writeAt(t, cache, 48, newBlock(blockSize, 48))
+	writeAt(t, cache, 56, newBlock(1, 56))
+
+	readAt(t, cache, 8, newBlock(blockSize, 8))
+	readAt(t, cache, 24, newBlock(blockSize, 24))
+	readAt(t, cache, 32, newBlock(blockSize, 32))
+	readAt(t, cache, 48, newBlock(blockSize, 48))
+
+	readAt(t, cache, 24, newBlock(16, 24))
+	readAt(t, cache, 24, newBlock(12, 24))
+	readAt(t, cache, 24, newBlock(15, 24))
+	readAt(t, cache, 48, newBlock(9, 48))
+	readAt(t, cache, 50, newBlock(7, 50))
+
+	readAtWithError(t, cache, 0, 8, ErrCacheUncachedRange)
+	readAtWithError(t, cache, 7, 8, ErrCacheUncachedRange)
+	readAtWithError(t, cache, 8, 9, ErrCacheUncachedRange)
+	readAtWithError(t, cache, 24, 17, ErrCacheUncachedRange)
+}
+
+// GenAI: gemini 2.5 wrote these tests.
 
 func TestLocalDownloadSmallerThanBlockSizeFile(t *testing.T) {
 	ctx := context.Background()

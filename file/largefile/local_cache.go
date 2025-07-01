@@ -52,13 +52,15 @@ type DownloadCache interface {
 	Complete() bool
 
 	// WriteAt writes at most blocksize bytes starting at the specified offset.
-	// It returns an error if data is not exactly blocksize bytes long, unless
-	// the offset is at the end of the file, in which case it must
-	// be (content length % blocksize) bytes long.
+	// Offset must be aligned with the block boundaries. It returns an error if
+	// data is not exactly blocksize bytes long, unless the offset is at the
+	// end of the file, in which case it must be (content length % blocksize)
+	// bytes long.
 	WriteAt(data []byte, off int64) (int, error)
 
 	// ReadAt reads at most len(data) bytes starting at the specified offset.
 	// It returns an error if any of the data to be read is not already cached.
+	// The offset need not be aligned with the block boundaries.
 	ReadAt(data []byte, off int64) (int, error)
 }
 
@@ -333,8 +335,8 @@ func (c *LocalDownloadCache) validateOffset(off, size int64) error {
 	if c.indexStore == nil {
 		return fmt.Errorf("index store is not initialized: %w", ErrCacheInternalError)
 	}
-	if off < 0 || off > c.lastBlockOffset {
-		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.lastBlockOffset, ErrCacheInvalidOffset)
+	if off < 0 || off >= c.indexStore.contentSize {
+		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.indexStore.contentSize, ErrCacheInvalidOffset)
 	}
 	if off+size > c.indexStore.contentSize {
 		return fmt.Errorf("offset %d with size %d exceeds content size %d: %w", off, size, c.indexStore.contentSize, ErrCacheInvalidBlockSize)
