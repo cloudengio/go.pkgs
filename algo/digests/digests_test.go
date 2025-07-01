@@ -248,3 +248,31 @@ func TestParseHex(t *testing.T) {
 		})
 	}
 }
+
+func TestEmptyDigest(t *testing.T) {
+	// Test creating a Hash with an empty digest
+	h := digests.Hash{}
+	if h.IsSet() {
+		t.Error("Expected IsSet() to return false")
+	}
+	if h.Validate() {
+		t.Error("Expected Validate() to return false for a Hash with an empty digest")
+	}
+	h, _ = digests.New("sha256", nil)
+	if h.IsSet() {
+		t.Error("Expected IsSet() to return false")
+	}
+	if h.Validate() {
+		t.Error("Expected Validate() to return false for a Hash with an empty digest")
+	}
+	h = digests.Hash{
+		Hash:   nil,
+		Digest: []byte{'a'},
+	}
+	if h.IsSet() {
+		t.Error("Expected IsSet() to return false")
+	}
+	if h.Validate() {
+		t.Error("Expected Validate() to return false for a Hash with an empty digest")
+	}
+}

@@ -8,6 +8,18 @@ Package digests provides a simple interface to create and validate digests
 using various algorithms such as SHA1, MD5, SHA256, and SHA512. Support is
 provided for working with digests in both base64 and hex formats.
 
+## Constants
+### MD5, SHA1, SHA256, SHA512
+```go
+MD5 = "md5"
+SHA1 = "sha1"
+SHA256 = "sha256"
+SHA512 = "sha512"
+
+```
+
+
+
 ## Functions
 ### Func FromBase64
 ```go
@@ -71,6 +83,11 @@ security-sensitive applications.
 
 
 ### Methods
+
+```go
+func (h Hash) IsSet() bool
+```
+
 
 ```go
 func (h Hash) Validate() bool
