@@ -49,7 +49,7 @@ func (h *Heap[T]) Pop() T {
 }
 
 // Remove is like heap.Remove.
-func (h *Heap[T]) Remove(i int) any {
+func (h *Heap[T]) Remove(i int) T {
 	n := len(*h) - 1
 	if n != i {
 		swap(*h, i, n)
@@ -109,9 +109,10 @@ func less[T Value[T]](h []T, i, j int) bool {
 }
 
 func pop[T Value[T]](h []T) ([]T, T) {
-	old := h
-	n := len(old)
-	x := old[n-1]
-	h = old[0 : n-1]
+	n := len(h) - 1
+	x := h[n]
+	var zero T
+	h[n] = zero // Prevent memory leak
+	h = h[:n]
 	return h, x
 }

@@ -50,7 +50,7 @@ Push is like heap.Push.
 
 
 ```go
-func (h *Heap[T]) Remove(i int) any
+func (h *Heap[T]) Remove(i int) T
 ```
 Remove is like heap.Remove.
 
