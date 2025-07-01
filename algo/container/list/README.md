@@ -87,6 +87,81 @@ type DoubleID[T any] *doubleItem[T]
 ```
 
 
+### Type Single
+```go
+type Single[T any] struct {
+	// contains filtered or unexported fields
+}
+```
+Single provides a singly linked list.
+
+### Functions
+
+```go
+func NewSingle[T any]() *Single[T]
+```
+NewSingle creates a new instance of Single[T] with an initial empty state.
+
+
+
+### Methods
+
+```go
+func (sl *Single[T]) Append(val T) SingleID[T]
+```
+Append adds a new item to the end of the list and returns its ID.
+
+
+```go
+func (sl *Single[T]) Forward() iter.Seq[T]
+```
+Forward returns an iterator over the list.
+
+
+```go
+func (sl *Single[T]) Head() T
+```
+Head returns the first item in the list.
+
+
+```go
+func (sl *Single[T]) Len() int
+```
+Len returns the number of items in the singly linked list.
+
+
+```go
+func (sl *Single[T]) Prepend(val T) SingleID[T]
+```
+Prepend adds a new item to the beginning of the list and returns its ID.
+
+
+```go
+func (sl *Single[T]) Remove(val T, cmp func(a, b T) bool)
+```
+Remove removes the first occurrence of the specified value from the list.
+
+
+```go
+func (sl *Single[T]) RemoveItem(id SingleID[T])
+```
+RemoveItem removes the item with the specified ID from the list.
+
+
+```go
+func (sl *Single[T]) Reset()
+```
+Reset resets the singly linked list to its initial empty state.
+
+
+
+
+### Type SingleID
+```go
+type SingleID[T any] *singleItem[T]
+```
+
+
 
 
 

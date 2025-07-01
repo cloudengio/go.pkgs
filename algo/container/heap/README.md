@@ -5,7 +5,58 @@ import cloudeng.io/algo/container/heap
 ```
 
 
+## Functions
+### Func Fix
+```go
+func Fix[T Value[T]](h []T, i int)
+```
+Fix is like heap.Fix.
+
+
+
 ## Types
+### Type Heap
+```go
+type Heap[T Value[T]] []T
+```
+Heap is a generic heap implementation that can be used with any type that
+implements the Value interface. It provides methods to push, pop, remove,
+and fix elements in the heap. The heap is implemented as a slice in the same
+manner as the standard library's heap package, but it is generic and can
+work with any type that satisfies the Value interface.
+
+### Methods
+
+```go
+func (h Heap[T]) Init()
+```
+
+
+```go
+func (h Heap[T]) Len() int
+```
+
+
+```go
+func (h *Heap[T]) Pop() T
+```
+Pop is like heap.Pop.
+
+
+```go
+func (h *Heap[T]) Push(x T)
+```
+Push is like heap.Push.
+
+
+```go
+func (h *Heap[T]) Remove(i int) T
+```
+Remove is like heap.Remove.
+
+
+
+
 ### Type MinMax
 ```go
 type MinMax[K Ordered, V any] struct {
@@ -189,6 +240,23 @@ more efficient than Remove followed by Push.
 
 
 
+
+### Type Value
+```go
+type Value[T any] interface {
+	Less(x T) bool
+}
+```
+Value represents the interface that must be implemented by types that can be
+used as values in the generic Heap implementation. It requires a Less method
+that compares the current instance with another instance of the same type
+and returns true if the current instance is less than the other instance.
+
+
+
+
+## Examples
+### [ExampleHeap](https://pkg.go.dev/cloudeng.io/algo/container/heap?tab=doc#example-Heap)
 
 
 

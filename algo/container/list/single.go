@@ -6,7 +6,7 @@ package list
 
 import "iter"
 
-// Double provides a doubly linked list.
+// Single provides a singly linked list.
 type Single[T any] struct {
 	sentinel singleItem[T] // sentinel to avoid having to handle head/tail corner cases.
 	tail     *singleItem[T]
@@ -18,25 +18,29 @@ type singleItem[T any] struct {
 	T    T
 }
 
+// NewSingle creates a new instance of Single[T] with an initial empty state.
 func NewSingle[T any]() *Single[T] {
-	dl := &Single[T]{}
-	dl.Reset()
-	return dl
+	sl := &Single[T]{}
+	sl.Reset()
+	return sl
 }
 
-func (dl *Single[T]) Reset() {
-	dl.len = 0
-	dl.sentinel.next = &dl.sentinel
-	dl.tail = &dl.sentinel
+// Reset resets the singly linked list to its initial empty state.
+func (sl *Single[T]) Reset() {
+	sl.len = 0
+	sl.sentinel.next = &sl.sentinel
+	sl.tail = &sl.sentinel
 }
 
-func (dl *Single[T]) Len() int {
-	return dl.len
+// Len returns the number of items in the singly linked list.
+func (sl *Single[T]) Len() int {
+	return sl.len
 }
 
-func (dl *Single[T]) Forward() iter.Seq[T] {
+// Forward returns an iterator over the list.
+func (sl *Single[T]) Forward() iter.Seq[T] {
 	return func(yield func(T) bool) {
-		for n := dl.sentinel.next; n != &dl.sentinel; n = n.next {
+		for n := sl.sentinel.next; n != &sl.sentinel; n = n.next {
 			if !yield(n.T) {
 				break
 			}
@@ -44,47 +48,50 @@ func (dl *Single[T]) Forward() iter.Seq[T] {
 	}
 }
 
-func (dl *Single[T]) insertAfterItem(val T, it *singleItem[T]) *singleItem[T] {
+func (sl *Single[T]) insertAfterItem(val T, it *singleItem[T]) *singleItem[T] {
 	n := &singleItem[T]{T: val}
 	n.next = it.next
 	it.next = n
-	dl.len++
+	sl.len++
 	return n
 }
 
-func (dl *Single[T]) Head() T {
-	if dl.len == 0 {
-		return dl.sentinel.T
+// Head returns the first item in the list.
+func (sl *Single[T]) Head() T {
+	if sl.len == 0 {
+		return sl.sentinel.T
 	}
-	return dl.sentinel.next.T
+	return sl.sentinel.next.T
 }
 
-func (dl *Single[T]) Append(val T) SingleID[T] {
-	n := dl.insertAfterItem(val, dl.tail)
-	dl.tail = n
+// Append adds a new item to the end of the list and returns its ID.
+func (sl *Single[T]) Append(val T) SingleID[T] {
+	n := sl.insertAfterItem(val, sl.tail)
+	sl.tail = n
 	return n
 }
 
-func (dl *Single[T]) Prepend(val T) SingleID[T] {
-	n := dl.insertAfterItem(val, &dl.sentinel)
-	if dl.len == 1 {
-		dl.tail = n
+// Prepend adds a new item to the beginning of the list and returns its ID.
+func (sl *Single[T]) Prepend(val T) SingleID[T] {
+	n := sl.insertAfterItem(val, &sl.sentinel)
+	if sl.len == 1 {
+		sl.tail = n
 	}
 	return n
 }
 
-func (dl *Single[T]) removeItem(prev, it *singleItem[T]) {
-	dl.len--
+func (sl *Single[T]) removeItem(prev, it *singleItem[T]) {
+	sl.len--
 	prev.next = it.next
-	if dl.tail == it {
-		dl.tail = prev
+	if sl.tail == it {
+		sl.tail = prev
 	}
 	*it = singleItem[T]{}
 }
 
-func (dl *Single[T]) findPrev(it *singleItem[T]) *singleItem[T] {
-	prev := &dl.sentinel
-	for n := dl.sentinel.next; n != &dl.sentinel; n = n.next {
+func (sl *Single[T]) findPrev(it *singleItem[T]) *singleItem[T] {
+	prev := &sl.sentinel
+	for n := sl.sentinel.next; n != &sl.sentinel; n = n.next {
 		if n == it {
 			return prev
 		}
@@ -95,17 +102,19 @@ func (dl *Single[T]) findPrev(it *singleItem[T]) *singleItem[T] {
 
 type SingleID[T any] *singleItem[T]
 
-func (dl *Single[T]) RemoveItem(id SingleID[T]) {
-	if prev := dl.findPrev(id); prev != nil {
-		dl.removeItem(prev, id)
+// RemoveItem removes the item with the specified ID from the list.
+func (sl *Single[T]) RemoveItem(id SingleID[T]) {
+	if prev := sl.findPrev(id); prev != nil {
+		sl.removeItem(prev, id)
 	}
 }
 
-func (dl *Single[T]) Remove(val T, cmp func(a, b T) bool) {
-	prev := &dl.sentinel
-	for n := dl.sentinel.next; n != &dl.sentinel; n = n.next {
+// Remove removes the first occurrence of the specified value from the list.
+func (sl *Single[T]) Remove(val T, cmp func(a, b T) bool) {
+	prev := &sl.sentinel
+	for n := sl.sentinel.next; n != &sl.sentinel; n = n.next {
 		if cmp(n.T, val) {
-			dl.removeItem(prev, n)
+			sl.removeItem(prev, n)
 			return
 		}
 		prev = n

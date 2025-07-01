@@ -119,7 +119,7 @@ func TestGenericHeap_String(t *testing.T) {
 	// Verify the result is sorted
 	expected := []string{"apple", "banana", "cherry", "date", "elderberry"}
 	for i, v := range result {
-		if v != expected[i] {
+		if !reflect.DeepEqual(v, expected[i]) {
 			t.Errorf("heap result[%d] = %s, want %s", i, v, expected[i])
 		}
 	}
@@ -149,7 +149,7 @@ func TestGenericHeap_CustomType(t *testing.T) {
 	// Verify ages are in ascending order
 	expectedAges := []int{20, 25, 30, 35, 40}
 	for i, age := range ages {
-		if age != expectedAges[i] {
+		if !reflect.DeepEqual(age, expectedAges[i]) {
 			t.Errorf("person age[%d] = %d, want %d", i, age, expectedAges[i])
 		}
 	}
@@ -225,7 +225,7 @@ func TestGenericHeap_Remove(t *testing.T) {
 	// Test 1: Remove the root element
 	h := heap.Heap[IntType]{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 	h.Init()
-	removed := h.Remove(0).(IntType)
+	removed := h.Remove(0)
 	if removed != 0 {
 		t.Errorf("Test 1: Remove(0) got %v, want 0", removed)
 	}
@@ -239,7 +239,7 @@ func TestGenericHeap_Remove(t *testing.T) {
 	// Test 2: Remove an element from the middle
 	h = heap.Heap[IntType]{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 	h.Init()
-	removed = h.Remove(4).(IntType) // Remove value 4
+	removed = h.Remove(4) // Remove value 4
 	if removed != 4 {
 		t.Errorf("Test 2: Remove(4) got %v, want 4", removed)
 	}
@@ -257,7 +257,7 @@ func TestGenericHeap_Remove(t *testing.T) {
 	h.Init()
 	lastIdx := h.Len() - 1
 	lastVal := h[lastIdx]
-	removed = h.Remove(lastIdx).(IntType)
+	removed = h.Remove(lastIdx)
 	if removed != lastVal {
 		t.Errorf("Test 3: Remove(last) got %v, want %v", removed, lastVal)
 	}
