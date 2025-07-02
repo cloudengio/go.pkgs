@@ -16,21 +16,21 @@ structures.
 ## Functions
 ### Func AllSet
 ```go
-func AllSet(args ...interface{}) bool
+func AllSet(args ...any) bool
 ```
 AllSet is like ExactlyOne except that it returns true if all of its
 arguments are set.
 
 ### Func AtMostOneSet
 ```go
-func AtMostOneSet(args ...interface{}) bool
+func AtMostOneSet(args ...any) bool
 ```
 AtMostOneSet is like ExactlyOne except that it returns true if zero or one
 of its arguments are set.
 
 ### Func ExactlyOneSet
 ```go
-func ExactlyOneSet(args ...interface{}) bool
+func ExactlyOneSet(args ...any) bool
 ```
 ExactlyOneSet will return true if exactly one of its arguments is 'set',
 where 'set' means:
@@ -72,7 +72,7 @@ So $HOME/.configdir may be used on both UNIX and Windows for example.
 
 ### Func RegisterFlagsInStruct
 ```go
-func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
+func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags any, valueDefaults map[string]any, usageDefaults map[string]string) error
 ```
 RegisterFlagsInStruct will selectively register fields in the
 supplied struct as flags of the appropriate type with the supplied
@@ -103,6 +103,14 @@ themselves tagged. For example:
 
 will result in three flags, --a, --b and --c. Note that embedding as a
 pointer is not supported.
+
+### Func WithDefault
+```go
+func WithDefault[T comparable](a, b T) T
+```
+WithDefault returns a value if it is not the zero value for its type,
+otherwise it returns the second value. This is useful for command line flags
+where a default value should be used if the user does not provide one.
 
 
 
@@ -289,18 +297,18 @@ and Default methods.
 ### Methods
 
 ```go
-func (ef Map) Default(val interface{}) Map
+func (ef Map) Default(val any) Map
 ```
 
 
 ```go
-func (ef *Map) Get() interface{}
+func (ef *Map) Get() any
 ```
 Value implements flag.Getter.
 
 
 ```go
-func (ef Map) Register(name string, val interface{}) Map
+func (ef Map) Register(name string, val any) Map
 ```
 
 
@@ -424,7 +432,7 @@ line argument.
 ### Methods
 
 ```go
-func (r *Repeating) Get() interface{}
+func (r *Repeating) Get() any
 ```
 Get inplements flag.Getter.
 
@@ -455,7 +463,7 @@ someone been set.
 ### Functions
 
 ```go
-func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*SetMap, error)
+func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags any, valueDefaults map[string]any, usageDefaults map[string]string) (*SetMap, error)
 ```
 RegisterFlagsInStructWithSetMap is like RegisterFlagsInStruct but returns
 a SetMap which can be used to determine which flag variables have been
@@ -467,7 +475,7 @@ argument.
 ### Methods
 
 ```go
-func (sm *SetMap) IsSet(field interface{}) (string, bool)
+func (sm *SetMap) IsSet(field any) (string, bool)
 ```
 IsSet returns true if the supplied flag variable's value has been set,
 either via a string literal in the struct or via the valueDefaults argument
@@ -489,7 +497,7 @@ formats.
 ### Methods
 
 ```go
-func (tf *Time) Get() interface{}
+func (tf *Time) Get() any
 ```
 Value implements flag.Getter.
 

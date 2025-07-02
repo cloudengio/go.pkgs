@@ -123,7 +123,7 @@ func ParseFlagTag(t string) (name, value, usage string, err error) {
 	return
 }
 
-func defaultLiteralValue(typeName string) interface{} {
+func defaultLiteralValue(typeName string) any {
 	switch typeName {
 	case "int":
 		return int(0)
@@ -143,7 +143,7 @@ func defaultLiteralValue(typeName string) interface{} {
 	return nil
 }
 
-func literalDefault(typeName, literal string, initialValue interface{}) (value interface{}, usageDefault string, set bool, err error) {
+func literalDefault(typeName, literal string, initialValue any) (value any, usageDefault string, set bool, err error) {
 	if initialValue != nil {
 		switch v := initialValue.(type) {
 		case int, int64, uint, uint64, bool, float64, string, time.Duration:
@@ -226,7 +226,7 @@ func literalDefault(typeName, literal string, initialValue interface{}) (value i
 //
 // will result in three flags, --a, --b and --c.
 // Note that embedding as a pointer is not supported.
-func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error {
+func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags any, valueDefaults map[string]any, usageDefaults map[string]string) error {
 	_, err := RegisterFlagsInStructWithSetMap(fs, tag, structWithFlags, valueDefaults, usageDefaults)
 	return err
 }
@@ -235,13 +235,13 @@ func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags interfa
 // a SetMap which can be used to determine which flag variables have been
 // initialized either with a literal in the struct tag or via the valueDefaults
 // argument.
-func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*SetMap, error) {
+func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags any, valueDefaults map[string]any, usageDefaults map[string]string) (*SetMap, error) {
 	reg := &registrar{
 		fs:            fs,
 		tag:           tag,
 		valueDefaults: valueDefaults,
 		usageDefaults: usageDefaults,
-		sm:            &SetMap{set: map[interface{}]string{}},
+		sm:            &SetMap{set: map[any]string{}},
 	}
 	err := reg.registerFlagsInStruct(structWithFlags)
 	if err != nil {
@@ -283,7 +283,7 @@ func createVarFlag(fs *flag.FlagSet, fieldValue reflect.Value, name, value, desc
 	return set, nil
 }
 
-func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue interface{}, fieldType reflect.StructField, fieldValue reflect.Value, name, description string) bool {
+func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue any, fieldType reflect.StructField, fieldValue reflect.Value, name, description string) bool {
 	switch dv := initialValue.(type) {
 	case int:
 		ptr := (*int)(unsafe.Pointer(fieldValue.Addr().Pointer()))
@@ -322,7 +322,7 @@ func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue interface{}, fieldTy
 	return true
 }
 
-func getTypeVal(structWithFlags interface{}) (reflect.Type, reflect.Value, error) {
+func getTypeVal(structWithFlags any) (reflect.Type, reflect.Value, error) {
 	typ := reflect.TypeOf(structWithFlags)
 	val := reflect.ValueOf(structWithFlags)
 	if typ.Kind() == reflect.Ptr {
@@ -342,7 +342,7 @@ func getTypeVal(structWithFlags interface{}) (reflect.Type, reflect.Value, error
 type registrar struct {
 	fs            *flag.FlagSet
 	tag           string
-	valueDefaults map[string]interface{}
+	valueDefaults map[string]any
 	usageDefaults map[string]string
 	sm            *SetMap
 }
@@ -356,13 +356,13 @@ func (reg *registrar) possiblyEmbedded(fieldType reflect.StructField, addr refle
 	return nil
 }
 
-func (reg *registrar) registerFlagsInStruct(structWithFlags interface{}) error {
+func (reg *registrar) registerFlagsInStruct(structWithFlags any) error {
 	typ, val, err := getTypeVal(structWithFlags)
 	if err != nil {
 		return err
 	}
 
-	for i := 0; i < typ.NumField(); i++ {
+	for i := range typ.NumField() {
 		fieldType := typ.Field(i)
 		fieldValue := val.Field(i)
 		fieldName := fieldType.Name
@@ -425,13 +425,13 @@ func (reg *registrar) registerFlagsInStruct(structWithFlags interface{}) error {
 // SetMaps represents flag variables, indexed by their address, whose value
 // has someone been set.
 type SetMap struct {
-	set map[interface{}]string
+	set map[any]string
 }
 
 // IsSet returns true if the supplied flag variable's value has been
 // set, either via a string literal in the struct or via the valueDefaults
 // argument to RegisterFlagsInStructWithSetMap.
-func (sm *SetMap) IsSet(field interface{}) (string, bool) {
+func (sm *SetMap) IsSet(field any) (string, bool) {
 	v, ok := sm.set[reflect.ValueOf(field).Pointer()]
 	return v, ok
 }

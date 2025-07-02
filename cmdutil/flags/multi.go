@@ -32,7 +32,7 @@ func (r *Repeating) Set(v string) error {
 }
 
 // Get inplements flag.Getter.
-func (r *Repeating) Get() interface{} {
+func (r *Repeating) Get() any {
 	return r.Values
 }
 

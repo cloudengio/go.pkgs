@@ -125,7 +125,7 @@ func allFlags(fs *flag.FlagSet) string {
 }
 
 func TestRegister(t *testing.T) {
-	assert := func(got, want interface{}) {
+	assert := func(got, want any) {
 		_, file, line, _ := runtime.Caller(1)
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("%v:%v:got %v, want %v", filepath.Base(file), line, got, want)
@@ -202,7 +202,7 @@ func TestRegister(t *testing.T) {
 		zz  string        // ignored
 	}{}
 
-	values := map[string]interface{}{
+	values := map[string]any{
 		"iv":     33,
 		"u":      runtime.NumCPU(),
 		"str-nq": "oh my",
@@ -311,7 +311,7 @@ func TestRegister(t *testing.T) {
 		C string `cmdline:"configC,$HOME/.config,config flag"`
 		D int    `cmdline:"exitCode,$ENV_INT_TESTING,an integer environment variable"`
 	}{}
-	values = map[string]interface{}{
+	values = map[string]any{
 		"configB": "something-else",
 	}
 	usageDefaults = map[string]string{
@@ -367,7 +367,7 @@ func TestErrors(t *testing.T) {
 	expected(err, "field A: failed to parse tag: xxx")
 
 	t2 := struct {
-		A interface{} `cmdline:"zzz,,usage"`
+		A any `cmdline:"zzz,,usage"`
 	}{}
 	fs = &flag.FlagSet{}
 	err = flags.RegisterFlagsInStruct(fs, "cmdline", &t2, nil, nil)
@@ -395,7 +395,7 @@ func TestErrors(t *testing.T) {
 	expected(err, "flag xx does not exist but specified as a usage default")
 
 	fs = &flag.FlagSet{}
-	err = flags.RegisterFlagsInStruct(fs, "cmdline", &t5, map[string]interface{}{"xx": "yy"}, nil)
+	err = flags.RegisterFlagsInStruct(fs, "cmdline", &t5, map[string]any{"xx": "yy"}, nil)
 	expected(err, "flag xx does not exist but specified as a value default")
 
 	t6 := struct {
@@ -403,7 +403,7 @@ func TestErrors(t *testing.T) {
 		B int `cmdline:"b,1,use a"`
 	}{}
 	fs = &flag.FlagSet{}
-	err = flags.RegisterFlagsInStruct(fs, "cmdline", &t6, map[string]interface{}{"xx": "yy"}, nil)
+	err = flags.RegisterFlagsInStruct(fs, "cmdline", &t6, map[string]any{"xx": "yy"}, nil)
 	expected(err, "flag b already defined for this flag.FlagSet")
 
 	t7 := struct {
@@ -416,7 +416,7 @@ func TestErrors(t *testing.T) {
 }
 
 func TestEmbedding(t *testing.T) {
-	assert := func(got, want interface{}) {
+	assert := func(got, want any) {
 		_, file, line, _ := runtime.Caller(1)
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("%v:%v:got %v, want %v", filepath.Base(file), line, got, want)
@@ -432,7 +432,7 @@ func TestEmbedding(t *testing.T) {
 		CommonFlags
 		C int `cmdline:"c,3,use c"`
 	}{}
-	valueDefaults := map[string]interface{}{
+	valueDefaults := map[string]any{
 		"a": 11,
 	}
 	usageDefaults := map[string]string{
@@ -511,13 +511,13 @@ func TestExplicitValueAssignment(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 
-	assertNotSet := func(sm *flags.SetMap, v interface{}) {
+	assertNotSet := func(sm *flags.SetMap, v any) {
 		_, _, line, _ := runtime.Caller(1)
 		if _, ok := sm.IsSet(v); ok {
 			t.Errorf("line %v: %p should have been set", line, v)
 		}
 	}
-	assertSet := func(sm *flags.SetMap, v interface{}, n string) {
+	assertSet := func(sm *flags.SetMap, v any, n string) {
 		_, _, line, _ := runtime.Caller(1)
 		name, ok := sm.IsSet(v)
 		if !ok {
@@ -576,7 +576,7 @@ func TestExplicitValueAssignment(t *testing.T) {
 	assertSet(sm, &s1.V, "some-var")
 
 	fs = &flag.FlagSet{}
-	sm, err = flags.RegisterFlagsInStructWithSetMap(fs, "cmdline", &s0, map[string]interface{}{
+	sm, err = flags.RegisterFlagsInStructWithSetMap(fs, "cmdline", &s0, map[string]any{
 		"a":        1,
 		"b":        2,
 		"c":        3,
