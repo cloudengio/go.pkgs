@@ -11,9 +11,9 @@ import (
 )
 
 func TestValidate(t *testing.T) {
-	l := func(args ...interface{}) []interface{} { return args }
+	l := func(args ...any) []any { return args }
 	for i, tc := range []struct {
-		args                       []interface{}
+		args                       []any
 		exactlyOne, atmostOne, all bool
 	}{
 		{nil, false, true, true},
