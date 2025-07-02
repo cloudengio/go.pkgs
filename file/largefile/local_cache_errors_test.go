@@ -20,7 +20,7 @@ func newBlock(size, start int) []byte {
 	return buf
 }
 
-func writeAt(t *testing.T, cache DownloadCache, off int64, buf []byte) {
+func writeAt(t *testing.T, cache DownloadCache, buf []byte, off int64) {
 	t.Helper()
 	n, err := cache.WriteAt(buf, off)
 	if err != nil {
@@ -83,11 +83,11 @@ func TestCacheReadOffsetErrors(t *testing.T) {
 	}
 	defer cache.Close()
 
-	writeAt(t, cache, 8, newBlock(blockSize, 8))
-	writeAt(t, cache, 24, newBlock(blockSize, 24))
-	writeAt(t, cache, 32, newBlock(blockSize, 32))
-	writeAt(t, cache, 48, newBlock(blockSize, 48))
-	writeAt(t, cache, 56, newBlock(1, 56))
+	writeAt(t, cache, newBlock(blockSize, 8), 8)
+	writeAt(t, cache, newBlock(blockSize, 24), 24)
+	writeAt(t, cache, newBlock(blockSize, 32), 32)
+	writeAt(t, cache, newBlock(blockSize, 48), 48)
+	writeAt(t, cache, newBlock(1, 56), 56)
 
 	readAt(t, cache, 8, newBlock(blockSize, 8))
 	readAt(t, cache, 24, newBlock(blockSize, 24))

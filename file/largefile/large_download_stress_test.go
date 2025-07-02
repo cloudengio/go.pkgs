@@ -158,6 +158,31 @@ func validateIndexFile(t *testing.T, indexFile string, cacheSize int64, blockSiz
 	}
 }
 
+func createNewCache(ctx context.Context, t *testing.T, cacheFilePath, indexFilePath string, cacheSize int64, blockSize, concurrency int) *largefile.LocalDownloadCache {
+	t.Helper()
+
+	if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency, nil); err != nil {
+		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
+	}
+
+	cSize, cBblockSize := cache.ContentLengthAndBlockSize()
+	if cSize != cacheSize || cBblockSize != blockSize {
+		t.Fatalf("cache content size %d and block size %d do not match expected values %d and %d", cSize, cBblockSize, cacheSize, blockSize)
+	}
+
+	t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFilePath, cSize, cBblockSize)
+
+	return cache
+}
+
 func TestCacheStressTest(t *testing.T) {
 	ctx := context.Background()
 	tmpDirAllCached := t.TempDir()
@@ -170,24 +195,7 @@ func TestCacheStressTest(t *testing.T) {
 			cacheSize := int64(diskusage.KB * 7)
 			blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-			if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency, nil); err != nil {
-				t.Fatalf("NewFilesForCache failed: %v", err)
-			}
-			cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
-			if err != nil {
-				t.Fatalf("Failed to open cache files: %v", err)
-			}
-			cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
-			if err != nil {
-				t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
-			}
-
-			cSize, cBblockSize := cache.ContentLengthAndBlockSize()
-			if cSize != cacheSize || cBblockSize != blockSize {
-				t.Fatalf("cache content size %d and block size %d do not match expected values %d and %d", cSize, cBblockSize, cacheSize, blockSize)
-			}
-
-			t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFilePath, cSize, cBblockSize)
+			cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
 
 			dl, err := largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
 				cache,
@@ -201,7 +209,7 @@ func TestCacheStressTest(t *testing.T) {
 				t.Fatalf("Run failed: %v", err)
 			}
 
-			t.Logf("Download completed successfully, cache file %s is ready for use", cacheFile)
+			t.Logf("Download completed successfully, cache file %s is ready for use", cacheFilePath)
 			if err := cache.Close(); err != nil {
 				t.Fatalf("failed to close cache: %v", err)
 			}
@@ -272,23 +280,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-	if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency, nil); err != nil {
-		t.Fatalf("NewFilesForCache failed: %v", err)
-	}
-
-	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
-	if err != nil {
-		t.Fatalf("Failed to open cache files: %v", err)
-	}
-
-	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
-	if err != nil {
-		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
-	}
-
-	cSize, cBblockSize := cache.ContentLengthAndBlockSize()
-
-	t.Logf("Successfully created and allocated space for %s with size %v bytes in blocks of size %v", cacheFilePath, cSize, cBblockSize)
+	cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
 
 	prevState := largefile.DownloadState{
 		DownloadSize:   cacheSize,
@@ -355,7 +347,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 			t.Errorf("Run %d expected 1 iteration, got %d", i, st.Iterations)
 		}
 
-		if got, want := st.DownloadErrors, mf.errorsNoRetry; got != int64(want) {
+		if got, want := st.DownloadErrors, mf.errorsNoRetry; got != want {
 			t.Errorf("got %d, want %d", got, want)
 		}
 
@@ -387,17 +379,7 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
 	indexFilePath := filepath.Join(tmpDirAllCached, "cache.idx")
 
-	if err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, cacheSize, blockSize, 2, nil); err != nil {
-		t.Fatalf("NewFilesForCache failed: %v", err)
-	}
-	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
-	if err != nil {
-		t.Fatalf("Failed to open cache files: %v", err)
-	}
-	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
-	if err != nil {
-		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
-	}
+	cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, 2)
 
 	mf := &mockLargeFile{size: cacheSize, blockSize: blockSize, failRatio: failRatio, withRetry: withRetry}
 
@@ -426,7 +408,7 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 		t.Fatalf("failed to close cache: %v", err)
 	}
 
-	if got, want := st.DownloadRetries, mf.errorsWithRetry; got != int64(want) {
+	if got, want := st.DownloadRetries, mf.errorsWithRetry; got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 
@@ -608,7 +590,7 @@ func streamFile(ctx context.Context, t *testing.T, fileSize int64, blockSize, fa
 		t.Errorf("expected %d download errors, got %d", want, got)
 	}
 
-	if got, want := status.DownloadRetries, mf.errorsWithRetry; got != int64(want) {
+	if got, want := status.DownloadRetries, mf.errorsWithRetry; got != want {
 		t.Errorf("expected %d download retries, got %d", want, got)
 	}
 

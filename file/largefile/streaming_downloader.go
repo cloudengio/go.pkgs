@@ -17,7 +17,7 @@ import (
 )
 
 func (a response) Less(b response) bool {
-	return a.ByteRange.From < b.ByteRange.From
+	return a.From < b.From
 }
 
 // StreamingStatus holds status for a streaming download.
@@ -220,7 +220,7 @@ func (dl *StreamingDownloader) handleResponse(_ context.Context, resp response) 
 	if err := dl.writeToPipeLocked(resp); err != nil {
 		return err
 	}
-	return dl.drainCacheLocked(resp.ByteRange.To + 1) // Drain the cache to write any responses that are now in order.
+	return dl.drainCacheLocked(resp.To + 1) // Drain the cache to write any responses that are now in order.
 }
 
 func (dl *StreamingDownloader) drainCacheLocked(nextOffset int64) error {
@@ -230,7 +230,7 @@ func (dl *StreamingDownloader) drainCacheLocked(nextOffset int64) error {
 			if err := dl.writeToPipeLocked(head); err != nil {
 				return err
 			}
-			nextOffset = head.ByteRange.To + 1
+			nextOffset = head.To + 1
 			continue
 		}
 		dl.pushLocked(head) // Push back the response if it is not the next expected.
@@ -249,7 +249,7 @@ type retryTracker struct {
 func (rt *retryTracker) set(from int64) {
 	rt.Lock()
 	defer rt.Unlock()
-	rt.ByteRangesTracker.Set(from)
+	rt.Set(from)
 	rt.pending = true
 	rt.kickLocked() // Notify that the byte ranges have been updated.
 }
@@ -272,9 +272,9 @@ func (rt *retryTracker) notify() <-chan struct{} {
 func (rt *retryTracker) nextSetAndClear(start int, br *ByteRange) int {
 	rt.Lock()
 	defer rt.Unlock()
-	n := rt.ByteRangesTracker.NextSet(start, br)
+	n := rt.NextSet(start, br)
 	if n != -1 {
-		rt.ByteRangesTracker.Clear(br.From)
+		rt.Clear(br.From)
 	}
 	return n
 }

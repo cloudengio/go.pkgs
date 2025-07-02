@@ -178,7 +178,6 @@ type ByteRanges struct {
 	mu sync.RWMutex
 	byteRanges
 	contiguous *bitmap.Contiguous
-	ch         <-chan int // Channel for tail updates, if set.
 }
 
 // NewByteRanges creates a new ByteRanges instance with the specified content size
@@ -330,5 +329,5 @@ func NewByteRangesTracker(contentSize int64, blockSize int) *ByteRangesTracker {
 
 // Clear clears the byte range for the specified position.
 func (br *ByteRangesTracker) Clear(pos int64) {
-	br.byteRanges.clear(pos)
+	br.clear(pos)
 }

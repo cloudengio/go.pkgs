@@ -72,7 +72,7 @@ func (m *mockStreamingReader) ContentLengthAndBlockSize() (int64, int) {
 
 func (m *mockStreamingReader) Digest() digests.Hash { return digests.Hash{} }
 
-func (m *mockStreamingReader) GetReader(ctx context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
+func (m *mockStreamingReader) GetReader(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
 	m.mu.Lock()
 	if m.failAt != nil && m.failAt[from] {
 		m.mu.Unlock()
@@ -96,7 +96,10 @@ func TestStreamingDownloader_OrderedDownload(t *testing.T) {
 	dl := largefile.NewStreamingDownloader(reader)
 	// Run the downloader in a goroutine to simulate streaming.
 	go func() {
-		dl.Run(context.Background())
+		_, err := dl.Run(context.Background())
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	var buf bytes.Buffer
@@ -116,7 +119,10 @@ func TestStreamingDownloader_PartialRead(t *testing.T) {
 
 	dl := largefile.NewStreamingDownloader(reader)
 	go func() {
-		dl.Run(context.Background())
+		_, err := dl.Run(context.Background())
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	readBuf := make([]byte, 3)
@@ -142,10 +148,10 @@ func TestStreamingDownloader_OutOfOrderBlocks(t *testing.T) {
 	first := reader.setOrder(3, 1, 2, 0) // Ensure blocks are returned out of order.
 
 	var st largefile.StreamingStatus
-	var err error
+	var dlErr error
 	dl := largefile.NewStreamingDownloader(reader)
 	go func() {
-		st, err = dl.Run(context.Background())
+		st, dlErr = dl.Run(context.Background())
 	}()
 
 	go close(first) // Close the first channel to signal the end of the first read.
@@ -158,11 +164,11 @@ func TestStreamingDownloader_OutOfOrderBlocks(t *testing.T) {
 		t.Errorf("streamed data mismatch: got %q, want %q", got, content)
 	}
 
-	if err != nil {
+	if dlErr != nil {
 		t.Errorf("Run() returned an error: %v", err)
 	}
 	if st.OutOfOrder == 0 {
-
+		t.Error("expected OutOfOrder > 0, got 0")
 	}
 }
 
@@ -224,7 +230,10 @@ func TestStreamingDownloader_WithDigest(t *testing.T) {
 	hash, _ := digests.New("sha256", []byte(expectedDigest))
 	dl := largefile.NewStreamingDownloader(reader, largefile.WithDownloadDigest(hash))
 	go func() {
-		dl.Run(context.Background())
+		_, err := dl.Run(context.Background())
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	// Read all data
@@ -302,7 +311,10 @@ func TestStreamingDownloader_LargeFile(t *testing.T) {
 
 	dl := largefile.NewStreamingDownloader(reader)
 	go func() {
-		dl.Run(context.Background())
+		_, err := dl.Run(context.Background())
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	var buf bytes.Buffer
@@ -316,7 +328,7 @@ func TestStreamingDownloader_LargeFile(t *testing.T) {
 	}
 }
 
-func testStreamingDownloader_Status() error {
+func testStreamingDownloaderStatus() error {
 	content := []byte("abcdefghijklmnop") // 16 bytes
 	blockSize := 4                        // 4 blocks
 	reader := &mockStreamingReader{
@@ -378,13 +390,13 @@ func TestStreamingDownloader_Status(t *testing.T) {
 	for i := range 2 {
 		// this test can fail due to reordering after the reader returns,
 		// so we retry to allow for that.
-		err := testStreamingDownloader_Status()
+		err := testStreamingDownloaderStatus()
 		if err == nil {
 			return
 		}
-		t.Logf("testStreamingDownloader_Status() failed: attempt %v, err: %v", i, err)
+		t.Logf("testStreamingDownloaderStatus() failed: attempt %v, err: %v", i, err)
 	}
-	t.Errorf("testStreamingDownloader_Status() failed: %v", err)
+	t.Errorf("testStreamingDownloaderStatus() failed: %v", err)
 
 }
 

@@ -71,6 +71,17 @@ func loadIndexFile(t *testing.T, indexFilePath string, contentSize int64, blockS
 	return &br
 }
 
+func writeAt(t *testing.T, cache largefile.DownloadCache, buf []byte, off int64) {
+	t.Helper()
+	n, err := cache.WriteAt(buf, off)
+	if err != nil {
+		t.Fatalf("WriteAt failed: %v", err)
+	}
+	if got, want := int64(n), int64(len(buf)); got != want {
+		t.Errorf("WriteAt() = %v, want %v", got, want)
+	}
+}
+
 func TestNewFilesForCache(t *testing.T) {
 	ctx := context.Background()
 	const contentSize int64 = 1036
@@ -544,8 +555,8 @@ func TestLocalDownloadCache_Tail(t *testing.T) { //nolint:gocyclo
 		defer cache2.Close()
 
 		block := make([]byte, blockSize)
-		cache2.WriteAt(block, 0)                  // block 0
-		cache2.WriteAt(block, int64(2*blockSize)) // block 2
+		writeAt(t, cache2, block, 0)                  // block 0
+		writeAt(t, cache2, block, int64(2*blockSize)) // block 2
 
 		// Tail should return up to block 0
 		got := cache2.Tail(context.Background())
@@ -565,7 +576,7 @@ func TestLocalDownloadCache_Tail(t *testing.T) { //nolint:gocyclo
 			t.Fatal("Tail() returned before gap was filled")
 		default:
 		}
-		cache2.WriteAt(block, int64(blockSize)) // fill the gap
+		writeAt(t, cache2, block, int64(blockSize)) // fill the gap
 
 		select {
 		case got := <-done:
