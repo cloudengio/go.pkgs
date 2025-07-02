@@ -68,7 +68,7 @@ func ExactlyOneSet(args ...any) bool {
 // or one of its arguments are set.
 func AtMostOneSet(args ...any) bool {
 	mask := setMask(args)
-	validate(mask, "flags.ExactlyOneSet")
+	validate(mask, "flags.AtMostOneSet")
 	return count(mask) == 1 || count(mask) == 0
 }
 
@@ -76,6 +76,6 @@ func AtMostOneSet(args ...any) bool {
 // arguments are set.
 func AllSet(args ...any) bool {
 	mask := setMask(args)
-	validate(mask, "flags.ExactlyOneSet")
+	validate(mask, "flags.AllSet")
 	return count(mask) == len(args)
 }
