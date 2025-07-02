@@ -197,7 +197,6 @@ func (dl *StreamingDownloader) retryError(_ context.Context, req request, err er
 	if !dl.waitForCompletion {
 		return err
 	}
-	//return err
 	if err == nil {
 		return nil // No error, nothing to retry.
 	}

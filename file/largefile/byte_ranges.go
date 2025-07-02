@@ -177,10 +177,6 @@ func (br byteRanges) IsClear(pos int64) bool {
 type ByteRanges struct {
 	mu sync.RWMutex
 	byteRanges
-	//	contentSize int64
-	//	bitmapSize  int
-	//	blockSize   int
-	//	bitmap      bitmap.T
 	contiguous *bitmap.Contiguous
 	ch         <-chan int // Channel for tail updates, if set.
 }

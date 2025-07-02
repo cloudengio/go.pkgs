@@ -90,7 +90,7 @@ func (dl *CachingDownloader) finalize(status DownloadStatus, state DownloadState
 		// receiver a chance to read the final state.
 		select {
 		case dl.progressCh <- dl.progress.DownloadState:
-		case <-time.After(time.Second):
+		case <-time.After(dl.progressTimeout):
 		}
 		close(dl.progressCh) // Ensure the progress channel is closed when done.
 	}

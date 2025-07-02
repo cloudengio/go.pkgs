@@ -145,6 +145,9 @@ func newDownloader(file Reader, opts downloadOptions) *downloader {
 		dl.blockSize = 4096 // Default block size is 4 KiB.
 		dl.logger.Warn("block size not set, using default", "blockSize", dl.blockSize)
 	}
+	if dl.progressTimeout == 0 {
+		dl.progressTimeout = time.Second
+	}
 	dl.bufPool = sync.Pool{
 		New: func() any {
 			return bytes.NewBuffer(make([]byte, dl.blockSize))

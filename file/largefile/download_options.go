@@ -6,6 +6,7 @@ package largefile
 
 import (
 	"log/slog"
+	"time"
 
 	"cloudeng.io/algo/digests"
 	"cloudeng.io/net/ratecontrol"
@@ -15,6 +16,7 @@ type downloaderOptions struct {
 	concurrency       int
 	rateController    ratecontrol.Limiter
 	progressCh        chan<- DownloadState // Channel to report download progress.
+	progressTimeout   time.Duration        // Delay between progress updates.
 	logger            *slog.Logger
 	waitForCompletion bool
 }
@@ -51,6 +53,16 @@ func WithDownloadLogger(logger *slog.Logger) DownloadOption {
 func WithDownloadProgress(progress chan<- DownloadState) DownloadOption {
 	return func(o *downloadOptions) {
 		o.progressCh = progress
+	}
+}
+
+// WithDownloadProgressDelay sets a timeout for certain progress updates,
+// such as those sent when a download is completed to allow for the caller
+// to process any pending updates. Routine updates, such as those sent
+// whenever a new byte range is downloaded are sent on a best-effort basis.
+func WithDownloadProgressTimeout(timeout time.Duration) DownloadOption {
+	return func(o *downloadOptions) {
+		o.progressTimeout = timeout
 	}
 }
 
