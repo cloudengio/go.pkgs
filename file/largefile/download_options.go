@@ -15,7 +15,7 @@ import (
 type downloaderOptions struct {
 	concurrency       int
 	rateController    ratecontrol.Limiter
-	progressCh        chan<- DownloadState // Channel to report download progress.
+	progressCh        chan<- DownloadStats // Channel to report download progress.
 	progressTimeout   time.Duration        // Delay between progress updates.
 	logger            *slog.Logger
 	waitForCompletion bool
@@ -50,7 +50,7 @@ func WithDownloadLogger(logger *slog.Logger) DownloadOption {
 }
 
 // WithDownloadProgress sets the channel to report download progress.
-func WithDownloadProgress(progress chan<- DownloadState) DownloadOption {
+func WithDownloadProgress(progress chan<- DownloadStats) DownloadOption {
 	return func(o *downloadOptions) {
 		o.progressCh = progress
 	}

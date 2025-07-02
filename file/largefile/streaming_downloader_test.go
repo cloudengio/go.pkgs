@@ -382,9 +382,7 @@ func testStreamingDownloaderStatus() error {
 	if status.MaxOutOfOrder != 3 {
 		return fmt.Errorf("status.MaxOutOfOrder: got %v, want %v", status.MaxOutOfOrder, 3)
 	}
-
 	return nil
-
 }
 
 func TestStreamingDownloader_Status(t *testing.T) {
@@ -407,7 +405,7 @@ func TestStreamingDownloader_ProgressReporting(t *testing.T) {
 	blockSize := 128
 	reader := &mockStreamingReader{data: content, blockSize: blockSize}
 
-	progressCh := make(chan largefile.DownloadState, 10)
+	progressCh := make(chan largefile.DownloadStats, 10)
 	dl := largefile.NewStreamingDownloader(reader,
 		largefile.WithDownloadProgress(progressCh))
 
@@ -422,15 +420,21 @@ func TestStreamingDownloader_ProgressReporting(t *testing.T) {
 		t.Fatalf("io.ReadAll failed: %v", err)
 	}
 
-	var lastState largefile.DownloadState
-	for state := range progressCh {
-		if state.DownloadedBytes < lastState.DownloadedBytes {
-			t.Errorf("progress went backwards for bytes: %v -> %v", lastState.DownloadedBytes, state.DownloadedBytes)
+	var lastStats largefile.DownloadStats
+	for stats := range progressCh {
+		if stats.DownloadedBytes < lastStats.DownloadedBytes {
+			t.Errorf("progress went backwards for bytes: %v -> %v", lastStats.DownloadedBytes, stats.DownloadedBytes)
 		}
-		if state.DownloadBlocks < lastState.DownloadBlocks {
-			t.Errorf("progress went backwards for blocks: %v -> %v", lastState.DownloadBlocks, state.DownloadBlocks)
+		if stats.DownloadBlocks < lastStats.DownloadBlocks {
+			t.Errorf("progress went backwards for blocks: %v -> %v", lastStats.DownloadBlocks, stats.DownloadBlocks)
 		}
-		lastState = state
+		if stats.CachedOrStreamedBytes < lastStats.CachedOrStreamedBytes {
+			t.Errorf("progress went backwards for cached/streamed bytes: %v -> %v", lastStats.CachedOrStreamedBytes, stats.CachedOrStreamedBytes)
+		}
+		if stats.CachedOrStreamedBlocks < lastStats.CachedOrStreamedBlocks {
+			t.Errorf("progress went backwards for cached/streamed blocks: %v -> %v", lastStats.CachedOrStreamedBlocks, stats.CachedOrStreamedBlocks)
+		}
+		lastStats = stats
 	}
 
 	if len(data) != len(content) {

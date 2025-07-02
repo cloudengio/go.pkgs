@@ -19,7 +19,9 @@ import (
 	"cloudeng.io/net/ratecontrol"
 )
 
-type DownloadState struct {
+// DownloadStats statistics on the download process and is used for progress
+// reporting.
+type DownloadStats struct {
 	CachedOrStreamedBytes  int64 // Total bytes cached.
 	CachedOrStreamedBlocks int64 // Total blocks cached.
 	CacheErrors            int64 // Total number of errors encountered while caching.
@@ -32,10 +34,10 @@ type DownloadState struct {
 	Iterations             int64 // Number of iterations requiredd to complete the download.
 }
 
-func (ds DownloadState) updateAfterIteration(nds DownloadState) DownloadState {
+func (ds DownloadStats) updateAfterIteration(nds DownloadStats) DownloadStats {
 	// Update the download state after a 'wait for completion' iteration,
 	// do not update iterations and the overall download size and blocks
-	return DownloadState{
+	return DownloadStats{
 		CachedOrStreamedBytes:  ds.CachedOrStreamedBytes + nds.CachedOrStreamedBytes,
 		CachedOrStreamedBlocks: ds.CachedOrStreamedBlocks + nds.CachedOrStreamedBlocks,
 		CacheErrors:            ds.CacheErrors + nds.CacheErrors,
@@ -50,16 +52,18 @@ func (ds DownloadState) updateAfterIteration(nds DownloadState) DownloadState {
 }
 
 type progressTracker struct {
-	DownloadState
-	ch chan<- DownloadState
+	DownloadStats
+	mu sync.Mutex // Mutex to protect concurrent access to the stats.
+	ch chan<- DownloadStats
 }
 
 func (pt *progressTracker) send() {
 	if pt.ch == nil {
 		return
 	}
-	select {
-	case pt.ch <- DownloadState{
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	stats := DownloadStats{
 		CachedOrStreamedBytes:  atomic.LoadInt64(&pt.CachedOrStreamedBytes),
 		CachedOrStreamedBlocks: atomic.LoadInt64(&pt.CachedOrStreamedBlocks),
 		CacheErrors:            atomic.LoadInt64(&pt.CacheErrors),
@@ -70,7 +74,9 @@ func (pt *progressTracker) send() {
 		DownloadRetries:        atomic.LoadInt64(&pt.DownloadRetries),
 		DownloadErrors:         atomic.LoadInt64(&pt.DownloadErrors),
 		Iterations:             atomic.LoadInt64(&pt.Iterations),
-	}:
+	}
+	select {
+	case pt.ch <- stats:
 	default:
 	}
 }
@@ -154,7 +160,7 @@ func newDownloader(file Reader, opts downloadOptions) *downloader {
 		},
 	}
 	dl.progress = &progressTracker{
-		DownloadState: DownloadState{
+		DownloadStats: DownloadStats{
 			DownloadSize:   dl.size,
 			DownloadBlocks: int64(NumBlocks(dl.size, dl.blockSize)),
 		},

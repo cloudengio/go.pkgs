@@ -215,7 +215,7 @@ func TestCacheStressTest(t *testing.T) {
 			}
 
 			nBlocks := int64(largefile.NumBlocks(cacheSize, blockSize))
-			expected := largefile.DownloadState{
+			expected := largefile.DownloadStats{
 				CachedOrStreamedBytes:  cacheSize,
 				CachedOrStreamedBlocks: nBlocks,
 				DownloadedBytes:        cacheSize,
@@ -228,7 +228,7 @@ func TestCacheStressTest(t *testing.T) {
 				t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
 			}
 			st.Duration = 0
-			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: expected}); !reflect.DeepEqual(got, want) {
+			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: expected}); !reflect.DeepEqual(got, want) {
 				t.Errorf("expected status %+v, got %+v", want, got)
 			}
 
@@ -254,14 +254,14 @@ func TestCacheStressTest(t *testing.T) {
 				t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
 			}
 			st.Duration = 0
-			cachedState := largefile.DownloadState{
+			cachedState := largefile.DownloadStats{
 				CachedOrStreamedBytes:  cacheSize,
 				CachedOrStreamedBlocks: nBlocks,
 				DownloadSize:           cacheSize,
 				DownloadBlocks:         nBlocks,
 				Iterations:             1,
 			}
-			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: cachedState}); !reflect.DeepEqual(got, want) {
+			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: cachedState}); !reflect.DeepEqual(got, want) {
 				t.Errorf("expected status %+v, got %+v", want, got)
 			}
 
@@ -282,7 +282,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 
 	cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
 
-	prevState := largefile.DownloadState{
+	prevStats := largefile.DownloadStats{
 		DownloadSize:   cacheSize,
 		DownloadBlocks: int64(largefile.NumBlocks(cacheSize, blockSize)),
 	}
@@ -331,17 +331,17 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		if err != nil {
 			t.Fatalf("failed to create and allocate space for %s: %v", cacheFilePath, err)
 		}
-		if st.CachedOrStreamedBlocks <= prevState.CachedOrStreamedBlocks {
-			t.Errorf("Run %d expected more cached blocks, got %d, want > %d", i, st.CachedOrStreamedBlocks, prevState.CachedOrStreamedBlocks)
+		if st.CachedOrStreamedBlocks <= prevStats.CachedOrStreamedBlocks {
+			t.Errorf("Run %d expected more cached blocks, got %d, want > %d", i, st.CachedOrStreamedBlocks, prevStats.CachedOrStreamedBlocks)
 		}
-		if st.CachedOrStreamedBytes <= prevState.CachedOrStreamedBytes {
-			t.Errorf("Run %d expected more cached bytes, got %d, want > %d", i, st.CachedOrStreamedBytes, prevState.CachedOrStreamedBytes)
+		if st.CachedOrStreamedBytes <= prevStats.CachedOrStreamedBytes {
+			t.Errorf("Run %d expected more cached bytes, got %d, want > %d", i, st.CachedOrStreamedBytes, prevStats.CachedOrStreamedBytes)
 		}
-		if st.DownloadSize != prevState.DownloadSize {
-			t.Errorf("Run %d expected download size %d, got %d", i, prevState.DownloadSize, st.DownloadSize)
+		if st.DownloadSize != prevStats.DownloadSize {
+			t.Errorf("Run %d expected download size %d, got %d", i, prevStats.DownloadSize, st.DownloadSize)
 		}
-		if st.DownloadBlocks != prevState.DownloadBlocks {
-			t.Errorf("Run %d expected download blocks %d, got %d", i, prevState.DownloadBlocks, st.DownloadBlocks)
+		if st.DownloadBlocks != prevStats.DownloadBlocks {
+			t.Errorf("Run %d expected download blocks %d, got %d", i, prevStats.DownloadBlocks, st.DownloadBlocks)
 		}
 		if st.Iterations != 1 {
 			t.Errorf("Run %d expected 1 iteration, got %d", i, st.Iterations)
@@ -353,7 +353,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 
 		totalErrors += st.DownloadErrors
 		totalRetries += st.DownloadRetries
-		prevState = st.DownloadState
+		prevStats = st.DownloadStats
 	}
 
 	if !cache.Complete() {

@@ -47,7 +47,7 @@ func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOpti
 // the progress made, whether the download is resumable, completed and
 // the total duration of operation.
 type DownloadStatus struct {
-	DownloadState
+	DownloadStats
 	Resumeable bool          // Indicates if the download can be re-run.
 	Complete   bool          // Indicates if the download completed successfully.
 	Duration   time.Duration // Total duration of the download.
@@ -61,35 +61,35 @@ func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
 	dl.progress.incrementCacheOrStream(cachedBytes, cachedBlocks)
 
 	start := time.Now()
-	var finalState DownloadState
+	var finalStats DownloadStats
 	for {
 		st, err := dl.runOnce(ctx)
 		if st.Complete && err == nil {
-			return dl.finalize(st, finalState.updateAfterIteration(dl.progress.DownloadState), start, nil)
+			return dl.finalize(st, finalStats.updateAfterIteration(dl.progress.DownloadStats), start, nil)
 		}
 		dl.logger.Info("runOnce: download not complete, retrying", "iterations", st.Iterations, "error", err)
 		if !dl.waitForCompletion {
-			return dl.finalize(st, finalState.updateAfterIteration(dl.progress.DownloadState), start, err)
+			return dl.finalize(st, finalStats.updateAfterIteration(dl.progress.DownloadStats), start, err)
 		}
-		finalState = finalState.updateAfterIteration(dl.progress.DownloadState)
+		finalStats = finalStats.updateAfterIteration(dl.progress.DownloadStats)
 		select {
 		case <-ctx.Done():
-			return dl.finalize(st, finalState, start, ctx.Err())
+			return dl.finalize(st, finalStats, start, ctx.Err())
 		default:
 		}
 	}
 }
 
-func (dl *CachingDownloader) finalize(status DownloadStatus, state DownloadState, start time.Time, err error) (DownloadStatus, error) {
+func (dl *CachingDownloader) finalize(status DownloadStatus, state DownloadStats, start time.Time, err error) (DownloadStatus, error) {
 	status.Duration = time.Since(start)
-	status.DownloadState = state
+	status.DownloadStats = state
 	if dl.progressCh != nil {
-		dl.progress.DownloadState = status.DownloadState
+		dl.progress.DownloadStats = status.DownloadStats
 		// Send the final download state to the progress channel, taking
 		// care to ensure that a timeout is used, but also giving the
 		// receiver a chance to read the final state.
 		select {
-		case dl.progressCh <- dl.progress.DownloadState:
+		case dl.progressCh <- dl.progress.DownloadStats:
 		case <-time.After(dl.progressTimeout):
 		}
 		close(dl.progressCh) // Ensure the progress channel is closed when done.
@@ -127,7 +127,7 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 	}
 
 	st := DownloadStatus{
-		DownloadState: dl.progress.DownloadState,
+		DownloadStats: dl.progress.DownloadStats,
 		Complete:      dl.cache.Complete() && err == nil,
 		Resumeable:    resumeable,
 	}

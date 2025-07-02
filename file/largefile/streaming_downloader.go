@@ -22,7 +22,7 @@ func (a response) Less(b response) bool {
 
 // StreamingStatus holds status for a streaming download.
 type StreamingStatus struct {
-	DownloadState
+	DownloadStats
 	OutOfOrder    int64         // Total number of out-of-order responses encountered.
 	MaxOutOfOrder int64         // Maximum number of out-of-order responses at any point.
 	Duration      time.Duration // Total duration of the download.
@@ -85,7 +85,7 @@ func (dl *StreamingDownloader) Run(ctx context.Context) (StreamingStatus, error)
 	err = errors.Squash(err, context.Canceled, context.DeadlineExceeded)
 
 	st := StreamingStatus{
-		DownloadState: dl.progress.DownloadState,
+		DownloadStats: dl.progress.DownloadStats,
 		Duration:      time.Since(start),
 		OutOfOrder:    dl.outOfOrder,
 		MaxOutOfOrder: dl.maxHeapSize,

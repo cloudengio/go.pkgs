@@ -202,7 +202,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 	defaultBlockSize := 64
 	defaultBlocks := largefile.NumBlocks(defaultContentSize, defaultBlockSize)
 
-	defaultIncompleteState := largefile.DownloadState{
+	defaultIncompleteStats := largefile.DownloadStats{
 		CachedOrStreamedBytes:  0,
 		CachedOrStreamedBlocks: 0,
 		DownloadedBytes:        0,
@@ -298,8 +298,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected 0 PutCalls, got %d", len(mockCache.PutCalls))
 		}
 		st.Duration = 0
-		p := defaultIncompleteState
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		p := defaultIncompleteStats
+		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -341,7 +341,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("PutCall data mismatch: got %x, want %x", mockCache.PutCalls[0].Data, expectedData)
 		}
 		st.Duration = 0
-		p := largefile.DownloadState{
+		p := largefile.DownloadStats{
 			CachedOrStreamedBytes:  int64(defaultBlockSize),
 			CachedOrStreamedBlocks: 1,
 			DownloadedBytes:        int64(defaultBlockSize),
@@ -350,7 +350,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadBlocks:         int64(defaultBlocks),
 			Iterations:             1,
 		}
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -373,8 +373,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected 0 GetReaderCalls, got %d", len(mockReader.GetReaderCalls))
 		}
 		st.Duration = 0
-		p := defaultIncompleteState
-		if got, want := st, (largefile.DownloadStatus{Resumeable: false, Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		p := defaultIncompleteStats
+		if got, want := st, (largefile.DownloadStatus{Resumeable: false, Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -404,8 +404,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		st.CachedOrStreamedBytes = 0
 		st.DownloadedBlocks = 0
 		st.DownloadedBytes = 0
-		p := defaultIncompleteState
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		p := defaultIncompleteStats
+		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -469,8 +469,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		// so we set them to 0.
 		st.DownloadedBlocks, st.DownloadedBytes = 0, 0
 		st.CachedOrStreamedBlocks, st.CachedOrStreamedBytes = 0, 0
-		p := defaultIncompleteState
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		p := defaultIncompleteStats
+		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
@@ -502,8 +502,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Error("expected DownloadErrors to be > 0, got 0")
 		}
 		st.DownloadErrors = 0
-		p := defaultIncompleteState
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		p := defaultIncompleteStats
+		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
@@ -531,14 +531,14 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected error to contain %q, got %q", putErr.Error(), err.Error())
 		}
 		st.Duration = 0
-		p := defaultIncompleteState
+		p := defaultIncompleteStats
 		if st.CacheErrors == 0 {
 			t.Error("expected DownloadErrors to be > 0, got 0")
 		}
 		st.CacheErrors = 0
 		p.DownloadedBlocks = 1
 		p.DownloadedBytes = int64(defaultBlockSize)
-		if got, want := st, (largefile.DownloadStatus{DownloadState: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
@@ -562,8 +562,8 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected context.DeadlineExceeded with concurrency 0 and outstanding blocks, got %v", err)
 		}
 		st.Duration = 0
-		p := defaultIncompleteState
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		p := defaultIncompleteStats
+		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -594,12 +594,12 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			return newByteRangeSeq(ranges...)(s, b)
 		}
 		// ... (rest of this test case as you have it) ...
-		progressCh := make(chan largefile.DownloadState, numBlocks*2)
+		progressCh := make(chan largefile.DownloadStats, numBlocks*2)
 		optsWithProgress := defaultOpts(2) // Concurrency 2
 		optsWithProgress = append(optsWithProgress, largefile.WithDownloadProgress(progressCh))
 
 		ch := make(chan struct{})
-		var progressUpdates []largefile.DownloadState
+		var progressUpdates []largefile.DownloadStats
 		go func() {
 			for p := range progressCh {
 				progressUpdates = append(progressUpdates, p)
@@ -648,7 +648,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("final progress DownloadBlocks: got %d, want %d", finalProgress.DownloadBlocks, int64(numBlocks))
 		}
 		st.Duration = 0
-		p := largefile.DownloadState{
+		p := largefile.DownloadStats{
 			CachedOrStreamedBytes:  defaultContentSize,
 			CachedOrStreamedBlocks: int64(defaultBlocks),
 			DownloadedBytes:        defaultContentSize,
@@ -657,7 +657,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadBlocks:         int64(defaultBlocks),
 			Iterations:             1,
 		}
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
@@ -743,7 +743,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			}
 		}
 		st.Duration = 0
-		p := largefile.DownloadState{
+		p := largefile.DownloadStats{
 			CachedOrStreamedBytes:  currentContentSize,
 			CachedOrStreamedBlocks: int64(numBlocks),
 			DownloadedBytes:        currentContentSize,
@@ -752,7 +752,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadBlocks:         int64(numBlocks),
 			Iterations:             1,
 		}
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -848,7 +848,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			}
 		}
 		st.Duration = 0
-		p := largefile.DownloadState{
+		p := largefile.DownloadStats{
 			CachedOrStreamedBytes:  currentContentSize,
 			CachedOrStreamedBlocks: int64(totalBlocks),
 			DownloadedBytes:        currentContentSize,
@@ -857,7 +857,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			DownloadBlocks:         int64(totalBlocks),
 			Iterations:             1,
 		}
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadState: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
