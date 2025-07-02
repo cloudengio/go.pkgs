@@ -78,8 +78,12 @@ func IsSupported(algo string) bool {
 	}
 }
 
+// Supported returns a list of supported hash algorithms, note that hyphenated
+// versions of SHA1, SHA256, and SHA512 are also included for compatibility,
+// e.g., "sha-1", "sha-256", "sha-512" as well as the non-hyphenated
+// versions "sha1", "sha256", and "sha512".
 func Supported() []string {
-	return []string{"sha1", "md5", "sha256", "sha512"}
+	return []string{"sha1", "md5", "sha256", "sha512", "sha-1", "sha-256", "sha-512"}
 }
 
 func newHashInstance(algo string) hash.Hash {
