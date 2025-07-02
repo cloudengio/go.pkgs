@@ -305,8 +305,8 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		st, err := dl.Run(ctx)
 		t.Logf("Run %d completed with status: %+v\n", i, st)
 		if err != nil {
-			if got, want := st.Resumeable, true; got != want {
-				t.Errorf("Run %d expected resumeable error, got %v", i, err)
+			if got, want := st.Resumable, true; got != want {
+				t.Errorf("Run %d expected resumable error, got %v", i, err)
 			}
 			if got, want := cache.Complete(), false; got != want {
 				t.Errorf("Run %d expected cache to be incomplete, got complete: %v", i, got)
@@ -390,8 +390,8 @@ func downloadFile(ctx context.Context, t *testing.T, cacheSize int64, blockSize,
 	st, err := dl.Run(ctx)
 	t.Logf("Run completed with status: %+v\n", st)
 	if err != nil {
-		if got, want := st.Resumeable, true; got != want {
-			t.Errorf("Run expected resumeable error, got %v", err)
+		if got, want := st.Resumable, true; got != want {
+			t.Errorf("Run expected resumable error, got %v", err)
 		}
 		if got, want := cache.Complete(), false; got != want {
 			t.Errorf("Run expected cache to be incomplete, got complete: %v", got)
@@ -561,6 +561,9 @@ func streamFile(ctx context.Context, t *testing.T, fileSize int64, blockSize, fa
 		t.Fatalf("expected to write %d bytes, got %d", fileSize, n)
 	}
 
+	wg.Wait()
+	t.Logf("Run completed with status: %+v\n", status)
+
 	if err := errs.Err(); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -568,10 +571,6 @@ func streamFile(ctx context.Context, t *testing.T, fileSize int64, blockSize, fa
 	if errs.Err() == nil {
 		validateCacheFile(t, cacheFilePath, fileSize)
 	}
-
-	wg.Wait()
-
-	t.Logf("Run completed with status: %+v\n", status)
 
 	if status.DownloadSize != fileSize {
 		t.Errorf("expected download size %d, got %d", fileSize, status.DownloadSize)

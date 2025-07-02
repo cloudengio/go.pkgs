@@ -7,7 +7,6 @@ package largefile
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -62,31 +61,6 @@ type DownloadCache interface {
 	// It returns an error if any of the data to be read is not already cached.
 	// The offset need not be aligned with the block boundaries.
 	ReadAt(data []byte, off int64) (int, error)
-}
-
-var (
-	ErrCacheInvalidBlockSize  = errors.New("invalid block size")
-	ErrCacheInvalidOffset     = errors.New("invalid offset")
-	ErrCacheUncachedRange     = errors.New("uncached range")
-	ErrCacheInternalError     = &internalError{}
-	ErrStreamingDownloadError = &internalError{}
-)
-
-type internalError struct {
-	err error
-}
-
-func (e *internalError) Error() string {
-	return fmt.Sprintf("internal error: %v", e.err)
-}
-
-func (e *internalError) Unwrap() error {
-	return e.err
-}
-
-func (e *internalError) Is(target error) bool {
-	_, ok := target.(*internalError)
-	return ok
 }
 
 // LocalDownloadCache is a concrete implementation of RangeCache that uses
@@ -226,14 +200,14 @@ type indexStore struct {
 func (i *indexStore) save() error {
 	data, err := json.Marshal(i.ByteRanges)
 	if err != nil {
-		return &internalError{fmt.Errorf("failed to marshal ranges to JSON: %w", err)}
+		return &internalCacheError{fmt.Errorf("failed to marshal ranges to JSON: %w", err)}
 	}
 	n, err := i.wr.WriteAt(data, 0)
 	if err != nil {
-		return &internalError{fmt.Errorf("failed to write index file %s: %w", i.wr.Name(), err)}
+		return &internalCacheError{fmt.Errorf("failed to write index file %s: %w", i.wr.Name(), err)}
 	}
 	if n != len(data) {
-		return &internalError{fmt.Errorf("failed to write all data to the index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), err)}
+		return &internalCacheError{fmt.Errorf("failed to write all data to the index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), err)}
 	}
 	return nil
 }
@@ -241,10 +215,10 @@ func (i *indexStore) save() error {
 func (i *indexStore) load() error {
 	buf, err := io.ReadAll(i.wr)
 	if err != nil {
-		return &internalError{fmt.Errorf("failed to read index file %s: %w", i.wr.Name(), err)}
+		return &internalCacheError{fmt.Errorf("failed to read index file %s: %w", i.wr.Name(), err)}
 	}
 	if err := json.Unmarshal(buf, &i.ByteRanges); err != nil {
-		return &internalError{fmt.Errorf("failed to unmarshal index file %s: %w", i.wr.Name(), err)}
+		return &internalCacheError{fmt.Errorf("failed to unmarshal index file %s: %w", i.wr.Name(), err)}
 	}
 	return nil
 }
@@ -316,17 +290,17 @@ func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error) {
 	}
 	n, err := c.data.WriteAt(data, off)
 	if err != nil {
-		return 0, fmt.Errorf("failed to write data to cache for offset %d: %w", off, &internalError{err})
+		return 0, &internalCacheError{fmt.Errorf("failed to write data to cache for offset %d: %w", off, err)}
 	}
 	if n != len(data) {
-		return 0, fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d: %w", off, n, len(data), &internalError{})
+		return 0, &internalCacheError{fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d", off, n, len(data))}
 	}
 	if err := c.data.Sync(); err != nil {
-		return 0, fmt.Errorf("failed to sync cache file after writing offset %d: %w", off, &internalError{err})
+		return 0, &internalCacheError{fmt.Errorf("failed to sync cache file after writing offset %d: %w", off, err)}
 	}
 	c.indexStore.Set(off) // Mark the range as cached.
 	if err := c.indexStore.save(); err != nil {
-		return 0, fmt.Errorf("failed to save index file %s after writing offset %d: %w", c.indexStore.wr.Name(), off, &internalError{err})
+		return 0, &internalCacheError{fmt.Errorf("failed to save index file %s after writing offset %d: %w", c.indexStore.wr.Name(), off, err)}
 	}
 	return n, nil
 }
@@ -368,10 +342,10 @@ func (c *LocalDownloadCache) ReadAt(data []byte, off int64) (int, error) {
 	}
 	n, err := c.data.ReadAt(data, off)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read all data from cache for offset %d: %w", off, &internalError{err})
+		return 0, &internalCacheError{fmt.Errorf("failed to read all data from cache for offset %d: %w", off, err)}
 	}
 	if n != len(data) {
-		return 0, fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d: %w", off, n, len(data), &internalError{})
+		return 0, &internalCacheError{fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d", off, n, len(data))}
 	}
 	return n, nil
 }
@@ -390,10 +364,10 @@ func (c *LocalDownloadCache) Close() error {
 			continue
 		}
 		if err := f.Sync(); err != nil {
-			return fmt.Errorf("failed to sync %s: %w", f.Name(), err)
+			return &internalCacheError{fmt.Errorf("failed to sync %s: %w", f.Name(), err)}
 		}
 		if err := f.Close(); err != nil {
-			return fmt.Errorf("failed to close %s: %w", f.Name(), err)
+			return &internalCacheError{fmt.Errorf("failed to close %s: %w", f.Name(), err)}
 		}
 	}
 	return nil

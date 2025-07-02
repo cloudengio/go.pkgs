@@ -374,7 +374,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := defaultIncompleteStats
-		if got, want := st, (largefile.DownloadStatus{Resumeable: false, Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Resumable: false, Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -405,7 +405,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		st.DownloadedBlocks = 0
 		st.DownloadedBytes = 0
 		p := defaultIncompleteStats
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Resumable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
@@ -470,7 +470,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		st.DownloadedBlocks, st.DownloadedBytes = 0, 0
 		st.CachedOrStreamedBlocks, st.CachedOrStreamedBytes = 0, 0
 		p := defaultIncompleteStats
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Resumable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
@@ -503,7 +503,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.DownloadErrors = 0
 		p := defaultIncompleteStats
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Resumable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
@@ -563,7 +563,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := defaultIncompleteStats
-		if got, want := st, (largefile.DownloadStatus{Resumeable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+		if got, want := st, (largefile.DownloadStatus{Resumable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})

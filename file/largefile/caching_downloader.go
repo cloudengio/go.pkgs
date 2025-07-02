@@ -48,9 +48,9 @@ func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOpti
 // the total duration of operation.
 type DownloadStatus struct {
 	DownloadStats
-	Resumeable bool          // Indicates if the download can be re-run.
-	Complete   bool          // Indicates if the download completed successfully.
-	Duration   time.Duration // Total duration of the download.
+	Resumable bool          // Indicates if the download can be re-run.
+	Complete  bool          // Indicates if the download completed successfully.
+	Duration  time.Duration // Total duration of the download.
 }
 
 // Run executes the downloaded process. If the downloader encounters any errors
@@ -129,7 +129,7 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 	st := DownloadStatus{
 		DownloadStats: dl.progress.DownloadStats,
 		Complete:      dl.cache.Complete() && err == nil,
-		Resumeable:    resumeable,
+		Resumable:     resumeable,
 	}
 	return st, err
 }
