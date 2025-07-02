@@ -148,10 +148,12 @@ func TestStreamingDownloader_OutOfOrderBlocks(t *testing.T) {
 	first := reader.setOrder(3, 1, 2, 0) // Ensure blocks are returned out of order.
 
 	var st largefile.StreamingStatus
-	var dlErr error
+	errCh := make(chan error)
 	dl := largefile.NewStreamingDownloader(reader)
 	go func() {
-		st, dlErr = dl.Run(context.Background())
+		var err error
+		st, err = dl.Run(context.Background())
+		errCh <- err
 	}()
 
 	go close(first) // Close the first channel to signal the end of the first read.
@@ -164,7 +166,7 @@ func TestStreamingDownloader_OutOfOrderBlocks(t *testing.T) {
 		t.Errorf("streamed data mismatch: got %q, want %q", got, content)
 	}
 
-	if dlErr != nil {
+	if err := <-errCh; err != nil {
 		t.Errorf("Run() returned an error: %v", err)
 	}
 	if st.OutOfOrder == 0 {
