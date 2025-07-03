@@ -190,7 +190,7 @@ type responseHandler func(ctx context.Context, resp response) error
 
 func (dl *downloader) handleGet(ctx context.Context, req request, handler responseHandler) error {
 	if err := dl.rateController.Wait(ctx); err != nil {
-		return newInternalDownloadError(fmt.Errorf("ratecontrol failed: %w", err))
+		return err // Context was canceled or deadline exceeded, return immediately.
 	}
 	start := time.Now()
 	rd, err := dl.get(ctx, req)
@@ -229,9 +229,7 @@ func (dl *downloader) fetcher(ctx context.Context, in <-chan request, retryHandl
 			if err := dl.handleGet(ctx, req, handler); err != nil {
 				if errors.Is(err, context.Canceled) ||
 					errors.Is(err, context.DeadlineExceeded) ||
-					errors.Is(err, ErrCacheInternalError) ||
-					errors.Is(err, ErrStreamingInternalError) ||
-					errors.Is(err, ErrDownloadInternalError) {
+					errors.Is(err, ErrInternalError) {
 					return err
 				}
 				errs.Append(retryHandler(ctx, req, err))

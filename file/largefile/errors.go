@@ -10,61 +10,38 @@ import (
 )
 
 var (
-	ErrCacheInvalidBlockSize  = errors.New("invalid block size")
-	ErrCacheInvalidOffset     = errors.New("invalid offset")
-	ErrCacheUncachedRange     = errors.New("uncached range")
-	ErrCacheInternalError     = &internalCacheError{}
-	ErrStreamingInternalError = &internalStreamingError{}
-	ErrDownloadInternalError  = &internalDownloadError{}
+	ErrCacheInvalidBlockSize = errors.New("invalid block size")
+	ErrCacheInvalidOffset    = errors.New("invalid offset")
+	ErrCacheUncachedRange    = errors.New("uncached range")
+	ErrInternalError         = &internalError{}
 )
 
-type internalCacheError struct {
-	internalError
-}
-
-type internalStreamingError struct {
-	internalError
-}
-
-type internalDownloadError struct {
-	internalError
-}
-
 type internalError struct {
-	err error
+	component string
+	err       error
 }
 
 func (e *internalError) Error() string {
-	return fmt.Sprintf("internal cache error: %v", e.err)
+	return fmt.Sprintf("%v: internal error: %v", e.component, e.err)
 }
 
 func (e *internalError) Unwrap() error {
 	return e.err
 }
 
-func (e *internalCacheError) Is(target error) bool {
-	_, ok := target.(*internalCacheError)
-	return ok
-}
-
-func (e *internalStreamingError) Is(target error) bool {
-	_, ok := target.(*internalStreamingError)
-	return ok
-}
-
-func (e *internalDownloadError) Is(target error) bool {
-	_, ok := target.(*internalDownloadError)
+func (e *internalError) Is(target error) bool {
+	_, ok := target.(*internalError)
 	return ok
 }
 
 func newInternalCacheError(err error) error {
-	return &internalCacheError{internalError: internalError{err: err}}
+	return &internalError{component: "cache", err: err}
 }
 
 func newInternalStreamingError(err error) error {
-	return &internalStreamingError{internalError: internalError{err: err}}
+	return &internalError{component: "streaming", err: err}
 }
 
 func newInternalDownloadError(err error) error {
-	return &internalDownloadError{internalError: internalError{err: err}}
+	return &internalError{component: "download", err: err}
 }

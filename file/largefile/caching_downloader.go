@@ -121,7 +121,7 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 	// Any errors encountered during the download are considered resumable, ie,
 	// the download can be restarted with the same cache to continue from where it left off.
 	resumeable := err != nil
-	if errors.Is(err, ErrDownloadInternalError) || errors.Is(err, ErrCacheInternalError) {
+	if errors.Is(err, ErrInternalError) {
 		// If the error is a terminal error, we consider it non-resumable.
 		resumeable = false
 	}

@@ -7,6 +7,7 @@ package largefile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -173,7 +174,7 @@ type CacheFileReadWriter interface {
 // been created using NewFilesForCache.
 func NewLocalDownloadCache(dataReadWriter, indexReadWriter CacheFileReadWriter) (*LocalDownloadCache, error) {
 	if dataReadWriter == nil || indexReadWriter == nil {
-		return nil, fmt.Errorf("data and index read/writer arguments must be non-nil: %w", ErrCacheInternalError)
+		return nil, fmt.Errorf("data and index read/writer arguments must be non-nil")
 	}
 	cache := &LocalDownloadCache{
 		data:       dataReadWriter,
@@ -255,7 +256,7 @@ func (c *LocalDownloadCache) CachedBytesAndBlocks() (bytes, blocks int64) {
 
 func (c *LocalDownloadCache) validateOffsetAndSize(off, size int64) error {
 	if c.indexStore == nil {
-		return fmt.Errorf("index store is not initialized: %w", ErrCacheInternalError)
+		return newInternalCacheError(errors.New("index store is not initialized"))
 	}
 	if off < 0 || off > c.lastBlockOffset {
 		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.lastBlockOffset, ErrCacheInvalidOffset)
@@ -286,7 +287,7 @@ func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.data == nil || c.indexStore.wr == nil {
-		return 0, fmt.Errorf("cache files are not initialized: %w", ErrCacheInternalError)
+		return 0, newInternalCacheError(errors.New("cache files are not initialized"))
 	}
 	n, err := c.data.WriteAt(data, off)
 	if err != nil {
@@ -307,7 +308,7 @@ func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error) {
 
 func (c *LocalDownloadCache) validateOffset(off, size int64) error {
 	if c.indexStore == nil {
-		return fmt.Errorf("index store is not initialized: %w", ErrCacheInternalError)
+		return newInternalCacheError(errors.New("index store is not initialized"))
 	}
 	if off < 0 || off >= c.indexStore.contentSize {
 		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.indexStore.contentSize, ErrCacheInvalidOffset)
@@ -335,7 +336,7 @@ func (c *LocalDownloadCache) ReadAt(data []byte, off int64) (int, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.data == nil || c.indexStore.wr == nil {
-		return 0, fmt.Errorf("cache files are not initialized: %w", ErrCacheInternalError)
+		return 0, newInternalCacheError(errors.New("cache files are not initialized"))
 	}
 	if err := c.validateCachedLocked(off, int64(len(data))); err != nil {
 		return 0, err

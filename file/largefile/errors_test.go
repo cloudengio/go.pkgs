@@ -5,45 +5,46 @@
 package largefile
 
 import (
-	"errors"
+	"fmt"
 	"testing"
+
+	"cloudeng.io/errors"
 )
 
-func TestInternalErrorTypes(t *testing.T) {
-	cacheErr := newInternalCacheError(errors.New("cache"))
-	streamErr := newInternalStreamingError(errors.New("stream"))
-	downloadErr := newInternalDownloadError(errors.New("download"))
+func TestErrorTypes(t *testing.T) {
+	if !errors.Is(fmt.Errorf("... %w", ErrCacheInvalidBlockSize), ErrCacheInvalidBlockSize) {
+		t.Errorf("ErrCacheInvalidBlockSize should be equal to itself")
+	}
+	if !errors.Is(fmt.Errorf("... %w", ErrCacheInvalidOffset), ErrCacheInvalidOffset) {
+		t.Errorf("ErrCacheInvalidOffset should be equal to itself")
+	}
+	if !errors.Is(fmt.Errorf("... %w", ErrCacheUncachedRange), ErrCacheUncachedRange) {
+		t.Errorf("ErrCacheUncachedRange should be equal to itself")
+	}
+}
 
-	// Test Is for internalCacheError
-	if !errors.Is(cacheErr, &internalCacheError{}) {
-		t.Errorf("internalCacheError should be recognized by errors.Is")
+func TestInternalError(t *testing.T) {
+	cacheErr := newInternalCacheError(errors.New("test error"))
+	downloadErr := newInternalDownloadError(errors.New("test error"))
+	streamingErr := newInternalStreamingError(errors.New("test error"))
+
+	if !errors.Is(cacheErr, ErrInternalError) {
+		t.Errorf("cacheErr should be an internal error")
 	}
-	if errors.Is(cacheErr, &internalStreamingError{}) {
-		t.Errorf("internalCacheError should not be recognized as internalStreamingError")
+	if !errors.Is(downloadErr, ErrInternalError) {
+		t.Errorf("downloadErr should be an internal error")
 	}
-	if errors.Is(cacheErr, &internalDownloadError{}) {
-		t.Errorf("internalCacheError should not be recognized as internalDownloadError")
+	if !errors.Is(streamingErr, ErrInternalError) {
+		t.Errorf("streamingErr should be an internal error")
 	}
 
-	// Test Is for internalStreamingError
-	if !errors.Is(streamErr, &internalStreamingError{}) {
-		t.Errorf("internalStreamingError should be recognized by errors.Is")
+	if got, want := cacheErr.Error(), "cache: internal error: test error"; got != want {
+		t.Errorf("cacheErr.Error() = %q, want %q", got, want)
 	}
-	if errors.Is(streamErr, &internalCacheError{}) {
-		t.Errorf("internalStreamingError should not be recognized as internalCacheError")
+	if got, want := downloadErr.Error(), "download: internal error: test error"; got != want {
+		t.Errorf("downloadErr.Error() = %q, want %q", got, want)
 	}
-	if errors.Is(streamErr, &internalDownloadError{}) {
-		t.Errorf("internalStreamingError should not be recognized as internalDownloadError")
-	}
-
-	// Test Is for internalDownloadError
-	if !errors.Is(downloadErr, &internalDownloadError{}) {
-		t.Errorf("internalDownloadError should be recognized by errors.Is")
-	}
-	if errors.Is(downloadErr, &internalCacheError{}) {
-		t.Errorf("internalDownloadError should not be recognized as internalCacheError")
-	}
-	if errors.Is(downloadErr, &internalStreamingError{}) {
-		t.Errorf("internalDownloadError should not be recognized as internalStreamingError")
+	if got, want := streamingErr.Error(), "streaming: internal error: test error"; got != want {
+		t.Errorf("streamingErr.Error() = %q, want %q", got, want)
 	}
 }
