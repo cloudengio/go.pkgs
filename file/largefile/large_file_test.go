@@ -7,9 +7,11 @@ package largefile_test
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"cloudeng.io/file/largefile"
 )
@@ -227,4 +229,179 @@ func TestRanges(t *testing.T) {
 	if allSet[2].Size() != 10 {
 		t.Errorf("NextSet(1000) size = %d, want 10", allSet[2].Size())
 	}
+}
+
+func TestRangesFunction(t *testing.T) {
+	tests := []struct {
+		name       string
+		from       int64
+		to         int64
+		blockSize  int
+		wantRanges []largefile.ByteRange
+	}{
+		{
+			name:      "exact multiple from zero",
+			from:      0,
+			to:        99,
+			blockSize: 25,
+			wantRanges: []largefile.ByteRange{
+				{From: 0, To: 24},
+				{From: 25, To: 49},
+				{From: 50, To: 74},
+				{From: 75, To: 99},
+			},
+		},
+		{
+			name:      "partial last block from zero",
+			from:      0,
+			to:        99,
+			blockSize: 30,
+			wantRanges: []largefile.ByteRange{
+				{From: 0, To: 29},
+				{From: 30, To: 59},
+				{From: 60, To: 89},
+				{From: 90, To: 99},
+			},
+		},
+		{
+			// This test case demonstrates the current behavior where the
+			// yielded ranges are relative to 0, not the 'from' parameter.
+			name:      "non-zero from",
+			from:      50,
+			to:        149,
+			blockSize: 25,
+			wantRanges: []largefile.ByteRange{
+				{From: 50, To: 74},
+				{From: 75, To: 99},
+				{From: 100, To: 124},
+				{From: 125, To: 149},
+			},
+		},
+		{
+			name:      "single block smaller than blocksize",
+			from:      0,
+			to:        49,
+			blockSize: 100,
+			wantRanges: []largefile.ByteRange{
+				{From: 0, To: 49},
+			},
+		},
+		{
+			name:      "range size equals block size",
+			from:      0,
+			to:        99,
+			blockSize: 100,
+			wantRanges: []largefile.ByteRange{
+				{From: 0, To: 99},
+			},
+		},
+		{
+			name:       "zero size range",
+			from:       10,
+			to:         9,
+			blockSize:  100,
+			wantRanges: []largefile.ByteRange{},
+		},
+		{
+			name:       "zero block size",
+			from:       0,
+			to:         99,
+			blockSize:  0,
+			wantRanges: []largefile.ByteRange{},
+		},
+		{
+			name:       "negative block size",
+			from:       0,
+			to:         99,
+			blockSize:  -1,
+			wantRanges: []largefile.ByteRange{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotRanges []largefile.ByteRange
+			for r := range largefile.Ranges(tt.from, tt.to, tt.blockSize) {
+				gotRanges = append(gotRanges, r)
+			}
+
+			if !slices.Equal(gotRanges, tt.wantRanges) {
+				t.Errorf("Ranges() got = %v, want %v", gotRanges, tt.wantRanges)
+			}
+		})
+	}
+}
+
+func TestByteRanges_NotifyAndTail(t *testing.T) {
+	const (
+		contentSize = 4096
+		blockSize   = 1024
+	)
+
+	t.Run("Notify closes when contiguous range is extended", func(t *testing.T) {
+		br := largefile.NewByteRanges(contentSize, blockSize)
+		ch := br.Notify()
+		select {
+		case <-ch:
+			t.Fatal("channel should not be closed yet")
+		default:
+		}
+		br.Set(0)
+		select {
+		case <-ch:
+			// Success: channel closed after first block set
+		case <-time.After(50 * time.Millisecond):
+			t.Fatal("channel was not closed after contiguous extension")
+		}
+	})
+
+	t.Run("Notify already closed if range is complete", func(t *testing.T) {
+		br := largefile.NewByteRanges(contentSize, blockSize)
+		for i := 0; i < br.NumBlocks(); i++ {
+			br.Set(int64(i * blockSize))
+		}
+		ch := br.Notify()
+		select {
+		case <-ch:
+			// Success: already closed
+		default:
+			t.Fatal("channel should be closed for complete range")
+		}
+	})
+
+	t.Run("Tail returns false if nothing set", func(t *testing.T) {
+		br := largefile.NewByteRanges(contentSize, blockSize)
+		r, ok := br.Tail()
+		if ok {
+			t.Errorf("Tail() = %v, %v; want false", r, ok)
+		}
+	})
+
+	t.Run("Tail returns correct range after Set", func(t *testing.T) {
+		br := largefile.NewByteRanges(contentSize, blockSize)
+		br.Set(0)
+		r, ok := br.Tail()
+		want := largefile.ByteRange{From: 0, To: 1023}
+		if !ok {
+			t.Fatal("Tail() returned false after Set")
+		}
+		if !reflect.DeepEqual(r, want) {
+			t.Errorf("Tail() = %v, want %v", r, want)
+		}
+	})
+
+	t.Run("Tail returns full range when all set", func(t *testing.T) {
+		br := largefile.NewByteRanges(contentSize, blockSize)
+		for i := 0; i < br.NumBlocks(); i++ {
+			br.Set(int64(i * blockSize))
+		}
+		r, ok := br.Tail()
+		want := largefile.ByteRange{From: 0, To: contentSize - 1}
+		if !ok {
+			t.Fatal("Tail() returned false for complete range")
+		}
+		if !reflect.DeepEqual(r, want) {
+			t.Errorf("Tail() = %v, want %v", r, want)
+		}
+	})
 }

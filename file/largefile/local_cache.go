@@ -22,9 +22,11 @@ type DownloadCache interface {
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
-	// Cached returns the total number of bytes and blocks already stored in
+
+	// CachedBytesAndBlocks returns the total number of bytes and blocks already stored in
 	// the cache.
 	CachedBytesAndBlocks() (bytes, blocks int64)
+
 	// NextOutstanding finds the next byte range that has not been cached
 	// starting from the specified 'start' index. Its return value is either
 	// -1 if there are no more outstanding ranges, or the value of the next
@@ -35,55 +37,43 @@ type DownloadCache interface {
 	//        // Do something with the byte range br.
 	//    }
 	NextOutstanding(start int, br *ByteRange) int
+
 	// NextCached finds the next byte range that has been cached in the same manner
 	// as NextOutstanding.
 	NextCached(start int, br *ByteRange) int
+
+	// Tail returns the contiguous range of bytes that have been cached so far.
+	// If this has not grown since the last call to Tail, Tail will block until
+	// the tail is extended. If the context is done before the tail is extended,
+	// it returns a ByteRange with From and To set to -1.
+	Tail(context.Context) ByteRange
+
 	// Complete returns true if all byte ranges have been cached.
 	Complete() bool
+
 	// WriteAt writes at most blocksize bytes starting at the specified offset.
-	// It returns an error if data is not exactly blocksize bytes long, unless
-	// the offset is at the end of the file, in which case it must
-	// be (content length % blocksize) bytes long.
+	// Offset must be aligned with the block boundaries. It returns an error if
+	// data is not exactly blocksize bytes long, unless the offset is at the
+	// end of the file, in which case it must be (content length % blocksize)
+	// bytes long.
 	WriteAt(data []byte, off int64) (int, error)
-	// ReadAt reads at most blocksize bytes starting at the specified offset.
-	// It returns an error if data is not exactly blocksize bytes long, unless
-	// the offset is at the end of the file, in which case it must
-	// be (content length % blocksize) bytes long.
+
+	// ReadAt reads at most len(data) bytes starting at the specified offset.
+	// It returns an error if any of the data to be read is not already cached.
+	// The offset need not be aligned with the block boundaries.
 	ReadAt(data []byte, off int64) (int, error)
-}
-
-var (
-	ErrCacheInvalidBlockSize = errors.New("invalid block size")
-	ErrCacheInvalidOffset    = errors.New("invalid offset")
-	ErrCacheInternalError    = &internalCacheError{}
-)
-
-type internalCacheError struct {
-	err error
-}
-
-func (e *internalCacheError) Error() string {
-	return fmt.Sprintf("internal cache error: %v", e.err)
-}
-
-func (e *internalCacheError) Unwrap() error {
-	return e.err
-}
-
-func (e *internalCacheError) Is(target error) bool {
-	_, ok := target.(*internalCacheError)
-	return ok
 }
 
 // LocalDownloadCache is a concrete implementation of RangeCache that uses
 // a local file to cache byte ranges of large files.
 // It allows for concurrent access.
 type LocalDownloadCache struct {
-	mu              sync.Mutex // Protects access to the cache file.
-	data            CacheFileReadWriter
-	indexStore      *indexStore
-	lastBlockSize   int64 // size of last block
-	lastBlockOffset int64
+	mu                sync.RWMutex // Protects access to the cache file.
+	data              CacheFileReadWriter
+	indexStore        *indexStore
+	lastTailByteRange int64 // The last byte range returned by Tail.
+	lastBlockSize     int64 // size of last block
+	lastBlockOffset   int64 // offset of last block
 }
 
 // CreateNewFilesForCache creates a new cache file and an index file for caching
@@ -184,7 +174,7 @@ type CacheFileReadWriter interface {
 // been created using NewFilesForCache.
 func NewLocalDownloadCache(dataReadWriter, indexReadWriter CacheFileReadWriter) (*LocalDownloadCache, error) {
 	if dataReadWriter == nil || indexReadWriter == nil {
-		return nil, fmt.Errorf("data and index read/writer arguments must be non-nil: %w", ErrCacheInternalError)
+		return nil, fmt.Errorf("data and index read/writer arguments must be non-nil")
 	}
 	cache := &LocalDownloadCache{
 		data:       dataReadWriter,
@@ -192,8 +182,8 @@ func NewLocalDownloadCache(dataReadWriter, indexReadWriter CacheFileReadWriter) 
 	}
 	if err := cache.indexStore.load(); err != nil {
 		return nil, fmt.Errorf("failed to load index file %s: %w", indexReadWriter.Name(), err)
-
 	}
+
 	cache.lastBlockSize = cache.indexStore.ContentLength() % int64(cache.indexStore.blockSize)
 	cache.lastBlockOffset = cache.indexStore.ContentLength() - cache.lastBlockSize
 	if cache.lastBlockSize == 0 {
@@ -211,14 +201,14 @@ type indexStore struct {
 func (i *indexStore) save() error {
 	data, err := json.Marshal(i.ByteRanges)
 	if err != nil {
-		return fmt.Errorf("failed to marshal ranges to JSON: %w", err)
+		return newInternalCacheError(fmt.Errorf("failed to marshal ranges to JSON: %w", err))
 	}
 	n, err := i.wr.WriteAt(data, 0)
 	if err != nil {
-		return fmt.Errorf("failed to write index file %s: %w", i.wr.Name(), err)
+		return newInternalCacheError(fmt.Errorf("failed to write index file %s: %w", i.wr.Name(), err))
 	}
 	if n != len(data) {
-		return fmt.Errorf("failed to write all data to the index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), &internalCacheError{})
+		return newInternalCacheError(fmt.Errorf("failed to write all data to the index file %s: wrote %d bytes, expected %d: %w", i.wr.Name(), n, len(data), err))
 	}
 	return nil
 }
@@ -226,10 +216,10 @@ func (i *indexStore) save() error {
 func (i *indexStore) load() error {
 	buf, err := io.ReadAll(i.wr)
 	if err != nil {
-		return fmt.Errorf("failed to read index file %s: %w", i.wr.Name(), err)
+		return newInternalCacheError(fmt.Errorf("failed to read index file %s: %w", i.wr.Name(), err))
 	}
 	if err := json.Unmarshal(buf, &i.ByteRanges); err != nil {
-		return fmt.Errorf("failed to unmarshal index file %s: %w", i.wr.Name(), err)
+		return newInternalCacheError(fmt.Errorf("failed to unmarshal index file %s: %w", i.wr.Name(), err))
 	}
 	return nil
 }
@@ -266,7 +256,7 @@ func (c *LocalDownloadCache) CachedBytesAndBlocks() (bytes, blocks int64) {
 
 func (c *LocalDownloadCache) validateOffsetAndSize(off, size int64) error {
 	if c.indexStore == nil {
-		return fmt.Errorf("index store is not initialized: %w", ErrCacheInternalError)
+		return newInternalCacheError(errors.New("index store is not initialized"))
 	}
 	if off < 0 || off > c.lastBlockOffset {
 		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.lastBlockOffset, ErrCacheInvalidOffset)
@@ -287,7 +277,6 @@ func (c *LocalDownloadCache) validateOffsetAndSize(off, size int64) error {
 		return fmt.Errorf("data size %d for offset %d: must be %d: %w", size, off, c.indexStore.blockSize, ErrCacheInvalidBlockSize)
 	}
 	return nil
-
 }
 
 // WriteAt implements DownloadCache.
@@ -298,44 +287,66 @@ func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.data == nil || c.indexStore.wr == nil {
-		return 0, fmt.Errorf("cache files are not initialized: %w", ErrCacheInternalError)
+		return 0, newInternalCacheError(errors.New("cache files are not initialized"))
 	}
 	n, err := c.data.WriteAt(data, off)
 	if err != nil {
-		return 0, fmt.Errorf("failed to write data to cache for offset %d: %w", off, &internalCacheError{err})
+		return 0, newInternalCacheError(fmt.Errorf("failed to write data to cache for offset %d: %w", off, err))
 	}
 	if n != len(data) {
-		return 0, fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d: %w", off, n, len(data), &internalCacheError{})
+		return n, newInternalCacheError(fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d: %w", off, n, len(data), io.ErrShortWrite)) // Ensure all data is written.
 	}
 	if err := c.data.Sync(); err != nil {
-		return 0, fmt.Errorf("failed to sync cache file after writing offset %d: %w", off, &internalCacheError{err})
+		return 0, newInternalCacheError(fmt.Errorf("failed to sync cache file after writing offset %d: %w", off, err))
 	}
 	c.indexStore.Set(off) // Mark the range as cached.
 	if err := c.indexStore.save(); err != nil {
-		return 0, fmt.Errorf("failed to save index file %s after writing offset %d: %w", c.indexStore.wr.Name(), off, &internalCacheError{err})
+		return 0, newInternalCacheError(fmt.Errorf("failed to save index file %s after writing offset %d: %w", c.indexStore.wr.Name(), off, err))
 	}
 	return n, nil
 }
 
+func (c *LocalDownloadCache) validateOffset(off, size int64) error {
+	if c.indexStore == nil {
+		return newInternalCacheError(errors.New("index store is not initialized"))
+	}
+	if off < 0 || off >= c.indexStore.contentSize {
+		return fmt.Errorf("%d must be between 0 and %d: %w", off, c.indexStore.contentSize, ErrCacheInvalidOffset)
+	}
+	if off+size > c.indexStore.contentSize {
+		return fmt.Errorf("offset %d with size %d exceeds content size %d: %w", off, size, c.indexStore.contentSize, ErrCacheInvalidBlockSize)
+	}
+	return nil
+}
+
+func (c *LocalDownloadCache) validateCachedLocked(off, size int64) error {
+	for i := off; i < off+size; i += int64(c.indexStore.blockSize) {
+		if c.indexStore.IsClear(i) {
+			return fmt.Errorf("offset %d is not cached: %w", i, ErrCacheUncachedRange)
+		}
+	}
+	return nil
+}
+
 // ReadAt implements DownloadCache.
 func (c *LocalDownloadCache) ReadAt(data []byte, off int64) (int, error) {
-	if err := c.validateOffsetAndSize(off, int64(len(data))); err != nil {
+	if err := c.validateOffset(off, int64(len(data))); err != nil {
 		return 0, err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.data == nil || c.indexStore.wr == nil {
-		return 0, fmt.Errorf("cache files are not initialized: %w", ErrCacheInternalError)
+		return 0, newInternalCacheError(errors.New("cache files are not initialized"))
 	}
-	if c.indexStore.IsClear(off) {
-		return 0, fmt.Errorf("offset %d is not cachedL: %w", off, ErrCacheInvalidOffset)
+	if err := c.validateCachedLocked(off, int64(len(data))); err != nil {
+		return 0, err
 	}
 	n, err := c.data.ReadAt(data, off)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read all data from cache for offset %d: %w", off, &internalCacheError{err})
+		return 0, newInternalCacheError(fmt.Errorf("failed to read all data from cache for offset %d: %w", off, err))
 	}
 	if n != len(data) {
-		return 0, fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d: %w", off, n, len(data), &internalCacheError{})
+		return n, newInternalCacheError(fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d: %w", off, n, len(data), io.ErrUnexpectedEOF))
 	}
 	return n, nil
 }
@@ -354,11 +365,41 @@ func (c *LocalDownloadCache) Close() error {
 			continue
 		}
 		if err := f.Sync(); err != nil {
-			return fmt.Errorf("failed to sync %s: %w", f.Name(), err)
+			return newInternalCacheError(fmt.Errorf("failed to sync %s: %w", f.Name(), err))
 		}
 		if err := f.Close(); err != nil {
-			return fmt.Errorf("failed to close %s: %w", f.Name(), err)
+			return newInternalCacheError(fmt.Errorf("failed to close %s: %w", f.Name(), err))
 		}
 	}
 	return nil
+}
+
+func (c *LocalDownloadCache) isExtended(to int64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	done := to > c.lastTailByteRange
+	if done {
+		c.lastTailByteRange = to
+	}
+	return done
+}
+
+// Tail implements DownloadCache. It returns the contiguous range of bytes
+// that have been cached so far. If this has not grown since the last call to
+// Tail, Tail will block until the tail is extended.
+func (c *LocalDownloadCache) Tail(ctx context.Context) ByteRange {
+	if tail, ok := c.indexStore.Tail(); ok && c.isExtended(tail.To) {
+		return tail
+	}
+	ch := c.indexStore.Notify()
+	select {
+	case <-ctx.Done():
+		return ByteRange{From: -1, To: -1} // Return an empty range if the context is done.
+	case <-ch:
+	}
+	tail, _ := c.indexStore.Tail() // ok will always be true after a notification is received.
+	c.mu.Lock()
+	c.lastTailByteRange = tail.To
+	c.mu.Unlock()
+	return tail
 }

@@ -179,8 +179,8 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError, got %T: %v", err, err)
 		}
 		if !errors.Is(err, simulatedErr) {
 			t.Errorf("expected underlying error to be %v, but it was not found in chain", simulatedErr)
@@ -197,8 +197,8 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError, got %T: %v", err, err)
 		}
 		if !errors.Is(err, simulatedErr) {
 			t.Errorf("expected underlying error to be %v, but it was not found in chain", simulatedErr)
@@ -215,8 +215,8 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		cache.indexStore.wr = mockIndexFile // Replace real index file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError, got %T: %v", err, err)
 		}
 		if !errors.Is(err, simulatedErr) {
 			t.Errorf("expected underlying error to be %v, but it was not found in chain", simulatedErr)
@@ -232,8 +232,8 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		cache.indexStore.wr = mockIndexFile // Replace real index file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError, got %T: %v", err, err)
 		}
 		if !strings.Contains(err.Error(), "failed to write all data to the index file") {
 			t.Errorf("error message mismatch, got: %v", err)
@@ -255,8 +255,8 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.ReadAt(make([]byte, 64), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError, got %T: %v", err, err)
 		}
 		if !errors.Is(err, simulatedErr) {
 			t.Errorf("expected underlying error to be %v, but it was not found in chain", simulatedErr)
@@ -278,8 +278,8 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		cache.data = mockDataFile
 
 		_, err := cache.ReadAt(make([]byte, 64), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError, got %T: %v", err, err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError, got %T: %v", err, err)
 		}
 		if !errors.Is(err, io.EOF) {
 			t.Errorf("expected underlying error to be io.EOF, but it was not found in chain")
@@ -292,16 +292,16 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 	t.Run("uninitialized files", func(t *testing.T) {
 		cache := &LocalDownloadCache{} // Create an uninitialized cache
 		_, err := cache.WriteAt(make([]byte, 1), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError for WriteAt, got %v", err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError for WriteAt, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "index store is not initialized") {
 			t.Errorf("error message mismatch, got: %v", err)
 		}
 
 		_, err = cache.ReadAt(make([]byte, 1), 0)
-		if !errors.Is(err, ErrCacheInternalError) {
-			t.Errorf("expected ErrCacheInternalError for ReadAt, got %v", err)
+		if !errors.Is(err, ErrInternalError) {
+			t.Errorf("expected ErrInternalError for ReadAt, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "index store is not initialized") {
 			t.Errorf("error message mismatch, got: %v", err)
@@ -311,10 +311,10 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 
 func TestInternalCacheErrorFormatting(t *testing.T) {
 	underlyingErr := fmt.Errorf("specific cause")
-	err := &internalCacheError{err: underlyingErr}
+	err := newInternalCacheError(underlyingErr)
 
-	if !errors.Is(err, ErrCacheInternalError) {
-		t.Error("errors.Is should identify the error as ErrCacheInternalError")
+	if !errors.Is(err, ErrInternalError) {
+		t.Error("errors.Is should identify the error as ErrInternalError")
 	}
 
 	if !errors.Is(err, underlyingErr) {
@@ -325,7 +325,7 @@ func TestInternalCacheErrorFormatting(t *testing.T) {
 		t.Errorf("errors.Unwrap() returned %v, want %v", unwrapped, underlyingErr)
 	}
 
-	expectedMsg := "internal cache error: specific cause"
+	expectedMsg := "cache: internal error: specific cause"
 	if err.Error() != expectedMsg {
 		t.Errorf("Error() returned %q, want %q", err.Error(), expectedMsg)
 	}
