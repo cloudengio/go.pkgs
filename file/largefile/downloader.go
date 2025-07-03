@@ -117,23 +117,6 @@ type downloader struct {
 	bufPool   sync.Pool        // Pool for byte slices to reduce allocations.
 }
 
-type terminalError struct {
-	err error // The error that caused the terminal state.
-}
-
-func (te *terminalError) Error() string {
-	return te.err.Error()
-}
-
-func (te *terminalError) Unwrap() error {
-	return te.err
-}
-
-func (te *terminalError) Is(target error) bool {
-	_, ok := target.(*terminalError)
-	return ok
-}
-
 func newDownloader(file Reader, opts downloadOptions) *downloader {
 	dl := &downloader{file: file, downloadOptions: opts}
 	if dl.logger == nil {
@@ -207,7 +190,7 @@ type responseHandler func(ctx context.Context, resp response) error
 
 func (dl *downloader) handleGet(ctx context.Context, req request, handler responseHandler) error {
 	if err := dl.rateController.Wait(ctx); err != nil {
-		return fmt.Errorf("ratecontrol failed: %w", err)
+		return newInternalDownloadError(fmt.Errorf("ratecontrol failed: %w", err))
 	}
 	start := time.Now()
 	rd, err := dl.get(ctx, req)
@@ -230,7 +213,7 @@ func (dl *downloader) handleGet(ctx context.Context, req request, handler respon
 	resp.duration = time.Since(start)
 	resp.data = buf
 	if err := handler(ctx, resp); err != nil {
-		return fmt.Errorf("failed to handle response for byte range %v: %w", req.ByteRange, err)
+		return err
 	}
 	return nil
 }
@@ -244,7 +227,11 @@ func (dl *downloader) fetcher(ctx context.Context, in <-chan request, retryHandl
 				return errs.Err()
 			}
 			if err := dl.handleGet(ctx, req, handler); err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, &terminalError{}) {
+				if errors.Is(err, context.Canceled) ||
+					errors.Is(err, context.DeadlineExceeded) ||
+					errors.Is(err, ErrCacheInternalError) ||
+					errors.Is(err, ErrStreamingInternalError) ||
+					errors.Is(err, ErrDownloadInternalError) {
 					return err
 				}
 				errs.Append(retryHandler(ctx, req, err))

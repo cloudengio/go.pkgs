@@ -163,10 +163,10 @@ func (dl *StreamingDownloader) generator(ctx context.Context) error {
 
 func (dl *StreamingDownloader) writeToPipeLocked(resp response) error {
 	if dl.tracking.From == -1 && resp.From != 0 {
-		return &internalError{fmt.Errorf("first response must start at 0, got %d", resp.From)}
+		return newInternalStreamingError(fmt.Errorf("first response must start at 0, got %d", resp.From))
 	}
 	if resp.From != dl.tracking.To+1 {
-		return &internalError{fmt.Errorf("out of order response: expected %d, got %d", dl.tracking.To+1, resp.From)}
+		return newInternalStreamingError(fmt.Errorf("out of order response: expected %d, got %d", dl.tracking.To+1, resp.From))
 	}
 	dl.tracking = resp.ByteRange // Update the tracking range to the current response.
 	data := resp.data.Bytes()
@@ -175,7 +175,7 @@ func (dl *StreamingDownloader) writeToPipeLocked(resp response) error {
 		return err
 	}
 	if n < len(data) {
-		return io.ErrShortWrite
+		return newInternalStreamingError(io.ErrShortWrite)
 	}
 	if dl.hash.Hash != nil {
 		if _, err := dl.hash.Write(data); err != nil {

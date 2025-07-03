@@ -10,9 +10,9 @@ import (
 )
 
 func TestInternalErrorTypes(t *testing.T) {
-	cacheErr := &internalCacheError{err: errors.New("cache")}
-	streamErr := &internalStreamingError{err: errors.New("stream")}
-	downloadErr := &internalDownloadError{err: errors.New("download")}
+	cacheErr := newInternalCacheError(errors.New("cache"))
+	streamErr := newInternalStreamingError(errors.New("stream"))
+	downloadErr := newInternalDownloadError(errors.New("download"))
 
 	// Test Is for internalCacheError
 	if !errors.Is(cacheErr, &internalCacheError{}) {

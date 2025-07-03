@@ -311,7 +311,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 
 func TestInternalCacheErrorFormatting(t *testing.T) {
 	underlyingErr := fmt.Errorf("specific cause")
-	err := &internalError{err: underlyingErr}
+	err := newInternalCacheError(underlyingErr)
 
 	if !errors.Is(err, ErrCacheInternalError) {
 		t.Error("errors.Is should identify the error as ErrCacheInternalError")
@@ -325,7 +325,7 @@ func TestInternalCacheErrorFormatting(t *testing.T) {
 		t.Errorf("errors.Unwrap() returned %v, want %v", unwrapped, underlyingErr)
 	}
 
-	expectedMsg := "internal error: specific cause"
+	expectedMsg := "internal cache error: specific cause"
 	if err.Error() != expectedMsg {
 		t.Errorf("Error() returned %q, want %q", err.Error(), expectedMsg)
 	}

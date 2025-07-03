@@ -56,3 +56,15 @@ func (e *internalDownloadError) Is(target error) bool {
 	_, ok := target.(*internalDownloadError)
 	return ok
 }
+
+func newInternalCacheError(err error) error {
+	return &internalCacheError{internalError: internalError{err: err}}
+}
+
+func newInternalStreamingError(err error) error {
+	return &internalStreamingError{internalError: internalError{err: err}}
+}
+
+func newInternalDownloadError(err error) error {
+	return &internalDownloadError{internalError: internalError{err: err}}
+}

@@ -121,7 +121,7 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 	// Any errors encountered during the download are considered resumable, ie,
 	// the download can be restarted with the same cache to continue from where it left off.
 	resumeable := err != nil
-	if errors.Is(err, &terminalError{}) {
+	if errors.Is(err, ErrDownloadInternalError) || errors.Is(err, ErrCacheInternalError) {
 		// If the error is a terminal error, we consider it non-resumable.
 		resumeable = false
 	}
@@ -140,7 +140,7 @@ func (dl *CachingDownloader) handleResponse(_ context.Context, resp response) er
 	if err != nil {
 		dl.progress.incrementCacheErrors()
 		dl.logger.Info("handleResponse: cache write failed", "byteRange", resp.ByteRange, "error", err)
-		return &terminalError{err}
+		return newInternalDownloadError(err)
 	}
 	dl.progress.incrementCacheOrStream(int64(n), 1)
 	return nil
