@@ -294,7 +294,7 @@ func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error) {
 		return 0, newInternalCacheError(fmt.Errorf("failed to write data to cache for offset %d: %w", off, err))
 	}
 	if n != len(data) {
-		return 0, newInternalCacheError(fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d", off, n, len(data))) // Ensure all data is written.
+		return n, newInternalCacheError(fmt.Errorf("failed to write all data to cache for offset %d: wrote %d bytes, expected %d: %w", off, n, len(data), io.ErrShortWrite)) // Ensure all data is written.
 	}
 	if err := c.data.Sync(); err != nil {
 		return 0, newInternalCacheError(fmt.Errorf("failed to sync cache file after writing offset %d: %w", off, err))
@@ -346,7 +346,7 @@ func (c *LocalDownloadCache) ReadAt(data []byte, off int64) (int, error) {
 		return 0, newInternalCacheError(fmt.Errorf("failed to read all data from cache for offset %d: %w", off, err))
 	}
 	if n != len(data) {
-		return 0, newInternalCacheError(fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d", off, n, len(data)))
+		return n, newInternalCacheError(fmt.Errorf("failed to read all data from cache for offset %d: read %d bytes, expected %d: %w", off, n, len(data), io.ErrUnexpectedEOF))
 	}
 	return n, nil
 }

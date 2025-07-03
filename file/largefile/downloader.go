@@ -22,8 +22,8 @@ import (
 // DownloadStats statistics on the download process and is used for progress
 // reporting.
 type DownloadStats struct {
-	CachedOrStreamedBytes  int64 // Total bytes cached.
-	CachedOrStreamedBlocks int64 // Total blocks cached.
+	CachedOrStreamedBytes  int64 // Total bytes cached or streamed.
+	CachedOrStreamedBlocks int64 // Total blocks cached or streamed.
 	CacheErrors            int64 // Total number of errors encountered while caching.
 	DownloadedBytes        int64 // Total bytes downloaded so far.
 	DownloadedBlocks       int64 // Total blocks downloaded so far.
