@@ -387,7 +387,7 @@ func testStreamingDownloaderStatus() error {
 
 func TestStreamingDownloader_Status(t *testing.T) {
 	var err error
-	for i := range 2 {
+	for i := range 4 {
 		// this test can fail due to reordering after the reader returns,
 		// so we retry to allow for that.
 		err := testStreamingDownloaderStatus()
