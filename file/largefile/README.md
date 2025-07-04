@@ -6,13 +6,12 @@ import cloudeng.io/file/largefile
 
 
 ## Variables
-### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrCacheInternalError, ErrStreamingDownloadError
+### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrInternalError
 ```go
 ErrCacheInvalidBlockSize = errors.New("invalid block size")
 ErrCacheInvalidOffset = errors.New("invalid offset")
 ErrCacheUncachedRange = errors.New("uncached range")
-ErrCacheInternalError = &internalError{}
-ErrStreamingDownloadError = &internalError{}
+ErrInternalError = &internalError{}
 
 ```
 
@@ -510,9 +509,18 @@ WithDownloadLogger sets the logger for the download.
 
 
 ```go
-func WithDownloadProgress(progress chan<- DownloadState) DownloadOption
+func WithDownloadProgress(progress chan<- DownloadStats) DownloadOption
 ```
 WithDownloadProgress sets the channel to report download progress.
+
+
+```go
+func WithDownloadProgressTimeout(timeout time.Duration) DownloadOption
+```
+WithDownloadProgressDelay sets a timeout for certain progress updates,
+such as those sent when a download is completed to allow for the caller to
+process any pending updates. Routine updates, such as those sent whenever a
+new byte range is downloaded are sent on a best-effort basis.
 
 
 ```go
@@ -534,11 +542,11 @@ left outstanding for the next iteration.
 
 
 
-### Type DownloadState
+### Type DownloadStats
 ```go
-type DownloadState struct {
-	CachedOrStreamedBytes  int64 // Total bytes cached.
-	CachedOrStreamedBlocks int64 // Total blocks cached.
+type DownloadStats struct {
+	CachedOrStreamedBytes  int64 // Total bytes cached or streamed.
+	CachedOrStreamedBlocks int64 // Total blocks cached or streamed.
 	CacheErrors            int64 // Total number of errors encountered while caching.
 	DownloadedBytes        int64 // Total bytes downloaded so far.
 	DownloadedBlocks       int64 // Total blocks downloaded so far.
@@ -549,15 +557,17 @@ type DownloadState struct {
 	Iterations             int64 // Number of iterations requiredd to complete the download.
 }
 ```
+DownloadStats statistics on the download process and is used for progress
+reporting.
 
 
 ### Type DownloadStatus
 ```go
 type DownloadStatus struct {
-	DownloadState
-	Resumeable bool          // Indicates if the download can be re-run.
-	Complete   bool          // Indicates if the download completed successfully.
-	Duration   time.Duration // Total duration of the download.
+	DownloadStats
+	Resumable bool          // Indicates if the download can be re-run.
+	Complete  bool          // Indicates if the download completed successfully.
+	Duration  time.Duration // Total duration of the download.
 }
 ```
 DownloadStatus holds the status for a completed download operation,
@@ -745,7 +755,7 @@ func (dl *StreamingDownloader) Run(ctx context.Context) (StreamingStatus, error)
 ### Type StreamingStatus
 ```go
 type StreamingStatus struct {
-	DownloadState
+	DownloadStats
 	OutOfOrder    int64         // Total number of out-of-order responses encountered.
 	MaxOutOfOrder int64         // Maximum number of out-of-order responses at any point.
 	Duration      time.Duration // Total duration of the download.
