@@ -5,6 +5,16 @@ import cloudeng.io/file/localfs
 ```
 
 
+## Constants
+### DefaultLargeFileBlockSize
+```go
+DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
+
+
+```
+
+
+
 ## Functions
 ### Func NewLevelScanner
 ```go
@@ -14,6 +24,45 @@ func NewLevelScanner(path string, openwait time.Duration) filewalk.LevelScanner
 
 
 ## Types
+### Type LargeFile
+```go
+type LargeFile struct {
+	// contains filtered or unexported fields
+}
+```
+
+### Functions
+
+```go
+func NewLargeFile(filename string, blockSize int, digest digests.Hash) (*LargeFile, error)
+```
+
+
+
+### Methods
+
+```go
+func (lf *LargeFile) ContentLengthAndBlockSize() (int64, int)
+```
+
+
+```go
+func (lf *LargeFile) Digest() digests.Hash
+```
+
+
+```go
+func (lf *LargeFile) GetReader(ctx context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error)
+```
+
+
+```go
+func (lf *LargeFile) Name() string
+```
+
+
+
+
 ### Type Option
 ```go
 type Option func(o *options)
