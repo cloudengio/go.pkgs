@@ -79,7 +79,7 @@ func (lf *LargeFile) Digest() digests.Hash {
 }
 
 // GetReader implements largefile.Reader.
-func (lf *LargeFile) GetReader(ctx context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
+func (lf *LargeFile) GetReader(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
 	return reader{f: lf.f, at: from}, noRetry{}, nil
 }
 
