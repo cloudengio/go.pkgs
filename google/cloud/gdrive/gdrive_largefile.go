@@ -55,7 +55,7 @@ func NewReader(ctx context.Context, service *drive.Service, fileID string, opts 
 		fn(&o)
 	}
 	if o.blockSize <= 0 {
-		o.blockSize = DefaultLargeFileBlockSize // Default block size is 16 MiB.
+		o.blockSize = DefaultLargeFileBlockSize // Default block size is 64 MiB.
 	}
 	if service == nil {
 		return nil, fmt.Errorf("google drive service is nil")
@@ -194,7 +194,7 @@ func GetWithFields(ctx context.Context, srv *drive.Service, fileID string, field
 
 func ServiceFromJSON(ctx context.Context, creds []byte, scopes ...string) (*drive.Service, error) {
 	// Create a JWT config from the JSON key.
-	config, err := google.JWTConfigFromJSON(creds, drive.DriveReadonlyScope)
+	config, err := google.JWTConfigFromJSON(creds, scopes...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create JWT: %v", err)
 	}
