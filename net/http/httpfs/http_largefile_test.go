@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/net/http/httpfs"
 	"cloudeng.io/net/http/httpfs/rfc9530"
 )
@@ -29,7 +30,8 @@ func newHTTTransport() *http.Transport {
 func TestLargeFile_HeadAndRange(t *testing.T) { //nolint:gocyclo
 	const fileContent = "abcdefghijklmnopqrstuvwxyz0123456789"
 	const blockSize = 8
-	const digestVal = "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:"
+	const digestOnly = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+	const digestVal = "sha-256=:" + digestOnly + ":"
 
 	// Serve HEAD and GET with Accept-Ranges and Repr-Digest headers.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +88,13 @@ func TestLargeFile_HeadAndRange(t *testing.T) { //nolint:gocyclo
 	if bs != blockSize {
 		t.Errorf("BlockSize = %d, want %d", bs, blockSize)
 	}
-	if got, want := lf.Digest(), "sha-256=:"+strings.Split(digestVal, ":")[1]+":"; got != want {
-		t.Errorf("Digest() = %q, want %q", got, want)
+	digest := lf.Digest()
+	if got, want := digest.Algo, "sha-256"; got != want {
+		t.Errorf("Digest().Algo = %q, want %q", got, want)
+	}
+	b64 := digests.ToBase64(digest.Digest)
+	if got, want := b64, digestOnly; got != want {
+		t.Errorf("Digest().Base64 = %q, want %q", got, want)
 	}
 
 	// Test reading a block
