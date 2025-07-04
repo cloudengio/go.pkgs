@@ -61,7 +61,8 @@ func NewReader(ctx context.Context, service *drive.Service, fileID string, opts 
 		return nil, fmt.Errorf("google drive service is nil")
 	}
 
-	file, err := service.Files.Get(fileID).Fields("id", "name", "size", "md5Checksum", "sha1Checksum").Do()
+	file, err := service.Files.Get(fileID).Context(ctx).
+		Fields("id", "name", "size", "md5Checksum", "sha1Checksum").Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get google drive file metadata for %v: %w", fileID, err)
 	}
@@ -166,6 +167,7 @@ func (r driveRetryResponse) BackoffDuration() (bool, time.Duration) {
 // GetFileID retrieves a file by its name and returns file metadata including ID and name.
 func GetFileID(ctx context.Context, srv *drive.Service, query string) (*drive.File, error) {
 	r, err := srv.Files.List().
+		Context(ctx).
 		Q(query).
 		Spaces("drive").
 		Fields("files(id, name)").
@@ -182,7 +184,7 @@ func GetFileID(ctx context.Context, srv *drive.Service, query string) (*drive.Fi
 
 // GetWithFields retrieves a file by its ID and returns the file metadata with specified fields.
 func GetWithFields(ctx context.Context, srv *drive.Service, fileID string, fields ...googleapi.Field) (*drive.File, error) {
-	file, err := srv.Files.Get(fileID).Fields(fields...).Do()
+	file, err := srv.Files.Get(fileID).Context(ctx).Fields(fields...).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file %s: %w", fileID, err)
 	}

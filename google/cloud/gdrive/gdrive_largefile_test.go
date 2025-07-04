@@ -42,7 +42,7 @@ func (m *mockServer) handler(w http.ResponseWriter, r *http.Request) {
 	// Metadata request
 	if strings.Contains(r.URL.Path, testFileID) && r.URL.Query().Get("alt") != "media" {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(m.fileMetadata)
+		json.NewEncoder(w).Encode(m.fileMetadata) //nolint:errcheck
 		return
 	}
 
@@ -74,7 +74,7 @@ func (m *mockServer) handler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", from, to, len(m.fileContent)))
 		w.Header().Set("Content-Length", strconv.Itoa(to-from+1))
 		w.WriteHeader(http.StatusPartialContent)
-		w.Write(m.fileContent[from : to+1])
+		w.Write(m.fileContent[from : to+1]) //nolint:errcheck
 		return
 	}
 
