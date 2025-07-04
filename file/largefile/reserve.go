@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"cloudeng.io/file/diskusage"
 	"cloudeng.io/sys"
@@ -25,9 +26,12 @@ var ErrNotEnoughSpace = errors.New("not enough space available for the requested
 // a download operations never fails because of insufficient local space once
 // it has been initiated. Progress can be reported via the progressCh channel,
 // which will receive updates on the amount of space reserved. The channel
-// will be closed when ReserveSpace returns.
+// will be closed when ReserveSpace returns. If concurrency is 0 or less,
+// it defaults to the number of CPU cores available on the system.
 func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int, progressCh chan<- int64) error {
-
+	if concurrency <= 0 {
+		concurrency = runtime.NumCPU()
+	}
 	availBytes, err := sys.AvailableBytes(filepath.Dir(filename))
 	if err != nil {
 		return fmt.Errorf("failed to determine available bytes for %s: %w", filename, err)

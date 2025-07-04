@@ -30,12 +30,18 @@ type LargeFile struct {
 	// contains filtered or unexported fields
 }
 ```
+LargeFile is a wrapper around a file that supports reading large files in
+blocks. It implements the largefile.Reader interface.
 
 ### Functions
 
 ```go
-func NewLargeFile(filename string, blockSize int, digest digests.Hash) (*LargeFile, error)
+func NewLargeFile(file *os.File, blockSize int, digest digests.Hash) (*LargeFile, error)
 ```
+NewLargeFile creates a new LargeFile instance that wraps the provided file
+and uses the specified block size for reading. The supplied digest is simply
+returned by the Digest() method and is not used to validate the file's
+contents directly.
 
 
 
@@ -44,21 +50,25 @@ func NewLargeFile(filename string, blockSize int, digest digests.Hash) (*LargeFi
 ```go
 func (lf *LargeFile) ContentLengthAndBlockSize() (int64, int)
 ```
+ContentLengthAndBlockSize implements largefile.Reader.
 
 
 ```go
 func (lf *LargeFile) Digest() digests.Hash
 ```
+Digest implements largefile.Reader.
 
 
 ```go
-func (lf *LargeFile) GetReader(ctx context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error)
+func (lf *LargeFile) GetReader(_ context.Context, from, _ int64) (io.ReadCloser, largefile.RetryResponse, error)
 ```
+GetReader implements largefile.Reader.
 
 
 ```go
 func (lf *LargeFile) Name() string
 ```
+Name implements largefile.Reader.
 
 
 
