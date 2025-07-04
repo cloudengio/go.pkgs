@@ -5,7 +5,9 @@
 package rfc9530_test
 
 import (
+	"encoding/base64"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -172,6 +174,24 @@ func TestParseReprDigest(t *testing.T) {
 
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("%v: ParseReprDigest() got = %v, want %v", tt.name, got, tt.want)
+			}
+			for k, v := range got {
+				d := k + "=:" + v + ":"
+				algo, b64, raw, err := rfc9530.ParseAlgoDigest(d)
+				if err != nil {
+					t.Errorf("%v: ParseAlgoDigest() hdr %q error = %v", tt.name, d, err)
+					return
+				}
+				if algo == "" {
+					t.Errorf("%v: ParseAlgoDigest() algo = empty, want non-empty", tt.name)
+				}
+				dec, err := base64.StdEncoding.DecodeString(b64)
+				if err != nil {
+					t.Errorf("%v: ParseAlgoDigest() base64 decode error = %v", tt.name, err)
+				}
+				if !slices.Equal(dec, raw) {
+					t.Errorf("%v: ParseAlgoDigest() raw bytes = %v, want %v", tt.name, dec, raw)
+				}
 			}
 		})
 	}

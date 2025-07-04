@@ -5,6 +5,16 @@ import cloudeng.io/net/http/httpfs
 ```
 
 
+## Constants
+### DefaultLargeFileBlockSize
+```go
+DefaultLargeFileBlockSize = 1024 * 16 // Default block size is 16 KiB.
+
+
+```
+
+
+
 ## Variables
 ### ErrNoRangeSupport
 ```go
@@ -133,7 +143,7 @@ func (f *LargeFile) ContentLengthAndBlockSize() (int64, int)
 
 
 ```go
-func (f *LargeFile) Digest() string
+func (f *LargeFile) Digest() digests.Hash
 ```
 
 
@@ -158,7 +168,7 @@ type LargeFileOption func(o *largeFileOptions)
 ### Functions
 
 ```go
-func WithDetaultRetryDelay(delay time.Duration) LargeFileOption
+func WithDefaultRetryDelay(delay time.Duration) LargeFileOption
 ```
 WithDefaultRetryDelay sets the default retry delay for HTTP requests.
 This is used when the server responds with a 503 Service Unavailable status
@@ -170,6 +180,12 @@ The default value is 1 minute.
 func WithLargeFileBlockSize(blockSize int) LargeFileOption
 ```
 WithLargeFileBlockSize sets the block size for reading large files.
+
+
+```go
+func WithLargeFileDigest(dig digests.Hash) LargeFileOption
+```
+WithLargeFileDigest sets the digest for the large file.
 
 
 ```go
