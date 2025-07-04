@@ -39,8 +39,7 @@ blocks. It implements the largefile.Reader interface.
 func NewLargeFile(file *os.File, blockSize int, digest digests.Hash) (*LargeFile, error)
 ```
 NewLargeFile creates a new LargeFile instance that wraps the provided file
-and uses the specified block size for reading. If the file does not exist
-or cannot be opened, an error is returned. The supplied digest is simply
+and uses the specified block size for reading. The supplied digest is simply
 returned by the Digest() method and is not used to validate the file's
 contents directly.
 
