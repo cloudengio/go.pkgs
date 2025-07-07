@@ -6,11 +6,12 @@ import cloudeng.io/file/largefile
 
 
 ## Variables
-### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheInternalError
+### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrInternalError
 ```go
 ErrCacheInvalidBlockSize = errors.New("invalid block size")
 ErrCacheInvalidOffset = errors.New("invalid offset")
-ErrCacheInternalError = &internalCacheError{}
+ErrCacheUncachedRange = errors.New("uncached range")
+ErrInternalError = &internalError{}
 
 ```
 
@@ -71,6 +72,15 @@ func OpenCacheFiles(data, index string) (CacheFileReadWriter, CacheFileReadWrite
 ```
 OpenCacheFiles opens the cache and index files for reading and writing.
 
+### Func Ranges
+```go
+func Ranges(from, to int64, blockSize int) iter.Seq[ByteRange]
+```
+Ranges returns an iterator for all byte ranges over the specified range and
+block size. Each range is inclusive of the 'From' byte and the 'To' byte.
+The ranges are generated in blocks of the specified size, with the last
+block potentially being smaller than the specified block size.
+
 ### Func ReserveSpace
 ```go
 func ReserveSpace(ctx context.Context, filename string, size int64, blockSize, concurrency int, progressCh chan<- int64) error
@@ -82,8 +92,9 @@ such as Linux, space is reserved accordingly, on others data is written to
 the file to ensure that the space is allocated. The intent is to ensure that
 a download operations never fails because of insufficient local space once
 it has been initiated. Progress can be reported via the progressCh channel,
-which will receive updates on the amount of space reserved. The channel will
-be closed when ReserveSpace returns.
+which will receive updates on the amount of space reserved. The channel
+will be closed when ReserveSpace returns. If concurrency is 0 or less,
+it defaults to the number of CPU cores available on the system.
 
 
 
@@ -98,6 +109,18 @@ type ByteRange struct {
 ByteRange represents a range of bytes in a file. The range is inclusive
 of the 'From' byte and the 'To' byte as per the HTTP Range header
 specification/convention.
+
+### Functions
+
+```go
+func RangeForIndex(index int, contentSize int64, blockSize int) ByteRange
+```
+RangeForIndex returns the byte range for the specified block index in a
+series of blocks of the specified size over the content size. The range
+is inclusive of the 'From' byte and the 'To' byte. If the index is out of
+bounds, it returns an invalid range with From and To set to -1.
+
+
 
 ### Methods
 
@@ -119,13 +142,15 @@ type ByteRanges struct {
 	// contains filtered or unexported fields
 }
 ```
-ByteRange represents a collection of equally sized (apart from the last
-range), contiguous, byte ranges that can be used to track which parts of a
-file have or have not been 'processed', e.g downloaded, cached, uploaded
-etc. The ranges are represented as a bitmap, where each bit corresponds to
-a block of bytes of the specified size. The bitmap is used to efficiently
-track which byte ranges are set (processed) and which are clear (not
-processed).
+ByteRanges represents a collection of equally sized (apart from the last
+range), contiguous, byte ranges that can be used to track which parts
+of a file have or have not been 'processed', e.g downloaded, cached,
+uploaded etc. The ranges are represented as a bitmap, where each bit
+corresponds to a block of bytes of the specified size. The bitmap is used to
+efficiently track which byte ranges are set (processed) and which are clear
+(not processed). ByteRanges also allows for the contiguous head of the byte
+ranges to be tracked asynchronously. ByteRanges is thread-safe and can be
+used concurrently by multiple goroutines.
 
 ### Functions
 
@@ -160,13 +185,22 @@ iteration is complete. Use NextSet if finer-grained control is needed.
 
 
 ```go
-func (br *ByteRanges) BlockSize() int
+func (br ByteRanges) Block(pos int64) int
 ```
+Block returns the block index for the specified position. It returns -1 if
+the position is out of bounds.
 
 
 ```go
-func (br *ByteRanges) ContentLength() int64
+func (br ByteRanges) BlockSize() int
 ```
+BlockSize returns the size of each block in bytes.
+
+
+```go
+func (br ByteRanges) ContentLength() int64
+```
+ContentLength returns the total size of the content in bytes.
 
 
 ```go
@@ -209,7 +243,14 @@ similarly to NextClear.
 
 
 ```go
-func (br *ByteRanges) NumBlocks() int
+func (br *ByteRanges) Notify() <-chan struct{}
+```
+Notify returns a channel that is closed when the contiguous byte ranges
+starting at the first byte (ie. 0) are extended.
+
+
+```go
+func (br ByteRanges) NumBlocks() int
 ```
 NumBlocks returns the number of blocks required to cover the byte ranges
 represented by this ByteRanges instance.
@@ -223,9 +264,122 @@ if the position is out of bounds.
 
 
 ```go
+func (br *ByteRanges) Tail() (ByteRange, bool)
+```
+Tail returns the contiguous byte ranage that starts at the first byte and
+extends to the last contiguous byte from the start that has been set.
+It returns false if no ranges have been set.
+
+
+```go
 func (br *ByteRanges) UnmarshalJSON(data []byte) error
 ```
 UnmarshalJSON implements the json.Unmarshaler interface for ByteRanges.
+
+
+
+
+### Type ByteRangesTracker
+```go
+type ByteRangesTracker struct {
+	// contains filtered or unexported fields
+}
+```
+ByteRangesTracker tracks byte ranges but is not thread safe and does not
+support tracking the contiguous head of the byte ranges.
+
+### Functions
+
+```go
+func NewByteRangesTracker(contentSize int64, blockSize int) *ByteRangesTracker
+```
+NewByteRangesTracker creates a new ByteRangesTracker instance with the
+specified content size and block size.
+
+
+
+### Methods
+
+```go
+func (br ByteRangesTracker) Block(pos int64) int
+```
+Block returns the block index for the specified position. It returns -1 if
+the position is out of bounds.
+
+
+```go
+func (br ByteRangesTracker) BlockSize() int
+```
+BlockSize returns the size of each block in bytes.
+
+
+```go
+func (br *ByteRangesTracker) Clear(pos int64)
+```
+Clear clears the byte range for the specified position.
+
+
+```go
+func (br ByteRangesTracker) ContentLength() int64
+```
+ContentLength returns the total size of the content in bytes.
+
+
+```go
+func (br ByteRangesTracker) IsClear(pos int64) bool
+```
+IsClear checks if the byte range for the specified position is clear.
+
+
+```go
+func (br ByteRangesTracker) IsSet(pos int64) bool
+```
+IsSet checks if the byte range for the specified position is set.
+
+
+```go
+func (br *ByteRangesTracker) MarshalJSON() ([]byte, error)
+```
+
+
+```go
+func (br ByteRangesTracker) NextClear(start int, nbr *ByteRange) int
+```
+NextClear returns the next clear byte range starting from 'start'. It starts
+searching from the specified start index and returns the index of the next
+outstanding range which can be used to continue searching for the next
+outstanding range. The index will be -1 if there are no more outstanding
+ranges.
+
+    for start := NextClear(0, &br); start >= 0; start = NextClear(start, &br) {
+        // Do something with the byte range br.
+    }
+
+
+```go
+func (br ByteRangesTracker) NextSet(start int, nbr *ByteRange) int
+```
+NextSet returns the next set byte range starting from 'start' and behaves
+similarly to NextClear.
+
+
+```go
+func (br ByteRangesTracker) NumBlocks() int
+```
+NumBlocks returns the number of blocks required to cover the byte ranges
+represented by this ByteRanges instance.
+
+
+```go
+func (br *ByteRangesTracker) Set(pos int64)
+```
+Set marks the byte range for the specified position as set. It has no effect
+if the position is out of bounds.
+
+
+```go
+func (br *ByteRangesTracker) UnmarshalJSON(data []byte) error
+```
 
 
 
@@ -260,7 +414,7 @@ local cache and supports resuming downloads from where they left off.
 ### Functions
 
 ```go
-func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOption) *CachingDownloader
+func NewCachingDownloader(file Reader, cache DownloadCache, opts ...DownloadOption) (*CachingDownloader, error)
 ```
 NewCachingDownloader creates a new CachingDownloader instance.
 
@@ -283,9 +437,11 @@ type DownloadCache interface {
 	// ContentLengthAndBlockSize returns the total length of the file in bytes
 	// and the block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
-	// Cached returns the total number of bytes and blocks already stored in
+
+	// CachedBytesAndBlocks returns the total number of bytes and blocks already stored in
 	// the cache.
 	CachedBytesAndBlocks() (bytes, blocks int64)
+
 	// NextOutstanding finds the next byte range that has not been cached
 	// starting from the specified 'start' index. Its return value is either
 	// -1 if there are no more outstanding ranges, or the value of the next
@@ -296,20 +452,30 @@ type DownloadCache interface {
 	//        // Do something with the byte range br.
 	//    }
 	NextOutstanding(start int, br *ByteRange) int
+
 	// NextCached finds the next byte range that has been cached in the same manner
 	// as NextOutstanding.
 	NextCached(start int, br *ByteRange) int
+
+	// Tail returns the contiguous range of bytes that have been cached so far.
+	// If this has not grown since the last call to Tail, Tail will block until
+	// the tail is extended. If the context is done before the tail is extended,
+	// it returns a ByteRange with From and To set to -1.
+	Tail(context.Context) ByteRange
+
 	// Complete returns true if all byte ranges have been cached.
 	Complete() bool
+
 	// WriteAt writes at most blocksize bytes starting at the specified offset.
-	// It returns an error if data is not exactly blocksize bytes long, unless
-	// the offset is at the end of the file, in which case it must
-	// be (content length % blocksize) bytes long.
+	// Offset must be aligned with the block boundaries. It returns an error if
+	// data is not exactly blocksize bytes long, unless the offset is at the
+	// end of the file, in which case it must be (content length % blocksize)
+	// bytes long.
 	WriteAt(data []byte, off int64) (int, error)
-	// ReadAt reads at most blocksize bytes starting at the specified offset.
-	// It returns an error if data is not exactly blocksize bytes long, unless
-	// the offset is at the end of the file, in which case it must
-	// be (content length % blocksize) bytes long.
+
+	// ReadAt reads at most len(data) bytes starting at the specified offset.
+	// It returns an error if any of the data to be read is not already cached.
+	// The offset need not be aligned with the block boundaries.
 	ReadAt(data []byte, off int64) (int, error)
 }
 ```
@@ -331,15 +497,31 @@ WithDownloadConcurrency sets the number of concurrent download goroutines.
 
 
 ```go
+func WithDownloadDigest(h digests.Hash) DownloadOption
+```
+WithDownloadDigest sets the hash function to be used for computing the
+digest of the downloaded data as it is streamed.
+
+
+```go
 func WithDownloadLogger(logger *slog.Logger) DownloadOption
 ```
 WithDownloadLogger sets the logger for the download.
 
 
 ```go
-func WithDownloadProgress(progress chan<- DownloadState) DownloadOption
+func WithDownloadProgress(progress chan<- DownloadStats) DownloadOption
 ```
 WithDownloadProgress sets the channel to report download progress.
+
+
+```go
+func WithDownloadProgressTimeout(timeout time.Duration) DownloadOption
+```
+WithDownloadProgressDelay sets a timeout for certain progress updates,
+such as those sent when a download is completed to allow for the caller to
+process any pending updates. Routine updates, such as those sent whenever a
+new byte range is downloaded are sent on a best-effort basis.
 
 
 ```go
@@ -361,35 +543,37 @@ left outstanding for the next iteration.
 
 
 
-### Type DownloadState
+### Type DownloadStats
 ```go
-type DownloadState struct {
-	CachedBytes      int64 // Total bytes cached.
-	CachedBlocks     int64 // Total blocks cached.
-	CacheErrors      int64 // Total number of errors encountered while caching.
-	DownloadedBytes  int64 // Total bytes downloaded so far.
-	DownloadedBlocks int64 // Total blocks downloaded so far.
-	DownloadSize     int64 // Total size of the file in bytes.
-	DownloadBlocks   int64 // Total number of blocks to download.
-	DownloadRetries  int64 // Total number of retries made during the download.
-	DownloadErrors   int64 // Total number of errors encountered during the download.
-	Iterations       int64 // Number of iterations requiredd to complete the download.
+type DownloadStats struct {
+	CachedOrStreamedBytes  int64 // Total bytes cached or streamed.
+	CachedOrStreamedBlocks int64 // Total blocks cached or streamed.
+	CacheErrors            int64 // Total number of errors encountered while caching.
+	DownloadedBytes        int64 // Total bytes downloaded so far.
+	DownloadedBlocks       int64 // Total blocks downloaded so far.
+	DownloadSize           int64 // Total size of the file in bytes.
+	DownloadBlocks         int64 // Total number of blocks to download.
+	DownloadRetries        int64 // Total number of retries made during the download.
+	DownloadErrors         int64 // Total number of errors encountered during the download.
+	Iterations             int64 // Number of iterations requiredd to complete the download.
 }
 ```
+DownloadStats statistics on the download process and is used for progress
+reporting.
 
 
 ### Type DownloadStatus
 ```go
 type DownloadStatus struct {
-	DownloadState
-	Resumeable bool          // Indicates if the download can be re-run.
-	Complete   bool          // Indicates if the download completed successfully.
-	Duration   time.Duration // Total duration of the download.
+	DownloadStats
+	Resumable bool          // Indicates if the download can be re-run.
+	Complete  bool          // Indicates if the download completed successfully.
+	Duration  time.Duration // Total duration of the download.
 }
 ```
-DownloadStatus holds the status of a download operation, including the
-progress made, whether the download is resumable, completed and the total
-duration of operation.
+DownloadStatus holds the status for a completed download operation,
+including the progress made, whether the download is resumable, completed
+and the total duration of operation.
 
 
 ### Type LocalDownloadCache
@@ -464,6 +648,14 @@ ReadAt implements DownloadCache.
 
 
 ```go
+func (c *LocalDownloadCache) Tail(ctx context.Context) ByteRange
+```
+Tail implements DownloadCache. It returns the contiguous range of bytes that
+have been cached so far. If this has not grown since the last call to Tail,
+Tail will block until the tail is extended.
+
+
+```go
 func (c *LocalDownloadCache) WriteAt(data []byte, off int64) (int, error)
 ```
 WriteAt implements DownloadCache.
@@ -480,11 +672,10 @@ type Reader interface {
 	// and the preferred block size used for downloading the file.
 	ContentLengthAndBlockSize() (int64, int)
 
-	// Digest returns the digest of the file, if available, the
-	// format defined by RFC 9530's Repr-Digest header, eg.
-	// Repr-Digest: sha-256=:d435Qo+nKZ+gLcUHn7GQtQ72hiBVAgqoLsZnZPiTGPk=:
-	// An empty string is returned if no digest is available.
-	Digest() string
+	// Digest returns an instance of digests.Hash that can be used to
+	// compute and validate the digest of the file.
+	// If the file does not have a digest digest.IsSet() will return false.
+	Digest() digests.Hash
 
 	// GetReader retrieves a byte range from the file and returns
 	// a reader that can be used to access that data range. In addition to the
@@ -515,20 +706,6 @@ failed with a retryable error can be retried and how long to wait before
 retrying the operation.
 
 
-### Type StreamingDownloadOption
-```go
-type StreamingDownloadOption func(*downloadStreamingOptions)
-```
-
-### Functions
-
-```go
-func WithVerifyDigest(verify bool) StreamingDownloadOption
-```
-
-
-
-
 ### Type StreamingDownloader
 ```go
 type StreamingDownloader struct {
@@ -542,11 +719,50 @@ serializes the responses into a single stream for reading.
 ### Functions
 
 ```go
-func NewStreamingDownloader(file Reader, opts ...StreamingDownloadOption) *StreamingDownloader
+func NewStreamingDownloader(file Reader, opts ...DownloadOption) *StreamingDownloader
 ```
 NewStreamingDownloader creates a new StreamingDownloader instance.
 
 
+
+### Methods
+
+```go
+func (dl *StreamingDownloader) ContentLength() int64
+```
+ContentLength returns the content length header for the file being
+downloaded.
+
+
+```go
+func (dl *StreamingDownloader) Read(buf []byte) (int, error)
+```
+Read implements io.Reader.
+
+
+```go
+func (dl *StreamingDownloader) Reader() io.Reader
+```
+Reader returns an io.Reader.
+
+
+```go
+func (dl *StreamingDownloader) Run(ctx context.Context) (StreamingStatus, error)
+```
+
+
+
+
+### Type StreamingStatus
+```go
+type StreamingStatus struct {
+	DownloadStats
+	OutOfOrder    int64         // Total number of out-of-order responses encountered.
+	MaxOutOfOrder int64         // Maximum number of out-of-order responses at any point.
+	Duration      time.Duration // Total duration of the download.
+}
+```
+StreamingStatus holds status for a streaming download.
 
 
 ### Type Uploader

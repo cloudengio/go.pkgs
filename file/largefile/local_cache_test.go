@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/file/largefile"
@@ -68,6 +69,17 @@ func loadIndexFile(t *testing.T, indexFilePath string, contentSize int64, blockS
 		t.Errorf("index file block size %d does not match expected block size %d", br.BlockSize(), blockSize)
 	}
 	return &br
+}
+
+func writeAt(t *testing.T, cache largefile.DownloadCache, buf []byte, off int64) {
+	t.Helper()
+	n, err := cache.WriteAt(buf, off)
+	if err != nil {
+		t.Fatalf("WriteAt failed: %v", err)
+	}
+	if got, want := int64(n), int64(len(buf)); got != want {
+		t.Errorf("WriteAt() = %v, want %v", got, want)
+	}
 }
 
 func TestNewFilesForCache(t *testing.T) {
@@ -480,5 +492,237 @@ func TestLocalDownloadCache_ContentLengthAndBlockSize(t *testing.T) {
 	}
 	if bs != blockSize {
 		t.Errorf("BlockSize() got %v, want %v", bs, blockSize)
+	}
+}
+
+func TestLocalDownloadCache_Tail(t *testing.T) { //nolint:gocyclo
+	ctx := context.Background()
+	const contentSize int64 = 256
+	const blockSize int = 64 // 4 blocks
+	tmpDir := t.TempDir()
+	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
+	indexFilePath := filepath.Join(tmpDir, "cache.idx")
+
+	err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
+	if err != nil {
+		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("NewLocalDownloadCache failed: %v", err)
+	}
+	defer cache.Close()
+
+	t.Run("Tail returns -1,-1 if nothing cached", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		got := cache.Tail(ctx)
+		if got.From != -1 || got.To != -1 {
+			t.Errorf("Tail() got %v, want {-1,-1}", got)
+		}
+	})
+
+	t.Run("Tail returns correct range after each block", func(t *testing.T) {
+		block := make([]byte, blockSize)
+		for i := range block {
+			block[i] = byte(i)
+		}
+		for i := 0; i < 4; i++ {
+			_, err := cache.WriteAt(block, int64(i*blockSize))
+			if err != nil {
+				t.Fatalf("WriteAt failed: %v", err)
+			}
+			got := cache.Tail(context.Background())
+			want := largefile.ByteRange{From: 0, To: int64((i+1)*blockSize - 1)}
+			if got != want {
+				t.Errorf("Tail() after block %d got %v, want %v", i, got, want)
+			}
+		}
+	})
+
+	t.Run("Tail blocks until next contiguous block is cached", func(t *testing.T) {
+		// New cache with a gap at block 1
+		tmpDir2 := t.TempDir()
+		cacheFilePath2 := filepath.Join(tmpDir2, "cache.dat")
+		indexFilePath2 := filepath.Join(tmpDir2, "cache.idx")
+		_ = largefile.CreateNewFilesForCache(ctx, cacheFilePath2, indexFilePath2, contentSize, blockSize, 1, nil)
+		cacheFile2, indexFile2, _ := largefile.OpenCacheFiles(cacheFilePath2, indexFilePath2)
+		cache2, _ := largefile.NewLocalDownloadCache(cacheFile2, indexFile2)
+		defer cache2.Close()
+
+		block := make([]byte, blockSize)
+		writeAt(t, cache2, block, 0)                  // block 0
+		writeAt(t, cache2, block, int64(2*blockSize)) // block 2
+
+		// Tail should return up to block 0
+		got := cache2.Tail(context.Background())
+		want := largefile.ByteRange{From: 0, To: int64(blockSize - 1)}
+		if got != want {
+			t.Errorf("Tail() with gap got %v, want %v", got, want)
+		}
+
+		// Start Tail in a goroutine, should block until block 1 is cached
+		done := make(chan largefile.ByteRange, 1)
+		go func() {
+			done <- cache2.Tail(context.Background())
+		}()
+		time.Sleep(20 * time.Millisecond)
+		select {
+		case <-done:
+			t.Fatal("Tail() returned before gap was filled")
+		default:
+		}
+		writeAt(t, cache2, block, int64(blockSize)) // fill the gap
+
+		select {
+		case got := <-done:
+			want := largefile.ByteRange{From: 0, To: int64(3*blockSize - 1)}
+			if got != want {
+				t.Errorf("Tail() after filling gap got %v, want %v", got, want)
+			}
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Tail() did not return after filling gap")
+		}
+	})
+
+	t.Run("Tail returns immediately if already complete", func(t *testing.T) {
+		// All blocks already cached from previous test
+		got := cache.Tail(context.Background())
+		want := largefile.ByteRange{From: 0, To: contentSize - 1}
+		if got != want {
+			t.Errorf("Tail() got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("Tail returns -1,-1 if context cancelled before extension", func(t *testing.T) {
+		tmpDir3 := t.TempDir()
+		cacheFilePath3 := filepath.Join(tmpDir3, "cache.dat")
+		indexFilePath3 := filepath.Join(tmpDir3, "cache.idx")
+		_ = largefile.CreateNewFilesForCache(ctx, cacheFilePath3, indexFilePath3, contentSize, blockSize, 1, nil)
+		cacheFile3, indexFile3, _ := largefile.OpenCacheFiles(cacheFilePath3, indexFilePath3)
+		cache3, _ := largefile.NewLocalDownloadCache(cacheFile3, indexFile3)
+		defer cache3.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		got := cache3.Tail(ctx)
+		if got.From != -1 || got.To != -1 {
+			t.Errorf("Tail() got %v, want {-1,-1}", got)
+		}
+	})
+}
+
+func TestLocalDownloadCache_ReadAt_ArbitraryRanges(t *testing.T) { //nolint:gocyclo
+	ctx := context.Background()
+	const contentSize int64 = (4 * 64) + 10
+	const blockSize int = 64 // 4 blocks
+	tmpDir := t.TempDir()
+	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
+	indexFilePath := filepath.Join(tmpDir, "cache.idx")
+
+	err := largefile.CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
+	if err != nil {
+		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	cache, err := largefile.NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("NewLocalDownloadCache failed: %v", err)
+	}
+	defer cache.Close()
+
+	// Write blocks 0 and 1
+	block := make([]byte, blockSize)
+	for i := range block {
+		block[i] = byte(i)
+	}
+	_, err = cache.WriteAt(block, 0)
+	if err != nil {
+		t.Fatalf("WriteAt block 0 failed: %v", err)
+	}
+	_, err = cache.WriteAt(block, int64(blockSize))
+	if err != nil {
+		t.Fatalf("WriteAt block 1 failed: %v", err)
+	}
+
+	// Try to read across both cached blocks (should succeed)
+	readBuf := make([]byte, 2*blockSize)
+	n, err := cache.ReadAt(readBuf, 0)
+	if err != nil {
+		t.Errorf("ReadAt across two cached blocks failed: %v", err)
+	}
+	if n != 2*blockSize {
+		t.Errorf("ReadAt read %d bytes, want %d", n, 2*blockSize)
+	}
+	if !bytes.Equal(readBuf[:blockSize], block) || !bytes.Equal(readBuf[blockSize:2*blockSize], block) {
+		t.Errorf("ReadAt data mismatch across two blocks")
+	}
+
+	// Try to read a range that partially overlaps an uncached block (should fail)
+	readBuf = make([]byte, blockSize+16)
+	_, err = cache.ReadAt(readBuf, int64(blockSize))
+	if err == nil {
+		t.Error("ReadAt should fail when reading into uncached block, but got nil error")
+	}
+
+	// Write block 2
+	_, err = cache.WriteAt(block, int64(2*blockSize))
+	if err != nil {
+		t.Fatalf("WriteAt block 2 failed: %v", err)
+	}
+
+	// Try to read a range that spans blocks 1 and 2 (should succeed)
+	readBuf = make([]byte, blockSize*2)
+	n, err = cache.ReadAt(readBuf, int64(blockSize))
+	if err != nil {
+		t.Errorf("ReadAt across blocks 1 and 2 failed: %v", err)
+	}
+	if n != 2*blockSize {
+		t.Errorf("ReadAt read %d bytes, want %d", n, 2*blockSize)
+	}
+
+	// Try to read a range that starts at an uncached block (should fail)
+	readBuf = make([]byte, blockSize)
+	_, err = cache.ReadAt(readBuf, int64(3*blockSize))
+	if err == nil {
+		t.Error("ReadAt should fail when reading from uncached block, but got nil error")
+	}
+
+	readBuf = make([]byte, 10)
+	_, err = cache.ReadAt(readBuf, (int64(blockSize) * 4))
+	if err == nil {
+		t.Error("ReadAt should fail when reading from uncached block, but got nil error")
+	}
+
+	// Write partial last block
+	_, err = cache.WriteAt(block[:10], (int64(blockSize) * 4)) // Write to the end of the file
+	if err != nil {
+		t.Fatalf("WriteAt trailing failed: %v", err)
+	}
+
+	readBuf = make([]byte, blockSize+10)
+	_, err = cache.ReadAt(readBuf, (int64(blockSize) * 3))
+	if err == nil {
+		t.Error("ReadAt should fail when reading from uncached block, but got nil error")
+	}
+
+	_, err = cache.WriteAt(block, (int64(blockSize) * 3)) // Write to the end of the file
+	if err != nil {
+		t.Fatalf("WriteAt trailing failed: %v", err)
+	}
+
+	n, err = cache.ReadAt(readBuf, (int64(blockSize) * 3))
+	if err != nil {
+		t.Error("ReadAt should be able to read overlapping trailing data, but got error: " + err.Error() + "'")
+	}
+	if n != blockSize+10 {
+		t.Errorf("ReadAt read %d bytes, want %d", n, 10+10)
 	}
 }

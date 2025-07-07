@@ -11,7 +11,7 @@ import (
 	"runtime"
 )
 
-func setMask(args []interface{}) []int {
+func setMask(args []any) []int {
 	if len(args) == 0 {
 		return nil
 	}
@@ -58,7 +58,7 @@ func count(mask []int) int {
 //
 // ExactlyOneSet will panic if any of the arguments are not one of the above
 // types.
-func ExactlyOneSet(args ...interface{}) bool {
+func ExactlyOneSet(args ...any) bool {
 	mask := setMask(args)
 	validate(mask, "flags.ExactlyOneSet")
 	return count(mask) == 1
@@ -66,16 +66,16 @@ func ExactlyOneSet(args ...interface{}) bool {
 
 // AtMostOneSet is like ExactlyOne except that it returns true if zero
 // or one of its arguments are set.
-func AtMostOneSet(args ...interface{}) bool {
+func AtMostOneSet(args ...any) bool {
 	mask := setMask(args)
-	validate(mask, "flags.ExactlyOneSet")
+	validate(mask, "flags.AtMostOneSet")
 	return count(mask) == 1 || count(mask) == 0
 }
 
 // AllSet is like ExactlyOne except that it returns true if all of its
 // arguments are set.
-func AllSet(args ...interface{}) bool {
+func AllSet(args ...any) bool {
 	mask := setMask(args)
-	validate(mask, "flags.ExactlyOneSet")
+	validate(mask, "flags.AllSet")
 	return count(mask) == len(args)
 }

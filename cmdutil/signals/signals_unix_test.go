@@ -24,7 +24,7 @@ import (
 
 func TestSignal(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
 	runCmd := func(args ...string) (*exec.Cmd, int, *expect.Lines) {

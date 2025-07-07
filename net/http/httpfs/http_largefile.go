@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"cloudeng.io/algo/digests"
 	"cloudeng.io/file/largefile"
 	"cloudeng.io/net/http/httperror"
 	"cloudeng.io/net/http/httpfs/rfc9530"
@@ -30,7 +31,7 @@ type LargeFile struct {
 	largeFileOptions
 	name          string
 	contentLength int64
-	digest        string
+	digest        digests.Hash
 }
 
 var ErrNoRangeSupport = &errNoRangeSupport{}
@@ -48,6 +49,7 @@ type largeFileOptions struct {
 	logger    *slog.Logger // Optional logger for debugging.
 	blockSize int
 	delay     time.Duration
+	digest    digests.Hash // Optional digest for the file.
 }
 
 // WithLargeFileBlockSize sets the block size for reading large files.
@@ -76,21 +78,32 @@ func WithLargeFileTransport(transport *http.Transport) LargeFileOption {
 // This is used when the server responds with a 503 Service Unavailable status
 // but does not provide a Retry-After header or that header cannot be parsed.
 // The default value is 1 minute.
-func WithDetaultRetryDelay(delay time.Duration) LargeFileOption {
+func WithDefaultRetryDelay(delay time.Duration) LargeFileOption {
 	return func(o *largeFileOptions) {
 		o.delay = delay
 	}
 }
 
+// WithLargeFileDigest sets the digest for the large file.
+func WithLargeFileDigest(dig digests.Hash) LargeFileOption {
+	return func(o *largeFileOptions) {
+		o.digest = dig
+	}
+}
+
+const DefaultLargeFileBlockSize = 1024 * 16 // Default block size is 16 KiB.
+
 // OpenLargeFile opens a large file for concurrent reading using file.largefile.Reader.
 func NewLargeFile(ctx context.Context, name string, opts ...LargeFileOption) (largefile.Reader, error) {
 	lf := &LargeFile{name: name}
-	lf.blockSize = 4096 // default block size is 4 KiB
 	lf.logger = slog.New(slog.DiscardHandler)
 	lf.transport = &http.Transport{}
 	lf.delay = time.Minute // default retry delay is 1 minute
 	for _, opt := range opts {
 		opt(&lf.largeFileOptions)
+	}
+	if lf.blockSize <= 0 {
+		lf.blockSize = DefaultLargeFileBlockSize // Default block size is 16 KiB.
 	}
 	client := &http.Client{
 		Transport: lf.transport,
@@ -109,11 +122,22 @@ func NewLargeFile(ctx context.Context, name string, opts ...LargeFileOption) (la
 		return nil, ErrNoRangeSupport
 	}
 	if digestHeader := resp.Header.Get(rfc9530.ReprDigestHeader); len(digestHeader) > 0 {
-		digests, err := rfc9530.ParseReprDigest(digestHeader)
+		hdrDigests, err := rfc9530.ParseReprDigest(digestHeader)
 		if err != nil {
 			return nil, err
 		}
-		lf.digest, _ = rfc9530.ChooseDigest(digests, "sha1", "sha256", "sha512")
+		hdrDigest, ok := rfc9530.ChooseDigest(hdrDigests, "sha1", "sha-1", "sha256", "sha-256", "sha512", "sha-512")
+		if !ok {
+			return nil, fmt.Errorf("no suitable digest found")
+		}
+		algo, _, digest, err := rfc9530.ParseAlgoDigest(hdrDigest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse digest: %w", err)
+		}
+		lf.digest, err = digests.New(algo, digest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create digest hash: %w", err)
+		}
 	}
 	lf.contentLength = resp.ContentLength
 	return lf, nil
@@ -128,7 +152,7 @@ func (f *LargeFile) ContentLengthAndBlockSize() (int64, int) {
 	return f.contentLength, f.blockSize
 }
 
-func (f *LargeFile) Digest() string {
+func (f *LargeFile) Digest() digests.Hash {
 	return f.digest
 }
 

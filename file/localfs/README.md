@@ -5,6 +5,16 @@ import cloudeng.io/file/localfs
 ```
 
 
+## Constants
+### DefaultLargeFileBlockSize
+```go
+DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
+
+
+```
+
+
+
 ## Functions
 ### Func NewLevelScanner
 ```go
@@ -14,6 +24,55 @@ func NewLevelScanner(path string, openwait time.Duration) filewalk.LevelScanner
 
 
 ## Types
+### Type LargeFile
+```go
+type LargeFile struct {
+	// contains filtered or unexported fields
+}
+```
+LargeFile is a wrapper around a file that supports reading large files in
+blocks. It implements the largefile.Reader interface.
+
+### Functions
+
+```go
+func NewLargeFile(file *os.File, blockSize int, digest digests.Hash) (*LargeFile, error)
+```
+NewLargeFile creates a new LargeFile instance that wraps the provided file
+and uses the specified block size for reading. The supplied digest is simply
+returned by the Digest() method and is not used to validate the file's
+contents directly.
+
+
+
+### Methods
+
+```go
+func (lf *LargeFile) ContentLengthAndBlockSize() (int64, int)
+```
+ContentLengthAndBlockSize implements largefile.Reader.
+
+
+```go
+func (lf *LargeFile) Digest() digests.Hash
+```
+Digest implements largefile.Reader.
+
+
+```go
+func (lf *LargeFile) GetReader(_ context.Context, from, _ int64) (io.ReadCloser, largefile.RetryResponse, error)
+```
+GetReader implements largefile.Reader.
+
+
+```go
+func (lf *LargeFile) Name() string
+```
+Name implements largefile.Reader.
+
+
+
+
 ### Type Option
 ```go
 type Option func(o *options)

@@ -15,8 +15,8 @@ import (
 // initialized with name, value pairs and a default value using its
 // Register and Default methods.
 type Map struct {
-	value  interface{}
-	values map[string]interface{}
+	value  any
+	values map[string]any
 }
 
 type ErrMap struct {
@@ -66,21 +66,21 @@ func (ef *Map) String() string {
 }
 
 // Value implements flag.Getter.
-func (ef *Map) Get() interface{} {
+func (ef *Map) Get() any {
 	return ef.value
 }
 
-func (ef Map) Register(name string, val interface{}) Map {
+func (ef Map) Register(name string, val any) Map {
 	if ef.values == nil {
-		ef.values = map[string]interface{}{}
+		ef.values = map[string]any{}
 	}
 	ef.values[name] = val
 	return ef
 }
 
-func (ef Map) Default(val interface{}) Map {
+func (ef Map) Default(val any) Map {
 	if ef.values == nil {
-		ef.values = map[string]interface{}{}
+		ef.values = map[string]any{}
 	}
 	ef.value = val
 	return ef
