@@ -5,8 +5,6 @@ go 1.24.2
 require (
 	cloudeng.io/algo v0.0.0-20250704001736-d4e02be3f778
 	cloudeng.io/file v0.0.0-20250704001736-d4e02be3f778
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.83.0
-	github.com/aws/smithy-go v1.22.4
 )
 
 require (
