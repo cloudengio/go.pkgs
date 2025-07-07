@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	cloudeng.io/algo v0.0.0-20250704001736-d4e02be3f778
-	cloudeng.io/file v0.0.0-20250704001736-d4e02be3f778
+	cloudeng.io/file v0.0.0-20250707202835-5d7a2bb3051a
 )
 
 require (
