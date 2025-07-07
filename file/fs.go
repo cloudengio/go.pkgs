@@ -73,6 +73,7 @@ type WriteFileFS interface {
 // ErrNotImplemented is returned by methods that are not implemented
 // by a particular filesystem.
 var ErrNotImplemented = fmt.Errorf("not implemented")
+var ErrSchemeNotSupported = fmt.Errorf("scheme not supported")
 
 var _ fs.FileInfo = (*Info)(nil)
 
