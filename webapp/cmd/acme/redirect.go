@@ -21,7 +21,6 @@ import (
 type testRedirectFlags struct {
 	webapp.HTTPServerFlags
 	webapp.HTTPAcmeFlags
-	webapp.TLSCertFlags
 	awsconfig.AWSFlags
 }
 

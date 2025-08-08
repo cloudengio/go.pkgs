@@ -98,7 +98,7 @@ TLSConfigFromFlags creates a tls.Config based on the supplied flags,
 which may require obtaining certificates directly from pem files or from a
 possibly remote certificate store using TLSConfigUsingCertStore. If a cert
 store is specified then the getStoreOpts function may be used to obtain
-additional options for the store. A cache is then created to fron that store
+additional options for the store. A cache is then created to from that store
 using the supplied cacheOpts.
 
 ### Func TLSConfigUsingCertFiles

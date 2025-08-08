@@ -83,6 +83,10 @@ func RedirectPort80(ctx context.Context, httpsAddr string, acmeRedirectHost stri
 	if err != nil {
 		return err
 	}
-	go ServeWithShutdown(ctx, ln, srv, time.Minute)
+	go func() {
+		if err := ServeWithShutdown(ctx, ln, srv, time.Minute); err != nil {
+			ctxlog.Logger(ctx).Error("error from http redirect server", "addr", srv.Addr, "err", err.Error())
+		}
+	}()
 	return nil
 }

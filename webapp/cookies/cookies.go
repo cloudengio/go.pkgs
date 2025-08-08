@@ -48,7 +48,6 @@ func (c T) SetSecureWithExpiration(rw http.ResponseWriter, value string, expires
 // Set sets the supplied cookie with the name of the cookie specified
 // in the receiver but using all other values from the supplied cookie.
 func (c T) Set(rw http.ResponseWriter, ck *http.Cookie) {
-	// Set a session cookie that expires in 10 minutes.
 	ck.Name = string(c)
 	http.SetCookie(rw, ck)
 }

@@ -57,7 +57,7 @@ type HTTPServerFlags struct {
 // possibly remote certificate store using TLSConfigUsingCertStore. If
 // a cert store is specified then the getStoreOpts function
 // may be used to obtain additional options for the store. A cache
-// is then created to fron that store using the supplied cacheOpts.
+// is then created to from that store using the supplied cacheOpts.
 func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, getStoreOpts func() (opts []any, err error), cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
 	if cl.ListStoreTypes {
 		return nil, errors.New(strings.Join(RegisteredCertStores(), "\n"))

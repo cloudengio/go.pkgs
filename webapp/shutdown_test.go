@@ -5,7 +5,6 @@
 package webapp_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -29,9 +28,13 @@ import (
 	"cloudeng.io/webapp"
 )
 
+var tlsConfig *tls.Config
+var tlsCert []byte
+var tlsOnce sync.Once
+
 // newSelfSignedTLSConfig creates a self-signed certificate and returns a tls.Config
 // for a server, and the certificate in PEM format for a client to trust.
-func newSelfSignedTLSConfig(t *testing.T) (*tls.Config, []byte) {
+func newSelfSignedTLSConfigInit(t *testing.T) (*tls.Config, []byte) {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -65,10 +68,16 @@ func newSelfSignedTLSConfig(t *testing.T) (*tls.Config, []byte) {
 	}, certPEM
 }
 
+func newSelfSignedTLSConfig(t *testing.T) (*tls.Config, []byte) {
+	tlsOnce.Do(func() {
+		tlsConfig, tlsCert = newSelfSignedTLSConfigInit(t)
+	})
+	return tlsConfig, tlsCert
+}
+
 func TestServeWithShutdown(t *testing.T) {
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-	ctx := ctxlog.WithLogger(context.Background(), logger)
+	var logged strings.Builder
+	ctx := ctxlog.WithLogger(t.Context(), slog.New(slog.NewJSONHandler(&logged, nil)))
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -86,7 +95,7 @@ func TestServeWithShutdown(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		if err := webapp.ServeWithShutdown(ctx, ln, srv, time.Second); err != nil {
-			log.Printf("ServeWithShutdown returned an error: %v", err)
+			t.Errorf("ServeWithShutdown returned an unexpected error: %v", err)
 		}
 	}()
 
@@ -108,9 +117,10 @@ func TestServeWithShutdown(t *testing.T) {
 	cancel()
 	wg.Wait()
 
-	if !strings.Contains(logBuf.String(), "shutting down server") {
-		t.Errorf("log output missing 'shutting down server':\n%s", logBuf.String())
+	if !strings.Contains(logged.String(), "server being shut down") {
+		t.Errorf("expected log message not found: %q", logged.String())
 	}
+
 }
 
 func TestServeTLSWithShutdown(t *testing.T) {
@@ -123,10 +133,7 @@ func TestServeTLSWithShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-	ctx := ctxlog.WithLogger(context.Background(), logger)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -134,7 +141,7 @@ func TestServeTLSWithShutdown(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		if err := webapp.ServeTLSWithShutdown(ctx, ln, srv, time.Second); err != nil {
-			log.Printf("ServeTLSWithShutdown returned an error: %v", err)
+			t.Errorf("ServeTLSWithShutdown returned an unexpected error: %v", err)
 		}
 	}()
 
@@ -165,112 +172,107 @@ func TestServeTLSWithShutdown(t *testing.T) {
 	cancel()
 	wg.Wait()
 
-	if !strings.Contains(logBuf.String(), "shutting down server") {
-		t.Errorf("log output missing 'shutting down server':\n%s", logBuf.String())
-	}
 }
 
-func TestServeWithShutdown_Error(t *testing.T) {
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-	ctx := ctxlog.WithLogger(context.Background(), logger)
-	ctx, cancel := context.WithCancel(ctx)
-
+func TestServeWithShutdown_ServerError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Close listener immediately to cause srv.Serve to fail.
+	addr := ln.Addr()
 	if err := ln.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := webapp.ServeWithShutdown(ctx, ln, &http.Server{}, time.Second)
-		if err != nil {
-			t.Errorf("ServeWithShutdown returned an unexpected error: %v", err)
-		}
-	}()
-
-	// Give the server goroutine a moment to start and fail on Serve.
-	time.Sleep(100 * time.Millisecond)
-
-	// Now, trigger the shutdown.
-	cancel()
-	wg.Wait()
-
-	output := logBuf.String()
-	if !strings.Contains(output, "server error") || !strings.Contains(output, "use of closed network connection") {
-		t.Errorf("expected 'server error' and 'use of closed network connection' in log, got:\n%s", output)
+	err = webapp.ServeWithShutdown(context.Background(), ln, &http.Server{Addr: addr.String()}, time.Second)
+	if err == nil {
+		t.Fatal("expected an error, but got nil")
 	}
-	if !strings.Contains(output, "shutting down server") {
-		t.Errorf("log output missing 'shutting down server':\n%s", output)
+	if !strings.Contains(err.Error(), "use of closed network connection") {
+		t.Errorf("error does not contain expected message: got %v", err)
 	}
 }
 
-func TestServeTLSWithShutdown_Error(t *testing.T) {
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-	ctx := ctxlog.WithLogger(context.Background(), logger)
-	ctx, cancel := context.WithCancel(ctx)
-
+func TestServeTLSWithShutdown_ServerError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Close listener immediately to cause srv.ServeTLS to fail.
+	addr := ln.Addr()
 	if err := ln.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	serverTLSConf, _ := newSelfSignedTLSConfig(t)
 	srv := &http.Server{
+		Addr:      addr.String(),
 		TLSConfig: serverTLSConf,
 	}
+	srv.TLSConfig.CipherSuites = []uint16{}
 
+	err = webapp.ServeTLSWithShutdown(context.Background(), ln, srv, time.Second)
+	if err == nil {
+		t.Fatal("expected an error, but got nil")
+	}
+	if !strings.Contains(err.Error(), "missing an HTTP/2-required ") {
+		t.Errorf("error does not contain expected message: got %v", err)
+	}
+}
+
+func TestServeWithShutdown_ShutdownError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// This handler will hang, preventing a graceful shutdown.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(time.Second)
+		fmt.Fprint(w, "hello")
+	})
+
+	ln, srv, err := webapp.NewHTTPServer("127.0.0.1:0", handler)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var shutdownErr error
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := webapp.ServeTLSWithShutdown(ctx, ln, srv, time.Second)
-		if err != nil {
-			t.Errorf("ServeTLSWithShutdown returned an unexpected error: %v", err)
-		}
+		// Use a very short grace period to ensure Shutdown fails.
+		shutdownErr = webapp.ServeWithShutdown(ctx, ln, srv, 10*time.Millisecond)
 	}()
 
-	// Give the server goroutine a moment to start and fail on ServeTLS.
-	time.Sleep(100 * time.Millisecond)
+	// Make a request to the hanging handler.
+	go func() {
+		_, _ = http.Get("http://" + ln.Addr().String())
+	}()
 
-	// Now, trigger the shutdown.
+	// Give the request a moment to be accepted by the server.
+	time.Sleep(50 * time.Millisecond)
+
+	// Trigger the shutdown.
 	cancel()
 	wg.Wait()
 
-	output := logBuf.String()
-	if !strings.Contains(output, "serveTLS error") || !strings.Contains(output, "use of closed network connection") {
-		t.Errorf("expected 'serveTLS error' and 'use of closed network connection' in log, got:\n%s", output)
+	if shutdownErr == nil {
+		t.Fatal("expected a shutdown error, but got nil")
 	}
-	if !strings.Contains(output, "shutting down server") {
-		t.Errorf("log output missing 'shutting down server':\n%s", output)
+	if !strings.Contains(shutdownErr.Error(), "shutdown failed") {
+		t.Errorf("error does not contain expected 'shutdown failed' message: got %v", shutdownErr)
 	}
 }
 
 func ExampleServeWithShutdown() {
-	// Create a handler for the server.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Hello, World!")
 	})
 
-	// Use NewHTTPServer to create a listener and a server instance.
-	// Using port "0" will automatically choose a free port.
 	ln, srv, err := webapp.NewHTTPServer("127.0.0.1:0", handler)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Create a context that will be canceled after a short time to trigger shutdown.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
@@ -279,7 +281,6 @@ func ExampleServeWithShutdown() {
 		fmt.Printf("server listening on: %s:<some-port>\n", host)
 	}
 
-	// Run the server. This function will block until the server is shut down.
 	if err := webapp.ServeWithShutdown(ctx, ln, srv, 5*time.Second); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}
