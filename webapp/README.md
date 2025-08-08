@@ -19,31 +19,12 @@ same application.
 An example/template can be found in cmd/webapp.
 
 ## Functions
-### Func CertPoolForTesting
-```go
-func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error)
-```
-CertPoolForTesting returns a new x509.CertPool containing the certs in the
-specified pem files. It is intended for testing purposes only.
-
 ### Func NewHTTPServer
 ```go
 func NewHTTPServer(addr string, handler http.Handler) (net.Listener, *http.Server, error)
 ```
 NewHTTPServer returns a new *http.Server and a listener whose address
 defaults to ":http".
-
-### Func NewSelfSignedCert
-```go
-func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) error
-```
-NewSelfSignedCert creates a self signed certificate. Default values for the
-supported options are:
-  - an rsa 4096 bit private key will be generated and used.
-  - "localhost" and "127.0.0.1" are used for the DNS and IP addresses
-    included in the certificate.
-  - certificates are valid from time.Now() and for 5 days.
-  - the organization is 'cloudeng llc'.
 
 ### Func NewTLSServer
 ```go
@@ -58,7 +39,8 @@ func RedirectPort80(ctx context.Context, httpsAddr string, acmeRedirectHost stri
 ```
 RedirectPort80 starts an http.Server that will redirect port 80 to the
 specified supplied https port. If acmeRedirect is specified then acme
-HTTP-01 challenges will be redirected to that URL.
+HTTP-01 challenges will be redirected to that URL. The server will run in
+the background until the supplied context is canceled.
 
 ### Func RedirectToHTTPSHandlerFunc
 ```go
@@ -88,13 +70,9 @@ stores.
 ```go
 func SafePath(path string) error
 ```
-
-### Func SelfSignedCertCommand
-```go
-func SelfSignedCertCommand(name string) *subcmd.Command
-```
-SelfSignedCertCommand returns a subcmd.Command that provides the ability to
-generate a self signed certificate and private key file.
+SafePath checks if the given path is safe for use as a filename screening
+for control characters, windows device names, relative paths, paths (eg.
+a/b is not allowed) etc.
 
 ### Func ServeTLSWithShutdown
 ```go
@@ -114,12 +92,14 @@ within the specified grace period.
 
 ### Func TLSConfigFromFlags
 ```go
-func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, storeOpts ...interface{}) (*tls.Config, error)
+func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, getStoreOpts func() (opts []any, err error), cacheOpts ...CertServingCacheOption) (*tls.Config, error)
 ```
 TLSConfigFromFlags creates a tls.Config based on the supplied flags,
-which may require obtaining certificates directly from pem files or
-from a possibly remote certificate store using TLSConfigUsingCertStore.
-Any supplied storeOpts are passed to TLSConfigUsingCertStore.
+which may require obtaining certificates directly from pem files or from a
+possibly remote certificate store using TLSConfigUsingCertStore. If a cert
+store is specified then the getStoreOpts function may be used to obtain
+additional options for the store. A cache is then created to fron that store
+using the supplied cacheOpts.
 
 ### Func TLSConfigUsingCertFiles
 ```go
@@ -130,10 +110,11 @@ read from the supplied files.
 
 ### Func TLSConfigUsingCertStore
 ```go
-func TLSConfigUsingCertStore(ctx context.Context, typ, name, testingCA string, storeOpts ...interface{}) (*tls.Config, error)
+func TLSConfigUsingCertStore(ctx context.Context, store CertStore, cacheOpts ...CertServingCacheOption) (*tls.Config, error)
 ```
-TLSConfigUsingCertStore returns a tls.Config configured with the certificate
-obtained from a certificate store.
+TLSConfigUsingCertStore returns a tls.Config configured with the
+certificate obtained from the specified certificate store accessed via a
+CertServingCache created with the supplied options.
 
 
 
@@ -154,10 +135,12 @@ in-memory cache will reload certificates from the store on a periodic basis
 ### Functions
 
 ```go
-func NewCertServingCache(certStore CertStore, opts ...CertServingCacheOption) *CertServingCache
+func NewCertServingCache(ctx context.Context, certStore CertStore, opts ...CertServingCacheOption) *CertServingCache
 ```
-NewCertServingCache returns a new instance of CertServingCache that uses the
-supplied CertStore.
+NewCertServingCache returns a new instance of CertServingCache that uses
+the supplied CertStore. The supplied context is cached and used by the
+GetCertificate method, this allows for credentials etc to be passed to the
+CertStore.Get method called by GetCertificate via the context.
 
 
 
@@ -207,7 +190,6 @@ refreshed. This is generally only required for testing purposes.
 type CertStore interface {
 	Get(ctx context.Context, name string) ([]byte, error)
 	Put(ctx context.Context, name string, data []byte) error
-	Delete(ctx context.Context, name string) error
 }
 ```
 CertStore represents a store for TLS certificates.
@@ -215,7 +197,7 @@ CertStore represents a store for TLS certificates.
 ### Functions
 
 ```go
-func NewCertStore(ctx context.Context, typ, name string, storeOpts ...interface{}) (CertStore, error)
+func NewCertStore(ctx context.Context, typ, name string, storeOpts ...any) (CertStore, error)
 ```
 
 
@@ -226,7 +208,7 @@ func NewCertStore(ctx context.Context, typ, name string, storeOpts ...interface{
 type CertStoreFactory interface {
 	Type() string
 	Describe() string
-	New(ctx context.Context, name string, opts ...interface{}) (CertStore, error)
+	New(ctx context.Context, name string, opts ...any) (CertStore, error)
 }
 ```
 CertStoreFactory is the interface that must be implemented to register
@@ -234,13 +216,22 @@ a new CertStore type with this package so that it may accessed via the
 TLSCertStoreFlags command line flags.
 
 
+### Type HTTPAcmeFlags
+```go
+type HTTPAcmeFlags struct {
+	AcmeRedirectTarget string `subcmd:"acme-redirect-target,,host implementing acme client that this http server will redirect acme challenges to"`
+}
+```
+HTTPAcmeFlags defines flags for running an http server that will handle
+acme challenges, currently it allows for redirecting them to a server that
+implements the acme client protocol.
+
+
 ### Type HTTPServerFlags
 ```go
 type HTTPServerFlags struct {
 	Address string `subcmd:"https,:8080,address to run https web server on"`
 	TLSCertFlags
-	AcmeRedirectTarget string `subcmd:"acme-redirect-target,,host implementing acme client that this http server will redirect acme challenges to"`
-	TestingCAPem       string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 }
 ```
 HTTPServerFlags defines commonly used flags for running an http server.
@@ -251,50 +242,6 @@ preferred for production, source for TLS certificates is from a cache as
 specified by tls-cert-cache-type and tls-cert-cache-name. The cache may be
 on local disk, or preferably in some shared service such as Amazon's Secrets
 Service.
-
-
-### Type SelfSignedOption
-```go
-type SelfSignedOption func(ssc *selfSignedCertOptions)
-```
-SelfSignedOption represents an option to NewSelfSignedCert.
-
-### Functions
-
-```go
-func CertAllIPAddresses() SelfSignedOption
-```
-CertIPAddresses specifies that all local IPs be used in the generated
-certificate.
-
-
-```go
-func CertDNSHosts(hosts ...string) SelfSignedOption
-```
-CertDNSHosts specifies the set of dns host names to use in the generated
-certificate.
-
-
-```go
-func CertIPAddresses(ips ...string) SelfSignedOption
-```
-CertIPAddresses specifies the set of ip addresses to use in the generated
-certificate.
-
-
-```go
-func CertOrganizations(orgs ...string) SelfSignedOption
-```
-CertOrganizations specifies that the organization to be used in the
-generated certificate.
-
-
-```go
-func CertPrivateKey(key crypto.PrivateKey) SelfSignedOption
-```
-CertPrivateKey specifies the private key to use for the certificate.
-
-
 
 
 ### Type TLSCertFlags
@@ -323,6 +270,11 @@ TLS/SSL certificate store. This is generally used in conjunction with
 TLSConfigFromFlags for apps that simply want to use stored certificates.
 Apps that manage/obtain/renew certificates may use them directly.
 
+
+
+
+## Examples
+### [ExampleServeWithShutdown](https://pkg.go.dev/cloudeng.io/webapp?tab=doc#example-ServeWithShutdown)
 
 
 

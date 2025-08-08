@@ -20,6 +20,8 @@ import (
 
 type testRedirectFlags struct {
 	webapp.HTTPServerFlags
+	webapp.HTTPAcmeFlags
+	webapp.TLSCertFlags
 	awsconfig.AWSFlags
 }
 
@@ -31,7 +33,7 @@ func redirectCmd() *subcmd.Command {
 	return testRedirectCmd
 }
 
-func testACMERedirect(ctx context.Context, values interface{}, _ []string) error {
+func testACMERedirect(ctx context.Context, values any, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*testRedirectFlags)
@@ -53,7 +55,9 @@ func testACMERedirect(ctx context.Context, values interface{}, _ []string) error
 		storeOpts = append(storeOpts, awscertstore.WithAWSConfig(cfg))
 	}
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, storeOpts...)
+	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, func() (opts []any, err error) {
+		return storeOpts, nil
+	})
 	if err != nil {
 		return err
 	}
