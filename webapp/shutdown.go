@@ -8,10 +8,11 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"time"
+
+	"cloudeng.io/logging/ctxlog"
 )
 
 // ServeWithShutdown runs srv.ListenAndServe in background and then
@@ -20,7 +21,7 @@ import (
 func ServeWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, grace time.Duration) error {
 	return serveWithShutdown(ctx, srv, grace, func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("serve: %s\n", err)
+			ctxlog.Logger(ctx).Error("server error", "err", err.Error())
 		}
 	})
 }
@@ -29,9 +30,12 @@ func ServeWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, g
 // Note that any TLS options must be configured prior to calling this
 // function via the TLSConfig field in http.Server.
 func ServeTLSWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, grace time.Duration) error {
+	if srv.TLSConfig == nil {
+		return fmt.Errorf("ServeTLSWithShutdown requires a non-nil TLSConfig in the http.Server")
+	}
 	return serveWithShutdown(ctx, srv, grace, func() {
 		if err := srv.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("serveTLS: %s\n", err)
+			ctxlog.Logger(ctx).Error("serveTLS error", "err", err.Error())
 		}
 	})
 }
@@ -40,8 +44,8 @@ func serveWithShutdown(ctx context.Context, srv *http.Server, grace time.Duratio
 	go fn()
 
 	<-ctx.Done()
-	log.Printf("stopping..... %v\n", srv.Addr)
-	ctx, cancel := context.WithTimeout(context.Background(), grace)
+	ctxlog.Logger(ctx).Info("shutting down server", "addr", srv.Addr)
+	ctx, cancel := context.WithTimeout(ctx, grace)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		return fmt.Errorf("server forced to shutdown afer %s: %v", grace, err)

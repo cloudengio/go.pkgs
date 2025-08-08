@@ -1,0 +1,1 @@
+export function one(x: number) { return x + 1 }
