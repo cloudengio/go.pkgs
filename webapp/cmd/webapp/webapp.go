@@ -38,6 +38,7 @@ var webpackedAssetPrefix = "webapp-sample/build"
 
 type ProdServerFlags struct {
 	webapp.HTTPServerFlags
+	webapp.HTTPAcmeFlags
 }
 
 type DevServerFlags struct {
@@ -60,9 +61,7 @@ func init() {
 	devServeCmd := subcmd.NewCommand("dev", devServerFlagSet, devServe, subcmd.ExactlyNumArguments(0))
 	devServeCmd.Document(`run a development server.`)
 
-	certCmd := webapp.SelfSignedCertCommand("self-signed-cert")
-
-	cmdSet = subcmd.NewCommandSet(prodServeCmd, devServeCmd, certCmd)
+	cmdSet = subcmd.NewCommandSet(prodServeCmd, devServeCmd)
 	cmdSet.Document(`Run a webapp server. Two modes are supported: production and
 	development.
 
@@ -94,7 +93,7 @@ func prodServe(ctx context.Context, values interface{}, _ []string) error {
 
 	configureAPIEndpoints(router)
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags)
+	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, nil)
 	if err != nil {
 		return err
 	}
@@ -124,7 +123,7 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 
 	configureAPIEndpoints(router)
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags)
+	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, nil)
 	if err != nil {
 		return err
 	}

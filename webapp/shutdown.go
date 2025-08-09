@@ -7,21 +7,21 @@ package webapp
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"time"
+
+	"cloudeng.io/logging/ctxlog"
 )
 
 // ServeWithShutdown runs srv.ListenAndServe in background and then
 // waits for the context to be canceled. It will then attempt to shutdown
 // the web server within the specified grace period.
 func ServeWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, grace time.Duration) error {
-	return serveWithShutdown(ctx, srv, grace, func() {
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("serve: %s\n", err)
-		}
+	return serveWithShutdown(ctx, srv, grace, func() error {
+		return srv.Serve(ln)
 	})
 }
 
@@ -29,31 +29,58 @@ func ServeWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, g
 // Note that any TLS options must be configured prior to calling this
 // function via the TLSConfig field in http.Server.
 func ServeTLSWithShutdown(ctx context.Context, ln net.Listener, srv *http.Server, grace time.Duration) error {
-	return serveWithShutdown(ctx, srv, grace, func() {
-		if err := srv.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("serveTLS: %s\n", err)
-		}
+	if srv.TLSConfig == nil {
+		return fmt.Errorf("ServeTLSWithShutdown requires a non-nil TLSConfig in the http.Server")
+	}
+	return serveWithShutdown(ctx, srv, grace, func() error {
+		return srv.ServeTLS(ln, "", "")
 	})
 }
 
-func serveWithShutdown(ctx context.Context, srv *http.Server, grace time.Duration, fn func()) error {
-	go fn()
+func serveWithShutdown(ctx context.Context, srv *http.Server, grace time.Duration, fn func() error) error {
+	serveErrCh := make(chan error, 1)
+	go func() {
+		err := fn()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErrCh <- err
+			return
+		}
+		serveErrCh <- nil
+		close(serveErrCh)
+	}()
 
-	<-ctx.Done()
-	log.Printf("stopping..... %v\n", srv.Addr)
+	select {
+	case err := <-serveErrCh:
+		if err != nil {
+			return fmt.Errorf("server %v, unexpected error %w", srv.Addr, err)
+		}
+		return nil
+	case <-ctx.Done():
+		ctxlog.Logger(ctx).Info("server being shut down", "addr", srv.Addr, "grace", grace)
+	}
+
+	// Use a new context tree for the shutdown, since the original
+	// was only intended to signal starting the shutdown.
 	ctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		return fmt.Errorf("server forced to shutdown afer %s: %v", grace, err)
+	if err := srv.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("server running on %v, shutdown failed %s: %w", srv.Addr, grace, err)
 	}
-	return nil
+	select {
+	case err := <-serveErrCh:
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // NewHTTPServer returns a new *http.Server and a listener whose address defaults
 // to ":http".
 func NewHTTPServer(addr string, handler http.Handler) (net.Listener, *http.Server, error) {
 	return newServer(addr, ":http", handler, nil)
-
 }
 
 // NewTLSServer returns a new *http.Server and a listener whose address defaults

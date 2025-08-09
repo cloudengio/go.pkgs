@@ -2,10 +2,9 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package webapp
+package devtest
 
 import (
-	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -18,10 +17,25 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"os/exec"
 	"time"
-
-	"cloudeng.io/cmdutil/subcmd"
 )
+
+// NewSelfSignedCertUsingMkcert uses mkcert (https://github.com/FiloSottile/mkcert) to
+// create certificates. If mkcert --install has been run then these certificates will
+// be trusted by the browser and other local applications
+func NewSelfSignedCertUsingMkcert(certFile, keyFile string, hosts ...string) error {
+	if len(certFile) == 0 || len(keyFile) == 0 {
+		return fmt.Errorf("both the crt and key files must be specified")
+	}
+	args := []string{"--cert-file", certFile, "--key-file", keyFile}
+	args = append(args, hosts...)
+	out, err := exec.Command("mkcert", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create certificates: %v\nOutput: %s", err, out)
+	}
+	return nil
+}
 
 type selfSignedCertOptions struct {
 	ips  []string
@@ -110,7 +124,6 @@ func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) er
 	if err := opts.setDefaults(); err != nil {
 		return err
 	}
-
 	// based on crypto/tls/generate_cert.go
 
 	// ECDSA, ED25519 and RSA subject keys should have the DigitalSignature
@@ -143,6 +156,14 @@ func NewSelfSignedCert(certFile, keyFile string, options ...SelfSignedOption) er
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+		DNSNames:              opts.dns,
+		IPAddresses:           make([]net.IP, len(opts.ips)),
+	}
+	for i, ip := range opts.ips {
+		template.IPAddresses[i] = net.ParseIP(ip)
+		if template.IPAddresses[i] == nil {
+			return fmt.Errorf("failed to parse IP address %q", ip)
+		}
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(opts.key), opts.key)
@@ -212,6 +233,7 @@ func allIPS() []string {
 	return all
 }
 
+/*
 // selfSignedCertFlags represents the flags for creating a self signed certificate
 // as used by the command returned by SelfSignedCertCommand.
 type selfSignedCertFlags struct {
@@ -228,6 +250,8 @@ func SelfSignedCertCommand(name string) *subcmd.Command {
 	return certCmd
 }
 
+TestingCAPem string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
+
 func certCmd(_ context.Context, values interface{}, _ []string) error {
 	cl := values.(*selfSignedCertFlags)
 	return NewSelfSignedCert(cl.CertificateFile,
@@ -235,6 +259,16 @@ func certCmd(_ context.Context, values interface{}, _ []string) error {
 		CertAllIPAddresses(),
 	)
 }
+		var opts []CertServingCacheOption
+	if len(testingCA) > 0 {
+		certPool, err := CertPoolForTesting(testingCA)
+		if err != nil {
+			return nil, fmt.Errorf("failed to obtain cert pool containing %v", testingCA)
+		}
+		opts = append(opts, CertCacheRootCAs(certPool))
+	}
+
+*/
 
 // CertPoolForTesting returns a new x509.CertPool containing the certs
 // in the specified pem files. It is intended for testing purposes only.
