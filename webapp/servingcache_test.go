@@ -42,19 +42,25 @@ func newMockCertStore() *mockCertStore {
 func (s *mockCertStore) Get(_ context.Context, name string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.storeErr != nil {
+		return nil, s.storeErr
+	}
 	cert, ok := s.certs[name]
 	if !ok {
 		return nil, fmt.Errorf("cert not found for %s", name)
 	}
 	s.getHits++
-	return cert, s.storeErr
+	return cert, nil
 }
 
 func (s *mockCertStore) Put(_ context.Context, name string, data []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.storeErr != nil {
+		return s.storeErr
+	}
 	s.certs[name] = data
-	return s.storeErr
+	return nil
 }
 
 func (s *mockCertStore) GetHits() int {
@@ -112,7 +118,9 @@ func TestCertServingCache_GetCertificate(t *testing.T) {
 	certData, rootCAs := generateTestCert(t, domain, now.Add(-time.Hour), now.Add(time.Hour))
 
 	store := newMockCertStore()
-	store.Put(ctx, domain, certData)
+	if err := store.Put(ctx, domain, certData); err != nil {
+		t.Fatal(err)
+	}
 
 	cache := webapp.NewCertServingCache(ctx, store, webapp.CertCacheRootCAs(rootCAs))
 
@@ -148,7 +156,9 @@ func TestCertServingCache_Expiry(t *testing.T) {
 	certData, rootCAs := generateTestCert(t, domain, startTime.Add(-time.Hour), startTime.Add(2*time.Hour))
 
 	store := newMockCertStore()
-	store.Put(ctx, domain, certData)
+	if err := store.Put(ctx, domain, certData); err != nil {
+		t.Fatal(err)
+	}
 
 	// Use a mock time function to control expiry.
 	mockTime := startTime
@@ -190,12 +200,13 @@ func TestCertServingCache_Expiry(t *testing.T) {
 func TestCertServingCache_Errors(t *testing.T) {
 	ctx := t.Context()
 	store := newMockCertStore()
-	cache := webapp.NewCertServingCache(ctx, store)
 
 	startTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	certData, _ := generateTestCert(t, "store-error.com", startTime.Add(-time.Hour), startTime.Add(2*time.Hour))
 
-	store.Put(ctx, "store-error.com", certData)
+	if err := store.Put(ctx, "store-error.com", certData); err != nil {
+		t.Fatal(err)
+	}
 
 	testCases := []struct {
 		name       string
@@ -249,6 +260,7 @@ func TestCertServingCache_Errors(t *testing.T) {
 			store.storeErr = tc.storeErr
 			store.mu.Unlock()
 
+			cache := webapp.NewCertServingCache(ctx, store)
 			if tc.rootCAs != nil {
 				// Create a new cache for tests that need specific roots.
 				cache = webapp.NewCertServingCache(ctx, store, webapp.CertCacheRootCAs(tc.rootCAs))

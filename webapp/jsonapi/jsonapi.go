@@ -44,7 +44,7 @@ func (ep Endpoint[Req, Resp]) ParseRequest(rw http.ResponseWriter, r *http.Reque
 // It sets the Content-Type header to "application/json" and writes the
 // HTTP status code. If encoding the response fails, it uses WriteError to write
 // an error message to the client.
-func (ep Endpoint[Req, Resp]) WriteResponse(rw http.ResponseWriter, r *http.Request, resp Resp) error {
+func (ep Endpoint[Req, Resp]) WriteResponse(rw http.ResponseWriter, resp Resp) error {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
@@ -65,7 +65,7 @@ type ErrorResponse struct {
 func WriteErrorMsg(rw http.ResponseWriter, msg string, status int) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
-	json.NewEncoder(rw).Encode(ErrorResponse{Message: msg})
+	json.NewEncoder(rw).Encode(ErrorResponse{Message: msg}) //nolint:errcheck
 }
 
 // WriteError writes an ErrorResponse in JSON format to the http.ResponseWriter.
@@ -73,5 +73,5 @@ func WriteErrorMsg(rw http.ResponseWriter, msg string, status int) {
 func WriteError(rw http.ResponseWriter, err ErrorResponse, status int) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
-	json.NewEncoder(rw).Encode(err)
+	json.NewEncoder(rw).Encode(err) //nolint:errcheck
 }

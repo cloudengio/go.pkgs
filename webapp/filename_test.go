@@ -127,7 +127,7 @@ func TestSafePathsClaude(t *testing.T) {
 
 		// Valid paths - should not return errors
 		{"file.txt", ""},
-		//{"path/to/file.txt", ""}, should not be allowed.
+		// {"path/to/file.txt", ""}, should not be allowed.
 		{"file-123.txt", ""},
 		{"file_123.txt", ""},
 		{"file 123.txt", ""},

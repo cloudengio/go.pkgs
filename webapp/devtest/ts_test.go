@@ -39,7 +39,7 @@ shift
 goto loop
 :done
 `
-		if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		if err := os.WriteFile(script, []byte(content), 0700); err != nil { //nolint: gosec //G306
 			t.Fatalf("write fake tsc: %v", err)
 		}
 		return script
@@ -70,7 +70,7 @@ for a in "$@"; do
   esac
 done
 `
-	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte(content), 0700); err != nil { //nolint: gosec //G306
 		t.Fatalf("write fake tsc: %v", err)
 	}
 	return script
@@ -84,7 +84,7 @@ func copyTestdata(t *testing.T, dstDir string, names ...string) {
 		if err != nil {
 			t.Fatalf("read testdata %s: %v", src, err)
 		}
-		if err := os.WriteFile(filepath.Join(dstDir, n), b, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dstDir, n), b, 0600); err != nil {
 			t.Fatalf("write %s: %v", n, err)
 		}
 	}
@@ -134,7 +134,7 @@ func TestTypescriptSources_CompileIncremental(t *testing.T) {
 	time.Sleep(15 * time.Millisecond) // allow mtime granularity
 
 	// Modify only one.ts.
-	if err := os.WriteFile(filepath.Join(tmp, "one.ts"), []byte(`export function one(x:number){return x+2}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "one.ts"), []byte(`export function one(x:number){return x+2}`), 0600); err != nil {
 		t.Fatalf("modify one.ts: %v", err)
 	}
 

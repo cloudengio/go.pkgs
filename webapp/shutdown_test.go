@@ -65,6 +65,7 @@ func newSelfSignedTLSConfigInit(t *testing.T) (*tls.Config, []byte) {
 	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
+		MinVersion:   tls.VersionTLS12,
 	}, certPEM
 }
 
@@ -81,7 +82,7 @@ func TestServeWithShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "hello")
 	})
 
@@ -125,7 +126,7 @@ func TestServeWithShutdown(t *testing.T) {
 
 func TestServeTLSWithShutdown(t *testing.T) {
 	serverTLSConf, certPEM := newSelfSignedTLSConfig(t)
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "hello tls")
 	})
 	ln, srv, err := webapp.NewTLSServer("127.0.0.1:0", handler, serverTLSConf)
@@ -148,7 +149,8 @@ func TestServeTLSWithShutdown(t *testing.T) {
 	certPool := x509.NewCertPool()
 	certPool.AppendCertsFromPEM(certPEM)
 	clientTLSConf := &tls.Config{
-		RootCAs: certPool,
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
 	}
 	transport := &http.Transport{
 		TLSClientConfig: clientTLSConf,
@@ -184,7 +186,7 @@ func TestServeWithShutdown_ServerError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = webapp.ServeWithShutdown(context.Background(), ln, &http.Server{Addr: addr.String()}, time.Second)
+	err = webapp.ServeWithShutdown(context.Background(), ln, &http.Server{Addr: addr.String(), ReadTimeout: time.Second}, time.Second)
 	if err == nil {
 		t.Fatal("expected an error, but got nil")
 	}
@@ -205,8 +207,9 @@ func TestServeTLSWithShutdown_ServerError(t *testing.T) {
 
 	serverTLSConf, _ := newSelfSignedTLSConfig(t)
 	srv := &http.Server{
-		Addr:      addr.String(),
-		TLSConfig: serverTLSConf,
+		Addr:        addr.String(),
+		TLSConfig:   serverTLSConf,
+		ReadTimeout: time.Second,
 	}
 	srv.TLSConfig.CipherSuites = []uint16{}
 
@@ -224,7 +227,7 @@ func TestServeWithShutdown_ShutdownError(t *testing.T) {
 	defer cancel()
 
 	// This handler will hang, preventing a graceful shutdown.
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(time.Second)
 		fmt.Fprint(w, "hello")
 	})
@@ -264,7 +267,7 @@ func TestServeWithShutdown_ShutdownError(t *testing.T) {
 }
 
 func ExampleServeWithShutdown() {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "Hello, World!")
 	})
 

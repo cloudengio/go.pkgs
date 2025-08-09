@@ -91,9 +91,14 @@ func (ts *TypescriptSources) Compile(ctx context.Context) error {
 	if len(modified) == 0 {
 		return nil // nothing to compile
 	}
+	compilerPath, err := exec.LookPath(ts.options.compiler)
+	if err != nil {
+		return fmt.Errorf("failed to find typescript compiler %q in PATH: %w", ts.options.compiler, err)
+	}
+
 	args := []string{"--target", ts.options.target}
 	args = append(args, modified...)
-	cmd := exec.Command(ts.options.compiler, args...)
+	cmd := exec.CommandContext(ctx, compilerPath, args...)
 	cmd.Dir = ts.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

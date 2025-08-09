@@ -80,19 +80,17 @@ func TestEndpoint_ParseRequest(t *testing.T) {
 				if errResp.Message == "" {
 					t.Errorf("Expected error message in response, got empty string")
 				}
-			} else {
+			} else if parsedReq.Name != "John" || parsedReq.Age != 30 || parsedReq.Address != "123 Main St" {
 				// Verify the request was correctly parsed
-				if parsedReq.Name != "John" || parsedReq.Age != 30 || parsedReq.Address != "123 Main St" {
-					t.Errorf("Request not correctly parsed: %+v", parsedReq)
-				}
+				t.Errorf("Request not correctly parsed: %+v", parsedReq)
 			}
+
 		})
 	}
 }
 
 func TestEndpoint_WriteResponse(t *testing.T) {
 	ep := jsonapi.Endpoint[TestRequest, TestResponse]{}
-	req := httptest.NewRequest(http.MethodGet, "/api", nil)
 	rec := httptest.NewRecorder()
 
 	resp := TestResponse{
@@ -100,7 +98,7 @@ func TestEndpoint_WriteResponse(t *testing.T) {
 		ID:       42,
 	}
 
-	err := ep.WriteResponse(rec, req, resp)
+	err := ep.WriteResponse(rec, resp)
 	if err != nil {
 		t.Fatalf("WriteResponse() error = %v", err)
 	}
@@ -190,7 +188,6 @@ func TestWriteError(t *testing.T) {
 // TestEndpointEncodeError tests the error handling when encoding the response fails
 func TestEndpointEncodeError(t *testing.T) {
 	ep := jsonapi.Endpoint[TestRequest, TestResponse]{}
-	req := httptest.NewRequest(http.MethodGet, "/api", nil)
 
 	// Create a custom ResponseWriter that fails on Write
 	rec := &failingResponseWriter{
@@ -202,7 +199,7 @@ func TestEndpointEncodeError(t *testing.T) {
 		ID:       42,
 	}
 
-	err := ep.WriteResponse(rec, req, resp)
+	err := ep.WriteResponse(rec, resp)
 	if err == nil {
 		t.Fatal("WriteResponse() expected error, got nil")
 	}

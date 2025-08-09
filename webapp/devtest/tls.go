@@ -29,9 +29,7 @@ func NewSelfSignedCertUsingMkcert(certFile, keyFile string, hosts ...string) err
 		return fmt.Errorf("both the crt and key files must be specified")
 	}
 	args := []string{"--cert-file", certFile, "--key-file", keyFile}
-	for _, ip := range hosts {
-		args = append(args, ip)
-	}
+	args = append(args, hosts...)
 	out, err := exec.Command("mkcert", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create certificates: %v\nOutput: %s", err, out)

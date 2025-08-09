@@ -53,7 +53,7 @@ func NewJSServer(title string, ts *TypescriptSources, jsScripts ...string) *JSSe
 func (jss *JSServer) writeError(rw http.ResponseWriter, status int, err error) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
-	json.NewEncoder(rw).Encode(err.Error())
+	json.NewEncoder(rw).Encode(err.Error()) //nolint:errcheck
 }
 
 // ServeJS handles HTTP requests for serving a series of Javascript
