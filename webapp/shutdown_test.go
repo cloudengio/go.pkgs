@@ -65,7 +65,7 @@ func newSelfSignedTLSConfigInit(t *testing.T) (*tls.Config, []byte) {
 	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 	}, certPEM
 }
 
@@ -150,7 +150,7 @@ func TestServeTLSWithShutdown(t *testing.T) {
 	certPool.AppendCertsFromPEM(certPEM)
 	clientTLSConf := &tls.Config{
 		RootCAs:    certPool,
-		MinVersion: tls.VersionTLS12,
+		MinVersion: tls.VersionTLS13,
 	}
 	transport := &http.Transport{
 		TLSClientConfig: clientTLSConf,

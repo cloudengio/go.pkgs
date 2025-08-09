@@ -27,6 +27,7 @@ type Endpoint[Req, Resp any] struct{}
 // client.
 func (ep Endpoint[Req, Resp]) ParseRequest(rw http.ResponseWriter, r *http.Request, req *Req) error {
 	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
 	defer r.Body.Close() // Ensure the body is closed after reading.
 	if err := decoder.Decode(req); err != nil {
 		WriteErrorMsg(rw, "failed to decode request body", http.StatusBadRequest)
@@ -46,11 +47,11 @@ func (ep Endpoint[Req, Resp]) ParseRequest(rw http.ResponseWriter, r *http.Reque
 // an error message to the client.
 func (ep Endpoint[Req, Resp]) WriteResponse(rw http.ResponseWriter, resp Resp) error {
 	rw.Header().Set("Content-Type", "application/json")
-	rw.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
-		WriteErrorMsg(rw, "failed to encode response", http.StatusOK)
+		WriteErrorMsg(rw, "failed to encode response", http.StatusInternalServerError)
 		return fmt.Errorf("failed to encode response: %w", err)
 	}
+	rw.WriteHeader(http.StatusOK)
 	return nil
 }
 

@@ -46,7 +46,7 @@ it uses WriteError to write an error message to the client.
 
 
 ```go
-func (ep Endpoint[Req, Resp]) WriteResponse(rw http.ResponseWriter, r *http.Request, resp Resp) error
+func (ep Endpoint[Req, Resp]) WriteResponse(rw http.ResponseWriter, resp Resp) error
 ```
 WriteResponse writes the response in JSON format to the http.ResponseWriter.
 It sets the Content-Type header to "application/json" and writes the HTTP

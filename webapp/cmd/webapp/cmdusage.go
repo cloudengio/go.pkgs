@@ -21,7 +21,6 @@
 //	If a self-signed cerificate is required, the cert command can be used to generate
 //	one.
 //
-//	            prod - run a production server.
-//	             dev - run a development server.
-//	self-signed-cert - create a self signed certificate
+//	prod - run a production server.
+//	 dev - run a development server.
 package main
