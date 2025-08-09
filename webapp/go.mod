@@ -9,6 +9,8 @@ require (
 	cloudeng.io/io v0.0.0-20250707204608-69242ac664a5
 	cloudeng.io/logging v0.0.0-20250707204608-69242ac664a5
 	cloudeng.io/os v0.0.0-20250707204608-69242ac664a5
+	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327
+	github.com/chromedp/chromedp v0.14.0
 	github.com/go-webauthn/webauthn v0.13.4
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
@@ -18,10 +20,6 @@ require (
 
 require (
 	cloudeng.io/errors v0.0.12 // indirect
-	cloudeng.io/file v0.0.0-20250609000856-e90addcdd7e2 // indirect
-	cloudeng.io/text v0.0.11 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327 // indirect
-	github.com/chromedp/chromedp v0.14.0 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2 // indirect
@@ -34,5 +32,4 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
