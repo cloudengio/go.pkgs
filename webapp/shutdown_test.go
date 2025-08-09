@@ -211,6 +211,7 @@ func TestServeTLSWithShutdown_ServerError(t *testing.T) {
 		TLSConfig:   serverTLSConf,
 		ReadTimeout: time.Second,
 	}
+	srv.TLSConfig.MinVersion = tls.VersionTLS12 // force a ciphersuite error
 	srv.TLSConfig.CipherSuites = []uint16{}
 
 	err = webapp.ServeTLSWithShutdown(context.Background(), ln, srv, time.Second)
