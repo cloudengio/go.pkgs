@@ -7,6 +7,7 @@ package jwtutil_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"testing"
 	"time"
 
@@ -85,8 +86,8 @@ func TestKeyFuncErrors(t *testing.T) {
 		// Create a verifier with the correct public key but the wrong ID.
 		verifier := jwtutil.NewED25519PublicKey(pub, "key-2")
 		_, err = jwt.Parse(tokenString, verifier.KeyFunc)
-		if err != jwt.ErrInvalidKey {
-			t.Errorf("expected jwt.ErrInvalidKey, got %v", err)
+		if !errors.Is(err, jwt.ErrTokenUnverifiable) {
+			t.Errorf("expected jwt.ErrTokenUnverifiable, got %v", err)
 		}
 	})
 
@@ -100,7 +101,7 @@ func TestKeyFuncErrors(t *testing.T) {
 
 		// Attempt to verify it with the Ed25519 KeyFunc.
 		_, err = jwt.Parse(hmacString, signer.KeyFunc)
-		if err != jwt.ErrSignatureInvalid {
+		if !errors.Is(err, jwt.ErrSignatureInvalid) {
 			t.Errorf("expected jwt.ErrSignatureInvalid, got %v", err)
 		}
 	})
@@ -114,7 +115,7 @@ func TestKeyFuncErrors(t *testing.T) {
 		}
 
 		_, err = jwt.Parse(tokenString, signer.KeyFunc)
-		if err != jwt.ErrInvalidKey {
+		if !errors.Is(err, jwt.ErrTokenUnverifiable) {
 			t.Errorf("expected jwt.ErrInvalidKey for missing 'kid', got %v", err)
 		}
 	})
