@@ -23,6 +23,7 @@ import (
 	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/errors"
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/devtest"
 	"cloudeng.io/webapp/webauth/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -250,7 +251,7 @@ func customCertPool(ht *http.Transport, rootCAPemFile string) {
 
 func customTLSConfig(rootCAPemFile string) *tls.Config {
 	if len(rootCAPemFile) > 0 {
-		certPool, err := webapp.CertPoolForTesting(rootCAPemFile)
+		certPool, err := devtest.CertPoolForTesting(rootCAPemFile)
 		if err != nil {
 			log.Printf("Failed to obtain cert pool containing %v", rootCAPemFile)
 		} else {

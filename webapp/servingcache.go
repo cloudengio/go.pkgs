@@ -34,6 +34,7 @@ type entry struct {
 // reload certificates from the store on a periodic basis (with some jitter)
 // to allow for certificates to be refreshed.
 type CertServingCache struct {
+	ctx       context.Context
 	certStore CertStore
 	ttl       time.Duration
 	rootCAs   *x509.CertPool
@@ -70,9 +71,12 @@ func CertCacheNowFunc(fn func() time.Time) CertServingCacheOption {
 }
 
 // NewCertServingCache returns a new instance of CertServingCache that
-// uses the supplied CertStore.
-func NewCertServingCache(certStore CertStore, opts ...CertServingCacheOption) *CertServingCache {
+// uses the supplied CertStore. The supplied context is cached and used by
+// the GetCertificate method, this allows for credentials etc to be passed
+// to the CertStore.Get method called by GetCertificate via the context.
+func NewCertServingCache(ctx context.Context, certStore CertStore, opts ...CertServingCacheOption) *CertServingCache {
 	sc := &CertServingCache{
+		ctx:       ctx,
 		cache:     map[string]entry{},
 		certStore: certStore,
 		nowFunc:   time.Now,
@@ -88,31 +92,34 @@ func (m *CertServingCache) get(name string, when time.Time) *tls.Certificate {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
 	if entry, ok := m.cache[name]; ok {
-		if !entry.expiry.After(when) {
+		if entry.expiry.After(when) {
 			return entry.cert
 		}
 	}
 	return nil
 }
 
-func (m *CertServingCache) put(name string, cert *tls.Certificate, when time.Time) { //nolint:unused
+func (m *CertServingCache) put(name string, cert *tls.Certificate, expiration time.Duration) {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	m.cache[name] = entry{cert: cert, expiry: when.Add(m.ttl)}
+	m.cache[name] = entry{
+		cert:   cert,
+		expiry: m.nowFunc().Add(expiration),
+	}
 }
 
 // GetCertificate can be assigned to tls.Config.GetCertificate.
 func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	name := hello.ServerName
 	if name == "" {
-		return nil, fmt.Errorf("webauth/acme: missing server name")
+		return nil, fmt.Errorf("missing server name")
 	}
 	if !strings.Contains(strings.Trim(name, "."), ".") {
-		return nil, fmt.Errorf("webauth/acme: server name component count invalid")
+		return nil, fmt.Errorf("server name component count invalid")
 	}
 	name, err := idna.Lookup.ToASCII(name)
 	if err != nil {
-		return nil, fmt.Errorf("webauth/acme: server name contains invalid character")
+		return nil, fmt.Errorf("server name contains invalid character")
 	}
 
 	now := m.nowFunc()
@@ -120,10 +127,7 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 		return cert, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	data, err := m.certStore.Get(ctx, name)
+	data, err := m.certStore.Get(m.ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +135,7 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 	// Private key portion.
 	priv, pub := pem.Decode(data)
 	if priv == nil || !strings.Contains(priv.Type, "PRIVATE") {
-		return nil, fmt.Errorf("webauth/acme: no private key for %v", name)
+		return nil, fmt.Errorf("no private key for %v", name)
 	}
 	privKey, err := parsePrivateKey(priv.Bytes)
 	if err != nil {
@@ -151,11 +155,11 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 		pubDERBytes = append(pubDERBytes, b.Bytes...)
 	}
 	if len(pub) > 0 {
-		return nil, fmt.Errorf("webauth/acme: corrupt/spurious certs for %v", name)
+		return nil, fmt.Errorf("corrupt/spurious certs for %v", name)
 	}
 	x509Certs, err := x509.ParseCertificates(pubDERBytes)
 	if err != nil || len(x509Certs) == 0 {
-		return nil, fmt.Errorf("acme/autocert: no public key/certs found for %v", name)
+		return nil, fmt.Errorf("no public key/certs found for %v", name)
 	}
 	leaf, err := m.verifyLeafCert(name, now, x509Certs)
 	if err != nil {
@@ -166,6 +170,7 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 		PrivateKey:  privKey,
 		Leaf:        leaf,
 	}
+	m.put(name, tlscert, m.ttl)
 	return tlscert, nil
 }
 
@@ -182,7 +187,7 @@ func (m *CertServingCache) verifyLeafCert(name string, now time.Time, x509Certs 
 		Roots:         m.rootCAs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("acme/autocert: invalid leaf cert %v: %v", name, err)
+		return nil, fmt.Errorf("invalid leaf cert %v: %v", name, err)
 	}
 	return leaf, nil
 }
@@ -203,12 +208,12 @@ func parsePrivateKey(der []byte) (crypto.Signer, error) {
 		case *ecdsa.PrivateKey:
 			return key, nil
 		default:
-			return nil, errors.New("webauth/acme: unknown private key type in PKCS#8 wrapping")
+			return nil, errors.New("unknown private key type in PKCS#8 wrapping")
 		}
 	}
 	if key, err := x509.ParseECPrivateKey(der); err == nil {
 		return key, nil
 	}
 
-	return nil, errors.New("webauth/acme: failed to parse private key")
+	return nil, errors.New("failed to parse private key")
 }

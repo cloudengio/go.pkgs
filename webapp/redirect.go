@@ -7,12 +7,13 @@ package webapp
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"cloudeng.io/logging/ctxlog"
 )
 
 // RedirectToHTTPSHandlerFunc is a http.HandlerFunc that will redirect
@@ -25,18 +26,16 @@ func RedirectToHTTPSHandlerFunc(tlsPort string, acmeRedirectHost *url.URL) http.
 		tlsPort = "443"
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		escaped := strings.ReplaceAll(r.URL.Path, "\n", "")
-		escaped = strings.ReplaceAll(escaped, "\r", "")
-		log.Printf("http %v: %v: %v", r.Host, escaped, acmeRedirectHost != nil)
 		if acmeRedirectHost != nil && strings.HasPrefix(r.URL.Path, "/.well-known/acme-challenge/") {
 			nrl := url.URL{
 				Scheme: "http",
 				Host:   acmeRedirectHost.Host,
 				Path:   r.URL.Path,
 			}
-			log.Printf("acme redirect to %s", nrl.String())
+			target := nrl.String()
+			ctxlog.Logger(r.Context()).Info("redirecting acme challenge", "redirect", target)
 			// redirect to our login servers.
-			http.Redirect(w, r, nrl.String(), http.StatusTemporaryRedirect)
+			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 			return
 		}
 		host, _, err := net.SplitHostPort(r.Host)
@@ -46,6 +45,7 @@ func RedirectToHTTPSHandlerFunc(tlsPort string, acmeRedirectHost *url.URL) http.
 		u := r.URL
 		u.Host = net.JoinHostPort(host, tlsPort)
 		u.Scheme = "https"
+		ctxlog.Logger(r.Context()).Info("redirecting to https", "redirect", u.String())
 		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 	})
 }
@@ -53,6 +53,8 @@ func RedirectToHTTPSHandlerFunc(tlsPort string, acmeRedirectHost *url.URL) http.
 // RedirectPort80 starts an http.Server that will redirect port 80 to the
 // specified supplied https port. If acmeRedirect is specified then
 // acme HTTP-01 challenges will be redirected to that URL.
+// The server will run in the background until the supplied context
+// is canceled.
 func RedirectPort80(ctx context.Context, httpsAddr string, acmeRedirectHost string) error {
 	_, tlsPort, _ := net.SplitHostPort(httpsAddr)
 	var au *url.URL
@@ -82,9 +84,8 @@ func RedirectPort80(ctx context.Context, httpsAddr string, acmeRedirectHost stri
 		return err
 	}
 	go func() {
-		err := ServeWithShutdown(ctx, ln, srv, time.Minute)
-		if err != nil {
-			log.Printf("failed to shutdown http redirect to tls port %s", tlsPort)
+		if err := ServeWithShutdown(ctx, ln, srv, time.Minute); err != nil {
+			ctxlog.Logger(ctx).Error("error from http redirect server", "addr", srv.Addr, "err", err.Error())
 		}
 	}()
 	return nil

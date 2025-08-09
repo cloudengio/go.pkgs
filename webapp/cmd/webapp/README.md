@@ -24,9 +24,8 @@ Usage of `webapp`
     If a self-signed cerificate is required, the cert command can be used to generate
     one.
 
-                prod - run a production server.
-                 dev - run a development server.
-    self-signed-cert - create a self signed certificate
+    prod - run a production server.
+     dev - run a development server.
 
 This command is an example of how to create a simple `webapp` that uses react
 for the browser-side app and serves API endpoints for use by that app.
