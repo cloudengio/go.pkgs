@@ -23,22 +23,24 @@ import (
 	"cloudeng.io/webapp/devtest"
 	"cloudeng.io/webapp/webauth/jwtutil"
 	"cloudeng.io/webapp/webauth/webauthn/passkeys"
-	"github.com/go-webauthn/webauthn/protocol"
-	"github.com/go-webauthn/webauthn/webauthn"
 	serverWebauthn "github.com/go-webauthn/webauthn/webauthn"
 )
 
-var serverURL *url.URL
+// A minimal self-contained example of a WebAuthn server that can
+// create passkeys, login in using them and verify that a user is logged
+// in using a jwt cookie issued by the login.
 
-func init() {
-	var err error
-	serverURL, err = url.Parse("https://local.onyourbehalf.ai:8080")
+func main() {
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: go run main.go <host:port>")
+		return
+	}
+	hostPort := os.Args[1]
+	serverURL, err := url.Parse("https://" + hostPort)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse server URL: %v", err))
 	}
-}
 
-func main() {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
@@ -48,7 +50,7 @@ func main() {
 
 	certFile := "local.pem"
 	keyFile := "local-key.pem"
-	devtest.NewSelfSignedCertUsingMkcert(certFile, keyFile, "local.onyourbehalf.ai")
+	devtest.NewSelfSignedCertUsingMkcert(certFile, keyFile, hostPort)
 
 	wa, err := serverWebauthn.New(&serverWebauthn.Config{
 		RPDisplayName: "Test Passkeys",
@@ -69,20 +71,11 @@ func main() {
 	w := passkeys.NewHandler(wa, db, db, mw, passkeys.WithLogger(logger))
 	mime.AddExtensionType(".js", "application/javascript")
 
-	requireResidentKey := true
+	//requireResidentKey := true
 	// Register the file server handler for all requests and start the server.
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("./testdata")))
-	mux.HandleFunc("/generate-registration-options", func(rw http.ResponseWriter, r *http.Request) {
-		w.BeginRegistration(rw, r,
-			protocol.MediationDefault,
-			webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
-				AuthenticatorAttachment: protocol.Platform,
-				RequireResidentKey:      &requireResidentKey,
-				ResidentKey:             protocol.ResidentKeyRequirementRequired,
-				UserVerification:        protocol.VerificationPreferred}),
-		)
-	})
+	mux.HandleFunc("/generate-registration-options", w.BeginRegistration)
 	mux.HandleFunc("/verify-registration", w.FinishRegistration)
 	mux.HandleFunc("/generate-authentication-options", w.BeginDiscoverableAuthentication)
 	mux.HandleFunc("/verify-authentication", w.FinishAuthentication)
@@ -96,7 +89,7 @@ func main() {
 		devtest.NewJSServer("generate", tsc, "passkeys.js", "passkeys-create.js").ServeJS)
 
 	mux.HandleFunc("/login",
-		devtest.NewJSServer("generate", tsc, "passkeys.js", "passkeys-login.js").ServeJS)
+		devtest.NewJSServer("login", tsc, "passkeys.js", "passkeys-login.js").ServeJS)
 
 	cfg, err := webapp.TLSConfigUsingCertFiles(certFile, keyFile)
 	if err != nil {

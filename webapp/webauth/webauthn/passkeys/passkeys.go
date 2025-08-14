@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"cloudeng.io/webapp/jsonapi"
@@ -46,6 +47,8 @@ type options struct {
 	sessionCookieDuration time.Duration
 	loginCookieDuration   time.Duration
 	emailValidator        EmailValidator
+	mediationRequirement  protocol.CredentialMediationRequirement
+	registrationOptions   []webauthn.RegistrationOption
 }
 
 // HandlerOption represents an option for configuring the Handler.
@@ -76,9 +79,24 @@ func WithLoginCookieDuration(duration time.Duration) HandlerOption {
 	}
 }
 
+// WithEmailValidator sets the email validator for the handler.
 func WithEmailValidator(validator EmailValidator) HandlerOption {
 	return func(o *options) {
 		o.emailValidator = validator
+	}
+}
+
+// WithMediation sets the mediation requirement for the handler.
+func WithMediation(mediation protocol.CredentialMediationRequirement) HandlerOption {
+	return func(o *options) {
+		o.mediationRequirement = mediation
+	}
+}
+
+// WithRegistrationOptions sets the registration options for the handler.
+func WithRegistrationOptions(opts ...webauthn.RegistrationOption) HandlerOption {
+	return func(o *options) {
+		o.registrationOptions = slices.Clone(opts)
 	}
 }
 
@@ -103,6 +121,7 @@ func NewHandler(w WebAuthn, sm SessionManager, um UserDatabase, mw Middleware, o
 	if h.opts.logger == nil {
 		h.opts.logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 	}
+
 	return h
 }
 
@@ -120,8 +139,7 @@ type BeginRegistrationRequest struct {
 
 // BeginRegistration starts the registration process for a user.
 // It expects a request with a JSON body containing the user's email address.
-func (h *Handler) BeginRegistration(rw http.ResponseWriter, r *http.Request,
-	mediationRequirement protocol.CredentialMediationRequirement, opts ...webauthn.RegistrationOption) {
+func (h *Handler) BeginRegistration(rw http.ResponseWriter, r *http.Request) {
 	var req BeginRegistrationRequest
 	logger := h.opts.logger.With("method", "BeginRegistration")
 
@@ -147,7 +165,7 @@ func (h *Handler) BeginRegistration(rw http.ResponseWriter, r *http.Request,
 	}
 
 	creds, session, err := h.w.BeginMediatedRegistration(
-		user, mediationRequirement, opts...)
+		user, h.opts.mediationRequirement, h.opts.registrationOptions...)
 	if err != nil {
 		logger.Error("failed to begin mediated registration", "err", err.Error())
 		jsonapi.WriteErrorMsg(rw, "failed to begin mediated registration", http.StatusInternalServerError)

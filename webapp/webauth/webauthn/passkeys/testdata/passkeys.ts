@@ -1,31 +1,3 @@
-
-/*
-// Helper to convert ArrayBuffer to Base64URL string
-function bufferToBase64URL(buffer: ArrayBuffer): string {
-    return btoa(String.fromCharCode(...new Uint8Array(buffer)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-}
-
-
-// Helper to convert Base64URL string to ArrayBuffer
-function base64URLToBuffer(base64url: string): ArrayBuffer {
-    // Add padding and convert to standard Base64
-    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-    const padLength = (4 - (base64.length % 4)) % 4;
-    const padded = base64.padEnd(base64.length + padLength, '=');
-
-    // Decode and convert to ArrayBuffer
-    const raw = atob(padded);
-    const buffer = new ArrayBuffer(raw.length);
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < raw.length; i++) {
-        bytes[i] = raw.charCodeAt(i);
-    }
-    return buffer;
-}*/
-
 function base64urlToArrayBuffer(base64url: string): ArrayBuffer {
     // Convert base64url to standard base64
     const base64 = base64url
@@ -53,24 +25,30 @@ function arrayBufferToBase64url(buffer: ArrayBuffer): string {
 }
 
 
+type PasskeyCreation = {
+    user_handle: string;
+    email: string;
+    public_key_id?: string;
+    error?: string | null;
+    exception?: string | null;
+};
+
 /**
  * Creates a new passkey for a user.
  * @param email - The email address of the user for whom to create the passkey.
  * @param displayName - The username for which to create the passkey.
  */
-async function createPasskey(email: string, displayName: string): Promise<String> {
+async function createPasskey(email: string, displayName: string): Promise<PasskeyCreation> {
     console.log("Creating passkey for:", email, displayName);
     try {
-        console.log("Creating passkey in try block for:", email, displayName);
         // 1. Fetch registration options from the server
         const response: Response = await fetch('/generate-registration-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ "email": email, "display_name": displayName }),
         });
-        console.log("server response:", response);
         const options: PublicKeyCredentialCreationOptionsJSON = await response.json();
-        console.log("Registration options received:", options);
+
         console.log("User:", options.user);
         console.log("Relying Party:", options.rp);
 
@@ -89,7 +67,7 @@ async function createPasskey(email: string, displayName: string): Promise<String
         const credential = (await navigator.credentials.create({
             publicKey
         })) as PublicKeyCredential;
-        console.log("Credential received:", credential);
+        console.log("Credential:", credential);
 
         // 3. Send the new credential to the server to be verified and stored
         const attestationResponse = credential.response as AuthenticatorAttestationResponse;
@@ -109,19 +87,25 @@ async function createPasskey(email: string, displayName: string): Promise<String
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(verificationData),
         });
-
         if (verificationResponse.ok) {
-            return ""; // Indicate success
+            return {
+                user_handle: credential.id,
+                public_key_id: options.user.id,
+                email: options.user.name
+            };
         } else {
             const error = await verificationResponse.json();
-            return `failed to register passkey: ${error.message}`;
+            return {
+                user_handle: credential.id,
+                email: options.user.name,
+                error: `failed to register passkey: ${error.message}`, exception: null
+            };
         }
     } catch (err) {
         // Need to handle errors correctly:
         // InvalidStateError - programming error
         // NotAllowedError - all other errors.
-        console.log("Error creating passkey:", err);
-        return `could not create passkey: ${err}`;
+        return { user_handle: "", email: "", exception: `could not create passkey: ${err}` };
     }
 }
 

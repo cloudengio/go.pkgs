@@ -19,30 +19,33 @@ import (
 )
 
 var (
-	_ passkeys.WebAuthn    = (*mockWebAuthn)(nil)
-	_ passkeys.Middleware  = (*mockMiddleware)(nil)
-	_ passkeys.WebAuthn    = (*webauthn.WebAuthn)(nil)
-	_ passkeys.Middleware  = (passkeys.Middleware)(nil)
-	_ passkeys.UserCreator = (passkeys.UserCreator)(nil)
+	_ passkeys.WebAuthn   = (*mockWebAuthn)(nil)
+	_ passkeys.Middleware = (*mockMiddleware)(nil)
+	_ passkeys.WebAuthn   = (*webauthn.WebAuthn)(nil)
+	_ passkeys.Middleware = (passkeys.Middleware)(nil)
 )
 
 // mockWebAuthn is a simplified mock of webauthn.WebAuthn.
 type mockWebAuthn struct{}
 
 func (m *mockWebAuthn) BeginMediatedRegistration(user webauthn.User, _ protocol.CredentialMediationRequirement, _ ...webauthn.RegistrationOption) (*protocol.CredentialCreation, *webauthn.SessionData, error) {
-	return &protocol.CredentialCreation{
-			Response: protocol.PublicKeyCredentialCreationOptions{
-				Challenge: protocol.URLEncodedBase64("test-challenge"),
-				User: protocol.UserEntity{
-					ID:          user.WebAuthnID(),
-					DisplayName: user.WebAuthnDisplayName(),
-					Name:        user.WebAuthnName(),
+	cred := &protocol.CredentialCreation{
+		Response: protocol.PublicKeyCredentialCreationOptions{
+			Challenge: protocol.URLEncodedBase64("test-challenge"),
+			User: protocol.UserEntity{
+				ID: user.WebAuthnID(),
+				CredentialEntity: protocol.CredentialEntity{
+					Name: user.WebAuthnName(),
 				},
+				DisplayName: user.WebAuthnDisplayName(),
 			},
-		}, &webauthn.SessionData{
-			Challenge: "dGVzdC1jaGFsbGVuZ2U", // "test-challenge" base64 encoded
-			UserID:    user.WebAuthnID(),
-		}, nil
+		},
+	}
+	sess := &webauthn.SessionData{
+		Challenge: "dGVzdC1jaGFsbGVuZ2U", // "test-challenge" base64 encoded
+		UserID:    user.WebAuthnID(),
+	}
+	return cred, sess, nil
 }
 
 func (m *mockWebAuthn) FinishRegistration(user webauthn.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
@@ -147,13 +150,19 @@ func TestHandler_BeginRegistration(t *testing.T) {
 	mockWA := &mockWebAuthn{}
 	db := passkeys.NewRAMUserDatabase()
 	mw := &mockMiddleware{}
-	handler := passkeys.NewHandler(mockWA, db, db, mw)
+	handler := passkeys.NewHandler(mockWA, db, db, mw,
+		passkeys.WithRegistrationOptions(
+			webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+				AuthenticatorAttachment: protocol.Platform,
+				ResidentKey:             protocol.ResidentKeyRequirementRequired,
+				UserVerification:        protocol.VerificationPreferred}),
+		))
 
 	reqBody := `{"email":"test@example.com","display_name":"Test User"}`
 	req := httptest.NewRequest("POST", "/register/begin", bytes.NewBufferString(reqBody))
 	rec := httptest.NewRecorder()
 
-	handler.BeginRegistration(rec, req, protocol.MediationDefault)
+	handler.BeginRegistration(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -164,17 +173,14 @@ func TestHandler_BeginRegistration(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(resp.Challenge) == 0 {
-		t.Error("expected non-empty challenge")
-	}
-	if resp.User.Name != "test@example.com" {
-		t.Errorf("expected user name %q, got %q", "test@example.com", resp.User.Name)
+	if !bytes.Equal(resp.Challenge, protocol.URLEncodedBase64("test-challenge")) {
+		t.Errorf("expected challenge %q, got %q", "test-challenge", resp.Challenge)
 	}
 
 	cookies := rec.Result().Cookies()
 	var found bool
 	for _, cookie := range cookies {
-		if cookie.Name == passkeys.RegistrationCookie.String() {
+		if cookie.Name == string(passkeys.RegistrationCookie) {
 			found = true
 			if cookie.Value == "" {
 				t.Error("registration cookie has empty value")
@@ -204,10 +210,7 @@ func TestHandler_FinishRegistration(t *testing.T) {
 	tmpKey, _, _ := db.Registering(user, sessionData)
 
 	req := httptest.NewRequest("POST", "/register/finish", nil)
-	passkeys.RegistrationCookie.Set(rec, &http.Cookie{Value: tmpKey})
-	for _, c := range rec.Result().Cookies() {
-		req.AddCookie(c)
-	}
+	req.AddCookie(&http.Cookie{Name: string(passkeys.RegistrationCookie), Value: tmpKey})
 
 	rec := httptest.NewRecorder()
 	handler.FinishRegistration(rec, req)
