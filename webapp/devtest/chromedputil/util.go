@@ -10,6 +10,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"strings"
 	"text/template"
 
@@ -206,4 +207,17 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 		return false
 	}
 	return platformInfo.Type != ""
+}
+
+func ContextForCI(ctx context.Context) (context.Context, func()) {
+	path := os.Getenv("CHROME_BIN_PATH")
+	if len(path) == 0 {
+		return ctx, func() {}
+	}
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(path),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-setuid-sandbox", true),
+	)
+	return chromedp.NewExecAllocator(ctx, opts...)
 }
