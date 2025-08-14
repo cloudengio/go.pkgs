@@ -91,5 +91,4 @@ if (typeof chromedp_utils === "undefined") {
         }
         return result;
     }
-
 }

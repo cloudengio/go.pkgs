@@ -73,7 +73,7 @@ func SourceScript(ctx context.Context, script string) error {
 	if !result.Success {
 		return fmt.Errorf("failed to load script: %s", result.Error)
 	}
-	return err
+	return nil
 }
 
 func evaluate(ctx context.Context, expr string) (*runtime.RemoteObject, error) {
