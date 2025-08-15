@@ -209,16 +209,26 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 	return platformInfo.Type != ""
 }
 
-func ContextForCI(ctx context.Context) (context.Context, func()) {
+// ContextForCI returns a chromedp context that may be different on a CI
+// system than when running locally. The CI configuration may disable
+// sandboxing etc.
+func ContextForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
+	opts = append(chromedp.DefaultExecAllocatorOptions[:], opts...)
 	path := os.Getenv("CHROME_BIN_PATH")
 	if len(path) == 0 {
-		return ctx, func() {}
+		return chromedp.NewContext(ctx, opts...)
 	}
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+
+	opts = append(opts,
 		chromedp.ExecPath(path),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-setuid-sandbox", true),
 	)
-	return chromedp.NewExecAllocator(ctx, opts...)
+	ctx, cancelA := chromedp.NewExecAllocator(ctx, opts...)
+	ctx, cancelB := chromedp.NewContext(ctx)
+	return ctx, func() {
+		cancelB()
+		cancelA()
+	}
 }
