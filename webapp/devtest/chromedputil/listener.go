@@ -146,7 +146,7 @@ func WithAnyEventLogging() LoggingOption {
 }
 
 // RunLoggingListener starts the logging listener for Chrome DevTools Protocol events.
-func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...LoggingOption) {
+func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...LoggingOption) chan struct{} {
 	var options loggingOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -166,6 +166,7 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 
 	Listen(ctx, options.handlers...)
 
+	doneCh := make(chan struct{})
 	ch := make(chan struct{})
 	go func() {
 		close(ch)
@@ -195,9 +196,11 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 			case event := <-options.anyCh:
 				logger.Info("Other event", slog.Any("event", event))
 			case <-ctx.Done():
+				close(doneCh)
 				return
 			}
 		}
 	}()
 	<-ch
+	return doneCh
 }

@@ -571,7 +571,7 @@ func TestRunLoggingListener(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	// Run the listener with console and exception logging enabled.
-	chromedputil.RunLoggingListener(ctx, logger,
+	doneCh := chromedputil.RunLoggingListener(ctx, logger,
 		chromedputil.WithConsoleLogging(),
 		chromedputil.WithExceptionLogging(),
 	)
@@ -598,6 +598,7 @@ func TestRunLoggingListener(t *testing.T) {
 	// Stop the listener and capture the output.
 	cancel()
 
+	<-doneCh
 	logOutput := logBuf.String()
 
 	// Verify the console log was captured and printed to stderr.
