@@ -209,24 +209,31 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 	return platformInfo.Type != ""
 }
 
-// ContextForCI returns a chromedp context that may be different on a CI
-// system than when running locally. The CI configuration may disable
-// sandboxing etc.
-func ContextForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
-	opts = append(chromedp.DefaultExecAllocatorOptions[:], opts...)
+// WithExecAllocatorForCI returns a chromedp context with an ExecAllocator that may
+// be configured differently on a CI system than when running locally.
+// The CI configuration may disable sandboxing for example.
+func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
 	path := os.Getenv("CHROME_BIN_PATH")
 	if len(path) == 0 {
-		return chromedp.NewContext(ctx, opts...)
+		return chromedp.NewExecAllocator(ctx, opts...)
 	}
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
-
 	opts = append(opts,
 		chromedp.ExecPath(path),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-setuid-sandbox", true),
 	)
-	ctx, cancelA := chromedp.NewExecAllocator(ctx, opts...)
-	ctx, cancelB := chromedp.NewContext(ctx)
+	return chromedp.NewExecAllocator(ctx, opts...)
+}
+
+// WithContextForCI returns a chromedp context that may be different on a CI
+// system than when running locally. The CI configuration may disable
+// sandboxing etc. The ExecAllocator used is created with default options
+// (eg. headless). Use WithExecAllocatorForCI to customize accordingly. Note
+// that the CI customization is in WithExecAllocatorForCI.
+func WithContextForCI(ctx context.Context, opts ...chromedp.ContextOption) (context.Context, func()) {
+	ctx, cancelA := WithExecAllocatorForCI(ctx, chromedp.DefaultExecAllocatorOptions[:]...)
+	ctx, cancelB := chromedp.NewContext(ctx, opts...)
 	return ctx, func() {
 		cancelB()
 		cancelA()

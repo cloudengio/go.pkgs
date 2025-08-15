@@ -21,6 +21,7 @@ import (
 
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest"
+	"cloudeng.io/webapp/devtest/chromedputil"
 	"cloudeng.io/webapp/webauth/jwtutil"
 	"cloudeng.io/webapp/webauth/webauthn/passkeys"
 	"github.com/chromedp/cdproto/runtime"
@@ -153,7 +154,7 @@ func pars(objID runtime.RemoteObjectID) *runtime.GetPropertiesParams {
 
 func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWebauthn.AuthenticatorID) {
 	t.Helper()
-	ctx, cancel := chromedp.NewContext(context.Background(), chromedp.WithLogf(t.Logf))
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(), chromedp.WithLogf(t.Logf))
 
 	authOptions := &browserWebauthn.VirtualAuthenticatorOptions{
 		Protocol:            browserWebauthn.AuthenticatorProtocolCtap2,
@@ -178,11 +179,6 @@ func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWeb
 		cancel()
 		t.Fatalf("Failed to set up virtual authenticator: %v", err)
 	}
-
-	//if err := loadScript(ctx, t, "/content/passkeys.js"); err != nil {
-	//	cancel()
-	//	t.Fatalf("Failed to load script: %v", err)
-	//}
 
 	return ctx, cancel, authenticatorID
 }
@@ -210,7 +206,6 @@ func testPasskeyRegistration(ctx context.Context, t *testing.T) {
 	}
 	fmt.Printf(">>>>>>>>>>> %+v\n", result)
 	t.Fail()
-
 }
 
 func testPasskeyLogin(ctx context.Context, t *testing.T) {

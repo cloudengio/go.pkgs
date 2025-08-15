@@ -48,16 +48,11 @@ func setupTestServer() *httptest.Server {
 
 // setupBrowser creates a new chromedp context and navigates to the test server.
 func setupBrowser(t *testing.T, serverURL string) (context.Context, context.CancelFunc) {
-	ctx, cancelA := chromedputil.ContextForCI(context.Background())
-	ctx, cancelB := chromedp.NewContext(ctx)
+	ctx, cancel := chromedputil.WithContextForCI(context.Background())
 	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
-		cancelA()
 		t.Fatalf("failed to navigate to test server: %v", err)
 	}
-	return ctx, func() {
-		cancelA()
-		cancelB()
-	}
+	return ctx, cancel
 }
 
 func TestListGlobalFunctions(t *testing.T) {
