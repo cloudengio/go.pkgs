@@ -6,7 +6,6 @@ package awstestutil
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -44,22 +43,29 @@ func (s3AuthSchemeResolver) ResolveAuthSchemes(_ context.Context, params *s3.Aut
 }
 
 type s3Resolver struct {
-	uri url.URL
+	scheme string
+	port   string
 }
 
 func (r *s3Resolver) ResolveEndpoint(_ context.Context, params s3.EndpointParameters) (smithyendpoints.Endpoint, error) {
+	// Use virtual-hosted style endpoints.
 	var ep smithyendpoints.Endpoint
-	ep.URI = r.uri
-	ep.URI.Path = aws.ToString(params.Bucket)
+	bucket := aws.ToString(params.Bucket)
+	if len(bucket) == 0 {
+		ep.URI.Host = "s3.localhost.localstack.cloud:" + r.port
+	} else {
+		ep.URI.Host = aws.ToString(params.Bucket) + ".s3.localhost.localstack.cloud:" + r.port
+	}
+	ep.URI.Scheme = r.scheme
 	return ep, nil
 }
 
 func (a *AWS) S3(cfg aws.Config) *s3.Client {
-	res := &s3Resolver{a.uri()}
+	u := a.uri()
+	res := &s3Resolver{scheme: u.Scheme, port: u.Port()}
 	opt := s3.WithEndpointResolverV2(res)
 	opts := s3.Options{
 		AuthSchemeResolver: s3AuthSchemeResolver{},
-		UsePathStyle:       true,
 		Region:             cfg.Region,
 		Credentials:        cfg.Credentials,
 	}
