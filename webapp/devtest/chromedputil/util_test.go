@@ -5,13 +5,13 @@
 package chromedputil_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"cloudeng.io/webapp/devtest/chromedputil"
-	"github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
@@ -27,7 +26,7 @@ import (
 // setupTestServer creates a simple HTTP server to serve test files.
 func setupTestServer() *httptest.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/test.js", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/test.js", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `
             function myTestFunction() { console.log("hello from test.js"); }
             var anotherTestFunc = () => "world";
@@ -37,11 +36,11 @@ func setupTestServer() *httptest.Server {
 	mux.HandleFunc("/non-existent.js", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-	mux.HandleFunc("/invalid.js", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/invalid.js", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, `x=; // invalid js`)
 		w.Header().Set("Content-Type", "application/javascript")
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `<html><body><h1>Test Page</h1></body></html>`)
 	})
 	return httptest.NewServer(mux)
@@ -59,62 +58,6 @@ func setupBrowser(t *testing.T, serverURL string) (context.Context, context.Canc
 		cancelA()
 		cancelB()
 	}
-}
-
-func setupLoggingListener(ctx context.Context, logger *slog.Logger) {
-	consoleCh := make(chan *runtime.EventConsoleAPICalled, 10)
-	exceptionCh := make(chan *runtime.EventExceptionThrown, 10)
-	eventCh := make(chan *log.EventEntryAdded, 10)
-	anyCh := make(chan any, 10)
-	chromedputil.Listen(ctx,
-		chromedputil.NewEventConsoleHandler(consoleCh),
-		chromedputil.NewLogExceptionHandler(exceptionCh),
-		chromedputil.NewEventEntryHandler(eventCh),
-		//chromedputil.NewAnyHandler(anyCh),
-	)
-
-	go func() {
-		for {
-			select {
-			case event := <-consoleCh:
-				/*
-					attrs := []slog.Attr{}
-					for i, arg := range event.Args {
-						val, err := chromedputil.GetRemoteObjectValue(ctx, arg)
-						if err != nil {
-							logger.Error("Failed to get remote object value", "object id", arg.ObjectID, "error", err)
-							continue
-						}
-						attrs = append(attrs, slog.Any(fmt.Sprintf("arg%d", i), val.Value))
-					}
-					logger.LogAttrs(ctx, slog.LevelInfo, "...chromedp: console: ", attrs...)
-				*/
-				s, err := chromedputil.ConsoleArgsAsJSON(ctx, event)
-				if err != nil {
-					logger.Error("Failed to marshal console args to JSON", "error", err)
-					continue
-				}
-				for i, arg := range s {
-					fmt.Fprintf(os.Stderr, "%03d: %s\n", i, string(arg))
-				}
-			case event := <-exceptionCh:
-				logger.Error("Exception thrown", slog.Any("event", event))
-				logger.Error("Exception details",
-					slog.Any("stackTrace", event.ExceptionDetails.StackTrace),
-					slog.Any("exception", event.ExceptionDetails.Exception),
-					slog.Any("lineNumber", event.ExceptionDetails.LineNumber),
-					slog.Any("columnNumber", event.ExceptionDetails.ColumnNumber),
-				)
-			case event := <-eventCh:
-				logger.Info("Log entry added", slog.Any("event", event.Entry))
-			case event := <-anyCh:
-				logger.Info("Other event", slog.Any("event", event))
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 }
 
 func TestListGlobalFunctions(t *testing.T) {
@@ -181,9 +124,12 @@ func TestSourceScript(t *testing.T) {
 	defer cancel()
 
 	pageURL := ""
-	chromedp.Run(ctx,
+	err := chromedp.Run(ctx,
 		chromedp.Navigate(srv.URL),
 		chromedp.Evaluate(`window.location.href`, &pageURL))
+	if err != nil {
+		t.Fatalf("failed to evaluate page URL: %v", err)
+	}
 	if got, want := pageURL, srv.URL+"/"; got != want {
 		t.Errorf("expected page URL %q, got %q", want, got)
 	}
@@ -609,5 +555,62 @@ func TestConsoleArgsAsJSON(t *testing.T) { //nolint:gocyclo
 		t.Run(fmt.Sprintf("Argument %d", i), func(t *testing.T) {
 			checks[i](t, arg)
 		})
+	}
+}
+
+func TestRunLoggingListener(t *testing.T) {
+	srv := setupTestServer()
+	defer srv.Close()
+
+	ctx, cancel := setupBrowser(t, srv.URL)
+	defer cancel()
+
+	// Capture slog output
+	var logBuf bytes.Buffer
+
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+
+	// Run the listener with console and exception logging enabled.
+	chromedputil.RunLoggingListener(ctx, logger,
+		chromedputil.WithConsoleLogging(),
+		chromedputil.WithExceptionLogging(),
+	)
+
+	// Generate a console log and an exception in the browser.
+	err := chromedp.Run(ctx,
+		chromedp.Evaluate(`console.log("hello from the test");`, nil),
+	)
+	// We expect an error from the second evaluate, so we don't fail the test on it.
+	if err != nil {
+		t.Logf("chromedp.Run returned an expected error: %v", err)
+	}
+
+	// generate an exception..
+	scriptURL := fmt.Sprintf(`"%s/invalid.js"`, srv.URL)
+	err = chromedputil.SourceScript(ctx, scriptURL)
+	if err == nil {
+		t.Fatal("expected SourceScript to return an error for an invalid script, but it did not")
+	}
+
+	// Give the listener a moment to process the events.
+	time.Sleep(200 * time.Millisecond)
+
+	// Stop the listener and capture the output.
+	cancel()
+
+	logOutput := logBuf.String()
+
+	// Verify the console log was captured and printed to stderr.
+	expectedConsoleOut := `hello from the test`
+	if !strings.Contains(logOutput, expectedConsoleOut) {
+		t.Errorf("expected stderr to contain %q, but got:\n%s", expectedConsoleOut, logOutput)
+	}
+
+	// Verify the exception was captured and logged by slog.
+	if !strings.Contains(logOutput, "Exception thrown") {
+		t.Errorf("expected log output to contain 'Exception thrown', but got:\n%s", logOutput)
+	}
+	if !strings.Contains(logOutput, "SyntaxError: Unexpected token ';'") {
+		t.Errorf("expected log output to contain 'SyntaxError: Unexpected token ';'', but got:\n%s", logOutput)
 	}
 }

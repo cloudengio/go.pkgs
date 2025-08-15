@@ -214,6 +214,7 @@ func ContextForCI(ctx context.Context) (context.Context, func()) {
 	if len(path) == 0 {
 		return ctx, func() {}
 	}
+	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(path),
 		chromedp.Flag("no-sandbox", true),
