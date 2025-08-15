@@ -96,6 +96,7 @@ func NewLocalAWS(opts ...Option) *AWS {
 	for _, fn := range opts {
 		fn(&a.options)
 	}
+	a.options.localStackoptions = append(a.options.localStackoptions, localstack.WithVersion("3.1.0"))
 	return a
 }
 
@@ -162,7 +163,7 @@ func (a *AWS) SecretsManager(cfg aws.Config) *secretsmanager.Client {
 
 func DefaultAWSConfig() aws.Config {
 	return aws.Config{
-		Region:      "us-west-2",
+		Region:      "us-east-1",
 		Credentials: credentials.NewStaticCredentialsProvider("a", "b", "c"),
 	}
 }
