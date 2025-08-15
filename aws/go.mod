@@ -6,9 +6,9 @@ toolchain go1.24.4
 
 require (
 	cloudeng.io/errors v0.0.12
-	cloudeng.io/file v0.0.0-20250809220131-8173dce58d8d
+	cloudeng.io/file v0.0.0-20250815025853-3c9ff3897752
 	cloudeng.io/path v0.0.9
-	cloudeng.io/webapp v0.0.0-20250809220131-8173dce58d8d
+	cloudeng.io/webapp v0.0.0-20250815025853-3c9ff3897752
 	github.com/aws/aws-sdk-go-v2 v1.38.0
 	github.com/aws/aws-sdk-go-v2/config v1.31.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.4
@@ -22,10 +22,10 @@ require (
 
 require (
 	cloudeng.io/algo v0.0.0-20250702163429-a7491b52c177 // indirect
-	cloudeng.io/cmdutil v0.0.0-20250809220131-8173dce58d8d // indirect
-	cloudeng.io/logging v0.0.0-20250809220131-8173dce58d8d // indirect
+	cloudeng.io/cmdutil v0.0.0-20250815025853-3c9ff3897752 // indirect
+	cloudeng.io/logging v0.0.0-20250815025853-3c9ff3897752 // indirect
 	cloudeng.io/net v0.0.0-20250702160129-b1110d9b3fe4 // indirect
-	cloudeng.io/os v0.0.0-20250809220131-8173dce58d8d // indirect
+	cloudeng.io/os v0.0.0-20250815025853-3c9ff3897752 // indirect
 	cloudeng.io/sync v0.0.8 // indirect
 	cloudeng.io/sys v0.0.0-20250702160129-b1110d9b3fe4 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
