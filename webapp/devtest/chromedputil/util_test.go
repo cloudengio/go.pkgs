@@ -48,16 +48,11 @@ func setupTestServer() *httptest.Server {
 
 // setupBrowser creates a new chromedp context and navigates to the test server.
 func setupBrowser(t *testing.T, serverURL string) (context.Context, context.CancelFunc) {
-	ctx, cancelA := chromedputil.ContextForCI(context.Background())
-	ctx, cancelB := chromedp.NewContext(ctx)
+	ctx, cancel := chromedputil.WithContextForCI(context.Background())
 	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
-		cancelA()
 		t.Fatalf("failed to navigate to test server: %v", err)
 	}
-	return ctx, func() {
-		cancelA()
-		cancelB()
-	}
+	return ctx, cancel
 }
 
 func TestListGlobalFunctions(t *testing.T) {
@@ -71,15 +66,18 @@ func TestListGlobalFunctions(t *testing.T) {
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
         function aNewGlobalFunctionForTesting() {}
     `, nil)); err != nil {
+		cancel()
 		t.Fatalf("failed to define global function: %v", err)
 	}
 
 	functions, err := chromedputil.ListGlobalFunctions(ctx)
 	if err != nil {
+		cancel()
 		t.Fatalf("ListGlobalFunctions failed: %v", err)
 	}
 
 	if len(functions) == 0 {
+		cancel()
 		t.Fatal("expected some global functions, but got none")
 	}
 
@@ -136,7 +134,7 @@ func TestSourceScript(t *testing.T) {
 
 	t.Run("Failed Download", func(t *testing.T) {
 		// Attempt to source a script that will result in a 404.
-		scriptURL := fmt.Sprintf(`"%s/non-existent.js"`, srv.URL)
+		scriptURL := fmt.Sprintf(`%s/non-existent.js`, srv.URL)
 		err := chromedputil.SourceScript(ctx, scriptURL)
 		if err == nil {
 			t.Fatal("expected SourceScript to return an error for a non-existent script, but it did not")
@@ -149,7 +147,7 @@ func TestSourceScript(t *testing.T) {
 
 	t.Run("Failed Parsing of downloaded JS", func(t *testing.T) {
 		// Attempt to source a script that will result in a 404.
-		scriptURL := fmt.Sprintf(`"%s/invalid.js"`, srv.URL)
+		scriptURL := fmt.Sprintf(`%s/invalid.js`, srv.URL)
 		err := chromedputil.SourceScript(ctx, scriptURL)
 		if err == nil {
 			t.Fatal("expected SourceScript to return an error for an invalid script, but it did not")
@@ -162,7 +160,7 @@ func TestSourceScript(t *testing.T) {
 
 	t.Run("Successful Load", func(t *testing.T) {
 		// Source the test script from the server.
-		scriptURL := fmt.Sprintf(`"%s/test.js"`, srv.URL)
+		scriptURL := fmt.Sprintf(`%s/test.js`, srv.URL)
 		if err := chromedputil.SourceScript(ctx, scriptURL); err != nil {
 			t.Fatalf("SourceScript failed: %v", err)
 		}
@@ -586,7 +584,7 @@ func TestRunLoggingListener(t *testing.T) {
 	}
 
 	// generate an exception..
-	scriptURL := fmt.Sprintf(`"%s/invalid.js"`, srv.URL)
+	scriptURL := fmt.Sprintf(`%s/invalid.js`, srv.URL)
 	err = chromedputil.SourceScript(ctx, scriptURL)
 	if err == nil {
 		t.Fatal("expected SourceScript to return an error for an invalid script, but it did not")

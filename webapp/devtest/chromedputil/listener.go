@@ -115,8 +115,10 @@ type loggingOptions struct {
 	handlers    []func(ctx context.Context, ev any) bool
 }
 
+// LoggingOption represents options to RunLoggingListener.
 type LoggingOption func(*loggingOptions)
 
+// WithConsoleLogging enables logging of events of type 'runtime.EventConsoleAPICalled'.
 func WithConsoleLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.consoleCh = make(chan *runtime.EventConsoleAPICalled, 10)
@@ -124,6 +126,7 @@ func WithConsoleLogging() LoggingOption {
 	}
 }
 
+// WithExceptionLogging enables logging of events of type 'runtime.EventExceptionThrown'.
 func WithExceptionLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.exceptionCh = make(chan *runtime.EventExceptionThrown, 10)
@@ -131,6 +134,7 @@ func WithExceptionLogging() LoggingOption {
 	}
 }
 
+// WithEventEntryLogging enables logging of events of type 'log.EventEntryAdded'.
 func WithEventEntryLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.eventCh = make(chan *log.EventEntryAdded, 10)
@@ -138,6 +142,8 @@ func WithEventEntryLogging() LoggingOption {
 	}
 }
 
+// WithAnyEventLogging enables logging for events of type 'any'.
+// This is a catch all and should generally be the last handler in the list.
 func WithAnyEventLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.anyCh = make(chan any, 10)
@@ -146,6 +152,8 @@ func WithAnyEventLogging() LoggingOption {
 }
 
 // RunLoggingListener starts the logging listener for Chrome DevTools Protocol events.
+// It returns a channel that is closed when the goroutine that listens on events
+// terminates.
 func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...LoggingOption) chan struct{} {
 	var options loggingOptions
 	for _, opt := range opts {

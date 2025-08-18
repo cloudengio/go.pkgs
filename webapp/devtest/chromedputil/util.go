@@ -43,7 +43,7 @@ func WaitForPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams {
 
 var loadTpl = template.Must(template.New("loadJS").Parse(`
 (async () => {
-  let r = await chromedp_utils.loadScript({{.Script}});
+  let r = await chromedp_utils.loadScript("{{.Script}}");
   console.log("Script load result:", r);
   return r;
 })();`))
@@ -209,16 +209,33 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 	return platformInfo.Type != ""
 }
 
-func ContextForCI(ctx context.Context) (context.Context, func()) {
+// WithExecAllocatorForCI returns a chromedp context with an ExecAllocator that may
+// be configured differently on a CI system than when running locally.
+// The CI configuration may disable sandboxing for example.
+func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
 	path := os.Getenv("CHROME_BIN_PATH")
 	if len(path) == 0 {
-		return ctx, func() {}
+		return chromedp.NewExecAllocator(ctx, opts...)
 	}
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+	opts = append(opts,
 		chromedp.ExecPath(path),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-setuid-sandbox", true),
 	)
 	return chromedp.NewExecAllocator(ctx, opts...)
+}
+
+// WithContextForCI returns a chromedp context that may be different on a CI
+// system than when running locally. The CI configuration may disable
+// sandboxing etc. The ExecAllocator used is created with default options
+// (eg. headless). Use WithExecAllocatorForCI to customize accordingly. Note
+// that the CI customization is in WithExecAllocatorForCI.
+func WithContextForCI(ctx context.Context, opts ...chromedp.ContextOption) (context.Context, func()) {
+	ctx, cancelA := WithExecAllocatorForCI(ctx, chromedp.DefaultExecAllocatorOptions[:]...)
+	ctx, cancelB := chromedp.NewContext(ctx, opts...)
+	return ctx, func() {
+		cancelB()
+		cancelA()
+	}
 }
