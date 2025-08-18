@@ -97,6 +97,13 @@ func NewLogExceptionHandler(ch chan<- *runtime.EventExceptionThrown) func(ctx co
 NewLogExceptionHandler returns a handler for log exceptions that forwards
 the event to the provided channel.
 
+### Func RunLoggingListener
+```go
+func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...LoggingOption) chan struct{}
+```
+RunLoggingListener starts the logging listener for Chrome DevTools Protocol
+events.
+
 ### Func SourceScript
 ```go
 func SourceScript(ctx context.Context, script string) error
@@ -109,6 +116,56 @@ func WaitForPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams
 ```
 WaitForPromise waits for a promise to resolve in the given evaluate
 parameters.
+
+### Func WithContextForCI
+```go
+func WithContextForCI(ctx context.Context, opts ...chromedp.ContextOption) (context.Context, func())
+```
+WithContextForCI returns a chromedp context that may be different on a
+CI system than when running locally. The CI configuration may disable
+sandboxing etc. The ExecAllocator used is created with default options (eg.
+headless). Use WithExecAllocatorForCI to customize accordingly. Note that
+the CI customization is in WithExecAllocatorForCI.
+
+### Func WithExecAllocatorForCI
+```go
+func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func())
+```
+WithExecAllocatorForCI returns a chromedp context with an ExecAllocator that
+may be configured differently on a CI system than when running locally.
+The CI configuration may disable sandboxing for example.
+
+
+
+## Types
+### Type LoggingOption
+```go
+type LoggingOption func(*loggingOptions)
+```
+
+### Functions
+
+```go
+func WithAnyEventLogging() LoggingOption
+```
+
+
+```go
+func WithConsoleLogging() LoggingOption
+```
+
+
+```go
+func WithEventEntryLogging() LoggingOption
+```
+
+
+```go
+func WithExceptionLogging() LoggingOption
+```
+
+
+
 
 
 
