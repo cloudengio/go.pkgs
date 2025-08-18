@@ -66,15 +66,18 @@ func TestListGlobalFunctions(t *testing.T) {
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
         function aNewGlobalFunctionForTesting() {}
     `, nil)); err != nil {
+		cancel()
 		t.Fatalf("failed to define global function: %v", err)
 	}
 
 	functions, err := chromedputil.ListGlobalFunctions(ctx)
 	if err != nil {
+		cancel()
 		t.Fatalf("ListGlobalFunctions failed: %v", err)
 	}
 
 	if len(functions) == 0 {
+		cancel()
 		t.Fatal("expected some global functions, but got none")
 	}
 
