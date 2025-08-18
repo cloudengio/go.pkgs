@@ -43,7 +43,7 @@ func WaitForPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams {
 
 var loadTpl = template.Must(template.New("loadJS").Parse(`
 (async () => {
-  let r = await chromedp_utils.loadScript({{.Script}});
+  let r = await chromedp_utils.loadScript("{{.Script}}");
   console.log("Script load result:", r);
   return r;
 })();`))
@@ -64,6 +64,7 @@ func SourceScript(ctx context.Context, script string) error {
 	if err != nil {
 		return fmt.Errorf("failed to execute load template: %w", err)
 	}
+	fmt.Printf("Loading script %s\n", scr.String())
 	err = chromedp.Run(ctx,
 		chromedp.Evaluate(javascriptFunctions, nil),
 		chromedp.Evaluate(scr.String(), &result, WaitForPromise),

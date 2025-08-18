@@ -24,7 +24,6 @@ import (
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"cloudeng.io/webapp/webauth/jwtutil"
 	"cloudeng.io/webapp/webauth/webauthn/passkeys"
-	"github.com/chromedp/cdproto/runtime"
 	browserWebauthn "github.com/chromedp/cdproto/webauthn"
 	"github.com/chromedp/chromedp"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -100,8 +99,7 @@ func TestPasskeysServer(t *testing.T) {
 		t.Fatalf("Failed to generate private key: %v", err)
 	}
 	signer := jwtutil.NewED25519Signer(pubKey, privKey, "pkid")
-	mw := passkeys.NewJWTCookieMiddleware(
-		signer, "localhost", time.Minute)
+	mw := passkeys.NewJWTCookieMiddleware(signer, "localhost", time.Minute)
 	w := passkeys.NewHandler(wa, db, db, mw,
 		passkeys.WithLogger(logger),
 		passkeys.WithRegistrationOptions(
@@ -142,16 +140,6 @@ func TestPasskeysServer(t *testing.T) {
 	t.Logf("Server logs:\n%s\n", logged.String())
 }
 
-func pars(objID runtime.RemoteObjectID) *runtime.GetPropertiesParams {
-	return &runtime.GetPropertiesParams{
-		ObjectID:                 objID,
-		OwnProperties:            true,
-		AccessorPropertiesOnly:   false,
-		GeneratePreview:          true,
-		NonIndexedPropertiesOnly: false,
-	}
-}
-
 func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWebauthn.AuthenticatorID) {
 	t.Helper()
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(), chromedp.WithLogf(t.Logf))
@@ -180,11 +168,18 @@ func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWeb
 		t.Fatalf("Failed to set up virtual authenticator: %v", err)
 	}
 
-	return ctx, cancel, authenticatorID
-}
+	err := chromedp.Run(ctx, chromedp.Navigate(serverURL.String()))
+	if err != nil {
+		cancel()
+		t.Fatalf("Failed to navigate to server URL: %v", err)
+	}
 
-func waitForPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams {
-	return p.WithAwaitPromise(true)
+	if err := chromedputil.SourceScript(ctx, serverURL.String()+"/passkeys.js"); err != nil {
+		cancel()
+		t.Fatalf("Failed to source passkeys.js: %v", err)
+	}
+
+	return ctx, cancel, authenticatorID
 }
 
 func testPasskeyRegistration(ctx context.Context, t *testing.T) {
@@ -195,10 +190,11 @@ func testPasskeyRegistration(ctx context.Context, t *testing.T) {
 		Exception   string `json:"exception"`
 		Error       string `json:"error"`
 	}{}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	chromedputil.RunLoggingListener(ctx, logger)
 	err := chromedp.Run(ctx,
-		chromedp.Navigate(serverURL.String()+"/generate"),
 		// Call the registration function from the script.
-		chromedp.Evaluate(`createPasskey('test@example.com', 'Test User').then((result) => { return result; });`, &result, waitForPromise),
+		chromedp.Evaluate(`createPasskey('test@example.com', 'Test User').then((result) => { return result; });`, &result, chromedputil.WaitForPromise),
 	)
 	t.Logf("Registration result: %+v", result)
 	if err != nil {
