@@ -32,7 +32,7 @@ func Listen(ctx context.Context, handlers ...func(ctx context.Context, ev any) b
 
 // NewListenHandler returns a handler for a specific event type that forwards
 // the event to the provided channel.
-func NewListenHandler[T any](ctx context.Context, ch chan<- T) func(ctx context.Context, ev any) bool {
+func NewListenHandler[T any](ch chan<- T) func(ctx context.Context, ev any) bool {
 	return func(ctx context.Context, ev any) bool {
 		event, ok := ev.(T)
 		if !ok {
@@ -45,69 +45,6 @@ func NewListenHandler[T any](ctx context.Context, ch chan<- T) func(ctx context.
 		return true
 	}
 }
-
-/*
-// NewLogExceptionHandler returns a handler for log exceptions that forwards
-// the event to the provided channel.
-func NewLogExceptionHandler(ch chan<- *runtime.EventExceptionThrown) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		event, ok := ev.(*runtime.EventExceptionThrown)
-		if !ok {
-			return false
-		}
-		select {
-		case ch <- event:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-
-// NewEventEntryHandler returns a handler for log entry events that forwards
-// the event to the provided channel.
-func NewEventEntryHandler(ch chan<- *log.EventEntryAdded) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		event, ok := ev.(*log.EventEntryAdded)
-		if !ok {
-			return false
-		}
-		select {
-		case ch <- event:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-
-// NewEventConsoleHandler returns a handler for console events that forwards
-// the event to the provided channel.
-func NewEventConsoleHandler(ch chan<- *runtime.EventConsoleAPICalled) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		event, ok := ev.(*runtime.EventConsoleAPICalled)
-		if !ok {
-			return false
-		}
-		select {
-		case ch <- event:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-
-// NewAnyHandler returns a handler for all/any events that forwards
-// the event to the provided channel. It should generally be the last
-// handler in the list passed to Listen.
-func NewAnyHandler(ch chan<- any) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		select {
-		case ch <- ev:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-*/
 
 // ConsoleArgsAsJSON converts the console API call arguments to a slice of marshalled
 // JSON data, one per each argument to the original console.log call.
@@ -140,10 +77,9 @@ type loggingOptions struct {
 // LoggingOption represents options to RunLoggingListener.
 type LoggingOption func(*loggingOptions)
 
-func handlerOption[T any](ctx context.Context,
-	handlers []func(ctx context.Context, ev any) bool) (chan T, []func(ctx context.Context, ev any) bool) {
+func handlerOption[T any](handlers []func(ctx context.Context, ev any) bool) (chan T, []func(ctx context.Context, ev any) bool) {
 	ch := make(chan T, 10)
-	return ch, append(handlers, NewListenHandler(ctx, ch))
+	return ch, append(handlers, NewListenHandler(ch))
 }
 
 func initCh[T any](ch chan T) chan T {
@@ -154,39 +90,39 @@ func initCh[T any](ch chan T) chan T {
 }
 
 // WithConsoleLogging enables logging of events of type 'runtime.EventConsoleAPICalled'.
-func WithConsoleLogging(ctx context.Context) LoggingOption {
+func WithConsoleLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.consoleCh, opts.handlers = handlerOption[*runtime.EventConsoleAPICalled](ctx, opts.handlers)
+		opts.consoleCh, opts.handlers = handlerOption[*runtime.EventConsoleAPICalled](opts.handlers)
 	}
 }
 
 // WithExceptionLogging enables logging of events of type 'runtime.EventExceptionThrown'.
-func WithExceptionLogging(ctx context.Context) LoggingOption {
+func WithExceptionLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.exceptionCh, opts.handlers = handlerOption[*runtime.EventExceptionThrown](ctx, opts.handlers)
+		opts.exceptionCh, opts.handlers = handlerOption[*runtime.EventExceptionThrown](opts.handlers)
 	}
 }
 
 // WithEventEntryLogging enables logging of events of type 'log.EventEntryAdded'.
-func WithEventEntryLogging(ctx context.Context) LoggingOption {
+func WithEventEntryLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.eventCh, opts.handlers = handlerOption[*log.EventEntryAdded](ctx, opts.handlers)
+		opts.eventCh, opts.handlers = handlerOption[*log.EventEntryAdded](opts.handlers)
 	}
 }
 
 // WithNetworkLogging enables logging of events of type 'network.EventResponseReceived'.
-func WithNetworkLogging(ctx context.Context) LoggingOption {
+func WithNetworkLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.networkResponseCh, opts.handlers = handlerOption[*network.EventResponseReceived](ctx, opts.handlers)
-		opts.networkRrequestCh, opts.handlers = handlerOption[*network.EventRequestWillBeSent](ctx, opts.handlers)
+		opts.networkResponseCh, opts.handlers = handlerOption[*network.EventResponseReceived](opts.handlers)
+		opts.networkRrequestCh, opts.handlers = handlerOption[*network.EventRequestWillBeSent](opts.handlers)
 	}
 }
 
 // WithAnyEventLogging enables logging for events of type 'any'.
 // This is a catch all and should generally be the last handler in the list.
-func WithAnyEventLogging(ctx context.Context) LoggingOption {
+func WithAnyEventLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.anyCh, opts.handlers = handlerOption[any](ctx, opts.handlers)
+		opts.anyCh, opts.handlers = handlerOption[any](opts.handlers)
 	}
 }
 
@@ -218,21 +154,26 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 		for {
 			select {
 			case event := <-options.consoleCh:
-				s, err := ConsoleArgsAsJSON(ctx, event)
-				if err != nil {
-					logger.Error("Failed to marshal console args to JSON", "error", err)
-					continue
-				}
-				attrs := []slog.Attr{}
-				for i, arg := range s {
-					var jv jsonValue
-					if err := json.Unmarshal([]byte(arg), &jv); err != nil {
-						attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.StringValue(string(arg))})
-					} else {
-						attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.AnyValue(jv.Value)})
+				// Run asynchronously since ConsoleArgsAsJSON will call back into
+				// chromedp which may cause a deadlock depending on the overall
+				// state of chromedp.
+				go func() {
+					s, err := ConsoleArgsAsJSON(ctx, event)
+					if err != nil {
+						logger.Error("Failed to marshal console args to JSON", "error", err)
+						return
 					}
-				}
-				logger.LogAttrs(ctx, slog.LevelInfo, "Console API called", attrs...)
+					attrs := []slog.Attr{}
+					for i, arg := range s {
+						var jv jsonValue
+						if err := json.Unmarshal(arg, &jv); err != nil {
+							attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.StringValue(string(arg))})
+						} else {
+							attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.AnyValue(jv.Value)})
+						}
+					}
+					logger.LogAttrs(ctx, slog.LevelInfo, "Console API called", attrs...)
+				}()
 			case event := <-options.exceptionCh:
 				logger.Error("Exception thrown", slog.Any("event", event))
 				logger.Error("Exception details",
