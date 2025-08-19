@@ -70,7 +70,7 @@ handler to return true stops the event propagation.
 
 ### Func NewListenHandler
 ```go
-func NewListenHandler[T any](ctx context.Context, ch chan<- T) func(ctx context.Context, ev any) bool
+func NewListenHandler[T any](ch chan<- T) func(ctx context.Context, ev any) bool
 ```
 NewListenHandler returns a handler for a specific event type that forwards
 the event to the provided channel.
@@ -98,13 +98,13 @@ parameters.
 
 ### Func WithContextForCI
 ```go
-func WithContextForCI(ctx context.Context, opts ...chromedp.ContextOption) (context.Context, func())
+func WithContextForCI(ctx context.Context, execAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func())
 ```
-WithContextForCI returns a chromedp context that may be different on a
-CI system than when running locally. The CI configuration may disable
-sandboxing etc. The ExecAllocator used is created with default options (eg.
-headless). Use WithExecAllocatorForCI to customize accordingly. Note that
-the CI customization is in WithExecAllocatorForCI.
+WithContextForCI returns a chromedp context that may be different
+on a CI system than when running locally. The CI configuration may
+disable sandboxing etc. The ExecAllocator used is created with default
+options (eg. headless) if execAllocOpts is nil or empty via a call
+WithExecAllocatorForCI,
 
 ### Func WithExecAllocatorForCI
 ```go

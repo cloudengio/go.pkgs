@@ -269,6 +269,7 @@ func TestScopeAndDuration_SetDefaults(t *testing.T) {
 }
 
 func TestScopeAndDuration_Cookie(t *testing.T) {
+
 	sd := cookies.ScopeAndDuration{
 		Domain:   "example.com",
 		Path:     "/api",
@@ -289,10 +290,12 @@ func TestScopeAndDuration_Cookie(t *testing.T) {
 
 	// The exact expiration time depends on when the test runs, so just check that
 	// it's between now and now+Duration
-	expectedMin := time.Now()
-	expectedMax := expectedMin.Add(sd.Duration)
-	if cookie.Expires.Before(expectedMin) || cookie.Expires.After(expectedMax) {
-		t.Errorf("Cookie expires time is outside expected range: got %v, want between %v and %v",
-			cookie.Expires, expectedMin, expectedMax)
+	if time.Until(cookie.Expires) > sd.Duration {
+		t.Errorf("cookie expiration is too far in the future")
 	}
+	// Allow for a small delta for test execution time.
+	if time.Until(cookie.Expires) < sd.Duration-time.Second {
+		t.Errorf("cookie expiration is too soon, got %v, want > %v", time.Until(cookie.Expires), sd.Duration-time.Second)
+	}
+
 }
