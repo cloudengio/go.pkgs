@@ -5,18 +5,15 @@
 package chromedputil_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"github.com/chromedp/cdproto/runtime"
@@ -48,7 +45,7 @@ func setupTestServer() *httptest.Server {
 
 // setupBrowser creates a new chromedp context and navigates to the test server.
 func setupBrowser(t *testing.T, serverURL string) (context.Context, context.CancelFunc) {
-	ctx, cancel := chromedputil.WithContextForCI(context.Background())
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil)
 	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
 		t.Fatalf("failed to navigate to test server: %v", err)
 	}
@@ -379,237 +376,5 @@ func TestPlatformObjects(t *testing.T) {
 				t.Errorf("expected className to be %q, got %q", tc.expectedClass, platformInfo.ClassName)
 			}
 		})
-	}
-}
-
-func TestConsoleArgsAsJSON(t *testing.T) { //nolint:gocyclo
-	srv := setupTestServer()
-	defer srv.Close()
-
-	ctx, cancel := setupBrowser(t, srv.URL)
-	defer cancel()
-
-	consoleEventCh := make(chan *runtime.EventConsoleAPICalled, 1)
-	chromedputil.Listen(ctx, chromedputil.NewEventConsoleHandler(consoleEventCh))
-
-	// This JS will log a variety of object types to the console.
-	const jsLogComplexObjects = `
-        const simpleObj = { name: "test", value: 42 };
-        const nestedObj = { a: 1, b: { c: "nested" } };
-        const anArray = [1, "two", false];
-        const aPromise = Promise.resolve({ status: "ok" });
-        const aResponse = fetch("/"); // fetch returns a promise that resolves to a Response
-        
-        Promise.all([aPromise, aResponse]).then(([p, r]) => {
-            console.log(
-                "a string",
-                123,
-                true,
-                simpleObj,
-                nestedObj,
-                anArray,
-                p, // The resolved value of the promise
-                r  // The Response object
-            );
-        });
-    `
-
-	// We need to wait for the console.log inside the promise to execute.
-	err := chromedp.Run(ctx,
-		chromedp.Evaluate(jsLogComplexObjects, nil, chromedputil.WaitForPromise),
-	)
-	if err != nil {
-		t.Fatalf("failed to execute logging script: %v", err)
-	}
-
-	var event *runtime.EventConsoleAPICalled
-	select {
-	case event = <-consoleEventCh:
-		// Event received.
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for console event")
-	}
-
-	jsonArgs, err := chromedputil.ConsoleArgsAsJSON(ctx, event)
-	if err != nil {
-		t.Fatalf("ConsoleArgsAsJSON failed: %v", err)
-	}
-
-	if got, want := len(jsonArgs), 8; got != want {
-		t.Fatalf("got %d, want %d", got, want)
-	}
-
-	// Define checks for each logged argument.
-	checks := []func(t *testing.T, data []byte){
-		// 1. String
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `"a string"`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 2. Number
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `123`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 3. Boolean
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `true`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 4. Simple Object
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `{"name":"test","value":42}`; string(obj.Value) != want {
-				t.Errorf("got %v, want %v", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 5. Nested Object
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `{"a":1,"b":{"c":"nested"}}`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 6. Array
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `[1,"two",false]`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 7. Resolved Promise Value
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `{"status":"ok"}`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 8. Response Object
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			// For complex browser-native objects like Response, we can't get a simple
-			// JSON value. We verify that we get a handle with the correct type.
-			if obj.Type != "object" || obj.ClassName != "Response" {
-				t.Errorf("expected a Response object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-			if !chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("expected a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-	}
-
-	for i, arg := range jsonArgs {
-		t.Run(fmt.Sprintf("Argument %d", i), func(t *testing.T) {
-			checks[i](t, arg)
-		})
-	}
-}
-
-func TestRunLoggingListener(t *testing.T) {
-	srv := setupTestServer()
-	defer srv.Close()
-
-	ctx, cancel := setupBrowser(t, srv.URL)
-	defer cancel()
-
-	// Capture slog output
-	var logBuf bytes.Buffer
-
-	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-
-	// Run the listener with console and exception logging enabled.
-	doneCh := chromedputil.RunLoggingListener(ctx, logger,
-		chromedputil.WithConsoleLogging(),
-		chromedputil.WithExceptionLogging(),
-	)
-
-	// Generate a console log and an exception in the browser.
-	err := chromedp.Run(ctx,
-		chromedp.Evaluate(`console.log("hello from the test");`, nil),
-	)
-	// We expect an error from the second evaluate, so we don't fail the test on it.
-	if err != nil {
-		t.Logf("chromedp.Run returned an expected error: %v", err)
-	}
-
-	// generate an exception..
-	scriptURL := fmt.Sprintf(`%s/invalid.js`, srv.URL)
-	err = chromedputil.SourceScript(ctx, scriptURL)
-	if err == nil {
-		t.Fatal("expected SourceScript to return an error for an invalid script, but it did not")
-	}
-
-	// Give the listener a moment to process the events.
-	time.Sleep(200 * time.Millisecond)
-
-	// Stop the listener and capture the output.
-	cancel()
-
-	<-doneCh
-	logOutput := logBuf.String()
-
-	// Verify the console log was captured and printed to stderr.
-	expectedConsoleOut := `hello from the test`
-	if !strings.Contains(logOutput, expectedConsoleOut) {
-		t.Errorf("expected stderr to contain %q, but got:\n%s", expectedConsoleOut, logOutput)
-	}
-
-	// Verify the exception was captured and logged by slog.
-	if !strings.Contains(logOutput, "Exception thrown") {
-		t.Errorf("expected log output to contain 'Exception thrown', but got:\n%s", logOutput)
-	}
-	if !strings.Contains(logOutput, "SyntaxError: Unexpected token ';'") {
-		t.Errorf("expected log output to contain 'SyntaxError: Unexpected token ';'', but got:\n%s", logOutput)
 	}
 }

@@ -10,9 +10,11 @@ import (
 	"log/slog"
 
 	"github.com/chromedp/cdproto/log"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 )
 
 // Listen sets up a listener for Chrome DevTools Protocol events and calls each
@@ -28,61 +30,16 @@ func Listen(ctx context.Context, handlers ...func(ctx context.Context, ev any) b
 	})
 }
 
-// NewLogExceptionHandler returns a handler for log exceptions that forwards
+// NewListenHandler returns a handler for a specific event type that forwards
 // the event to the provided channel.
-func NewLogExceptionHandler(ch chan<- *runtime.EventExceptionThrown) func(ctx context.Context, ev any) bool {
+func NewListenHandler[T any](ch chan<- T) func(ctx context.Context, ev any) bool {
 	return func(ctx context.Context, ev any) bool {
-		event, ok := ev.(*runtime.EventExceptionThrown)
+		event, ok := ev.(T)
 		if !ok {
 			return false
 		}
 		select {
 		case ch <- event:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-
-// NewEventEntryHandler returns a handler for log entry events that forwards
-// the event to the provided channel.
-func NewEventEntryHandler(ch chan<- *log.EventEntryAdded) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		event, ok := ev.(*log.EventEntryAdded)
-		if !ok {
-			return false
-		}
-		select {
-		case ch <- event:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-
-// NewEventConsoleHandler returns a handler for console events that forwards
-// the event to the provided channel.
-func NewEventConsoleHandler(ch chan<- *runtime.EventConsoleAPICalled) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		event, ok := ev.(*runtime.EventConsoleAPICalled)
-		if !ok {
-			return false
-		}
-		select {
-		case ch <- event:
-		case <-ctx.Done():
-		}
-		return true
-	}
-}
-
-// NewAnyHandler returns a handler for all/any events that forwards
-// the event to the provided channel. It should generally be the last
-// handler in the list passed to Listen.
-func NewAnyHandler(ch chan<- any) func(ctx context.Context, ev any) bool {
-	return func(ctx context.Context, ev any) bool {
-		select {
-		case ch <- ev:
 		case <-ctx.Done():
 		}
 		return true
@@ -96,11 +53,11 @@ func ConsoleArgsAsJSON(ctx context.Context, event *runtime.EventConsoleAPICalled
 	for _, arg := range event.Args {
 		val, _, err := GetRemoteObjectValueJSON(ctx, arg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get remote object value: %+v %w", arg, err)
 		}
 		out, err := json.Marshal(val)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		values = append(values, out)
 	}
@@ -108,37 +65,56 @@ func ConsoleArgsAsJSON(ctx context.Context, event *runtime.EventConsoleAPICalled
 }
 
 type loggingOptions struct {
-	consoleCh   chan *runtime.EventConsoleAPICalled
-	exceptionCh chan *runtime.EventExceptionThrown
-	eventCh     chan *log.EventEntryAdded
-	anyCh       chan any
-	handlers    []func(ctx context.Context, ev any) bool
+	consoleCh         chan *runtime.EventConsoleAPICalled
+	exceptionCh       chan *runtime.EventExceptionThrown
+	networkResponseCh chan *network.EventResponseReceived
+	networkRrequestCh chan *network.EventRequestWillBeSent
+	eventCh           chan *log.EventEntryAdded
+	anyCh             chan any
+	handlers          []func(ctx context.Context, ev any) bool
 }
 
 // LoggingOption represents options to RunLoggingListener.
 type LoggingOption func(*loggingOptions)
 
+func handlerOption[T any](handlers []func(ctx context.Context, ev any) bool) (chan T, []func(ctx context.Context, ev any) bool) {
+	ch := make(chan T, 10)
+	return ch, append(handlers, NewListenHandler(ch))
+}
+
+func initCh[T any](ch chan T) chan T {
+	if ch == nil {
+		return make(chan T, 10)
+	}
+	return ch
+}
+
 // WithConsoleLogging enables logging of events of type 'runtime.EventConsoleAPICalled'.
 func WithConsoleLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.consoleCh = make(chan *runtime.EventConsoleAPICalled, 10)
-		opts.handlers = append(opts.handlers, NewEventConsoleHandler(opts.consoleCh))
+		opts.consoleCh, opts.handlers = handlerOption[*runtime.EventConsoleAPICalled](opts.handlers)
 	}
 }
 
 // WithExceptionLogging enables logging of events of type 'runtime.EventExceptionThrown'.
 func WithExceptionLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.exceptionCh = make(chan *runtime.EventExceptionThrown, 10)
-		opts.handlers = append(opts.handlers, NewLogExceptionHandler(opts.exceptionCh))
+		opts.exceptionCh, opts.handlers = handlerOption[*runtime.EventExceptionThrown](opts.handlers)
 	}
 }
 
 // WithEventEntryLogging enables logging of events of type 'log.EventEntryAdded'.
 func WithEventEntryLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.eventCh = make(chan *log.EventEntryAdded, 10)
-		opts.handlers = append(opts.handlers, NewEventEntryHandler(opts.eventCh))
+		opts.eventCh, opts.handlers = handlerOption[*log.EventEntryAdded](opts.handlers)
+	}
+}
+
+// WithNetworkLogging enables logging of events of type 'network.EventResponseReceived'.
+func WithNetworkLogging() LoggingOption {
+	return func(opts *loggingOptions) {
+		opts.networkResponseCh, opts.handlers = handlerOption[*network.EventResponseReceived](opts.handlers)
+		opts.networkRrequestCh, opts.handlers = handlerOption[*network.EventRequestWillBeSent](opts.handlers)
 	}
 }
 
@@ -146,9 +122,12 @@ func WithEventEntryLogging() LoggingOption {
 // This is a catch all and should generally be the last handler in the list.
 func WithAnyEventLogging() LoggingOption {
 	return func(opts *loggingOptions) {
-		opts.anyCh = make(chan any, 10)
-		opts.handlers = append(opts.handlers, NewAnyHandler(opts.anyCh))
+		opts.anyCh, opts.handlers = handlerOption[any](opts.handlers)
 	}
+}
+
+type jsonValue struct {
+	Value jsontext.Value `json:"value"`
 }
 
 // RunLoggingListener starts the logging listener for Chrome DevTools Protocol events.
@@ -159,18 +138,12 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 	for _, opt := range opts {
 		opt(&options)
 	}
-	if options.consoleCh == nil {
-		options.consoleCh = make(chan *runtime.EventConsoleAPICalled, 10)
-	}
-	if options.exceptionCh == nil {
-		options.exceptionCh = make(chan *runtime.EventExceptionThrown, 10)
-	}
-	if options.eventCh == nil {
-		options.eventCh = make(chan *log.EventEntryAdded, 10)
-	}
-	if options.anyCh == nil {
-		options.anyCh = make(chan any, 10)
-	}
+	options.consoleCh = initCh(options.consoleCh)
+	options.exceptionCh = initCh(options.exceptionCh)
+	options.networkResponseCh = initCh(options.networkResponseCh)
+	options.networkRrequestCh = initCh(options.networkRrequestCh)
+	options.eventCh = initCh(options.eventCh)
+	options.anyCh = initCh(options.anyCh)
 
 	Listen(ctx, options.handlers...)
 
@@ -181,16 +154,26 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 		for {
 			select {
 			case event := <-options.consoleCh:
-				s, err := ConsoleArgsAsJSON(ctx, event)
-				if err != nil {
-					logger.Error("Failed to marshal console args to JSON", "error", err)
-					continue
-				}
-				attrs := []slog.Attr{}
-				for i, arg := range s {
-					attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.StringValue(string(arg))})
-				}
-				logger.LogAttrs(ctx, slog.LevelInfo, "Console API called", attrs...)
+				// Run asynchronously since ConsoleArgsAsJSON will call back into
+				// chromedp which may cause a deadlock depending on the overall
+				// state of chromedp.
+				go func() {
+					s, err := ConsoleArgsAsJSON(ctx, event)
+					if err != nil {
+						logger.Error("Failed to marshal console args to JSON", "error", err)
+						return
+					}
+					attrs := []slog.Attr{}
+					for i, arg := range s {
+						var jv jsonValue
+						if err := json.Unmarshal(arg, &jv); err != nil {
+							attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.StringValue(string(arg))})
+						} else {
+							attrs = append(attrs, slog.Attr{Key: fmt.Sprintf("%03d", i), Value: slog.AnyValue(jv.Value)})
+						}
+					}
+					logger.LogAttrs(ctx, slog.LevelInfo, "Console API called", attrs...)
+				}()
 			case event := <-options.exceptionCh:
 				logger.Error("Exception thrown", slog.Any("event", event))
 				logger.Error("Exception details",
@@ -203,6 +186,10 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 				logger.Info("Log entry added", slog.Any("event", event.Entry))
 			case event := <-options.anyCh:
 				logger.Info("Other event", slog.Any("event", event))
+			case response := <-options.networkResponseCh:
+				logger.Info("Network response received", "url", response.Response.URL, "status", response.Response.Status)
+			case request := <-options.networkRrequestCh:
+				logger.Info("Network request received", "url", request.Request.URL, "method", request.Request.Method)
 			case <-ctx.Done():
 				close(doneCh)
 				return

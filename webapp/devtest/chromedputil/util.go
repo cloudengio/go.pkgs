@@ -148,6 +148,10 @@ func GetRemoteObjectValueJSON(ctx context.Context, object *runtime.RemoteObject)
 	if object.Value != nil {
 		return object, object.Value, nil
 	}
+	if object.Type == "undefined" {
+		object.Value = jsontext.Value(`"undefined"`)
+		return object, object.Value, nil
+	}
 	return safeClone(ctx, object.ObjectID)
 }
 
@@ -229,10 +233,15 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 // WithContextForCI returns a chromedp context that may be different on a CI
 // system than when running locally. The CI configuration may disable
 // sandboxing etc. The ExecAllocator used is created with default options
-// (eg. headless). Use WithExecAllocatorForCI to customize accordingly. Note
-// that the CI customization is in WithExecAllocatorForCI.
-func WithContextForCI(ctx context.Context, opts ...chromedp.ContextOption) (context.Context, func()) {
-	ctx, cancelA := WithExecAllocatorForCI(ctx, chromedp.DefaultExecAllocatorOptions[:]...)
+// (eg. headless) if execAllocOpts is nil or empty via a call WithExecAllocatorForCI,
+func WithContextForCI(ctx context.Context, execAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func()) {
+	allocOpts := []chromedp.ExecAllocatorOption{}
+	if execAllocOpts == nil {
+		allocOpts = append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
+	} else {
+		allocOpts = append(allocOpts, execAllocOpts...)
+	}
+	ctx, cancelA := WithExecAllocatorForCI(ctx, allocOpts...)
 	ctx, cancelB := chromedp.NewContext(ctx, opts...)
 	return ctx, func() {
 		cancelB()

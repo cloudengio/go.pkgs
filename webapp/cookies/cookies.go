@@ -13,18 +13,10 @@ import (
 // and track the use of cookies in a web application.
 type T string
 
-func setCookie(rw http.ResponseWriter, name, value string, expires time.Duration) {
-	cookie := &http.Cookie{
-		Name:     name,
-		Value:    value,
-		Path:     "/",
-		Expires:  time.Now().Add(expires), // Set a suitable expiration
-		HttpOnly: true,                    // Essential for security
-		Secure:   true,                    // Essential for HTTPS
-		SameSite: http.SameSiteStrictMode, // Recommended for CSRF protection
-	}
-	http.SetCookie(rw, cookie)
-}
+// Secure represents a named cookie that is set 'securely'.
+// It is primarily intended to document and track the use of cookies in a
+// web application.
+type Secure string
 
 func readAndClearCookie(rw http.ResponseWriter, r *http.Request, name string) (string, bool) {
 	cookie, err := r.Cookie(name)
@@ -38,15 +30,9 @@ func readAndClearCookie(rw http.ResponseWriter, r *http.Request, name string) (s
 	return val, true
 }
 
-// SetSecureWithExpiration sets a cookie with a specific expiration time.
-// The path is set to "/" to make the cookie available across the entire site,
-// and the cookie is marked as secure and HTTP-only and SameSiteStrictMode.
-func (c T) SetSecureWithExpiration(rw http.ResponseWriter, value string, expires time.Duration) {
-	setCookie(rw, string(c), value, expires)
-}
-
 // Set sets the supplied cookie with the name of the cookie specified
-// in the receiver but using all other values from the supplied cookie.
+// in the receiver. It overwrites the Name in ck.
+// All other fields in ck are used as specified.
 func (c T) Set(rw http.ResponseWriter, ck *http.Cookie) {
 	ck.Name = string(c)
 	http.SetCookie(rw, ck)
@@ -66,4 +52,65 @@ func (c T) Read(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return cookie.Value, true
+}
+
+// Set sets the supplied cookie securely with the name of the cookie specified
+// in the receiver and secure values for
+// HttpOnly, Secure and SameSite (true, true, SameSiteStrictMode).
+// All other fields in ck are used as specified.
+func (c Secure) Set(rw http.ResponseWriter, ck *http.Cookie) {
+	ck.Name = string(c)
+	ck.HttpOnly = true
+	ck.Secure = true
+	ck.SameSite = http.SameSiteStrictMode
+	http.SetCookie(rw, ck)
+}
+
+// ReadAndClear reads a cookie and requests its removal by setting
+// its MaxAge to -1 and its value to an empty string.
+func (c Secure) ReadAndClear(rw http.ResponseWriter, r *http.Request) (string, bool) {
+	return readAndClearCookie(rw, r, string(c))
+}
+
+// Read reads the cookie from the request and returns its value.
+// If the cookie is not present, it returns an empty string and false.
+func (c Secure) Read(r *http.Request) (string, bool) {
+	cookie, err := r.Cookie(string(c))
+	if err != nil {
+		return "", false
+	}
+	return cookie.Value, true
+}
+
+// ScopeAndDuration represents the scope and duration settings for cookies.
+type ScopeAndDuration struct {
+	Domain   string
+	Path     string
+	Duration time.Duration
+}
+
+// SetDefaults uses the supplied values as defaults for ScopeAndDuration if the
+// current values are not already set.
+func (d ScopeAndDuration) SetDefaults(domain, path string, duration time.Duration) ScopeAndDuration {
+	if d.Domain == "" {
+		d.Domain = domain
+	}
+	if d.Path == "" {
+		d.Path = path
+	}
+	if d.Duration == 0 {
+		d.Duration = duration
+	}
+	return d
+}
+
+// Cookie returns a new http.Cookie with the specified value and the
+// scope and duration settings from the ScopeAndDuration receiver.
+func (d ScopeAndDuration) Cookie(value string) *http.Cookie {
+	return &http.Cookie{
+		Domain:  d.Domain,
+		Path:    d.Path,
+		Expires: time.Now().Add(d.Duration),
+		Value:   value,
+	}
 }
