@@ -269,7 +269,6 @@ func TestScopeAndDuration_SetDefaults(t *testing.T) {
 }
 
 func TestScopeAndDuration_Cookie(t *testing.T) {
-
 	sd := cookies.ScopeAndDuration{
 		Domain:   "example.com",
 		Path:     "/api",
@@ -297,5 +296,4 @@ func TestScopeAndDuration_Cookie(t *testing.T) {
 	if time.Until(cookie.Expires) < sd.Duration-time.Second {
 		t.Errorf("cookie expiration is too soon, got %v, want > %v", time.Until(cookie.Expires), sd.Duration-time.Second)
 	}
-
 }

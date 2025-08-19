@@ -126,35 +126,35 @@ LoggingOption represents options to RunLoggingListener.
 ### Functions
 
 ```go
-func WithAnyEventLogging(ctx context.Context) LoggingOption
+func WithAnyEventLogging() LoggingOption
 ```
 WithAnyEventLogging enables logging for events of type 'any'. This is a
 catch all and should generally be the last handler in the list.
 
 
 ```go
-func WithConsoleLogging(ctx context.Context) LoggingOption
+func WithConsoleLogging() LoggingOption
 ```
 WithConsoleLogging enables logging of events of type
 'runtime.EventConsoleAPICalled'.
 
 
 ```go
-func WithEventEntryLogging(ctx context.Context) LoggingOption
+func WithEventEntryLogging() LoggingOption
 ```
 WithEventEntryLogging enables logging of events of type
 'log.EventEntryAdded'.
 
 
 ```go
-func WithExceptionLogging(ctx context.Context) LoggingOption
+func WithExceptionLogging() LoggingOption
 ```
 WithExceptionLogging enables logging of events of type
 'runtime.EventExceptionThrown'.
 
 
 ```go
-func WithNetworkLogging(ctx context.Context) LoggingOption
+func WithNetworkLogging() LoggingOption
 ```
 WithNetworkLogging enables logging of events of type
 'network.EventResponseReceived'.
