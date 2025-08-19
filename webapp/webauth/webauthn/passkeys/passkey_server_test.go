@@ -2,6 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:generate tsc --target es2017 testdata/passkeys.ts
 package passkeys_test
 
 import (
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/cookies"
 	"cloudeng.io/webapp/devtest"
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"cloudeng.io/webapp/webauth/jwtutil"
@@ -35,7 +37,7 @@ var serverURL *url.URL
 
 func init() {
 	var err error
-	serverURL, err = url.Parse("https://localhost:8081")
+	serverURL, err = url.Parse("https://localhost:8088")
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse server URL: %v", err))
 	}
@@ -80,8 +82,8 @@ func runServer(ctx context.Context, t *testing.T, tmpDir string, w *passkeys.Han
 }
 
 func TestPasskeysServer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, serverCancel := context.WithCancel(context.Background())
+	defer serverCancel()
 
 	wa, err := serverWebauthn.New(&serverWebauthn.Config{
 		RPDisplayName: "Test Passkeys",
@@ -99,12 +101,19 @@ func TestPasskeysServer(t *testing.T) {
 		t.Fatalf("Failed to generate private key: %v", err)
 	}
 	signer := jwtutil.NewED25519Signer(pubKey, privKey, "pkid")
-	mw := passkeys.NewJWTCookieMiddleware(signer, "localhost", time.Minute)
+	scopeAndDuration := cookies.ScopeAndDuration{
+		Domain:   "localhost",
+		Path:     "/",
+		Duration: 10 * time.Minute,
+	}
+	mw := passkeys.NewJWTCookieMiddleware(signer, "localhost", scopeAndDuration)
+	requireResidentKey := true
 	w := passkeys.NewHandler(wa, db, db, mw,
 		passkeys.WithLogger(logger),
 		passkeys.WithRegistrationOptions(
 			webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
 				AuthenticatorAttachment: protocol.Platform,
+				RequireResidentKey:      &requireResidentKey,
 				ResidentKey:             protocol.ResidentKeyRequirementRequired,
 				UserVerification:        protocol.VerificationPreferred,
 			}),
@@ -120,24 +129,56 @@ func TestPasskeysServer(t *testing.T) {
 
 	ctx, cancel, authenticatorID := setupBrowser(t)
 	defer cancel()
-	defer func() {
-		if err := chromedp.Run(ctx, browserWebauthn.RemoveVirtualAuthenticator(authenticatorID)); err != nil {
-			t.Errorf("Failed to remove virtual authenticator: %v", err)
-		}
-	}()
+	defer chromedp.Run(ctx, browserWebauthn.RemoveVirtualAuthenticator(authenticatorID))
+
+	listenCh := chromedputil.RunLoggingListener(ctx, logger,
+		chromedputil.WithNetworkLogging(ctx),
+		chromedputil.WithConsoleLogging(ctx),
+		chromedputil.WithExceptionLogging(ctx),
+	)
 
 	// Run tests for registration and login.
-	testPasskeyRegistration(ctx, t)
-	testPasskeyLogin(ctx, t)
+	regResult := testPasskeyRegistration(ctx, t)
 
-	cancel()
+	uid, err := passkeys.UserIDFromString(regResult.UserHandle)
+	if err != nil {
+		t.Fatalf("Failed to get user ID from string: %v", err)
+	}
+
+	user, err := db.Lookup(uid)
+	if err != nil {
+		t.Fatalf("Failed to lookup user: %v", err)
+	}
+	if user.WebAuthnName() != regResult.Email {
+		t.Fatalf("User email does not match: got %v, want %v", user.WebAuthnName(), regResult.Email)
+	}
+
+	loginRes := testPasskeyLogin(ctx, t)
+
+	if !loginRes.Success {
+		time.Sleep(100 * time.Millisecond) // Allow time for events to propagate.
+		t.Errorf("Login failed: %s", loginRes.Error)
+	}
+
+	if got, want := regResult.UserHandle, loginRes.UserHandle; got != want {
+		t.Errorf("User handle does not match: got %v, want %v", got, want)
+	}
+	if got, want := regResult.PublicKeyID, loginRes.PublicKeyID; got != want {
+		t.Errorf("Public key ID does not match: got %v, want %v", got, want)
+	}
+
+	if err := chromedp.Run(ctx, browserWebauthn.RemoveVirtualAuthenticator(authenticatorID)); err != nil {
+		t.Errorf("Failed to remove virtual authenticator: %v", err)
+	}
+	cancel()       // Stop the browser context.
+	serverCancel() // Stop the web server.
 	if err := <-errCh; err != nil {
 		// http.ErrServerClosed is the expected error on graceful shutdown.
 		if err != http.ErrServerClosed {
-			t.Fatalf("Server error: %v", err)
+			t.Errorf("Server error: %v", err)
 		}
 	}
-	t.Logf("Server logs:\n%s\n", logged.String())
+	<-listenCh
 }
 
 func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWebauthn.AuthenticatorID) {
@@ -145,11 +186,12 @@ func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWeb
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(), chromedp.WithLogf(t.Logf))
 
 	authOptions := &browserWebauthn.VirtualAuthenticatorOptions{
-		Protocol:            browserWebauthn.AuthenticatorProtocolCtap2,
-		Transport:           browserWebauthn.AuthenticatorTransportInternal,
-		HasResidentKey:      true,
-		HasUserVerification: true,
-		IsUserVerified:      true,
+		Protocol:                    browserWebauthn.AuthenticatorProtocolCtap2,
+		Transport:                   browserWebauthn.AuthenticatorTransportInternal,
+		HasResidentKey:              true,
+		HasUserVerification:         true,
+		IsUserVerified:              true,
+		AutomaticPresenceSimulation: true,
 	}
 
 	var authenticatorID browserWebauthn.AuthenticatorID
@@ -159,9 +201,6 @@ func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWeb
 			var err error
 			authenticatorID, err = browserWebauthn.AddVirtualAuthenticator(authOptions).Do(ctx)
 			return err
-		}),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return browserWebauthn.SetAutomaticPresenceSimulation(authenticatorID, true).Do(ctx)
 		}),
 	); err != nil {
 		cancel()
@@ -182,48 +221,43 @@ func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWeb
 	return ctx, cancel, authenticatorID
 }
 
-func testPasskeyRegistration(ctx context.Context, t *testing.T) {
-	result := struct {
-		UserHandle  string `json:"user_handle"`
-		PublicKeyID string `json:"public_key_id"`
-		Email       string `json:"email"`
-		Exception   string `json:"exception"`
-		Error       string `json:"error"`
-	}{}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	chromedputil.RunLoggingListener(ctx, logger)
+type registrationResult struct {
+	UserHandle  string `json:"user_handle"`
+	PublicKeyID string `json:"public_key_id"`
+	Email       string `json:"email"`
+	Error       string `json:"error"`
+}
+
+func testPasskeyRegistration(ctx context.Context, t *testing.T) registrationResult {
+	var result registrationResult
 	err := chromedp.Run(ctx,
 		// Call the registration function from the script.
 		chromedp.Evaluate(`createPasskey('test@example.com', 'Test User').then((result) => { return result; });`, &result, chromedputil.WaitForPromise),
 	)
-	t.Logf("Registration result: %+v", result)
 	if err != nil {
 		t.Fatalf("Passkey registration test failed: %v", err)
 	}
-	fmt.Printf(">>>>>>>>>>> %+v\n", result)
-	t.Fail()
+	return result
 }
 
-func testPasskeyLogin(ctx context.Context, t *testing.T) {
-	ctx, cancel, authenticatorID := setupBrowser(t)
-	defer cancel()
-	defer func() {
-		if err := chromedp.Run(ctx, browserWebauthn.RemoveVirtualAuthenticator(authenticatorID)); err != nil {
-			t.Errorf("Failed to remove virtual authenticator: %v", err)
-		}
-	}()
+type loginResult struct {
+	Success     bool   `json:"success"`
+	UserHandle  string `json:"user_handle"`
+	PublicKeyID string `json:"public_key_id"`
+	Error       string `json:"error"`
+}
 
-	var result string
+func testPasskeyLogin(ctx context.Context, t *testing.T) loginResult {
+	var result loginResult
 	err := chromedp.Run(ctx,
-		chromedp.Navigate(serverURL.String()),
 		// Call the login function from the script.
-		chromedp.Evaluate(`loginWithPasskey()`, &result),
+		chromedp.Evaluate(`usePasskey();`, &result, chromedputil.WaitForPromise),
 	)
-
 	if err != nil {
 		t.Fatalf("Passkey login test failed: %v", err)
 	}
-	if result != "login successful" {
+	if !result.Success {
 		t.Errorf("Expected login to be successful, but got: %v", result)
 	}
+	return result
 }

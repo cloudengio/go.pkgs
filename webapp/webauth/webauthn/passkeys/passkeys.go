@@ -14,6 +14,7 @@ import (
 	"slices"
 	"time"
 
+	"cloudeng.io/webapp/cookies"
 	"cloudeng.io/webapp/jsonapi"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -43,12 +44,11 @@ type Handler struct {
 }
 
 type options struct {
-	logger                *slog.Logger
-	sessionCookieDuration time.Duration
-	loginCookieDuration   time.Duration
-	emailValidator        EmailValidator
-	mediationRequirement  protocol.CredentialMediationRequirement
-	registrationOptions   []webauthn.RegistrationOption
+	logger               *slog.Logger
+	sessionCookie        cookies.ScopeAndDuration
+	emailValidator       EmailValidator
+	mediationRequirement protocol.CredentialMediationRequirement
+	registrationOptions  []webauthn.RegistrationOption
 }
 
 // HandlerOption represents an option for configuring the Handler.
@@ -59,23 +59,6 @@ type HandlerOption func(*options)
 func WithLogger(logger *slog.Logger) HandlerOption {
 	return func(o *options) {
 		o.logger = logger
-	}
-}
-
-// WithSessionCookieDuration sets the duration for session cookies,
-// that is, those used during being/finish endpoint invocations.
-// The default is 10 minutes.
-func WithSessionCookieDuration(duration time.Duration) HandlerOption {
-	return func(o *options) {
-		o.sessionCookieDuration = duration
-	}
-}
-
-// WithLoginCookieDuration sets the duration for login cookies.
-// The default is 7 days.
-func WithLoginCookieDuration(duration time.Duration) HandlerOption {
-	return func(o *options) {
-		o.loginCookieDuration = duration
 	}
 }
 
@@ -100,6 +83,14 @@ func WithRegistrationOptions(opts ...webauthn.RegistrationOption) HandlerOption 
 	}
 }
 
+// WithSessionCookieScopeAndDuration sets the session cookie's scope (domain, path)
+// and duration.
+func WithSessionCookieScopeAndDuration(ck cookies.ScopeAndDuration) HandlerOption {
+	return func(o *options) {
+		o.sessionCookie = ck
+	}
+}
+
 // NewHandler creates a new passkeys handler with the provided WebAuthn
 // implementation, session and user managers.
 func NewHandler(w WebAuthn, sm SessionManager, um UserDatabase, mw Middleware, opts ...HandlerOption) *Handler {
@@ -112,12 +103,7 @@ func NewHandler(w WebAuthn, sm SessionManager, um UserDatabase, mw Middleware, o
 	for _, fn := range opts {
 		fn(&h.opts)
 	}
-	if h.opts.sessionCookieDuration == 0 {
-		h.opts.sessionCookieDuration = 10 * time.Minute // Default session cookie duration.
-	}
-	if h.opts.loginCookieDuration == 0 {
-		h.opts.loginCookieDuration = 7 * 24 * time.Hour // Default login cookie duration.
-	}
+	h.opts.sessionCookie = h.opts.sessionCookie.SetDefaults("", "/", 10*time.Minute)
 	if h.opts.logger == nil {
 		h.opts.logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 	}
@@ -184,7 +170,7 @@ func (h *Handler) BeginRegistration(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RegistrationCookie.SetSecureWithExpiration(rw, tmpKey, h.opts.sessionCookieDuration)
+	RegistrationCookie.Set(rw, h.opts.sessionCookie.Cookie(tmpKey))
 	if err := BeginRegistrationEndpoint.WriteResponse(rw, &creds.Response); err != nil {
 		logger.Error("failed to write response", "error", err.Error())
 		return
@@ -251,7 +237,7 @@ func (h *Handler) FinishRegistration(rw http.ResponseWriter, r *http.Request) {
 // the authentication using a discoverable passkey. The user's identity will be
 // determined by the user handle provided in the request. The response will contain
 // the options for the authentication request.
-var BeginDiscoverableAuthenticationEndpoint = jsonapi.Endpoint[struct{}, *protocol.PublicKeyCredentialRequestOptions]{}
+var BeginDiscoverableAuthenticationEndpoint = jsonapi.Endpoint[struct{}, *protocol.CredentialAssertion]{}
 
 func (h *Handler) BeginDiscoverableAuthentication(rw http.ResponseWriter, r *http.Request) {
 	logger := h.opts.logger.With("method", "BeginDiscoverableAuthentication")
@@ -268,9 +254,11 @@ func (h *Handler) BeginDiscoverableAuthentication(rw http.ResponseWriter, r *htt
 		jsonapi.WriteErrorMsg(rw, "failed to begin authenticating", http.StatusInternalServerError)
 		return
 	}
-	AuthenticationCookie.SetSecureWithExpiration(rw, tmpKey, h.opts.sessionCookieDuration)
+	AuthenticationCookie.Set(rw, h.opts.sessionCookie.Cookie(tmpKey))
 
-	if err := BeginDiscoverableAuthenticationEndpoint.WriteResponse(rw, &options.Response); err != nil {
+	fmt.Printf("ZZXZZ %+v\n", options)
+
+	if err := BeginDiscoverableAuthenticationEndpoint.WriteResponse(rw, options); err != nil {
 		logger.Error("failed to write response", "error", err.Error())
 		return
 	}
@@ -340,12 +328,13 @@ func (h *Handler) FinishAuthentication(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.mw.UserAuthenticated(rw, pu.ID(), h.opts.loginCookieDuration); err != nil {
+	if err := h.mw.UserAuthenticated(rw, pu.ID()); err != nil {
 		logger.Error("failed to set authenticated session", "error", err.Error())
 		jsonapi.WriteErrorMsg(rw, "failed to set authenticated session", http.StatusInternalServerError)
 		return
 	}
 
+	logger.Info("authentication/login successful", "user_id", pu.ID(), "webauthn_name", user.WebAuthnName())
 }
 
 // VerifyAuthenticationEndpoint represents the endpoint for verifying the authentication

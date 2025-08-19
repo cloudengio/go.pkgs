@@ -24,14 +24,14 @@ function arrayBufferToBase64url(buffer: ArrayBuffer): string {
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-
 type PasskeyCreation = {
     user_handle: string;
     email: string;
     public_key_id?: string;
     error?: string | null;
-    exception?: string | null;
 };
+
+
 
 /**
  * Creates a new passkey for a user.
@@ -47,27 +47,20 @@ async function createPasskey(email: string, displayName: string): Promise<Passke
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ "email": email, "display_name": displayName }),
         });
+
         const options: PublicKeyCredentialCreationOptionsJSON = await response.json();
+        console.log("Server responded with options:", options);
 
-        console.log("User:", options.user);
-        console.log("Relying Party:", options.rp);
-
-        // Convert challenge/user ID to ArrayBuffers
-        const publicKey: PublicKeyCredentialCreationOptions = {
-            pubKeyCredParams: options.pubKeyCredParams,
-            rp: options.rp,
-            challenge: base64urlToArrayBuffer(options.challenge),
-            user: {
-                ...options.user,
-                id: base64urlToArrayBuffer(options.user.id) // as unknown as string)
-            }
-        };
-
+        const createOptions = PublicKeyCredential.parseCreationOptionsFromJSON(options)
+        console.log("Create Options:", createOptions);
         // 2. Prompt the user to create a new passkey
-        const credential = (await navigator.credentials.create({
-            publicKey
-        })) as PublicKeyCredential;
-        console.log("Credential:", credential);
+        const credential = (await navigator.credentials.create(
+            {
+                publicKey: createOptions
+            })) as PublicKeyCredential;
+
+        console.log("Credential created:", credential);
+        console.log("Credential id:", credential.id);
 
         // 3. Send the new credential to the server to be verified and stored
         const attestationResponse = credential.response as AuthenticatorAttestationResponse;
@@ -81,6 +74,7 @@ async function createPasskey(email: string, displayName: string): Promise<Passke
                 attestationObject: arrayBufferToBase64url(attestationResponse.attestationObject),
             },
         };
+
         console.log("Verification Data:", verificationData);
         const verificationResponse = await fetch('/verify-registration', {
             method: 'POST',
@@ -89,48 +83,62 @@ async function createPasskey(email: string, displayName: string): Promise<Passke
         });
         if (verificationResponse.ok) {
             return {
-                user_handle: credential.id,
-                public_key_id: options.user.id,
+                user_handle: options.user.id,
+                public_key_id: credential.id,
                 email: options.user.name
             };
         } else {
             const error = await verificationResponse.json();
             return {
-                user_handle: credential.id,
+                user_handle: options.user.id,
+                public_key_id: credential.id,
                 email: options.user.name,
-                error: `failed to register passkey: ${error.message}`, exception: null
+                error: `failed to register passkey: ${error.message}`
             };
         }
     } catch (err) {
+        console.error("Error creating passkey:", err);
         // Need to handle errors correctly:
         // InvalidStateError - programming error
         // NotAllowedError - all other errors.
-        return { user_handle: "", email: "", exception: `could not create passkey: ${err}` };
+        return { user_handle: "", email: "", error: `could not create passkey: ${err}` };
     }
+}
+
+type PasskeyLogin = {
+    success: boolean;
+    user_handle: string;
+    public_key_id: string;
+    error?: string | null;
+};
+
+type CredentialRequestResponse = {
+    mediation: CredentialMediationRequirement;
+    publicKey: PublicKeyCredentialRequestOptionsJSON;
 }
 
 /**
  * Authenticates a user with an existing passkey.
  */
-async function usePasskey(): Promise<String> {
+async function usePasskey(): Promise<PasskeyLogin> {
     try {
         // 1. Fetch authentication options from the server
         const response = await fetch('/generate-authentication-options');
-        const options: PublicKeyCredentialRequestOptions = await response.json();
+        const options: CredentialRequestResponse = await response.json();
 
-        // Convert challenge and any credential IDs from Base64URL to ArrayBuffer
-        options.challenge = base64urlToArrayBuffer(options.challenge as unknown as string);
-        if (options.allowCredentials) {
-            for (const cred of options.allowCredentials) {
-                cred.id = base64urlToArrayBuffer(cred.id as unknown as string);
-            }
-        }
-        console.log("Authentication options received:", options);
+        console.log("Authentication public key options received:", options.publicKey!);
+        console.log("challenge", options.publicKey!.challenge);
+        console.log("Mediated authentication public key options received:", options.mediation);
+
+        const publicKey: PublicKeyCredentialRequestOptions = PublicKeyCredential.parseRequestOptionsFromJSON(
+            options.publicKey, // JSON-type representation
+        );
+
         // 2. Prompt the user to use their passkey
         const credential = (await navigator.credentials.get({
-            publicKey: options,
+            mediation: options.mediation,
+            publicKey: publicKey
         })) as PublicKeyCredential;
-
         console.log("Credential received:", credential);
 
         // 3. Send the assertion to the server for verification
@@ -158,12 +166,26 @@ async function usePasskey(): Promise<String> {
 
         if (verificationResponse.ok) {
             // Redirect or update UI for signed-in state
-            return ""
+            return {
+                success: true,
+                public_key_id: credential.id,
+                user_handle: verificationData.response.userHandle ?? "",
+            };
         } else {
             const error = await verificationResponse.json();
-            return `❌ Authentication failed: ${error.message}`;
+            return {
+                success: false,
+                public_key_id: "",
+                user_handle: "",
+                error: `Authentication failed: ${error.message}`,
+            };
         }
     } catch (err) {
-        return `Could not authenticate with passkey: ${err}`;
+        return {
+            success: false,
+            user_handle: "",
+            public_key_id: "",
+            error: `Could not authenticate with passkey: exception: ${err}`,
+        };
     }
 }

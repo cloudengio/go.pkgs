@@ -14,52 +14,10 @@ import (
 )
 
 const (
-	testCookieName cookies.T = "my-test-cookie"
-	testValue      string    = "hello-world"
+	testCookieName   cookies.T      = "my-test-cookie"
+	secureCookieName cookies.Secure = "my-secure-cookie"
+	testValue        string         = "hello-world"
 )
-
-func TestSetSecureWithExpiration(t *testing.T) {
-	rec := httptest.NewRecorder()
-	expires := 10 * time.Minute
-
-	testCookieName.SetSecureWithExpiration(rec, testValue, expires)
-
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if len(res.Cookies()) != 1 {
-		t.Fatalf("expected 1 cookie, got %d", len(res.Cookies()))
-	}
-
-	cookie := res.Cookies()[0]
-
-	if got, want := cookie.Name, string(testCookieName); got != want {
-		t.Errorf("got cookie name %q, want %q", got, want)
-	}
-	if got, want := cookie.Value, testValue; got != want {
-		t.Errorf("got cookie value %q, want %q", got, want)
-	}
-	if got, want := cookie.Path, "/"; got != want {
-		t.Errorf("got cookie path %q, want %q", got, want)
-	}
-	if !cookie.HttpOnly {
-		t.Error("expected HttpOnly to be true")
-	}
-	if !cookie.Secure {
-		t.Error("expected Secure to be true")
-	}
-	if got, want := cookie.SameSite, http.SameSiteStrictMode; got != want {
-		t.Errorf("got SameSite mode %v, want %v", got, want)
-	}
-
-	// Check that the expiration is in the future and close to what we set.
-	if time.Until(cookie.Expires) > expires {
-		t.Errorf("cookie expiration is too far in the future")
-	}
-	if time.Until(cookie.Expires) < expires-time.Minute {
-		t.Errorf("cookie expiration is too soon")
-	}
-}
 
 func TestSet(t *testing.T) {
 	rec := httptest.NewRecorder()
@@ -161,5 +119,180 @@ func TestReadAndClear(t *testing.T) {
 	defer resNoCookie.Body.Close()
 	if len(resNoCookie.Cookies()) != 0 {
 		t.Errorf("expected no cookies to be set when clearing a non-existent cookie, but got %d", len(resNoCookie.Cookies()))
+	}
+}
+
+func TestSecure_Set(t *testing.T) {
+	rec := httptest.NewRecorder()
+	ck := &http.Cookie{
+		Value:  testValue,
+		Domain: "example.com",
+		Path:   "/",
+	}
+
+	secureCookieName.Set(rec, ck)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if len(res.Cookies()) != 1 {
+		t.Fatalf("expected 1 cookie, got %d", len(res.Cookies()))
+	}
+
+	cookie := res.Cookies()[0]
+
+	if got, want := cookie.Name, string(secureCookieName); got != want {
+		t.Errorf("got cookie name %q, want %q", got, want)
+	}
+	if got, want := cookie.Value, testValue; got != want {
+		t.Errorf("got cookie value %q, want %q", got, want)
+	}
+	if got, want := cookie.Domain, "example.com"; got != want {
+		t.Errorf("got cookie domain %q, want %q", got, want)
+	}
+	if !cookie.HttpOnly {
+		t.Error("expected HttpOnly to be true")
+	}
+	if !cookie.Secure {
+		t.Error("expected Secure to be true")
+	}
+	if got, want := cookie.SameSite, http.SameSiteStrictMode; got != want {
+		t.Errorf("got SameSite mode %v, want %v", got, want)
+	}
+}
+
+func TestSecure_Read(t *testing.T) {
+	// Case 1: Cookie exists.
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(&http.Cookie{Name: string(secureCookieName), Value: testValue})
+
+	val, ok := secureCookieName.Read(req)
+	if !ok {
+		t.Error("expected to find cookie, but did not")
+	}
+	if val != testValue {
+		t.Errorf("got value %q, want %q", val, testValue)
+	}
+
+	// Case 2: Cookie does not exist.
+	reqNoCookie := httptest.NewRequest("GET", "/", nil)
+	val, ok = secureCookieName.Read(reqNoCookie)
+	if ok {
+		t.Error("did not expect to find cookie, but did")
+	}
+	if val != "" {
+		t.Errorf("got value %q, want empty string", val)
+	}
+}
+
+func TestSecure_ReadAndClear(t *testing.T) {
+	// Case 1: Cookie exists.
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(&http.Cookie{Name: string(secureCookieName), Value: testValue})
+
+	val, ok := secureCookieName.ReadAndClear(rec, req)
+	if !ok {
+		t.Error("expected to find cookie, but did not")
+	}
+	if val != testValue {
+		t.Errorf("got value %q, want %q", val, testValue)
+	}
+
+	// Check that a clearing cookie was set in the response.
+	res := rec.Result()
+	defer res.Body.Close()
+	if len(res.Cookies()) != 1 {
+		t.Fatalf("expected 1 clearing cookie to be set, got %d", len(res.Cookies()))
+	}
+	clearingCookie := res.Cookies()[0]
+	if clearingCookie.MaxAge != -1 {
+		t.Errorf("expected MaxAge of -1 to clear cookie, got %d", clearingCookie.MaxAge)
+	}
+	if clearingCookie.Value != "" {
+		t.Errorf("expected empty value to clear cookie, got %q", clearingCookie.Value)
+	}
+
+	// Case 2: Cookie does not exist.
+	recNoCookie := httptest.NewRecorder()
+	reqNoCookie := httptest.NewRequest("GET", "/", nil)
+	val, ok = secureCookieName.ReadAndClear(recNoCookie, reqNoCookie)
+	if ok {
+		t.Error("did not expect to find cookie, but did")
+	}
+	if val != "" {
+		t.Errorf("got value %q, want empty string", val)
+	}
+	resNoCookie := recNoCookie.Result()
+	defer resNoCookie.Body.Close()
+	if len(resNoCookie.Cookies()) != 0 {
+		t.Errorf("expected no cookies to be set when clearing a non-existent cookie, but got %d", len(resNoCookie.Cookies()))
+	}
+}
+
+func TestScopeAndDuration_SetDefaults(t *testing.T) {
+	t.Run("Use Defaults", func(t *testing.T) {
+		var sd cookies.ScopeAndDuration // Empty
+
+		result := sd.SetDefaults("default-domain.com", "/default-path", 30*time.Minute)
+
+		if result.Domain != "default-domain.com" {
+			t.Errorf("Domain not set to default: got %q, want %q", result.Domain, "default-domain.com")
+		}
+		if result.Path != "/default-path" {
+			t.Errorf("Path not set to default: got %q, want %q", result.Path, "/default-path")
+		}
+		if result.Duration != 30*time.Minute {
+			t.Errorf("Duration not set to default: got %v, want %v", result.Duration, 30*time.Minute)
+		}
+	})
+
+	t.Run("Keep Existing Values", func(t *testing.T) {
+		sd := cookies.ScopeAndDuration{
+			Domain:   "original-domain.com",
+			Path:     "/original-path",
+			Duration: 15 * time.Minute,
+		}
+
+		result := sd.SetDefaults("default-domain.com", "/default-path", 30*time.Minute)
+
+		if result.Domain != "original-domain.com" {
+			t.Errorf("Domain was overridden: got %q, want %q", result.Domain, "original-domain.com")
+		}
+		if result.Path != "/original-path" {
+			t.Errorf("Path was overridden: got %q, want %q", result.Path, "/original-path")
+		}
+		if result.Duration != 15*time.Minute {
+			t.Errorf("Duration was overridden: got %v, want %v", result.Duration, 15*time.Minute)
+		}
+	})
+}
+
+func TestScopeAndDuration_Cookie(t *testing.T) {
+	sd := cookies.ScopeAndDuration{
+		Domain:   "example.com",
+		Path:     "/api",
+		Duration: 20 * time.Minute,
+	}
+
+	cookie := sd.Cookie(testValue)
+
+	if cookie.Domain != "example.com" {
+		t.Errorf("Cookie domain: got %q, want %q", cookie.Domain, "example.com")
+	}
+	if cookie.Path != "/api" {
+		t.Errorf("Cookie path: got %q, want %q", cookie.Path, "/api")
+	}
+	if cookie.Value != testValue {
+		t.Errorf("Cookie value: got %q, want %q", cookie.Value, testValue)
+	}
+
+	// The exact expiration time depends on when the test runs, so just check that
+	// it's between now and now+Duration
+	expectedMin := time.Now()
+	expectedMax := expectedMin.Add(sd.Duration)
+	if cookie.Expires.Before(expectedMin) || cookie.Expires.After(expectedMax) {
+		t.Errorf("Cookie expires time is outside expected range: got %v, want between %v and %v",
+			cookie.Expires, expectedMin, expectedMax)
 	}
 }

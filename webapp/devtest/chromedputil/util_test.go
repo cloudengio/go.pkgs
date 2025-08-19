@@ -390,7 +390,7 @@ func TestConsoleArgsAsJSON(t *testing.T) { //nolint:gocyclo
 	defer cancel()
 
 	consoleEventCh := make(chan *runtime.EventConsoleAPICalled, 1)
-	chromedputil.Listen(ctx, chromedputil.NewEventConsoleHandler(consoleEventCh))
+	chromedputil.Listen(ctx, chromedputil.NewListenHandler(ctx, consoleEventCh))
 
 	// This JS will log a variety of object types to the console.
 	const jsLogComplexObjects = `
@@ -570,8 +570,8 @@ func TestRunLoggingListener(t *testing.T) {
 
 	// Run the listener with console and exception logging enabled.
 	doneCh := chromedputil.RunLoggingListener(ctx, logger,
-		chromedputil.WithConsoleLogging(),
-		chromedputil.WithExceptionLogging(),
+		chromedputil.WithConsoleLogging(ctx),
+		chromedputil.WithExceptionLogging(ctx),
 	)
 
 	// Generate a console log and an exception in the browser.

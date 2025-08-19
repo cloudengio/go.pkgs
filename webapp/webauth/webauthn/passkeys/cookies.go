@@ -11,8 +11,8 @@ import (
 const (
 	// AuthenticationCookie is set during the login/authentication
 	// webauthn flow (set in Begin and cleared in Finish).
-	AuthenticationCookie = cookies.T("webauthn_authentication")
+	AuthenticationCookie = cookies.Secure("webauthn_authentication")
 	// RegistrationBeginCookie is set during the registration webauthn flow
 	// (set in Begin and cleared in Finish).
-	RegistrationCookie = cookies.T("webauthn_registration")
+	RegistrationCookie = cookies.Secure("webauthn_registration")
 )

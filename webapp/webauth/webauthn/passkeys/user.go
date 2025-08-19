@@ -6,10 +6,11 @@ package passkeys
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/google/uuid"
 )
 
 // UserID is used to uniquely identify users in the passkey system.
@@ -18,41 +19,42 @@ import (
 type UserID interface {
 	String() string               // Returns a string representation of the user ID that can be used usable as a key in a map. String should return the same value as MarshalText and hence UnmarshalText(String()) == UnmarshalText(MarshalText()).
 	UnmarshalBinary([]byte) error // Converts a byte slice to a UserID.
-	MarshalText() ([]byte, error) // Converts the UserID to a text representation.
-	UnmarshalText([]byte) error   // Converts a text representation to a UserID.
+	MarshalText() ([]byte, error) // Converts the UserID to base64.RawURLEncoding representation.
+	UnmarshalText([]byte) error   // Converts a base64.RawURLEncoding text representation to a UserID.
 }
 
-type uuidUserID uuid.UUID
+type uuidUserID [64]byte
 
 func (u uuidUserID) String() string {
-	return uuid.UUID(u).String()
+	return base64.RawURLEncoding.EncodeToString(u[:])
 }
 
 func (u uuidUserID) MarshalText() ([]byte, error) {
-	return []byte(uuid.UUID(u).String()), nil
+	buf := make([]byte, base64.RawURLEncoding.EncodedLen(len(u[:])))
+	base64.RawURLEncoding.Encode(buf, u[:])
+	return buf, nil
 }
 
 func (u *uuidUserID) UnmarshalText(text []byte) error {
-	id, err := uuid.Parse(string(text))
+	n, err := base64.RawURLEncoding.Decode(u[:], text)
 	if err != nil {
-		return fmt.Errorf("failed to parse UUID from text: %w", err)
+		return fmt.Errorf("failed to parse uid from text: %w", err)
 	}
-	*u = uuidUserID(id)
+	if n != 64 {
+		return fmt.Errorf("invalid length for uid: %d, expected 64", n)
+	}
 	return nil
 }
 
 func (u *uuidUserID) UnmarshalBinary(b []byte) error {
-	if len(b) != 16 {
-		return fmt.Errorf("invalid byte slice length for UUID: %d", len(b))
+	if len(b) != 64 {
+		return fmt.Errorf("invalid byte slice length for uid: %d, expected 64", len(b))
 	}
-	id, err := uuid.FromBytes(b)
-	if err != nil {
-		return fmt.Errorf("failed to convert bytes to UUID: %w", err)
-	}
-	*u = uuidUserID(id)
+	copy(u[:], b)
 	return nil
 }
 
+// UserIDFromBytes creates a UserID from a byte slice.
 func UserIDFromBytes(b []byte) (UserID, error) {
 	var id uuidUserID
 	if err := id.UnmarshalBinary(b); err != nil {
@@ -61,31 +63,46 @@ func UserIDFromBytes(b []byte) (UserID, error) {
 	return &id, nil
 }
 
+// UserIDFromString creates a UserID from a base64.RawURLEncoding string.
+func UserIDFromString(s string) (UserID, error) {
+	var id uuidUserID
+	if err := id.UnmarshalText([]byte(s)); err != nil {
+		return nil, fmt.Errorf("failed to create UserID from string: %w", err)
+	}
+	return &id, nil
+}
+
 // User represents a user that registers to use a passkey and implements webauthn.User
 type User struct {
-	id          uuid.UUID             // Unique identifier for the user, used in WebAuthn.
+	id          [64]byte              // Unique identifier for the user, used in WebAuthn.
 	email       string                // Email address of the user, supplied by the user and not verfied in any way.
 	displayName string                // Display name of the user, can be used for UI purposes.
 	credentials []webauthn.Credential // List of WebAuthn credentials associated with the user.
 }
 
+// NewUser creates a new user with the given email and display name.
 func NewUser(email, displayName string) (*User, error) {
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate UUID: %w", err)
-	}
-	return &User{
-		id:          id,
+	u := &User{
 		email:       email,
 		displayName: displayName,
-	}, nil
+	}
+	n, err := rand.Read(u.id[:]) // Fill the id with random bytes.
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate random user ID: %w", err)
+	}
+	if n != 64 {
+		return nil, fmt.Errorf("failed to generate enough random data: got %v, want 64", n)
+	}
+	return u, nil
 }
 
+// ID returns the unique identifier for the user.
 func (u *User) ID() UserID {
 	tmp := uuidUserID(u.id)
 	return &tmp
 }
 
+// UpdateCredential updates an existing credential for the user.
 func (u *User) UpdateCredential(cred webauthn.Credential) bool {
 	for i, c := range u.credentials {
 		if bytes.Equal(c.ID, cred.ID) {

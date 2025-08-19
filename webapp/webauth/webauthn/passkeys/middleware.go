@@ -20,7 +20,7 @@ type Middleware interface {
 	// It should be used to set a session Cookie, or a JWT token to be validated
 	// on subsequent requests. The expiration parameter indicates how long the
 	// login session should be valid.
-	UserAuthenticated(rw http.ResponseWriter, user UserID, expiration time.Duration) error
+	UserAuthenticated(rw http.ResponseWriter, user UserID) error
 
 	// AuthenticateUser is called to validate the user based on the request.
 	// It should return the UserID of the authenticated user or an error if authentication fails.
@@ -29,51 +29,50 @@ type Middleware interface {
 
 // JWTCookieMiddleware implements the Middleware interface using JWTs stored in cookies.
 type JWTCookieMiddleware struct {
-	signer  jwtutil.Signer
-	expires time.Duration
-	claims  jwt.RegisteredClaims
-	parser  *jwt.Parser
+	signer jwtutil.Signer
+	claims jwt.RegisteredClaims
+	parser *jwt.Parser
 
+	loginCookie cookies.ScopeAndDuration
 	// LoginCookie is set when the user has successfully logged in using
 	// webauthn and is used to inform the server that the user has
 	// successfully logged in
-	LoginCookie cookies.T // initialized as cookies.T("webauthn_login")
+	LoginCookie cookies.Secure // initialized as cookies.T("webauthn_login")
 }
 
 // NewJWTCookieMiddleware creates a new JWTCookieMiddleware instance.
-func NewJWTCookieMiddleware(signer jwtutil.Signer, issuer string, duration time.Duration) JWTCookieMiddleware {
+func NewJWTCookieMiddleware(signer jwtutil.Signer, issuer string, cookie cookies.ScopeAndDuration) JWTCookieMiddleware {
 	p := jwt.NewParser(
 		jwt.WithIssuer(issuer),
 		jwt.WithAudience("webauthn"),
 	)
 	m := JWTCookieMiddleware{
-		signer:  signer,
-		expires: duration,
+		signer:      signer,
+		loginCookie: cookie.SetDefaults("", "/", 10*time.Minute),
 		claims: jwt.RegisteredClaims{
 			Issuer:   issuer,
 			Audience: jwt.ClaimStrings{"webauthn"},
 		},
 		parser:      p,
-		LoginCookie: cookies.T("webauthn_login"),
+		LoginCookie: cookies.Secure("webauthn_login"),
 	}
 	return m
 }
 
-func (m JWTCookieMiddleware) UserAuthenticated(rw http.ResponseWriter, user UserID, expires time.Duration) error {
+func (m JWTCookieMiddleware) UserAuthenticated(rw http.ResponseWriter, user UserID) error {
 	now := time.Now()
-	expirationTime := now.Add(m.expires)
 
 	// Create the JWT claims.
 	claims := m.claims
 	claims.Subject = user.String()
-	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(m.loginCookie.Duration))
 	claims.NotBefore = jwt.NewNumericDate(now)
 
 	tokenString, err := m.signer.Sign(claims)
 	if err != nil {
 		return err
 	}
-	m.LoginCookie.SetSecureWithExpiration(rw, tokenString, expires)
+	m.LoginCookie.Set(rw, m.loginCookie.Cookie(tokenString))
 	return nil
 }
 

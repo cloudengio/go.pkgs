@@ -5,11 +5,12 @@
 package passkeys
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"sync"
 
 	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/google/uuid"
 )
 
 // SessionManager is the interface used by passkeys.Server to manage state
@@ -34,8 +35,20 @@ type sessionManager struct {
 	sessions map[string]sessionState // Maps temporary keys to state.
 }
 
+func generateSecureRandomString(length int) (string, error) {
+	b := make([]byte, length)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(b)[:length], nil
+}
+
 func (sm *sessionManager) Registering(user *User, sessionData *webauthn.SessionData) (tmpKey string, exists bool, err error) {
-	tmpKey = uuid.New().String()
+	tmpKey, err = generateSecureRandomString(32)
+	if err != nil {
+		return "", false, err
+	}
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.sessions[tmpKey] = sessionState{user: user, session: sessionData}
@@ -54,7 +67,10 @@ func (sm *sessionManager) Registered(tmpKey string) (user *User, sessionData *we
 }
 
 func (sm *sessionManager) Authenticating(sessionData *webauthn.SessionData) (tmpKey string, err error) {
-	tmpKey = uuid.New().String()
+	tmpKey, err = generateSecureRandomString(32)
+	if err != nil {
+		return "", err
+	}
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.sessions[tmpKey] = sessionState{session: sessionData}

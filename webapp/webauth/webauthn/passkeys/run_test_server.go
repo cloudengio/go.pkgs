@@ -20,9 +20,12 @@ import (
 
 	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/cookies"
 	"cloudeng.io/webapp/devtest"
 	"cloudeng.io/webapp/webauth/jwtutil"
 	"cloudeng.io/webapp/webauth/webauthn/passkeys"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 	serverWebauthn "github.com/go-webauthn/webauthn/webauthn"
 )
 
@@ -67,8 +70,22 @@ func main() {
 		panic(fmt.Sprintf("Failed to generate private key: %v", err))
 	}
 	signer := jwtutil.NewED25519Signer(pubKey, privKey, "pkid")
-	mw := passkeys.NewJWTCookieMiddleware(signer, "pktest", time.Hour*24*30)
-	w := passkeys.NewHandler(wa, db, db, mw, passkeys.WithLogger(logger))
+	mw := passkeys.NewJWTCookieMiddleware(signer, "pktest", cookies.ScopeAndDuration{
+		Path:     "/",
+		Domain:   serverURL.Hostname(),
+		Duration: time.Hour * 24 * 30,
+	})
+	requireResidentKey := true
+	w := passkeys.NewHandler(wa, db, db, mw,
+		passkeys.WithLogger(logger),
+		passkeys.WithRegistrationOptions(
+			webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+				AuthenticatorAttachment: protocol.Platform,
+				RequireResidentKey:      &requireResidentKey,
+				ResidentKey:             protocol.ResidentKeyRequirementRequired,
+				UserVerification:        protocol.VerificationPreferred,
+			})),
+	)
 	mime.AddExtensionType(".js", "application/javascript")
 
 	//requireResidentKey := true

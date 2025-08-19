@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
-	"time"
 
 	"cloudeng.io/webapp/webauth/webauthn/passkeys"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -86,7 +85,7 @@ type mockMiddleware struct {
 	authenticatedUserID passkeys.UserID
 }
 
-func (m *mockMiddleware) UserAuthenticated(w http.ResponseWriter, userID passkeys.UserID, duration time.Duration) error {
+func (m *mockMiddleware) UserAuthenticated(w http.ResponseWriter, userID passkeys.UserID) error {
 	m.authenticatedUserID = userID
 	return nil
 }

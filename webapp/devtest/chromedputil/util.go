@@ -64,7 +64,6 @@ func SourceScript(ctx context.Context, script string) error {
 	if err != nil {
 		return fmt.Errorf("failed to execute load template: %w", err)
 	}
-	fmt.Printf("Loading script %s\n", scr.String())
 	err = chromedp.Run(ctx,
 		chromedp.Evaluate(javascriptFunctions, nil),
 		chromedp.Evaluate(scr.String(), &result, WaitForPromise),
@@ -147,6 +146,10 @@ func callon(ctx context.Context, fn string, objectID runtime.RemoteObjectID, dee
 // the object is a platform object, e.g Response or Promise.
 func GetRemoteObjectValueJSON(ctx context.Context, object *runtime.RemoteObject) (*runtime.RemoteObject, jsontext.Value, error) {
 	if object.Value != nil {
+		return object, object.Value, nil
+	}
+	if object.Type == "undefined" {
+		object.Value = jsontext.Value(`"undefined"`)
 		return object, object.Value, nil
 	}
 	return safeClone(ctx, object.ObjectID)
