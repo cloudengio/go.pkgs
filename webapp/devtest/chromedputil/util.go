@@ -148,6 +148,10 @@ func GetRemoteObjectValueJSON(ctx context.Context, object *runtime.RemoteObject)
 	if object.Value != nil {
 		return object, object.Value, nil
 	}
+	if object.Type == "undefined" {
+		object.Value = jsontext.Value(`"undefined"`)
+		return object, object.Value, nil
+	}
 	return safeClone(ctx, object.ObjectID)
 }
 

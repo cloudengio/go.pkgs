@@ -68,33 +68,11 @@ Listen sets up a listener for Chrome DevTools Protocol events and calls
 each of the supplied handlers in turn when an event is received. The first
 handler to return true stops the event propagation.
 
-### Func NewAnyHandler
+### Func NewListenHandler
 ```go
-func NewAnyHandler(ch chan<- any) func(ctx context.Context, ev any) bool
+func NewListenHandler[T any](ctx context.Context, ch chan<- T) func(ctx context.Context, ev any) bool
 ```
-NewAnyHandler returns a handler for all/any events that forwards the event
-to the provided channel. It should generally be the last handler in the list
-passed to Listen.
-
-### Func NewEventConsoleHandler
-```go
-func NewEventConsoleHandler(ch chan<- *runtime.EventConsoleAPICalled) func(ctx context.Context, ev any) bool
-```
-NewEventConsoleHandler returns a handler for console events that forwards
-the event to the provided channel.
-
-### Func NewEventEntryHandler
-```go
-func NewEventEntryHandler(ch chan<- *log.EventEntryAdded) func(ctx context.Context, ev any) bool
-```
-NewEventEntryHandler returns a handler for log entry events that forwards
-the event to the provided channel.
-
-### Func NewLogExceptionHandler
-```go
-func NewLogExceptionHandler(ch chan<- *runtime.EventExceptionThrown) func(ctx context.Context, ev any) bool
-```
-NewLogExceptionHandler returns a handler for log exceptions that forwards
+NewListenHandler returns a handler for a specific event type that forwards
 the event to the provided channel.
 
 ### Func RunLoggingListener
@@ -102,7 +80,8 @@ the event to the provided channel.
 func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...LoggingOption) chan struct{}
 ```
 RunLoggingListener starts the logging listener for Chrome DevTools Protocol
-events.
+events. It returns a channel that is closed when the goroutine that listens
+on events terminates.
 
 ### Func SourceScript
 ```go
@@ -142,27 +121,43 @@ The CI configuration may disable sandboxing for example.
 ```go
 type LoggingOption func(*loggingOptions)
 ```
+LoggingOption represents options to RunLoggingListener.
 
 ### Functions
 
 ```go
-func WithAnyEventLogging() LoggingOption
+func WithAnyEventLogging(ctx context.Context) LoggingOption
 ```
+WithAnyEventLogging enables logging for events of type 'any'. This is a
+catch all and should generally be the last handler in the list.
 
 
 ```go
-func WithConsoleLogging() LoggingOption
+func WithConsoleLogging(ctx context.Context) LoggingOption
 ```
+WithConsoleLogging enables logging of events of type
+'runtime.EventConsoleAPICalled'.
 
 
 ```go
-func WithEventEntryLogging() LoggingOption
+func WithEventEntryLogging(ctx context.Context) LoggingOption
 ```
+WithEventEntryLogging enables logging of events of type
+'log.EventEntryAdded'.
 
 
 ```go
-func WithExceptionLogging() LoggingOption
+func WithExceptionLogging(ctx context.Context) LoggingOption
 ```
+WithExceptionLogging enables logging of events of type
+'runtime.EventExceptionThrown'.
+
+
+```go
+func WithNetworkLogging(ctx context.Context) LoggingOption
+```
+WithNetworkLogging enables logging of events of type
+'network.EventResponseReceived'.
 
 
 
