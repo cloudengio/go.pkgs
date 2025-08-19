@@ -90,28 +90,28 @@ func initCh[T any](ch chan T) chan T {
 }
 
 // WithConsoleLogging enables logging of events of type 'runtime.EventConsoleAPICalled'.
-func WithConsoleLogging(ctx context.Context) LoggingOption {
+func WithConsoleLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.consoleCh, opts.handlers = handlerOption[*runtime.EventConsoleAPICalled](opts.handlers)
 	}
 }
 
 // WithExceptionLogging enables logging of events of type 'runtime.EventExceptionThrown'.
-func WithExceptionLogging(ctx context.Context) LoggingOption {
+func WithExceptionLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.exceptionCh, opts.handlers = handlerOption[*runtime.EventExceptionThrown](opts.handlers)
 	}
 }
 
 // WithEventEntryLogging enables logging of events of type 'log.EventEntryAdded'.
-func WithEventEntryLogging(ctx context.Context) LoggingOption {
+func WithEventEntryLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.eventCh, opts.handlers = handlerOption[*log.EventEntryAdded](opts.handlers)
 	}
 }
 
 // WithNetworkLogging enables logging of events of type 'network.EventResponseReceived'.
-func WithNetworkLogging(ctx context.Context) LoggingOption {
+func WithNetworkLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.networkResponseCh, opts.handlers = handlerOption[*network.EventResponseReceived](opts.handlers)
 		opts.networkRrequestCh, opts.handlers = handlerOption[*network.EventRequestWillBeSent](opts.handlers)
@@ -120,7 +120,7 @@ func WithNetworkLogging(ctx context.Context) LoggingOption {
 
 // WithAnyEventLogging enables logging for events of type 'any'.
 // This is a catch all and should generally be the last handler in the list.
-func WithAnyEventLogging(ctx context.Context) LoggingOption {
+func WithAnyEventLogging() LoggingOption {
 	return func(opts *loggingOptions) {
 		opts.anyCh, opts.handlers = handlerOption[any](opts.handlers)
 	}
