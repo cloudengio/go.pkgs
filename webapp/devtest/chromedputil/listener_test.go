@@ -84,9 +84,6 @@ func TestListen(t *testing.T) {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
-	// Give events time to process
-	time.Sleep(500 * time.Millisecond)
-
 	// Verify console events were captured
 	select {
 	case event := <-consoleCh:
@@ -105,8 +102,8 @@ func TestListen(t *testing.T) {
 	select {
 	case <-exceptionCh:
 		// Success - exception was captured
-	case <-time.After(100 * time.Millisecond):
-		// This is also fine
+	case <-time.After(1 * time.Second):
+		t.Error("Timed out waiting for exception event")
 	}
 }
 
@@ -611,6 +608,7 @@ func TestRunLoggingListenerEvaluate(t *testing.T) {
 	cancel()
 
 	<-doneCh
+
 	logOutput := logBuf.String()
 
 	// Verify the console log was captured and printed to stderr.
