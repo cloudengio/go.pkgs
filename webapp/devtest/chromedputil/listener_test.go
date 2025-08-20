@@ -47,11 +47,11 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
                         // This will be detected by console logging
                         console.log("Hello from test page", {key: "value"});
                         
-                        // This will trigger an exception event
-                        throw new Error("Planned test error");
                         // This will trigger network events
                         fetch("/api-endpoint").then(r => console.log("Fetch completed"));
 
+                        // This will trigger an exception event
+                        throw new Error("Planned test error");
                      </script>
                 </body>
             </html>
@@ -84,9 +84,6 @@ func TestListen(t *testing.T) {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
-	// Give events time to process
-	time.Sleep(500 * time.Millisecond)
-
 	// Verify console events were captured
 	select {
 	case event := <-consoleCh:
@@ -105,8 +102,8 @@ func TestListen(t *testing.T) {
 	select {
 	case <-exceptionCh:
 		// Success - exception was captured
-	case <-time.After(100 * time.Millisecond):
-		// This is also fine
+	case <-time.After(1 * time.Second):
+		t.Error("Timed out waiting for exception event")
 	}
 }
 
@@ -611,6 +608,7 @@ func TestRunLoggingListenerEvaluate(t *testing.T) {
 	cancel()
 
 	<-doneCh
+
 	logOutput := logBuf.String()
 
 	// Verify the console log was captured and printed to stderr.
