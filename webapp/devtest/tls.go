@@ -23,10 +23,13 @@ import (
 
 // NewSelfSignedCertUsingMkcert uses mkcert (https://github.com/FiloSottile/mkcert) to
 // create certificates. If mkcert --install has been run then these certificates will
-// be trusted by the browser and other local applications
+// be trusted by the browser and other local applications.
 func NewSelfSignedCertUsingMkcert(certFile, keyFile string, hosts ...string) error {
 	if len(certFile) == 0 || len(keyFile) == 0 {
 		return fmt.Errorf("both the crt and key files must be specified")
+	}
+	if len(hosts) == 0 {
+		return fmt.Errorf("at least one host must be specified")
 	}
 	args := []string{"--cert-file", certFile, "--key-file", keyFile}
 	args = append(args, hosts...)
