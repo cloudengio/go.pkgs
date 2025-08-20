@@ -47,11 +47,11 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
                         // This will be detected by console logging
                         console.log("Hello from test page", {key: "value"});
                         
-                        // This will trigger an exception event
-                        throw new Error("Planned test error");
                         // This will trigger network events
                         fetch("/api-endpoint").then(r => console.log("Fetch completed"));
 
+                        // This will trigger an exception event
+                        throw new Error("Planned test error");
                      </script>
                 </body>
             </html>
