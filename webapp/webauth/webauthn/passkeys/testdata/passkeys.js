@@ -41,7 +41,7 @@ async function createPasskey(email, displayName) {
             publicKey: createOptions
         }));
         console.log("Credential created:", credential);
-        console.log("Credential:", credential.id);
+        console.log("Credential id:", credential.id);
         // 3. Send the new credential to the server to be verified and stored
         const attestationResponse = credential.response;
         const verificationData = {

@@ -239,7 +239,7 @@ func (h *Handler) FinishRegistration(rw http.ResponseWriter, r *http.Request) {
 // the options for the authentication request.
 var BeginDiscoverableAuthenticationEndpoint = jsonapi.Endpoint[struct{}, *protocol.CredentialAssertion]{}
 
-func (h *Handler) BeginDiscoverableAuthentication(rw http.ResponseWriter, r *http.Request) {
+func (h *Handler) BeginDiscoverableAuthentication(rw http.ResponseWriter, _ *http.Request) {
 	logger := h.opts.logger.With("method", "BeginDiscoverableAuthentication")
 
 	options, session, err := h.w.BeginDiscoverableMediatedLogin(protocol.MediationDefault)
@@ -290,7 +290,7 @@ func (h *Handler) FinishAuthentication(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
+	handler := func(_, userHandle []byte) (webauthn.User, error) {
 		uid, err := UserIDFromBytes(userHandle)
 		if err != nil {
 			logger.Error("invalid user handle", "user_handle", userHandle, "error", err.Error())

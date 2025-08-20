@@ -47,7 +47,7 @@ func (m *mockWebAuthn) BeginMediatedRegistration(user webauthn.User, _ protocol.
 	return cred, sess, nil
 }
 
-func (m *mockWebAuthn) FinishRegistration(user webauthn.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
+func (m *mockWebAuthn) FinishRegistration(_ webauthn.User, _ webauthn.SessionData, _ *http.Request) (*webauthn.Credential, error) {
 	return &webauthn.Credential{
 		ID:              []byte("test-credential-id"),
 		PublicKey:       []byte("test-public-key"),
@@ -65,7 +65,7 @@ func (m *mockWebAuthn) BeginDiscoverableMediatedLogin(_ protocol.CredentialMedia
 		}, nil
 }
 
-func (m *mockWebAuthn) FinishPasskeyLogin(handler webauthn.DiscoverableUserHandler, session webauthn.SessionData, response *http.Request) (webauthn.User, *webauthn.Credential, error) {
+func (m *mockWebAuthn) FinishPasskeyLogin(handler webauthn.DiscoverableUserHandler, session webauthn.SessionData, _ *http.Request) (webauthn.User, *webauthn.Credential, error) {
 	user, err := handler(nil, session.UserID)
 	if err != nil {
 		return nil, nil, err
@@ -85,12 +85,12 @@ type mockMiddleware struct {
 	authenticatedUserID passkeys.UserID
 }
 
-func (m *mockMiddleware) UserAuthenticated(w http.ResponseWriter, userID passkeys.UserID) error {
+func (m *mockMiddleware) UserAuthenticated(_ http.ResponseWriter, userID passkeys.UserID) error {
 	m.authenticatedUserID = userID
 	return nil
 }
 
-func (m *mockMiddleware) AuthenticateUser(r *http.Request) (passkeys.UserID, error) {
+func (m *mockMiddleware) AuthenticateUser(_ *http.Request) (passkeys.UserID, error) {
 	return m.authenticatedUserID, nil
 }
 

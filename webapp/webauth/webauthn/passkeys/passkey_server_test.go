@@ -30,7 +30,6 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
-	serverWebauthn "github.com/go-webauthn/webauthn/webauthn"
 )
 
 var serverURL *url.URL
@@ -85,7 +84,7 @@ func TestPasskeysServer(t *testing.T) {
 	ctx, serverCancel := context.WithCancel(context.Background())
 	defer serverCancel()
 
-	wa, err := serverWebauthn.New(&serverWebauthn.Config{
+	wa, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: "Test Passkeys",
 		RPID:          "localhost",
 		RPOrigins:     []string{serverURL.String()},
@@ -129,7 +128,7 @@ func TestPasskeysServer(t *testing.T) {
 
 	ctx, cancel, authenticatorID := setupBrowser(t)
 	defer cancel()
-	defer chromedp.Run(ctx, browserWebauthn.RemoveVirtualAuthenticator(authenticatorID))
+	defer chromedp.Run(ctx, browserWebauthn.RemoveVirtualAuthenticator(authenticatorID)) //nolint:errcheck
 
 	listenCh := chromedputil.RunLoggingListener(ctx, logger,
 		chromedputil.WithNetworkLogging(),
