@@ -18,10 +18,10 @@ import (
 )
 
 var (
-	_ passkeys.WebAuthn   = (*mockWebAuthn)(nil)
-	_ passkeys.Middleware = (*mockMiddleware)(nil)
-	_ passkeys.WebAuthn   = (*webauthn.WebAuthn)(nil)
-	_ passkeys.Middleware = (passkeys.Middleware)(nil)
+	_ passkeys.WebAuthn     = (*mockWebAuthn)(nil)
+	_ passkeys.LoginManager = (*mockLoginManager)(nil)
+	_ passkeys.WebAuthn     = (*webauthn.WebAuthn)(nil)
+	_ passkeys.LoginManager = (passkeys.LoginManager)(nil)
 )
 
 // mockWebAuthn is a simplified mock of webauthn.WebAuthn.
@@ -80,17 +80,17 @@ func (m *mockWebAuthn) FinishPasskeyLogin(handler webauthn.DiscoverableUserHandl
 	return user, cred, nil
 }
 
-// mockMiddleware implements the Middleware interface for testing.
-type mockMiddleware struct {
+// mockLoginManager implements the LoginManager interface for testing.
+type mockLoginManager struct {
 	authenticatedUserID passkeys.UserID
 }
 
-func (m *mockMiddleware) UserAuthenticated(_ http.ResponseWriter, userID passkeys.UserID) error {
+func (m *mockLoginManager) UserAuthenticated(_ http.ResponseWriter, userID passkeys.UserID) error {
 	m.authenticatedUserID = userID
 	return nil
 }
 
-func (m *mockMiddleware) AuthenticateUser(_ *http.Request) (passkeys.UserID, error) {
+func (m *mockLoginManager) AuthenticateUser(_ *http.Request) (passkeys.UserID, error) {
 	return m.authenticatedUserID, nil
 }
 
@@ -148,8 +148,8 @@ func TestRAMUserDatabase(t *testing.T) {
 func TestHandler_BeginRegistration(t *testing.T) {
 	mockWA := &mockWebAuthn{}
 	db := passkeys.NewRAMUserDatabase()
-	mw := &mockMiddleware{}
-	handler := passkeys.NewHandler(mockWA, db, db, mw,
+	lm := &mockLoginManager{}
+	handler := passkeys.NewHandler(mockWA, db, db, lm,
 		passkeys.WithRegistrationOptions(
 			webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
 				AuthenticatorAttachment: protocol.Platform,
@@ -195,7 +195,7 @@ func TestHandler_BeginRegistration(t *testing.T) {
 func TestHandler_FinishRegistration(t *testing.T) {
 	mockWA := &mockWebAuthn{}
 	db := passkeys.NewRAMUserDatabase()
-	mw := &mockMiddleware{}
+	mw := &mockLoginManager{}
 	handler := passkeys.NewHandler(mockWA, db, db, mw)
 
 	user, err := passkeys.NewUser("test@example.com", "Test User")
@@ -230,7 +230,7 @@ func TestHandler_FinishRegistration(t *testing.T) {
 func TestHandler_FinishRegistration_MissingCookie(t *testing.T) {
 	mockWA := &mockWebAuthn{}
 	db := passkeys.NewRAMUserDatabase()
-	mw := &mockMiddleware{}
+	mw := &mockLoginManager{}
 	handler := passkeys.NewHandler(mockWA, db, db, mw)
 
 	req := httptest.NewRequest("POST", "/register/finish", nil)

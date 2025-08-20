@@ -14,8 +14,8 @@ import (
 )
 
 // UserID is used to uniquely identify users in the passkey system.
-// It must be a cryptographically secure randomly generated value, (eg a UUID,
-// or the output crypto.rand.Reader).
+// It must be a cryptographically secure randomly generated value,
+// (eg. 64 bytes read crypto.rand.Reader).
 type UserID interface {
 	String() string               // Returns a string representation of the user ID that can be used usable as a key in a map. String should return the same value as MarshalText and hence UnmarshalText(String()) == UnmarshalText(MarshalText()).
 	UnmarshalBinary([]byte) error // Converts a byte slice to a UserID.

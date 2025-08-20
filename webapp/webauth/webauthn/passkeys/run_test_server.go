@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"cloudeng.io/cmdutil"
 	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/cookies"
@@ -41,10 +42,13 @@ func main() {
 	hostPort := os.Args[1]
 	serverURL, err := url.Parse("https://" + hostPort)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to parse server URL: %v", err))
+		fmt.Printf("Failed to parse server URL: %v", err)
+		return
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmdutil.HandleSignals(cancel, os.Interrupt, os.Kill)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelInfo,
@@ -53,7 +57,14 @@ func main() {
 
 	certFile := "local.pem"
 	keyFile := "local-key.pem"
-	devtest.NewSelfSignedCertUsingMkcert(certFile, keyFile, hostPort)
+	if err := devtest.NewSelfSignedCertUsingMkcert(certFile, keyFile, serverURL.Hostname()); err != nil {
+		fmt.Printf("Failed to create self-signed certificates: %v", err)
+		return
+	}
+	defer func() {
+		os.Remove(certFile)
+		os.Remove(keyFile)
+	}()
 
 	wa, err := serverWebauthn.New(&serverWebauthn.Config{
 		RPDisplayName: "Test Passkeys",
@@ -61,16 +72,18 @@ func main() {
 		RPOrigins:     []string{serverURL.String()},
 	})
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create WebAuthn instance: %v", err))
+		fmt.Printf("Failed to create WebAuthn instance: %v", err)
+		return
 	}
 
 	db := passkeys.NewRAMUserDatabase()
 	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to generate private key: %v", err))
+		fmt.Printf("Failed to generate private key: %v", err)
+		return
 	}
 	signer := jwtutil.NewED25519Signer(pubKey, privKey, "pkid")
-	mw := passkeys.NewJWTCookieMiddleware(signer, "pktest", cookies.ScopeAndDuration{
+	mw := passkeys.NewJWTCookieLoginManager(signer, "pktest", cookies.ScopeAndDuration{
 		Path:     "/",
 		Domain:   serverURL.Hostname(),
 		Duration: time.Hour * 24 * 30,
@@ -88,7 +101,6 @@ func main() {
 	)
 	mime.AddExtensionType(".js", "application/javascript")
 
-	//requireResidentKey := true
 	// Register the file server handler for all requests and start the server.
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("./testdata")))
@@ -110,15 +122,20 @@ func main() {
 
 	cfg, err := webapp.TLSConfigUsingCertFiles(certFile, keyFile)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create TLS config: %v", err))
+		fmt.Printf("Failed to create TLS config: %v", err)
+		return
 	}
 	fmt.Printf("Starting TLS server at %s\n", serverURL.Host)
 	ln, srv, err := webapp.NewTLSServer(serverURL.Host, mux, cfg)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create TLS server: %v", err))
+		fmt.Printf("Failed to create TLS server: %v", err)
+		return
 	}
 
 	if err := webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second); err != nil {
-		panic(fmt.Sprintf("Failed to start TLS server: %v", err))
+		fmt.Printf("Failed to start TLS server: %v", err)
+		return
 	}
+
+	fmt.Printf("Server stopped gracefully\n")
 }

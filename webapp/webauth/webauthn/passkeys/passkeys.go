@@ -39,7 +39,7 @@ type Handler struct {
 	w    WebAuthn
 	sm   SessionManager
 	um   UserDatabase
-	mw   Middleware
+	lm   LoginManager
 	opts options
 }
 
@@ -93,12 +93,12 @@ func WithSessionCookieScopeAndDuration(ck cookies.ScopeAndDuration) HandlerOptio
 
 // NewHandler creates a new passkeys handler with the provided WebAuthn
 // implementation, session and user managers.
-func NewHandler(w WebAuthn, sm SessionManager, um UserDatabase, mw Middleware, opts ...HandlerOption) *Handler {
+func NewHandler(w WebAuthn, sm SessionManager, um UserDatabase, lm LoginManager, opts ...HandlerOption) *Handler {
 	h := &Handler{
 		w:  w,
 		um: um,
 		sm: sm,
-		mw: mw,
+		lm: lm,
 	}
 	for _, fn := range opts {
 		fn(&h.opts)
@@ -256,8 +256,6 @@ func (h *Handler) BeginDiscoverableAuthentication(rw http.ResponseWriter, _ *htt
 	}
 	AuthenticationCookie.Set(rw, h.opts.sessionCookie.Cookie(tmpKey))
 
-	fmt.Printf("ZZXZZ %+v\n", options)
-
 	if err := BeginDiscoverableAuthenticationEndpoint.WriteResponse(rw, options); err != nil {
 		logger.Error("failed to write response", "error", err.Error())
 		return
@@ -328,7 +326,7 @@ func (h *Handler) FinishAuthentication(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.mw.UserAuthenticated(rw, pu.ID()); err != nil {
+	if err := h.lm.UserAuthenticated(rw, pu.ID()); err != nil {
 		logger.Error("failed to set authenticated session", "error", err.Error())
 		jsonapi.WriteErrorMsg(rw, "failed to set authenticated session", http.StatusInternalServerError)
 		return
@@ -343,7 +341,7 @@ var VerifyAuthenticationEndpoint = jsonapi.Endpoint[struct{}, struct{}]{}
 
 func (h *Handler) VerifyAuthentication(rw http.ResponseWriter, r *http.Request) {
 	logger := h.opts.logger.With("method", "VerifyAuthentication")
-	uid, err := h.mw.AuthenticateUser(r)
+	uid, err := h.lm.AuthenticateUser(r)
 	if err != nil {
 		logger.Error("failed to authenticate user", "error", err.Error())
 		jsonapi.WriteErrorMsg(rw, "failed to authenticate user", http.StatusUnauthorized)

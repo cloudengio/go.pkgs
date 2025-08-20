@@ -14,8 +14,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Middleware defines the interface for/to middleware components in the passkeys server.
-type Middleware interface {
+// LoginManager defines the interface for managing logged in users who
+// have authenticated using a passkey.
+type LoginManager interface {
 	// UserAuthenticated is called after a user has successfully logged in with a passkey.
 	// It should be used to set a session Cookie, or a JWT token to be validated
 	// on subsequent requests. The expiration parameter indicates how long the
@@ -27,8 +28,8 @@ type Middleware interface {
 	AuthenticateUser(r *http.Request) (UserID, error)
 }
 
-// JWTCookieMiddleware implements the Middleware interface using JWTs stored in cookies.
-type JWTCookieMiddleware struct {
+// JWTCookieLoginManager implements the LoginManager interface using JWTs stored in cookies.
+type JWTCookieLoginManager struct {
 	signer jwtutil.Signer
 	claims jwt.RegisteredClaims
 	parser *jwt.Parser
@@ -40,13 +41,13 @@ type JWTCookieMiddleware struct {
 	LoginCookie cookies.Secure // initialized as cookies.T("webauthn_login")
 }
 
-// NewJWTCookieMiddleware creates a new JWTCookieMiddleware instance.
-func NewJWTCookieMiddleware(signer jwtutil.Signer, issuer string, cookie cookies.ScopeAndDuration) JWTCookieMiddleware {
+// NewJWTCookieLoginManager creates a new JWTCookieLoginManager instance.
+func NewJWTCookieLoginManager(signer jwtutil.Signer, issuer string, cookie cookies.ScopeAndDuration) JWTCookieLoginManager {
 	p := jwt.NewParser(
 		jwt.WithIssuer(issuer),
 		jwt.WithAudience("webauthn"),
 	)
-	m := JWTCookieMiddleware{
+	m := JWTCookieLoginManager{
 		signer:      signer,
 		loginCookie: cookie.SetDefaults("", "/", 10*time.Minute),
 		claims: jwt.RegisteredClaims{
@@ -59,13 +60,13 @@ func NewJWTCookieMiddleware(signer jwtutil.Signer, issuer string, cookie cookies
 	return m
 }
 
-func (m JWTCookieMiddleware) UserAuthenticated(rw http.ResponseWriter, user UserID) error {
+func (m JWTCookieLoginManager) UserAuthenticated(rw http.ResponseWriter, user UserID) error {
 	now := time.Now()
 
 	// Create the JWT claims.
 	claims := m.claims
 	claims.Subject = user.String()
-	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(m.loginCookie.Duration))
+	claims.ExpiresAt = jwt.NewNumericDate(now.Add(m.loginCookie.Duration))
 	claims.NotBefore = jwt.NewNumericDate(now)
 
 	tokenString, err := m.signer.Sign(claims)
@@ -76,7 +77,7 @@ func (m JWTCookieMiddleware) UserAuthenticated(rw http.ResponseWriter, user User
 	return nil
 }
 
-func (m JWTCookieMiddleware) AuthenticateUser(r *http.Request) (UserID, error) {
+func (m JWTCookieLoginManager) AuthenticateUser(r *http.Request) (UserID, error) {
 	tokenString, ok := m.LoginCookie.Read(r)
 	if !ok {
 		return nil, errors.New("missing authentication cookie")
@@ -87,8 +88,7 @@ func (m JWTCookieMiddleware) AuthenticateUser(r *http.Request) (UserID, error) {
 	if err != nil {
 		return nil, err
 	}
-	var user User
-	uid, err := user.ParseUID(claims.Subject)
+	uid, err := UserIDFromString(claims.Subject)
 	if err != nil {
 		return nil, err
 	}

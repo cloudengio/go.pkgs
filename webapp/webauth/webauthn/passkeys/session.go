@@ -60,7 +60,7 @@ func (sm *sessionManager) Registered(tmpKey string) (user *User, sessionData *we
 	defer sm.mu.Unlock()
 	data, exists := sm.sessions[tmpKey]
 	if !exists {
-		return nil, nil, fmt.Errorf("user not found")
+		return nil, nil, fmt.Errorf("session not found")
 	}
 	delete(sm.sessions, tmpKey) // Remove the session after retrieval.
 	return data.user, data.session, nil

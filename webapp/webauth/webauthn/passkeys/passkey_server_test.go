@@ -45,7 +45,6 @@ func init() {
 func runServer(ctx context.Context, t *testing.T, tmpDir string, w *passkeys.Handler, errCh chan error) error {
 	certFile := filepath.Join(tmpDir, "cert.pem")
 	keyFile := filepath.Join(tmpDir, "key.pem")
-
 	if err := devtest.NewSelfSignedCertUsingMkcert(certFile, keyFile, "localhost"); err != nil {
 		return fmt.Errorf("failed to create self-signed certificates: %v", err)
 	}
@@ -105,7 +104,7 @@ func TestPasskeysServer(t *testing.T) {
 		Path:     "/",
 		Duration: 10 * time.Minute,
 	}
-	mw := passkeys.NewJWTCookieMiddleware(signer, "localhost", scopeAndDuration)
+	mw := passkeys.NewJWTCookieLoginManager(signer, "localhost", scopeAndDuration)
 	requireResidentKey := true
 	w := passkeys.NewHandler(wa, db, db, mw,
 		passkeys.WithLogger(logger),
@@ -209,7 +208,7 @@ func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWeb
 	err := chromedp.Run(ctx, chromedp.Navigate(serverURL.String()))
 	if err != nil {
 		cancel()
-		t.Fatalf("Failed to navigate to server URL: %v", err)
+		t.Fatalf("Failed to navigate to server URL: %v, %v", serverURL.String(), err)
 	}
 
 	if err := chromedputil.SourceScript(ctx, serverURL.String()+"/passkeys.js"); err != nil {
