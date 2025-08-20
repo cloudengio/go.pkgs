@@ -236,7 +236,7 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 // (eg. headless) if execAllocOpts is nil or empty via a call WithExecAllocatorForCI,
 func WithContextForCI(ctx context.Context, execAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func()) {
 	allocOpts := []chromedp.ExecAllocatorOption{}
-	if execAllocOpts == nil {
+	if len(execAllocOpts) == 0 {
 		allocOpts = append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
 	} else {
 		allocOpts = append(allocOpts, execAllocOpts...)

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
@@ -148,16 +149,19 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 	Listen(ctx, options.handlers...)
 
 	doneCh := make(chan struct{})
-	ch := make(chan struct{})
+	startCh := make(chan struct{})
 	go func() {
-		close(ch)
+		close(startCh)
+		var wg sync.WaitGroup
 		for {
 			select {
 			case event := <-options.consoleCh:
 				// Run asynchronously since ConsoleArgsAsJSON will call back into
 				// chromedp which may cause a deadlock depending on the overall
 				// state of chromedp.
+				wg.Add(1)
 				go func() {
+					defer wg.Done()
 					s, err := ConsoleArgsAsJSON(ctx, event)
 					if err != nil {
 						logger.Error("Failed to marshal console args to JSON", "error", err)
@@ -191,11 +195,12 @@ func RunLoggingListener(ctx context.Context, logger *slog.Logger, opts ...Loggin
 			case request := <-options.networkRrequestCh:
 				logger.Info("Network request received", "url", request.Request.URL, "method", request.Request.Method)
 			case <-ctx.Done():
+				wg.Wait()
 				close(doneCh)
 				return
 			}
 		}
 	}()
-	<-ch
+	<-startCh
 	return doneCh
 }
