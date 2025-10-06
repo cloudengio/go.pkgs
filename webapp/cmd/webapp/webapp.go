@@ -23,6 +23,7 @@ import (
 
 	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/vite"
 	"cloudeng.io/webapp/webassets"
 	"cloudeng.io/webapp/webpack"
 	"github.com/julienschmidt/httprouter"
@@ -44,6 +45,7 @@ type ProdServerFlags struct {
 type DevServerFlags struct {
 	webapp.HTTPServerFlags
 	webpack.DevServerFlags
+	vite.Flags
 	webassets.AssetsFlags
 }
 
@@ -71,12 +73,13 @@ func init() {
 
 	1. with embedded assets that can be overridden with newer or new files found on the local filesystem. This is generally used when the javascript/webapp tooling only supports generating new assets rather than any form of dynamic update. The user must reload the site/page to see the new version.
  
-    2. with a development server, such as that provided by webpack, that dynamically
-    monitors the javascript/webapp code and dynamically rebuilds the assets. To use
-    this mode, this application will proxy all of the urls that it doesn't itself
-    implement to the running development server. The dev server may be started by
-    this server via the --webpack-dir option. Alternatively, a running dev server
-    may be used via the --webpack-server option.
+    2. with a development server, such as that provided by webpack or vite,
+    that dynamically monitors the javascript/webapp code and dynamically
+    rebuilds the assets. To use this mode, this application will proxy all
+    of the urls that it doesn't itself implement to the running development
+    server. The dev server may be started by this server via the
+    --webpack-dir or --vite-dir option. Alternatively, a running dev server
+    may be used via the --webpack-server or --vite-server option.
 
 	If a self-signed cerificate is required, the cert command can be used to generate one.`)
 }
@@ -119,6 +122,14 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*DevServerFlags)
+
+	usingWebpack := len(cl.WebpackServer) > 0 || len(cl.WebpackDir) > 0
+	usingVite := len(cl.ViteServer) > 0 || len(cl.ViteDir) > 0
+
+	if usingWebpack && usingVite {
+		return fmt.Errorf("cannot use both webpack and vite flags simultaneously")
+	}
+
 	router := httprouter.New()
 
 	configureAPIEndpoints(router)
@@ -144,6 +155,16 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 		dsURL, err = runWebpackDevServer(ctx, cl.WebpackDir, cl.Address)
 		if err == nil {
 			routeToProxy(router, "/build/", dsURL)
+		}
+	case len(cl.ViteServer) > 0:
+		dsURL, err = url.Parse(cl.ViteServer)
+		if err == nil {
+			routeToProxy(router, "/", dsURL)
+		}
+	case len(cl.ViteDir) > 0:
+		dsURL, err = runViteDevServer(ctx, cl.ViteDir, cl.Address)
+		if err == nil {
+			routeToProxy(router, "/", dsURL)
 		}
 	default:
 		assets := webassets.NewAssets(webpackedAssetPrefix, webpackedAssets,
@@ -183,6 +204,15 @@ func runWebpackDevServer(ctx context.Context, webpackDir, address string) (*url.
 		return nil, err
 	}
 	return wpsrv.WaitForURL(ctx)
+}
+
+func runViteDevServer(ctx context.Context, viteDir, address string) (*url.URL, error) {
+	vitesrv := vite.NewDevServer(ctx, viteDir, "yarn", "dev")
+	vitesrv.Configure(vite.SetSdoutStderr(os.Stdout, os.Stdout))
+	if err := vitesrv.Start(); err != nil {
+		return nil, err
+	}
+	return vitesrv.WaitForURL(ctx)
 }
 
 func routeToProxy(router *httprouter.Router, _ string, url *url.URL) {
