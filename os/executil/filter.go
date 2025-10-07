@@ -31,8 +31,9 @@ func discardIfNil(w io.Writer) io.Writer {
 // NewLineFilter returns an io.WriteCloser that scans the contents of the
 // supplied io.Writer and sends lines that match the regexp to the supplied
 // channel. It can be used to filter the output of a command started
-// by the exec package for example for specific output. Call Close on
-// the returned io.WriteCloser to ensure that all resources are reclaimed.
+// by the exec package for example for specific output. If the regexp is nil,
+// all lines are sent. Close must be called on the returned io.WriteCloser to
+// ensure that all resources are reclaimed.
 func NewLineFilter(forward io.Writer, re *regexp.Regexp, ch chan<- []byte) io.WriteCloser {
 	lf := &linefilter{
 		forward: discardIfNil(forward),
@@ -58,7 +59,7 @@ func (lf *linefilter) readlines() {
 	sc := bufio.NewScanner(lf.prd)
 	for sc.Scan() {
 		buf := sc.Bytes()
-		if lf.re.Match(buf) {
+		if lf.re == nil || lf.re.Match(buf) {
 			send(lf.ch, buf)
 		}
 		lf.forward.Write(buf)          //nolint:errcheck
