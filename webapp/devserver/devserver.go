@@ -7,8 +7,8 @@ package devserver
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
-	"os"
 	"os/exec"
 
 	"cloudeng.io/os/executil"
@@ -18,9 +18,8 @@ import (
 // by webpack or vite that serves UI content with live reload
 // capabilities.
 type DevServer struct {
-	ctx    context.Context
-	cancel context.CancelFunc
 	cmd    *exec.Cmd
+	closer io.Closer
 }
 
 // URLExtractor parses each line of output from the dev server looking
@@ -49,10 +48,11 @@ func NewServer(ctx context.Context, dir, binary string, args ...string) *DevServ
 // from its output using the supplied URLExtractor function. The
 // context can be used to cancel the wait operation. If the context
 // is cancelled before a URL is extracted an error is returned.
-func (ds *DevServer) StartAndWaitForURL(ctx context.Context, extractor URLExtractor) (*url.URL, error) {
+func (ds *DevServer) StartAndWaitForURL(ctx context.Context, writer io.Writer, extractor URLExtractor) (*url.URL, error) {
 	ch := make(chan []byte, 1)
-	filter := executil.NewLineFilter(os.Stdout, nil, ch)
+	filter := executil.NewLineFilter(writer, nil, ch)
 	ds.cmd.Stdout = filter
+	ds.closer = filter
 	if err := ds.cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start dev server %q in %q: %w", ds.cmd.String(), ds.cmd.Dir, err)
 	}
@@ -70,5 +70,14 @@ func (ds *DevServer) StartAndWaitForURL(ctx context.Context, extractor URLExtrac
 			// we return.
 			return u, err
 		}
+	}
+}
+
+// CloseStdout closes the stdout from the dev server process and
+// will prevent any further output from being processed or forwarded
+// to the writer supplied to StartAndWaitForURL.
+func (ds *DevServer) Close() {
+	if ds.closer != nil {
+		ds.closer.Close()
 	}
 }

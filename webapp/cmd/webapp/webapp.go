@@ -202,13 +202,13 @@ func serveIndexHTML(fsys fs.FS) http.HandlerFunc {
 func runWebpackDevServer(ctx context.Context, webpackDir string) (*url.URL, error) {
 	wpsrv := devserver.NewServer(ctx, webpackDir, "yarn", "start")
 	log.Printf("starting webpack dev server in %q\n", webpackDir)
-	return wpsrv.StartAndWaitForURL(ctx, devserver.NewWebpackURLExtractor(nil))
+	return wpsrv.StartAndWaitForURL(ctx, os.Stdout, devserver.NewWebpackURLExtractor(nil))
 }
 
 func runViteDevServer(ctx context.Context, viteDir string) (*url.URL, error) {
 	vitesrv := devserver.NewServer(ctx, viteDir, "npm", "run", "dev", "--", "--host")
 	log.Printf("starting vite dev server in %q\n", viteDir)
-	return vitesrv.StartAndWaitForURL(ctx, devserver.NewViteURLExtractor(nil))
+	return vitesrv.StartAndWaitForURL(ctx, os.Stdout, devserver.NewViteURLExtractor(nil))
 }
 
 func routeToProxy(router chi.Router, _ string, url *url.URL) {
@@ -218,16 +218,8 @@ func routeToProxy(router chi.Router, _ string, url *url.URL) {
 	// Proxy websockets to allow for fast refresh - ie. changes made
 	// in the javascript react code is immediately reflected in the UI
 	// without a page reload.
-	router.Get("/sockjs-node", func(w http.ResponseWriter, r *http.Request) {
-		proxy.ServeHTTP(w, r)
-	})
-	router.Post("/sockjs-node", func(w http.ResponseWriter, r *http.Request) {
-		proxy.ServeHTTP(w, r)
-	})
-	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		proxy.ServeHTTP(w, r)
-	})
-	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		proxy.ServeHTTP(w, r)
-	})
+	router.Get("/sockjs-node", http.HandlerFunc(proxy.ServeHTTP))
+	router.Post("/sockjs-node", http.HandlerFunc(proxy.ServeHTTP))
+	router.Get("/", http.HandlerFunc(proxy.ServeHTTP))
+	router.NotFound(http.HandlerFunc(proxy.ServeHTTP))
 }
