@@ -34,7 +34,7 @@ func NewSelfSignedCertUsingMkcert(certFile, keyFile string, hosts ...string) err
 NewSelfSignedCertUsingMkcert uses mkcert
 (https://github.com/FiloSottile/mkcert) to create certificates. If mkcert
 --install has been run then these certificates will be trusted by the
-browser and other local applications
+browser and other local applications.
 
 
 
