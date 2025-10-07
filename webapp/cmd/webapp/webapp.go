@@ -18,32 +18,42 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"regexp"
 	"time"
 
 	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/devserver"
 	"cloudeng.io/webapp/webassets"
-	"cloudeng.io/webapp/webpack"
-	"github.com/julienschmidt/httprouter"
+	"github.com/go-chi/chi/v5"
 )
 
 // Use go generate to create and build the sample react app.
 //go:generate npx create-react-app webapp-sample
 //go:generate yarn --cwd webapp-sample build
+//go:generate ./create-vite-react.sh
 
 //go:embed webapp-sample/build webapp-sample/build/static/css webapp-sample/build/static/js webapp-sample/build/static/media
 var webpackedAssets embed.FS
-var webpackedAssetPrefix = "webapp-sample/build"
 
 type ProdServerFlags struct {
 	webapp.HTTPServerFlags
 	webapp.HTTPAcmeFlags
 }
 
+type WebpackFlags struct {
+	WebpackDir    string `subcmd:"webpack-dir,,'set to a directory containing a webpack configuration with the webpack dev server configured. This dev server will then be started and requests proxied to it.'"`
+	WebpackServer string `subcmd:"webpack-server,,set to the url of an already running webpack dev server to which requests will be proxied."`
+}
+
+type ViteFlags struct {
+	ViteDir    string `subcmd:"vite-dir,,'set to a directory containing a vite configuration with the vite dev server configured. This dev server will then be started and requests proxied to it.'"`
+	ViteServer string `subcmd:"vite-server,,set to the url of an already running vite dev server to which requests will be proxied."`
+}
+
 type DevServerFlags struct {
 	webapp.HTTPServerFlags
-	webpack.DevServerFlags
+	WebpackFlags
+	ViteFlags
 	webassets.AssetsFlags
 }
 
@@ -76,7 +86,9 @@ func init() {
     this mode, this application will proxy all of the urls that it doesn't itself
     implement to the running development server. The dev server may be started by
     this server via the --webpack-dir option. Alternatively, a running dev server
-    may be used via the --webpack-server option.
+    may be used via the --webpack-server option. Similarly for vite with the
+	--vite-dir and --vite-server options. Note, that only one of webpack or vite
+	may be used at a time.
 
 	If a self-signed cerificate is required, the cert command can be used to generate one.`)
 }
@@ -85,13 +97,20 @@ func main() {
 	cmdSet.MustDispatch(context.Background())
 }
 
-func prodServe(ctx context.Context, values interface{}, _ []string) error {
+func serveContent(router chi.Router) {
+	assets := webassets.NewAssets("webapp-sample/build/", webpackedAssets)
+	router.Handle("/static/*", http.FileServer(http.FS(assets)))
+	router.NotFound(serveIndexHTML(assets)) // serve index.html on all urls.
+}
+
+func prodServe(ctx context.Context, values any, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*ProdServerFlags)
-	router := httprouter.New()
 
+	router := chi.NewRouter()
 	configureAPIEndpoints(router)
+	serveContent(router)
 
 	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, nil)
 	if err != nil {
@@ -110,17 +129,14 @@ func prodServe(ctx context.Context, values interface{}, _ []string) error {
 
 	log.Printf("running on %s", ln.Addr())
 
-	assets := webassets.NewAssets(webpackedAssetPrefix, webpackedAssets)
-	router.ServeFiles("/*filepath", http.FS(assets))
 	return webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 }
 
-func devServe(ctx context.Context, values interface{}, _ []string) error {
+func devServe(ctx context.Context, values any, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*DevServerFlags)
-	router := httprouter.New()
-
+	router := chi.NewRouter()
 	configureAPIEndpoints(router)
 
 	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, nil)
@@ -141,15 +157,22 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 			routeToProxy(router, "/build/", dsURL)
 		}
 	case len(cl.WebpackDir) > 0:
-		dsURL, err = runWebpackDevServer(ctx, cl.WebpackDir, cl.Address)
+		dsURL, err = runWebpackDevServer(ctx, cl.WebpackDir)
+		if err == nil {
+			routeToProxy(router, "/build/", dsURL)
+		}
+	case len(cl.ViteServer) > 0:
+		dsURL, err = url.Parse(cl.ViteServer)
+		if err == nil {
+			routeToProxy(router, "/build/", dsURL)
+		}
+	case len(cl.ViteDir) > 0:
+		dsURL, err = runViteDevServer(ctx, cl.ViteDir)
 		if err == nil {
 			routeToProxy(router, "/build/", dsURL)
 		}
 	default:
-		assets := webassets.NewAssets(webpackedAssetPrefix, webpackedAssets,
-			webassets.OptionsFromFlags(&cl.AssetsFlags)...)
-		router.ServeFiles("/*filepath", http.FS(assets))
-		router.NotFound = serveIndexHTML(assets) // serve index.html on all urls.
+		serveContent(router)
 	}
 	if err != nil {
 		return err
@@ -159,14 +182,15 @@ func devServe(ctx context.Context, values interface{}, _ []string) error {
 	return webapp.ServeTLSWithShutdown(ctx, ln, srv, 5*time.Second)
 }
 
-func configureAPIEndpoints(router *httprouter.Router) {
-	router.HandlerFunc("GET", "/hello", func(w http.ResponseWriter, _ *http.Request) {
+func configureAPIEndpoints(router chi.Router) {
+	router.Get("/hello", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "hello")
 	})
 }
 
 func serveIndexHTML(fsys fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		code, err := webassets.ServeFile(w, fsys, "index.html")
 		w.WriteHeader(code)
 		if err != nil {
@@ -175,25 +199,27 @@ func serveIndexHTML(fsys fs.FS) http.HandlerFunc {
 	}
 }
 
-func runWebpackDevServer(ctx context.Context, webpackDir, address string) (*url.URL, error) {
-	wpsrv := webpack.NewDevServer(ctx, webpackDir, "yarn", "start", "--public", address)
-	wpsrv.Configure(webpack.SetSdoutStderr(os.Stdout, os.Stdout),
-		webpack.AddrRegularExpression(regexp.MustCompile("Local:")))
-	if err := wpsrv.Start(); err != nil {
-		return nil, err
-	}
-	return wpsrv.WaitForURL(ctx)
+func runWebpackDevServer(ctx context.Context, webpackDir string) (*url.URL, error) {
+	wpsrv := devserver.NewServer(ctx, webpackDir, "yarn", "start")
+	log.Printf("starting webpack dev server in %q\n", webpackDir)
+	return wpsrv.StartAndWaitForURL(ctx, os.Stdout, devserver.NewWebpackURLExtractor(nil))
 }
 
-func routeToProxy(router *httprouter.Router, _ string, url *url.URL) {
+func runViteDevServer(ctx context.Context, viteDir string) (*url.URL, error) {
+	vitesrv := devserver.NewServer(ctx, viteDir, "npm", "run", "dev", "--", "--host")
+	log.Printf("starting vite dev server in %q\n", viteDir)
+	return vitesrv.StartAndWaitForURL(ctx, os.Stdout, devserver.NewViteURLExtractor(nil))
+}
+
+func routeToProxy(router chi.Router, _ string, url *url.URL) {
 	// TODO: understand what publicPath (now _), was intended for, since
 	// it's set to /build/ on the call sites, but overridden to / here.
 	proxy := httputil.NewSingleHostReverseProxy(url)
 	// Proxy websockets to allow for fast refresh - ie. changes made
 	// in the javascript react code is immediately reflected in the UI
 	// without a page reload.
-	router.Handler("GET", "/sockjs-node", proxy)
-	router.Handler("POST", "/sockjs-node", proxy)
-	router.Handler("GET", "/", proxy)
-	router.NotFound = proxy
+	router.Get("/sockjs-node", http.HandlerFunc(proxy.ServeHTTP))
+	router.Post("/sockjs-node", http.HandlerFunc(proxy.ServeHTTP))
+	router.Get("/", http.HandlerFunc(proxy.ServeHTTP))
+	router.NotFound(http.HandlerFunc(proxy.ServeHTTP))
 }
