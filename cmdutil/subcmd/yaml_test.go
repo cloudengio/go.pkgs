@@ -33,7 +33,7 @@ commands:
       - <arg2> - arg 2
   - name: l0.2
     summary: l0.2 documentation for l0.2
-    arguments:
+    args:
       - <arg1>
       - ...
   - name: l0.3

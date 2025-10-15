@@ -15,7 +15,7 @@ import (
 // use to separate command names at different levels.
 const levelSep = "/"
 
-func buildTree(cmdDict map[string]*Command, parent, sep string, defs []commandDef) []*Command {
+func buildTree(cmdDict map[string]*Command, parent, sep string, defs []commandDef) ([]*Command, error) {
 	cmds := make([]*Command, len(defs))
 	for i, def := range defs {
 		pathName := strings.TrimPrefix(parent+levelSep+def.Name, levelSep)
@@ -24,26 +24,50 @@ func buildTree(cmdDict map[string]*Command, parent, sep string, defs []commandDe
 				name:        def.Name,
 				description: def.Summary,
 			}
-			cmd.arguments, cmd.argumentDetails = splitArguments(def.Arguments, " - ")
-			fn := determineOptForArgs(def.Arguments, sep)
+			args, err := def.ArgumentsOrArgs()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse arguments for command %q: %v", pathName, err)
+			}
+			cmd.arguments, cmd.argumentDetails = splitArguments(args, " - ")
+			fn := determineOptForArgs(args, sep)
 			fn(&cmd.opts)
 			cmdDict[pathName] = cmd
 			cmds[i] = cmd
 			continue
 		}
-		cmdSet := NewCommandSet(buildTree(cmdDict, parent+levelSep+def.Name, sep, def.Commands)...)
+		bt, err := buildTree(cmdDict, parent+levelSep+def.Name, sep, def.Commands)
+		if err != nil {
+			return nil, err
+		}
+		cmdSet := NewCommandSet(bt...)
 		cmds[i] = NewCommandLevel(def.Name, cmdSet)
-		cmds[i].Document(def.Summary, def.Arguments...)
+		args, err := def.ArgumentsOrArgs()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse arguments for command %q: %v", pathName, err)
+		}
+		cmds[i].Document(def.Summary, args...)
 		cmdDict[pathName] = cmds[i]
 	}
-	return cmds
+	return cmds, nil
 }
 
 type commandDef struct {
 	Name      string
 	Summary   string
 	Arguments []string
+	Args      []string // Alias for Arguments to support both spellings.
 	Commands  []commandDef
+}
+
+// ArgumentsOrArgs returns Arguments, or Args if Arguments is not set.
+func (c *commandDef) ArgumentsOrArgs() ([]string, error) {
+	if len(c.Arguments) > 0 && len(c.Args) > 0 {
+		return nil, fmt.Errorf("cannot specify both Arguments and Args")
+	}
+	if len(c.Arguments) > 0 {
+		return c.Arguments, nil
+	}
+	return c.Args, nil
 }
 
 type CommandSetYAML struct {
@@ -140,11 +164,23 @@ func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	cmdSet := &CommandSetYAML{
 		cmdDict: map[string]*Command{},
 	}
-	tlcmd := NewCommand(yamlCmd.Name, nil, nil, determineOptForArgs(yamlCmd.Arguments, sep))
-	tlcmd.Document(yamlCmd.Summary, yamlCmd.Arguments...)
+	args, err := yamlCmd.ArgumentsOrArgs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse top level command arguments: %v", err)
+	}
+	tlcmd := NewCommand(yamlCmd.Name, nil, nil, determineOptForArgs(args, sep))
+	tlcmd.Document(yamlCmd.Summary, args...)
 	cmdSet.cmdDict[yamlCmd.Name] = tlcmd
 	if yamlCmd.Commands != nil {
-		cmds := buildTree(cmdSet.cmdDict, "", sep, yamlCmd.Commands)
+		args, err := yamlCmd.ArgumentsOrArgs()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse top level command arguments: %v", err)
+		}
+		tlcmd.arguments, tlcmd.argumentDetails = splitArguments(args, " - ")
+		cmds, err := buildTree(cmdSet.cmdDict, "", sep, yamlCmd.Commands)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build command tree: %v", err)
+		}
 		cmdSet.CommandSet = NewCommandSet(cmds...)
 		cmdSet.document = yamlCmd.Summary
 		tlcmd.flags = &FlagSet{}
