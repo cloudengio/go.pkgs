@@ -24,8 +24,8 @@ func buildTree(cmdDict map[string]*Command, parent, sep string, defs []commandDe
 				name:        def.Name,
 				description: def.Summary,
 			}
-			cmd.arguments, cmd.argumentDetails = splitArguments(def.Arguments, " - ")
-			fn := determineOptForArgs(def.Arguments, sep)
+			cmd.arguments, cmd.argumentDetails = splitArguments(def.ArgumentsOrArgs(), " - ")
+			fn := determineOptForArgs(def.ArgumentsOrArgs(), sep)
 			fn(&cmd.opts)
 			cmdDict[pathName] = cmd
 			cmds[i] = cmd
@@ -33,7 +33,7 @@ func buildTree(cmdDict map[string]*Command, parent, sep string, defs []commandDe
 		}
 		cmdSet := NewCommandSet(buildTree(cmdDict, parent+levelSep+def.Name, sep, def.Commands)...)
 		cmds[i] = NewCommandLevel(def.Name, cmdSet)
-		cmds[i].Document(def.Summary, def.Arguments...)
+		cmds[i].Document(def.Summary, def.ArgumentsOrArgs()...)
 		cmdDict[pathName] = cmds[i]
 	}
 	return cmds
@@ -43,7 +43,16 @@ type commandDef struct {
 	Name      string
 	Summary   string
 	Arguments []string
+	Args      []string // Alias for Arguments to support both spellings.
 	Commands  []commandDef
+}
+
+// ArgumentsOrArgs returns Arguments or Args if Arguments is not set.
+func (c *commandDef) ArgumentsOrArgs() []string {
+	if len(c.Arguments) > 0 {
+		return c.Arguments
+	}
+	return c.Args
 }
 
 type CommandSetYAML struct {
@@ -140,8 +149,8 @@ func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	cmdSet := &CommandSetYAML{
 		cmdDict: map[string]*Command{},
 	}
-	tlcmd := NewCommand(yamlCmd.Name, nil, nil, determineOptForArgs(yamlCmd.Arguments, sep))
-	tlcmd.Document(yamlCmd.Summary, yamlCmd.Arguments...)
+	tlcmd := NewCommand(yamlCmd.Name, nil, nil, determineOptForArgs(yamlCmd.ArgumentsOrArgs(), sep))
+	tlcmd.Document(yamlCmd.Summary, yamlCmd.ArgumentsOrArgs()...)
 	cmdSet.cmdDict[yamlCmd.Name] = tlcmd
 	if yamlCmd.Commands != nil {
 		cmds := buildTree(cmdSet.cmdDict, "", sep, yamlCmd.Commands)
