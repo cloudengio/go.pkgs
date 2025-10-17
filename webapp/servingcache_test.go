@@ -63,6 +63,16 @@ func (s *mockCertStore) Put(_ context.Context, name string, data []byte) error {
 	return nil
 }
 
+func (s *mockCertStore) Delete(_ context.Context, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.storeErr != nil {
+		return s.storeErr
+	}
+	delete(s.certs, name)
+	return nil
+}
+
 func (s *mockCertStore) GetHits() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

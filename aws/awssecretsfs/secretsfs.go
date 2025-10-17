@@ -9,6 +9,7 @@ package awssecretsfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io/fs"
 	"time"
 
@@ -16,14 +17,16 @@ import (
 	"cloudeng.io/file"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
 
 // Option represents an option to New.
 type Option func(o *options)
 
 type options struct {
-	smOptions secretsmanager.Options
-	client    Client
+	smOptions           secretsmanager.Options
+	recoveryDelayInDays int64
+	client              Client
 }
 
 // WithSecretsOptions wraps secretsmanager.Options for use when creating an s3.Client.
@@ -32,6 +35,14 @@ func WithSecretsOptions(opts ...func(*secretsmanager.Options)) Option {
 		for _, fn := range opts {
 			fn(&o.smOptions)
 		}
+	}
+}
+
+// WithRecoveryDelay specifies the number of days to retain a secret after deletion.
+// Set to 0 for immediate deletion without recovery, the default is 7 days.
+func WithRecoveryDelay(days int64) Option {
+	return func(o *options) {
+		o.recoveryDelayInDays = days
 	}
 }
 
@@ -56,6 +67,7 @@ type T struct {
 // NewSecretsFS creates a new instance of T.
 func NewSecretsFS(cfg aws.Config, options ...Option) *T {
 	smfs := &T{}
+	smfs.options.recoveryDelayInDays = 7
 	for _, fn := range options {
 		fn(&smfs.options)
 	}
@@ -70,7 +82,7 @@ func NewSecretsFS(cfg aws.Config, options ...Option) *T {
 func (smfs *T) Open(name string) (fs.File, error) {
 	out, err := readSecret(context.Background(), smfs.client, name)
 	if err != nil {
-		return nil, err
+		return nil, translateError(err)
 	}
 	data := getData(out)
 	return &secret{name: aws.ToString(out.Name), size: len(data), buf: bytes.NewBuffer(data)}, nil
@@ -86,10 +98,28 @@ func (smfs *T) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 	return smfs.readFileCtx(ctx, name)
 }
 
+// Delete deletes the secret with the given name. Name can be the short name of the secret or the ARN.
+func (smfs *T) Delete(ctx context.Context, nameOrArn string) error {
+	arn := nameOrArn
+	if !awsutil.IsARN(nameOrArn) {
+		arn = getARN(ctx, smfs.client, nameOrArn)
+	}
+	sin := &secretsmanager.DeleteSecretInput{
+		SecretId: aws.String(arn),
+	}
+	if smfs.options.recoveryDelayInDays == 0 {
+		sin.ForceDeleteWithoutRecovery = aws.Bool(true)
+	} else {
+		sin.RecoveryWindowInDays = aws.Int64(smfs.options.recoveryDelayInDays)
+	}
+	_, err := smfs.client.DeleteSecret(ctx, sin)
+	return translateError(err)
+}
+
 func (smfs *T) readFileCtx(ctx context.Context, name string) ([]byte, error) {
 	out, err := readSecret(ctx, smfs.client, name)
 	if err != nil {
-		return nil, err
+		return nil, translateError(err)
 	}
 	return getData(out), nil
 }
@@ -114,10 +144,11 @@ func (s *secret) Close() error {
 	return nil
 }
 
-// Client represents the set of AWS S3 client methods used by s3fs.
+// Client represents the set of AWS Secrets service methods used by awssecretsfs.
 type Client interface {
 	ListSecretVersionIds(ctx context.Context, params *secretsmanager.ListSecretVersionIdsInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretVersionIdsOutput, error)
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
+	DeleteSecret(ctx context.Context, params *secretsmanager.DeleteSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error)
 }
 
 // getARN returns the ARN for the secret which includes the random string
@@ -146,4 +177,12 @@ func readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsm
 	}
 	return client.GetSecretValue(ctx,
 		&secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
+}
+
+func translateError(err error) error {
+	var rnfe *types.ResourceNotFoundException
+	if errors.As(err, &rnfe) {
+		return fs.ErrNotExist
+	}
+	return err
 }

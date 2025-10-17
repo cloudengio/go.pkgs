@@ -70,6 +70,12 @@ type WriteFileFS interface {
 	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
 }
 
+// ReadFileFS defines an FS style interface for reading files.
+type ReadFileFS interface {
+	ReadFile(name string) ([]byte, error)
+	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+}
+
 // ErrNotImplemented is returned by methods that are not implemented
 // by a particular filesystem.
 var ErrNotImplemented = fmt.Errorf("not implemented")

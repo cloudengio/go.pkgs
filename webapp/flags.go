@@ -7,27 +7,15 @@ package webapp
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
-	"strings"
-	"sync"
-)
 
-// TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
-// certificate store. This is generally used in conjunction with
-// TLSConfigFromFlags for apps that simply want to use stored certificates.
-// Apps that manage/obtain/renew certificates may use them directly.
-type TLSCertStoreFlags struct {
-	CertStoreType  string `subcmd:"tls-cert-store-type,,'the type of the certificate store to use for retrieving tls certificates, use --tls-list-stores to see the currently available types'"`
-	CertStore      string `subcmd:"tls-cert-store,,'name/address of the certificate cache to use for retrieving tls certificates, the interpreation of this depends on the tls-cert-store-type flag'"`
-	ListStoreTypes bool   `subcmd:"tls-list-stores,,list the available types of tls certificate store"`
-}
+	"golang.org/x/crypto/acme/autocert"
+)
 
 // TLSCertFlags defines commonly used flags for obtaining TLS/SSL certificates.
 // Certificates may be obtained in one of two ways: from a cache of
 // certificates, or from local files.
 type TLSCertFlags struct {
-	TLSCertStoreFlags
 	CertificateFile string `subcmd:"tls-cert,,ssl certificate file"`
 	KeyFile         string `subcmd:"tls-key,,ssl private key file"`
 }
@@ -59,52 +47,17 @@ type HTTPServerFlags struct {
 // may be used to obtain additional options for the store. A cache
 // is then created to from that store using the supplied cacheOpts.
 func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, getStoreOpts func() (opts []any, err error), cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
-	if cl.ListStoreTypes {
-		return nil, errors.New(strings.Join(RegisteredCertStores(), "\n"))
-	}
-	useStore := len(cl.CertStoreType) > 0 || len(cl.CertStore) > 0
-	useFiles := len(cl.CertificateFile) > 0 || len(cl.KeyFile) > 0
-	if useStore && useFiles {
-		return nil, fmt.Errorf("can't use both a certificate cache and certificate files")
-	}
-	if useStore {
-		storeOpts := []any{}
-		if getStoreOpts != nil {
-			var err error
-			storeOpts, err = getStoreOpts()
-			if err != nil {
-				return nil, fmt.Errorf("failed to obtain store options: %v", err)
-			}
-		}
-		store, err := NewCertStore(ctx, cl.CertStoreType, cl.CertStore, storeOpts...)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create cert store: %v", err)
-		}
-		return TLSConfigUsingCertStore(ctx, store, cacheOpts...)
-	}
 	return TLSConfigUsingCertFiles(cl.CertificateFile, cl.KeyFile)
 }
 
 // TLSConfigUsingCertStore returns a tls.Config configured with the
 // certificate obtained from the specified certificate store accessed
 // via a CertServingCache created with the supplied options.
-func TLSConfigUsingCertStore(ctx context.Context, store CertStore, cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
+func TLSConfigUsingCertStore(ctx context.Context, store autocert.Cache, cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
 	return &tls.Config{
 		GetCertificate: NewCertServingCache(ctx, store, cacheOpts...).GetCertificate,
 		MinVersion:     tls.VersionTLS13,
 	}, nil
-}
-
-func NewCertStore(ctx context.Context, typ, name string, storeOpts ...any) (CertStore, error) {
-	factory, err := getFactory(typ)
-	if err != nil {
-		return nil, err
-	}
-	store, err := factory.New(ctx, name, storeOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache instance: %v %v: %v", typ, name, err)
-	}
-	return store, nil
 }
 
 // TLSConfigUsingCertFiles returns a tls.Config configured with the
@@ -123,11 +76,56 @@ func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
 	}, nil
 }
 
-// CertStore represents a store for TLS certificates.
-type CertStore interface {
-	Get(ctx context.Context, name string) ([]byte, error)
-	Put(ctx context.Context, name string, data []byte) error
+/*
+// TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
+// certificate store. This is generally used in conjunction with
+// TLSConfigFromFlags for apps that simply want to use stored certificates.
+// Apps that manage/obtain/renew certificates may use them directly.
+type TLSCertStoreFlags struct {
+	CertStoreType  string `subcmd:"tls-cert-store-type,,'the type of the certificate store to use for retrieving tls certificates, use --tls-list-stores to see the currently available types'"`
+	CertStore      string `subcmd:"tls-cert-store,,'name/address of the certificate cache to use for retrieving tls certificates, the interpreation of this depends on the tls-cert-store-type flag'"`
+	ListStoreTypes bool   `subcmd:"tls-list-stores,,list the available types of tls certificate store"`
 }
+
+/*if cl.ListStoreTypes {
+		return nil, errors.New(strings.Join(RegisteredCertStores(), "\n"))
+	}*/
+//useStore := len(cl.CertStoreType) > 0 || len(cl.CertStore) > 0
+//useFiles := len(cl.CertificateFile) > 0 || len(cl.KeyFile) > 0
+/*if useStore && useFiles {
+		return nil, fmt.Errorf("can't use both a certificate cache and certificate files")
+	}
+	if useStore {
+		storeOpts := []any{}
+		if getStoreOpts != nil {
+			var err error
+			storeOpts, err = getStoreOpts()
+			if err != nil {
+				return nil, fmt.Errorf("failed to obtain store options: %v", err)
+			}
+		}
+		store, err := NewCertStore(ctx, cl.CertStoreType, cl.CertStore, storeOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create cert store: %v", err)
+		}
+		return TLSConfigUsingCertStore(ctx, store, cacheOpts...)
+	}
+
+func NewCertStore(ctx context.Context, typ, name string, storeOpts ...any) (CertStore, error) {
+	factory, err := getFactory(typ)
+	if err != nil {
+		return nil, err
+	}
+	store, err := factory.New(ctx, name, storeOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache instance: %v %v: %v", typ, name, err)
+	}
+	return store, nil
+}
+
+
+// CertStore represents a store for TLS certificates.
+type CertStore autocert.Cache
 
 // CertStoreFactory is the interface that must be implemented to register
 // a new CertStore type with this package so that it may accessed via
@@ -172,3 +170,4 @@ func RegisteredCertStores() []string {
 	}
 	return names
 }
+*/

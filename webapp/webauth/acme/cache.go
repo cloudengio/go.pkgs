@@ -6,61 +6,109 @@ package acme
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"cloudeng.io/errors"
+	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/os/lockedfile"
-	"cloudeng.io/webapp"
 	"golang.org/x/crypto/acme/autocert"
 )
 
-type dircache struct {
-	lock     *lockedfile.Mutex
-	cache    autocert.Cache
-	readonly bool
+// Cache implements autocert.Cache with file locking to allow
+// safe concurrent access to the underlying cache in order to
+// extract certificates programmatically.
+type Cache struct {
+	lock         *lockedfile.Mutex
+	localCache   autocert.Cache
+	backingStore CacheFS
+	readonly     bool
 }
 
 // ErrCacheMiss is the same as autocert.ErrCacheMiss
 var ErrCacheMiss = autocert.ErrCacheMiss
 
-// NewDirCache returns an instance of a local filesystem based
-// cache for certificates and the acme account key but with
-// file system locking. Set the readonly argument for readonly
-// access via the 'Get' method, this will typically be used to
-// safely extract keys for use by other servers. However, ideally,
-// a secure shared services such as Amazon's secrets manager should
-// be used instead.
-func NewDirCache(dir string, readonly bool) autocert.Cache {
+// CacheFS defines an interface that combines reading, writing
+// and deleting files and is used to create an acme/autocert cache.
+type CacheFS interface {
+	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
+	Delete(ctx context.Context, name string) error
+}
+
+// NewCache returns an instance of autocert.Cache that will store
+// certificates in 'backing' store, but use the local file system for
+// temporary/private data such as the ACME client's private key. This
+// allows for certificates to be shared across multiple hosts by using
+// a distributed 'backing' store such as AWS' secretsmanager.
+// Certificates may be extracted safely for use by other servers
+// by using the readonly option.
+func NewCache(localDir string, storeFS CacheFS, readonly bool) *Cache {
 	if !readonly {
-		if err := os.MkdirAll(dir, 0700); err != nil {
+		if err := os.MkdirAll(localDir, 0700); err != nil {
 			panic(err)
 		}
 	}
-	return &dircache{
-		lock:     lockedfile.MutexAt(filepath.Join(dir, "dir.lock")),
-		cache:    autocert.DirCache(dir),
-		readonly: readonly,
+	return &Cache{
+		lock:         lockedfile.MutexAt(filepath.Join(localDir, "dir.lock")),
+		localCache:   autocert.DirCache(localDir),
+		backingStore: storeFS,
+		readonly:     readonly,
 	}
 }
 
+// IsLocalName returns true if the specified name is for local-only
+// data such as ACME client private keys or http-01 challenge tokens.
+func IsLocalName(name string) bool {
+	return strings.HasSuffix(name, "+token") ||
+		strings.HasSuffix(name, "+rsa") ||
+		strings.Contains(name, "http-01") ||
+		(strings.HasPrefix(name, "acme_account") &&
+			strings.HasSuffix(name, "key"))
+}
+
+var (
+	ErrReadonlyCache    = errors.New("readonly cache")
+	ErrLocalOperation   = errors.New("local operation")
+	ErrBackingOperation = errors.New("backing store operation")
+	ErrLockFailed       = errors.New("lock acquisition failed")
+)
+
 // Delete implements autocert.Cache.
-func (dc *dircache) Delete(ctx context.Context, name string) error {
+func (dc *Cache) Delete(ctx context.Context, name string) error {
 	if dc.readonly {
-		return fmt.Errorf("readonly cache")
+		return fmt.Errorf("delete %q: %w", name, ErrReadonlyCache)
+	}
+	if !IsLocalName(name) {
+		if err := dc.backingStore.Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete %q: %w", name, errors.NewM(err, ErrBackingOperation))
+		}
+		return nil
 	}
 	unlock, err := dc.lock.Lock()
 	if err != nil {
-		return err
+		return errors.NewM(fmt.Errorf("lock acquisition failed: %w", err), ErrLockFailed)
 	}
 	defer unlock()
-	return dc.cache.Delete(ctx, name)
+	if err := dc.localCache.Delete(ctx, name); err != nil {
+		return fmt.Errorf("delete %q: %w", name, errors.NewM(err, ErrLocalOperation))
+	}
+	return nil
+
 }
 
 // Get implements autocert.Cache.
-func (dc *dircache) Get(ctx context.Context, name string) ([]byte, error) {
+func (dc *Cache) Get(ctx context.Context, name string) ([]byte, error) {
+	if !IsLocalName(name) {
+		data, err := dc.backingStore.ReadFileCtx(ctx, name)
+		if err != nil {
+			return nil, fmt.Errorf("get %q: %w", name, errors.NewM(err, ErrBackingOperation))
+		}
+		return data, nil
+	}
 	var err error
 	var unlock func()
 	if dc.readonly {
@@ -69,23 +117,38 @@ func (dc *dircache) Get(ctx context.Context, name string) ([]byte, error) {
 		unlock, err = dc.lock.Lock()
 	}
 	if err != nil {
-		return nil, err
+		return nil, errors.NewM(fmt.Errorf("lock acquisition failed: %w", err), ErrLockFailed)
 	}
 	defer unlock()
-	return dc.cache.Get(ctx, name)
+	data, err := dc.localCache.Get(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("get %q: %w", name, errors.NewM(err, ErrLocalOperation))
+	}
+	return data, nil
 }
 
 // Put implements autocert.Cache.
-func (dc *dircache) Put(ctx context.Context, name string, data []byte) error {
+func (dc *Cache) Put(ctx context.Context, name string, data []byte) error {
 	if dc.readonly {
-		return fmt.Errorf("readonly cache")
+		return fmt.Errorf("put %q: %w", name, ErrReadonlyCache)
+	}
+	if !IsLocalName(name) {
+		if err := dc.backingStore.WriteFileCtx(ctx, name, data, 0600); err != nil {
+			return fmt.Errorf("put %q: %w", name, errors.NewM(err, ErrBackingOperation))
+		}
+		return nil
 	}
 	unlock, err := dc.lock.Lock()
 	if err != nil {
-		return err
+		return errors.NewM(fmt.Errorf("lock acquisition failed: %w", err), ErrLockFailed)
 	}
 	defer unlock()
-	return dc.cache.Put(ctx, name, data)
+	if err := dc.localCache.Put(ctx, name, data); err != nil {
+		ctxlog.Logger(ctx).Error("acme.Cache.Put failed", "key", name, "error", err)
+		return fmt.Errorf("put %q: %w", name, errors.NewM(err, ErrLocalOperation))
+	}
+	ctxlog.Logger(ctx).Error("acme.Cache.Put succeeded", "key", name)
+	return nil
 }
 
 // NewNullCache returns an autocert.Cache that never stores any data and is
@@ -109,57 +172,4 @@ func (nc *nullcache) Get(_ context.Context, _ string) ([]byte, error) {
 // Put implements autocert.Cache.
 func (nc *nullcache) Put(_ context.Context, _ string, _ []byte) error {
 	return nil
-}
-
-const (
-	dirCacheName  = "autocert-dir-cache"
-	nullCacheName = "autocert-null-cache"
-)
-
-var (
-	// AutoCertDiskStore creates instances of webapp.CertStore using
-	// NewDirCache with read-only set to true.
-	AutoCertDiskStore = CertStoreFactory{dirCacheName}
-
-	// AutoCertNullStore creates instances of webapp.CertStore using
-	// NewNullCache.
-	AutoCertNullStore = CertStoreFactory{nullCacheName}
-)
-
-// CertStoreFactory represents the webapp.CertStore's that can be
-// created by this package.
-type CertStoreFactory struct {
-	typ string
-}
-
-// Type implements webapp.CertStoreFactory.
-func (f CertStoreFactory) Type() string {
-	return f.typ
-}
-
-func unsupported(typ string) string {
-	return fmt.Sprintf(
-		"unsupported factory type: %s: use one of %s", typ, strings.Join([]string{dirCacheName, nullCacheName}, ","))
-}
-
-// New implements webapp.CertStoreFactory.
-func (f CertStoreFactory) New(_ context.Context, dir string, _ ...interface{}) (webapp.CertStore, error) {
-	switch f.typ {
-	case dirCacheName:
-		return NewDirCache(dir, true), nil
-	case nullCacheName:
-		return NewNullCache(), nil
-	}
-	return nil, errors.New(unsupported(f.typ))
-}
-
-// Describe implements webapp.CertStoreFactory.
-func (f CertStoreFactory) Describe() string {
-	switch f.typ {
-	case dirCacheName:
-		return dirCacheName + " retrieves certificates from a local filesystem instance of an acme/autocert cache"
-	case nullCacheName:
-		return nullCacheName + " never stores any certificates and always returns a cache miss, use it for testing"
-	}
-	panic(unsupported(f.typ))
 }
