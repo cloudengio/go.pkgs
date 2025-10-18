@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
 
@@ -35,7 +36,7 @@ type entry struct {
 // to allow for certificates to be refreshed.
 type CertServingCache struct {
 	ctx       context.Context
-	certStore CertStore
+	certStore autocert.Cache
 	ttl       time.Duration
 	rootCAs   *x509.CertPool
 	nowFunc   func() time.Time
@@ -74,7 +75,7 @@ func CertCacheNowFunc(fn func() time.Time) CertServingCacheOption {
 // uses the supplied CertStore. The supplied context is cached and used by
 // the GetCertificate method, this allows for credentials etc to be passed
 // to the CertStore.Get method called by GetCertificate via the context.
-func NewCertServingCache(ctx context.Context, certStore CertStore, opts ...CertServingCacheOption) *CertServingCache {
+func NewCertServingCache(ctx context.Context, certStore autocert.Cache, opts ...CertServingCacheOption) *CertServingCache {
 	sc := &CertServingCache{
 		ctx:       ctx,
 		cache:     map[string]entry{},

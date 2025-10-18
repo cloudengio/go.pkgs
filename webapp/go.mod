@@ -32,4 +32,5 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

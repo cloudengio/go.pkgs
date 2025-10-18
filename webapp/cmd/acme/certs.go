@@ -8,22 +8,30 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
-	"cloudeng.io/aws/awscertstore"
 	"cloudeng.io/aws/awsconfig"
+	"cloudeng.io/aws/awssecretsfs"
 	"cloudeng.io/cmdutil/subcmd"
-	"cloudeng.io/errors"
-	"cloudeng.io/webapp"
+	"cloudeng.io/file/localfs"
+	"cloudeng.io/webapp/webauth/acme"
 )
 
+// TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
+// certificate store. This is generally used in conjunction with
+// TLSConfigFromFlags for apps that simply want to use stored certificates.
+// Apps that manage/obtain/renew certificates may use them directly.
+type TLSCertStoreFlags struct {
+	UseAWSSecretsManager bool   `subcmd:"aws-secrets,false,'use AWS Secrets Manager as the backend for the certificate store'"`
+	LocalCacheDir        string `subcmd:"local-cache-dir,,'if set use a local directory as a cache layer in front of the certificate store'"`
+}
+
 type putCertFlags struct {
-	webapp.TLSCertStoreFlags
+	TLSCertStoreFlags
 	awsconfig.AWSFlags
 }
 
 type getCertFlags struct {
-	webapp.TLSCertStoreFlags
+	TLSCertStoreFlags
 	awsconfig.AWSFlags
 }
 
@@ -40,24 +48,29 @@ func certSubCmd() *subcmd.Command {
 	return cl
 }
 
-func newCertStore(ctx context.Context, cl webapp.TLSCertStoreFlags, awscl awsconfig.AWSFlags) (webapp.CertStore, error) {
-	if cl.ListStoreTypes {
-		return nil, errors.New(strings.Join(webapp.RegisteredCertStores(), "\n"))
+func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, readonly bool) (*acme.CachingStore, error) {
+	if cl.UseAWSSecretsManager && !awscl.AWS {
+		return nil, fmt.Errorf("aws-secrets-manager flag requires aws configuration to be enabled")
 	}
-	if !awscl.AWS {
-		return webapp.NewCertStore(ctx, cl.CertStoreType, cl.CertStore)
+	if !cl.UseAWSSecretsManager || !awscl.AWS {
+		return acme.NewCachingStore(cl.LocalCacheDir, localfs.New(), readonly), nil
 	}
 	awscfg, err := awsconfig.LoadUsingFlags(ctx, awscl)
 	if err != nil {
 		return nil, err
 	}
-	return webapp.NewCertStore(ctx, cl.CertStoreType, cl.CertStore,
-		awscertstore.WithAWSConfig(awscfg))
+	var sfs *awssecretsfs.T
+	if readonly {
+		sfs = awssecretsfs.New(awscfg)
+	} else {
+		sfs = awssecretsfs.New(awscfg, awssecretsfs.WithAllowCreation(true), awssecretsfs.WithAllowUpdates(true))
+	}
+	return acme.NewCachingStore(cl.LocalCacheDir, sfs, readonly), nil
 }
 
 func getCert(ctx context.Context, values interface{}, args []string) error {
 	cl := values.(*getCertFlags)
-	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags)
+	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, true)
 	if err != nil {
 		return err
 	}
@@ -72,7 +85,7 @@ func getCert(ctx context.Context, values interface{}, args []string) error {
 
 func putCert(ctx context.Context, values interface{}, args []string) error {
 	cl := values.(*putCertFlags)
-	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags)
+	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, false)
 	if err != nil {
 		return err
 	}

@@ -7,27 +7,15 @@ package webapp
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
-	"strings"
-	"sync"
-)
 
-// TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
-// certificate store. This is generally used in conjunction with
-// TLSConfigFromFlags for apps that simply want to use stored certificates.
-// Apps that manage/obtain/renew certificates may use them directly.
-type TLSCertStoreFlags struct {
-	CertStoreType  string `subcmd:"tls-cert-store-type,,'the type of the certificate store to use for retrieving tls certificates, use --tls-list-stores to see the currently available types'"`
-	CertStore      string `subcmd:"tls-cert-store,,'name/address of the certificate cache to use for retrieving tls certificates, the interpreation of this depends on the tls-cert-store-type flag'"`
-	ListStoreTypes bool   `subcmd:"tls-list-stores,,list the available types of tls certificate store"`
-}
+	"golang.org/x/crypto/acme/autocert"
+)
 
 // TLSCertFlags defines commonly used flags for obtaining TLS/SSL certificates.
 // Certificates may be obtained in one of two ways: from a cache of
 // certificates, or from local files.
 type TLSCertFlags struct {
-	TLSCertStoreFlags
 	CertificateFile string `subcmd:"tls-cert,,ssl certificate file"`
 	KeyFile         string `subcmd:"tls-key,,ssl private key file"`
 }
@@ -58,13 +46,71 @@ type HTTPServerFlags struct {
 // a cert store is specified then the getStoreOpts function
 // may be used to obtain additional options for the store. A cache
 // is then created to from that store using the supplied cacheOpts.
-func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, getStoreOpts func() (opts []any, err error), cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
-	if cl.ListStoreTypes {
-		return nil, errors.New(strings.Join(RegisteredCertStores(), "\n"))
+func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, error) {
+	return TLSConfigUsingCertFiles(cl.CertificateFile, cl.KeyFile)
+}
+
+// TLSConfigUsingCertStore returns a tls.Config configured with the
+// certificate obtained from the specified certificate store accessed
+// via a CertServingCache created with the supplied options.
+func TLSConfigUsingCertStore(ctx context.Context, store autocert.Cache, cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
+	return &tls.Config{
+		GetCertificate: NewCertServingCache(ctx, store, cacheOpts...).GetCertificate,
+		MinVersion:     tls.VersionTLS13,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+	}, nil
+}
+
+// TLSConfigUsingCertFiles returns a tls.Config configured with the
+// certificate read from the supplied files.
+func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
+	if len(certFile) == 0 || len(keyFile) == 0 {
+		return nil, fmt.Errorf("both the crt and key files must be specified")
 	}
-	useStore := len(cl.CertStoreType) > 0 || len(cl.CertStore) > 0
-	useFiles := len(cl.CertificateFile) > 0 || len(cl.KeyFile) > 0
-	if useStore && useFiles {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS13,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+	}, nil
+}
+
+/*
+// TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
+// certificate store. This is generally used in conjunction with
+// TLSConfigFromFlags for apps that simply want to use stored certificates.
+// Apps that manage/obtain/renew certificates may use them directly.
+type TLSCertStoreFlags struct {
+	CertStoreType  string `subcmd:"tls-cert-store-type,,'the type of the certificate store to use for retrieving tls certificates, use --tls-list-stores to see the currently available types'"`
+	CertStore      string `subcmd:"tls-cert-store,,'name/address of the certificate cache to use for retrieving tls certificates, the interpreation of this depends on the tls-cert-store-type flag'"`
+	ListStoreTypes bool   `subcmd:"tls-list-stores,,list the available types of tls certificate store"`
+}
+
+/*if cl.ListStoreTypes {
+		return nil, errors.New(strings.Join(RegisteredCertStores(), "\n"))
+	}*/
+//useStore := len(cl.CertStoreType) > 0 || len(cl.CertStore) > 0
+//useFiles := len(cl.CertificateFile) > 0 || len(cl.KeyFile) > 0
+/*if useStore && useFiles {
 		return nil, fmt.Errorf("can't use both a certificate cache and certificate files")
 	}
 	if useStore {
@@ -82,18 +128,6 @@ func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, getStoreOpts fu
 		}
 		return TLSConfigUsingCertStore(ctx, store, cacheOpts...)
 	}
-	return TLSConfigUsingCertFiles(cl.CertificateFile, cl.KeyFile)
-}
-
-// TLSConfigUsingCertStore returns a tls.Config configured with the
-// certificate obtained from the specified certificate store accessed
-// via a CertServingCache created with the supplied options.
-func TLSConfigUsingCertStore(ctx context.Context, store CertStore, cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
-	return &tls.Config{
-		GetCertificate: NewCertServingCache(ctx, store, cacheOpts...).GetCertificate,
-		MinVersion:     tls.VersionTLS13,
-	}, nil
-}
 
 func NewCertStore(ctx context.Context, typ, name string, storeOpts ...any) (CertStore, error) {
 	factory, err := getFactory(typ)
@@ -107,27 +141,9 @@ func NewCertStore(ctx context.Context, typ, name string, storeOpts ...any) (Cert
 	return store, nil
 }
 
-// TLSConfigUsingCertFiles returns a tls.Config configured with the
-// certificate read from the supplied files.
-func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
-	if len(certFile) == 0 || len(keyFile) == 0 {
-		return nil, fmt.Errorf("both the crt and key files must be specified")
-	}
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS13,
-	}, nil
-}
 
 // CertStore represents a store for TLS certificates.
-type CertStore interface {
-	Get(ctx context.Context, name string) ([]byte, error)
-	Put(ctx context.Context, name string, data []byte) error
-}
+type CertStore autocert.Cache
 
 // CertStoreFactory is the interface that must be implemented to register
 // a new CertStore type with this package so that it may accessed via
@@ -172,3 +188,4 @@ func RegisteredCertStores() []string {
 	}
 	return names
 }
+*/
