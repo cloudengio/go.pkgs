@@ -14,33 +14,23 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"time"
 
-	"cloudeng.io/aws/awscertstore"
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/errors"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest"
 	"cloudeng.io/webapp/webauth/acme"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 var cmdSet *subcmd.CommandSet
 
 type certManagerFlags struct {
 	acme.CertFlags
-	webapp.TLSCertStoreFlags
+	TLSCertStoreFlags
 	awsconfig.AWSFlags
-}
-
-func init() {
-	// Register the available certificate stores.
-	webapp.RegisterCertStoreFactory(acme.AutoCertDiskStore)
-	webapp.RegisterCertStoreFactory(acme.AutoCertNullStore)
-	webapp.RegisterCertStoreFactory(awscertstore.AutoCertStore)
 }
 
 func init() {
@@ -104,38 +94,12 @@ func main() {
 	cmdSet.MustDispatch(context.Background())
 }
 
-func newAutoCertCacheFromFlags(ctx context.Context, cl webapp.TLSCertStoreFlags, awscl awsconfig.AWSFlags) (autocert.Cache, error) {
-	opts := []awscertstore.AWSCacheOption{}
-	if awscl.AWS {
-		awscfg, err := awsconfig.LoadUsingFlags(ctx, awscl)
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, awscertstore.WithAWSConfig(awscfg))
-	}
-	if cl.ListStoreTypes {
-		return nil, errors.New(strings.Join(webapp.RegisteredCertStores(), "\n"))
-	}
-	var cache autocert.Cache
-	switch {
-	case cl.CertStoreType == acme.AutoCertDiskStore.Type():
-		cache = acme.NewDirCache(cl.CertStore, false)
-	case cl.CertStoreType == acme.AutoCertNullStore.Type():
-		cache = acme.NewNullCache()
-	case cl.CertStoreType == awscertstore.AutoCertStore.Type():
-		cache = awscertstore.NewHybridCache(cl.CertStore, opts...)
-	default:
-		return nil, fmt.Errorf("unsupported cert store type: %v", cl.CertStoreType)
-	}
-	return cache, nil
-}
-
 func manageCerts(ctx context.Context, values interface{}, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*certManagerFlags)
 
-	cache, err := newAutoCertCacheFromFlags(ctx, cl.TLSCertStoreFlags, cl.AWSFlags)
+	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, false)
 	if err != nil {
 		return err
 	}

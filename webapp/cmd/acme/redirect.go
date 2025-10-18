@@ -12,13 +12,13 @@ import (
 	"os/signal"
 	"time"
 
-	"cloudeng.io/aws/awscertstore"
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/webapp"
 )
 
 type testRedirectFlags struct {
+	TLSCertStoreFlags
 	webapp.HTTPServerFlags
 	webapp.HTTPAcmeFlags
 	awsconfig.AWSFlags
@@ -45,18 +45,12 @@ func testACMERedirect(ctx context.Context, values any, _ []string) error {
 		return err
 	}
 
-	storeOpts := []interface{}{}
-	if cl.AWS {
-		cfg, err := awsconfig.Load(ctx)
-		if err != nil {
-			return err
-		}
-		storeOpts = append(storeOpts, awscertstore.WithAWSConfig(cfg))
+	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, true)
+	if err != nil {
+		return err
 	}
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, func() (opts []any, err error) {
-		return storeOpts, nil
-	})
+	cfg, err := webapp.TLSConfigUsingCertStore(ctx, cache)
 	if err != nil {
 		return err
 	}

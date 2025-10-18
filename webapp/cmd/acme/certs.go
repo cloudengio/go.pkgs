@@ -48,24 +48,29 @@ func certSubCmd() *subcmd.Command {
 	return cl
 }
 
-func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, readonly bool) (*acme.Cache, error) {
+func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, readonly bool) (*acme.CachingStore, error) {
 	if cl.UseAWSSecretsManager && !awscl.AWS {
 		return nil, fmt.Errorf("aws-secrets-manager flag requires aws configuration to be enabled")
 	}
 	if !cl.UseAWSSecretsManager || !awscl.AWS {
-		return acme.NewCache(cl.LocalCacheDir, localfs.New(), readonly), nil
+		return acme.NewCachingStore(cl.LocalCacheDir, localfs.New(), readonly), nil
 	}
 	awscfg, err := awsconfig.LoadUsingFlags(ctx, awscl)
 	if err != nil {
 		return nil, err
 	}
-	sfs := awssecretsfs.New(awscfg)
-	return acme.NewCache(cl.LocalCacheDir, sfs, readonly), nil
+	var sfs *awssecretsfs.T
+	if readonly {
+		sfs = awssecretsfs.New(awscfg)
+	} else {
+		sfs = awssecretsfs.New(awscfg, awssecretsfs.WithAllowCreation(true), awssecretsfs.WithAllowUpdates(true))
+	}
+	return acme.NewCachingStore(cl.LocalCacheDir, sfs, readonly), nil
 }
 
 func getCert(ctx context.Context, values interface{}, args []string) error {
 	cl := values.(*getCertFlags)
-	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags)
+	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, true)
 	if err != nil {
 		return err
 	}
@@ -80,7 +85,7 @@ func getCert(ctx context.Context, values interface{}, args []string) error {
 
 func putCert(ctx context.Context, values interface{}, args []string) error {
 	cl := values.(*putCertFlags)
-	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags)
+	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, false)
 	if err != nil {
 		return err
 	}

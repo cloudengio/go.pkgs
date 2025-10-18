@@ -86,11 +86,11 @@ func TestIsLocalName(t *testing.T) {
 	}
 }
 
-func setupCache(t *testing.T, readonly bool) (*acme.Cache, *mockCacheFS, func()) {
+func setupCache(t *testing.T, readonly bool) (*acme.CachingStore, *mockCacheFS, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache := acme.NewCache(tmpDir, mockFS, readonly)
+	cache := acme.NewCachingStore(tmpDir, mockFS, readonly)
 	return cache, mockFS, func() {}
 }
 
@@ -198,7 +198,7 @@ func TestCacheLocking(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache := acme.NewCache(tmpDir, mockFS, false)
+	cache := acme.NewCachingStore(tmpDir, mockFS, false)
 
 	localName, localData := "local.key+token", []byte("key")
 	if err := cache.Put(ctx, localName, localData); err != nil {

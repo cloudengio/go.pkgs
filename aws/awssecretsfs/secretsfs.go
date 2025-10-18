@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"time"
 
@@ -27,6 +28,8 @@ type options struct {
 	smOptions           secretsmanager.Options
 	recoveryDelayInDays int64
 	client              Client
+	allowNew            bool
+	allowUpdates        bool
 }
 
 // WithSecretsOptions wraps secretsmanager.Options for use when creating an s3.Client.
@@ -53,8 +56,22 @@ func WithSecretsClient(client Client) Option {
 	}
 }
 
+// WithAllowUpdates specifies whether writes to existing secrets are allowed.
+func WithAllowUpdates(allow bool) Option {
+	return func(o *options) {
+		o.allowUpdates = allow
+	}
+}
+
+// WithAllowCreation specifies whether creation of new secrets is allowed.
+func WithAllowCreation(allow bool) Option {
+	return func(o *options) {
+		o.allowNew = allow
+	}
+}
+
 // New creates a new instance of fs.ReadFile backed by the secretsmanager.
-func New(cfg aws.Config, options ...Option) fs.ReadFileFS {
+func New(cfg aws.Config, options ...Option) *T {
 	return NewSecretsFS(cfg, options...)
 }
 
@@ -94,15 +111,53 @@ func (smfs *T) ReadFile(name string) ([]byte, error) {
 }
 
 // ReadFileCtx is like ReadFile but with a context.
-func (smfs *T) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
-	return smfs.readFileCtx(ctx, name)
+func (smfs *T) ReadFileCtx(ctx context.Context, nameOrArn string) ([]byte, error) {
+	return smfs.readFileCtx(ctx, nameOrArn)
+}
+
+func (smfs *T) WriteFileCtx(ctx context.Context, nameOrArn string, data []byte, _ fs.FileMode) error {
+	if !smfs.options.allowNew && !smfs.options.allowUpdates {
+		return fmt.Errorf("creations and updates are not allowed: %w", fs.ErrPermission)
+	}
+
+	exists, arn, err := secretExists(ctx, smfs.client, nameOrArn)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		if !smfs.options.allowUpdates {
+			return fmt.Errorf("updates are not allowed: %w", fs.ErrPermission)
+		}
+		_, err = smfs.client.PutSecretValue(ctx, &secretsmanager.PutSecretValueInput{
+			SecretId:     aws.String(arn),
+			SecretBinary: data,
+		})
+		return err
+	}
+
+	if !smfs.options.allowNew {
+		return fmt.Errorf("creations are not allowed: %w", fs.ErrPermission)
+	}
+	_, err = smfs.client.CreateSecret(ctx, &secretsmanager.CreateSecretInput{
+		Name:         aws.String(nameOrArn),
+		SecretBinary: data,
+	})
+	return err
 }
 
 // Delete deletes the secret with the given name. Name can be the short name of the secret or the ARN.
 func (smfs *T) Delete(ctx context.Context, nameOrArn string) error {
 	arn := nameOrArn
 	if !awsutil.IsARN(nameOrArn) {
-		arn = getARN(ctx, smfs.client, nameOrArn)
+		exists, an, err := secretExists(ctx, smfs.client, nameOrArn)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fs.ErrNotExist
+		}
+		arn = an
 	}
 	sin := &secretsmanager.DeleteSecretInput{
 		SecretId: aws.String(arn),
@@ -149,18 +204,21 @@ type Client interface {
 	ListSecretVersionIds(ctx context.Context, params *secretsmanager.ListSecretVersionIdsInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretVersionIdsOutput, error)
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 	DeleteSecret(ctx context.Context, params *secretsmanager.DeleteSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error)
+	PutSecretValue(ctx context.Context, params *secretsmanager.PutSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.PutSecretValueOutput, error)
+	CreateSecret(ctx context.Context, params *secretsmanager.CreateSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error)
+	DescribeSecret(ctx context.Context, params *secretsmanager.DescribeSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DescribeSecretOutput, error)
 }
 
-// getARN returns the ARN for the secret which includes the random string
-// created by the secretsmanager rather than the 'short' name of the secret
-// so that subsequent operations return ResourceNotFoundException or
-// AccessDeniedException cleanly.
-func getARN(ctx context.Context, client Client, name string) string {
-	out, err := client.ListSecretVersionIds(ctx, &secretsmanager.ListSecretVersionIdsInput{SecretId: aws.String(name)})
+func secretExists(ctx context.Context, client Client, nameOrArn string) (bool, string, error) {
+	out, err := client.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{SecretId: aws.String(nameOrArn)})
 	if err != nil {
-		return name
+		var rnfe *types.ResourceNotFoundException
+		if errors.As(err, &rnfe) {
+			return false, "", nil
+		}
+		return false, "", err
 	}
-	return *out.ARN
+	return true, *out.ARN, nil
 }
 
 func getData(out *secretsmanager.GetSecretValueOutput) []byte {
@@ -173,7 +231,14 @@ func getData(out *secretsmanager.GetSecretValueOutput) []byte {
 func readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsmanager.GetSecretValueOutput, error) {
 	arn := nameOrArn
 	if !awsutil.IsARN(nameOrArn) {
-		arn = getARN(ctx, client, nameOrArn)
+		exists, an, err := secretExists(ctx, client, nameOrArn)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, fs.ErrNotExist
+		}
+		arn = an
 	}
 	return client.GetSecretValue(ctx,
 		&secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})

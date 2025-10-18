@@ -46,7 +46,7 @@ type HTTPServerFlags struct {
 // a cert store is specified then the getStoreOpts function
 // may be used to obtain additional options for the store. A cache
 // is then created to from that store using the supplied cacheOpts.
-func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags, getStoreOpts func() (opts []any, err error), cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
+func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, error) {
 	return TLSConfigUsingCertFiles(cl.CertificateFile, cl.KeyFile)
 }
 
@@ -57,6 +57,15 @@ func TLSConfigUsingCertStore(ctx context.Context, store autocert.Cache, cacheOpt
 	return &tls.Config{
 		GetCertificate: NewCertServingCache(ctx, store, cacheOpts...).GetCertificate,
 		MinVersion:     tls.VersionTLS13,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
 	}, nil
 }
 
@@ -73,6 +82,15 @@ func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS13,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
 	}, nil
 }
 

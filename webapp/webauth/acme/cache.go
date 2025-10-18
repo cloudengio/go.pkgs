@@ -18,10 +18,15 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-// Cache implements autocert.Cache with file locking to allow
-// safe concurrent access to the underlying cache in order to
-// extract certificates programmatically.
-type Cache struct {
+// CachingStore implements a 'caching store' that intergrates withletsencrypt's
+// autocert. It provides an instance of autocert.Cache that will store
+// certificates in 'backing' store, but use the local file system for
+// temporary/private data such as the ACME client's private key. This
+// allows for certificates to be shared across multiple hosts by using
+// a distributed 'backing' store such as AWS' secretsmanager.
+// In addition, certificates may be extracted safely on the host that
+// manages them programmatically.
+type CachingStore struct {
 	lock         *lockedfile.Mutex
 	localCache   autocert.Cache
 	backingStore CacheFS
@@ -39,20 +44,20 @@ type CacheFS interface {
 	Delete(ctx context.Context, name string) error
 }
 
-// NewCache returns an instance of autocert.Cache that will store
+// NewCachingStore returns an instance of autocert.Cache that will store
 // certificates in 'backing' store, but use the local file system for
 // temporary/private data such as the ACME client's private key. This
 // allows for certificates to be shared across multiple hosts by using
 // a distributed 'backing' store such as AWS' secretsmanager.
 // Certificates may be extracted safely for use by other servers
 // by using the readonly option.
-func NewCache(localDir string, storeFS CacheFS, readonly bool) *Cache {
+func NewCachingStore(localDir string, storeFS CacheFS, readonly bool) *CachingStore {
 	if !readonly {
 		if err := os.MkdirAll(localDir, 0700); err != nil {
 			panic(err)
 		}
 	}
-	return &Cache{
+	return &CachingStore{
 		lock:         lockedfile.MutexAt(filepath.Join(localDir, "dir.lock")),
 		localCache:   autocert.DirCache(localDir),
 		backingStore: storeFS,
@@ -78,7 +83,7 @@ var (
 )
 
 // Delete implements autocert.Cache.
-func (dc *Cache) Delete(ctx context.Context, name string) error {
+func (dc *CachingStore) Delete(ctx context.Context, name string) error {
 	if dc.readonly {
 		return fmt.Errorf("delete %q: %w", name, ErrReadonlyCache)
 	}
@@ -101,7 +106,7 @@ func (dc *Cache) Delete(ctx context.Context, name string) error {
 }
 
 // Get implements autocert.Cache.
-func (dc *Cache) Get(ctx context.Context, name string) ([]byte, error) {
+func (dc *CachingStore) Get(ctx context.Context, name string) ([]byte, error) {
 	if !IsLocalName(name) {
 		data, err := dc.backingStore.ReadFileCtx(ctx, name)
 		if err != nil {
@@ -128,7 +133,7 @@ func (dc *Cache) Get(ctx context.Context, name string) ([]byte, error) {
 }
 
 // Put implements autocert.Cache.
-func (dc *Cache) Put(ctx context.Context, name string, data []byte) error {
+func (dc *CachingStore) Put(ctx context.Context, name string, data []byte) error {
 	if dc.readonly {
 		return fmt.Errorf("put %q: %w", name, ErrReadonlyCache)
 	}
