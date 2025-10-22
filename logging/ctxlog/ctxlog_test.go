@@ -7,7 +7,9 @@ package ctxlog_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"runtime"
 	"testing"
 
 	"cloudeng.io/logging/ctxlog"
@@ -120,4 +122,51 @@ func TestLogLevels(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte("custom level")) {
 		t.Error("expected custom level message in log output")
 	}
+}
+
+func TestSource(t *testing.T) {
+	ctx := context.Background()
+	buf := &bytes.Buffer{}
+	ctx = ctxlog.NewJSONLogger(ctx, buf, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelDebug,
+	})
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("failed to get caller info")
+	}
+
+	check := func(line int, fn func()) {
+		buf.Reset()
+		fn()
+		var logged struct {
+			Source struct {
+				File string `json:"file"`
+				Line int    `json:"line"`
+			} `json:"source"`
+		}
+		if err := json.Unmarshal(buf.Bytes(), &logged); err != nil {
+			t.Fatalf("failed to unmarshal log output: %v\n%s", err, buf.String())
+		}
+		if got, want := logged.Source.File, file; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := logged.Source.Line, line; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+
+	_, _, line, _ := runtime.Caller(0)
+	check(line+1, func() { ctxlog.Info(ctx, "info") })
+	_, _, line, _ = runtime.Caller(0)
+	check(line+1, func() { ctxlog.Error(ctx, "error", nil) })
+	_, _, line, _ = runtime.Caller(0)
+	check(line+1, func() { ctxlog.Debug(ctx, "debug") })
+	_, _, line, _ = runtime.Caller(0)
+	check(line+1, func() { ctxlog.Warn(ctx, "warn") })
+
+	logLogger := ctxlog.NewLogLogger(ctx, slog.LevelError)
+	_, _, line, _ = runtime.Caller(0)
+	check(line+1, func() { logLogger.Print("log logger") })
 }
