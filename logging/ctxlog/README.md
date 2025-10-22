@@ -41,13 +41,6 @@ func NewJSONLogger(ctx context.Context, w io.Writer, opts *slog.HandlerOptions) 
 ```
 NewJSONLogger returns a new context with a JSON logger.
 
-### Func NewLogLogger
-```go
-func NewLogLogger(ctx context.Context, level slog.Level) *log.Logger
-```
-NewLogLogger returns a new standard library logger that logs to the provided
-context's logger at the specified level.
-
 ### Func Warn
 ```go
 func Warn(ctx context.Context, msg string, args ...any)
