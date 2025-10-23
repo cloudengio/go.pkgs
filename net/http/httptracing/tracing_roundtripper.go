@@ -288,6 +288,7 @@ func copyAndReplace(logger *slog.Logger, body io.ReadCloser) ([]byte, io.ReadClo
 	if body == nil {
 		return nil, nil
 	}
+	defer body.Close()
 	data, err := io.ReadAll(body)
 	if err != nil {
 		logger.Error("reading body for logging", "error", err)
@@ -298,23 +299,20 @@ func copyAndReplace(logger *slog.Logger, body io.ReadCloser) ([]byte, io.ReadClo
 }
 
 func (t *TracingRoundTripper) logAndReplaceBody(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response) io.ReadCloser {
-	if t.opts.responseBody == nil && t.opts.requestBody == nil {
-		if req != nil {
-			return req.Body
+	if resp == nil {
+		if t.opts.requestBody != nil {
+			data, body := copyAndReplace(logger, req.Body)
+			t.opts.requestBody(ctx, logger, req, data)
+			return body
 		}
-		if resp != nil {
-			return resp.Body
-		}
-		return nil
+		return req.Body
 	}
-	if req != nil {
-		data, body := copyAndReplace(logger, req.Body)
-		t.opts.requestBody(ctx, logger, req, data)
+	if t.opts.responseBody == nil {
+		data, body := copyAndReplace(logger, resp.Body)
+		t.opts.responseBody(ctx, logger, req, resp, data)
 		return body
 	}
-	data, body := copyAndReplace(logger, resp.Body)
-	t.opts.responseBody(ctx, logger, req, resp, data)
-	return body
+	return resp.Body
 }
 
 // RoundTrip implements the http.RoundTripper interface.
@@ -349,7 +347,7 @@ func (t *TracingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		logger = logger.With(
 			"status", resp.Status,
 			"duration", duration.String())
-		resp.Body = t.logAndReplaceBody(ctx, logger, nil, resp)
+		resp.Body = t.logAndReplaceBody(ctx, logger, req, resp)
 	}
 	return resp, err
 }
