@@ -29,9 +29,10 @@ func erase(ctx context.Context, fs *os.File, zeros []byte, written *int64, brCh 
 				}
 				return fmt.Errorf("%s: %w", fs.Name(), err)
 			}
+			w := atomic.AddInt64(written, r.Size())
 			if progressCh != nil {
 				select {
-				case progressCh <- atomic.AddInt64(written, r.Size()):
+				case progressCh <- w:
 				default:
 				}
 			}

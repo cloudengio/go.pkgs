@@ -332,18 +332,17 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 			if got, want := cache.Complete(), false; got != want {
 				t.Errorf("Run %d expected cache to be incomplete, got complete: %v", i, got)
 			}
-			continue
-		}
+		} else {
+			if got, want := st.Complete, true; got != want {
+				t.Errorf("Run %d expected complete status, got %v", i, st)
+			}
+			if got, want := cache.Complete(), true; got != want {
+				t.Errorf("Run %d expected cache to be complete, got complete: %v", i, got)
+			}
 
-		if got, want := st.Complete, true; got != want {
-			t.Errorf("Run %d expected complete status, got %v", i, st)
-		}
-		if got, want := cache.Complete(), true; got != want {
-			t.Errorf("Run %d expected cache to be complete, got complete: %v", i, got)
-		}
-
-		if err := cache.Close(); err != nil {
-			t.Fatalf("failed to close cache: %v", err)
+			if err := cache.Close(); err != nil {
+				t.Fatalf("failed to close cache: %v", err)
+			}
 		}
 
 		cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
@@ -382,7 +381,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	validateIndexFile(t, indexFilePath, cacheSize, blockSize)
 
 	if got, want := totalErrors, strings.Count(logOut.String(), `"error":"mock failure`); got != int64(want) {
-		t.Errorf("got %d mock failure messages, did not match number of errors reported: %d", want, got)
+		t.Errorf("got %d mock failure messages, did not match number of errors reported in logs: %d", got, want)
 	}
 
 }
