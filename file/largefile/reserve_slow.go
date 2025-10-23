@@ -17,6 +17,29 @@ import (
 	"cloudeng.io/sync/errgroup"
 )
 
+func erase(ctx context.Context, fs *os.File, zeros []byte, written *int64, brCh <-chan ByteRange, progressCh chan<- int64) error {
+	for r := range brCh {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if _, err := fs.WriteAt(zeros[:r.Size()], r.From); err != nil {
+				if errors.Is(err, syscall.ENOSPC) {
+					return fmt.Errorf("%s: %w", fs.Name(), ErrNotEnoughSpace)
+				}
+				return fmt.Errorf("%s: %w", fs.Name(), err)
+			}
+			if progressCh != nil {
+				select {
+				case progressCh <- atomic.AddInt64(written, r.Size()):
+				default:
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concurrency int, progressCh chan<- int64) error {
 	if size <= 0 {
 		return nil
@@ -37,26 +60,7 @@ func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concu
 
 	for range concurrency {
 		g.Go(func() error {
-			for r := range brCh {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-					if _, err := fs.WriteAt(buf[:r.Size()], r.From); err != nil {
-						if errors.Is(err, syscall.ENOSPC) {
-							return fmt.Errorf("%s: %w", fs.Name(), ErrNotEnoughSpace)
-						}
-						return fmt.Errorf("%s: %w", fs.Name(), err)
-					}
-					if progressCh != nil {
-						select {
-						case progressCh <- atomic.AddInt64(&written, r.Size()):
-						default:
-						}
-					}
-				}
-			}
-			return nil
+			return erase(ctx, fs, buf, &written, brCh, progressCh)
 		})
 	}
 	err := g.Wait()

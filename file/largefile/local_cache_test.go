@@ -139,8 +139,8 @@ func TestNewFilesForCache(t *testing.T) {
 	}
 }
 
-func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
-	ctx := context.Background()
+func TestNewLocalDownloadCacheExisting(t *testing.T) {
+	ctx := t.Context()
 	const contentSize int64 = 1036
 	const blockSize int = 128
 	const concurrency int = 1
@@ -187,6 +187,12 @@ func TestNewLocalDownloadCache(t *testing.T) { //nolint:gocyclo
 			t.Errorf("Expected second block to be cached, got %v", cachedRanges)
 		}
 	})
+
+}
+
+func TestNewLocalDownloadCacheErrors(t *testing.T) {
+	const contentSize int64 = 1036
+	const blockSize int = 128
 
 	t.Run("index file does not exist", func(t *testing.T) {
 		tmpDir := t.TempDir()
