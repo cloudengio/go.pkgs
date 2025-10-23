@@ -107,7 +107,135 @@ func TestListen(t *testing.T) {
 	}
 }
 
-func TestConsoleArgsAsJSONGemini(t *testing.T) { //nolint:gocyclo
+// 1. String
+func testString(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `"a string"`; string(obj.Value) != want {
+		t.Errorf("got %s, want %s", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 2. Number
+func testNumber(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `123`; string(obj.Value) != want {
+		t.Errorf("got %s, want %s", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 3. Boolean
+func testBoolean(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `true`; string(obj.Value) != want {
+		t.Errorf("got %s, want %s", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 4. Simple Object
+func testSimpleObject(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"name":"test","value":42}`; string(obj.Value) != want {
+		t.Errorf("got %v, want %v", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 5. Nested Object
+func testNestedObject(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"a":1,"b":{"c":"nested"}}`; string(obj.Value) != want {
+		t.Errorf("got %s, want %s", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 6. Array
+func testArray(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `[1,"two",false]`; string(obj.Value) != want {
+		t.Errorf("got %s, want %s", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 7. Resolved Promise Value
+func testResolvedPromise(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"status":"ok"}`; string(obj.Value) != want {
+		t.Errorf("got %s, want %s", obj.Value, want)
+	}
+	if chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+// 8. Response Object
+func testResponseObject(t *testing.T, data []byte) {
+	var obj runtime.RemoteObject
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatal(err)
+	}
+	// For complex browser-native objects like Response, we can't get a simple
+	// JSON value. We verify that we get a handle with the correct type.
+	if obj.Type != "object" || obj.ClassName != "Response" {
+		t.Errorf("expected a Response object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+	if !chromedputil.IsPlatformObject(&obj) {
+		t.Errorf("expected a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
+	}
+}
+
+func consoleArgsChecks() []func(t *testing.T, data []byte) {
+	return []func(t *testing.T, data []byte){
+		testString,
+		testNumber,
+		testBoolean,
+		testSimpleObject,
+		testNestedObject,
+		testArray,
+		testResolvedPromise,
+		testResponseObject,
+	}
+
+}
+
+func TestConsoleArgsAsJSONGemini(t *testing.T) {
 	srv := setupTestServer()
 	defer srv.Close()
 
@@ -165,114 +293,7 @@ func TestConsoleArgsAsJSONGemini(t *testing.T) { //nolint:gocyclo
 	}
 
 	// Define checks for each logged argument.
-	checks := []func(t *testing.T, data []byte){
-		// 1. String
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `"a string"`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 2. Number
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `123`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 3. Boolean
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `true`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 4. Simple Object
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `{"name":"test","value":42}`; string(obj.Value) != want {
-				t.Errorf("got %v, want %v", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 5. Nested Object
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `{"a":1,"b":{"c":"nested"}}`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 6. Array
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `[1,"two",false]`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 7. Resolved Promise Value
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			if want := `{"status":"ok"}`; string(obj.Value) != want {
-				t.Errorf("got %s, want %s", obj.Value, want)
-			}
-			if chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("did not expect a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-		// 8. Response Object
-		func(t *testing.T, data []byte) {
-			var obj runtime.RemoteObject
-			if err := json.Unmarshal(data, &obj); err != nil {
-				t.Fatal(err)
-			}
-			// For complex browser-native objects like Response, we can't get a simple
-			// JSON value. We verify that we get a handle with the correct type.
-			if obj.Type != "object" || obj.ClassName != "Response" {
-				t.Errorf("expected a Response object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-			if !chromedputil.IsPlatformObject(&obj) {
-				t.Errorf("expected a platform object, but got type %q and class %q", obj.Type, obj.ClassName)
-			}
-		},
-	}
+	checks := consoleArgsChecks()
 
 	for i, arg := range jsonArgs {
 		t.Run(fmt.Sprintf("Argument %d", i), func(t *testing.T) {
@@ -410,7 +431,81 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	}
 }
 
-func TestNewListenHandler(t *testing.T) { //nolint:gocyclo
+func testNewListenHandler(ctx context.Context, t *testing.T, event any, expected bool) { //nolint:gocyclo
+	t.Helper()
+
+	// Create a channel for the specific event type
+	switch evt := event.(type) {
+	case *runtime.EventConsoleAPICalled:
+		ch := make(chan *runtime.EventConsoleAPICalled, 1)
+		handler := chromedputil.NewListenHandler(ch)
+
+		// Call the handler with the event
+		result := handler(ctx, evt)
+		if result != expected {
+			t.Errorf("Handler returned %v, expected %v", result, expected)
+		}
+
+		if expected {
+			select {
+			case <-ch:
+				// Success - event was sent to channel
+			case <-time.After(100 * time.Millisecond):
+				t.Error("Event was not sent to channel")
+			}
+		}
+
+	case *runtime.EventExceptionThrown:
+		ch := make(chan *runtime.EventExceptionThrown, 1)
+		handler := chromedputil.NewListenHandler(ch)
+
+		// Call the handler with the event
+		result := handler(ctx, evt)
+		if result != expected {
+			t.Errorf("Handler returned %v, expected %v", result, expected)
+		}
+
+		if expected {
+			select {
+			case <-ch:
+				// Success - event was sent to channel
+			case <-time.After(100 * time.Millisecond):
+				t.Error("Event was not sent to channel")
+			}
+		}
+
+	case *log.EventEntryAdded:
+		ch := make(chan *log.EventEntryAdded, 1)
+		handler := chromedputil.NewListenHandler(ch)
+
+		// Call the handler with the event
+		result := handler(ctx, evt)
+		if result != expected {
+			t.Errorf("Handler returned %v, expected %v", result, expected)
+		}
+
+		if expected {
+			select {
+			case <-ch:
+				// Success - event was sent to channel
+			case <-time.After(100 * time.Millisecond):
+				t.Error("Event was not sent to channel")
+			}
+		}
+
+	case string:
+		ch := make(chan string, 1)
+		handler := chromedputil.NewListenHandler(ch)
+
+		// Call the handler with a mismatched event type
+		result := handler(ctx, &runtime.EventConsoleAPICalled{})
+		if result != false {
+			t.Error("Handler should return false for mismatched event types")
+		}
+	}
+}
+
+func TestNewListenHandler(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -444,75 +539,7 @@ func TestNewListenHandler(t *testing.T) { //nolint:gocyclo
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a channel for the specific event type
-			switch evt := tc.event.(type) {
-			case *runtime.EventConsoleAPICalled:
-				ch := make(chan *runtime.EventConsoleAPICalled, 1)
-				handler := chromedputil.NewListenHandler(ch)
-
-				// Call the handler with the event
-				result := handler(ctx, evt)
-				if result != tc.expected {
-					t.Errorf("Handler returned %v, expected %v", result, tc.expected)
-				}
-
-				if tc.expected {
-					select {
-					case <-ch:
-						// Success - event was sent to channel
-					case <-time.After(100 * time.Millisecond):
-						t.Error("Event was not sent to channel")
-					}
-				}
-
-			case *runtime.EventExceptionThrown:
-				ch := make(chan *runtime.EventExceptionThrown, 1)
-				handler := chromedputil.NewListenHandler(ch)
-
-				// Call the handler with the event
-				result := handler(ctx, evt)
-				if result != tc.expected {
-					t.Errorf("Handler returned %v, expected %v", result, tc.expected)
-				}
-
-				if tc.expected {
-					select {
-					case <-ch:
-						// Success - event was sent to channel
-					case <-time.After(100 * time.Millisecond):
-						t.Error("Event was not sent to channel")
-					}
-				}
-
-			case *log.EventEntryAdded:
-				ch := make(chan *log.EventEntryAdded, 1)
-				handler := chromedputil.NewListenHandler(ch)
-
-				// Call the handler with the event
-				result := handler(ctx, evt)
-				if result != tc.expected {
-					t.Errorf("Handler returned %v, expected %v", result, tc.expected)
-				}
-
-				if tc.expected {
-					select {
-					case <-ch:
-						// Success - event was sent to channel
-					case <-time.After(100 * time.Millisecond):
-						t.Error("Event was not sent to channel")
-					}
-				}
-
-			case string:
-				ch := make(chan string, 1)
-				handler := chromedputil.NewListenHandler(ch)
-
-				// Call the handler with a mismatched event type
-				result := handler(ctx, &runtime.EventConsoleAPICalled{})
-				if result != false {
-					t.Error("Handler should return false for mismatched event types")
-				}
-			}
+			testNewListenHandler(ctx, t, tc.event, tc.expected)
 		})
 	}
 }
