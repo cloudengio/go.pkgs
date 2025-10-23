@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+// VCSInfo extracts version control system information from the build info
+// if available. The returned values are the revision, last commit time,
+// a boolean indicating whether there were uncommitted changes (dirty)
+// and a boolean indicating whether the information was successfully extracted.
 func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool) {
 	var info *debug.BuildInfo
 	info, ok = debug.ReadBuildInfo()
