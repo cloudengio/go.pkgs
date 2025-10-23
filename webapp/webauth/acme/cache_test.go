@@ -75,6 +75,7 @@ func TestIsLocalName(t *testing.T) {
 		{"foo.bar.org", false},
 		{"example.com+token", true},
 		{"example.com+rsa", true},
+		{"acme_account.key+token", true},
 		{"acme_account+key", true},
 		{"acme_account.key", true},
 		{"something/http-01/foo", true},
@@ -86,11 +87,36 @@ func TestIsLocalName(t *testing.T) {
 	}
 }
 
+func TestIsAcmeAccountKey(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name  string
+		isKey bool
+	}{
+		{"example.com", false},
+		{"foo.bar.org", false},
+		{"example.com+token", false},
+		{"example.com+rsa", false},
+		{"acme_account+key", true},
+		{"acme_account.key", true},
+		{"acme_account.key+token", false},
+		{"something/http-01/foo", false},
+	}
+	for _, tc := range testCases {
+		if got, want := acme.IsAcmeAccountKey(tc.name), tc.isKey; got != want {
+			t.Errorf("IsAcmeAccountKey(%q): got %v, want %v", tc.name, got, want)
+		}
+	}
+}
+
 func setupCache(t *testing.T, readonly bool) (*acme.CachingStore, *mockCacheFS, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache := acme.NewCachingStore(tmpDir, mockFS, readonly)
+	cache, err := acme.NewCachingStore(tmpDir, mockFS, acme.WithReadonly(readonly))
+	if err != nil {
+		t.Fatal(err)
+	}
 	return cache, mockFS, func() {}
 }
 
@@ -105,7 +131,7 @@ func TestCacheReadonly(t *testing.T) {
 	if !errors.Is(err, acme.ErrReadonlyCache) {
 		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
 	}
-	err = cache.Put(ctx, "local.key", []byte("key"))
+	err = cache.Put(ctx, "local.key+token", []byte("key"))
 	if !errors.Is(err, acme.ErrReadonlyCache) {
 		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
 	}
@@ -115,20 +141,31 @@ func TestCacheReadonly(t *testing.T) {
 	if !errors.Is(err, acme.ErrReadonlyCache) {
 		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
 	}
-	err = cache.Delete(ctx, "local.key")
+	err = cache.Delete(ctx, "local.key+token")
 	if !errors.Is(err, acme.ErrReadonlyCache) {
 		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
 	}
+}
 
-	// Get should return miss.
-	_, err = cache.Get(ctx, "remote.com")
-	if !errors.Is(err, acme.ErrCacheMiss) {
-		t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+func TestCacheMiss(t *testing.T) {
+	ctx := context.Background()
+	for _, readonly := range []bool{true, false} {
+		cache, mockFS, cleanup := setupCache(t, readonly)
+		defer cleanup()
+		// Get should return miss.
+		for _, mockErr := range []error{nil, os.ErrNotExist, fs.ErrNotExist, acme.ErrCacheMiss} {
+			mockFS.err = mockErr
+			_, err := cache.Get(ctx, "remote.com")
+			if !errors.Is(err, acme.ErrCacheMiss) {
+				t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+			}
+			_, err = cache.Get(ctx, "local.key+token")
+			if !errors.Is(err, acme.ErrCacheMiss) {
+				t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+			}
+		}
 	}
-	_, err = cache.Get(ctx, "local.key")
-	if !errors.Is(err, acme.ErrCacheMiss) {
-		t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
-	}
+
 }
 
 func TestCacheReadWrite(t *testing.T) {
@@ -138,7 +175,7 @@ func TestCacheReadWrite(t *testing.T) {
 	defer cleanup()
 
 	remoteName, remoteData := "remote.com", []byte("cert-data")
-	localName, localData := "acme_account.key", []byte("key-data")
+	localName, localData := "acme_account.key+token", []byte("key-data")
 
 	// Test Put
 	if err := cache.Put(ctx, remoteName, remoteData); err != nil {
@@ -198,7 +235,10 @@ func TestCacheLocking(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache := acme.NewCachingStore(tmpDir, mockFS, false)
+	cache, err := acme.NewCachingStore(tmpDir, mockFS, acme.WithReadonly(false))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	localName, localData := "local.key+token", []byte("key")
 	if err := cache.Put(ctx, localName, localData); err != nil {
@@ -266,20 +306,90 @@ func TestCacheLocking(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestNullCache(t *testing.T) {
+func TestCacheACMEKeyInBackingStore(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	mockFS := newMockCacheFS()
+	cache, err := acme.NewCachingStore(tmpDir, mockFS, acme.WithSaveAccountKey("another-name-in-backing-store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyName := "acme_account+key"
+
+	err = cache.Put(ctx, keyName, []byte("acme-key-data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the data is in the backing store under the specified name.
+	data, err := mockFS.ReadFileCtx(ctx, "another-name-in-backing-store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "acme-key-data"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	data, err = cache.Get(ctx, keyName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "acme-key-data"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+}
+
+func TestLocalStore(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cache := acme.NewNullCache()
+	tmpDir := t.TempDir()
 
-	if err := cache.Put(ctx, "any", []byte("any")); err != nil {
-		t.Errorf("Put failed: %v", err)
+	store, err := acme.NewLocalStore(tmpDir)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if _, err := cache.Get(ctx, "any"); !errors.Is(err, acme.ErrCacheMiss) {
-		t.Errorf("Get: got %v, want %v", err, acme.ErrCacheMiss)
+	// Test Write
+	name, data := "test-file", []byte("test-data")
+	if err := store.WriteFileCtx(ctx, name, data, 0600); err != nil {
+		t.Fatal(err)
 	}
 
-	if err := cache.Delete(ctx, "any"); err != nil {
-		t.Errorf("Delete failed: %v", err)
+	// Verify file exists and has correct content
+	filePath := filepath.Join(tmpDir, name)
+	readData, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(readData, data) {
+		t.Errorf("got %q, want %q", readData, data)
+	}
+
+	// Test Read
+	readData, err = store.ReadFileCtx(ctx, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(readData, data) {
+		t.Errorf("got %q, want %q", readData, data)
+	}
+
+	// Test Delete
+	if err := store.Delete(ctx, name); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify file is gone
+	_, err = os.Stat(filePath)
+	if !os.IsNotExist(err) {
+		t.Errorf("expected file to not exist, but got err: %v", err)
+	}
+
+	// Test Read on non-existent file
+	_, err = store.ReadFileCtx(ctx, "non-existent")
+	if !os.IsNotExist(err) {
+		t.Errorf("expected not-exist error, but got: %v", err)
 	}
 }

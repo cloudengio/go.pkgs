@@ -79,7 +79,7 @@ func RedirectPort80(ctx context.Context, httpsAddr string, acmeRedirectHost stri
 	}
 
 	redirect := RedirectToHTTPSHandlerFunc(tlsPort, au)
-	ln, srv, err := NewHTTPServer(":80", redirect)
+	ln, srv, err := NewHTTPServer(ctx, ":80", redirect)
 	if err != nil {
 		return err
 	}

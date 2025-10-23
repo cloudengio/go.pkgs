@@ -236,43 +236,6 @@ func allIPS() []string {
 	return all
 }
 
-/*
-// selfSignedCertFlags represents the flags for creating a self signed certificate
-// as used by the command returned by SelfSignedCertCommand.
-type selfSignedCertFlags struct {
-	CertificateFile string `subcmd:"ssl-cert,localhost.crt,ssl certificate file"`
-	KeyFile         string `subcmd:"ssl-key,localhost.key,ssl private key file"`
-}
-
-// SelfSignedCertCommand returns a subcmd.Command that provides the
-// ability to generate a self signed certificate and private key file.
-func SelfSignedCertCommand(name string) *subcmd.Command {
-	certFlagSet := subcmd.MustRegisterFlagStruct(&selfSignedCertFlags{}, nil, nil)
-	certCmd := subcmd.NewCommand(name, certFlagSet, certCmd, subcmd.ExactlyNumArguments(0))
-	certCmd.Document(`create a self signed certificate`)
-	return certCmd
-}
-
-TestingCAPem string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
-
-func certCmd(_ context.Context, values interface{}, _ []string) error {
-	cl := values.(*selfSignedCertFlags)
-	return NewSelfSignedCert(cl.CertificateFile,
-		cl.KeyFile,
-		CertAllIPAddresses(),
-	)
-}
-		var opts []CertServingCacheOption
-	if len(testingCA) > 0 {
-		certPool, err := CertPoolForTesting(testingCA)
-		if err != nil {
-			return nil, fmt.Errorf("failed to obtain cert pool containing %v", testingCA)
-		}
-		opts = append(opts, CertCacheRootCAs(certPool))
-	}
-
-*/
-
 // CertPoolForTesting returns a new x509.CertPool containing the certs
 // in the specified pem files. It is intended for testing purposes only.
 func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error) {
@@ -281,6 +244,10 @@ func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error) {
 	}
 	rootCAs := x509.NewCertPool()
 	for _, pemFile := range pemFiles {
+		if len(pemFile) == 0 {
+			continue
+		}
+
 		certs, err := os.ReadFile(pemFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", pemFile, err)

@@ -50,22 +50,45 @@ func TLSConfigFromFlags(ctx context.Context, cl HTTPServerFlags) (*tls.Config, e
 	return TLSConfigUsingCertFiles(cl.CertificateFile, cl.KeyFile)
 }
 
+// PreferredCipherSuites is the list of preferred cipher suites
+// for tls.Config instances created by this package.
+var PreferredCipherSuites = []uint16{
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+	tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+}
+
+// PreferredCurves is the list of preferred elliptic curves
+// for tls.Config instances created by this package.
+var PreferredCurves = []tls.CurveID{
+	tls.X25519,
+	tls.CurveP256,
+}
+
+// PreferredTLSMinVersion is the preferred minimum TLS version
+// for tls.Config instances created by this package.
+const PreferredTLSMinVersion = tls.VersionTLS13
+
+// PreferredSignatureSchemes is the list of preferred signature schemes
+// generally used for obtainint TLS certificates.
+var PreferredSignatureSchemes = []tls.SignatureScheme{
+	tls.ECDSAWithP256AndSHA256,
+	tls.ECDSAWithP384AndSHA384,
+	tls.ECDSAWithP521AndSHA512,
+}
+
 // TLSConfigUsingCertStore returns a tls.Config configured with the
 // certificate obtained from the specified certificate store accessed
 // via a CertServingCache created with the supplied options.
 func TLSConfigUsingCertStore(ctx context.Context, store autocert.Cache, cacheOpts ...CertServingCacheOption) (*tls.Config, error) {
 	return &tls.Config{
-		GetCertificate: NewCertServingCache(ctx, store, cacheOpts...).GetCertificate,
-		MinVersion:     tls.VersionTLS13,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+		GetCertificate:   NewCertServingCache(ctx, store, cacheOpts...).GetCertificate,
+		MinVersion:       PreferredTLSMinVersion,
+		CipherSuites:     PreferredCipherSuites,
+		CurvePreferences: PreferredCurves,
 	}, nil
 }
 
@@ -80,17 +103,10 @@ func TLSConfigUsingCertFiles(certFile, keyFile string) (*tls.Config, error) {
 		return nil, err
 	}
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS13,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+		Certificates:     []tls.Certificate{cert},
+		MinVersion:       PreferredTLSMinVersion,
+		CipherSuites:     PreferredCipherSuites,
+		CurvePreferences: PreferredCurves,
 	}, nil
 }
 

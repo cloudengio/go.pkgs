@@ -30,7 +30,7 @@ type CachingStore struct {
 	lock         *lockedfile.Mutex
 	localCache   autocert.Cache
 	backingStore CacheFS
-	readonly     bool
+	opts         options
 }
 
 // ErrCacheMiss is the same as autocert.ErrCacheMiss
@@ -44,25 +44,65 @@ type CacheFS interface {
 	Delete(ctx context.Context, name string) error
 }
 
+type Option func(o *options)
+
+type options struct {
+	readonly           bool
+	saveAccountKeyName string
+}
+
+// WithReadonly sets whether the caching store is readonly.
+func WithReadonly(readonly bool) Option {
+	return func(o *options) {
+		o.readonly = readonly
+	}
+}
+
+// WithSaveAccountKey sets whether ACME account keys are to be saved to
+// the backing store using the specified name.
+func WithSaveAccountKey(name string) Option {
+	return func(o *options) {
+		o.saveAccountKeyName = name
+	}
+}
+
 // NewCachingStore returns an instance of autocert.Cache that will store
 // certificates in 'backing' store, but use the local file system for
 // temporary/private data such as the ACME client's private key. This
 // allows for certificates to be shared across multiple hosts by using
 // a distributed 'backing' store such as AWS' secretsmanager.
 // Certificates may be extracted safely for use by other servers
-// by using the readonly option.
-func NewCachingStore(localDir string, storeFS CacheFS, readonly bool) *CachingStore {
-	if !readonly {
-		if err := os.MkdirAll(localDir, 0700); err != nil {
-			panic(err)
-		}
+// by using the readonly option. CachingStore implements autocert.Cache.
+func NewCachingStore(localDir string, backingStore CacheFS, opts ...Option) (*CachingStore, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
 	}
-	return &CachingStore{
+	if err := os.MkdirAll(localDir, 0700); err != nil {
+		return nil, err
+	}
+	cache := &CachingStore{
 		lock:         lockedfile.MutexAt(filepath.Join(localDir, "dir.lock")),
 		localCache:   autocert.DirCache(localDir),
-		backingStore: storeFS,
-		readonly:     readonly,
+		backingStore: backingStore,
+		opts:         o,
 	}
+	if o.readonly {
+		// Use the lock in order to create the lock file if it does not already
+		// exist, since RLock will fail if the lock file does not already exist.
+		unlock, err := cache.lock.Lock()
+		if err != nil {
+			return nil, fmt.Errorf("lock acquisition failed: %w", err)
+		}
+		unlock()
+	}
+	return cache, nil
+}
+
+// IsAcmeAccountKey returns true if the specified name is for an
+// ACME account private key.
+func IsAcmeAccountKey(name string) bool {
+	return name == "acme_account+key" || name == "acme_account.key"
 }
 
 // IsLocalName returns true if the specified name is for local-only
@@ -71,8 +111,7 @@ func IsLocalName(name string) bool {
 	return strings.HasSuffix(name, "+token") ||
 		strings.HasSuffix(name, "+rsa") ||
 		strings.Contains(name, "http-01") ||
-		(strings.HasPrefix(name, "acme_account") &&
-			strings.HasSuffix(name, "key"))
+		IsAcmeAccountKey(name)
 }
 
 var (
@@ -84,7 +123,7 @@ var (
 
 // Delete implements autocert.Cache.
 func (dc *CachingStore) Delete(ctx context.Context, name string) error {
-	if dc.readonly {
+	if dc.opts.readonly {
 		return fmt.Errorf("delete %q: %w", name, ErrReadonlyCache)
 	}
 	if !IsLocalName(name) {
@@ -105,18 +144,30 @@ func (dc *CachingStore) Delete(ctx context.Context, name string) error {
 
 }
 
+func (dc *CachingStore) translateCacheMiss(err error) error {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, autocert.ErrCacheMiss) || errors.Is(err, os.ErrNotExist) {
+		return ErrCacheMiss
+	}
+	return err
+}
+
 // Get implements autocert.Cache.
 func (dc *CachingStore) Get(ctx context.Context, name string) ([]byte, error) {
-	if !IsLocalName(name) {
+	name, backingStore := dc.useBackingStore(name)
+	if backingStore {
 		data, err := dc.backingStore.ReadFileCtx(ctx, name)
 		if err != nil {
+			if err = dc.translateCacheMiss(err); err == ErrCacheMiss {
+				return nil, ErrCacheMiss
+			}
 			return nil, fmt.Errorf("get %q: %w", name, errors.NewM(err, ErrBackingOperation))
 		}
+		fmt.Printf("acme/cache.go: Get %q succeeded\n", name)
 		return data, nil
 	}
 	var err error
 	var unlock func()
-	if dc.readonly {
+	if dc.opts.readonly {
 		unlock, err = dc.lock.RLock()
 	} else {
 		unlock, err = dc.lock.Lock()
@@ -127,17 +178,31 @@ func (dc *CachingStore) Get(ctx context.Context, name string) ([]byte, error) {
 	defer unlock()
 	data, err := dc.localCache.Get(ctx, name)
 	if err != nil {
+		if err = dc.translateCacheMiss(err); err == ErrCacheMiss {
+			return nil, ErrCacheMiss
+		}
 		return nil, fmt.Errorf("get %q: %w", name, errors.NewM(err, ErrLocalOperation))
 	}
 	return data, nil
 }
 
+func (dc *CachingStore) useBackingStore(name string) (string, bool) {
+	if !IsLocalName(name) {
+		return name, true
+	}
+	if len(dc.opts.saveAccountKeyName) > 0 && IsAcmeAccountKey(name) {
+		return dc.opts.saveAccountKeyName, true
+	}
+	return name, false
+}
+
 // Put implements autocert.Cache.
 func (dc *CachingStore) Put(ctx context.Context, name string, data []byte) error {
-	if dc.readonly {
+	if dc.opts.readonly {
 		return fmt.Errorf("put %q: %w", name, ErrReadonlyCache)
 	}
-	if !IsLocalName(name) {
+	name, backingStore := dc.useBackingStore(name)
+	if backingStore {
 		if err := dc.backingStore.WriteFileCtx(ctx, name, data, 0600); err != nil {
 			return fmt.Errorf("put %q: %w", name, errors.NewM(err, ErrBackingOperation))
 		}
@@ -156,25 +221,29 @@ func (dc *CachingStore) Put(ctx context.Context, name string, data []byte) error
 	return nil
 }
 
-// NewNullCache returns an autocert.Cache that never stores any data and is
-// intended for use when testing.
-func NewNullCache() autocert.Cache {
-	return &nullcache{}
+type localCache struct {
+	root string
 }
 
-type nullcache struct{}
-
-// Delete implements autocert.Cache.
-func (nc *nullcache) Delete(_ context.Context, _ string) error {
-	return nil
+func NewLocalStore(dir string) (CacheFS, error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	return &localCache{root: dir}, nil
 }
 
-// Get implements autocert.Cache.
-func (nc *nullcache) Get(_ context.Context, _ string) ([]byte, error) {
-	return nil, ErrCacheMiss
+func (lc *localCache) path(name string) string {
+	return filepath.Join(lc.root, name)
 }
 
-// Put implements autocert.Cache.
-func (nc *nullcache) Put(_ context.Context, _ string, _ []byte) error {
-	return nil
+func (lc *localCache) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	return os.ReadFile(lc.path(name))
+}
+
+func (lc *localCache) WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
+	return os.WriteFile(lc.path(name), data, perm)
+}
+
+func (lc *localCache) Delete(ctx context.Context, name string) error {
+	return os.Remove(lc.path(name))
 }

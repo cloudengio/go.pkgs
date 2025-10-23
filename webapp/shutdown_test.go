@@ -86,7 +86,7 @@ func TestServeWithShutdown(t *testing.T) {
 		fmt.Fprint(w, "hello")
 	})
 
-	ln, srv, err := webapp.NewHTTPServer("127.0.0.1:0", handler)
+	ln, srv, err := webapp.NewHTTPServer(ctx, "127.0.0.1:0", handler)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,11 +125,12 @@ func TestServeWithShutdown(t *testing.T) {
 }
 
 func TestServeTLSWithShutdown(t *testing.T) {
+	ctx := t.Context()
 	serverTLSConf, certPEM := newSelfSignedTLSConfig(t)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "hello tls")
 	})
-	ln, srv, err := webapp.NewTLSServer("127.0.0.1:0", handler, serverTLSConf)
+	ln, srv, err := webapp.NewTLSServer(ctx, "127.0.0.1:0", handler, serverTLSConf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +234,7 @@ func TestServeWithShutdown_ShutdownError(t *testing.T) {
 		fmt.Fprint(w, "hello")
 	})
 
-	ln, srv, err := webapp.NewHTTPServer("127.0.0.1:0", handler)
+	ln, srv, err := webapp.NewHTTPServer(ctx, "127.0.0.1:0", handler)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,11 +269,13 @@ func TestServeWithShutdown_ShutdownError(t *testing.T) {
 }
 
 func ExampleServeWithShutdown() {
+	ctx := context.Background()
+
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "Hello, World!")
 	})
 
-	ln, srv, err := webapp.NewHTTPServer("127.0.0.1:0", handler)
+	ln, srv, err := webapp.NewHTTPServer(ctx, "127.0.0.1:0", handler)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -292,4 +295,27 @@ func ExampleServeWithShutdown() {
 	// Output:
 	// server listening on: 127.0.0.1:<some-port>
 	// server shutdown complete
+}
+
+func TestParseAddrDefaults(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		in, defaultPort, out string
+	}{
+		{"", "https", ":https"},
+		{"", "http", ":http"},
+		{":http", "https", ":http"},
+		{":https", "http", ":https"},
+		{"localhost:8080", "https", "localhost:8080"},
+		{"127.0.0.1:8080", "http", "127.0.0.1:8080"},
+		{"8080", "https", ":8080"},
+		{"localhost", "https", "localhost:https"},
+		{"google.com", "http", "google.com:http"},
+	}
+
+	for i, tc := range testCases {
+		if got, want := webapp.ParseAddrPortDefaults(tc.in, tc.defaultPort), tc.out; got != want {
+			t.Errorf("%v: got %v, want %v", i, got, want)
+		}
+	}
 }

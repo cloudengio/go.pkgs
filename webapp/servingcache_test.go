@@ -15,7 +15,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"math/big"
 	"strings"
 	"sync"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	"cloudeng.io/webapp"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // mockCertStore is a mock implementation of the CertStore interface for testing.
@@ -47,7 +47,7 @@ func (s *mockCertStore) Get(_ context.Context, name string) ([]byte, error) {
 	}
 	cert, ok := s.certs[name]
 	if !ok {
-		return nil, fmt.Errorf("cert not found for %s", name)
+		return nil, autocert.ErrCacheMiss
 	}
 	s.getHits++
 	return cert, nil
@@ -205,6 +205,29 @@ func TestCertServingCache_Expiry(t *testing.T) {
 	if hits := store.GetHits(); hits != 2 {
 		t.Errorf("expected 2 store hits after TTL expiry, got %d", hits)
 	}
+}
+
+func TestCertServingCache_CacheMiss(t *testing.T) {
+	ctx := t.Context()
+	domain := "not-in-cache.com"
+	store := newMockCertStore()
+	cache := webapp.NewCertServingCache(ctx, store)
+
+	// Request a certificate that is not in the cache or the store.
+	// This is a cache miss, and the store will also return a "not found" error.
+	_, err := cache.GetCertificate(&tls.ClientHelloInfo{ServerName: domain})
+	if err == nil {
+		t.Fatal("expected an error for a certificate that is not in the store, but got nil")
+	}
+
+	if !errors.Is(err, autocert.ErrCacheMiss) {
+		t.Errorf("expected error to be %v, but got %v", autocert.ErrCacheMiss, err)
+	}
+
+	if hits := store.GetHits(); hits != 0 {
+		t.Errorf("expected 0 store hits for a cache miss, got %d", hits)
+	}
+
 }
 
 func TestCertServingCache_Errors(t *testing.T) {

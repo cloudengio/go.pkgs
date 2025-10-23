@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"cloudeng.io/aws/awsconfig"
-	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/webapp"
 )
 
@@ -24,15 +23,9 @@ type testRedirectFlags struct {
 	awsconfig.AWSFlags
 }
 
-func redirectCmd() *subcmd.Command {
-	testRedirectCmd := subcmd.NewCommand("redirect-test",
-		subcmd.MustRegisterFlagStruct(&testRedirectFlags{}, nil, nil),
-		testACMERedirect, subcmd.ExactlyNumArguments(0))
-	testRedirectCmd.Document(`test redirecting acme http-01 challenges back to a central server that implements the acme client.`)
-	return testRedirectCmd
-}
+type testRedirectCmd struct{}
 
-func testACMERedirect(ctx context.Context, values any, _ []string) error {
+func (_ testRedirectCmd) redirect(ctx context.Context, values any, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*testRedirectFlags)
@@ -59,7 +52,7 @@ func testACMERedirect(ctx context.Context, values any, _ []string) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "hello\n")
 	})
-	ln, srv, err := webapp.NewTLSServer(cl.Address, mux, cfg)
+	ln, srv, err := webapp.NewTLSServer(ctx, cl.Address, mux, cfg)
 	if err != nil {
 		return err
 	}
