@@ -18,7 +18,7 @@ import (
 
 func TestFlags(t *testing.T) {
 	ctx := context.Background()
-	cl := acme.AcmeFlags{}
+	cl := acme.ServiceFlags{}
 	flagSet := &flag.FlagSet{}
 	err := flags.RegisterFlagsInStruct(flagSet, "subcmd", &cl, nil, nil)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr, err := acme.NewManager(ctx, autocert.DirCache(t.TempDir()), cl.ManagerConfig(), "allowed-domain-a", "allowed-domain-b")
+	mgr, err := acme.NewAutocertManager(ctx, autocert.DirCache(t.TempDir()), cl.AutocertConfig(), "allowed-domain-a", "allowed-domain-b")
 	if err != nil {
 		t.Fatal(err)
 	}

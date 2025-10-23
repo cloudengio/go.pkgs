@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package acme_test
+package certcache_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"cloudeng.io/os/lockedfile"
-	"cloudeng.io/webapp/webauth/acme"
+	"cloudeng.io/webapp/webauth/acme/certcache"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +40,7 @@ func (m *mockCacheFS) ReadFileCtx(_ context.Context, name string) ([]byte, error
 	}
 	data, ok := m.store[name]
 	if !ok {
-		return nil, acme.ErrCacheMiss
+		return nil, certcache.ErrCacheMiss
 	}
 	return data, nil
 }
@@ -81,7 +81,7 @@ func TestIsLocalName(t *testing.T) {
 		{"something/http-01/foo", true},
 	}
 	for _, tc := range testCases {
-		if got, want := acme.IsLocalName(tc.name), tc.local; got != want {
+		if got, want := certcache.IsLocalName(tc.name), tc.local; got != want {
 			t.Errorf("IsLocalName(%q): got %v, want %v", tc.name, got, want)
 		}
 	}
@@ -103,17 +103,17 @@ func TestIsAcmeAccountKey(t *testing.T) {
 		{"something/http-01/foo", false},
 	}
 	for _, tc := range testCases {
-		if got, want := acme.IsAcmeAccountKey(tc.name), tc.isKey; got != want {
+		if got, want := certcache.IsAcmeAccountKey(tc.name), tc.isKey; got != want {
 			t.Errorf("IsAcmeAccountKey(%q): got %v, want %v", tc.name, got, want)
 		}
 	}
 }
 
-func setupCache(t *testing.T, readonly bool) (*acme.CachingStore, *mockCacheFS, func()) {
+func setupCache(t *testing.T, readonly bool) (*certcache.CachingStore, *mockCacheFS, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache, err := acme.NewCachingStore(tmpDir, mockFS, acme.WithReadonly(readonly))
+	cache, err := certcache.NewCachingStore(tmpDir, mockFS, certcache.WithReadonly(readonly))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,22 +128,22 @@ func TestCacheReadonly(t *testing.T) {
 
 	// Put should fail.
 	err := cache.Put(ctx, "remote.com", []byte("cert"))
-	if !errors.Is(err, acme.ErrReadonlyCache) {
-		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
+	if !errors.Is(err, certcache.ErrReadonlyCache) {
+		t.Errorf("got %v, want %v", err, certcache.ErrReadonlyCache)
 	}
 	err = cache.Put(ctx, "local.key+token", []byte("key"))
-	if !errors.Is(err, acme.ErrReadonlyCache) {
-		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
+	if !errors.Is(err, certcache.ErrReadonlyCache) {
+		t.Errorf("got %v, want %v", err, certcache.ErrReadonlyCache)
 	}
 
 	// Delete should fail.
 	err = cache.Delete(ctx, "remote.com")
-	if !errors.Is(err, acme.ErrReadonlyCache) {
-		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
+	if !errors.Is(err, certcache.ErrReadonlyCache) {
+		t.Errorf("got %v, want %v", err, certcache.ErrReadonlyCache)
 	}
 	err = cache.Delete(ctx, "local.key+token")
-	if !errors.Is(err, acme.ErrReadonlyCache) {
-		t.Errorf("got %v, want %v", err, acme.ErrReadonlyCache)
+	if !errors.Is(err, certcache.ErrReadonlyCache) {
+		t.Errorf("got %v, want %v", err, certcache.ErrReadonlyCache)
 	}
 }
 
@@ -153,15 +153,15 @@ func TestCacheMiss(t *testing.T) {
 		cache, mockFS, cleanup := setupCache(t, readonly)
 		defer cleanup()
 		// Get should return miss.
-		for _, mockErr := range []error{nil, os.ErrNotExist, fs.ErrNotExist, acme.ErrCacheMiss} {
+		for _, mockErr := range []error{nil, os.ErrNotExist, fs.ErrNotExist, certcache.ErrCacheMiss} {
 			mockFS.err = mockErr
 			_, err := cache.Get(ctx, "remote.com")
-			if !errors.Is(err, acme.ErrCacheMiss) {
-				t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+			if !errors.Is(err, certcache.ErrCacheMiss) {
+				t.Errorf("got %v, want %v", err, certcache.ErrCacheMiss)
 			}
 			_, err = cache.Get(ctx, "local.key+token")
-			if !errors.Is(err, acme.ErrCacheMiss) {
-				t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+			if !errors.Is(err, certcache.ErrCacheMiss) {
+				t.Errorf("got %v, want %v", err, certcache.ErrCacheMiss)
 			}
 		}
 	}
@@ -213,8 +213,8 @@ func TestCacheReadWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = cache.Get(ctx, remoteName)
-	if !errors.Is(err, acme.ErrCacheMiss) {
-		t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+	if !errors.Is(err, certcache.ErrCacheMiss) {
+		t.Errorf("got %v, want %v", err, certcache.ErrCacheMiss)
 	}
 	if _, ok := mockFS.store[remoteName]; ok {
 		t.Errorf("remote entry not deleted from backing store")
@@ -225,8 +225,8 @@ func TestCacheReadWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = cache.Get(ctx, localName)
-	if !errors.Is(err, acme.ErrCacheMiss) {
-		t.Errorf("got %v, want %v", err, acme.ErrCacheMiss)
+	if !errors.Is(err, certcache.ErrCacheMiss) {
+		t.Errorf("got %v, want %v", err, certcache.ErrCacheMiss)
 	}
 }
 
@@ -235,7 +235,7 @@ func TestCacheLocking(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache, err := acme.NewCachingStore(tmpDir, mockFS, acme.WithReadonly(false))
+	cache, err := certcache.NewCachingStore(tmpDir, mockFS, certcache.WithReadonly(false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,13 +294,13 @@ func TestCacheLocking(t *testing.T) {
 	require.NoError(t, err)
 
 	err = cache.Put(ctx, localName, []byte("new-data"))
-	require.ErrorIs(t, err, acme.ErrLockFailed)
+	require.ErrorIs(t, err, certcache.ErrLockFailed)
 
 	_, err = cache.Get(ctx, localName)
-	require.ErrorIs(t, err, acme.ErrLockFailed)
+	require.ErrorIs(t, err, certcache.ErrLockFailed)
 
 	err = cache.Delete(ctx, localName)
-	require.ErrorIs(t, err, acme.ErrLockFailed)
+	require.ErrorIs(t, err, certcache.ErrLockFailed)
 
 	err = os.Chmod(tmpDir, 0700)
 	require.NoError(t, err)
@@ -310,7 +310,7 @@ func TestCacheACMEKeyInBackingStore(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 	mockFS := newMockCacheFS()
-	cache, err := acme.NewCachingStore(tmpDir, mockFS, acme.WithSaveAccountKey("another-name-in-backing-store"))
+	cache, err := certcache.NewCachingStore(tmpDir, mockFS, certcache.WithSaveAccountKey("another-name-in-backing-store"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +346,7 @@ func TestLocalStore(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
-	store, err := acme.NewLocalStore(tmpDir)
+	store, err := certcache.NewLocalStore(tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
