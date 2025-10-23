@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-// CachingStore implements a 'caching store' that intergrates withletsencrypt's
+// CachingStore implements a 'caching store' that intergrates with
 // autocert. It provides an instance of autocert.Cache that will store
 // certificates in 'backing' store, but use the local file system for
 // temporary/private data such as the ACME client's private key. This
@@ -29,16 +29,16 @@ import (
 type CachingStore struct {
 	lock         *lockedfile.Mutex
 	localCache   autocert.Cache
-	backingStore CacheFS
+	backingStore StoreFS
 	opts         options
 }
 
 // ErrCacheMiss is the same as autocert.ErrCacheMiss
 var ErrCacheMiss = autocert.ErrCacheMiss
 
-// CacheFS defines an interface that combines reading, writing
+// StoreFS defines an interface that combines reading, writing
 // and deleting files and is used to create an acme/autocert cache.
-type CacheFS interface {
+type StoreFS interface {
 	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
 	Delete(ctx context.Context, name string) error
@@ -71,9 +71,9 @@ func WithSaveAccountKey(name string) Option {
 // temporary/private data such as the ACME client's private key. This
 // allows for certificates to be shared across multiple hosts by using
 // a distributed 'backing' store such as AWS' secretsmanager.
-// Certificates may be extracted safely for use by other servers
-// by using the readonly option. CachingStore implements autocert.Cache.
-func NewCachingStore(localDir string, backingStore CacheFS, opts ...Option) (*CachingStore, error) {
+// Certificates may be extracted safely for use by other servers.
+// CachingStore implements autocert.Cache.
+func NewCachingStore(localDir string, backingStore StoreFS, opts ...Option) (*CachingStore, error) {
 	var o options
 	for _, opt := range opts {
 		opt(&o)
@@ -224,7 +224,7 @@ type localCache struct {
 	root string
 }
 
-func NewLocalStore(dir string) (CacheFS, error) {
+func NewLocalStore(dir string) (StoreFS, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
