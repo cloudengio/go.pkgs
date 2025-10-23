@@ -111,7 +111,7 @@ type roundtripOptions struct {
 
 // JSONRequestBodyLogger logs the request body as a JSON object.
 // The supplied logger is pre-configured with relevant request information.
-func JSONRequestBodyLogger(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte) {
+func JSONRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
 	if len(data) == 0 {
 		logger.Info("HTTP Request Body", "direction", "request", "body", "(empty)")
 		return
@@ -121,7 +121,7 @@ func JSONRequestBodyLogger(ctx context.Context, logger *slog.Logger, req *http.R
 
 // JSONResponseBodyLogger logs the response body as a JSON object.
 // The supplied logger is pre-configured with relevant request information.
-func JSONResponseBodyLogger(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte) {
+func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 	if len(data) == 0 {
 		logger.Info("HTTP Response Body", "direction", "response", "body", "(empty)")
 		return
@@ -129,7 +129,7 @@ func JSONResponseBodyLogger(ctx context.Context, logger *slog.Logger, req *http.
 	logger.Info("HTTP Response Body", "direction", "response", "body", json.RawMessage(data))
 }
 
-func JSONHandlerResponseLogger(ctx context.Context, logger *slog.Logger, req *http.Request, _ http.Header, statusCode int, data []byte) {
+func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte) {
 	if len(data) == 0 {
 		logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", "(empty)")
 		return
@@ -282,7 +282,7 @@ func (t *TracingRoundTripper) addWriteTraceHooks(trace *httptrace.ClientTrace, l
 	}
 }
 
-var traceID int64 = 0
+var traceID int64
 
 func copyAndReplace(logger *slog.Logger, body io.ReadCloser) ([]byte, io.ReadCloser) {
 	if body == nil {

@@ -21,12 +21,12 @@ func TestTracingHandler(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "hello")
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "hello")
 	})
 
 	var reqBodyBuf bytes.Buffer
-	bodyCB := func(ctx context.Context, l *slog.Logger, req *http.Request, data []byte) {
+	bodyCB := func(_ context.Context, _ *slog.Logger, _ *http.Request, data []byte) {
 		reqBodyBuf.Write(data)
 	}
 
@@ -67,18 +67,18 @@ func TestTracingRoundTripper(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "hello server")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "hello server")
 	}))
 	defer server.Close()
 
 	var reqBodyCap, resBodyCap bytes.Buffer
 
-	reqBodyCB := func(ctx context.Context, l *slog.Logger, req *http.Request, data []byte) {
+	reqBodyCB := func(_ context.Context, _ *slog.Logger, _ *http.Request, data []byte) {
 		reqBodyCap.Write(data)
 	}
 
-	resBodyCB := func(ctx context.Context, l *slog.Logger, req *http.Request, resp *http.Response, data []byte) {
+	resBodyCB := func(_ context.Context, _ *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 		resBodyCap.Write(data)
 	}
 
@@ -134,8 +134,8 @@ func TestTracingRoundTripperHookMask(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "hello")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "hello")
 	}))
 	defer server.Close()
 
