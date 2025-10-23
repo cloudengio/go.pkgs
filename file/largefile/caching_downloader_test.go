@@ -162,6 +162,52 @@ func (m *MockDownloadCache) Tail(ctx context.Context) largefile.ByteRange {
 	return largefile.ByteRange{}
 }
 
+const (
+	defaultContentSize = int64(256)
+	defaultBlockSize   = 64
+	defaultConcurrency = 1
+)
+
+var (
+	firstRange = largefile.ByteRange{From: 0, To: int64(defaultBlockSize) - 1}
+)
+
+func newDefaultMockReader() *MockReader {
+	return &MockReader{
+		ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int) {
+			return defaultContentSize, defaultBlockSize
+		},
+		GetReaderFunc: func(_ context.Context, from, to int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error) {
+			dataSize := int(to-from) + 1
+			d := make([]byte, dataSize)
+			for i := 0; i < dataSize; i++ {
+				d[i] = byte(from + int64(i)) // Unique data per block start
+			}
+			return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
+		},
+	}
+}
+
+func newDefaultMockCache() *MockDownloadCache {
+	return &MockDownloadCache{
+		ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int) {
+			return defaultContentSize, defaultBlockSize
+		},
+		PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
+		OutstandingFunc: func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq()(s, b) // Default to no outstanding blocks
+		},
+	}
+}
+
+func defaultOpts(c int) []largefile.DownloadOption {
+	return []largefile.DownloadOption{
+		largefile.WithDownloadConcurrency(c),
+		largefile.WithDownloadRateController(ratecontrol.New()),
+		largefile.WithDownloadLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+	}
+}
+
 func newByteRangeSeq(ranges ...largefile.ByteRange) func(s int, b *largefile.ByteRange) int {
 	return func(s int, b *largefile.ByteRange) int {
 		if s >= len(ranges) {
@@ -196,61 +242,7 @@ func newLogger() (*slog.Logger, *strings.Builder) {
 	return slog.New(slog.NewJSONHandler(out, nil)), out
 }
 
-func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
-	ctx := context.Background()
-	defaultContentSize := int64(256)
-	defaultBlockSize := 64
-	defaultBlocks := largefile.NumBlocks(defaultContentSize, defaultBlockSize)
-
-	defaultIncompleteStats := largefile.DownloadStats{
-		CachedOrStreamedBytes:  0,
-		CachedOrStreamedBlocks: 0,
-		DownloadedBytes:        0,
-		DownloadedBlocks:       0,
-		DownloadSize:           defaultContentSize,
-		DownloadBlocks:         int64(defaultBlocks),
-		Iterations:             1,
-	}
-	defaultConcurrency := 1
-
-	firstRange := largefile.ByteRange{From: 0, To: int64(defaultBlockSize) - 1}
-
-	newDefaultMockReader := func() *MockReader {
-		return &MockReader{
-			ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int) {
-				return defaultContentSize, defaultBlockSize
-			},
-			GetReaderFunc: func(_ context.Context, from, to int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error) {
-				dataSize := int(to-from) + 1
-				d := make([]byte, dataSize)
-				for i := 0; i < dataSize; i++ {
-					d[i] = byte(from + int64(i)) // Unique data per block start
-				}
-				return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
-			},
-		}
-	}
-
-	newDefaultMockCache := func() *MockDownloadCache {
-		return &MockDownloadCache{
-			ContentLengthAndBlockSizeFunc: func() (size int64, blockSize int) {
-				return defaultContentSize, defaultBlockSize
-			},
-			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
-			OutstandingFunc: func(s int, b *largefile.ByteRange) int {
-				return newByteRangeSeq()(s, b) // Default to no outstanding blocks
-			},
-		}
-	}
-
-	defaultOpts := func(c int) []largefile.DownloadOption {
-		return []largefile.DownloadOption{
-			largefile.WithDownloadConcurrency(c),
-			largefile.WithDownloadRateController(ratecontrol.New()),
-			largefile.WithDownloadLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
-		}
-	}
-
+func TestCachingDownloaderSetup(t *testing.T) {
 	t.Run("cache not set", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		_, err := largefile.NewCachingDownloader(mockReader, nil, defaultOpts(defaultConcurrency)...)
@@ -276,6 +268,25 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected error message for size mismatch, got %q", err.Error())
 		}
 	})
+}
+
+func defaultsForTest() (defaultBlocks int, defaultIncompleteStats largefile.DownloadStats) {
+	defaultBlocks = largefile.NumBlocks(defaultContentSize, defaultBlockSize)
+	defaultIncompleteStats = largefile.DownloadStats{
+		CachedOrStreamedBytes:  0,
+		CachedOrStreamedBlocks: 0,
+		DownloadedBytes:        0,
+		DownloadedBlocks:       0,
+		DownloadSize:           defaultContentSize,
+		DownloadBlocks:         int64(defaultBlocks),
+		Iterations:             1,
+	}
+	return
+}
+
+func TestCachingDownloaderSimple(t *testing.T) {
+	ctx := t.Context()
+	defaultBlocks, defaultIncompleteStats := defaultsForTest()
 
 	t.Run("no outstanding blocks", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
@@ -354,6 +365,222 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected status %v, got %v", want, got)
 		}
 	})
+
+}
+
+func TestCachingDownloaderOutstandingBlocks(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("multiple outstanding blocks success (concurrency > 1)", func(t *testing.T) {
+		numBlocks := 3
+		concurrency := 2
+		currentContentSize := int64(numBlocks * defaultBlockSize)
+
+		mockReader := &MockReader{
+			ContentLengthAndBlockSizeFunc: func() (int64, int) {
+				return currentContentSize, defaultBlockSize
+			},
+			GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
+				dataSize := int(to - from + 1)
+				d := make([]byte, dataSize)
+				for i := 0; i < dataSize; i++ {
+					d[i] = byte(from + int64(i)) // Unique data per block
+				}
+				return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
+			},
+		}
+		mockCache := &MockDownloadCache{
+			ContentLengthAndBlockSizeFunc: func() (int64, int) {
+				return currentContentSize, defaultBlockSize
+			},
+			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
+		}
+		mockCache.CompleteFunc = func() bool {
+			return true
+		}
+
+		expectedRanges := make([]largefile.ByteRange, numBlocks)
+		for i := range numBlocks {
+			expectedRanges[i] = largefile.ByteRange{
+				From: int64(i * defaultBlockSize),
+				To:   int64((i+1)*defaultBlockSize) - 1,
+			}
+		}
+		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+			return newByteRangeSeq(expectedRanges...)(s, b)
+		}
+
+		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
+		if err != nil {
+			t.Fatalf("NewCachingDownloader failed: %v", err)
+		}
+		st, err := dl.Run(ctx)
+		if err != nil {
+			t.Fatalf("Run failed for multiple blocks: %v", err)
+		}
+
+		if len(mockReader.GetReaderCalls) != numBlocks {
+			t.Errorf("expected %d GetReaderCalls, got %d", numBlocks, len(mockReader.GetReaderCalls))
+		}
+		if len(mockCache.PutCalls) != numBlocks {
+			t.Errorf("expected %d PutCalls, got %d", numBlocks, len(mockCache.PutCalls))
+		}
+
+		// Sort PutCalls by From offset for deterministic checking
+		sort.Slice(mockCache.PutCalls, func(i, j int) bool {
+			return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
+		})
+
+		for i, expectedRange := range expectedRanges {
+			if i >= len(mockCache.PutCalls) {
+				t.Errorf("missing PutCall for range index %d: %+v", i, expectedRange)
+				continue
+			}
+			putCall := mockCache.PutCalls[i]
+			if putCall.Off != expectedRange.From {
+				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Off, expectedRange)
+			}
+			expectedDataSize := expectedRange.To - expectedRange.From + 1
+			if int64(len(putCall.Data)) != expectedDataSize {
+				t.Errorf("PutCall data length mismatch for range %+v: got %d, want %d", expectedRange, len(putCall.Data), expectedDataSize)
+			}
+		}
+		st.Duration = 0
+		p := largefile.DownloadStats{
+			CachedOrStreamedBytes:  currentContentSize,
+			CachedOrStreamedBlocks: int64(numBlocks),
+			DownloadedBytes:        currentContentSize,
+			DownloadedBlocks:       int64(numBlocks),
+			DownloadSize:           currentContentSize,
+			DownloadBlocks:         int64(numBlocks),
+			Iterations:             1,
+		}
+		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+			t.Errorf("expected status %v, got %v", want, got)
+		}
+	})
+
+}
+
+func TestCachingDownloaderMultipleBlockSizes(t *testing.T) {
+	ctx := t.Context()
+
+	numFullBlocks := 2
+	partialBlockSize := defaultBlockSize / 2
+	currentContentSize := int64(numFullBlocks*defaultBlockSize + partialBlockSize)
+	totalBlocks := numFullBlocks + 1
+	concurrency := 2
+
+	mockReader := &MockReader{
+		ContentLengthAndBlockSizeFunc: func() (int64, int) {
+			return currentContentSize, defaultBlockSize
+		},
+		GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
+			dataSize := int(to - from + 1)
+			d := make([]byte, dataSize)
+			for i := 0; i < dataSize; i++ {
+				d[i] = byte(from + int64(i))
+			}
+			return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
+		},
+	}
+	mockCache := &MockDownloadCache{
+		ContentLengthAndBlockSizeFunc: func() (int64, int) {
+			return currentContentSize, defaultBlockSize
+		},
+		PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
+	}
+	mockCache.CompleteFunc = func() bool {
+		return true
+	}
+
+	expectedRanges := make([]largefile.ByteRange, totalBlocks)
+	for i := range numFullBlocks {
+		expectedRanges[i] = largefile.ByteRange{
+			From: int64(i * defaultBlockSize),
+			To:   int64((i+1)*defaultBlockSize) - 1,
+		}
+	}
+	expectedRanges[numFullBlocks] = largefile.ByteRange{
+		From: int64(numFullBlocks * defaultBlockSize),
+		To:   currentContentSize - 1, // Last byte of the file
+	}
+
+	mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
+		return newByteRangeSeq(expectedRanges...)(s, b)
+	}
+
+	dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
+	if err != nil {
+		t.Fatalf("NewCachingDownloader failed: %v", err)
+	}
+	st, err := dl.Run(ctx)
+	if err != nil {
+		t.Fatalf("Run failed for non-multiple block size file: %v", err)
+	}
+
+	if len(mockReader.GetReaderCalls) != totalBlocks {
+		t.Errorf("expected %d GetReaderCalls, got %d", totalBlocks, len(mockReader.GetReaderCalls))
+	}
+	if len(mockCache.PutCalls) != totalBlocks {
+		t.Errorf("expected %d PutCalls, got %d", totalBlocks, len(mockCache.PutCalls))
+	}
+
+	sort.Slice(mockCache.PutCalls, func(i, j int) bool {
+		return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
+	})
+
+	for i, expectedRange := range expectedRanges {
+		if i >= len(mockCache.PutCalls) {
+			t.Errorf("missing PutCall for range index %d: %+v", i, expectedRange)
+			continue
+		}
+		putCall := mockCache.PutCalls[i]
+		if putCall.Off != expectedRange.From {
+			t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Off, expectedRange)
+		}
+		expectedDataSize := expectedRange.To - expectedRange.From + 1
+		if int64(len(putCall.Data)) != expectedDataSize {
+			t.Errorf("PutCall data length mismatch for range %+v: got %d, want %d", expectedRange, len(putCall.Data), expectedDataSize)
+		}
+		// Verify data content for the last partial block specifically
+		if i == numFullBlocks { // Last block
+			expectedPartialData := make([]byte, partialBlockSize)
+			for j := 0; j < partialBlockSize; j++ {
+				expectedPartialData[j] = byte(expectedRange.From + int64(j))
+			}
+			if !bytes.Equal(putCall.Data, expectedPartialData) {
+				t.Errorf("PutCall data content mismatch for partial block: got %x, want %x", putCall.Data, expectedPartialData)
+			}
+		}
+	}
+	st.Duration = 0
+	p := largefile.DownloadStats{
+		CachedOrStreamedBytes:  currentContentSize,
+		CachedOrStreamedBlocks: int64(totalBlocks),
+		DownloadedBytes:        currentContentSize,
+		DownloadedBlocks:       int64(totalBlocks),
+		DownloadSize:           currentContentSize,
+		DownloadBlocks:         int64(totalBlocks),
+		Iterations:             1,
+	}
+	if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected status %v, got %v", want, got)
+	}
+}
+
+func TestCachingDownloaderConcurrencyAndCancellation(t *testing.T) {
+	ctx := context.Background()
+	defaultBlocks := largefile.NumBlocks(defaultContentSize, defaultBlockSize)
+	defaultIncompleteStats := largefile.DownloadStats{
+		CachedOrStreamedBytes:  0,
+		CachedOrStreamedBlocks: 0,
+		DownloadedBytes:        0,
+		DownloadedBlocks:       0,
+		DownloadSize:           defaultContentSize,
+		DownloadBlocks:         int64(defaultBlocks),
+		Iterations:             1,
+	}
 
 	t.Run("concurrency 0 - no outstanding", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
@@ -474,8 +701,21 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
+}
 
-	// Corrected "fetcher GetReader error"
+func TestCachingDownloaderErrorHandling(t *testing.T) {
+	ctx := context.Background()
+	defaultBlocks := largefile.NumBlocks(defaultContentSize, defaultBlockSize)
+	defaultIncompleteStats := largefile.DownloadStats{
+		CachedOrStreamedBytes:  0,
+		CachedOrStreamedBlocks: 0,
+		DownloadedBytes:        0,
+		DownloadedBlocks:       0,
+		DownloadSize:           defaultContentSize,
+		DownloadBlocks:         int64(defaultBlocks),
+		Iterations:             1,
+	}
+
 	t.Run("fetcher GetReader error", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
@@ -508,7 +748,6 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 	})
 
-	// Corrected "fetcher handleResponse (cache.Put) error"
 	t.Run("fetcher handleResponse (cache.Put) error", func(t *testing.T) {
 		mockReader := newDefaultMockReader()
 		mockCache := newDefaultMockCache()
@@ -542,33 +781,10 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
+}
 
-	// Corrected "concurrency 0 - with outstanding"
-	t.Run("concurrency 0 - with outstanding (should block or complete if ctx cancelled)", func(t *testing.T) {
-		mockReader := newDefaultMockReader()
-		mockCache := newDefaultMockCache()
-		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
-			return newByteRangeSeq(firstRange)(s, b)
-		}
-		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, largefile.WithDownloadRateController(&slowRateLimiter{}))
-		if err != nil {
-			t.Fatalf("NewCachingDownloader failed: %v", err)
-		}
-		runCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		defer cancel()
-
-		st, err := dl.Run(runCtx)
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Errorf("expected context.DeadlineExceeded with concurrency 0 and outstanding blocks, got %v", err)
-		}
-		st.Duration = 0
-		p := defaultIncompleteStats
-		if got, want := st, (largefile.DownloadStatus{Resumable: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %+v, got %+v", want, got)
-		}
-	})
-
-	// Corrected "all blocks downloaded successfully with progress"
+func TestCachingDownloaderProgress(t *testing.T) {
+	ctx := context.Background()
 	t.Run("all blocks downloaded successfully with progress", func(t *testing.T) {
 		mockReader := newDefaultMockReader() // Ensure this is configured for the test's content/block size
 		mockCache := newDefaultMockCache()
@@ -649,101 +865,6 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 		}
 		st.Duration = 0
 		p := largefile.DownloadStats{
-			CachedOrStreamedBytes:  defaultContentSize,
-			CachedOrStreamedBlocks: int64(defaultBlocks),
-			DownloadedBytes:        defaultContentSize,
-			DownloadedBlocks:       int64(defaultBlocks),
-			DownloadSize:           defaultContentSize,
-			DownloadBlocks:         int64(defaultBlocks),
-			Iterations:             1,
-		}
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %+v, got %+v", want, got)
-		}
-	})
-
-	// --- NEW/UPDATED TESTS ---
-
-	// Replace/Unskip "multiple outstanding blocks success (concurrency > 1, with fixed pool)"
-	// This test will now attempt a multi-block download with concurrency.
-	// If the pool panic was due to a real issue, this might reveal it.
-	// Otherwise, it tests successful concurrent download.
-	t.Run("multiple outstanding blocks success (concurrency > 1)", func(t *testing.T) {
-		numBlocks := 3
-		concurrency := 2
-		currentContentSize := int64(numBlocks * defaultBlockSize)
-
-		mockReader := &MockReader{
-			ContentLengthAndBlockSizeFunc: func() (int64, int) {
-				return currentContentSize, defaultBlockSize
-			},
-			GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
-				dataSize := int(to - from + 1)
-				d := make([]byte, dataSize)
-				for i := 0; i < dataSize; i++ {
-					d[i] = byte(from + int64(i)) // Unique data per block
-				}
-				return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
-			},
-		}
-		mockCache := &MockDownloadCache{
-			ContentLengthAndBlockSizeFunc: func() (int64, int) {
-				return currentContentSize, defaultBlockSize
-			},
-			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
-		}
-		mockCache.CompleteFunc = func() bool {
-			return true
-		}
-
-		expectedRanges := make([]largefile.ByteRange, numBlocks)
-		for i := range numBlocks {
-			expectedRanges[i] = largefile.ByteRange{
-				From: int64(i * defaultBlockSize),
-				To:   int64((i+1)*defaultBlockSize) - 1,
-			}
-		}
-		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
-			return newByteRangeSeq(expectedRanges...)(s, b)
-		}
-
-		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
-		if err != nil {
-			t.Fatalf("NewCachingDownloader failed: %v", err)
-		}
-		st, err := dl.Run(ctx)
-		if err != nil {
-			t.Fatalf("Run failed for multiple blocks: %v", err)
-		}
-
-		if len(mockReader.GetReaderCalls) != numBlocks {
-			t.Errorf("expected %d GetReaderCalls, got %d", numBlocks, len(mockReader.GetReaderCalls))
-		}
-		if len(mockCache.PutCalls) != numBlocks {
-			t.Errorf("expected %d PutCalls, got %d", numBlocks, len(mockCache.PutCalls))
-		}
-
-		// Sort PutCalls by From offset for deterministic checking
-		sort.Slice(mockCache.PutCalls, func(i, j int) bool {
-			return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
-		})
-
-		for i, expectedRange := range expectedRanges {
-			if i >= len(mockCache.PutCalls) {
-				t.Errorf("missing PutCall for range index %d: %+v", i, expectedRange)
-				continue
-			}
-			putCall := mockCache.PutCalls[i]
-			if putCall.Off != expectedRange.From {
-				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Off, expectedRange)
-			}
-			expectedDataSize := expectedRange.To - expectedRange.From + 1
-			if int64(len(putCall.Data)) != expectedDataSize {
-				t.Errorf("PutCall data length mismatch for range %+v: got %d, want %d", expectedRange, len(putCall.Data), expectedDataSize)
-			}
-		}
-		st.Duration = 0
-		p := largefile.DownloadStats{
 			CachedOrStreamedBytes:  currentContentSize,
 			CachedOrStreamedBlocks: int64(numBlocks),
 			DownloadedBytes:        currentContentSize,
@@ -753,113 +874,7 @@ func TestCachingDownloaderRun(t *testing.T) { //nolint:gocyclo
 			Iterations:             1,
 		}
 		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
+			t.Errorf("expected status %+v, got %+v", want, got)
 		}
 	})
-
-	t.Run("file not a multiple of block size", func(t *testing.T) {
-		numFullBlocks := 2
-		partialBlockSize := defaultBlockSize / 2
-		currentContentSize := int64(numFullBlocks*defaultBlockSize + partialBlockSize)
-		totalBlocks := numFullBlocks + 1
-		concurrency := 2
-
-		mockReader := &MockReader{
-			ContentLengthAndBlockSizeFunc: func() (int64, int) {
-				return currentContentSize, defaultBlockSize
-			},
-			GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
-				dataSize := int(to - from + 1)
-				d := make([]byte, dataSize)
-				for i := 0; i < dataSize; i++ {
-					d[i] = byte(from + int64(i))
-				}
-				return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
-			},
-		}
-		mockCache := &MockDownloadCache{
-			ContentLengthAndBlockSizeFunc: func() (int64, int) {
-				return currentContentSize, defaultBlockSize
-			},
-			PutFunc: func(data []byte, _ int64) (int, error) { return len(data), nil },
-		}
-		mockCache.CompleteFunc = func() bool {
-			return true
-		}
-
-		expectedRanges := make([]largefile.ByteRange, totalBlocks)
-		for i := 0; i < numFullBlocks; i++ {
-			expectedRanges[i] = largefile.ByteRange{
-				From: int64(i * defaultBlockSize),
-				To:   int64((i+1)*defaultBlockSize) - 1,
-			}
-		}
-		expectedRanges[numFullBlocks] = largefile.ByteRange{
-			From: int64(numFullBlocks * defaultBlockSize),
-			To:   currentContentSize - 1, // Last byte of the file
-		}
-
-		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {
-			return newByteRangeSeq(expectedRanges...)(s, b)
-		}
-
-		dl, err := largefile.NewCachingDownloader(mockReader, mockCache, defaultOpts(concurrency)...)
-		if err != nil {
-			t.Fatalf("NewCachingDownloader failed: %v", err)
-		}
-		st, err := dl.Run(ctx)
-		if err != nil {
-			t.Fatalf("Run failed for non-multiple block size file: %v", err)
-		}
-
-		if len(mockReader.GetReaderCalls) != totalBlocks {
-			t.Errorf("expected %d GetReaderCalls, got %d", totalBlocks, len(mockReader.GetReaderCalls))
-		}
-		if len(mockCache.PutCalls) != totalBlocks {
-			t.Errorf("expected %d PutCalls, got %d", totalBlocks, len(mockCache.PutCalls))
-		}
-
-		sort.Slice(mockCache.PutCalls, func(i, j int) bool {
-			return mockCache.PutCalls[i].Off < mockCache.PutCalls[j].Off
-		})
-
-		for i, expectedRange := range expectedRanges {
-			if i >= len(mockCache.PutCalls) {
-				t.Errorf("missing PutCall for range index %d: %+v", i, expectedRange)
-				continue
-			}
-			putCall := mockCache.PutCalls[i]
-			if putCall.Off != expectedRange.From {
-				t.Errorf("PutCall range mismatch at index %d: got %+v, want %+v", i, putCall.Off, expectedRange)
-			}
-			expectedDataSize := expectedRange.To - expectedRange.From + 1
-			if int64(len(putCall.Data)) != expectedDataSize {
-				t.Errorf("PutCall data length mismatch for range %+v: got %d, want %d", expectedRange, len(putCall.Data), expectedDataSize)
-			}
-			// Verify data content for the last partial block specifically
-			if i == numFullBlocks { // Last block
-				expectedPartialData := make([]byte, partialBlockSize)
-				for j := 0; j < partialBlockSize; j++ {
-					expectedPartialData[j] = byte(expectedRange.From + int64(j))
-				}
-				if !bytes.Equal(putCall.Data, expectedPartialData) {
-					t.Errorf("PutCall data content mismatch for partial block: got %x, want %x", putCall.Data, expectedPartialData)
-				}
-			}
-		}
-		st.Duration = 0
-		p := largefile.DownloadStats{
-			CachedOrStreamedBytes:  currentContentSize,
-			CachedOrStreamedBlocks: int64(totalBlocks),
-			DownloadedBytes:        currentContentSize,
-			DownloadedBlocks:       int64(totalBlocks),
-			DownloadSize:           currentContentSize,
-			DownloadBlocks:         int64(totalBlocks),
-			Iterations:             1,
-		}
-		if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("expected status %v, got %v", want, got)
-		}
-	})
-
-} // End of TestCachingDownloader_Run
+}

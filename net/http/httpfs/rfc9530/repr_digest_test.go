@@ -29,6 +29,51 @@ const (
 	md5ValueB64 = "1B2M2Y8AsgTpgAmY7PhCfg==" // md5 of "hello"
 )
 
+func testParseReprDigest(t *testing.T, name, headerValue string, want map[string]string, wantErr string) {
+	t.Helper()
+	got, err := rfc9530.ParseReprDigest(headerValue)
+
+	if wantErr != "" {
+		if err == nil {
+			t.Errorf("%v: ParseReprDigest() error = nil, wantErr %q", name, wantErr)
+			return
+		}
+		if !strings.Contains(err.Error(), wantErr) {
+			t.Errorf("%v: ParseReprDigest() error = %q, wantErr %q", name, err.Error(), wantErr)
+		}
+		return // Expected error, no need to check 'want'
+	}
+
+	if err != nil {
+		t.Fatalf("%v: ParseReprDigest() unexpected error = %v", name, err)
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%v: ParseReprDigest() got = %v, want %v", name, got, want)
+	}
+	for k, v := range got {
+		d := k + "=:" + v + ":"
+		algo, b64, raw, err := rfc9530.ParseAlgoDigest(d)
+		if err != nil {
+			t.Errorf("%v: ParseAlgoDigest() hdr %q error = %v", name, d, err)
+			return
+		}
+		if algo == "" {
+			t.Errorf("%v: ParseAlgoDigest() algo = empty, want non-empty", name)
+		}
+		if b64 != v {
+			t.Errorf("%v: ParseAlgoDigest() b64 = %q, want %q", name, b64, v)
+		}
+		expectedRaw, err := base64.StdEncoding.DecodeString(v)
+		if err != nil {
+			t.Fatalf("invalid base64 in test case %q: %v", v, err)
+		}
+		if !slices.Equal(raw, expectedRaw) {
+			t.Errorf("%v: ParseAlgoDigest() raw bytes mismatch: got %x, want %x", name, raw, expectedRaw)
+		}
+	}
+}
+
 func TestParseReprDigest(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -155,47 +200,7 @@ func TestParseReprDigest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := rfc9530.ParseReprDigest(tt.headerValue)
-
-			if tt.wantErr != "" {
-				if err == nil {
-					t.Errorf("%v: ParseReprDigest() error = nil, wantErr %q", tt.name, tt.wantErr)
-					return
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Errorf("%v: ParseReprDigest() error = %q, wantErr %q", tt.name, err.Error(), tt.wantErr)
-				}
-				return // Expected error, no need to check 'want'
-			}
-
-			if err != nil {
-				t.Fatalf("%v: ParseReprDigest() unexpected error = %v", tt.name, err)
-			}
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("%v: ParseReprDigest() got = %v, want %v", tt.name, got, tt.want)
-			}
-			for k, v := range got {
-				d := k + "=:" + v + ":"
-				algo, b64, raw, err := rfc9530.ParseAlgoDigest(d)
-				if err != nil {
-					t.Errorf("%v: ParseAlgoDigest() hdr %q error = %v", tt.name, d, err)
-					return
-				}
-				if algo == "" {
-					t.Errorf("%v: ParseAlgoDigest() algo = empty, want non-empty", tt.name)
-				}
-				if b64 != v {
-					t.Errorf("%v: ParseAlgoDigest() b64 = %q, want %q", tt.name, b64, v)
-				}
-				expectedRaw, err := base64.StdEncoding.DecodeString(v)
-				if err != nil {
-					t.Fatalf("invalid base64 in test case %q: %v", v, err)
-				}
-				if !slices.Equal(raw, expectedRaw) {
-					t.Errorf("%v: ParseAlgoDigest() raw bytes mismatch: got %x, want %x", tt.name, raw, expectedRaw)
-				}
-			}
+			testParseReprDigest(t, tt.name, tt.headerValue, tt.want, tt.wantErr)
 		})
 	}
 }

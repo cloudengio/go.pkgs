@@ -63,8 +63,68 @@ func findDelta(start time.Time, repeat time.Duration) int {
 	return fnd
 }
 
-func TestDailyRepeat(t *testing.T) {
+func testDailyRepeat(t *testing.T, loc *time.Location, date datetime.CalendarDate, dst bool, repeats []time.Duration) {
 	nt := datetime.NewTimeOfDay
+	ncd := datetime.NewCalendarDate
+
+	t.Helper()
+	for _, start := range []struct {
+		tod         datetime.TimeOfDay
+		expectDelta bool
+	}{
+		{nt(0, 0, 0), true},
+		{nt(0, 59, 59), true},
+		{nt(1, 0, 0), false},   // can't reliably determine if the time is repeated.
+		{nt(2, 0, 0), false},   // can't reliably determine if the time is repeated.
+		{nt(23, 13, 0), false}, // doesn't cross a transition.
+	} {
+
+		expectedNumOps := map[string]int{}
+		// Run the repeats one at a time.
+		for i, repeat := range repeats {
+			scheduled := createActions(date, start.tod, []time.Duration{repeat})
+			active, _, _ := runDaily(scheduled, loc)
+
+			expectDelta := start.expectDelta && dst && repeat < time.Hour
+			expected := expectedRepeats(ncd(2024, 1, 1).Time(start.tod, loc), repeat)
+			actual := findDelta(date.Time(start.tod, loc), repeat)
+			if (expected-actual) == 0 && expectDelta {
+				t.Errorf("expected delta for %v %v %v %v", loc, date, start.tod, repeat)
+				continue
+			}
+			if got, want := len(active), actual; got != want {
+				t.Errorf("%v: %v: %v: %v: got %v, want %v", loc, date, start, repeat, got, want)
+			}
+
+			if got, ok := compareIntervals(active, repeat); !ok {
+				t.Errorf("%v: %v: %v: %v: got %v, want %v", loc, date, start.tod, repeat, got, repeat)
+			}
+
+			expectedNumOps[fmt.Sprintf("action%d", i)] = actual
+		}
+
+		// Run the repeats together.
+		scheduled := createActions(date, start.tod, repeats)
+		_, numOps, times := runDaily(scheduled, loc)
+
+		for i := range len(repeats) {
+			name := fmt.Sprintf("action%d", i)
+			prev := times[name][0]
+			for _, now := range times[name][1:] {
+				if got, want := now.Sub(prev), repeats[i]; got != want {
+					t.Errorf("got %v, want %v", got, want)
+				}
+				prev = now
+			}
+		}
+
+		if got, want := numOps, expectedNumOps; !reflect.DeepEqual(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestDailyRepeat(t *testing.T) {
 	ncd := datetime.NewCalendarDate
 
 	// Note that time.Date does not guarantee which timezone it
@@ -94,65 +154,13 @@ func TestDailyRepeat(t *testing.T) {
 		{uk, ncd(2024, 10, 27), true}, // Repeat an hour.
 		{uk, ncd(2024, 10, 28), false},
 	} {
-		for _, start := range []struct {
-			tod         datetime.TimeOfDay
-			expectDelta bool
-		}{
-			{nt(0, 0, 0), true},
-			{nt(0, 59, 59), true},
-			{nt(1, 0, 0), false},   // can't reliably determine if the time is repeated.
-			{nt(2, 0, 0), false},   // can't reliably determine if the time is repeated.
-			{nt(23, 13, 0), false}, // doesn't cross a transition.
-		} {
-
-			expectedNumOps := map[string]int{}
-			repeats := []time.Duration{time.Hour,
+		t.Run(fmt.Sprintf("%v-%v", tc.loc, tc.date), func(t *testing.T) {
+			testDailyRepeat(t, tc.loc, tc.date, tc.dst, []time.Duration{time.Hour,
 				time.Hour * 5,
 				time.Minute,
 				time.Minute * 13,
-			}
-			// Run the repeats one at a time.
-			for i, repeat := range repeats {
-				scheduled := createActions(tc.date, start.tod, []time.Duration{repeat})
-				active, _, _ := runDaily(scheduled, tc.loc)
-
-				expectDelta := start.expectDelta && tc.dst && repeat < time.Hour
-				expected := expectedRepeats(ncd(2024, 1, 1).Time(start.tod, tc.loc), repeat)
-				actual := findDelta(tc.date.Time(start.tod, tc.loc), repeat)
-				if (expected-actual) == 0 && expectDelta {
-					t.Errorf("expected delta for %v %v %v %v", tc.loc, tc.date, start.tod, repeat)
-					continue
-				}
-				if got, want := len(active), actual; got != want {
-					t.Errorf("%v: %v: %v: %v: got %v, want %v", tc.loc, tc.date, start, repeat, got, want)
-				}
-
-				if got, ok := compareIntervals(active, repeat); !ok {
-					t.Errorf("%v: %v: %v: %v: got %v, want %v", tc.loc, tc.date, start.tod, repeat, got, repeat)
-				}
-
-				expectedNumOps[fmt.Sprintf("action%d", i)] = actual
-			}
-
-			// Run the repeats together.
-			scheduled := createActions(tc.date, start.tod, repeats)
-			_, numOps, times := runDaily(scheduled, tc.loc)
-
-			for i := 0; i < len(repeats); i++ {
-				name := fmt.Sprintf("action%d", i)
-				prev := times[name][0]
-				for _, now := range times[name][1:] {
-					if got, want := now.Sub(prev), repeats[i]; got != want {
-						t.Errorf("got %v, want %v", got, want)
-					}
-					prev = now
-				}
-			}
-
-			if got, want := numOps, expectedNumOps; !reflect.DeepEqual(got, want) {
-				t.Errorf("got %v, want %v", got, want)
-			}
-		}
+			})
+		})
 	}
 }
 

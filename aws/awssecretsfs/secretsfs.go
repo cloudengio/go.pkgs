@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 	"time"
 
 	"cloudeng.io/aws/awsutil"
@@ -248,6 +249,12 @@ func translateError(err error) error {
 	var rnfe *types.ResourceNotFoundException
 	if errors.As(err, &rnfe) {
 		return fs.ErrNotExist
+	}
+	var ire *types.InvalidRequestException
+	if errors.As(err, &ire) {
+		if strings.Contains(ire.ErrorMessage(), "currently marked deleted") {
+			return fs.ErrNotExist
+		}
 	}
 	return err
 }
