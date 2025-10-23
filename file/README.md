@@ -14,6 +14,12 @@ ErrNotImplemented = fmt.Errorf("not implemented")
 ErrNotImplemented is returned by methods that are not implemented by a
 particular filesystem.
 
+### ErrSchemeNotSupported
+```go
+ErrSchemeNotSupported = fmt.Errorf("scheme not supported")
+
+```
+
 
 
 ## Functions
@@ -279,6 +285,16 @@ type ObjectFS interface {
 ObjectFS represents a writeable object store. It is intended to backed
 by cloud or local filesystems. The permissions may be ignored by some
 implementations.
+
+
+### Type ReadFileFS
+```go
+type ReadFileFS interface {
+	ReadFile(name string) ([]byte, error)
+	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+}
+```
+ReadFileFS defines an FS style interface for reading files.
 
 
 ### Type WriteFileFS
