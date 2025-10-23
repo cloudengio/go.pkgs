@@ -5,15 +5,23 @@ run:
 linters:
   enable:
     - copyloopvar
+    - errcheck
     - gocritic
     - gocyclo
+    - gocognit
     - gosec
+    - govet
+    - ineffassign
     - misspell
     - revive
+    - staticcheck
     - unconvert
+    - unused 
   settings:
     gocyclo:
       min-complexity: 15
+    gocognit:
+      min-complexity: 30
     gosec:
       excludes:
         - G115

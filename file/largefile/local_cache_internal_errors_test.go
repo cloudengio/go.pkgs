@@ -168,7 +168,7 @@ func setupTestCache(t *testing.T) (*LocalDownloadCache, string, string) {
 	return cache, cacheFilePath, indexFilePath
 }
 
-func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
+func TestInternalCacheErrorsWrite(t *testing.T) {
 	t.Run("WriteAt data file error", func(t *testing.T) {
 		cache, _, _ := setupTestCache(t)
 		defer cache.Close()
@@ -239,6 +239,10 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 			t.Errorf("error message mismatch, got: %v", err)
 		}
 	})
+
+}
+
+func TestInternalCacheErrorsRead(t *testing.T) {
 
 	t.Run("ReadAt data file error", func(t *testing.T) {
 		cache, _, _ := setupTestCache(t)

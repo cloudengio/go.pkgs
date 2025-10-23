@@ -126,6 +126,100 @@ func expectedFilenames(nItems, depth, fanOut int) []string {
 	return names
 }
 
+func runCrawl(ctx context.Context, t *testing.T, readFS file.FS, nItems, depth, fanOut int) ([]crawl.Crawled, int, int) {
+	inputCh := make(chan download.Request, 10)
+	outputCh := make(chan crawl.Crawled, 10)
+
+	crawler := crawl.New(
+		crawl.WithNumExtractors(2),
+		crawl.WithCrawlDepth(depth))
+
+	errCh := make(chan error, 1)
+	wg := &sync.WaitGroup{}
+	wg.Add(3)
+
+	outlinks := &extractor{fanOut: fanOut}
+
+	df := &dlFactory{numDownloaders: 1}
+	go func() {
+		errCh <- crawler.Run(ctx, df, outlinks, inputCh, outputCh)
+		wg.Done()
+	}()
+
+	go func() {
+		issuseCrawlRequests(ctx, nItems, inputCh, readFS)
+		wg.Done()
+	}()
+
+	crawled := []crawl.Crawled{}
+	nDownloads := 0
+	nOutlinks := 0
+	go func() {
+		for outs := range outputCh {
+			crawled = append(crawled, outs)
+			nDownloads += len(outs.Downloads)
+			for _, ol := range outs.Outlinks {
+				nOutlinks += len(ol.Names())
+			}
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+
+	return crawled, nDownloads, nOutlinks
+}
+
+func checkCrawlResults(ctx context.Context, t *testing.T, readFS file.FS, crawled []crawl.Crawled, nDownloads, nOutlinks, nItems, depth, fanOut int) {
+	expectedDownloads := nItems
+	prev := nItems
+	for d := 0; d < depth; d++ {
+		prev *= fanOut
+		expectedDownloads += prev
+	}
+	expectedOutlinks := expectedDownloads * fanOut
+
+	t.Logf("depth %v, expected downloads: %v, expected outlinks %v", depth, expectedDownloads, expectedOutlinks)
+
+	if got, want := nDownloads, expectedDownloads; got != want {
+		t.Errorf("depth %v: got %v, want %v", depth, got, want)
+	}
+
+	if got, want := nOutlinks, expectedOutlinks; got != want {
+		t.Errorf("depth %v: got %v, want %v", depth, got, want)
+	}
+
+	for _, c := range crawled {
+		if got, want := c.Request.Requester(), "issueCrawlRequest"; got != want {
+			t.Errorf("depth %v: got %v, want %v", depth, got, want)
+		}
+
+	}
+	writeFS := copyDownloadsToFS(ctx, t, crawled)
+
+	crawledContents := filetestutil.Contents(writeFS)
+	if got, want := len(crawledContents), expectedDownloads; got != want {
+		t.Errorf("depth %v: got %v, want %v", depth, got, want)
+	}
+
+	expectedDownloadNames := expectedFilenames(nItems, depth, fanOut)
+	if got, want := len(expectedDownloadNames), expectedDownloads; got != want {
+		t.Errorf("depth %v: got %v, want %v", depth, got, want)
+	}
+	for _, k := range expectedDownloadNames {
+		if _, ok := crawledContents[k]; !ok {
+			t.Errorf("%v was not crawled", k)
+		}
+	}
+	if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCrawler(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 
@@ -136,94 +230,10 @@ func TestCrawler(t *testing.T) {
 	fanOut := 2 // number of outlinks per download.
 
 	for _, depth := range []int{0, 1, 4} {
-		readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
-
-		inputCh := make(chan download.Request, 10)
-		outputCh := make(chan crawl.Crawled, 10)
-
-		crawler := crawl.New(
-			crawl.WithNumExtractors(2),
-			crawl.WithCrawlDepth(depth))
-
-		errCh := make(chan error, 1)
-		wg := &sync.WaitGroup{}
-		wg.Add(3)
-
-		outlinks := &extractor{fanOut: fanOut}
-
-		df := &dlFactory{numDownloaders: 1}
-		go func() {
-			errCh <- crawler.Run(ctx, df, outlinks, inputCh, outputCh)
-			wg.Done()
-		}()
-
-		go func() {
-			issuseCrawlRequests(ctx, nItems, inputCh, readFS)
-			wg.Done()
-		}()
-
-		crawled := []crawl.Crawled{}
-		nDownloads := 0
-		nOutlinks := 0
-		go func() {
-			for outs := range outputCh {
-				crawled = append(crawled, outs)
-				nDownloads += len(outs.Downloads)
-				for _, ol := range outs.Outlinks {
-					nOutlinks += len(ol.Names())
-				}
-			}
-			wg.Done()
-		}()
-
-		wg.Wait()
-
-		if err := <-errCh; err != nil {
-			t.Fatal(err)
-		}
-
-		expectedDownloads := nItems
-		prev := nItems
-		for d := 0; d < depth; d++ {
-			prev *= fanOut
-			expectedDownloads += prev
-		}
-		expectedOutlinks := expectedDownloads * fanOut
-
-		t.Logf("depth %v, expected downloads: %v, expected outlinks %v", depth, expectedDownloads, expectedOutlinks)
-
-		if got, want := nDownloads, expectedDownloads; got != want {
-			t.Errorf("depth %v: got %v, want %v", depth, got, want)
-		}
-
-		if got, want := nOutlinks, expectedOutlinks; got != want {
-			t.Errorf("depth %v: got %v, want %v", depth, got, want)
-		}
-
-		for _, c := range crawled {
-			if got, want := c.Request.Requester(), "issueCrawlRequest"; got != want {
-				t.Errorf("depth %v: got %v, want %v", depth, got, want)
-			}
-
-		}
-		writeFS := copyDownloadsToFS(ctx, t, crawled)
-
-		crawledContents := filetestutil.Contents(writeFS)
-		if got, want := len(crawledContents), expectedDownloads; got != want {
-			t.Errorf("depth %v: got %v, want %v", depth, got, want)
-		}
-
-		expectedDownloadNames := expectedFilenames(nItems, depth, fanOut)
-		if got, want := len(expectedDownloadNames), expectedDownloads; got != want {
-			t.Errorf("depth %v: got %v, want %v", depth, got, want)
-		}
-		for _, k := range expectedDownloadNames {
-			if _, ok := crawledContents[k]; !ok {
-				t.Errorf("%v was not crawled", k)
-			}
-		}
-		if err := filetestutil.CompareFS(readFS, writeFS); err != nil {
-			t.Fatal(err)
-		}
+		t.Run(fmt.Sprintf("depth-%v", depth), func(t *testing.T) {
+			readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
+			crawled, nDownloads, nOutlinks := runCrawl(ctx, t, readFS, nItems, depth, fanOut)
+			checkCrawlResults(ctx, t, readFS, crawled, nDownloads, nOutlinks, nItems, depth, fanOut)
+		})
 	}
 }
