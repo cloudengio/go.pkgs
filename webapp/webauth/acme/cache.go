@@ -162,7 +162,6 @@ func (dc *CachingStore) Get(ctx context.Context, name string) ([]byte, error) {
 			}
 			return nil, fmt.Errorf("get %q: %w", name, errors.NewM(err, ErrBackingOperation))
 		}
-		fmt.Printf("acme/cache.go: Get %q succeeded\n", name)
 		return data, nil
 	}
 	var err error
