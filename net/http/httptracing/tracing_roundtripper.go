@@ -307,7 +307,7 @@ func (t *TracingRoundTripper) logAndReplaceBody(ctx context.Context, logger *slo
 		}
 		return req.Body
 	}
-	if t.opts.responseBody == nil {
+	if t.opts.responseBody != nil {
 		data, body := copyAndReplace(logger, resp.Body)
 		t.opts.responseBody(ctx, logger, req, resp, data)
 		return body
