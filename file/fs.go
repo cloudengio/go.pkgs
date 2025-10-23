@@ -64,13 +64,13 @@ type FS interface {
 	SysXAttr(existing any, merge XAttr) any
 }
 
-// WriteFileFS defines an FS style interface for writing files.
+// WriteFileFS provides an interface for writing the entire contents of a file.
 type WriteFileFS interface {
 	WriteFile(name string, data []byte, perm fs.FileMode) error
 	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
 }
 
-// ReadFileFS defines an FS style interface for reading files.
+// ReadFileFS provides an interface for reading the entire contents of a file.
 type ReadFileFS interface {
 	ReadFile(name string) ([]byte, error)
 	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
