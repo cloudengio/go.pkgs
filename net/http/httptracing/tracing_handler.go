@@ -5,9 +5,12 @@
 package httptracing
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync/atomic"
 )
@@ -124,4 +127,19 @@ func (trw *tracingResponseWriter) WriteHeader(statusCode int) {
 
 func (trw *tracingResponseWriter) Data() []byte {
 	return trw.data
+}
+
+// Flush implements http.Flusher.
+func (trw *tracingResponseWriter) Flush() {
+	if f, ok := trw.wr.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Hijack implements http.Hijacker.
+func (trw *tracingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := trw.wr.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, fmt.Errorf("http.Hijacker not supported by underlying ResponseWriter")
 }

@@ -123,7 +123,7 @@ func JSONRequestBodyLogger(ctx context.Context, logger *slog.Logger, req *http.R
 // The supplied logger is pre-configured with relevant request information.
 func JSONResponseBodyLogger(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte) {
 	if len(data) == 0 {
-		logger.Info("HTTP Response Body: ", "direction", "response", "body", "(empty)")
+		logger.Info("HTTP Response Body", "direction", "response", "body", "(empty)")
 		return
 	}
 	logger.Info("HTTP Response Body", "direction", "response", "body", json.RawMessage(data))
@@ -131,7 +131,7 @@ func JSONResponseBodyLogger(ctx context.Context, logger *slog.Logger, req *http.
 
 func JSONHandlerResponseLogger(ctx context.Context, logger *slog.Logger, req *http.Request, _ http.Header, statusCode int, data []byte) {
 	if len(data) == 0 {
-		logger.Info("HTTP Handler Response Body: ", "direction", "response", "status_code", statusCode, "body", "(empty)")
+		logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", "(empty)")
 		return
 	}
 	logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", json.RawMessage(data))
@@ -343,7 +343,7 @@ func (t *TracingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 	duration := time.Since(start)
 	if err != nil {
-		logger.Warn("HTTP Response trace: (warning)",
+		logger.Warn("HTTP Response trace",
 			"error", err, "duration", duration.String())
 	} else {
 		logger = logger.With(
