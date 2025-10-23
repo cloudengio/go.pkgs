@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 	awstestutil.AWSTestMain(m, &awsInstance)
 }
 
-func newSecretsFS(opts ...awssecretsfs.Option) fs.ReadFileFS {
+func newSecretsFS(opts ...awssecretsfs.Option) *awssecretsfs.T {
 	cfg := awstestutil.DefaultAWSConfig()
 	o := []awssecretsfs.Option{
 		awssecretsfs.WithSecretsClient(awsInstance.SecretsManager(cfg))}
@@ -126,10 +126,7 @@ func TestSecretDeletion(t *testing.T) {
 	}
 
 	// Now delete it.
-	_, err = client.DeleteSecret(ctx, &secretsmanager.DeleteSecretInput{
-		SecretId:                   s.ARN,
-		ForceDeleteWithoutRecovery: aws.Bool(true),
-	})
+	err = sfs.Delete(ctx, name)
 	if err != nil {
 		t.Fatalf("failed to delete secret: %v", err)
 	}
@@ -146,19 +143,13 @@ func TestWriteFile(t *testing.T) {
 	ctx := context.Background()
 
 	sfs := newSecretsFS(awssecretsfs.WithAllowCreation(true), awssecretsfs.WithAllowUpdates(true))
-	wfs, ok := sfs.(interface {
-		WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
-	})
-	if !ok {
-		t.Fatalf("fs.ReadFileFS does not implement WriteFileCtx")
-	}
 
 	client := awsInstance.SecretsManager(awstestutil.DefaultAWSConfig())
-	secretName := "test-write-secret"
+	secretName := "test-write-secret" //nolint:gosec // G101 this is not a hardcoded secret.
 	secretValue := []byte("my-secret-value")
 
 	// 1. Create a new secret.
-	err := wfs.WriteFileCtx(ctx, secretName, secretValue, 0600)
+	err := sfs.WriteFileCtx(ctx, secretName, secretValue, 0600)
 	if err != nil {
 		t.Fatalf("WriteFileCtx failed to create secret: %v", err)
 	}
@@ -174,7 +165,7 @@ func TestWriteFile(t *testing.T) {
 
 	// 3. Update an existing secret.
 	updatedSecretValue := []byte("my-updated-secret-value")
-	err = wfs.WriteFileCtx(ctx, secretName, updatedSecretValue, 0600)
+	err = sfs.WriteFileCtx(ctx, secretName, updatedSecretValue, 0600)
 	if err != nil {
 		t.Fatalf("WriteFileCtx failed to update secret: %v", err)
 	}
@@ -203,17 +194,10 @@ func TestWriteFilePermissions(t *testing.T) {
 	ctx := context.Background()
 	client := awsInstance.SecretsManager(awstestutil.DefaultAWSConfig())
 
-	wfsFor := func(t *testing.T, opts ...awssecretsfs.Option) interface {
+	wfsFor := func(opts ...awssecretsfs.Option) interface {
 		WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
 	} {
-		sfs := newSecretsFS(opts...)
-		wfs, ok := sfs.(interface {
-			WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
-		})
-		if !ok {
-			t.Fatalf("fs.ReadFileFS does not implement WriteFileCtx")
-		}
-		return wfs
+		return newSecretsFS(opts...)
 	}
 
 	secretName := "test-write-perms-secret"
@@ -237,7 +221,7 @@ func TestWriteFilePermissions(t *testing.T) {
 	defer cleanup(secretName)
 
 	t.Run("no-create-no-update", func(t *testing.T) {
-		wfs := wfsFor(t) // Defaults are false for creation and updates.
+		wfs := wfsFor() // Defaults are false for creation and updates.
 		err := wfs.WriteFileCtx(ctx, secretName, secretValue, 0600)
 		if !errors.Is(err, fs.ErrPermission) {
 			t.Errorf("expected fs.ErrPermission for create, got %v", err)
@@ -262,7 +246,7 @@ func TestWriteFilePermissions(t *testing.T) {
 	cleanup(secretName)
 
 	t.Run("allow-create-no-update", func(t *testing.T) {
-		wfs := wfsFor(t, awssecretsfs.WithAllowCreation(true))
+		wfs := wfsFor(awssecretsfs.WithAllowCreation(true))
 		err := wfs.WriteFileCtx(ctx, secretName, secretValue, 0600)
 		if err != nil {
 			t.Fatalf("create should have succeeded, but got: %v", err)
@@ -278,7 +262,7 @@ func TestWriteFilePermissions(t *testing.T) {
 	cleanup(secretName)
 
 	t.Run("no-create-allow-update", func(t *testing.T) {
-		wfs := wfsFor(t, awssecretsfs.WithAllowUpdates(true))
+		wfs := wfsFor(awssecretsfs.WithAllowUpdates(true))
 		err := wfs.WriteFileCtx(ctx, secretName, secretValue, 0600)
 		if !errors.Is(err, fs.ErrPermission) {
 			t.Errorf("expected fs.ErrPermission for create, got %v", err)
