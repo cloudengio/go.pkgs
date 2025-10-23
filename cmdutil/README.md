@@ -6,7 +6,24 @@ import cloudeng.io/cmdutil
 
 Package cmdutil provides support for implementing command line utilities.
 
+## Variables
+### ErrInterrupt
+```go
+ErrInterrupt = errors.New("interrupted")
+
+```
+ErrInterrupt is returned as the cause for HandleInterrupt cancellations.
+
+
+
 ## Functions
+### Func BuildInfoJSON
+```go
+func BuildInfoJSON() json.RawMessage
+```
+BuildInfoJSON returns the build information as a JSON raw message or nil if
+the build information is not available.
+
 ### Func CopyAll
 ```go
 func CopyAll(fromDir, toDir string, ovewrite bool) error
@@ -37,6 +54,14 @@ func Exit(format string, args ...interface{})
 ```
 Exit formats and prints the supplied parameters to os.Stderr and then calls
 os.Exit(1).
+
+### Func HandleInterrupt
+```go
+func HandleInterrupt(ctx context.Context) (context.Context, context.CancelCauseFunc)
+```
+HandleInterrupt returns a context that is cancelled when an interrupt signal
+is received. The returned CancelCauseFunc should be used to cancel the
+context and will return ErrInterrupt as the cause.
 
 ### Func HandleSignals
 ```go
@@ -69,6 +94,10 @@ beneath dir.
 ```go
 func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool)
 ```
+VCSInfo extracts version control system information from the build info
+if available. The returned values are the revision, last commit time,
+a boolean indicating whether there were uncommitted changes (dirty) and a
+boolean indicating whether the information was successfully extracted.
 
 
 
