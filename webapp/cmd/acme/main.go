@@ -52,8 +52,8 @@ func cli() *subcmd.CommandSetYAML {
 	cmd.Set("servers", "redirect").MustRunner(redirectCmd.redirect, &testRedirectFlags{})
 
 	certsCmd := certsCmd{}
-	cmd.Set("certs", "validate-hosts").MustRunner(certsCmd.validateHostCertificates, &validateHostFlags{})
-	cmd.Set("certs", "validate-pem-files").MustRunner(certsCmd.validatePEMFiles, &validateFileFlags{})
+	cmd.Set("certs", "validate-hosts").MustRunner(certsCmd.validateHostCertificatesCmd, &validateHostFlags{})
+	cmd.Set("certs", "validate-pem-files").MustRunner(certsCmd.validatePEMFilesCmd, &validateFileFlags{})
 	cmd.Set("certs", "store", "put").MustRunner(putCert, &putCertFlags{})
 	cmd.Set("certs", "store", "get").MustRunner(getCert, &getCertFlags{})
 

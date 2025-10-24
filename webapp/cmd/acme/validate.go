@@ -6,11 +6,7 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"math/big"
-	"net"
 	"regexp"
 	"time"
 
@@ -18,12 +14,14 @@ import (
 	"cloudeng.io/file/localfs"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest"
+	"cloudeng.io/webapp/tlsvalidate"
 )
 
 type ValidateFlags struct {
+	TLSPort            string          `subcmd:"tls-port,443,the TLS port to use when validating hosts"`
 	CustomROOTCA       string          `subcmd:"custom-root-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 	CheckSerialNumbers bool            `subcmd:"same-serial-numbers,true,check that all of the serial numbers for certs found on the same host are the same"`
-	ValidFor           time.Duration   `subcmd:"valid-for,720h,check that the certifcates are valid for at least this duration"`
+	ValidFor           time.Duration   `subcmd:"valid-for,360h,check that the certifcates are valid for at least this duration"`
 	Issuer             flags.Repeating `subcmd:"issuer,,check that the issuer urls match this regular expression"`
 }
 
@@ -39,23 +37,15 @@ type validateHostFlags struct {
 func (_ certsCmd) validateHostCertificatesCmd(ctx context.Context, values any, args []string) error {
 	cl := values.(*validateHostFlags)
 	for _, host := range args {
-		all, err := expandHost(host, cl.AllHosts)
-		if err != nil {
+		if err := validateCerts(ctx, cl, host); err != nil {
 			return err
 		}
-		ipv4Only := ignoreIPv6(all)
-		if err := validateCerts(ctx, cl, host, ipv4Only); err != nil {
-			return err
-		}
+		fmt.Printf("%v: ok\n", host)
 	}
 	return nil
 }
 
-func validateCerts(ctx context.Context, cl *validateHostFlags, host string, addrs []string) error {
-	var serial *big.Int
-	var serialFrom string
-	expiry := time.Now().Add(cl.ValidFor)
-
+func validateCerts(ctx context.Context, cl *validateHostFlags, host string) error {
 	regexps := []*regexp.Regexp{}
 	for _, expr := range cl.Issuer.Values {
 		re, err := regexp.Compile(expr)
@@ -64,86 +54,25 @@ func validateCerts(ctx context.Context, cl *validateHostFlags, host string, addr
 		}
 		regexps = append(regexps, re)
 	}
-
-	tlsCfg := &tls.Config{}
-	root, err := devtest.CertPoolForTesting(cl.CustomROOTCA)
-	if err != nil {
-		return fmt.Errorf("failed to obtain cert pool containing %v: %w", cl.CustomROOTCA, err)
+	opts := []tlsvalidate.Option{
+		tlsvalidate.WithExpandDNSNames(cl.AllHosts),
+		tlsvalidate.WithCheckSerialNumbers(cl.CheckSerialNumbers),
+		tlsvalidate.WithValidForAtLeast(cl.ValidFor),
+		tlsvalidate.WithIssuerRegexps(regexps...),
 	}
-	tlsCfg.RootCAs = root
-
-	for _, addr := range addrs {
-		certs, err := downloadCert(ctx, tlsCfg, host, addr)
+	if len(cl.CustomROOTCA) > 0 {
+		root, err := devtest.CertPoolForTesting(cl.CustomROOTCA)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to obtain cert pool containing %v: %w", cl.CustomROOTCA, err)
 		}
-		cert0 := certs[0]
-		if cl.CheckSerialNumbers {
-			if serial == nil {
-				serial = cert0.SerialNumber
-				serialFrom = addr
-			} else if serial.Cmp(cert0.SerialNumber) != 0 {
-				return fmt.Errorf("%v: mismatched serial numbers: (%v: %v) != (%v: %v)", host, serialFrom, serial, addr, cert0.SerialNumber)
-			}
-		}
-		if cert0.NotAfter.Before(expiry) {
-			return fmt.Errorf("%v: %v: cert expires before (%v before %v", host, addr, cert0.NotAfter, expiry)
-		}
-		for _, re := range regexps {
-			found := false
-			for _, url := range cert0.IssuingCertificateURL {
-				if re.MatchString(url) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return fmt.Errorf("%v: %v: %v is not in the list of issuer urls", host, addr, re)
-			}
-		}
-		fmt.Printf("%v: %v: ok\n", host, addr)
-		fmt.Printf("\tserial:      %v\n", cert0.SerialNumber)
-		fmt.Printf("\tvalid until: %v\n", cert0.NotAfter)
-		for _, url := range cert0.IssuingCertificateURL {
-			fmt.Printf("\tissuer:  %v\n", url)
-		}
+		opts = append(opts, tlsvalidate.WithRootCAs(root))
 	}
-	return nil
+
+	validator := tlsvalidate.NewValidator(opts...)
+	return validator.Validate(ctx, host, cl.TLSPort)
 }
 
-func ignoreIPv6(addrs []string) []string {
-	ipv4 := []string{}
-	for _, addr := range addrs {
-		if len(net.ParseIP(addr).To4()) == net.IPv4len {
-			ipv4 = append(ipv4, addr)
-		}
-	}
-	return ipv4
-}
-
-func downloadCert(ctx context.Context, cfg *tls.Config, host, addr string) ([]*x509.Certificate, error) {
-	cfg = cfg.Clone()
-	cfg.ServerName = host
-	conn, err := tls.Dial("tcp", net.JoinHostPort(addr, "443"), cfg)
-	if err != nil {
-		return nil, err
-	}
-	cs := conn.ConnectionState()
-	if len(cs.PeerCertificates) > 0 {
-		return conn.ConnectionState().PeerCertificates, nil
-	}
-	return nil, fmt.Errorf("no peer certificates found for host %v @ %v", host, addr)
-
-}
-
-func expandHost(host string, expand bool) ([]string, error) {
-	if expand {
-		return net.LookupHost(host)
-	}
-	return []string{host}, nil
-}
-
-func (_ certsCmd) validatePEMFile(ctx context.Context, cl *validateFileFlags, pemFile, rootCA string) error {
+func (_ certsCmd) validatePEMFile(ctx context.Context, pemFile, rootCA string) error {
 	certs, err := webapp.ReadAndParseCertsPEM(ctx, localfs.New(), pemFile)
 	if err != nil {
 		return err
@@ -156,10 +85,10 @@ func (_ certsCmd) validatePEMFile(ctx context.Context, cl *validateFileFlags, pe
 	return err
 }
 
-func (c certsCmd) validatePEMFiles(ctx context.Context, values any, args []string) error {
+func (c certsCmd) validatePEMFilesCmd(ctx context.Context, values any, args []string) error {
 	cl := values.(*validateFileFlags)
 	for _, pemFile := range args {
-		if err := c.validatePEMFile(ctx, cl, pemFile, cl.CustomROOTCA); err != nil {
+		if err := c.validatePEMFile(ctx, pemFile, cl.CustomROOTCA); err != nil {
 			return err
 		}
 		fmt.Printf("%v: ok\n", pemFile)
