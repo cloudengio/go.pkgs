@@ -238,9 +238,12 @@ func TestValidator(t *testing.T) {
 func TestCheckSerialNumbers(t *testing.T) {
 	ctx := context.Background()
 
+	// Serve different serial numbers for the same host using ipv4 and ipv6 addresses to expand
+	// localhost to two different IPs.
+
 	// Cert 1
 	rootCert1, rootKey1 := newCert(t, "root1.com", true, nil, nil, nil, nil)
-	leafCert1, leafKey1 := newCert(t, "leaf.com", false, nil, []net.IP{net.ParseIP("127.0.0.1")}, rootCert1, rootKey1)
+	leafCert1, leafKey1 := newCert(t, "leaf.com", false, []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")}, rootCert1, rootKey1)
 	addr1, cleanup1 := startTLSServer(t, leafCert1, leafKey1, "127.0.0.1:0")
 	defer cleanup1()
 	_, port1, _ := net.SplitHostPort(addr1)
@@ -248,10 +251,9 @@ func TestCheckSerialNumbers(t *testing.T) {
 	// Cert 2 (different serial)
 	time.Sleep(time.Second)
 	rootCert2, rootKey2 := newCert(t, "root2.com", true, nil, nil, nil, nil)
-	leafCert2, leafKey2 := newCert(t, "leaf.com", false, []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")}, rootCert2, rootKey2)
-	addr2, cleanup2 := startTLSServer(t, leafCert2, leafKey2, "127.0.0.1:0")
+	leafCert2, leafKey2 := newCert(t, "leaf.com", false, []string{"localhost"}, []net.IP{net.ParseIP("::1")}, rootCert2, rootKey2)
+	_, cleanup2 := startTLSServer(t, leafCert2, leafKey2, net.JoinHostPort("::1", port1))
 	defer cleanup2()
-	_, port2, _ := net.SplitHostPort(addr2)
 
 	rootPool := x509.NewCertPool()
 	rootPool.AddCert(rootCert1)
@@ -265,32 +267,17 @@ func TestCheckSerialNumbers(t *testing.T) {
 	// First, validate against one server, should be fine.
 	validator := tlsvalidate.NewValidator(
 		tlsvalidate.WithRootCAs(rootPool),
+		tlsvalidate.WithExpandDNSNames(true),
 		tlsvalidate.WithCheckSerialNumbers(true),
 	)
-	if err := validator.Validate(ctx, "127.0.0.1", port1); err != nil {
-		t.Fatalf("validation against first server failed: %v", err)
+	err := validator.Validate(ctx, "localhost", port1)
+	if err == nil {
+		t.Fatalf("expected serial number check to fail on first server, but it passed")
+	}
+	if !strings.Contains(err.Error(), "mismatched serial numbers") {
+		t.Errorf("expected mismatched serial numbers error, but got: %v", err)
 	}
 
-	// Now, a hypothetical validator that could check both would fail.
-	// We can't do this directly with the current API, so we'll test the logic
-	// by manually creating the states. This is less ideal but tests the core logic.
-	state1, err := getTLSState(ctx, rootPool, "127.0.0.1", port1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	state2, err := getTLSState(ctx, rootPool, "127.0.0.1", port2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if state1.PeerCertificates[0].SerialNumber.Cmp(state2.PeerCertificates[0].SerialNumber) == 0 {
-		t.Fatal("test setup failed: serial numbers are the same")
-	}
-
-	// The current Validate function doesn't support multiple ports for one host,
-	// so we can't directly test the mismatched serial error path for a single Validate call.
-	// The logic is simple enough that we can trust the unit test of the comparison itself.
-	// A more advanced test would require modifying the Validate function or using DNS overrides.
 }
 
 func getTLSState(ctx context.Context, roots *x509.CertPool, host, port string) (tls.ConnectionState, error) {
