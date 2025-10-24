@@ -6,9 +6,11 @@ toolchain go1.24.4
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20250707204608-69242ac664a5
+	cloudeng.io/errors v0.0.12
 	cloudeng.io/io v0.0.0-20250707204608-69242ac664a5
 	cloudeng.io/logging v0.0.0-20250707204608-69242ac664a5
 	cloudeng.io/os v0.0.0-20250707204608-69242ac664a5
+	cloudeng.io/sync v0.0.8
 	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
 	github.com/chromedp/chromedp v0.14.1
 	github.com/go-json-experiment/json v0.0.0-20250813233538-9b1f9ea2e11b
@@ -19,7 +21,6 @@ require (
 )
 
 require (
-	cloudeng.io/errors v0.0.12 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-webauthn/x v0.1.23 // indirect
