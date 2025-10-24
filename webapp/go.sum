@@ -1,5 +1,7 @@
 cloudeng.io/cmdutil v0.0.0-20250707204608-69242ac664a5 h1:MAHMikUGNHzfeLELZDFifo/uFxE5WsxkK3R5d2gNqPM=
 cloudeng.io/cmdutil v0.0.0-20250707204608-69242ac664a5/go.mod h1:DPmPt2BHWbkbVQ96AwvESlACDFHncHvXNqdFs0/e/68=
+cloudeng.io/debug v0.0.0-20230105021008-948d22470af5 h1:zsKXQfoCtN7whSQIdpArUNxKTtQG3+vpd1XJ8qzcWBA=
+cloudeng.io/debug v0.0.0-20230105021008-948d22470af5/go.mod h1:UDKUtuaCh0+iaDe5+i70G3l3liexOPeU3h0lyUeAt+o=
 cloudeng.io/errors v0.0.12 h1:yrEEm5tPWMIhY4rFvsM+7fb2GyZ1euciYsU2LQkjYr8=
 cloudeng.io/errors v0.0.12/go.mod h1:+IAMDlCNxHDxlWE9vjkPxED0d7Wzt7Nl3REebuCO4m8=
 cloudeng.io/io v0.0.0-20250707204608-69242ac664a5 h1:0XelGqFa/fzHPM0ooJ1UMC+c62zTqp6OPjGT2582FDM=
@@ -8,6 +10,8 @@ cloudeng.io/logging v0.0.0-20250707204608-69242ac664a5 h1:xCs0TEBeO2InGozLpEQlPW
 cloudeng.io/logging v0.0.0-20250707204608-69242ac664a5/go.mod h1:D0TUs3Aiwa1c7xI/TE7JITYnICck34r6DR5twakJjIs=
 cloudeng.io/os v0.0.0-20250707204608-69242ac664a5 h1:IJj2jy0rqzTIWwtHKQtA0zoEzjauBUzj97ikJhvmRsw=
 cloudeng.io/os v0.0.0-20250707204608-69242ac664a5/go.mod h1:P5SsLQqgYloG+cG0B74JYzNi6lhvtfRW02Faz9RXl3A=
+cloudeng.io/sync v0.0.8 h1:N8o5Qo5sjxwDktWIW/7rfK14O74jGS3pprefjF3EFKA=
+cloudeng.io/sync v0.0.8/go.mod h1:76qdZzMQSN+iPeQxY9MSbnSELKQmcd9E6pnfRgWgN8s=
 cloudeng.io/windows v0.0.0-20250609004730-15d7065649f1 h1:RcK/EyRTHNFuVo2sMzM02ofufRUkrrjCm0Sxh0xjGxs=
 cloudeng.io/windows v0.0.0-20250609004730-15d7065649f1/go.mod h1:GBP/cmfJXkTx4AnvjrZvRb9lSJs3c062EK9wq+4hdKM=
 github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d h1:ZtA1sedVbEW7EW80Iz2GR3Ye6PwbJAJXjv7D74xG6HU=
