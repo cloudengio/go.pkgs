@@ -75,6 +75,7 @@ func startTLSServer(t *testing.T, cert *x509.Certificate, key *rsa.PrivateKey, a
 		Certificate: [][]byte{cert.Raw},
 		PrivateKey:  key,
 	}
+	//nolint:gosec // G402 we want to test min version handling
 	cfg := &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
 		MinVersion:   tls.VersionTLS12,
@@ -84,12 +85,12 @@ func startTLSServer(t *testing.T, cert *x509.Certificate, key *rsa.PrivateKey, a
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := &http.Server{TLSConfig: cfg}
+	srv := &http.Server{TLSConfig: cfg, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		_ = srv.ServeTLS(ln, "", "")
 	}()
 	return ln.Addr().String(), func() {
-		srv.Shutdown(context.Background())
+		srv.Shutdown(context.Background()) //nolint:errcheck
 	}
 }
 
@@ -227,10 +228,8 @@ func TestValidator(t *testing.T) {
 				if !strings.Contains(err.Error(), tc.errorMsg) {
 					t.Errorf("expected error to contain %q, but got %q", tc.errorMsg, err.Error())
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
 	}
@@ -304,6 +303,7 @@ func getTLSState(ctx context.Context, roots *x509.CertPool, host, port string) (
 	cfg := &tls.Config{
 		RootCAs:    roots,
 		ServerName: host,
+		MinVersion: tls.VersionTLS12,
 	}
 	tlsConn := tls.Client(conn, cfg)
 	if err := tlsConn.Handshake(); err != nil {

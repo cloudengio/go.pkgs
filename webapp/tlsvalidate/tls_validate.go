@@ -71,7 +71,6 @@ func WithRootCAs(rootCAs *x509.CertPool) Option {
 // same serial number.
 func WithCheckSerialNumbers(check bool) Option {
 	return func(o *options) {
-		// placeholder for future use
 		o.checkSerial = check
 	}
 }
@@ -88,7 +87,6 @@ func WithTLSMinVersion(version uint16) Option {
 // that the ciphersuite used is one of the specified ciphersuites.
 func WithCiphersuites(suites []uint16) Option {
 	return func(o *options) {
-		// placeholder for future use
 		o.ciphersuites = suites
 	}
 }
@@ -132,7 +130,7 @@ func (v *Validator) Validate(ctx context.Context, host, port string) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for _, addr := range addrs {
 		g.Go(func() error {
-			s, err := v.getTLSState(ctx, &tls.Config{
+			s, err := v.getTLSState(ctx, &tls.Config{ //nolint:gosec // G402 we want to test min version handling
 				ServerName:    host,
 				RootCAs:       v.opts.rootCAs,
 				MinVersion:    v.opts.tlsMinVer,
@@ -144,6 +142,7 @@ func (v *Validator) Validate(ctx context.Context, host, port string) error {
 			}
 			state.add(tlsState{
 				host:  host,
+				addr:  addr,
 				port:  port,
 				state: s,
 			})
@@ -162,8 +161,10 @@ func (v *Validator) Validate(ctx context.Context, host, port string) error {
 		if v.opts.checkSerial {
 			if serial == nil {
 				serial = cs.state.PeerCertificates[0].SerialNumber
-			} else if serial.Cmp(cs.state.PeerCertificates[0].SerialNumber) != 0 {
-				errs.Append(fmt.Errorf("%v: mismatched serial numbers: (%v) != (%v)", host, serial, cs.state.PeerCertificates[0].SerialNumber))
+				continue
+			}
+			if serial.Cmp(cs.state.PeerCertificates[0].SerialNumber) != 0 {
+				errs.Append(fmt.Errorf("%v: %v mismatched serial numbers: (%v) != (%v)", host, cs.addr, serial, cs.state.PeerCertificates[0].SerialNumber))
 			}
 		}
 	}
@@ -230,8 +231,8 @@ func (v *Validator) getTLSState(ctx context.Context, cfg *tls.Config, addr, port
 }
 
 type tlsState struct {
-	host, port string
-	state      tls.ConnectionState
+	host, addr, port string
+	state            tls.ConnectionState
 }
 
 type tlsStates struct {
