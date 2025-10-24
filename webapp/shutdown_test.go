@@ -300,18 +300,18 @@ func ExampleServeWithShutdown() {
 func TestSplitHostPort(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		in        string
+		in         string
 		host, port string
 	}{
 		{"localhost:8080", "localhost", "8080"},
 		{"127.0.0.1:80", "127.0.0.1", "80"},
 		{"[::1]:8080", "::1", "8080"},
 		{"[::1]", "::1", ""},
-		{"localhost", "", "localhost"},
-		{"127.0.0.1", "", "127.0.0.1"},
+		{"localhost", "localhost", ""},
+		{"127.0.0.1", "127.0.0.1", ""},
 		{":8080", "", "8080"},
 		{"", "", ""},
-		{":", "", ":"},
+		{":", "", ""},
 	}
 
 	for i, tc := range testCases {
@@ -337,7 +337,7 @@ func TestParseAddrPortDefaults(t *testing.T) {
 		{"localhost:8080", "https", "localhost:8080"},
 		{"127.0.0.1:8080", "http", "127.0.0.1:8080"},
 		{"[::1]:8080", "https", "[::1]:8080"},
-		{"8080", "https", ":8080"},
+		{"8080", "https", "8080:https"},
 		{"localhost", "https", "localhost:https"},
 		{"google.com", "http", "google.com:http"},
 		{"[::1]", "https", "[::1]:https"},

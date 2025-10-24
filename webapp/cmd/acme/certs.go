@@ -12,7 +12,7 @@ import (
 
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/aws/awssecretsfs"
-	"cloudeng.io/webapp/webauth/acme"
+	"cloudeng.io/webapp/webauth/acme/certcache"
 )
 
 // TLSCertStoreFlags defines commonly used flags for specifying a TLS/SSL
@@ -36,7 +36,7 @@ type getCertFlags struct {
 
 type certsCmd struct{}
 
-func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, readonly bool) (*acme.CachingStore, error) {
+func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, readonly bool) (*certcache.CachingStore, error) {
 	if cl.UseAWSSecretsManager && !awscl.AWS {
 		return nil, fmt.Errorf("aws-secrets-manager flag requires aws configuration to be enabled")
 	}
@@ -44,13 +44,13 @@ func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWS
 		return nil, fmt.Errorf("local-cache-dir must be specified")
 	}
 	if !cl.UseAWSSecretsManager || !awscl.AWS {
-		lb, err := acme.NewLocalStore(filepath.Join(cl.LocalCacheDir, "certs"))
+		lb, err := certcache.NewLocalStore(filepath.Join(cl.LocalCacheDir, "certs"))
 		if err != nil {
 			return nil, err
 		}
-		return acme.NewCachingStore(cl.LocalCacheDir,
+		return certcache.NewCachingStore(cl.LocalCacheDir,
 			lb,
-			acme.WithReadonly(readonly))
+			certcache.WithReadonly(readonly))
 	}
 	awscfg, err := awsconfig.LoadUsingFlags(ctx, awscl)
 	if err != nil {
@@ -62,7 +62,7 @@ func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWS
 	} else {
 		sfs = awssecretsfs.New(awscfg, awssecretsfs.WithAllowCreation(true), awssecretsfs.WithAllowUpdates(true))
 	}
-	return acme.NewCachingStore(cl.LocalCacheDir, sfs, acme.WithReadonly(readonly))
+	return certcache.NewCachingStore(cl.LocalCacheDir, sfs, certcache.WithReadonly(readonly))
 }
 
 func getCert(ctx context.Context, values any, args []string) error {

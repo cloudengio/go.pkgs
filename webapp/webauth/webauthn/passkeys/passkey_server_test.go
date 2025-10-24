@@ -67,7 +67,7 @@ func runServer(ctx context.Context, t *testing.T, tmpDir string, w *passkeys.Han
 	}
 
 	t.Logf("Starting TLS server at %s\n", serverURL.Host)
-	ln, srv, err := webapp.NewTLSServer(serverURL.Host, mux, cfg)
+	ln, srv, err := webapp.NewTLSServer(ctx, serverURL.Host, mux, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create TLS server: %v", err)
 	}

@@ -237,10 +237,12 @@ func allIPS() []string {
 }
 
 // CertPoolForTesting returns a new x509.CertPool containing the certs
-// in the specified pem files. It is intended for testing purposes only.
+// in the specified pem files. If no pem files are specified nil it
+// will return the system cert pool.
+// It is intended for testing purposes only.
 func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error) {
 	if len(pemFiles) == 0 {
-		return nil, fmt.Errorf("no CA pem files specified")
+		return x509.SystemCertPool()
 	}
 	rootCAs := x509.NewCertPool()
 	for _, pemFile := range pemFiles {

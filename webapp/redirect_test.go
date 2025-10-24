@@ -158,7 +158,12 @@ func TestRedirectPort80(t *testing.T) {
 	// Give the server a moment to start.
 	time.Sleep(100 * time.Millisecond)
 
-	resp, err := http.Get("http://127.0.0.1:80/test")
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get("http://127.0.0.1:80/test")
 	if err != nil {
 		t.Fatalf("failed to make request to redirect server: %v", err)
 	}
@@ -178,7 +183,7 @@ func TestRedirectPort80(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify it's no longer listening.
-	_, err = http.Get("http://127.0.0.1:80/test")
+	_, err = client.Get("http://127.0.0.1:80/test")
 	if err == nil {
 		t.Fatal("server did not shut down as expected")
 	}

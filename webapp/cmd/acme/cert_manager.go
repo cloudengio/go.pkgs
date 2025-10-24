@@ -16,15 +16,17 @@ import (
 	"cloudeng.io/cmdutil"
 	"cloudeng.io/errors"
 	"cloudeng.io/logging/ctxlog"
+	"cloudeng.io/net/http/httptracing"
 	"cloudeng.io/sync/errgroup"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest"
 	"cloudeng.io/webapp/webauth/acme"
+	"cloudeng.io/webapp/webauth/acme/certcache"
 	"golang.org/x/crypto/acme/autocert"
 )
 
 type certManagerFlags struct {
-	acme.AcmeFlags
+	acme.ServiceFlags
 	TestingCAPem string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 	TLSCertStoreFlags
 	awsconfig.AWSFlags
@@ -45,14 +47,14 @@ func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []strin
 		return err
 	}
 
-	acmeCfg := cl.AcmeFlags.ManagerConfig()
-	mgr, err := acme.NewManager(ctx, cache, acmeCfg, hosts...)
+	acmeCfg := cl.ServiceFlags.AutocertConfig()
+	mgr, err := acme.NewAutocertManager(ctx, cache, acmeCfg, hosts...)
 	if err != nil {
 		return err
 	}
 
 	if cl.HTTPPort != 80 {
-		noPort := acme.WrapHostPolicyNoPort(mgr.HostPolicy)
+		noPort := certcache.WrapHostPolicyNoPort(mgr.HostPolicy)
 		mgr.HostPolicy = func(ctx context.Context, host string) error {
 			if err := noPort(ctx, host); err != nil {
 				ctxlog.Logger(ctx).Info("acme host policy check failed", "host", host, "error", err)
@@ -74,10 +76,10 @@ func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []strin
 				RootCAs:    rootCAs,
 				MinVersion: tls.VersionTLS13,
 			}}
-		loggingRT := webapp.NewTracingRoundTripper(testingRT,
-			webapp.WithTracingLogger(logger),
-			webapp.WithTraceRequestBody(webapp.JSONRequestBodyLogger),
-			webapp.WithTraceResponseBody(webapp.JSONResponseBodyLogger),
+		loggingRT := httptracing.NewTracingRoundTripper(testingRT,
+			httptracing.WithTracingLogger(logger),
+			httptracing.WithTraceRequestBody(httptracing.JSONRequestBodyLogger),
+			httptracing.WithTraceResponseBody(httptracing.JSONResponseBodyLogger),
 		)
 		mgr.Client.HTTPClient = &http.Client{
 			Transport: loggingRT,
@@ -89,11 +91,11 @@ func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []strin
 		w.WriteHeader(http.StatusForbidden)
 	})
 
-	port80TracingHandler := webapp.NewTracingHandler(
+	port80TracingHandler := httptracing.NewTracingHandler(
 		mgr.HTTPHandler(fallback),
-		webapp.WithHandlerLogger(logger.With("server", "acme-challenge-http")),
-		webapp.WithHandlerRequestBody(webapp.JSONRequestBodyLogger),
-		webapp.WithHandlerResponseBody(webapp.JSONHandlerResponseLogger),
+		httptracing.WithHandlerLogger(logger.With("server", "acme-challenge-http")),
+		httptracing.WithHandlerRequestBody(httptracing.JSONRequestBodyLogger),
+		httptracing.WithHandlerResponseBody(httptracing.JSONHandlerResponseLogger),
 	)
 
 	httpListener, httpServer, err := webapp.NewHTTPServer(ctx, fmt.Sprintf(":%d", cl.HTTPPort), port80TracingHandler)
@@ -117,8 +119,6 @@ func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []strin
 	}
 	logger.Info("certificate refresh interval", "interval", refreshInterval.String())
 
-	/*	webapp.WaitForServers(ctx, time.Second*2, httpListener.Addr().String(), tlsListener.Addr().String())
-		logger.Info("http and https servers are reachable, starting certificate refresh loop", "http", httpListener.Addr().Network(), "https", tlsListener.Addr().Network())*/
 	webapp.WaitForServers(ctx, time.Second*2, httpListener.Addr().String())
 
 	go func() {
@@ -159,7 +159,7 @@ func refreshCertificateUsingHello(ctx context.Context, mgr *autocert.Manager, ho
 		CipherSuites:     webapp.PreferredCipherSuites,
 		SignatureSchemes: webapp.PreferredSignatureSchemes,
 	}
-	fmt.Printf("refreshing certificate using tls hello for host: %v\n", host)
+	ctxlog.Logger(ctx).Info("refreshing certificate using tls hello", "host", host)
 	cert, err := mgr.GetCertificate(&hello)
 	if err != nil {
 		return err

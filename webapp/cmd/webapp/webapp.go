@@ -37,7 +37,7 @@ var webpackedAssets embed.FS
 
 type ProdServerFlags struct {
 	webapp.HTTPServerFlags
-	webapp.HTTPAcmeFlags
+	webapp.TLSCertConfig
 }
 
 type WebpackFlags struct {
@@ -112,18 +112,18 @@ func prodServe(ctx context.Context, values any, _ []string) error {
 	configureAPIEndpoints(router)
 	serveContent(router)
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, nil)
+	cfg, err := cl.HTTPServerFlags.Config().TLSConfig()
 	if err != nil {
 		return err
 	}
 
-	ln, srv, err := webapp.NewTLSServer(cl.Address, router, cfg)
+	ln, srv, err := webapp.NewTLSServer(ctx, cl.Address, router, cfg)
 	if err != nil {
 		return err
 	}
 
 	// Force all http traffic to an https port.
-	if err := webapp.RedirectPort80(ctx, cl.Address, cl.AcmeRedirectTarget); err != nil {
+	if err := webapp.RedirectPort80(ctx, webapp.RedirectToHTTPSPort(cl.Address)); err != nil {
 		return err
 	}
 
@@ -139,12 +139,12 @@ func devServe(ctx context.Context, values any, _ []string) error {
 	router := chi.NewRouter()
 	configureAPIEndpoints(router)
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, nil)
+	cfg, err := cl.HTTPServerFlags.Config().TLSConfig()
 	if err != nil {
 		return err
 	}
 
-	ln, srv, err := webapp.NewTLSServer(cl.Address, router, cfg)
+	ln, srv, err := webapp.NewTLSServer(ctx, cl.Address, router, cfg)
 	if err != nil {
 		return err
 	}

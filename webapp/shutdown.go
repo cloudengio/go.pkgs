@@ -131,17 +131,16 @@ func newServer(ctx context.Context, addr string, handler http.Handler, cfg *tls.
 
 // SplitHostPort splits hostport into host and port. If hostport
 // does not contain a port, then the returned port is empty.
-// If hostport is malformed, an error is returned.
-// If no port is present, the returned host is empty and
-// the entire hostport is returned as the port.
 // It assumes that the hostport is a valid ipv4 or ipv6 address.
 func SplitHostPort(hostport string) (string, string) {
-	host, port, err := net.SplitHostPort(hostport)
-	if err == nil {
+	if host, port, err := net.SplitHostPort(hostport); err == nil {
 		return host, port
 	}
-	if errors.Is(err, &net.AddrError{}) {
-		return "", hostport
+	if len(hostport) == 0 {
+		return "", ""
+	}
+	if hostport[0] == '[' && hostport[len(hostport)-1] == ']' {
+		return hostport[1 : len(hostport)-1], ""
 	}
 	return hostport, ""
 }

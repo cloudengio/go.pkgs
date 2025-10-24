@@ -8,15 +8,16 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net"
-	"os"
 	"regexp"
 	"time"
 
 	"cloudeng.io/cmdutil/flags"
+	"cloudeng.io/file/localfs"
+	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/devtest"
 )
 
 type ValidateFlags struct {
@@ -35,6 +36,21 @@ type validateHostFlags struct {
 	AllHosts bool `subcmd:"all,false,set to validate all of the hosts for a given DNS hostname or domain"`
 }
 
+func (_ certsCmd) validateHostCertificatesCmd(ctx context.Context, values any, args []string) error {
+	cl := values.(*validateHostFlags)
+	for _, host := range args {
+		all, err := expandHost(host, cl.AllHosts)
+		if err != nil {
+			return err
+		}
+		ipv4Only := ignoreIPv6(all)
+		if err := validateCerts(ctx, cl, host, ipv4Only); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateCerts(ctx context.Context, cl *validateHostFlags, host string, addrs []string) error {
 	var serial *big.Int
 	var serialFrom string
@@ -48,8 +64,16 @@ func validateCerts(ctx context.Context, cl *validateHostFlags, host string, addr
 		}
 		regexps = append(regexps, re)
 	}
+
+	tlsCfg := &tls.Config{}
+	root, err := devtest.CertPoolForTesting(cl.CustomROOTCA)
+	if err != nil {
+		return fmt.Errorf("failed to obtain cert pool containing %v: %w", cl.CustomROOTCA, err)
+	}
+	tlsCfg.RootCAs = root
+
 	for _, addr := range addrs {
-		certs, err := downloadCert(ctx, cl.CustomROOTCA, host, addr)
+		certs, err := downloadCert(ctx, tlsCfg, host, addr)
 		if err != nil {
 			return err
 		}
@@ -97,11 +121,8 @@ func ignoreIPv6(addrs []string) []string {
 	return ipv4
 }
 
-func downloadCert(ctx context.Context, pemfile, host, addr string) ([]*x509.Certificate, error) {
-	cfg, err := customTLSConfig(ctx, pemfile)
-	if err != nil {
-		return nil, err
-	}
+func downloadCert(ctx context.Context, cfg *tls.Config, host, addr string) ([]*x509.Certificate, error) {
+	cfg = cfg.Clone()
 	cfg.ServerName = host
 	conn, err := tls.Dial("tcp", net.JoinHostPort(addr, "443"), cfg)
 	if err != nil {
@@ -122,104 +143,23 @@ func expandHost(host string, expand bool) ([]string, error) {
 	return []string{host}, nil
 }
 
-func (_ certsCmd) validateHostCertificates(ctx context.Context, values any, args []string) error {
-	cl := values.(*validateHostFlags)
-	for _, host := range args {
-		all, err := expandHost(host, cl.AllHosts)
-		if err != nil {
-			return err
-		}
-		ipv4Only := ignoreIPv6(all)
-		if err := validateCerts(ctx, cl, host, ipv4Only); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func certificatesFromPEM(pemFile string) ([]*x509.Certificate, error) {
-	data, err := os.ReadFile(pemFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read pem file %v: %v", pemFile, err)
-	}
-	certs := []*x509.Certificate{}
-	rest := data
-	for {
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		if block == nil {
-			break
-		}
-		if block.Type != "CERTIFICATE" {
-			continue
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse certificate in %v: %v", pemFile, err)
-		}
-		certs = append(certs, cert)
-	}
-	if len(certs) == 0 {
-		return nil, fmt.Errorf("no certificates found in pem data")
-	}
-	return certs, nil
-}
-
-func (_ certsCmd) validatePEMFile(_ context.Context, cl *validateFileFlags, pemFile string) error {
-	certs, err := certificatesFromPEM(pemFile)
+func (_ certsCmd) validatePEMFile(ctx context.Context, cl *validateFileFlags, pemFile, rootCA string) error {
+	certs, err := webapp.ReadAndParseCertsPEM(ctx, localfs.New(), pemFile)
 	if err != nil {
 		return err
 	}
-	var leaves []*x509.Certificate
-	var intermediates, root *x509.CertPool
-
-	intermediates = x509.NewCertPool()
-	for _, cert := range certs {
-		if cert.IsCA {
-			intermediates.AddCert(cert)
-			continue
-		}
-		leaves = append(leaves, cert)
+	root, err := devtest.CertPoolForTesting(rootCA)
+	if err != nil {
+		return fmt.Errorf("failed to obtain cert pool containing %v: %w", rootCA, err)
 	}
-	if len(leaves) != 1 {
-		return fmt.Errorf("%v: expected exactly one leaf certificate, found %v", pemFile, len(leaves))
-	}
-	leaf := leaves[0]
-
-	if cl.CustomROOTCA != "" {
-		rootCerts, err := certificatesFromPEM(cl.CustomROOTCA)
-		if err != nil {
-			return fmt.Errorf("failed to load custom root CA from %v: %v", cl.CustomROOTCA, err)
-		}
-		root = x509.NewCertPool()
-		for _, rc := range rootCerts {
-			root.AddCert(rc)
-		}
-	}
-
-	for _, ic := range leaf.IssuingCertificateURL {
-		fmt.Printf("leaf issuer url: %v\n", ic)
-	}
-	opts := x509.VerifyOptions{
-		Roots:         root,
-		Intermediates: intermediates,
-		CurrentTime:   time.Now(),
-	}
-	if _, err := leaf.Verify(opts); err != nil {
-		return fmt.Errorf("certificate verification failed for %v: %v", pemFile, err)
-	}
-	expiry := time.Now().Add(cl.ValidFor)
-	if leaf.NotAfter.Before(expiry) {
-		return fmt.Errorf("%v: cert expires before (%v before %v", pemFile, leaf.NotAfter, expiry)
-	}
-	return nil
+	_, err = webapp.VerifyCertChain("", certs, root)
+	return err
 }
 
 func (c certsCmd) validatePEMFiles(ctx context.Context, values any, args []string) error {
 	cl := values.(*validateFileFlags)
 	for _, pemFile := range args {
-		if err := c.validatePEMFile(ctx, cl, pemFile); err != nil {
+		if err := c.validatePEMFile(ctx, cl, pemFile, cl.CustomROOTCA); err != nil {
 			return err
 		}
 		fmt.Printf("%v: ok\n", pemFile)

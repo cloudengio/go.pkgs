@@ -19,7 +19,7 @@ import (
 type testRedirectFlags struct {
 	TLSCertStoreFlags
 	webapp.HTTPServerFlags
-	webapp.HTTPAcmeFlags
+	AcmeClientHost string `subcmd:"acme-client-host,,the host (with optional port) to which ACME HTTP-01 challenge requests will be redirected."`
 	awsconfig.AWSFlags
 }
 
@@ -30,11 +30,15 @@ func (_ testRedirectCmd) redirect(ctx context.Context, values any, _ []string) e
 	defer done()
 	cl := values.(*testRedirectFlags)
 
-	if len(cl.AcmeRedirectTarget) == 0 {
+	cfg := cl.HTTPServerFlags.Config()
+
+	if len(cl.AcmeClientHost) == 0 {
 		return fmt.Errorf("must specific a target for the acme client")
 	}
 
-	if err := webapp.RedirectPort80(ctx, ":443", cl.AcmeRedirectTarget); err != nil {
+	if err := webapp.RedirectPort80(ctx,
+		webapp.RedirectToHTTPSPort(cfg.Address),
+		webapp.RedirectToHTTPSPort(cl.AcmeClientHost)); err != nil {
 		return err
 	}
 
@@ -43,7 +47,7 @@ func (_ testRedirectCmd) redirect(ctx context.Context, values any, _ []string) e
 		return err
 	}
 
-	cfg, err := webapp.TLSConfigUsingCertStore(ctx, cache)
+	tlsCfg, err := webapp.TLSConfigUsingCertStore(ctx, cache)
 	if err != nil {
 		return err
 	}
@@ -52,11 +56,11 @@ func (_ testRedirectCmd) redirect(ctx context.Context, values any, _ []string) e
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "hello\n")
 	})
-	ln, srv, err := webapp.NewTLSServer(ctx, cl.Address, mux, cfg)
+	ln, srv, err := webapp.NewTLSServer(ctx, cl.Address, mux, tlsCfg)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("listening on: %v\n", ln.Addr())
-	srv.TLSConfig = cfg
+	srv.TLSConfig = tlsCfg
 	return webapp.ServeTLSWithShutdown(ctx, ln, srv, time.Minute)
 }
