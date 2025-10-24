@@ -279,22 +279,3 @@ func TestCheckSerialNumbers(t *testing.T) {
 	}
 
 }
-
-func getTLSState(ctx context.Context, roots *x509.CertPool, host, port string) (tls.ConnectionState, error) {
-	dialer := &net.Dialer{}
-	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
-	if err != nil {
-		return tls.ConnectionState{}, err
-	}
-	defer conn.Close()
-	cfg := &tls.Config{
-		RootCAs:    roots,
-		ServerName: host,
-		MinVersion: tls.VersionTLS12,
-	}
-	tlsConn := tls.Client(conn, cfg)
-	if err := tlsConn.Handshake(); err != nil {
-		return tls.ConnectionState{}, err
-	}
-	return tlsConn.ConnectionState(), nil
-}
