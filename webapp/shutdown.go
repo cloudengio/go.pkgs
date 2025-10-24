@@ -12,8 +12,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"cloudeng.io/logging/ctxlog"
@@ -131,29 +129,37 @@ func newServer(ctx context.Context, addr string, handler http.Handler, cfg *tls.
 	return ln, srv, nil
 }
 
+// SplitHostPort splits hostport into host and port. If hostport
+// does not contain a port, then the returned port is empty.
+// If hostport is malformed, an error is returned.
+// If no port is present, the returned host is empty and
+// the entire hostport is returned as the port.
+// It assumes that the hostport is a valid ipv4 or ipv6 address.
+func SplitHostPort(hostport string) (string, string) {
+	host, port, err := net.SplitHostPort(hostport)
+	if err == nil {
+		return host, port
+	}
+	if errors.Is(err, &net.AddrError{}) {
+		return "", hostport
+	}
+	return hostport, ""
+}
+
 // ParseAddrPortDefaults parses addr and returns an address:port string.
-// If addr is empty then ":<port>" is returned.
-// If addr contains a colon then it is assumed to be a valid
-// address:port and returned as is.
-// If addr contains no colon then it is assumed to be a port if
-// it can be parsed as an integer, in which case ":" is prepended.
-// Otherwise it is assumed to be a host, in which case port :<port>
-// is appended. Thus "localhost" becomes "localhost:<port>".
+// If addr does not contain a port then the supplied port is used.
 func ParseAddrPortDefaults(addr, port string) string {
-	port = strings.TrimPrefix(port, ":")
-	if len(addr) == 0 {
-		return ":" + port
+	h, p := SplitHostPort(addr)
+	switch {
+	case len(h) == 0 && len(p) == 0:
+		return net.JoinHostPort("", port)
+	case len(h) == 0:
+		return net.JoinHostPort("", p)
+	case len(p) == 0:
+		return net.JoinHostPort(h, port)
+	default:
+		return net.JoinHostPort(h, p)
 	}
-	if idx := strings.Index(addr, ":"); idx >= 0 {
-		return addr
-	}
-	// could be a host, or a port.
-	if _, err := strconv.Atoi(addr); err == nil {
-		// port
-		return ":" + addr
-	}
-	// host
-	return net.JoinHostPort(addr, port)
 }
 
 // WaitForServers waits for all supplied addresses to be available

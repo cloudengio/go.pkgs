@@ -297,7 +297,35 @@ func ExampleServeWithShutdown() {
 	// server shutdown complete
 }
 
-func TestParseAddrDefaults(t *testing.T) {
+func TestSplitHostPort(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		in        string
+		host, port string
+	}{
+		{"localhost:8080", "localhost", "8080"},
+		{"127.0.0.1:80", "127.0.0.1", "80"},
+		{"[::1]:8080", "::1", "8080"},
+		{"[::1]", "::1", ""},
+		{"localhost", "", "localhost"},
+		{"127.0.0.1", "", "127.0.0.1"},
+		{":8080", "", "8080"},
+		{"", "", ""},
+		{":", "", ":"},
+	}
+
+	for i, tc := range testCases {
+		h, p := webapp.SplitHostPort(tc.in)
+		if got, want := h, tc.host; got != want {
+			t.Errorf("%v: host: got %v, want %v", i, got, want)
+		}
+		if got, want := p, tc.port; got != want {
+			t.Errorf("%v: port: got %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestParseAddrPortDefaults(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		in, defaultPort, out string
@@ -308,9 +336,11 @@ func TestParseAddrDefaults(t *testing.T) {
 		{":https", "http", ":https"},
 		{"localhost:8080", "https", "localhost:8080"},
 		{"127.0.0.1:8080", "http", "127.0.0.1:8080"},
+		{"[::1]:8080", "https", "[::1]:8080"},
 		{"8080", "https", ":8080"},
 		{"localhost", "https", "localhost:https"},
 		{"google.com", "http", "google.com:http"},
+		{"[::1]", "https", "[::1]:https"},
 	}
 
 	for i, tc := range testCases {

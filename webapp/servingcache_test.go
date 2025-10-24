@@ -79,16 +79,65 @@ func (s *mockCertStore) GetHits() int {
 	return s.getHits
 }
 
-// generateTestCert generates a self-signed certificate and private key for a given domain.
+// generateTestCert generates a certificate chain (leaf, intermediate, root) and private key for a given domain.
+// It returns the PEM encoded leaf private key + leaf certificate + intermediate certificate,
+// and a root CA pool containing the root certificate.
 func generateTestCert(t *testing.T, domain string, notBefore, notAfter time.Time) ([]byte, *x509.CertPool) {
 	t.Helper()
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+	// 1. Root CA
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("failed to generate private key: %v", err)
+		t.Fatalf("failed to generate root private key: %v", err)
+	}
+	rootTemplate := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test-root-ca"},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter.Add(time.Hour * 24 * 365), // Root cert valid for longer
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+	}
+	rootCertBytes, err := x509.CreateCertificate(rand.Reader, &rootTemplate, &rootTemplate, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatalf("failed to create root certificate: %v", err)
+	}
+	rootCert, err := x509.ParseCertificate(rootCertBytes)
+	if err != nil {
+		t.Fatalf("failed to parse root certificate: %v", err)
 	}
 
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
+	// 2. Intermediate CA
+	intermediateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate intermediate private key: %v", err)
+	}
+	intermediateTemplate := x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "test-intermediate-ca"},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter.Add(time.Hour * 24 * 30), // Intermediate valid for less time
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+	}
+	intermediateCertBytes, err := x509.CreateCertificate(rand.Reader, &intermediateTemplate, rootCert, &intermediateKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatalf("failed to create intermediate certificate: %v", err)
+	}
+	intermediateCert, err := x509.ParseCertificate(intermediateCertBytes)
+	if err != nil {
+		t.Fatalf("failed to parse intermediate certificate: %v", err)
+	}
+
+	// 3. Leaf (Server) Certificate
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate leaf private key: %v", err)
+	}
+	leafTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(3),
 		Subject:      pkix.Name{CommonName: domain},
 		DNSNames:     []string{domain},
 		NotBefore:    notBefore,
@@ -96,29 +145,42 @@ func generateTestCert(t *testing.T, domain string, notBefore, notAfter time.Time
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	leafCertBytes, err := x509.CreateCertificate(rand.Reader, &leafTemplate, intermediateCert, &leafKey.PublicKey, intermediateKey)
 	if err != nil {
-		t.Fatalf("failed to create certificate: %v", err)
+		t.Fatalf("failed to create leaf certificate: %v", err)
 	}
 
-	var certPEM, keyPEM bytes.Buffer
-	if err := pem.Encode(&certPEM, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		t.Fatalf("failed to encode cert to PEM: %v", err)
-	}
+	// 4. PEM encode and combine
+	var certChainPEM, keyPEM bytes.Buffer
 
-	privBytes, err := x509.MarshalECPrivateKey(priv)
+	// Leaf private key
+	leafKeyBytes, err := x509.MarshalECPrivateKey(leafKey)
 	if err != nil {
-		t.Fatalf("failed to marshal private key: %v", err)
+		t.Fatalf("failed to marshal leaf private key: %v", err)
 	}
-	if err := pem.Encode(&keyPEM, &pem.Block{Type: "EC PRIVATE KEY", Bytes: privBytes}); err != nil {
-		t.Fatalf("failed to encode key to PEM: %v", err)
+	if err := pem.Encode(&keyPEM, &pem.Block{Type: "EC PRIVATE KEY", Bytes: leafKeyBytes}); err != nil {
+		t.Fatalf("failed to encode leaf key to PEM: %v", err)
 	}
 
+	// Leaf certificate
+	if err := pem.Encode(&certChainPEM, &pem.Block{Type: "CERTIFICATE", Bytes: leafCertBytes}); err != nil {
+		t.Fatalf("failed to encode leaf cert to PEM: %v", err)
+	}
+
+	// Intermediate certificate
+	if err := pem.Encode(&certChainPEM, &pem.Block{Type: "CERTIFICATE", Bytes: intermediateCertBytes}); err != nil {
+		t.Fatalf("failed to encode intermediate cert to PEM: %v", err)
+	}
+
+	// 5. Create Root CA Pool
 	rootCAs := x509.NewCertPool()
-	rootCAs.AppendCertsFromPEM(certPEM.Bytes())
+	var rootCertPEM bytes.Buffer
+	if err := pem.Encode(&rootCertPEM, &pem.Block{Type: "CERTIFICATE", Bytes: rootCertBytes}); err != nil {
+		t.Fatalf("failed to encode root cert to PEM: %v", err)
+	}
+	rootCAs.AppendCertsFromPEM(rootCertPEM.Bytes())
 
-	return append(keyPEM.Bytes(), certPEM.Bytes()...), rootCAs
+	return append(keyPEM.Bytes(), certChainPEM.Bytes()...), rootCAs
 }
 
 func TestCertServingCache_GetCertificate(t *testing.T) {
@@ -241,6 +303,12 @@ func TestCertServingCache_Errors(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	idx := bytes.Index(certData, []byte("-----BEGIN CERTIFICATE-----"))
+	if idx == -1 {
+		t.Fatal("failed to find certificate in generated cert data")
+	}
+	noKey := certData[idx:]
+
 	testCases := []struct {
 		name       string
 		serverName string
@@ -268,7 +336,7 @@ func TestCertServingCache_Errors(t *testing.T) {
 		{
 			name:       "no private key",
 			serverName: "no-key.com",
-			storeData:  []byte("-----BEGIN CERTIFICATE-----\n..."),
+			storeData:  noKey,
 			wantErr:    "no private key",
 		},
 		{
@@ -280,7 +348,18 @@ func TestCertServingCache_Errors(t *testing.T) {
 				return data
 			}(),
 			rootCAs: x509.NewCertPool(), // No roots, will fail verification
-			wantErr: "invalid leaf cert",
+			wantErr: "has expired or is not yet valid",
+		},
+		{
+			name:       "too early cert",
+			serverName: "too-early.com",
+			storeData: func() []byte {
+				now := time.Now()
+				data, _ := generateTestCert(t, "too-early.com", now.Add(time.Hour), now.Add(2*time.Hour))
+				return data
+			}(),
+			rootCAs: x509.NewCertPool(), // No roots, will fail verification
+			wantErr: "has expired or is not yet valid",
 		},
 	}
 

@@ -35,6 +35,11 @@ type TLSCertConfig struct {
 	KeyFile  string `yaml:"key_file,omitempty"`
 }
 
+// TLSConfig returns a tls.Config.
+func (tc TLSCertConfig) TLSConfig() (*tls.Config, error) {
+	return TLSConfigUsingCertFiles(tc.CertFile, tc.KeyFile)
+}
+
 // HTTPServerFlags defines commonly used flags for running an http server.
 // TLS certificates may be retrieved either from a local cert and key file
 // as specified by tls-cert and tls-key; this is generally used for testing
@@ -62,14 +67,8 @@ type HTTPServerConfig struct {
 	TLSCerts TLSCertConfig `yaml:"tls_certs,omitempty"`
 }
 
-// TLSConfigFromConfig creates a tls.Config based on the supplied config, which
-// may require obtaining certificates directly from pem files or from a
-// possibly remote certificate store using TLSConfigUsingCertStore. If
-// a cert store is specified then the getStoreOpts function
-// may be used to obtain additional options for the store. A cache
-// is then created to from that store using the supplied cacheOpts.
-func TLSConfigFromConfig(ctx context.Context, cl HTTPServerConfig) (*tls.Config, error) {
-	return TLSConfigUsingCertFiles(cl.TLSCerts.CertFile, cl.TLSCerts.KeyFile)
+func (hc HTTPServerConfig) TLSConfig() (*tls.Config, error) {
+	return hc.TLSCerts.TLSConfig()
 }
 
 // PreferredCipherSuites is the list of preferred cipher suites
