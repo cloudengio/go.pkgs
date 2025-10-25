@@ -35,7 +35,7 @@ func WrapHostPolicyNoPort(existing autocert.HostPolicy) autocert.HostPolicy {
 // for the specified host. It prefers to use the PreferredCipherSuites and
 // PreferredSignatureSchemes defined in webapp package to force the use
 // of ECDSA certificates rather than RSA.
-func RefreshCertificate(ctx context.Context, mgr *autocert.Manager, host string) (*tls.Certificate, error) {
+func RefreshCertificate(_ context.Context, mgr *autocert.Manager, host string) (*tls.Certificate, error) {
 	hello := tls.ClientHelloInfo{
 		ServerName:       host,
 		CipherSuites:     webapp.PreferredCipherSuites,

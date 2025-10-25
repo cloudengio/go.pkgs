@@ -94,13 +94,13 @@ func TestRedirectHandler(t *testing.T) {
 			redirects: []webapp.Redirect{
 				{
 					Prefix: "/",
-					Target: func(r *http.Request) (string, int) {
+					Target: func(_ *http.Request) (string, int) {
 						return "https://catchall.com", http.StatusMovedPermanently
 					},
 				},
 				{
 					Prefix: "/foo",
-					Target: func(r *http.Request) (string, int) {
+					Target: func(_ *http.Request) (string, int) {
 						return "https://foospecific.com", http.StatusMovedPermanently
 					},
 				},
@@ -159,7 +159,7 @@ func TestRedirectPort80(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}

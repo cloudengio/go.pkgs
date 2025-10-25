@@ -3,7 +3,8 @@
 // license that can be found in the LICENSE file.
 
 // Package certcache  provides support for working with autocert
-// managers and in particular with caching storing certificates.
+// caches with persistent backing stores for storing and distributing
+// certificates.
 package certcache
 
 import (
@@ -237,14 +238,14 @@ func (lc *localCache) path(name string) string {
 	return filepath.Join(lc.root, name)
 }
 
-func (lc *localCache) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+func (lc *localCache) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
 	return os.ReadFile(lc.path(name))
 }
 
-func (lc *localCache) WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
+func (lc *localCache) WriteFileCtx(_ context.Context, name string, data []byte, perm fs.FileMode) error {
 	return os.WriteFile(lc.path(name), data, perm)
 }
 
-func (lc *localCache) Delete(ctx context.Context, name string) error {
+func (lc *localCache) Delete(_ context.Context, name string) error {
 	return os.Remove(lc.path(name))
 }

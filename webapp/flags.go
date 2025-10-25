@@ -22,10 +22,7 @@ type TLSCertFlags struct {
 
 // Config returns a TLSCertConfig based on the supplied flags.
 func (cl TLSCertFlags) Config() TLSCertConfig {
-	return TLSCertConfig{
-		CertFile: cl.CertFile,
-		KeyFile:  cl.KeyFile,
-	}
+	return TLSCertConfig(cl)
 }
 
 // TLSCertConfig defines configuration for TLS certificates obtained

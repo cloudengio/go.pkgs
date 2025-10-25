@@ -69,7 +69,7 @@ type AutocertConfig struct {
 // NewAutocertManager creates a new autocert.Manager from the supplied config.
 // Any supplied hosts, along with the ClientHost, are used to specify
 // the allowed hosts for the manager.
-func NewAutocertManager(ctx context.Context, cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error) {
+func NewAutocertManager(_ context.Context, cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error) {
 	if cache == nil {
 		return nil, fmt.Errorf("no cache provided")
 	}
