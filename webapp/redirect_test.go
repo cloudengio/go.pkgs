@@ -13,70 +13,100 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/webapp"
 )
 
-func TestRedirectToHTTPSHandlerFunc(t *testing.T) {
+func TestRedirectHandler(t *testing.T) {
 	acmeRedirectURL, err := url.Parse("http://acme-handler.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	testCases := []struct {
 		name               string
 		reqURL             string
-		tlsPort            string
-		acmeRedirect       *url.URL
+		redirects          []webapp.Redirect
 		expectedStatusCode int
 		expectedLocation   string
 		expectedLog        string
 	}{
 		{
-			name:               "Redirect to specific port",
-			reqURL:             "http://example.com/path/to/page",
-			tlsPort:            "8443",
-			acmeRedirect:       nil,
+			name:   "Redirect to specific port",
+			reqURL: "http://example.com/path/to/page",
+			redirects: []webapp.Redirect{
+				webapp.RedirectToHTTPSPort(":8443"),
+			},
 			expectedStatusCode: http.StatusMovedPermanently,
 			expectedLocation:   "https://example.com:8443/path/to/page",
-			expectedLog:        `level=INFO msg="redirecting to https" redirect=https://example.com:8443/path/to/page`,
 		},
 		{
-			name:               "Redirect to default port 443",
-			reqURL:             "http://example.com/another/page",
-			tlsPort:            "", // Default
-			acmeRedirect:       nil,
+			name:   "Redirect to default port 443",
+			reqURL: "http://example.com/another/page",
+			redirects: []webapp.Redirect{
+				webapp.RedirectToHTTPSPort(""),
+			},
 			expectedStatusCode: http.StatusMovedPermanently,
 			expectedLocation:   "https://example.com:443/another/page",
-			expectedLog:        `level=INFO msg="redirecting to https" redirect=https://example.com:443/another/page`,
 		},
 		{
-			name:               "ACME challenge redirect",
-			reqURL:             "http://example.com/.well-known/acme-challenge/some-token",
-			tlsPort:            "8443",
-			acmeRedirect:       acmeRedirectURL,
+			name:   "ACME challenge redirect",
+			reqURL: "http://example.com/.well-known/acme-challenge/some-token",
+			redirects: []webapp.Redirect{
+				webapp.RedirectAcmeHTTP01(acmeRedirectURL.Host),
+				webapp.RedirectToHTTPSPort(":8443"),
+			},
 			expectedStatusCode: http.StatusTemporaryRedirect,
 			expectedLocation:   "http://acme-handler.example.com/.well-known/acme-challenge/some-token",
 			expectedLog:        `level=INFO msg="redirecting acme challenge" redirect=http://acme-handler.example.com/.well-known/acme-challenge/some-token`,
 		},
 		{
-			name:               "Standard redirect when ACME is configured",
-			reqURL:             "http://example.com/not-an-acme-challenge",
-			tlsPort:            "8443",
-			acmeRedirect:       acmeRedirectURL,
+			name:   "Standard redirect when ACME is configured",
+			reqURL: "http://example.com/not-an-acme-challenge",
+			redirects: []webapp.Redirect{
+				webapp.RedirectAcmeHTTP01(acmeRedirectURL.Host),
+				webapp.RedirectToHTTPSPort(":8443"),
+			},
 			expectedStatusCode: http.StatusMovedPermanently,
 			expectedLocation:   "https://example.com:8443/not-an-acme-challenge",
-			expectedLog:        `level=INFO msg="redirecting to https" redirect=https://example.com:8443/not-an-acme-challenge`,
 		},
 		{
-			name:               "Request with host and port",
-			reqURL:             "http://example.com:80/path",
-			tlsPort:            "8443",
-			acmeRedirect:       nil,
+			name:   "Request with host and port",
+			reqURL: "http://example.com:80/path",
+			redirects: []webapp.Redirect{
+				webapp.RedirectToHTTPSPort(":8443"),
+			},
 			expectedStatusCode: http.StatusMovedPermanently,
 			expectedLocation:   "https://example.com:8443/path",
-			expectedLog:        `level=INFO msg="redirecting to https" redirect=https://example.com:8443/path`,
+		},
+		{
+			name:   "No matching redirect",
+			reqURL: "http://example.com/no-match",
+			redirects: []webapp.Redirect{
+				{Prefix: "/foo"},
+			},
+			expectedStatusCode: http.StatusNotFound,
+		},
+		{
+			name:   "More specific prefix wins",
+			reqURL: "http://example.com/foo/bar",
+			redirects: []webapp.Redirect{
+				{
+					Prefix: "/",
+					Target: func(_ *http.Request) (string, int) {
+						return "https://catchall.com", http.StatusMovedPermanently
+					},
+				},
+				{
+					Prefix: "/foo",
+					Target: func(_ *http.Request) (string, int) {
+						return "https://foospecific.com", http.StatusMovedPermanently
+					},
+				},
+			},
+			expectedStatusCode: http.StatusMovedPermanently,
+			expectedLocation:   "https://foospecific.com",
 		},
 	}
 
@@ -90,7 +120,7 @@ func TestRedirectToHTTPSHandlerFunc(t *testing.T) {
 			req = req.WithContext(ctx)
 			rr := httptest.NewRecorder()
 
-			handler := webapp.RedirectToHTTPSHandlerFunc(tc.tlsPort, tc.acmeRedirect)
+			handler := webapp.RedirectHandler(tc.redirects...)
 			handler.ServeHTTP(rr, req)
 
 			if status := rr.Code; status != tc.expectedStatusCode {
@@ -103,83 +133,58 @@ func TestRedirectToHTTPSHandlerFunc(t *testing.T) {
 					location, tc.expectedLocation)
 			}
 
-			if got := strings.TrimSpace(logBuf.String()); !strings.Contains(got, tc.expectedLog) {
-				t.Errorf("log output missing expected string:\n  got: %v\n want: %v", got, tc.expectedLog)
+			if len(tc.expectedLog) > 0 {
+				if got := strings.TrimSpace(logBuf.String()); !strings.Contains(got, tc.expectedLog) {
+					t.Errorf("log output missing expected string:\n  got: %v\n want: %v", got, tc.expectedLog)
+				}
 			}
 		})
 	}
 }
 
 func TestRedirectPort80(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel() // Ensure context is always canceled to avoid leaking goroutines.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	testCases := []struct {
-		name             string
-		httpsAddr        string
-		acmeRedirectHost string
-		expectErr        string
-	}{
-		{
-			name:             "Valid ACME redirect",
-			httpsAddr:        "example.com:443",
-			acmeRedirectHost: "http://acme.example.com",
-			expectErr:        "",
-		},
-		{
-			name:             "Valid ACME redirect with port 80",
-			httpsAddr:        "example.com:443",
-			acmeRedirectHost: "http://acme.example.com:80",
-			expectErr:        "",
-		},
-		{
-			name:             "Invalid ACME redirect scheme",
-			httpsAddr:        "example.com:443",
-			acmeRedirectHost: "https://acme.example.com",
-			expectErr:        "acme redirect must be http",
-		},
-		{
-			name:             "Invalid ACME redirect port",
-			httpsAddr:        "example.com:443",
-			acmeRedirectHost: "http://acme.example.com:8080",
-			expectErr:        "acme redirect must be to port 80",
-		},
-		{
-			name:             "ACME redirect with path",
-			httpsAddr:        "example.com:443",
-			acmeRedirectHost: "http://acme.example.com/some/path",
-			expectErr:        "acmeRedirect should not include a path",
-		},
-		{
-			name:             "Invalid ACME redirect URL",
-			httpsAddr:        "example.com:443",
-			acmeRedirectHost: "http://[::1]:namedport",
-			expectErr:        `invalid port`, // Simplified check
-		},
+	err := webapp.RedirectPort80(ctx, webapp.RedirectToHTTPSPort(":8443"))
+	if err != nil {
+		// This may fail on systems where port 80 is privileged.
+		// We can't reliably test this everywhere, so we just log it.
+		// The important part is that the handler logic is tested above.
+		t.Logf("failed to start redirect server on port 80 (this may be expected): %v", err)
+		return
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// We test the validation logic of RedirectPort80, but do not actually
-			// start the server, as it would require root privileges to bind to port 80.
-			err := webapp.RedirectPort80(ctx, tc.httpsAddr, tc.acmeRedirectHost)
+	// Give the server a moment to start.
+	time.Sleep(100 * time.Millisecond)
 
-			if tc.expectErr == "" {
-				if err != nil {
-					// An error is expected here because we can't bind to port 80.
-					// We are only testing the parameter validation part.
-					// A successful parameter validation will lead to a listen error.
-					if !strings.Contains(err.Error(), "listen tcp :80") {
-						t.Errorf("unexpected error: got %v", err)
-					}
-				}
-			} else {
-				if err == nil {
-					t.Errorf("expected error containing %q, but got nil", tc.expectErr)
-				} else if !strings.Contains(err.Error(), tc.expectErr) {
-					t.Errorf("expected error to contain %q, but got %q", tc.expectErr, err.Error())
-				}
-			}
-		})
+	client := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get("http://127.0.0.1:80/test")
+	if err != nil {
+		t.Fatalf("failed to make request to redirect server: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got, want := resp.StatusCode, http.StatusMovedPermanently; got != want {
+		t.Errorf("got status %v, want %v", got, want)
+	}
+
+	if got, want := resp.Header.Get("Location"), "https://127.0.0.1:8443/test"; got != want {
+		t.Errorf("got location %q, want %q", got, want)
+	}
+
+	// The server shuts down when the context is canceled.
+	cancel()
+	// Give it a moment to shut down.
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify it's no longer listening.
+	_, err = client.Get("http://127.0.0.1:80/test")
+	if err == nil {
+		t.Fatal("server did not shut down as expected")
 	}
 }

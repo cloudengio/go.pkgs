@@ -13,11 +13,12 @@ import (
 
 	"cloudeng.io/cmdutil/flags"
 	"cloudeng.io/webapp/webauth/acme"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func TestFlags(t *testing.T) {
 	ctx := context.Background()
-	cl := acme.CertFlags{}
+	cl := acme.ServiceFlags{}
 	flagSet := &flag.FlagSet{}
 	err := flags.RegisterFlagsInStruct(flagSet, "subcmd", &cl, nil, nil)
 	if err != nil {
@@ -25,15 +26,13 @@ func TestFlags(t *testing.T) {
 	}
 	err = flagSet.Parse([]string{
 		"--acme-client-host=login.domain",
-		"--acme-cert-host=allowed-domain-a",
-		"--acme-cert-host=allowed-domain-b",
 		"--acme-renew-before=1h",
 		"--acme-email=foo@bar"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	mgr, err := acme.NewManagerFromFlags(ctx, acme.NewNullCache(), cl)
+	mgr, err := acme.NewAutocertManager(ctx, autocert.DirCache(t.TempDir()), cl.AutocertConfig(), "allowed-domain-a", "allowed-domain-b")
 	if err != nil {
 		t.Fatal(err)
 	}

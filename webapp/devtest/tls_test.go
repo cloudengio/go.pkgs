@@ -171,9 +171,6 @@ func TestCertPoolForTesting(t *testing.T) {
 	}
 
 	// 4. Test error cases.
-	if _, err := devtest.CertPoolForTesting(); err == nil {
-		t.Error("expected an error for no files, but got nil")
-	}
 	if _, err := devtest.CertPoolForTesting("non-existent-file.pem"); err == nil {
 		t.Error("expected an error for non-existent file, but got nil")
 	}

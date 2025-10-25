@@ -6,18 +6,15 @@ package webapp
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
 
@@ -35,7 +32,7 @@ type entry struct {
 // to allow for certificates to be refreshed.
 type CertServingCache struct {
 	ctx       context.Context
-	certStore CertStore
+	certStore autocert.Cache
 	ttl       time.Duration
 	rootCAs   *x509.CertPool
 	nowFunc   func() time.Time
@@ -74,7 +71,7 @@ func CertCacheNowFunc(fn func() time.Time) CertServingCacheOption {
 // uses the supplied CertStore. The supplied context is cached and used by
 // the GetCertificate method, this allows for credentials etc to be passed
 // to the CertStore.Get method called by GetCertificate via the context.
-func NewCertServingCache(ctx context.Context, certStore CertStore, opts ...CertServingCacheOption) *CertServingCache {
+func NewCertServingCache(ctx context.Context, certStore autocert.Cache, opts ...CertServingCacheOption) *CertServingCache {
 	sc := &CertServingCache{
 		ctx:       ctx,
 		cache:     map[string]entry{},
@@ -132,88 +129,43 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 		return nil, err
 	}
 
-	// Private key portion.
-	priv, pub := pem.Decode(data)
-	if priv == nil || !strings.Contains(priv.Type, "PRIVATE") {
-		return nil, fmt.Errorf("no private key for %v", name)
+	// New cert file loaded.
+	privPEM, _, certsPEM := ParsePEM(data)
+	if len(certsPEM) == 0 {
+		return nil, fmt.Errorf("no certificates found for %v", name)
 	}
-	privKey, err := parsePrivateKey(priv.Bytes)
+	if len(privPEM) == 0 {
+		return nil, fmt.Errorf("no private key found for %v", name)
+	}
+
+	// Verify cert chain.
+	certs, err := parseCertsPEM(certsPEM)
+	if err != nil {
+		return nil, err
+	}
+	opts := x509.VerifyOptions{
+		DNSName:     name,
+		Roots:       m.rootCAs,
+		CurrentTime: now,
+	}
+	_, err = verifyCertChainOpts(certs, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	// Public portion, iterate over all certs in the chain.
-	var pubDER [][]byte
-	var pubDERBytes []byte
-	for len(pub) > 0 {
-		var b *pem.Block
-		b, pub = pem.Decode(pub)
-		if b == nil {
-			break
-		}
-		pubDER = append(pubDER, b.Bytes)
-		pubDERBytes = append(pubDERBytes, b.Bytes...)
+	if certs[0].IsCA {
+		return nil, fmt.Errorf("leaf certificate is a CA cert for %v", name)
 	}
-	if len(pub) > 0 {
-		return nil, fmt.Errorf("corrupt/spurious certs for %v", name)
-	}
-	x509Certs, err := x509.ParseCertificates(pubDERBytes)
-	if err != nil || len(x509Certs) == 0 {
-		return nil, fmt.Errorf("no public key/certs found for %v", name)
-	}
-	leaf, err := m.verifyLeafCert(name, now, x509Certs)
+
+	// Prepare tls.Certificate
+	cert := pem.EncodeToMemory(certsPEM[0])
+	priv := pem.EncodeToMemory(privPEM[0])
+	// Load tls.Certificate
+	tlscert, err := tls.X509KeyPair(cert, priv)
 	if err != nil {
-		return nil, err
-	}
-	tlscert := &tls.Certificate{
-		Certificate: pubDER,
-		PrivateKey:  privKey,
-		Leaf:        leaf,
-	}
-	m.put(name, tlscert, m.ttl)
-	return tlscert, nil
-}
-
-func (m *CertServingCache) verifyLeafCert(name string, now time.Time, x509Certs []*x509.Certificate) (*x509.Certificate, error) {
-	leaf := x509Certs[0]
-	intermediates := x509.NewCertPool()
-	for _, ic := range x509Certs[1:] {
-		intermediates.AddCert(ic)
-	}
-	_, err := leaf.Verify(x509.VerifyOptions{
-		DNSName:       name,
-		Intermediates: intermediates,
-		CurrentTime:   now,
-		Roots:         m.rootCAs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("invalid leaf cert %v: %v", name, err)
-	}
-	return leaf, nil
-}
-
-// Attempt to parse the given private key DER block. OpenSSL 0.9.8 generates
-// PKCS#1 private keys by default, while OpenSSL 1.0.0 generates PKCS#8 keys.
-// OpenSSL ecparam generates SEC1 EC private keys for ECDSA. We try all three.
-//
-// Inspired by parsePrivateKey in crypto/tls/tls.go.
-func parsePrivateKey(der []byte) (crypto.Signer, error) {
-	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
-		return key, nil
-	}
-	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
-		switch key := key.(type) {
-		case *rsa.PrivateKey:
-			return key, nil
-		case *ecdsa.PrivateKey:
-			return key, nil
-		default:
-			return nil, errors.New("unknown private key type in PKCS#8 wrapping")
-		}
-	}
-	if key, err := x509.ParseECPrivateKey(der); err == nil {
-		return key, nil
+		return nil, fmt.Errorf("failed to load x509 key pair for %v: %w", name, err)
 	}
 
-	return nil, errors.New("failed to parse private key")
+	m.put(name, &tlscert, m.ttl)
+	return &tlscert, nil
 }
