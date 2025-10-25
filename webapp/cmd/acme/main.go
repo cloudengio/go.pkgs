@@ -31,6 +31,8 @@ commands:
     commands:
       - name: validate-hosts
         summary: validate the certificates served for specified hosts
+        args:
+          - <hosts>+  # hosts to validate certificates for          
       - name: validate-pem-files
         summary: validate the pem encoded certificates served for specified hosts
         args:
