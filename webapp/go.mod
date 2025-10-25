@@ -1,6 +1,6 @@
 module cloudeng.io/webapp
 
-go 1.24
+go 1.25
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20250707204608-69242ac664a5
