@@ -25,12 +25,12 @@ type testRedirectFlags struct {
 
 type testRedirectCmd struct{}
 
-func (_ testRedirectCmd) redirect(ctx context.Context, values any, _ []string) error {
+func (testRedirectCmd) redirect(ctx context.Context, values any, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*testRedirectFlags)
 
-	cfg := cl.HTTPServerFlags.Config()
+	cfg := cl.HTTPServerConfig()
 
 	if len(cl.AcmeClientHost) == 0 {
 		return fmt.Errorf("must specific a target for the acme client")

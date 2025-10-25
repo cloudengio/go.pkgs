@@ -50,8 +50,8 @@ type HTTPServerFlags struct {
 	TLSCertFlags
 }
 
-// Config returns an HTTPServerConfig based on the supplied flags.
-func (cl HTTPServerFlags) Config() HTTPServerConfig {
+// HTTPServerConfig returns an HTTPServerConfig based on the supplied flags.
+func (cl HTTPServerFlags) HTTPServerConfig() HTTPServerConfig {
 	return HTTPServerConfig{
 		Address:  cl.Address,
 		TLSCerts: cl.TLSCertFlags.Config(),

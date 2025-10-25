@@ -34,7 +34,7 @@ type validateHostFlags struct {
 	AllHosts bool `subcmd:"all,false,set to validate all of the hosts for a given DNS hostname or domain"`
 }
 
-func (_ certsCmd) validateHostCertificatesCmd(ctx context.Context, values any, args []string) error {
+func (certsCmd) validateHostCertificatesCmd(ctx context.Context, values any, args []string) error {
 	cl := values.(*validateHostFlags)
 	for _, host := range args {
 		if err := validateCerts(ctx, cl, host); err != nil {
@@ -72,7 +72,7 @@ func validateCerts(ctx context.Context, cl *validateHostFlags, host string) erro
 	return validator.Validate(ctx, host, cl.TLSPort)
 }
 
-func (_ certsCmd) validatePEMFile(ctx context.Context, pemFile, rootCA string) error {
+func (certsCmd) validatePEMFile(ctx context.Context, pemFile, rootCA string) error {
 	certs, err := webapp.ReadAndParseCertsPEM(ctx, localfs.New(), pemFile)
 	if err != nil {
 		return err

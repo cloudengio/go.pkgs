@@ -35,7 +35,7 @@ type certManagerFlags struct {
 }
 type certManagerCmd struct{}
 
-func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []string) error {
+func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string) error {
 	logger := ctxlog.Logger(ctx)
 	logger.Info("starting acme cert manager", "build_info", cmdutil.BuildInfoJSON())
 
@@ -47,7 +47,7 @@ func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []strin
 		return err
 	}
 
-	acmeCfg := cl.ServiceFlags.AutocertConfig()
+	acmeCfg := cl.AutocertConfig()
 	mgr, err := acme.NewAutocertManager(ctx, cache, acmeCfg, hosts...)
 	if err != nil {
 		return err
@@ -119,7 +119,9 @@ func (_ certManagerCmd) manageCerts(ctx context.Context, flags any, args []strin
 	}
 	logger.Info("certificate refresh interval", "interval", refreshInterval.String())
 
-	webapp.WaitForServers(ctx, time.Second*2, httpListener.Addr().String())
+	if err := webapp.WaitForServers(ctx, time.Second*2, httpListener.Addr().String()); err != nil {
+		return fmt.Errorf("http server failed to start: %w", err)
+	}
 
 	go func() {
 		err := refreshCertificatesUsingHello(ctx, cl.RefreshInterval, mgr, hosts...)
