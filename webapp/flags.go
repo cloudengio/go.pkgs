@@ -21,7 +21,7 @@ type TLSCertFlags struct {
 }
 
 // Config returns a TLSCertConfig based on the supplied flags.
-func (cl TLSCertFlags) Config() TLSCertConfig {
+func (cl TLSCertFlags) TLSCertConfig() TLSCertConfig {
 	return TLSCertConfig(cl)
 }
 
@@ -54,7 +54,7 @@ type HTTPServerFlags struct {
 func (cl HTTPServerFlags) HTTPServerConfig() HTTPServerConfig {
 	return HTTPServerConfig{
 		Address:  cl.Address,
-		TLSCerts: cl.TLSCertFlags.Config(),
+		TLSCerts: cl.TLSCertConfig(),
 	}
 }
 
