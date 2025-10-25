@@ -15,12 +15,17 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20251024212118-8a0206d3c796
 	github.com/go-webauthn/webauthn v0.14.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.43.0
 	golang.org/x/net v0.46.0
 )
 
 require (
+	cloudeng.io/algo v0.0.0-20250702163429-a7491b52c177 // indirect
+	cloudeng.io/net v0.0.0-20250702160129-b1110d9b3fe4 // indirect
+	cloudeng.io/sys v0.0.0-20250702160129-b1110d9b3fe4 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-webauthn/x v0.1.25 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
@@ -29,6 +34,7 @@ require (
 	github.com/google/go-tpm v0.9.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
