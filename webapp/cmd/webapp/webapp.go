@@ -112,7 +112,7 @@ func prodServe(ctx context.Context, values any, _ []string) error {
 	configureAPIEndpoints(router)
 	serveContent(router)
 
-	cfg, err := cl.HTTPServerFlags.Config().TLSConfig()
+	cfg, err := cl.HTTPServerConfig().TLSConfig()
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func devServe(ctx context.Context, values any, _ []string) error {
 	router := chi.NewRouter()
 	configureAPIEndpoints(router)
 
-	cfg, err := cl.HTTPServerFlags.Config().TLSConfig()
+	cfg, err := cl.HTTPServerConfig().TLSConfig()
 	if err != nil {
 		return err
 	}
