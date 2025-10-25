@@ -7,6 +7,7 @@ package chromedputil_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,7 +23,6 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/go-json-experiment/json"
 )
 
 func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, string) {
