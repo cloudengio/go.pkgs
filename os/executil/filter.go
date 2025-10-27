@@ -14,7 +14,7 @@ import (
 
 type linefilter struct {
 	*io.PipeWriter
-	re      *regexp.Regexp
+	res     []*regexp.Regexp
 	ch      chan<- []byte
 	prd     *io.PipeReader
 	errCh   chan error
@@ -31,13 +31,13 @@ func discardIfNil(w io.Writer) io.Writer {
 // NewLineFilter returns an io.WriteCloser that scans the contents of the
 // supplied io.Writer and sends lines that match the regexp to the supplied
 // channel. It can be used to filter the output of a command started
-// by the exec package for example for specific output. If the regexp is nil,
-// all lines are sent. Close must be called on the returned io.WriteCloser to
-// ensure that all resources are reclaimed.
-func NewLineFilter(forward io.Writer, re *regexp.Regexp, ch chan<- []byte) io.WriteCloser {
+// by the exec package for example for specific output. If no regexps are
+// supplied, all lines are sent. Close must be called on the returned
+// io.WriteCloser to ensure that all resources are reclaimed.
+func NewLineFilter(forward io.Writer, ch chan<- []byte, res ...*regexp.Regexp) io.WriteCloser {
 	lf := &linefilter{
 		forward: discardIfNil(forward),
-		re:      re,
+		res:     res,
 		ch:      ch,
 		errCh:   make(chan error, 1),
 	}
@@ -59,7 +59,16 @@ func (lf *linefilter) readlines() {
 	sc := bufio.NewScanner(lf.prd)
 	for sc.Scan() {
 		buf := sc.Bytes()
-		if lf.re == nil || lf.re.Match(buf) {
+		match := len(lf.res) == 0
+		if !match {
+			for _, re := range lf.res {
+				if re.Match(buf) {
+					match = true
+					break
+				}
+			}
+		}
+		if match {
 			send(lf.ch, buf)
 		}
 		lf.forward.Write(buf)          //nolint:errcheck
@@ -75,7 +84,7 @@ func (lf *linefilter) Close() error {
 	lf.PipeWriter.Close()
 	close(lf.ch)
 	err := <-lf.errCh
-	if !strings.Contains(err.Error(), "read/write on closed pipe") {
+	if err != nil && !strings.Contains(err.Error(), "read/write on closed pipe") {
 		return err
 	}
 	return nil
