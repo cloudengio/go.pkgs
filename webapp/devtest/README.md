@@ -13,7 +13,8 @@ applications, including TLS certificate generation and management.
 func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error)
 ```
 CertPoolForTesting returns a new x509.CertPool containing the certs in the
-specified pem files. It is intended for testing purposes only.
+specified pem files. If no pem files are specified nil it will return the
+system cert pool. It is intended for testing purposes only.
 
 ### Func NewSelfSignedCert
 ```go
@@ -63,6 +64,63 @@ func NewJSServer(title string, ts *TypescriptSources, jsScripts ...string) *JSSe
 func (jss *JSServer) ServeJS(rw http.ResponseWriter, r *http.Request)
 ```
 ServeJS handles HTTP requests for serving a series of Javascript files.
+
+
+
+
+### Type Pebble
+```go
+type Pebble struct {
+	// contains filtered or unexported fields
+}
+```
+Pebble manages a pebble instance for testing purposes.
+
+### Functions
+
+```go
+func NewPebble(binary string) *Pebble
+```
+NewPebble creates a new Pebble instance. The supplied configFile will
+be used to configure the pebble instance. The server is not started by
+NewPebble.
+
+
+
+### Methods
+
+```go
+func (p *Pebble) CreateCerts(ctx context.Context, outputDir string) (string, error)
+```
+CreateCerts uses minica to create a self-signed certificate for use with the
+pebble instance. The generated certificate and key are placed in outputDir.
+It returns the path to the pebble configuration file to be used when
+starting pebble.
+
+
+```go
+func (p *Pebble) PID() int
+```
+PID returns the process ID of the pebble instance.
+
+
+```go
+func (p *Pebble) Start(ctx context.Context, cfg string, forward io.WriteCloser) error
+```
+Start the pebble instance with its output forwarded to the supplied writer.
+
+
+```go
+func (p *Pebble) Stop() error
+```
+Stop the pebble instance.
+
+
+```go
+func (p *Pebble) WaitForIssuedCertificateSerial(ctx context.Context) (string, error)
+```
+WaitForIssuedCertificateSerial waits until a certificate is issued and
+returns its serial number.
 
 
 
