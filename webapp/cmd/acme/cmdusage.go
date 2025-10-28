@@ -9,7 +9,7 @@
 //	server is dedicated to managingcertificates it does not support any other
 //	services and consequently allother services do not implement the acme protocol.
 //	Rather, these otherservices will redirect any http-01 acme challenges back to
-//	this dedicatedacme service. This comannd implements two sub commands: 'cert-manager'
+//	this dedicatedacme service. This command implements two sub commands: 'cert-manager'
 //	whichis the dedicated acme manager and 'redirect-test' which illustrates how
 //	other services should redirect back to the host running the 'cert-manager'.
 //
@@ -25,7 +25,7 @@
 //	- run cert-manager on host certs.an.example. Port 80 must be accessible tothe
 //	internet. It could be configured with www.an.example and an.exampleas the allowed
 //	hosts/domains for which it will manage certificates.- all instances of services
-//	that run on www.an.example an an.example mustimplement the redirect to
+//	that run on www.an.example and an.example mustimplement the redirect to
 //	certs.an.example as implemented by theredirect test.- the dns entries for
 //	an.example and www.an.example need not include theIP address of certs.an.example.
 //	- cert-manager will periodically issue http GETS againsthttps://www.an.example
@@ -41,8 +41,6 @@
 //	fargate, ECS/EKS etc with no overhead other than implementingthe http-01 redirect
 //	and having access to the certificates.
 //
-//	 cert-manager - manage obtaining and renewing tls certificates using an acme service such as letsencrypt.org.
-//	redirect-test - test redirecting acme http-01 challenges back to a central server that implements the acme client.
-//	   cert-store - store and retrieve certificates directly from a certificate store.
-//	     validate - validate the certificates for a host/domain
+//	servers - run acme related servers
+//	  certs - manage ACME issued TLS certificates
 package main

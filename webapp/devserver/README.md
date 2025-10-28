@@ -30,7 +30,15 @@ successfully extracted.
 ### Methods
 
 ```go
-func (ds *DevServer) StartAndWaitForURL(ctx context.Context, extractor URLExtractor) (*url.URL, error)
+func (ds *DevServer) Close()
+```
+CloseStdout closes the stdout from the dev server process and will prevent
+any further output from being processed or forwarded to the writer supplied
+to StartAndWaitForURL.
+
+
+```go
+func (ds *DevServer) StartAndWaitForURL(ctx context.Context, writer io.Writer, extractor URLExtractor) (*url.URL, error)
 ```
 StartAndWaitForURL starts the dev server and waits until a URL is extracted
 from its output using the supplied URLExtractor function. The context can be

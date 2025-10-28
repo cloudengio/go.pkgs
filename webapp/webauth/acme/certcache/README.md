@@ -4,8 +4,8 @@
 import cloudeng.io/webapp/webauth/acme/certcache
 ```
 
-Package certcache provides support for working with autocert managers and in
-particular with caching storing certificates.
+Package certcache provides support for working with autocert caches with
+persistent backing stores for storing and distributing certificates.
 
 ## Variables
 ### ErrReadonlyCache, ErrLocalOperation, ErrBackingOperation, ErrLockFailed
@@ -43,7 +43,7 @@ as ACME client private keys or http-01 challenge tokens.
 
 ### Func RefreshCertificate
 ```go
-func RefreshCertificate(ctx context.Context, mgr *autocert.Manager, host string) (*tls.Certificate, error)
+func RefreshCertificate(_ context.Context, mgr *autocert.Manager, host string) (*tls.Certificate, error)
 ```
 RefreshCertificate attempts to refresh the certificate for the specified
 host using the provided autocert.Manager by simulating a TLS ClientHello
