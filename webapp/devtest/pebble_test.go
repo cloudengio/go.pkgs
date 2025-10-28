@@ -6,6 +6,7 @@ package devtest_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,18 +37,23 @@ func TestPebble(t *testing.T) {
 	}
 	pebble := devtest.NewPebble(mockPebblePath)
 
-	if err := os.MkdirAll(filepath.Join(tmpDir, "test", "certs"), 0700); err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
+	cfg, err := devtest.NewPebbleConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	pblcfg, err := pebble.CreateCerts(ctx, filepath.Join(tmpDir, "test", "certs"))
+	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("failed to create pebble certs: %v", err)
 	}
 
 	out := &output{&strings.Builder{}}
-	if err := pebble.Start(ctx, pblcfg, out); err != nil {
+	if err := pebble.Start(ctx, ".", cfgFile, out); err != nil {
 		t.Fatalf("failed to start pebble: %v", err)
+	}
+
+	if err := pebble.WaitForReady(ctx); err != nil {
+		t.Fatalf("WaitForReady: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -59,6 +65,13 @@ func TestPebble(t *testing.T) {
 	if got, want := serial, "0123456789abcdef"; got != want {
 		t.Errorf("invalid serial: got %q, want %q", got, want)
 	}
+
+	ensureStopped(t, pebble)
+
+}
+
+func ensureStopped(t *testing.T, pebble *devtest.Pebble) {
+	t.Helper()
 
 	pid := pebble.PID()
 	if pid == 0 {
@@ -83,5 +96,42 @@ func TestPebble(t *testing.T) {
 		t.Errorf("process %d still exists after close", pid)
 		proc.Kill() //nolint:errcheck
 	}
+}
 
+func TestPebble_RealServer(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	pebble := devtest.NewPebble("pebble")
+
+	cfg, err := devtest.NewPebbleConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, filepath.Join(tmpDir, "test", "certs"))
+	if err != nil {
+		t.Fatalf("failed to create pebble certs: %v", err)
+	}
+
+	out := &output{&strings.Builder{}}
+	if err := pebble.Start(ctx, tmpDir, cfgFile, out); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
+		t.Fatalf("failed to start pebble: %v", err)
+	}
+	if err := pebble.WaitForReady(ctx); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
+		t.Fatalf("WaitForReady: %v", err)
+	}
+
+	data, err := cfg.GetRootCert(ctx)
+	fmt.Printf("PEM data: %s\n", data)
+	t.Fail()
+	fmt.Printf("out %s\n", out.String())
+	if err != nil {
+		t.Fatalf("GetRootCert: %v", err)
+	}
+
+	ensureStopped(t, pebble)
 }
