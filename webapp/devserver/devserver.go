@@ -50,7 +50,7 @@ func NewServer(ctx context.Context, dir, binary string, args ...string) *DevServ
 // is cancelled before a URL is extracted an error is returned.
 func (ds *DevServer) StartAndWaitForURL(ctx context.Context, writer io.Writer, extractor URLExtractor) (*url.URL, error) {
 	ch := make(chan []byte, 1)
-	filter := executil.NewLineFilter(writer, nil, ch)
+	filter := executil.NewLineFilter(writer, ch)
 	ds.cmd.Stdout = filter
 	ds.closer = filter
 	if err := ds.cmd.Start(); err != nil {

@@ -32,7 +32,7 @@ func Example() {
 	// Use go run testdata/cat.go for compatibility across windows and unix.
 	cmd := exec.CommandContext(ctx, "go", "run", filepath.Join("testdata", "cat.go"), filepath.Join("testdata", "example")) // #nosec G204
 	ch := make(chan []byte, 1)
-	filter := executil.NewLineFilter(all, regexp.MustCompile("filter me:"), ch)
+	filter := executil.NewLineFilter(all, ch, regexp.MustCompile("filter me:"))
 	cmd.Stdout = filter
 	var wg sync.WaitGroup
 	wg.Add(1)

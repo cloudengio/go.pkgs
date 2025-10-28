@@ -22,12 +22,12 @@ func GoBuild(ctx context.Context, binary string, args ...string) (string, error)
 
 ### Func NewLineFilter
 ```go
-func NewLineFilter(forward io.Writer, re *regexp.Regexp, ch chan<- []byte) io.WriteCloser
+func NewLineFilter(forward io.Writer, ch chan<- []byte, res ...*regexp.Regexp) io.WriteCloser
 ```
 NewLineFilter returns an io.WriteCloser that scans the contents of the
 supplied io.Writer and sends lines that match the regexp to the supplied
-channel. It can be used to filter the output of a command started by
-the exec package for example for specific output. If the regexp is nil,
+channel. It can be used to filter the output of a command started by the
+exec package for example for specific output. If no regexps are supplied,
 all lines are sent. Close must be called on the returned io.WriteCloser to
 ensure that all resources are reclaimed.
 
