@@ -113,7 +113,7 @@ func (p *Pebble) PID() int {
 
 // Stop the pebble instance.
 func (p *Pebble) Stop() error {
-	p.cmd.Process.Signal(syscall.SIGINT)
+	p.cmd.Process.Signal(syscall.SIGINT) //nolint:errcheck
 	if p.cmd != nil {
 		return p.cmd.Wait()
 	}

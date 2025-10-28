@@ -6,7 +6,6 @@ package devtest_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -66,9 +65,6 @@ func TestPebble(t *testing.T) {
 		t.Fatalf("invalid pebble pid: %d", pid)
 	}
 	if err := pebble.Stop(); err != nil {
-		if !errors.Is(err, os.ErrProcessDone) {
-			t.Fatalf("failed to stop pebble: %v", err)
-		}
 		t.Fatalf("failed to close pebble: %v", err)
 	}
 
@@ -85,7 +81,7 @@ func TestPebble(t *testing.T) {
 	if err := proc.Signal(syscall.Signal(0)); err == nil {
 		// If there's no error, the process still exists.
 		t.Errorf("process %d still exists after close", pid)
-		proc.Kill()
+		proc.Kill() //nolint:errcheck
 	}
 
 }
