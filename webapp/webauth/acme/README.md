@@ -23,7 +23,7 @@ LetsEncryptProduction = acme.LetsEncryptURL
 ## Functions
 ### Func NewAutocertManager
 ```go
-func NewAutocertManager(ctx context.Context, cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error)
+func NewAutocertManager(_ context.Context, cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error)
 ```
 NewAutocertManager creates a new autocert.Manager from the supplied config.
 Any supplied hosts, along with the ClientHost, are used to specify the

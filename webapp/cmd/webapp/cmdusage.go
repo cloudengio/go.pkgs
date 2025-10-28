@@ -16,7 +16,9 @@
 //	this mode, this application will proxy all of the urls that it doesn't itself
 //	implement to the running development server. The dev server may be started by
 //	this server via the --webpack-dir option. Alternatively, a running dev server
-//	may be used via the --webpack-server option.
+//	may be used via the --webpack-server option. Similarly for vite with the--vite-dir
+//	and --vite-server options. Note, that only one of webpack or vitemay be used
+//	at a time.
 //
 //	If a self-signed cerificate is required, the cert command can be used to generate
 //	one.

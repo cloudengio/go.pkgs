@@ -70,12 +70,12 @@ func (fs *SecureNoteFS) ReadFile(name string) ([]byte, error)
 
 
 ```go
-func (fs *SecureNoteFS) WriteFile(name string, data []byte, perm fs.FileMode) error
+func (fs *SecureNoteFS) WriteFile(name string, data []byte, _ fs.FileMode) error
 ```
 
 
 ```go
-func (fs *SecureNoteFS) WriteFileCtx(_ context.Context, name string, data []byte, perm fs.FileMode) error
+func (fs *SecureNoteFS) WriteFileCtx(_ context.Context, name string, data []byte, _ fs.FileMode) error
 ```
 
 

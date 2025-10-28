@@ -8,19 +8,19 @@ import cloudeng.io/net/http/httptracing
 ## Functions
 ### Func JSONHandlerResponseLogger
 ```go
-func JSONHandlerResponseLogger(ctx context.Context, logger *slog.Logger, req *http.Request, _ http.Header, statusCode int, data []byte)
+func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte)
 ```
 
 ### Func JSONRequestBodyLogger
 ```go
-func JSONRequestBodyLogger(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+func JSONRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
 JSONRequestBodyLogger logs the request body as a JSON object. The supplied
 logger is pre-configured with relevant request information.
 
 ### Func JSONResponseBodyLogger
 ```go
-func JSONResponseBodyLogger(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
+func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
 ```
 JSONResponseBodyLogger logs the response body as a JSON object. The supplied
 logger is pre-configured with relevant request information.

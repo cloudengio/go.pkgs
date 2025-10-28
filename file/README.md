@@ -294,7 +294,7 @@ type ReadFileFS interface {
 	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 }
 ```
-ReadFileFS defines an FS style interface for reading files.
+ReadFileFS provides an interface for reading the entire contents of a file.
 
 
 ### Type WriteFileFS
@@ -304,7 +304,7 @@ type WriteFileFS interface {
 	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
 }
 ```
-WriteFileFS defines an FS style interface for writing files.
+WriteFileFS provides an interface for writing the entire contents of a file.
 
 
 ### Type XAttr
