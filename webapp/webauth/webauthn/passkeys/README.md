@@ -436,7 +436,7 @@ type WebAuthn interface {
 	BeginMediatedRegistration(user webauthn.User, mediation protocol.CredentialMediationRequirement, opts ...webauthn.RegistrationOption) (creation *protocol.CredentialCreation, session *webauthn.SessionData, err error)
 	FinishRegistration(user webauthn.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error)
 	BeginDiscoverableMediatedLogin(mediation protocol.CredentialMediationRequirement, opts ...webauthn.LoginOption) (*protocol.CredentialAssertion, *webauthn.SessionData, error)
-	FinishPasskeyLogin(handler webauthn.DiscoverableUserHandler, session webauthn.SessionData, response *http.Request) (user webauthn.User, credential *webauthn.Credential, err error)
+	FinishPasskeyLogin(handler webauthn.DiscoverableUserHandler, session webauthn.SessionData, request *http.Request) (user webauthn.User, credential *webauthn.Credential, err error)
 }
 ```
 WebAuthn defines the subset of webauthn.WebAuthn used by this package.
