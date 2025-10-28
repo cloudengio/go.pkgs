@@ -6,7 +6,10 @@ package devtest
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"maps"
@@ -108,17 +111,15 @@ func (p *Pebble) PID() int {
 }
 
 // Stop the pebble instance.
-func (p *Pebble) Stop() error {
+func (p *Pebble) Stop() {
 	p.cmd.Process.Signal(syscall.SIGINT) //nolint:errcheck
 	if p.cmd != nil {
-		return p.cmd.Wait()
+		_ = p.cmd.Wait()
+		return
 	}
 	if p.closer != nil {
-		if err := p.closer.Close(); err != nil {
-			return err
-		}
+		_ = p.closer.Close()
 	}
-	return nil
 }
 
 // PebbleConfig represents the configuration for a pebble instance
@@ -134,33 +135,9 @@ type PebbleConfig struct {
 	RootCertURL       string
 
 	originalConfig map[string]map[string]any
+	pebbleCA       *x509.CertPool
+	serverRoots    *x509.CertPool
 }
-
-/*
-func asInt(key string, m map[string]any) (int, error) {
-	v, ok := m[key]
-	if !ok {
-		return 0, fmt.Errorf("missing key %q in pebble config", key)
-	}
-	f, ok := v.(float64)
-	if !ok {
-		return 0, fmt.Errorf("invalid type for key %q in pebble config: %T", key, v)
-	}
-	return int(f), nil
-}
-
-func asString(key string, m map[string]any) (string, error) {
-	v, ok := m[key]
-	if !ok {
-		return "", fmt.Errorf("missing key %q in pebble config", key)
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid type for key %q in pebble config: %T", key, v)
-	}
-	return s, nil
-}
-*/
 
 var parsedConfig = map[string]map[string]any{}
 
@@ -201,12 +178,14 @@ const pebbleConfig = `
     }
 }`
 
+// NewPebbleConfig creates a new PebbleConfig instance with
+// default values.
 func NewPebbleConfig() (PebbleConfig, error) {
 	var cfg PebbleConfig
 	cfg.originalConfig = parsedConfig
 	cfg.HTTPPort = 5002
 	cfg.TLSPort = 5001
-	cfg.TestCertBase = "test/certs"
+	cfg.TestCertBase = filepath.Join("test", "certs")
 	cfg.Address = "localhost:14000"
 	cfg.ManagementAddress = "localhost:15000"
 	u := url.URL{
@@ -216,86 +195,7 @@ func NewPebbleConfig() (PebbleConfig, error) {
 	}
 	cfg.RootCertURL = u.String()
 	return cfg, nil
-
-	/*
-		var errs errors.M
-		tmp := parsedConfig["pebble"]
-
-		/*
-			ai := func(key string) int {
-				v, err := asInt(key, tmp)
-				errs.Append(err)
-				return v
-			}
-			as := func(key string) string {
-				v, err := asString(key, tmp)
-				errs.Append(err)
-				return v
-			}
-
-			laddr := as("listenAddress")
-			maddr := as("managementListenAddress")
-			cfg.HTTPPort = ai("httpPort")
-			cfg.TLSPort = ai("tlsPort")
-			certFile := as(string("certificate"))
-			keyFile := as(string("privateKey"))
-			if errs.Err() != nil {
-				return cfg, errs.Err()
-			}
-			_, port, err := net.SplitHostPort(laddr)
-			if err != nil {
-				return cfg, fmt.Errorf("invalid listen address %q: %w", laddr, err)
-			}
-			_, mport, err := net.SplitHostPort(maddr)
-			if err != nil {
-				return cfg, fmt.Errorf("invalid management listen address %q: %w", maddr, err)
-			}
-			base, host := cfg.findBase(certFile, keyFile)
-			cfg.Address = net.JoinHostPort(host, port)
-			cfg.ManagementAddress = net.JoinHostPort(host, mport)
-
-			u := url.URL{
-				Scheme: "https",
-				Host:   cfg.ManagementAddress,
-				Path:   "/roots/0",
-			}
-			cfg.RootCertURL = u.String()
-
-			cfg.TestCertBase = base
-			if cfg.TestCertBase == "" {
-				errs.Append(fmt.Errorf("failed to determine test cert base from %q and %q", cfg.Address, cfg.ManagementAddress))
-			}
-			if errs.Err() != nil {
-				return cfg, errs.Err()
-			}
-			return cfg, nil*/
-
 }
-
-/*
-func (pc PebbleConfig) findLeadingPath(a string) (prefix, host string) {
-	parts := strings.Split(a, "/")
-	if len(parts) < 2 {
-		return "", ""
-	}
-	return path.Join(parts[0 : len(parts)-2]...), parts[len(parts)-2]
-}
-
-func (pc PebbleConfig) findBase(a, b string) (prefix, host string) {
-	la, ha := pc.findLeadingPath(a)
-	lb, hb := pc.findLeadingPath(b)
-	if la == "" || lb == "" {
-		return "", ""
-	}
-	if la != lb {
-		return "", ""
-	}
-	if ha != hb {
-		return "", ""
-	}
-	return la, ha
-}
-*/
 
 // CreateCertsAndUpdateConfig uses minica to create a self-signed certificate for
 // use with the pebble instance. The generated certificate and key are placed in outputDir.
@@ -307,7 +207,7 @@ func (pc PebbleConfig) findBase(a, b string) (prefix, host string) {
 //	          -ca-key pebble.minica.key.pem \
 //	          -domains localhost,pebble \
 //	          -ip-addresses 127.0.0.1
-func (pc PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDir string) (string, error) {
+func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDir string) (string, error) {
 	certDir := filepath.Join(outputDir, pc.TestCertBase)
 	if err := os.MkdirAll(certDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create cert dir: %v", err)
@@ -323,7 +223,7 @@ func (pc PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDir
 		"-ca-key", "pebble.minica.key.pem",
 		"-domains", "localhost,pebble",
 		"-ip-addresses", "127.0.0.1")
-	cmd.Dir = outputDir
+	cmd.Dir = certDir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("failed to run minica: %v: %s", err, output)
 	}
@@ -340,10 +240,18 @@ func (pc PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDir
 		return "", fmt.Errorf("failed to write updated pebble config to %q: %v", cfgFile, err)
 	}
 
+	root, err := CertPoolForTesting(filepath.Join(outputDir, pc.TestCertBase, "pebble.minica.pem"))
+	if err != nil {
+		return "", fmt.Errorf("failed to load pebble root cert: %v", err)
+	}
+	pc.pebbleCA = root
+
 	return cfgFile, nil
 }
 
-func (pc PebbleConfig) GetRootCert(ctx context.Context) ([]byte, error) {
+// GetIssuingCert retrieves the pebble certificate, including intermediates,
+// used to sign issued certificates.
+func (pc PebbleConfig) GetIssuingCert(ctx context.Context) ([]byte, error) {
 	u := url.URL{
 		Scheme: "https",
 		Host:   pc.ManagementAddress,
@@ -354,11 +262,44 @@ func (pc PebbleConfig) GetRootCert(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    pc.pebbleCA,
+				MinVersion: tls.VersionTLS12,
+			},
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	return io.ReadAll(resp.Body)
+}
+
+// CA returns a CertPool containing the root pebble CA certificate.
+// Use it when configuring clients to connect to the pebble instance.
+func (pc PebbleConfig) CA() *x509.CertPool {
+	return pc.pebbleCA
+}
+
+// IssuingCA returns a CertPool containing the issuing CA certificate
+// used by pebble to sign issued certificates.
+func (pc PebbleConfig) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
+	data, err := pc.GetIssuingCert(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pb, _ := pem.Decode(data)
+	if pb == nil {
+		return nil, fmt.Errorf("failed to decode issuing cert pem data")
+	}
+	cert, err := x509.ParseCertificate(pb.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+	return pool, nil
 }

@@ -6,7 +6,6 @@ package devtest_test
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,6 +35,8 @@ func TestPebble(t *testing.T) {
 		t.Fatalf("failed to build mock pebble: %v", err)
 	}
 	pebble := devtest.NewPebble(mockPebblePath)
+	out := &output{&strings.Builder{}}
+	defer ensureStopped(t, pebble, out)
 
 	cfg, err := devtest.NewPebbleConfig()
 	if err != nil {
@@ -47,7 +48,6 @@ func TestPebble(t *testing.T) {
 		t.Fatalf("failed to create pebble certs: %v", err)
 	}
 
-	out := &output{&strings.Builder{}}
 	if err := pebble.Start(ctx, ".", cfgFile, out); err != nil {
 		t.Fatalf("failed to start pebble: %v", err)
 	}
@@ -66,20 +66,17 @@ func TestPebble(t *testing.T) {
 		t.Errorf("invalid serial: got %q, want %q", got, want)
 	}
 
-	ensureStopped(t, pebble)
-
 }
 
-func ensureStopped(t *testing.T, pebble *devtest.Pebble) {
+func ensureStopped(t *testing.T, pebble *devtest.Pebble, out *output) {
 	t.Helper()
 
 	pid := pebble.PID()
 	if pid == 0 {
+		t.Log(out.String())
 		t.Fatalf("invalid pebble pid: %d", pid)
 	}
-	if err := pebble.Stop(); err != nil {
-		t.Fatalf("failed to close pebble: %v", err)
-	}
+	pebble.Stop()
 
 	// 5. Verify the process is gone.
 	// On Unix, os.FindProcess always succeeds, so we need to signal it.
@@ -104,18 +101,19 @@ func TestPebble_RealServer(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	pebble := devtest.NewPebble("pebble")
+	out := &output{&strings.Builder{}}
+	defer ensureStopped(t, pebble, out)
 
 	cfg, err := devtest.NewPebbleConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, filepath.Join(tmpDir, "test", "certs"))
+	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("failed to create pebble certs: %v", err)
 	}
 
-	out := &output{&strings.Builder{}}
 	if err := pebble.Start(ctx, tmpDir, cfgFile, out); err != nil {
 		t.Logf("pebble log output: %s\n", out.String())
 		t.Fatalf("failed to start pebble: %v", err)
@@ -125,13 +123,8 @@ func TestPebble_RealServer(t *testing.T) {
 		t.Fatalf("WaitForReady: %v", err)
 	}
 
-	data, err := cfg.GetRootCert(ctx)
-	fmt.Printf("PEM data: %s\n", data)
-	t.Fail()
-	fmt.Printf("out %s\n", out.String())
-	if err != nil {
-		t.Fatalf("GetRootCert: %v", err)
+	if _, err := cfg.GetIssuingCA(ctx); err != nil {
+		t.Fatalf("GetIssuingCA: %v", err)
 	}
 
-	ensureStopped(t, pebble)
 }

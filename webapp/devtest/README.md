@@ -90,28 +90,19 @@ NewPebble.
 ### Methods
 
 ```go
-func (p *Pebble) CreateCerts(ctx context.Context, outputDir string) (string, error)
-```
-CreateCerts uses minica to create a self-signed certificate for use with the
-pebble instance. The generated certificate and key are placed in outputDir.
-It returns the path to the pebble configuration file to be used when
-starting pebble.
-
-
-```go
 func (p *Pebble) PID() int
 ```
 PID returns the process ID of the pebble instance.
 
 
 ```go
-func (p *Pebble) Start(ctx context.Context, cfg string, forward io.WriteCloser) error
+func (p *Pebble) Start(ctx context.Context, dir, cfg string, forward io.WriteCloser) error
 ```
 Start the pebble instance with its output forwarded to the supplied writer.
 
 
 ```go
-func (p *Pebble) Stop() error
+func (p *Pebble) Stop()
 ```
 Stop the pebble instance.
 
@@ -121,6 +112,77 @@ func (p *Pebble) WaitForIssuedCertificateSerial(ctx context.Context) (string, er
 ```
 WaitForIssuedCertificateSerial waits until a certificate is issued and
 returns its serial number.
+
+
+```go
+func (p *Pebble) WaitForReady(ctx context.Context) error
+```
+
+
+
+
+### Type PebbleConfig
+```go
+type PebbleConfig struct {
+	Address           string
+	ManagementAddress string
+	HTTPPort          int
+	TLSPort           int
+	Certificate       []byte
+	Key               []byte
+	TestCertBase      string
+	RootCertURL       string
+	// contains filtered or unexported fields
+}
+```
+PebbleConfig represents the configuration for a pebble instance that's
+relevant to using it for testing clients.
+
+### Functions
+
+```go
+func NewPebbleConfig() (PebbleConfig, error)
+```
+NewPebbleConfig creates a new PebbleConfig instance with default values.
+
+
+
+### Methods
+
+```go
+func (pc PebbleConfig) CA() *x509.CertPool
+```
+CA returns a CertPool containing the root pebble CA certificate. Use it when
+configuring clients to connect to the pebble instance.
+
+
+```go
+func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDir string) (string, error)
+```
+CreateCertsAndUpdateConfig uses minica to create a self-signed certificate
+for use with the pebble instance. The generated certificate and key
+are placed in outputDir. It returns the path to the possibly unpdated
+configuration file to be used when starting pebble. Use minica to create a
+self-signed certificate for the domain as per:
+
+    	  minica -ca-cert pebble.minica.pem \
+              -ca-key pebble.minica.key.pem \
+              -domains localhost,pebble \
+              -ip-addresses 127.0.0.1
+
+
+```go
+func (pc PebbleConfig) GetIssuingCA(ctx context.Context) (*x509.CertPool, error)
+```
+IssuingCA returns a CertPool containing the issuing CA certificate used by
+pebble to sign issued certificates.
+
+
+```go
+func (pc PebbleConfig) GetIssuingCert(ctx context.Context) ([]byte, error)
+```
+GetIssuingCert retrieves the pebble certificate, including intermediates,
+used to sign issued certificates.
 
 
 
