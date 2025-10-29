@@ -68,63 +68,6 @@ ServeJS handles HTTP requests for serving a series of Javascript files.
 
 
 
-### Type Pebble
-```go
-type Pebble struct {
-	// contains filtered or unexported fields
-}
-```
-Pebble manages a pebble instance for testing purposes.
-
-### Functions
-
-```go
-func NewPebble(binary string) *Pebble
-```
-NewPebble creates a new Pebble instance. The supplied configFile will
-be used to configure the pebble instance. The server is not started by
-NewPebble.
-
-
-
-### Methods
-
-```go
-func (p *Pebble) CreateCerts(ctx context.Context, outputDir string) (string, error)
-```
-CreateCerts uses minica to create a self-signed certificate for use with the
-pebble instance. The generated certificate and key are placed in outputDir.
-It returns the path to the pebble configuration file to be used when
-starting pebble.
-
-
-```go
-func (p *Pebble) PID() int
-```
-PID returns the process ID of the pebble instance.
-
-
-```go
-func (p *Pebble) Start(ctx context.Context, cfg string, forward io.WriteCloser) error
-```
-Start the pebble instance with its output forwarded to the supplied writer.
-
-
-```go
-func (p *Pebble) Stop() error
-```
-Stop the pebble instance.
-
-
-```go
-func (p *Pebble) WaitForIssuedCertificateSerial(ctx context.Context) (string, error)
-```
-WaitForIssuedCertificateSerial waits until a certificate is issued and
-returns its serial number.
-
-
-
-
 ### Type SelfSignedOption
 ```go
 type SelfSignedOption func(ssc *selfSignedCertOptions)
