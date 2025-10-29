@@ -6,11 +6,8 @@ package devtest_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -38,10 +35,7 @@ func TestPebble(t *testing.T) {
 	out := &output{&strings.Builder{}}
 	defer ensureStopped(t, pebble, out)
 
-	cfg, err := devtest.NewPebbleConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := devtest.NewPebbleConfig()
 
 	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, tmpDir)
 	if err != nil {
@@ -70,28 +64,9 @@ func TestPebble(t *testing.T) {
 
 func ensureStopped(t *testing.T, pebble *devtest.Pebble, out *output) {
 	t.Helper()
-
-	pid := pebble.PID()
-	if pid == 0 {
-		t.Log(out.String())
-		t.Fatalf("invalid pebble pid: %d", pid)
-	}
-	pebble.Stop()
-
-	// 5. Verify the process is gone.
-	// On Unix, os.FindProcess always succeeds, so we need to signal it.
-	// On Windows, FindProcess will error if the process doesn't exist.
-	time.Sleep(100 * time.Millisecond) // Give it a moment to die.
-	proc, err := os.FindProcess(pid)
-	if err != nil && runtime.GOOS == "windows" {
-		// On windows, this is sufficient to know it's gone.
-		return
-	}
-	// On Unix, we need to send a signal 0 to check for existence.
-	if err := proc.Signal(syscall.Signal(0)); err == nil {
-		// If there's no error, the process still exists.
-		t.Errorf("process %d still exists after close", pid)
-		proc.Kill() //nolint:errcheck
+	if err := pebble.EnsureStopped(t.Context(), time.Minute); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
+		t.Fatalf("failed to stop pebble process %d: %v", pebble.PID(), err)
 	}
 }
 
@@ -104,10 +79,7 @@ func TestPebble_RealServer(t *testing.T) {
 	out := &output{&strings.Builder{}}
 	defer ensureStopped(t, pebble, out)
 
-	cfg, err := devtest.NewPebbleConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := devtest.NewPebbleConfig()
 
 	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, tmpDir)
 	if err != nil {

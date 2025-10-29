@@ -20,7 +20,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"syscall"
+	"time"
 
+	clos "cloudeng.io/os"
 	"cloudeng.io/os/executil"
 )
 
@@ -110,16 +112,23 @@ func (p *Pebble) PID() int {
 	return 0
 }
 
-// Stop the pebble instance.
-func (p *Pebble) Stop() {
-	p.cmd.Process.Signal(syscall.SIGINT) //nolint:errcheck
-	if p.cmd != nil {
-		_ = p.cmd.Wait()
-		return
+// Stop the pebble instance, it returns the pid of the stopped process.
+func (p *Pebble) Stop() int {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return -1
 	}
+	pid := p.cmd.Process.Pid
+	p.cmd.Process.Signal(syscall.SIGINT) //nolint:errcheck
+	_ = p.cmd.Wait()
 	if p.closer != nil {
 		_ = p.closer.Close()
 	}
+	return pid
+}
+
+// EnsureStopped ensures that the pebble instance is stopped.
+func (p *Pebble) EnsureStopped(ctx context.Context, waitFor time.Duration) error {
+	return clos.SignalAndWait(ctx, waitFor, p.cmd, os.Interrupt, syscall.SIGINT, syscall.SIGKILL)
 }
 
 // PebbleConfig represents the configuration for a pebble instance
@@ -130,7 +139,8 @@ type PebbleConfig struct {
 	HTTPPort          int
 	TLSPort           int
 	Certificate       []byte
-	Key               []byte
+	CertificateFile   string
+	CAFile            string
 	TestCertBase      string
 	RootCertURL       string
 
@@ -180,7 +190,7 @@ const pebbleConfig = `
 
 // NewPebbleConfig creates a new PebbleConfig instance with
 // default values.
-func NewPebbleConfig() (PebbleConfig, error) {
+func NewPebbleConfig() PebbleConfig {
 	var cfg PebbleConfig
 	cfg.originalConfig = parsedConfig
 	cfg.HTTPPort = 5002
@@ -194,7 +204,7 @@ func NewPebbleConfig() (PebbleConfig, error) {
 		Path:   "/roots/0",
 	}
 	cfg.RootCertURL = u.String()
-	return cfg, nil
+	return cfg
 }
 
 // CreateCertsAndUpdateConfig uses minica to create a self-signed certificate for
@@ -245,6 +255,8 @@ func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDi
 		return "", fmt.Errorf("failed to load pebble root cert: %v", err)
 	}
 	pc.pebbleCA = root
+	pc.CertificateFile = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
+	pc.CAFile = filepath.Join(pc.TestCertBase, "pebble.minica.pem")
 
 	return cfgFile, nil
 }
