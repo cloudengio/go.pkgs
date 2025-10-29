@@ -95,10 +95,7 @@ func TestEnsureStopped(t *testing.T) {
 	t.Run("non-existent", func(t *testing.T) {
 		// Find a PID that is not running.
 		pid := 65535
-		for {
-			if executil.IsStopped(pid) {
-				break
-			}
+		for !executil.IsStopped(pid) {
 			pid--
 			if pid == 0 {
 				t.Fatal("could not find a non-existent PID")
