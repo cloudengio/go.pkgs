@@ -36,10 +36,10 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 			return err
 		}
 		if wait {
-			ctx, cancel := context.WithTimeout(ctx, perSignalOrWait)
+			waitCtx, cancel := context.WithTimeout(ctx, perSignalOrWait)
 			select {
 			case <-doneCh:
-			case <-ctx.Done():
+			case <-waitCtx.Done():
 			}
 			cancel()
 			wait = false

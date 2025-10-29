@@ -50,7 +50,7 @@ func startStoppable(ctx context.Context, t *testing.T, hang bool, out *bytes.Buf
 	return cmd
 }
 
-func TestEnsureStopped(t *testing.T) {
+func TestSignalAndWait(t *testing.T) {
 	ctx := context.Background()
 	// Test graceful shutdown.
 	t.Run("graceful", func(t *testing.T) {
