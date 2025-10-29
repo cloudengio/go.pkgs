@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package os
+package executil
 
 import (
 	"context"
@@ -26,7 +26,7 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 
 	doneCh := make(chan struct{})
 	go func() {
-		cmd.Wait()
+		cmd.Wait() //nolint:errcheck
 		close(doneCh)
 	}()
 	wait := true
@@ -37,11 +37,11 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 		}
 		if wait {
 			ctx, cancel := context.WithTimeout(ctx, perSignalOrWait)
-			defer cancel()
 			select {
 			case <-doneCh:
 			case <-ctx.Done():
 			}
+			cancel()
 			wait = false
 		}
 		if err := WaitForStopped(ctx, pid, perSignalOrWait); err == nil {
@@ -53,7 +53,7 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 
 // IsStopped returns true if the process with the specified pid has
 // stopped or does not exist. Wait must have been called on the
-// process otherwise this function may will return true on some systems
+// process otherwise this function will return true on some systems
 // since the process may still exist as a defunct process.
 func IsStopped(pid int) bool {
 	return isStopped(pid)
@@ -67,11 +67,13 @@ func WaitForStopped(ctx context.Context, pid int, waitFor time.Duration) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, waitFor)
 	defer cancel()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+		case <-ticker.C:
 			if isStopped(pid) {
 				return nil
 			}
