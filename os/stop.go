@@ -37,11 +37,11 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 		}
 		if wait {
 			ctx, cancel := context.WithTimeout(ctx, perSignalOrWait)
-			defer cancel()
 			select {
 			case <-doneCh:
 			case <-ctx.Done():
 			}
+			cancel()
 			wait = false
 		}
 		if err := WaitForStopped(ctx, pid, perSignalOrWait); err == nil {
@@ -53,7 +53,7 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 
 // IsStopped returns true if the process with the specified pid has
 // stopped or does not exist. Wait must have been called on the
-// process otherwise this function may will return true on some systems
+// process otherwise this function will return true on some systems
 // since the process may still exist as a defunct process.
 func IsStopped(pid int) bool {
 	return isStopped(pid)
