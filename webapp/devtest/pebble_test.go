@@ -6,11 +6,8 @@ package devtest_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -35,19 +32,22 @@ func TestPebble(t *testing.T) {
 		t.Fatalf("failed to build mock pebble: %v", err)
 	}
 	pebble := devtest.NewPebble(mockPebblePath)
+	out := &output{&strings.Builder{}}
+	defer ensureStopped(t, pebble, out)
 
-	if err := os.MkdirAll(filepath.Join(tmpDir, "test", "certs"), 0700); err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
+	cfg := devtest.NewPebbleConfig()
 
-	pblcfg, err := pebble.CreateCerts(ctx, filepath.Join(tmpDir, "test", "certs"))
+	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("failed to create pebble certs: %v", err)
 	}
 
-	out := &output{&strings.Builder{}}
-	if err := pebble.Start(ctx, pblcfg, out); err != nil {
+	if err := pebble.Start(ctx, ".", cfgFile, out); err != nil {
 		t.Fatalf("failed to start pebble: %v", err)
+	}
+
+	if err := pebble.WaitForReady(ctx); err != nil {
+		t.Fatalf("WaitForReady: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -60,28 +60,43 @@ func TestPebble(t *testing.T) {
 		t.Errorf("invalid serial: got %q, want %q", got, want)
 	}
 
-	pid := pebble.PID()
-	if pid == 0 {
-		t.Fatalf("invalid pebble pid: %d", pid)
+}
+
+func ensureStopped(t *testing.T, pebble *devtest.Pebble, out *output) {
+	t.Helper()
+	if err := pebble.EnsureStopped(t.Context(), time.Minute); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
+		t.Fatalf("failed to stop pebble process %d: %v", pebble.PID(), err)
 	}
-	if err := pebble.Stop(); err != nil {
-		t.Fatalf("failed to close pebble: %v", err)
+}
+
+func TestPebble_RealServer(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	pebble := devtest.NewPebble("pebble")
+	out := &output{&strings.Builder{}}
+	defer ensureStopped(t, pebble, out)
+
+	cfg := devtest.NewPebbleConfig()
+
+	cfgFile, err := cfg.CreateCertsAndUpdateConfig(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create pebble certs: %v", err)
 	}
 
-	// 5. Verify the process is gone.
-	// On Unix, os.FindProcess always succeeds, so we need to signal it.
-	// On Windows, FindProcess will error if the process doesn't exist.
-	time.Sleep(100 * time.Millisecond) // Give it a moment to die.
-	proc, err := os.FindProcess(pid)
-	if err != nil && runtime.GOOS == "windows" {
-		// On windows, this is sufficient to know it's gone.
-		return
+	if err := pebble.Start(ctx, tmpDir, cfgFile, out); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
+		t.Fatalf("failed to start pebble: %v", err)
 	}
-	// On Unix, we need to send a signal 0 to check for existence.
-	if err := proc.Signal(syscall.Signal(0)); err == nil {
-		// If there's no error, the process still exists.
-		t.Errorf("process %d still exists after close", pid)
-		proc.Kill() //nolint:errcheck
+	if err := pebble.WaitForReady(ctx); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
+		t.Fatalf("WaitForReady: %v", err)
+	}
+
+	if _, err := cfg.GetIssuingCA(ctx); err != nil {
+		t.Fatalf("GetIssuingCA: %v", err)
 	}
 
 }
