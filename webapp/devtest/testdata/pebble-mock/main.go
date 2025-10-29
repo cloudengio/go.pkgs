@@ -19,8 +19,19 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	flag.StringVar(&config, "config", "", "path to pebble config file")
 	flag.Parse()
+
 	time.Sleep(100 * time.Millisecond)
-	fmt.Fprintf(os.Stdout, "Issued certificate serial 0123456789abcdef for order\n")
+
+	_, err := os.ReadFile(config)
+	if err != nil {
+		fmt.Printf("Failed to read config file: %v\n", err)
+		os.Exit(1)
+		return
+	}
+
+	fmt.Printf("ACME directory available at: https://0.0.0.0:14000/dir\n")
+	fmt.Printf("Root CA certificate available at: https://0.0.0.0:15000/roots/0\n")
+	fmt.Printf("Issued certificate serial 0123456789abcdef for order\n")
 	// Keep running until killed by the test's Stop() method.
 	select {
 	case <-sigCh:
