@@ -4,7 +4,7 @@
 
 //go:build unix || darwin
 
-package os
+package executil
 
 import (
 	"syscall"

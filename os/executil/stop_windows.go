@@ -4,13 +4,18 @@
 
 //go:build windows
 
-package os
+package executil
 
 import (
-	"os"
+	"syscall"
 )
 
 func isStopped(pid int) bool {
-	_, err := os.FindProcess(pid)
-	return err != nil
+	// PROCESS_QUERY_INFORMATION is enough to check for existence.
+	h, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return true
+	}
+	syscall.CloseHandle(h)
+	return false
 }

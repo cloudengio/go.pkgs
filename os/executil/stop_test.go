@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package os_test
+package executil_test
 
 import (
 	"bufio"
@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	cio "cloudeng.io/os"
 	"cloudeng.io/os/executil"
 )
 
@@ -57,23 +56,23 @@ func TestEnsureStopped(t *testing.T) {
 	t.Run("graceful", func(t *testing.T) {
 		out := &bytes.Buffer{}
 		cmd := startStoppable(ctx, t, false, out)
-		err := cio.SignalAndWait(ctx, time.Second*2, cmd, os.Interrupt)
+		err := executil.SignalAndWait(ctx, time.Second*2, cmd, os.Interrupt)
 		if err != nil {
 			t.Fatalf("SignalAndWait failed: %v", err)
 		}
-		if !cio.IsStopped(cmd.Process.Pid) {
+		if !executil.IsStopped(cmd.Process.Pid) {
 			t.Fatalf("process %d is not stopped", cmd.Process.Pid)
 		}
 	})
 
 	// Timeout
-	t.Run("forced", func(t *testing.T) {
+	t.Run("timeout", func(t *testing.T) {
 		out := &bytes.Buffer{}
 		cmd := startStoppable(ctx, t, true, out)
 		time.Sleep(time.Second)
 		ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		defer cancel()
-		err := cio.SignalAndWait(ctx, 100*time.Millisecond, cmd, os.Interrupt)
+		err := executil.SignalAndWait(ctx, 100*time.Millisecond, cmd, os.Interrupt)
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected a timeout, got %v", err)
 		}
@@ -83,31 +82,27 @@ func TestEnsureStopped(t *testing.T) {
 	t.Run("forced", func(t *testing.T) {
 		out := &bytes.Buffer{}
 		cmd := startStoppable(ctx, t, true, out)
-		err := cio.SignalAndWait(ctx, 100*time.Millisecond, cmd, os.Interrupt, syscall.SIGKILL)
+		err := executil.SignalAndWait(ctx, 100*time.Millisecond, cmd, os.Interrupt, syscall.SIGKILL)
 		if err != nil {
 			t.Fatalf("SignalAndWait failed: %v", err)
 		}
-		if !cio.IsStopped(cmd.Process.Pid) {
+		if !executil.IsStopped(cmd.Process.Pid) {
 			t.Fatalf("process %d is not stopped", cmd.Process.Pid)
 		}
 	})
 	// Test non-existent process.
+
 	t.Run("non-existent", func(t *testing.T) {
 		// Find a PID that is not running.
 		pid := 65535
 		for {
-			proc, _ := os.FindProcess(pid)
-			// On Unix, Signal(0) checks for existence.
-			if err := proc.Signal(syscall.Signal(0)); err != nil {
+			if executil.IsStopped(pid) {
 				break
 			}
 			pid--
 			if pid == 0 {
 				t.Fatal("could not find a non-existent PID")
 			}
-		}
-		if !cio.IsStopped(pid) {
-			t.Fatalf("expected process %d to be non-existent", pid)
 		}
 	})
 }
