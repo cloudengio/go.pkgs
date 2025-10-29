@@ -129,7 +129,6 @@ type Config struct {
 
 	originalConfig map[string]map[string]any
 	pebbleCA       *x509.CertPool
-	serverRoots    *x509.CertPool
 }
 
 var parsedConfig = map[string]map[string]any{}
