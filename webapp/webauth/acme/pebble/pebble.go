@@ -2,17 +2,15 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package devtest
+package pebble
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,29 +20,28 @@ import (
 	"syscall"
 	"time"
 
-	clos "cloudeng.io/os"
 	"cloudeng.io/os/executil"
 )
 
-// Pebble manages a pebble instance for testing purposes.
-type Pebble struct {
+// T manages a pebble instance for testing purposes.
+type T struct {
 	cmd    *exec.Cmd
 	binary string
 	closer io.Closer
 	ch     chan []byte
 }
 
-// NewPebble creates a new Pebble instance. The supplied configFile will be used
-// to configure the pebble instance. The server is not started by NewPebble.
-func NewPebble(binary string) *Pebble {
-	return &Pebble{
+// New creates a new Pebble instance. The supplied configFile will be used
+// to configure the pebble instance. The server is not started by New.
+func New(binary string) *T {
+	return &T{
 		binary: binary,
 	}
 }
 
 // Start the pebble instance with its output forwarded to the supplied
 // writer.
-func (p *Pebble) Start(ctx context.Context, dir, cfg string, forward io.WriteCloser) error {
+func (p *T) Start(ctx context.Context, dir, cfg string, forward io.WriteCloser) error {
 	pebblePath, err := exec.LookPath(p.binary)
 	if err != nil {
 		return fmt.Errorf("failed to find pebble binary in PATH: %w", err)
@@ -68,7 +65,7 @@ var (
 	mgmtReadyRE = regexp.MustCompile(`Root CA certificate available at:`)
 )
 
-func (p *Pebble) WaitForReady(ctx context.Context) error {
+func (p *T) WaitForReady(ctx context.Context) error {
 	seen := 0
 	for {
 		select {
@@ -90,7 +87,7 @@ func (p *Pebble) WaitForReady(ctx context.Context) error {
 
 // WaitForIssuedCertificateSerial waits until a certificate is issued
 // and returns its serial number.
-func (p *Pebble) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) {
+func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) {
 	for {
 		select {
 		case line := <-p.ch:
@@ -105,35 +102,21 @@ func (p *Pebble) WaitForIssuedCertificateSerial(ctx context.Context) (string, er
 }
 
 // PID returns the process ID of the pebble instance.
-func (p *Pebble) PID() int {
+func (p *T) PID() int {
 	if p.cmd != nil && p.cmd.Process != nil {
 		return p.cmd.Process.Pid
 	}
 	return 0
 }
 
-// Stop the pebble instance, it returns the pid of the stopped process.
-func (p *Pebble) Stop() int {
-	if p.cmd == nil || p.cmd.Process == nil {
-		return -1
-	}
-	pid := p.cmd.Process.Pid
-	p.cmd.Process.Signal(syscall.SIGINT) //nolint:errcheck
-	_ = p.cmd.Wait()
-	if p.closer != nil {
-		_ = p.closer.Close()
-	}
-	return pid
-}
-
 // EnsureStopped ensures that the pebble instance is stopped.
-func (p *Pebble) EnsureStopped(ctx context.Context, waitFor time.Duration) error {
-	return clos.SignalAndWait(ctx, waitFor, p.cmd, os.Interrupt, syscall.SIGINT, syscall.SIGKILL)
+func (p *T) EnsureStopped(ctx context.Context, waitFor time.Duration) error {
+	return executil.SignalAndWait(ctx, waitFor, p.cmd, os.Interrupt, syscall.SIGINT, syscall.SIGKILL)
 }
 
-// PebbleConfig represents the configuration for a pebble instance
+// Config represents the configuration for a pebble instance
 // that's relevant to using it for testing clients.
-type PebbleConfig struct {
+type Config struct {
 	Address           string
 	ManagementAddress string
 	HTTPPort          int
@@ -146,7 +129,6 @@ type PebbleConfig struct {
 
 	originalConfig map[string]map[string]any
 	pebbleCA       *x509.CertPool
-	serverRoots    *x509.CertPool
 }
 
 var parsedConfig = map[string]map[string]any{}
@@ -188,10 +170,10 @@ const pebbleConfig = `
     }
 }`
 
-// NewPebbleConfig creates a new PebbleConfig instance with
+// NewConfig creates a new Config instance with
 // default values.
-func NewPebbleConfig() PebbleConfig {
-	var cfg PebbleConfig
+func NewConfig() Config {
+	var cfg Config
 	cfg.originalConfig = parsedConfig
 	cfg.HTTPPort = 5002
 	cfg.TLSPort = 5001
@@ -207,6 +189,18 @@ func NewPebbleConfig() PebbleConfig {
 	return cfg
 }
 
+func deepCopy(m map[string]map[string]any) (map[string]map[string]any, error) {
+	cfgData, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal original pebble config: %v", err)
+	}
+	var ncfg map[string]map[string]any
+	if err := json.Unmarshal(cfgData, &ncfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal original pebble config: %v", err)
+	}
+	return ncfg, nil
+}
+
 // CreateCertsAndUpdateConfig uses minica to create a self-signed certificate for
 // use with the pebble instance. The generated certificate and key are placed in outputDir.
 // It returns the path to the possibly unpdated configuration file to be used when starting
@@ -217,7 +211,7 @@ func NewPebbleConfig() PebbleConfig {
 //	          -ca-key pebble.minica.key.pem \
 //	          -domains localhost,pebble \
 //	          -ip-addresses 127.0.0.1
-func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDir string) (string, error) {
+func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir string) (string, error) {
 	certDir := filepath.Join(outputDir, pc.TestCertBase)
 	if err := os.MkdirAll(certDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create cert dir: %v", err)
@@ -238,7 +232,10 @@ func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDi
 		return "", fmt.Errorf("failed to run minica: %v: %s", err, output)
 	}
 
-	ncfg := maps.Clone(pc.originalConfig)
+	ncfg, err := deepCopy(pc.originalConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to deep copy original pebble config: %v", err)
+	}
 	ncfg["pebble"]["certificate"] = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
 	ncfg["pebble"]["privateKey"] = filepath.Join(pc.TestCertBase, "localhost", "key.pem")
 	cfgData, err := json.MarshalIndent(ncfg, "", "  ")
@@ -250,11 +247,19 @@ func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDi
 		return "", fmt.Errorf("failed to write updated pebble config to %q: %v", cfgFile, err)
 	}
 
-	root, err := CertPoolForTesting(filepath.Join(outputDir, pc.TestCertBase, "pebble.minica.pem"))
+	sysPool, err := x509.SystemCertPool()
 	if err != nil {
-		return "", fmt.Errorf("failed to load pebble root cert: %v", err)
+		return "", fmt.Errorf("failed to load system cert pool: %v", err)
 	}
-	pc.pebbleCA = root
+	data, err := os.ReadFile(filepath.Join(outputDir, pc.TestCertBase, "pebble.minica.pem"))
+	if err != nil {
+		return "", fmt.Errorf("failed to read pebble minica cert: %v", err)
+	}
+	if !sysPool.AppendCertsFromPEM(data) {
+		return "", fmt.Errorf("failed to append pebble minica cert to cert pool")
+	}
+
+	pc.pebbleCA = sysPool
 	pc.CertificateFile = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
 	pc.CAFile = filepath.Join(pc.TestCertBase, "pebble.minica.pem")
 
@@ -263,7 +268,7 @@ func (pc *PebbleConfig) CreateCertsAndUpdateConfig(ctx context.Context, outputDi
 
 // GetIssuingCert retrieves the pebble certificate, including intermediates,
 // used to sign issued certificates.
-func (pc PebbleConfig) GetIssuingCert(ctx context.Context) ([]byte, error) {
+func (pc Config) GetIssuingCert(ctx context.Context) ([]byte, error) {
 	u := url.URL{
 		Scheme: "https",
 		Host:   pc.ManagementAddress,
@@ -292,26 +297,20 @@ func (pc PebbleConfig) GetIssuingCert(ctx context.Context) ([]byte, error) {
 
 // CA returns a CertPool containing the root pebble CA certificate.
 // Use it when configuring clients to connect to the pebble instance.
-func (pc PebbleConfig) CA() *x509.CertPool {
+func (pc Config) CA() *x509.CertPool {
 	return pc.pebbleCA
 }
 
 // IssuingCA returns a CertPool containing the issuing CA certificate
 // used by pebble to sign issued certificates.
-func (pc PebbleConfig) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
+func (pc Config) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
 	data, err := pc.GetIssuingCert(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pb, _ := pem.Decode(data)
-	if pb == nil {
-		return nil, fmt.Errorf("failed to decode issuing cert pem data")
-	}
-	cert, err := x509.ParseCertificate(pb.Bytes)
-	if err != nil {
-		return nil, err
-	}
 	pool := x509.NewCertPool()
-	pool.AddCert(cert)
+	if !pool.AppendCertsFromPEM(data) {
+		return nil, fmt.Errorf("failed to append issuing cert to pool")
+	}
 	return pool, nil
 }
