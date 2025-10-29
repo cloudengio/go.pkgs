@@ -9,10 +9,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -192,6 +190,18 @@ func NewConfig() Config {
 	return cfg
 }
 
+func deepCopy(m map[string]map[string]any) (map[string]map[string]any, error) {
+	cfgData, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal original pebble config: %v", err)
+	}
+	var ncfg map[string]map[string]any
+	if err := json.Unmarshal(cfgData, &ncfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal original pebble config: %v", err)
+	}
+	return ncfg, nil
+}
+
 // CreateCertsAndUpdateConfig uses minica to create a self-signed certificate for
 // use with the pebble instance. The generated certificate and key are placed in outputDir.
 // It returns the path to the possibly unpdated configuration file to be used when starting
@@ -223,7 +233,10 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 		return "", fmt.Errorf("failed to run minica: %v: %s", err, output)
 	}
 
-	ncfg := maps.Clone(pc.originalConfig)
+	ncfg, err := deepCopy(pc.originalConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to deep copy original pebble config: %v", err)
+	}
 	ncfg["pebble"]["certificate"] = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
 	ncfg["pebble"]["privateKey"] = filepath.Join(pc.TestCertBase, "localhost", "key.pem")
 	cfgData, err := json.MarshalIndent(ncfg, "", "  ")
@@ -296,15 +309,9 @@ func (pc Config) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
 	if err != nil {
 		return nil, err
 	}
-	pb, _ := pem.Decode(data)
-	if pb == nil {
-		return nil, fmt.Errorf("failed to decode issuing cert pem data")
-	}
-	cert, err := x509.ParseCertificate(pb.Bytes)
-	if err != nil {
-		return nil, err
-	}
 	pool := x509.NewCertPool()
-	pool.AddCert(cert)
+	if !pool.AppendCertsFromPEM(data) {
+		return nil, fmt.Errorf("failed to append issuing cert to pool")
+	}
 	return pool, nil
 }
