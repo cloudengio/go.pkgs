@@ -325,7 +325,7 @@ func TestCertServingCache_Errors(t *testing.T) {
 		{
 			name:       "invalid server name",
 			serverName: "localhost",
-			wantErr:    "server name component count invalid",
+			wantErr:    "server name \"localhost\" is not a qualified domain name",
 		},
 		{
 			name:       "store error",

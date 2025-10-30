@@ -10,7 +10,15 @@ permissions:
   contents: read
 
 jobs:
+  pebble-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up custom domains for pebble test
+        run: |
+          echo "127.0.0.1 pebble.example.com. pebble-test.example.com." | sudo tee -a /etc/hosts
+
   test:
+    needs: pebble-setup
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
       go-versions: |

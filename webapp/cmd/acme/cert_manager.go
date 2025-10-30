@@ -32,6 +32,7 @@ type certManagerFlags struct {
 	awsconfig.AWSFlags
 	HTTPPort        int           `subcmd:"http-port,80,address to run http acme challenge server on"`
 	RefreshInterval time.Duration `subcmd:"cert-refresh-interval,6h,interval between certificate refresh attempts"`
+	Trace           bool          `subcmd:"trace,false,enable http tracing for acme client operations"`
 }
 type certManagerCmd struct{}
 
@@ -41,6 +42,8 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 
 	cl := flags.(*certManagerFlags)
 	hosts := args
+
+	logger.Info("acme cert manager flags", "flags", cl)
 
 	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, false)
 	if err != nil {
@@ -71,19 +74,23 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 		if err != nil {
 			return fmt.Errorf("failed to obtain cert pool containing %v: %w", cl.TestingCAPem, err)
 		}
-		testingRT := &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:    rootCAs,
-				MinVersion: tls.VersionTLS13,
-			}}
-		loggingRT := httptracing.NewTracingRoundTripper(testingRT,
+		mgr.Client.HTTPClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs:    rootCAs,
+					MinVersion: tls.VersionTLS13,
+				}},
+		}
+		logger.Info("acme.NewManagerFromFlags: configured acme manager http client with custom root CA pool")
+	}
+
+	if cl.Trace {
+		loggingRT := httptracing.NewTracingRoundTripper(mgr.Client.HTTPClient.Transport,
 			httptracing.WithTracingLogger(logger),
 			httptracing.WithTraceRequestBody(httptracing.JSONRequestBodyLogger),
 			httptracing.WithTraceResponseBody(httptracing.JSONResponseBodyLogger),
 		)
-		mgr.Client.HTTPClient = &http.Client{
-			Transport: loggingRT,
-		}
+		mgr.Client.HTTPClient.Transport = loggingRT
 	}
 
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,14 +98,17 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 		w.WriteHeader(http.StatusForbidden)
 	})
 
-	port80TracingHandler := httptracing.NewTracingHandler(
-		mgr.HTTPHandler(fallback),
-		httptracing.WithHandlerLogger(logger.With("server", "acme-challenge-http")),
-		httptracing.WithHandlerRequestBody(httptracing.JSONRequestBodyLogger),
-		httptracing.WithHandlerResponseBody(httptracing.JSONHandlerResponseLogger),
-	)
+	httpHandler := mgr.HTTPHandler(fallback)
+	if cl.Trace {
+		httpHandler = httptracing.NewTracingHandler(
+			mgr.HTTPHandler(fallback),
+			httptracing.WithHandlerLogger(logger.With("server", "acme-challenge-http")),
+			httptracing.WithHandlerRequestBody(httptracing.JSONRequestBodyLogger),
+			httptracing.WithHandlerResponseBody(httptracing.JSONHandlerResponseLogger),
+		)
+	}
 
-	httpListener, httpServer, err := webapp.NewHTTPServer(ctx, fmt.Sprintf(":%d", cl.HTTPPort), port80TracingHandler)
+	httpListener, httpServer, err := webapp.NewHTTPServer(ctx, fmt.Sprintf(":%d", cl.HTTPPort), httpHandler)
 	if err != nil {
 		return err
 	}
@@ -111,13 +121,6 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 		errs.Append(err)
 		stopped.Done()
 	}()
-
-	// issue get requets to initialize all certificates.
-	refreshInterval := cl.RenewBefore / 10
-	if refreshInterval < (time.Hour * 3) {
-		refreshInterval = time.Hour * 3
-	}
-	logger.Info("certificate refresh interval", "interval", refreshInterval.String())
 
 	if err := webapp.WaitForServers(ctx, time.Second*2, httpListener.Addr().String()); err != nil {
 		return fmt.Errorf("http server failed to start: %w", err)
@@ -138,9 +141,11 @@ func refreshCertificatesUsingHello(ctx context.Context, interval time.Duration, 
 	for _, host := range hosts {
 		h := host
 		grp.Go(func() error {
+			ctxlog.Logger(ctx).Info("starting certificate refresh loop", "host", h, "interval", interval.String())
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
 			for {
+
 				if err := refreshCertificateUsingHello(ctx, mgr, h); err != nil {
 					ctxlog.Logger(ctx).Error("failed to refresh certificate using tls hello", "host", h, "error", err)
 				}
@@ -161,7 +166,6 @@ func refreshCertificateUsingHello(ctx context.Context, mgr *autocert.Manager, ho
 		CipherSuites:     webapp.PreferredCipherSuites,
 		SignatureSchemes: webapp.PreferredSignatureSchemes,
 	}
-	ctxlog.Logger(ctx).Info("refreshing certificate using tls hello", "host", host)
 	cert, err := mgr.GetCertificate(&hello)
 	if err != nil {
 		return err

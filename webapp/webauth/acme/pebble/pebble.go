@@ -20,8 +20,22 @@ import (
 	"syscall"
 	"time"
 
+	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/os/executil"
 )
+
+// ServerOption represents a option for configuring a new Pebble instance.
+type ServerOption func(*serverOptions)
+
+type serverOptions struct {
+	// future options
+}
+
+type ConfigOption func(*configOption)
+
+type configOption struct {
+	// future options
+}
 
 // T manages a pebble instance for testing purposes.
 type T struct {
@@ -29,14 +43,19 @@ type T struct {
 	binary string
 	closer io.Closer
 	ch     chan []byte
+	opts   serverOptions
 }
 
 // New creates a new Pebble instance. The supplied configFile will be used
 // to configure the pebble instance. The server is not started by New.
-func New(binary string) *T {
-	return &T{
+func New(binary string, opts ...ServerOption) *T {
+	p := &T{
 		binary: binary,
 	}
+	for _, o := range opts {
+		o(&p.opts)
+	}
+	return p
 }
 
 // Start the pebble instance with its output forwarded to the supplied
@@ -70,6 +89,7 @@ func (p *T) WaitForReady(ctx context.Context) error {
 	for {
 		select {
 		case line := <-p.ch:
+			ctxlog.Logger(ctx).Debug("pebble WaitForReady", "line", string(line))
 			if acmeReadyRE.Match(line) {
 				seen++
 			}
@@ -91,6 +111,8 @@ func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) 
 	for {
 		select {
 		case line := <-p.ch:
+			ctxlog.Logger(ctx).Debug("pebble WaitForIssuedCertificateSerial", "line", string(line))
+
 			matches := issuedRE.FindSubmatch(line)
 			if matches != nil {
 				return string(matches[1]), nil
@@ -172,14 +194,19 @@ const pebbleConfig = `
 
 // NewConfig creates a new Config instance with
 // default values.
-func NewConfig() Config {
+func NewConfig(opt ...ConfigOption) Config {
+	var o configOption
+	for _, co := range opt {
+		co(&o)
+	}
 	var cfg Config
+	// Keep these in sync with the json literal above.
 	cfg.originalConfig = parsedConfig
 	cfg.HTTPPort = 5002
 	cfg.TLSPort = 5001
 	cfg.TestCertBase = filepath.Join("test", "certs")
-	cfg.Address = "localhost:14000"
-	cfg.ManagementAddress = "localhost:15000"
+	cfg.Address = "https://localhost:14000"
+	cfg.ManagementAddress = "https://localhost:15000"
 	u := url.URL{
 		Scheme: "https",
 		Host:   cfg.ManagementAddress,
@@ -264,6 +291,11 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	pc.CAFile = filepath.Join(pc.TestCertBase, "pebble.minica.pem")
 
 	return cfgFile, nil
+}
+
+// ACMEService returns the ACME service 'directory' URL.
+func (pc Config) ACMEService() string {
+	return pc.Address + "/dir"
 }
 
 // GetIssuingCert retrieves the pebble certificate, including intermediates,
