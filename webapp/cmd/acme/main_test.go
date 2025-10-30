@@ -68,7 +68,7 @@ func TestACMEMain(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	pebbleServer, pebbleCfg, pebbleOut, pebbleCacheDir, pebbleTestDir := startPebble(ctx, t, tmpDir, validityPeriodSecs)
-	defer pebbleServer.EnsureStopped(ctx, time.Second)
+	defer pebbleServer.EnsureStopped(ctx, time.Second) //nolint:errcheck
 	_ = pebbleOut
 	mgrFlags := certManagerFlags{
 		ServiceFlags: acme.ServiceFlags{
@@ -103,7 +103,7 @@ func TestACMEMain(t *testing.T) {
 
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
-	cert := waitForCertWithSerial(wctx, t, localhostCert, serial)
+	cert := waitForCertWithSerial(wctx, t, "new certififcate", localhostCert, serial)
 	if cert.NotAfter.Sub(cert.NotBefore) > time.Duration(validityPeriodSecs)*time.Second {
 		t.Errorf("expected short lived certificate, got validity %v", cert.NotAfter.Sub(cert.NotBefore))
 	}
@@ -119,7 +119,7 @@ func TestACMEMain(t *testing.T) {
 
 	wctx, wcancel = context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
-	waitForCertWithSerial(wctx, t, localhostCert, renewedSerial)
+	waitForCertWithSerial(wctx, t, "certificate refresh", localhostCert, renewedSerial)
 
 	cancel()
 
@@ -134,14 +134,14 @@ func TestACMEMain(t *testing.T) {
 
 }
 
-func waitForCertWithSerial(ctx context.Context, t *testing.T, certPath, serial string) *x509.Certificate {
+func waitForCertWithSerial(ctx context.Context, t *testing.T, msg, certPath, serial string) *x509.Certificate {
 	t.Helper()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			t.Fatalf("timed out waiting for cert %v with serial %v: %v", certPath, serial, ctx.Err())
+			t.Fatalf("%v: timed out waiting for cert %v with serial %v: %v", msg, certPath, serial, ctx.Err())
 		case <-ticker.C:
 			if _, err := os.Stat(certPath); err != nil {
 				continue
@@ -149,10 +149,10 @@ func waitForCertWithSerial(ctx context.Context, t *testing.T, certPath, serial s
 			leafCert := getLeafCert(t, certPath)
 			gotSerial := fmt.Sprintf("%0*x", len(leafCert.SerialNumber.Bytes())*2, leafCert.SerialNumber)
 			if gotSerial == serial {
-				t.Logf("found cert %v with serial %v", certPath, serial)
+				t.Logf("%v: found cert %v with serial %v", msg, certPath, serial)
 				return leafCert
 			}
-			t.Logf("waiting for serial %v, got %v", serial, gotSerial)
+			t.Logf("%v: waiting for serial %v, got %v", msg, serial, gotSerial)
 		}
 	}
 }
