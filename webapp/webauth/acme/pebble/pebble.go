@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -205,8 +206,8 @@ func NewConfig(opt ...ConfigOption) Config {
 	cfg.HTTPPort = 5002
 	cfg.TLSPort = 5001
 	cfg.TestCertBase = filepath.Join("test", "certs")
-	cfg.Address = "https://localhost:14000"
-	cfg.ManagementAddress = "https://localhost:15000"
+	cfg.Address = "localhost:14000"
+	cfg.ManagementAddress = "localhost:15000"
 	u := url.URL{
 		Scheme: "https",
 		Host:   cfg.ManagementAddress,
@@ -293,21 +294,31 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	return cfgFile, nil
 }
 
-// ACMEService returns the ACME service 'directory' URL.
-func (pc Config) ACMEService() string {
-	return pc.Address + "/dir"
+// DirectoryURL returns the ACME service 'directory' URL.
+func (pc Config) DirectoryURL() string {
+	return ensureScheme("https", pc.Address, "/dir")
+}
+
+// CARootsURL returns the URL from which the pebble root CA certificate
+// can be retrieved, use 0 as the id.
+func (pc Config) CARootsURL(id int) string {
+	return ensureScheme("https", pc.ManagementAddress, fmt.Sprintf("roots/%d", id))
+}
+
+// ensureScheme ensures that the supplied urlOrAddr has the specified scheme.
+func ensureScheme(scheme, urlOrAddr, path string) string {
+	if strings.HasPrefix(urlOrAddr, scheme+"://") {
+		return fmt.Sprintf("%s/%s", urlOrAddr, path)
+	}
+	return fmt.Sprintf("%s://%s/%s", scheme, urlOrAddr, path)
 }
 
 // GetIssuingCert retrieves the pebble certificate, including intermediates,
 // used to sign issued certificates.
-func (pc Config) GetIssuingCert(ctx context.Context) ([]byte, error) {
-	u := url.URL{
-		Scheme: "https",
-		Host:   pc.ManagementAddress,
-		Path:   "/roots/0",
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+func (pc Config) GetIssuingCert(ctx context.Context, id int) ([]byte, error) {
+	u := pc.CARootsURL(id)
+	fmt.Printf("GetIssuingCert: fetching issuing cert %q from %q\n", pc.ManagementAddress, u)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -335,8 +346,8 @@ func (pc Config) CA() *x509.CertPool {
 
 // IssuingCA returns a CertPool containing the issuing CA certificate
 // used by pebble to sign issued certificates.
-func (pc Config) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
-	data, err := pc.GetIssuingCert(ctx)
+func (pc Config) GetIssuingCA(ctx context.Context, id int) (*x509.CertPool, error) {
+	data, err := pc.GetIssuingCert(ctx, id)
 	if err != nil {
 		return nil, err
 	}

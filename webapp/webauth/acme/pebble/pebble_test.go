@@ -95,7 +95,7 @@ func TestPebble_RealServer(t *testing.T) {
 		t.Fatalf("WaitForReady: %v", err)
 	}
 
-	if _, err := cfg.GetIssuingCA(ctx); err != nil {
+	if _, err := cfg.GetIssuingCA(ctx, 0); err != nil {
 		t.Fatalf("GetIssuingCA: %v", err)
 	}
 
