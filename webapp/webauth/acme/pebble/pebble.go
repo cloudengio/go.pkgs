@@ -32,10 +32,19 @@ type serverOptions struct {
 	// future options
 }
 
+// ConfigOption represents an option for configuring a new Config instance.
 type ConfigOption func(*configOption)
 
 type configOption struct {
-	// future options
+	validityPeriod time.Duration
+}
+
+// WithValidityPeriod returns a ConfigOption that sets the validity period
+// for issued certificates.
+func WithValidityPeriod(secs int) ConfigOption {
+	return func(o *configOption) {
+		o.validityPeriod = time.Duration(secs) * time.Second
+	}
 }
 
 // T manages a pebble instance for testing purposes.
@@ -150,6 +159,7 @@ type Config struct {
 	TestCertBase      string
 	RootCertURL       string
 
+	opts           configOption
 	originalConfig map[string]map[string]any
 	pebbleCA       *x509.CertPool
 }
@@ -196,11 +206,10 @@ const pebbleConfig = `
 // NewConfig creates a new Config instance with
 // default values.
 func NewConfig(opt ...ConfigOption) Config {
-	var o configOption
-	for _, co := range opt {
-		co(&o)
-	}
 	var cfg Config
+	for _, co := range opt {
+		co(&cfg.opts)
+	}
 	// Keep these in sync with the json literal above.
 	cfg.originalConfig = parsedConfig
 	cfg.HTTPPort = 5002
@@ -230,8 +239,9 @@ func deepCopy(m map[string]map[string]any) (map[string]map[string]any, error) {
 }
 
 // CreateCertsAndUpdateConfig uses minica to create a self-signed certificate for
-// use with the pebble instance. The generated certificate and key are placed in outputDir.
-// It returns the path to the possibly unpdated configuration file to be used when starting
+// use with the pebble instance and applies any other config customizations requested
+// by any ConfigOptions. The generated certificate and key are placed in outputDir.
+// It returns the path to the possibly updated configuration file to be used when starting
 // pebble.
 // Use minica to create a self-signed certificate for the domain as per:
 //
@@ -263,6 +273,11 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	ncfg, err := deepCopy(pc.originalConfig)
 	if err != nil {
 		return "", fmt.Errorf("failed to deep copy original pebble config: %v", err)
+	}
+	if pc.opts.validityPeriod != 0 {
+		profiles := ncfg["pebble"]["profiles"].(map[string]any)
+		defaultProfile := profiles["default"].(map[string]any)
+		defaultProfile["validityPeriod"] = int(pc.opts.validityPeriod.Seconds())
 	}
 	ncfg["pebble"]["certificate"] = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
 	ncfg["pebble"]["privateKey"] = filepath.Join(pc.TestCertBase, "localhost", "key.pem")
