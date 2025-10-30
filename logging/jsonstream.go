@@ -10,17 +10,13 @@ import (
 )
 
 type JSONFormatter struct {
-	writer io.Writer
-	prefix string
-	indent string
+	enc *json.Encoder
 }
 
 func NewJSONFormatter(w io.Writer, prefix, indent string) *JSONFormatter {
-	return &JSONFormatter{
-		writer: w,
-		prefix: prefix,
-		indent: indent,
-	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent(prefix, indent)
+	return &JSONFormatter{enc: enc}
 }
 
 func (js *JSONFormatter) Write(p []byte) (n int, err error) {
@@ -32,7 +28,5 @@ func (js *JSONFormatter) Write(p []byte) (n int, err error) {
 }
 
 func (js *JSONFormatter) Format(v any) error {
-	enc := json.NewEncoder(js.writer)
-	enc.SetIndent(js.prefix, js.indent)
-	return enc.Encode(v)
+	return js.enc.Encode(v)
 }
