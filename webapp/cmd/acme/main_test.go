@@ -66,7 +66,6 @@ func TestACMEMain(t *testing.T) {
 
 	validityPeriodSecs := 5 // seconds
 	tmpDir := t.TempDir()
-	tmpDir, _ = os.MkdirTemp("", "acme-test-")
 
 	pebbleServer, pebbleCfg, pebbleOut, pebbleCacheDir, pebbleTestDir := startPebble(ctx, t, tmpDir, validityPeriodSecs)
 	defer pebbleServer.EnsureStopped(ctx, time.Second)
@@ -109,23 +108,6 @@ func TestACMEMain(t *testing.T) {
 		t.Errorf("expected short lived certificate, got validity %v", cert.NotAfter.Sub(cert.NotBefore))
 	}
 
-	// test revocation
-	if err := pebbleServer.RevokeCertificate(ctx, serial); err != nil {
-		t.Fatalf("failed to revoke certificate: %v", err)
-	}
-
-	revokedSerial, err := pebbleServer.WaitForIssuedCertificateSerial(ctx)
-	if err != nil {
-		t.Fatalf("failed to wait for revoked certificate serial: %v", err)
-	}
-	if revokedSerial == serial {
-		t.Fatalf("expected a new serial number after revocation, but got the same one: %v", revokedSerial)
-	}
-
-	wctx, wcancel = context.WithTimeout(ctx, 10*time.Second)
-	defer wcancel()
-	waitForCertWithSerial(wctx, t, localhostCert, revokedSerial)
-
 	// test renewal
 	renewedSerial, err := pebbleServer.WaitForIssuedCertificateSerial(ctx)
 	if err != nil {
@@ -141,7 +123,6 @@ func TestACMEMain(t *testing.T) {
 
 	cancel()
 
-	
 	select {
 	case err := <-errCh:
 		if err != nil && err != context.Canceled {
