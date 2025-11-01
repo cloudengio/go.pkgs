@@ -5,7 +5,6 @@
 package webapp
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -14,12 +13,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 
 	"cloudeng.io/file"
-	"golang.org/x/crypto/ocsp"
 )
 
 // VerifyCertChain verifies the supplied certificate chain using the
@@ -187,76 +183,3 @@ func FindLeafPEM(certsPEM []*pem.Block) ([]byte, *x509.Certificate, error) {
 	}
 	return nil, nil, fmt.Errorf("no leaf certificate found")
 }
-
-	type OCSPStatus int
-
-	const (
-		OCSPStatusInvalid OCSPStatus = iota
-		OCSPStatusGood
-		OCSPStatusRevoked
-		OCSPStatusUnknown
-	)
-
-	func (s OCSPStatus) String() string {
-		switch s {
-		case OCSPStatusGood:
-			return "good"
-		case OCSPStatusRevoked:
-			return "revoked"
-		case OCSPStatusUnknown:
-			return "unknown"
-
-	// CheckOCSPStatus checks the OCSP status of the provided leaf certificate
-	// using the provided issuer certificate.
-	func CheckOCSPStatus(ctx context.Context, leaf, issuer *x509.Certificate) (OCSPStatus, error) {
-		// 1. Get the OCSP server URL from the leaf certificate's AIA extension.
-		if len(leaf.OCSPServer) == 0 {
-			return OCSPStatusInvalid, fmt.Errorf("certificate has no OCSP server specified")
-		}
-		ocspURL := leaf.OCSPServer[0]
-
-		// 2. Create the OCSP request.
-		// We pass 'nil' for options, using sane defaults.
-		ocspReq, err := ocsp.CreateRequest(leaf, issuer, nil)
-		if err != nil {
-			return OCSPStatusInvalid, fmt.Errorf("failed to create OCSP request: %w", err)
-		}
-
-		// 3. Send the request via HTTP POST.
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", ocspURL, bytes.NewBuffer(ocspReq))
-		if err != nil {
-			return OCSPStatusInvalid, fmt.Errorf("failed to create HTTP request: %w", err)
-		}
-		httpReq.Header.Set("Content-Type", "application/ocsp-request")
-
-		httpClient := &http.Client{}
-		httpResp, err := httpClient.Do(httpReq)
-		if err != nil {
-			return OCSPStatusInvalid, fmt.Errorf("failed to send OCSP request: %w", err)
-		}
-		defer httpResp.Body.Close()
-
-		// 4. Read the OCSP response.
-		respBytes, err := io.ReadAll(httpResp.Body)
-		if err != nil {
-			return OCSPStatusInvalid, fmt.Errorf("failed to read OCSP response body: %w", err)
-		}
-
-		// 5. Parse the OCSP response.
-		ocspResp, err := ocsp.ParseResponse(respBytes, issuer)
-		if err != nil {
-			return OCSPStatusInvalid, fmt.Errorf("failed to parse OCSP response: %w", err)
-		}
-
-		// 6. Return the status.
-		switch ocspResp.Status {
-		case ocsp.Good:
-			return OCSPStatusGood, nil
-		case ocsp.Revoked:
-			return OCSPStatusRevoked, nil
-		case ocsp.Unknown:
-			return OCSPStatusUnknown, nil
-		default:
-			return OCSPStatusInvalid, nil
-		}
-	}

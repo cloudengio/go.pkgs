@@ -7,11 +7,9 @@ package main
 import (
 	"context"
 	"crypto"
-	"crypto/x509"
 	"fmt"
 
 	"cloudeng.io/aws/awsconfig"
-	"cloudeng.io/file/localfs"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/webauth/acme"
 	"cloudeng.io/webapp/webauth/acme/certcache"
@@ -42,11 +40,6 @@ type checkStatusFlags struct {
 func (revokeCmd) revokeUsingKey(ctx context.Context, flags any, args []string) error {
 	name := args[0]
 	cl := flags.(*revokeFlags)
-
-	issuer, err := getIssuer(ctx, cl.IssuingCertPEMFile)
-	if err != nil {
-		return fmt.Errorf("failed to read issuing certificate PEM file: %w", err)
-	}
 
 	reason, err := certcache.ParseRevocationReason(cl.RevocationReason)
 	if err != nil {
@@ -112,48 +105,5 @@ func (revokeCmd) revokeUsingKey(ctx context.Context, flags any, args []string) e
 	}
 	fmt.Printf("successfully revoked certificate for %q\n", name)
 
-	status, err := getCertStatus(ctx, cache, name, issuer)
-	if err != nil {
-		return fmt.Errorf("failed to check OCSP status after revocation: %w", err)
-	}
-	if status != webapp.OCSPStatusRevoked {
-		return fmt.Errorf("expected OCSP status 'revoked' after revocation, got %s", status)
-	}
 	return nil
-}
-
-func (revokeCmd) getStatus(ctx context.Context, flags any, args []string) error {
-	cl := flags.(*checkStatusFlags)
-
-	issuer, err := getIssuer(ctx, cl.IssuingCertPEMFile)
-	if err != nil {
-		return fmt.Errorf("failed to read issuing certificate PEM file: %w", err)
-	}
-
-	for _, name := range args {
-		cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags,
-			certcache.WithReadonly(true))
-		if err != nil {
-			return err
-		}
-		status, err := getCertStatus(ctx, cache, name, issuer)
-		if err != nil {
-			return fmt.Errorf("failed to check OCSP status: %w", err)
-		}
-
-		fmt.Printf("%q: %s\n", name, status)
-	}
-	// need issuer and leaf cert
-	return nil
-}
-
-func getIssuer(ctx context.Context, filename string) (*x509.Certificate, error) {
-	issuers, err := webapp.ReadAndParseCertsPEM(ctx, localfs.New(), filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read issuing certificate PEM file: %w", err)
-	}
-	if len(issuers) == 0 {
-		return nil, fmt.Errorf("no issuing certificate found")
-	}
-	return issuers[0], nil
 }
