@@ -33,10 +33,6 @@ type revokeFlags struct {
 	UseAccountKey    bool   `subcmd:"use-account-key,false,'use the acme account key to sign the revocation request'"`
 }
 
-type checkStatusFlags struct {
-	RevokeCommonFlags
-}
-
 func (revokeCmd) revokeUsingKey(ctx context.Context, flags any, args []string) error {
 	name := args[0]
 	cl := flags.(*revokeFlags)

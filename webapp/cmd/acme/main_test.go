@@ -133,7 +133,7 @@ func TestCertRenewal(t *testing.T) {
 	defer pebbleServer.EnsureStopped(ctx, time.Second) //nolint:errcheck
 
 	mgrFlags := defaultManagerFlags(pebbleCfg, pebbleTestDir, pebbleCacheDir)
-	mgrFlags.ServiceFlags.RenewBefore = time.Second * 15 // allow immediate renewal
+	mgrFlags.RenewBefore = time.Second * 15 // allow immediate renewal
 	mgrFlags.RefreshInterval = time.Second
 
 	stopAndWaitForCertManager := runCertManager(ctx, t, &mgrFlags, "pebble-test.example.com")
