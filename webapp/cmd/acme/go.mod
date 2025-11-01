@@ -18,19 +18,10 @@ require (
 
 require (
 	cloudeng.io/algo v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/datetime v0.0.0-20251030224013-8727539d4943 // indirect
 	cloudeng.io/debug v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/geospatial v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/google v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/io v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/linux v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/macos v0.0.0-20251030224013-8727539d4943 // indirect
 	cloudeng.io/os v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/path v0.0.10-0.20251030224013-8727539d4943 // indirect
 	cloudeng.io/sys v0.0.0-20251030224013-8727539d4943 // indirect
 	cloudeng.io/text v0.0.12-0.20251030224013-8727539d4943 // indirect
-	cloudeng.io/webapp/cmd/webapp v0.0.0-20251030224013-8727539d4943 // indirect
-	cloudeng.io/webapp/webauth/auth0 v0.0.0-20251030224013-8727539d4943 // indirect
 	cloudeng.io/windows v0.0.0-20251030224013-8727539d4943 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.39.4 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.31.15 // indirect
@@ -46,8 +37,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.9 // indirect
 	github.com/aws/smithy-go v1.23.1 // indirect
-	github.com/go-chi/chi/v5 v5.2.3 // indirect
-	github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
