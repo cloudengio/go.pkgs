@@ -178,13 +178,14 @@ func durationWithin(d1, d2, tolerance time.Duration) bool {
 
 func runCertManager(ctx context.Context, t *testing.T, flags *certManagerFlags, host string) func(t *testing.T) {
 	t.Helper()
+	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	go func() {
 		err := certManagerCmd{}.manageCerts(ctx, flags, []string{host})
 		t.Logf("cert manager exited: %v", err)
 		errCh <- err
 	}()
-	ctx, cancel := context.WithCancel(ctx)
+
 	return func(t *testing.T) {
 		cancel()
 		waitForServer(t, errCh)
