@@ -61,14 +61,15 @@ func startPebble(ctx context.Context, t *testing.T, tmpDir string, configOpts ..
 
 func defaultManagerFlags(pebbleCfg pebble.Config, pebbleTestDir, pebbleCacheDir string) certManagerFlags {
 	return certManagerFlags{
+		ClientHostFlag: ClientHostFlag{pebbleCfg.Address},
 		ServiceFlags: acme.ServiceFlags{
-			ClientHost: pebbleCfg.Address,
-			Provider:   pebbleCfg.DirectoryURL(),
-			Email:      "dev@cloudeng.io",
+
+			Provider: pebbleCfg.DirectoryURL(),
+			Email:    "dev@cloudeng.io",
 		},
-		HTTPPort:        pebbleCfg.HTTPPort,
-		TestingCAPem:    filepath.Join(pebbleTestDir, pebbleCfg.CAFile),
-		RefreshInterval: time.Minute,
+		HTTPPort:         pebbleCfg.HTTPPort,
+		TestingCAPEMFlag: TestingCAPEMFlag{filepath.Join(pebbleTestDir, pebbleCfg.CAFile)},
+		RefreshInterval:  time.Minute,
 		TLSCertStoreFlags: TLSCertStoreFlags{
 			LocalCacheDir: pebbleCacheDir,
 		},
@@ -202,27 +203,6 @@ func waitForServer(t *testing.T, errCh <-chan error) {
 	}
 }
 
-/*
-func waitForCert(ctx context.Context, t *testing.T, msg, certPath string) (*x509.Certificate, *x509.CertPool) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatalf("%v: timed out waiting for cert %v: %v", msg, certPath, ctx.Err())
-		case <-ticker.C:
-			if _, err := os.Stat(certPath); err != nil {
-				continue
-			}
-			return getCerts(t, certPath)
-
-		}
-	}
-}*/
-
 func waitForNewCert(ctx context.Context, t *testing.T, msg, certPath string, previousSerial string) (*x509.Certificate, *x509.CertPool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -247,85 +227,6 @@ func waitForNewCert(ctx context.Context, t *testing.T, msg, certPath string, pre
 		}
 	}
 }
-
-/*
-	issuingCA, err := pebbleCfg.GetIssuingCA(ctx, 0)
-	if err != nil {
-		t.Fatalf("failed to get issuing CA: %v", err)
-	}
-	if _, err := leaf.Verify(x509.VerifyOptions{
-		Intermediates: intermediates,
-		Roots:         issuingCA,
-	}); err != nil {
-		t.Fatalf("certificate verification failed: %v", err)
-	}*/
-
-/*
-	// test restart of cert manager picks up existing certs and renews them
-	stopAndWaitForCertManager = runCertManager(ctx, t, &mgrFlags, "pebble-test.example.com")
-
-	// test renewal
-	renewedSerial, err := pebbleServer.WaitForIssuedCertificateSerial(ctx)
-	if err != nil {
-		t.Fatalf("failed to wait for renewed certificate serial: %v", err)
-	}
-	t.Logf("refreshed certificate issued with serial: %v", serial)
-	if renewedSerial == serial {
-		t.Fatalf("expected a new serial number, but got the same one: %v", renewedSerial)
-	}
-
-	waitForCertWithSerial(ctx, t, "certificate refresh", localhostCert, renewedSerial)
-
-	stopAndWaitForCertManager(t)*/
-/*cert := waitForCertWithSerial(ctx, t, "new certififcate", localhostCert, serial)
-if cert.NotAfter.Sub(cert.NotBefore) > time.Duration(validityPeriodSecs)*time.Second {
-	t.Errorf("expected short lived certificate, got validity %v", cert.NotAfter.Sub(cert.NotBefore))
-}*/
-/*
-		serial, err := pebbleServer.WaitForIssuedCertificateSerial(ctx)
-		if err != nil {
-			t.Fatalf("failed to wait for issued certificate serial: %v", err)
-		}
-		t.Logf("initial certificate issued with serial: %v", serial)
-
-	// test initial cert obtain
-*/
-
-/*gotSerial := fmt.Sprintf("%0*x", len(leafCert.SerialNumber.Bytes())*2, leafCert.SerialNumber)
-if gotSerial == serial {
-	t.Logf("%v: found cert %v with serial %v", msg, certPath, serial)
-	t.Logf("%v: cert %v valid from %v to %v\n", msg, serial, leafCert.NotBefore, leafCert.NotAfter)
-	return leafCert
-}
-t.Logf("%v: waiting for serial %v, got %v", msg, serial, gotSerial)*/
-/*
-func waitForCertWithSerial(ctx context.Context, t *testing.T, msg, certPath, serial string) *x509.Certificate {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatalf("%v: timed out waiting for cert %v with serial %v: %v", msg, certPath, serial, ctx.Err())
-		case <-ticker.C:
-			if _, err := os.Stat(certPath); err != nil {
-				continue
-			}
-			leafCert := getCerts(t, certPath)
-			gotSerial := fmt.Sprintf("%0*x", len(leafCert.SerialNumber.Bytes())*2, leafCert.SerialNumber)
-			if gotSerial == serial {
-				t.Logf("%v: found cert %v with serial %v", msg, certPath, serial)
-				t.Logf("%v: cert %v valid from %v to %v\n", msg, serial, leafCert.NotBefore, leafCert.NotAfter)
-				return leafCert
-			}
-			t.Logf("%v: waiting for serial %v, got %v", msg, serial, gotSerial)
-		}
-	}
-}
-*/
-
 func getCerts(t *testing.T, certPath string) (*x509.Certificate, *x509.CertPool) {
 	t.Helper()
 	certPEM, err := os.ReadFile(certPath)

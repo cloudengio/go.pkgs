@@ -20,7 +20,7 @@ type revokeCmd struct{}
 
 type RevokeCommonFlags struct {
 	acme.ServiceFlags
-	TestingCAPemFlag
+	TestingCAPEMFlag
 	AccountKeyAliasFlag
 	TLSCertStoreFlags
 	awsconfig.AWSFlags
@@ -59,7 +59,7 @@ func (revokeCmd) revokeUsingKey(ctx context.Context, flags any, args []string) e
 		return fmt.Errorf("failed to obtain acme account key: %w", err)
 	}
 
-	httpClient, err := httpClientWithCustomCA(ctx, cl.TestingCAPem)
+	httpClient, err := httpClientWithCustomCA(ctx, cl.TestingCAPEM)
 	if err != nil {
 		return err
 	}

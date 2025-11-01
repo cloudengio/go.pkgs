@@ -25,8 +25,8 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-type TestingCAPemFlag struct {
-	TestingCAPem string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
+type TestingCAPEMFlag struct {
+	TestingCAPEM string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
 }
 
 type ClientHostFlag struct {
@@ -40,7 +40,7 @@ type AccountKeyAliasFlag struct {
 type certManagerFlags struct {
 	ClientHostFlag
 	acme.ServiceFlags
-	TestingCAPemFlag
+	TestingCAPEMFlag
 	TLSCertStoreFlags
 	AccountKeyAliasFlag
 	awsconfig.AWSFlags
@@ -84,7 +84,7 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 		}
 	}
 
-	mgr.Client.HTTPClient, err = httpClientWithCustomCA(ctx, cl.TestingCAPem)
+	mgr.Client.HTTPClient, err = httpClientWithCustomCA(ctx, cl.TestingCAPEM)
 	if err != nil {
 		return err
 	}
