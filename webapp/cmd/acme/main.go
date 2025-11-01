@@ -44,6 +44,25 @@ commands:
             summary: store a certificate in a cert store
           - name: get
             summary: retrieve a certificate from a cert store
+      - name: revoke
+        summary: revoke a certificate stored in a cert store using either the private key of the certificate or the private key of the acme account used to obtain the certificate
+        args:
+          - <name> # name of the certificate to revoke
+      - name: get-status
+        summary: check the OCSP status of a certificate stored in a cert store
+        args:
+          - <names>... # names of the certificates to check OCSP status for
+      - name: ca
+        summary: manage certificate authorities
+        commands:
+          - name: get-issuer-cert
+            summary: get the issuer certificate for a given ACME CA service, often an intermediate certificate
+            args:
+              - <acme-ca-service> # the acme ca service to get the issuer certificate for
+          - name: get-root-cert
+            summary: get the root certificate for a given ACME CA service
+            args:
+              - <acme-ca-service> # the acme ca service to get the root certificate for
 `
 
 func cli() *subcmd.CommandSetYAML {
@@ -58,6 +77,10 @@ func cli() *subcmd.CommandSetYAML {
 	cmd.Set("certs", "validate-pem-files").MustRunner(certsCmd.validatePEMFilesCmd, &validateFileFlags{})
 	cmd.Set("certs", "store", "put").MustRunner(putCert, &putCertFlags{})
 	cmd.Set("certs", "store", "get").MustRunner(getCert, &getCertFlags{})
+
+	revokeCmd := revokeCmd{}
+	cmd.Set("certs", "revoke").MustRunner(revokeCmd.revokeUsingKey, &revokeFlags{})
+	cmd.Set("certs", "get-status").MustRunner(revokeCmd.getStatus, &checkStatusFlags{})
 
 	cmd.Document(`manage ACME issued TLS certificates
 

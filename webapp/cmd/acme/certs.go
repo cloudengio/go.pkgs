@@ -36,7 +36,7 @@ type getCertFlags struct {
 
 type certsCmd struct{}
 
-func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, readonly bool) (*certcache.CachingStore, error) {
+func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWSFlags, opts ...certcache.Option) (*certcache.CachingStore, error) {
 	if cl.UseAWSSecretsManager && !awscl.AWS {
 		return nil, fmt.Errorf("aws-secrets-manager flag requires aws configuration to be enabled")
 	}
@@ -48,26 +48,24 @@ func newCertStore(ctx context.Context, cl TLSCertStoreFlags, awscl awsconfig.AWS
 		if err != nil {
 			return nil, err
 		}
-		return certcache.NewCachingStore(cl.LocalCacheDir,
-			lb,
-			certcache.WithReadonly(readonly))
+		return certcache.NewCachingStore(cl.LocalCacheDir, lb, opts...)
 	}
 	awscfg, err := awsconfig.LoadUsingFlags(ctx, awscl)
 	if err != nil {
 		return nil, err
 	}
 	var sfs *awssecretsfs.T
-	if readonly {
+	if certcache.HasReadonlyOption(opts) {
 		sfs = awssecretsfs.New(awscfg)
 	} else {
 		sfs = awssecretsfs.New(awscfg, awssecretsfs.WithAllowCreation(true), awssecretsfs.WithAllowUpdates(true))
 	}
-	return certcache.NewCachingStore(cl.LocalCacheDir, sfs, certcache.WithReadonly(readonly))
+	return certcache.NewCachingStore(cl.LocalCacheDir, sfs, opts...)
 }
 
 func getCert(ctx context.Context, values any, args []string) error {
 	cl := values.(*getCertFlags)
-	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, true)
+	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, certcache.WithReadonly(true))
 	if err != nil {
 		return err
 	}
@@ -82,7 +80,7 @@ func getCert(ctx context.Context, values any, args []string) error {
 
 func putCert(ctx context.Context, values any, args []string) error {
 	cl := values.(*putCertFlags)
-	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, false)
+	store, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, certcache.WithReadonly(false))
 	if err != nil {
 		return err
 	}
@@ -93,3 +91,15 @@ func putCert(ctx context.Context, values any, args []string) error {
 	}
 	return store.Put(ctx, file, buf)
 }
+
+/*
+https://acme-staging-v02.api.letsencrypt.org/directory
+hjttps://acme-v02.api.letsencrypt.org/directory
+
+
+https://letsencrypt.org/certs/isrgrootx1.pem
+https://letsencrypt.org/certs/isrg-root-x2.pem
+
+https://letsencrypt.org/certs/staging/letsencrypt-stg-root-x1.pem
+https://letsencrypt.org/certs/staging/letsencrypt-stg-root-x2.pem
+*/

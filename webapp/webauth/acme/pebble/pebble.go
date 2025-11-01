@@ -40,7 +40,7 @@ type configOption struct {
 }
 
 // WithValidityPeriod returns a ConfigOption that sets the validity period
-// for issued certificates.
+// for all issued certificates by modifying the value in all pebble profiles.
 func WithValidityPeriod(secs int) ConfigOption {
 	return func(o *configOption) {
 		o.validityPeriod = time.Duration(secs) * time.Second
@@ -89,9 +89,10 @@ func (p *T) Start(ctx context.Context, dir, cfg string, forward io.WriteCloser) 
 }
 
 var (
-	issuedRE    = regexp.MustCompile(`Issued certificate serial ([a-f0-9]+) for order`)
-	acmeReadyRE = regexp.MustCompile(`ACME directory available at:`)
-	mgmtReadyRE = regexp.MustCompile(`Root CA certificate available at:`)
+	issuedRE          = regexp.MustCompile(`Issued certificate serial ([a-f0-9]+) for order`)
+	acmeReadyRE       = regexp.MustCompile(`ACME directory available at:`)
+	mgmtReadyRE       = regexp.MustCompile(`Root CA certificate available at:`)
+	orderAuthorizedRE = regexp.MustCompile(`Order ([\w_-]+) is fully authorized\. Processing finalization`)
 )
 
 func (p *T) WaitForReady(ctx context.Context) error {
@@ -115,15 +116,13 @@ func (p *T) WaitForReady(ctx context.Context) error {
 	}
 }
 
-// WaitForIssuedCertificateSerial waits until a certificate is issued
-// and returns its serial number.
-func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) {
+func (p *T) waitForRe(ctx context.Context, re *regexp.Regexp) (string, error) {
 	for {
 		select {
 		case line := <-p.ch:
 			ctxlog.Logger(ctx).Debug("pebble WaitForIssuedCertificateSerial", "line", string(line))
 
-			matches := issuedRE.FindSubmatch(line)
+			matches := re.FindSubmatch(line)
 			if matches != nil {
 				return string(matches[1]), nil
 			}
@@ -131,6 +130,18 @@ func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) 
 			return "", ctx.Err()
 		}
 	}
+}
+
+// WaitForIssuedCertificateSerial waits until a certificate is issued
+// and returns its serial number.
+func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) {
+	return p.waitForRe(ctx, issuedRE)
+}
+
+// WaitForOrderAuthorized waits until an order is authorized
+// and returns its order ID.
+func (p *T) WaitForOrderAuthorized(ctx context.Context) (string, error) {
+	return p.waitForRe(ctx, orderAuthorizedRE)
 }
 
 // PID returns the process ID of the pebble instance.
@@ -276,8 +287,10 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	}
 	if pc.opts.validityPeriod != 0 {
 		profiles := ncfg["pebble"]["profiles"].(map[string]any)
-		defaultProfile := profiles["default"].(map[string]any)
-		defaultProfile["validityPeriod"] = int(pc.opts.validityPeriod.Seconds())
+		for _, profile := range profiles {
+			profileMap := profile.(map[string]any)
+			profileMap["validityPeriod"] = int(pc.opts.validityPeriod.Seconds())
+		}
 	}
 	ncfg["pebble"]["certificate"] = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
 	ncfg["pebble"]["privateKey"] = filepath.Join(pc.TestCertBase, "localhost", "key.pem")
@@ -309,6 +322,26 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	return cfgFile, nil
 }
 
+// PossibleValidityPeriods returns the validity periods specified across
+// all defined profiles in the pebble config.
+func (pc Config) PossibleValidityPeriods() []time.Duration {
+	periods := []time.Duration{}
+	profiles, ok := pc.originalConfig["pebble"]["profiles"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, profile := range profiles {
+		profileDetails, ok := profile.(map[string]any)
+		if !ok {
+			continue
+		}
+		if validity, ok := profileDetails["validityPeriod"].(float64); ok {
+			periods = append(periods, time.Duration(validity)*time.Second)
+		}
+	}
+	return periods
+}
+
 // DirectoryURL returns the ACME service 'directory' URL.
 func (pc Config) DirectoryURL() string {
 	return ensureScheme("https", pc.Address, "/dir")
@@ -332,7 +365,6 @@ func ensureScheme(scheme, urlOrAddr, path string) string {
 // used to sign issued certificates.
 func (pc Config) GetIssuingCert(ctx context.Context, id int) ([]byte, error) {
 	u := pc.CARootsURL(id)
-	fmt.Printf("GetIssuingCert: fetching issuing cert %q from %q\n", pc.ManagementAddress, u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -371,4 +403,18 @@ func (pc Config) GetIssuingCA(ctx context.Context, id int) (*x509.CertPool, erro
 		return nil, fmt.Errorf("failed to append issuing cert to pool")
 	}
 	return pool, nil
+}
+
+func (pc Config) ValidateCertificate(ctx context.Context, cert *x509.Certificate, intermediates *x509.CertPool) error {
+	issuingCA, err := pc.GetIssuingCA(ctx, 0)
+	if err != nil {
+		return fmt.Errorf("failed to get issuing CA: %v", err)
+	}
+	if _, err := cert.Verify(x509.VerifyOptions{
+		Intermediates: intermediates,
+		Roots:         issuingCA,
+	}); err != nil {
+		return fmt.Errorf("failed to verify certificate: %v", err)
+	}
+	return nil
 }

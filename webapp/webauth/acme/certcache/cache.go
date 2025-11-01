@@ -69,6 +69,16 @@ func WithSaveAccountKey(name string) Option {
 	}
 }
 
+// HasReadonlyOption returns true if the supplied options include
+// the WithReadonly option set to true.
+func HasReadonlyOption(opts []Option) bool {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o.readonly
+}
+
 // NewCachingStore returns an instance of autocert.Cache that will store
 // certificates in 'backing' store, but use the local file system for
 // temporary/private data such as the ACME client's private key. This

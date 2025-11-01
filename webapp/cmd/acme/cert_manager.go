@@ -25,10 +25,24 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-type certManagerFlags struct {
-	acme.ServiceFlags
+type TestingCAPemFlag struct {
 	TestingCAPem string `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
+}
+
+type ClientHostFlag struct {
+	ClientHost string `subcmd:"acme-client-host,,'host running the acme client responsible for refreshing certificates, https requests to this host for one of the certificate hosts will result in the certificate for the certificate host being refreshed if necessary'"`
+}
+
+type AccountKeyAliasFlag struct {
+	AccountKeyAlias string `subcmd:"acme-account-key-alias,acme_account.key,'the alias/name in the certificate store for the acme account private key'"`
+}
+
+type certManagerFlags struct {
+	ClientHostFlag
+	acme.ServiceFlags
+	TestingCAPemFlag
 	TLSCertStoreFlags
+	AccountKeyAliasFlag
 	awsconfig.AWSFlags
 	HTTPPort        int           `subcmd:"http-port,80,address to run http acme challenge server on"`
 	RefreshInterval time.Duration `subcmd:"cert-refresh-interval,6h,interval between certificate refresh attempts"`
@@ -41,11 +55,13 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 	logger.Info("starting acme cert manager", "build_info", cmdutil.BuildInfoJSON())
 
 	cl := flags.(*certManagerFlags)
-	hosts := args
+	hosts := append([]string{cl.ClientHost}, args...)
 
 	logger.Info("acme cert manager flags", "flags", cl)
 
-	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, false)
+	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags,
+		certcache.WithReadonly(false),
+		certcache.WithSaveAccountKey(cl.AccountKeyAlias))
 	if err != nil {
 		return err
 	}
@@ -68,22 +84,10 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 		}
 	}
 
-	if cl.TestingCAPem != "" {
-		logger.Warn("acme.NewManagerFromFlags: using custom root CA pool containing", "ca", cl.TestingCAPem)
-		rootCAs, err := devtest.CertPoolForTesting(cl.TestingCAPem)
-		if err != nil {
-			return fmt.Errorf("failed to obtain cert pool containing %v: %w", cl.TestingCAPem, err)
-		}
-		mgr.Client.HTTPClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs:    rootCAs,
-					MinVersion: tls.VersionTLS13,
-				}},
-		}
-		logger.Info("acme.NewManagerFromFlags: configured acme manager http client with custom root CA pool")
+	mgr.Client.HTTPClient, err = httpClientWithCustomCA(ctx, cl.TestingCAPem)
+	if err != nil {
+		return err
 	}
-
 	if cl.Trace {
 		loggingRT := httptracing.NewTracingRoundTripper(mgr.Client.HTTPClient.Transport,
 			httptracing.WithTracingLogger(logger),
@@ -145,7 +149,6 @@ func refreshCertificatesUsingHello(ctx context.Context, interval time.Duration, 
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
 			for {
-
 				if err := refreshCertificateUsingHello(ctx, mgr, h); err != nil {
 					ctxlog.Logger(ctx).Error("failed to refresh certificate using tls hello", "host", h, "error", err)
 				}
@@ -166,10 +169,35 @@ func refreshCertificateUsingHello(ctx context.Context, mgr *autocert.Manager, ho
 		CipherSuites:     webapp.PreferredCipherSuites,
 		SignatureSchemes: webapp.PreferredSignatureSchemes,
 	}
+	ctxlog.Logger(ctx).Info("refreshing certificate using tls hello", "host", host)
 	cert, err := mgr.GetCertificate(&hello)
 	if err != nil {
 		return err
 	}
-	ctxlog.Logger(ctx).Info("refreshed certificate using tls hello", "host", host, "expiry", cert.Leaf.NotAfter, "subject", cert.Leaf.Subject)
+	leaf := cert.Leaf
+	ctxlog.Logger(ctx).Info("refreshed certificate using tls hello", "host", host, "expiry", leaf.NotAfter, "serial", fmt.Sprintf("%0*x", len(leaf.SerialNumber.Bytes())*2, leaf.SerialNumber))
+	if time.Now().After(leaf.NotAfter) {
+		ctxlog.Logger(ctx).Warn("certificate has expired", "host", host, "expiry", leaf.NotAfter, "serial", fmt.Sprintf("%0*x", len(leaf.SerialNumber.Bytes())*2, leaf.SerialNumber))
+	}
 	return nil
+}
+
+func httpClientWithCustomCA(ctx context.Context, caPem string) (*http.Client, error) {
+	if caPem != "" {
+		ctxlog.Logger(ctx).Warn("acme.NewManagerFromFlags: using custom root CA pool containing", "ca", caPem)
+		rootCAs, err := devtest.CertPoolForTesting(caPem)
+		if err != nil {
+			return nil, fmt.Errorf("failed to obtain cert pool containing %v: %w", caPem, err)
+		}
+		httpClient := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs:    rootCAs,
+					MinVersion: tls.VersionTLS13,
+				}},
+		}
+		ctxlog.Logger(ctx).Info("acme.NewManagerFromFlags: configured acme manager http client with custom root CA pool")
+		return httpClient, nil
+	}
+	return nil, nil
 }
