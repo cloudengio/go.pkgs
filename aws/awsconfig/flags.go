@@ -25,7 +25,7 @@ type AWSFlags struct {
 // the specified flags.
 func LoadUsingFlags(ctx context.Context, cl AWSFlags) (aws.Config, error) {
 	if !cl.AWS {
-		return aws.Config{}, fmt.Errorf("aws not requested")
+		return aws.Config{}, fmt.Errorf("aws not enabled")
 	}
 	return Load(ctx, ConfigOptionsFromFlags(cl)...)
 }
@@ -35,20 +35,56 @@ func LoadUsingFlags(ctx context.Context, cl AWSFlags) (aws.Config, error) {
 // information is retrieved from EC2 IMDS when it's not found by other
 // means.
 func ConfigOptionsFromFlags(cl AWSFlags) []ConfigOption {
+	cfg := cl.Config()
+	return cfg.Options()
+}
+
+// AWSConfig represents a minimal AWS configuration required to authenticate
+// and interact with AWS services.
+type AWSConfig struct {
+	AWS            bool     `yaml:"aws"`
+	AWSProfile     string   `yaml:"aws_profile"`
+	AWSRegion      string   `yaml:"aws_region"`
+	AWSConfigFiles []string `yaml:"aws_config_files"`
+}
+
+// Config converts the flags to a AWSConfig instance.
+func (c AWSFlags) Config() AWSConfig {
+	return AWSConfig{
+		AWS:            c.AWS,
+		AWSProfile:     c.AWSProfile,
+		AWSRegion:      c.AWSRegion,
+		AWSConfigFiles: strings.Split(c.AWSConfigFiles, ","),
+	}
+}
+
+// Load calls awsconfig.Load with options controlled by the config.
+func (c AWSConfig) Load(ctx context.Context) (aws.Config, error) {
+	if !c.AWS {
+		return aws.Config{}, fmt.Errorf("aws not enabled")
+	}
+	return Load(ctx, c.Options()...)
+}
+
+// Options returns the ConfigOptions implied by the config.
+// NOTE: it always includes config.WithEC2IMDSRegion so that the region
+// information is retrieved from EC2 IMDS when it's not found by other
+// means.
+func (c AWSConfig) Options() []ConfigOption {
+	if !c.AWS {
+		return nil
+	}
 	opts := []ConfigOption{}
-	if len(cl.AWSConfigFiles) > 0 {
-		files := strings.Split(cl.AWSConfigFiles, ",")
-		opts = append(opts,
-			WithConfigOptions(config.WithSharedConfigFiles(files)),
-		)
+	if len(c.AWSConfigFiles) > 0 {
+		opts = append(opts, WithConfigOptions(config.WithSharedConfigFiles(c.AWSConfigFiles)))
 	}
-	if len(cl.AWSProfile) > 0 {
+	if len(c.AWSProfile) > 0 {
 		opts = append(opts,
-			WithConfigOptions(config.WithSharedConfigProfile(cl.AWSProfile)))
+			WithConfigOptions(config.WithSharedConfigProfile(c.AWSProfile)))
 	}
-	if len(cl.AWSRegion) > 0 {
+	if len(c.AWSRegion) > 0 {
 		opts = append(opts,
-			WithConfigOptions(config.WithRegion(cl.AWSRegion)))
+			WithConfigOptions(config.WithRegion(c.AWSRegion)))
 	}
 	opts = append(opts, WithConfigOptions(
 		config.WithEC2IMDSRegion(),

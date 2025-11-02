@@ -15,7 +15,7 @@ import (
 // Factory wraps creating an S3FS with the configuration required to
 // correctly initialize it.
 type Factory struct {
-	Config  awsconfig.AWSFlags
+	Config  awsconfig.AWSConfig
 	Options []Option
 }
 
@@ -23,7 +23,7 @@ func (f Factory) New(ctx context.Context) (*T, error) {
 	if !f.Config.AWS {
 		return nil, fmt.Errorf("AWS authentication must be enabled to use S3")
 	}
-	awsConfig, err := awsconfig.LoadUsingFlags(ctx, f.Config)
+	awsConfig, err := f.Config.Load(ctx)
 	if err != nil {
 		return nil, err
 	}
