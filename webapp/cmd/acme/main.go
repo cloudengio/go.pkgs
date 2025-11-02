@@ -44,6 +44,10 @@ commands:
             summary: store a certificate in a cert store
           - name: get
             summary: retrieve a certificate from a cert store
+      - name: revoke
+        summary: revoke a certificate stored in a cert store using either the private key of the certificate or the private key of the acme account used to obtain the certificate
+        args:
+          - <name> # name of the certificate to revoke
 `
 
 func cli() *subcmd.CommandSetYAML {
@@ -58,6 +62,9 @@ func cli() *subcmd.CommandSetYAML {
 	cmd.Set("certs", "validate-pem-files").MustRunner(certsCmd.validatePEMFilesCmd, &validateFileFlags{})
 	cmd.Set("certs", "store", "put").MustRunner(putCert, &putCertFlags{})
 	cmd.Set("certs", "store", "get").MustRunner(getCert, &getCertFlags{})
+
+	revokeCmd := revokeCmd{}
+	cmd.Set("certs", "revoke").MustRunner(revokeCmd.revokeUsingKey, &revokeFlags{})
 
 	cmd.Document(`manage ACME issued TLS certificates
 

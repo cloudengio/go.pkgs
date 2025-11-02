@@ -27,6 +27,13 @@ ErrCacheMiss is the same as autocert.ErrCacheMiss
 
 
 ## Functions
+### Func HasReadonlyOption
+```go
+func HasReadonlyOption(opts []Option) bool
+```
+HasReadonlyOption returns true if the supplied options include the
+WithReadonly option set to true.
+
 ### Func IsAcmeAccountKey
 ```go
 func IsAcmeAccountKey(name string) bool
@@ -40,6 +47,13 @@ func IsLocalName(name string) bool
 ```
 IsLocalName returns true if the specified name is for local-only data such
 as ACME client private keys or http-01 challenge tokens.
+
+### Func ParseRevocationReason
+```go
+func ParseRevocationReason(reason string) (acme.CRLReasonCode, error)
+```
+ParseRevocationReason parses the supplied revocation reason string and
+returns the corresponding acme.CRLReasonCode.
 
 ### Func RefreshCertificate
 ```go
@@ -103,6 +117,12 @@ Delete implements autocert.Cache.
 func (dc *CachingStore) Get(ctx context.Context, name string) ([]byte, error)
 ```
 Get implements autocert.Cache.
+
+
+```go
+func (dc *CachingStore) GetAccountKey(ctx context.Context) (crypto.Signer, error)
+```
+GetAccountKey retrieves the ACME account private key from the cache.
 
 
 ```go

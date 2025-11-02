@@ -14,6 +14,7 @@ import (
 
 	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/webauth/acme/certcache"
 )
 
 type testRedirectFlags struct {
@@ -42,7 +43,7 @@ func (testRedirectCmd) redirect(ctx context.Context, values any, _ []string) err
 		return err
 	}
 
-	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, true)
+	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, certcache.WithReadonly(false))
 	if err != nil {
 		return err
 	}

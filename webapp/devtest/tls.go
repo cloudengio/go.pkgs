@@ -249,7 +249,6 @@ func CertPoolForTesting(pemFiles ...string) (*x509.CertPool, error) {
 		if len(pemFile) == 0 {
 			continue
 		}
-
 		certs, err := os.ReadFile(pemFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", pemFile, err)

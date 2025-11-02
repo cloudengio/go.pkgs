@@ -112,7 +112,7 @@ func (m *CertServingCache) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Cert
 		return nil, fmt.Errorf("missing server name")
 	}
 	if !strings.Contains(strings.Trim(name, "."), ".") {
-		return nil, fmt.Errorf("server name component count invalid")
+		return nil, fmt.Errorf("server name %q is not a qualified domain name", name)
 	}
 	name, err := idna.Lookup.ToASCII(name)
 	if err != nil {

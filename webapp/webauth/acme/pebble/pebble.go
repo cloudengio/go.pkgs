@@ -17,11 +17,35 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
+	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/os/executil"
 )
+
+// ServerOption represents a option for configuring a new Pebble instance.
+type ServerOption func(*serverOptions)
+
+type serverOptions struct {
+	// future options
+}
+
+// ConfigOption represents an option for configuring a new Config instance.
+type ConfigOption func(*configOption)
+
+type configOption struct {
+	validityPeriod time.Duration
+}
+
+// WithValidityPeriod returns a ConfigOption that sets the validity period
+// for all issued certificates by modifying the value in all pebble profiles.
+func WithValidityPeriod(secs int) ConfigOption {
+	return func(o *configOption) {
+		o.validityPeriod = time.Duration(secs) * time.Second
+	}
+}
 
 // T manages a pebble instance for testing purposes.
 type T struct {
@@ -29,14 +53,19 @@ type T struct {
 	binary string
 	closer io.Closer
 	ch     chan []byte
+	opts   serverOptions
 }
 
 // New creates a new Pebble instance. The supplied configFile will be used
 // to configure the pebble instance. The server is not started by New.
-func New(binary string) *T {
-	return &T{
+func New(binary string, opts ...ServerOption) *T {
+	p := &T{
 		binary: binary,
 	}
+	for _, o := range opts {
+		o(&p.opts)
+	}
+	return p
 }
 
 // Start the pebble instance with its output forwarded to the supplied
@@ -60,9 +89,10 @@ func (p *T) Start(ctx context.Context, dir, cfg string, forward io.WriteCloser) 
 }
 
 var (
-	issuedRE    = regexp.MustCompile(`Issued certificate serial ([a-f0-9]+) for order`)
-	acmeReadyRE = regexp.MustCompile(`ACME directory available at:`)
-	mgmtReadyRE = regexp.MustCompile(`Root CA certificate available at:`)
+	issuedRE          = regexp.MustCompile(`Issued certificate serial ([a-f0-9]+) for order`)
+	acmeReadyRE       = regexp.MustCompile(`ACME directory available at:`)
+	mgmtReadyRE       = regexp.MustCompile(`Root CA certificate available at:`)
+	orderAuthorizedRE = regexp.MustCompile(`Order ([\w_-]+) is fully authorized\. Processing finalization`)
 )
 
 func (p *T) WaitForReady(ctx context.Context) error {
@@ -70,6 +100,7 @@ func (p *T) WaitForReady(ctx context.Context) error {
 	for {
 		select {
 		case line := <-p.ch:
+			ctxlog.Logger(ctx).Debug("pebble WaitForReady", "line", string(line))
 			if acmeReadyRE.Match(line) {
 				seen++
 			}
@@ -85,13 +116,13 @@ func (p *T) WaitForReady(ctx context.Context) error {
 	}
 }
 
-// WaitForIssuedCertificateSerial waits until a certificate is issued
-// and returns its serial number.
-func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) {
+func (p *T) waitForRe(ctx context.Context, re *regexp.Regexp) (string, error) {
 	for {
 		select {
 		case line := <-p.ch:
-			matches := issuedRE.FindSubmatch(line)
+			ctxlog.Logger(ctx).Debug("pebble WaitForIssuedCertificateSerial", "line", string(line))
+
+			matches := re.FindSubmatch(line)
 			if matches != nil {
 				return string(matches[1]), nil
 			}
@@ -99,6 +130,18 @@ func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) 
 			return "", ctx.Err()
 		}
 	}
+}
+
+// WaitForIssuedCertificateSerial waits until a certificate is issued
+// and returns its serial number.
+func (p *T) WaitForIssuedCertificateSerial(ctx context.Context) (string, error) {
+	return p.waitForRe(ctx, issuedRE)
+}
+
+// WaitForOrderAuthorized waits until an order is authorized
+// and returns its order ID.
+func (p *T) WaitForOrderAuthorized(ctx context.Context) (string, error) {
+	return p.waitForRe(ctx, orderAuthorizedRE)
 }
 
 // PID returns the process ID of the pebble instance.
@@ -127,6 +170,7 @@ type Config struct {
 	TestCertBase      string
 	RootCertURL       string
 
+	opts           configOption
 	originalConfig map[string]map[string]any
 	pebbleCA       *x509.CertPool
 }
@@ -172,8 +216,12 @@ const pebbleConfig = `
 
 // NewConfig creates a new Config instance with
 // default values.
-func NewConfig() Config {
+func NewConfig(opt ...ConfigOption) Config {
 	var cfg Config
+	for _, co := range opt {
+		co(&cfg.opts)
+	}
+	// Keep these in sync with the json literal above.
 	cfg.originalConfig = parsedConfig
 	cfg.HTTPPort = 5002
 	cfg.TLSPort = 5001
@@ -202,8 +250,9 @@ func deepCopy(m map[string]map[string]any) (map[string]map[string]any, error) {
 }
 
 // CreateCertsAndUpdateConfig uses minica to create a self-signed certificate for
-// use with the pebble instance. The generated certificate and key are placed in outputDir.
-// It returns the path to the possibly unpdated configuration file to be used when starting
+// use with the pebble instance and applies any other config customizations requested
+// by any ConfigOptions. The generated certificate and key are placed in outputDir.
+// It returns the path to the possibly updated configuration file to be used when starting
 // pebble.
 // Use minica to create a self-signed certificate for the domain as per:
 //
@@ -236,6 +285,13 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	if err != nil {
 		return "", fmt.Errorf("failed to deep copy original pebble config: %v", err)
 	}
+	if pc.opts.validityPeriod != 0 {
+		profiles := ncfg["pebble"]["profiles"].(map[string]any)
+		for _, profile := range profiles {
+			profileMap := profile.(map[string]any)
+			profileMap["validityPeriod"] = int(pc.opts.validityPeriod.Seconds())
+		}
+	}
 	ncfg["pebble"]["certificate"] = filepath.Join(pc.TestCertBase, "localhost", "cert.pem")
 	ncfg["pebble"]["privateKey"] = filepath.Join(pc.TestCertBase, "localhost", "key.pem")
 	cfgData, err := json.MarshalIndent(ncfg, "", "  ")
@@ -266,16 +322,50 @@ func (pc *Config) CreateCertsAndUpdateConfig(ctx context.Context, outputDir stri
 	return cfgFile, nil
 }
 
+// PossibleValidityPeriods returns the validity periods specified across
+// all defined profiles in the pebble config.
+func (pc Config) PossibleValidityPeriods() []time.Duration {
+	periods := []time.Duration{}
+	profiles, ok := pc.originalConfig["pebble"]["profiles"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, profile := range profiles {
+		profileDetails, ok := profile.(map[string]any)
+		if !ok {
+			continue
+		}
+		if validity, ok := profileDetails["validityPeriod"].(float64); ok {
+			periods = append(periods, time.Duration(validity)*time.Second)
+		}
+	}
+	return periods
+}
+
+// DirectoryURL returns the ACME service 'directory' URL.
+func (pc Config) DirectoryURL() string {
+	return ensureScheme("https", pc.Address, "/dir")
+}
+
+// CARootsURL returns the URL from which the pebble root CA certificate
+// can be retrieved, use 0 as the id.
+func (pc Config) CARootsURL(id int) string {
+	return ensureScheme("https", pc.ManagementAddress, fmt.Sprintf("roots/%d", id))
+}
+
+// ensureScheme ensures that the supplied urlOrAddr has the specified scheme.
+func ensureScheme(scheme, urlOrAddr, path string) string {
+	if strings.HasPrefix(urlOrAddr, scheme+"://") {
+		return fmt.Sprintf("%s/%s", urlOrAddr, path)
+	}
+	return fmt.Sprintf("%s://%s/%s", scheme, urlOrAddr, path)
+}
+
 // GetIssuingCert retrieves the pebble certificate, including intermediates,
 // used to sign issued certificates.
-func (pc Config) GetIssuingCert(ctx context.Context) ([]byte, error) {
-	u := url.URL{
-		Scheme: "https",
-		Host:   pc.ManagementAddress,
-		Path:   "/roots/0",
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+func (pc Config) GetIssuingCert(ctx context.Context, id int) ([]byte, error) {
+	u := pc.CARootsURL(id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -303,8 +393,8 @@ func (pc Config) CA() *x509.CertPool {
 
 // IssuingCA returns a CertPool containing the issuing CA certificate
 // used by pebble to sign issued certificates.
-func (pc Config) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
-	data, err := pc.GetIssuingCert(ctx)
+func (pc Config) GetIssuingCA(ctx context.Context, id int) (*x509.CertPool, error) {
+	data, err := pc.GetIssuingCert(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -313,4 +403,18 @@ func (pc Config) GetIssuingCA(ctx context.Context) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("failed to append issuing cert to pool")
 	}
 	return pool, nil
+}
+
+func (pc Config) ValidateCertificate(ctx context.Context, cert *x509.Certificate, intermediates *x509.CertPool) error {
+	issuingCA, err := pc.GetIssuingCA(ctx, 0)
+	if err != nil {
+		return fmt.Errorf("failed to get issuing CA: %v", err)
+	}
+	if _, err := cert.Verify(x509.VerifyOptions{
+		Intermediates: intermediates,
+		Roots:         issuingCA,
+	}); err != nil {
+		return fmt.Errorf("failed to verify certificate: %v", err)
+	}
+	return nil
 }

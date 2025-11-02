@@ -7,6 +7,8 @@ package pebble_test
 import (
 	"context"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -95,8 +97,26 @@ func TestPebble_RealServer(t *testing.T) {
 		t.Fatalf("WaitForReady: %v", err)
 	}
 
-	if _, err := cfg.GetIssuingCA(ctx); err != nil {
+	if _, err := cfg.GetIssuingCA(ctx, 0); err != nil {
 		t.Fatalf("GetIssuingCA: %v", err)
 	}
 
+}
+
+func TestPossibleValidityPeriods(t *testing.T) {
+	cfg := pebble.NewConfig()
+	periods := cfg.PossibleValidityPeriods()
+
+	expected := []time.Duration{
+		7776000 * time.Second,
+		518400 * time.Second,
+	}
+
+	// Sort both slices to ensure comparison is order-independent.
+	sort.Slice(periods, func(i, j int) bool { return periods[i] < periods[j] })
+	sort.Slice(expected, func(i, j int) bool { return expected[i] < expected[j] })
+
+	if !reflect.DeepEqual(periods, expected) {
+		t.Errorf("got %v, want %v", periods, expected)
+	}
 }
