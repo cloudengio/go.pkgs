@@ -25,14 +25,13 @@ func TestFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = flagSet.Parse([]string{
-		"--acme-client-host=login.domain",
 		"--acme-renew-before=1h",
 		"--acme-email=foo@bar"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	mgr, err := acme.NewAutocertManager(ctx, autocert.DirCache(t.TempDir()), cl.AutocertConfig(), "allowed-domain-a", "allowed-domain-b")
+	mgr, err := acme.NewAutocertManager(ctx, autocert.DirCache(t.TempDir()), cl.AutocertConfig(), "login.domain", "allowed-domain-a", "allowed-domain-b")
 	if err != nil {
 		t.Fatal(err)
 	}
