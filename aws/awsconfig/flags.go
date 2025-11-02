@@ -50,11 +50,15 @@ type AWSConfig struct {
 
 // Config converts the flags to a AWSConfig instance.
 func (c AWSFlags) Config() AWSConfig {
+	var files []string
+	if c.AWSConfigFiles != "" {
+		files = strings.Split(c.AWSConfigFiles, ",")
+	}
 	return AWSConfig{
 		AWS:            c.AWS,
 		AWSProfile:     c.AWSProfile,
 		AWSRegion:      c.AWSRegion,
-		AWSConfigFiles: strings.Split(c.AWSConfigFiles, ","),
+		AWSConfigFiles: files,
 	}
 }
 
