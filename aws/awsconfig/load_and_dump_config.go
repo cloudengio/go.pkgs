@@ -31,7 +31,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}
-	if err := awsconfig.DumpConfig(ctx, os.Stdout, cfg); err != nil {
+	if err := awsconfig.DebugPrintConfig(ctx, os.Stdout, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}
