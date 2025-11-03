@@ -15,6 +15,7 @@ jobs:
     with:
       go-versions: |
         [ "1.25.x" ]
+      os-version: windows-latest
       init-chrome: true
       init-pebble: true
       init-mkcert: true
