@@ -11,11 +11,8 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
-        with:
-          os-version: ${{ runner.os }}
-          go-versions: |
-            [ "1.25.x" ]
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+    with:
+      os-version: macos-latest
+      go-versions: |
+        [ "1.25.x" ]

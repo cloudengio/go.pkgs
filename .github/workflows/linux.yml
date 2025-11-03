@@ -11,20 +11,14 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
-        with:
-          os-version: ${{ runner.os }}
-          go-versions: |
-            [ "1.25.x" ]
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+    with:
+      os-version: ubuntu-latest
+      go-versions: |
+        [ "1.25.x" ]
 
   lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
-        with:
-          os-version: ${{ runner.os }}
-          go-version: "1.25.x"
+    uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
+    with:
+      os-version: ubuntu-latest
+      go-version: "1.25.x"
