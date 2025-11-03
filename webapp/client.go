@@ -7,23 +7,32 @@ package webapp
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 
 	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/net/http/httptracing"
-	"cloudeng.io/webapp/devtest"
 )
 
 // HTTPClientOption is used to configure an HTTP client.
 type HTTPClientOption func(o *httpClientOptions)
 
-// WithCustomCA configures the HTTP client to use the specified
+// WithCustomCAPEMFile configures the HTTP client to use the specified
 // custom CA PEM data as a root CA.
-func WithCustomCA(caPem string) HTTPClientOption {
+func WithCustomCAPEMFile(caPEMFile string) HTTPClientOption {
 	return func(o *httpClientOptions) {
-		o.caPem = caPem
+		o.caPEMFIle = caPEMFile
+	}
+}
+
+// WithCustomCAPool configures the HTTP client to use the specified
+// custom CA pool. It takes precedence over WithCustomCAPEMFile.
+func WithCustomCAPool(caPool *x509.CertPool) HTTPClientOption {
+	return func(o *httpClientOptions) {
+		o.caPool = caPool
 	}
 }
 
@@ -36,7 +45,8 @@ func WithTracingTransport(to ...httptracing.TraceRoundtripOption) HTTPClientOpti
 }
 
 type httpClientOptions struct {
-	caPem       string
+	caPEMFIle   string
+	caPool      *x509.CertPool
 	tracingOpts []httptracing.TraceRoundtripOption
 }
 
@@ -51,14 +61,18 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPClientOption) (*http.Client,
 			MinVersion:   tls.VersionTLS13,
 			CipherSuites: PreferredCipherSuites,
 		}}
-	if caPem := options.caPem; caPem != "" {
-		ctxlog.Logger(ctx).Warn("services.NewHTTPClient: using custom root CA pool containing", "ca", caPem)
-		rootCAs, err := devtest.CertPoolForTesting(caPem)
+	if options.caPool != nil {
+		ctxlog.Logger(ctx).Warn("services.NewHTTPClient: using custom root CA pool")
+		transport.TLSClientConfig.RootCAs = options.caPool
+	} else if caPEMFile := options.caPEMFIle; caPEMFile != "" {
+		ctxlog.Logger(ctx).Warn("services.NewHTTPClient: using custom root CA pool containing", "ca", caPEMFile)
+		rootCAs, err := certPool(caPEMFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to obtain cert pool containing %v: %w", caPem, err)
+			return nil, fmt.Errorf("failed to obtain cert pool containing %v: %w", caPEMFile, err)
 		}
 		transport.TLSClientConfig.RootCAs = rootCAs
 	}
+
 	httpClient := &http.Client{
 		Transport: transport,
 	}
@@ -67,4 +81,17 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPClientOption) (*http.Client,
 		httpClient.Transport = trt
 	}
 	return httpClient, nil
+}
+
+func certPool(pemFile string) (*x509.CertPool, error) {
+	rootCAs := x509.NewCertPool()
+	certs, err := os.ReadFile(pemFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to append %q to RootCAs: %v", pemFile, err)
+	}
+	// Append our cert to the system pool
+	if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+		return nil, fmt.Errorf("no certs appended")
+	}
+	return rootCAs, nil
 }
