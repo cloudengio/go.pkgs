@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,19 @@ import (
 	"cloudeng.io/net/http/httptracing"
 	"cloudeng.io/webapp"
 )
+
+func noCertError() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "x509: certificate signed by unknown authority"
+	case "darwin":
+		return "failed to verify certificate: x509: “localhost” certificate is not trusted"
+	case "linux":
+		return "x509: certificate signed by unknown authority"
+	default:
+		return "failed to verify certificate: x509: certificate signed by unknown authority"
+	}
+}
 
 func newCert(t *testing.T, name string, isCA bool, signer *x509.Certificate, signerKey *rsa.PrivateKey) (*x509.Certificate, *rsa.PrivateKey) {
 	t.Helper()
@@ -143,8 +157,9 @@ func TestNewHTTPClient(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected request with default client to fail")
 		}
-		if !strings.Contains(err.Error(), "failed to verify certificate: x509: “localhost” certificate is not trusted") {
-			t.Errorf("expected 'failed to verify certificate: x509: “localhost” certificate is not trusted', got: %v", err)
+		expected := "x509: certificate signed by unknown authority"
+		if !strings.Contains(err.Error(), expected) {
+			t.Errorf("expected %q, got: %v", expected, err)
 		}
 	})
 
