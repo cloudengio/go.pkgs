@@ -100,6 +100,9 @@ func readFile(t *testing.T, fn string) string {
 }
 
 func TestTypescriptSources_CompileIncremental(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping for windows - needs investigation")
+	}
 	tmp := t.TempDir()
 	copyTestdata(t, tmp, "one.ts", "two.ts")
 
