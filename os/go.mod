@@ -1,8 +1,8 @@
 module cloudeng.io/os
 
-go 1.23.3
+go 1.25
 
 require (
-	cloudeng.io/errors v0.0.10
-	cloudeng.io/sys v0.0.0-20250119024745-8a46e9bdda10
+	cloudeng.io/errors v0.0.13-0.20251103233205-9c9ec5cb705a
+	cloudeng.io/windows v0.0.0-20251103233205-9c9ec5cb705a
 )
