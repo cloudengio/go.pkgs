@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -51,6 +52,9 @@ func startStoppable(ctx context.Context, t *testing.T, hang bool, out *bytes.Buf
 }
 
 func TestSignalAndWait(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping signal handling tests on windows")
+	}
 	ctx := context.Background()
 	// Test graceful shutdown.
 	t.Run("graceful", func(t *testing.T) {
@@ -90,6 +94,9 @@ func TestSignalAndWait(t *testing.T) {
 			t.Fatalf("process %d is not stopped", cmd.Process.Pid)
 		}
 	})
+}
+
+func TestIsStopped(t *testing.T) {
 	// Test non-existent process.
 
 	t.Run("non-existent", func(t *testing.T) {

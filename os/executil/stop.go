@@ -32,7 +32,7 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 	wait := true
 
 	for _, sig := range sigs {
-		if err := cmd.Process.Signal(sig); err != nil {
+		if err := signal(cmd, sig); err != nil {
 			return err
 		}
 		if wait {
