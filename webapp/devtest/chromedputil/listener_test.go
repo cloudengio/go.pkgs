@@ -82,7 +82,9 @@ func TestListen(t *testing.T) {
 		t.Fatalf("Failed to wait for server URL: %v", err)
 	}
 	// Navigate to test page which will trigger events
-	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
+	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer wcancel()
+	if err := chromedp.Run(wctx, chromedp.Navigate(serverURL)); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
