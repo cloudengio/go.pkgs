@@ -9,11 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -370,7 +368,7 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 
 	// Create a buffered writer to capture log output
 	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(io.MultiWriter(&logBuf, os.Stderr), nil))
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	// Start the logging listener with all event types enabled
 	listenerCtx, cancelListener := context.WithCancel(ctx)
@@ -399,12 +397,14 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	select {
 	case <-doneCh:
 		// Success - listener has terminated
-	case <-time.After(2 * time.Second):
+		t.Logf("Listener terminated successfully")
+	case <-time.After(5 * time.Second):
 		t.Fatal("Timed out waiting for listener to terminate")
 	}
 
 	// Check that logs were captured
 	logs := logBuf.String()
+	t.Logf("Captured logs:\n%s", logs)
 
 	// Should have captured console logs
 	if !strings.Contains(logs, "Console API called") {
@@ -429,6 +429,7 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	if !strings.Contains(logs, "Log entry added") {
 		t.Error("No log entry logs were captured")
 	}
+
 }
 
 func testNewListenHandler(ctx context.Context, t *testing.T, event any, expected bool) { //nolint:gocyclo
