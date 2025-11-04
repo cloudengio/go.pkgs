@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +18,21 @@ import (
 )
 
 type output struct {
-	*strings.Builder
+	mu  sync.Mutex
+	out []byte
+}
+
+func (o *output) Write(p []byte) (n int, err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.out = append(o.out, p...)
+	return len(p), nil
+}
+
+func (o *output) String() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return string(o.out)
 }
 
 func (o *output) Close() error {
@@ -34,7 +48,7 @@ func TestPebble(t *testing.T) {
 		t.Fatalf("failed to build mock pebble: %v", err)
 	}
 	p := pebble.New(mockPebblePath)
-	out := &output{&strings.Builder{}}
+	out := &output{}
 	defer ensureStopped(t, p, out)
 
 	cfg := pebble.NewConfig()
@@ -78,7 +92,7 @@ func TestPebble_RealServer(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	p := pebble.New("pebble")
-	out := &output{&strings.Builder{}}
+	out := &output{}
 	defer ensureStopped(t, p, out)
 
 	cfg := pebble.NewConfig()
