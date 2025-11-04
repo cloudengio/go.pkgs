@@ -6,6 +6,7 @@ test:
     "--covermode=atomic",
     "--vet=off",
     "-race",
+    "-v",
     "./...",
   ]
 lint: ["golangci-lint", "run", "./..."]
