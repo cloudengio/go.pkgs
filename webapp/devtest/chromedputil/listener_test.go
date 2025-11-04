@@ -391,9 +391,9 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	}
 
 	// Navigate to the test page which will trigger various events
-	if err := chromedp.Run(ctx,
-		chromedp.Navigate(serverURL),
-	); err != nil {
+	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer wcancel()
+	if err := chromedp.Run(wctx, chromedp.Navigate(serverURL)); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
@@ -407,14 +407,17 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	select {
 	case <-doneCh:
 		// Success - listener has terminated
+		fmt.Printf("...Listener terminated successfully\n")
 		t.Logf("Listener terminated successfully")
 	case <-time.After(5 * time.Second):
+		fmt.Printf("...Timed out waiting for listener to terminate\n")
 		t.Fatal("Timed out waiting for listener to terminate")
 	}
 
 	// Check that logs were captured
 	logs := logBuf.String()
-	t.Logf("Captured logs:\n%s", logs)
+	fmt.Printf("...Captured logs:\n%s\n", logs)
+	t.Logf("...Captured logs:\n%s", logs)
 
 	// Should have captured console logs
 	if !strings.Contains(logs, "Console API called") {
