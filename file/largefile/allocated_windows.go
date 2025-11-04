@@ -8,6 +8,8 @@ package largefile
 
 import (
 	"os"
+
+	"golang.org/x/sys/windows"
 )
 
 func allocated(file *os.File, size int64) (bool, error) {
