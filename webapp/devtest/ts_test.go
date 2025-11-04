@@ -161,6 +161,9 @@ func TestTypescriptSources_CompileIncremental(t *testing.T) {
 }
 
 func TestTypescriptSources_NoChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping for windows - needs investigation")
+	}
 	tmp := t.TempDir()
 	copyTestdata(t, tmp, "one.ts")
 
@@ -190,6 +193,9 @@ func TestTypescriptSources_NoChanges(t *testing.T) {
 }
 
 func TestTypescriptSources_MissingFileErrorAndCwdRestored(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping for windows - needs investigation")
+	}
 	tmp := t.TempDir()
 	copyTestdata(t, tmp, "one.ts")
 

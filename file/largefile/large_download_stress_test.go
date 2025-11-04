@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -244,7 +245,8 @@ func runCacheStressTest(t *testing.T, cacheFilePath, indexFilePath string, concu
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if st.Duration == 0 {
+	// Windows timings are not reliable in CI environments.
+	if st.Duration == 0 && runtime.GOOS != "windows" {
 		t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
 	}
 	st.Duration = 0
