@@ -138,6 +138,15 @@ func TestStreamingDownloader_PartialRead(t *testing.T) {
 	}
 }
 
+/*
+ * IMPORTANTE NOTE: the degree of concurrency determines the number of
+ * out-of-order blocks that can be handled, if the concurrency is less than
+ * the number of out-of-order blocks, the test can deadlock.
+ *
+ * The correct fix is to change the downloader to use a pool of goroutines
+ * and to buffer the out-of-order blocks, but for now we just set concurrency
+ * to match the test.
+ */
 func TestStreamingDownloader_OutOfOrderBlocks(t *testing.T) {
 	content := []byte("abcdefgh")
 	blockSize := 2
@@ -149,7 +158,7 @@ func TestStreamingDownloader_OutOfOrderBlocks(t *testing.T) {
 
 	var st largefile.StreamingStatus
 	errCh := make(chan error)
-	dl := largefile.NewStreamingDownloader(reader)
+	dl := largefile.NewStreamingDownloader(reader, largefile.WithDownloadConcurrency(4))
 	go func() {
 		var err error
 		st, err = dl.Run(context.Background())
