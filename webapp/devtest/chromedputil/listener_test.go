@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
@@ -77,6 +78,9 @@ func TestListen(t *testing.T) {
 		chromedputil.NewListenHandler(exceptionCh),
 	)
 
+	if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
+		t.Fatalf("Failed to wait for server URL: %v", err)
+	}
 	// Navigate to test page which will trigger events
 	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
@@ -379,6 +383,10 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 		chromedputil.WithEventEntryLogging(),
 		chromedputil.WithAnyEventLogging(),
 	)
+
+	if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
+		t.Fatalf("Failed to wait for server URL: %v", err)
+	}
 
 	// Navigate to the test page which will trigger various events
 	if err := chromedp.Run(ctx,
