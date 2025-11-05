@@ -59,7 +59,7 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil)
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil, chromedp.WithLogf(t.Logf))
 
 	return ctx, cancel, server.URL
 }
