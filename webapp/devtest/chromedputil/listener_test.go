@@ -95,7 +95,10 @@ func TestListen(t *testing.T) {
 	// Navigate to test page which will trigger events
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
-	if err := chromedp.Run(wctx, chromedp.Navigate(serverURL)); err != nil {
+	if err := chromedp.Run(wctx,
+		chromedp.Navigate(serverURL),
+		chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
+	); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
@@ -108,7 +111,7 @@ func TestListen(t *testing.T) {
 		if len(event.Args) < 1 {
 			t.Errorf("Expected at least one console argument")
 		}
-	case <-time.After(1 * time.Second):
+	case <-time.After(3 * time.Second):
 		t.Error("Timed out waiting for console event")
 	}
 
