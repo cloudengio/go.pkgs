@@ -246,6 +246,7 @@ var AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
 	chromedp.Flag("use-mock-keychain", true),
 	chromedp.Flag("disable-background-networking", true),
 	chromedp.Flag("remote-allow-origins", "*"),
+	chromedp.Flag("enable-logging", true),
 }
 
 // WithContextForCI returns a chromedp context that may be different on a CI

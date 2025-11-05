@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -159,10 +160,12 @@ func TestListen(t *testing.T) {
 	// Navigate to test page which will trigger events
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
-	go func() {
-		time.Sleep(5 * time.Second)
-		logAllGoroutineStacks(t)
-	}()
+	if goruntime.GOOS == "darwin" {
+		go func() {
+			time.Sleep(5 * time.Second)
+			logAllGoroutineStacks(t)
+		}()
+	}
 	if err := chromedp.Run(wctx,
 		chromedp.Navigate(serverURL),
 		//chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
