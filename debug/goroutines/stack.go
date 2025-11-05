@@ -13,9 +13,48 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"text/template"
 )
 
 var goroutineHeaderRE = regexp.MustCompile(`^goroutine (\d+) \[([^\]]+)\]:$`)
+
+const (
+	panicTemplateText = `{{- if .IsHeader -}}
+goroutine {{.Goroutine.ID}} [{{.Goroutine.State}}]:
+{{- else if .IsFrame -}}
+	{{.Frame.Call}}
+	{{.Frame.File}}:{{.Frame.Line}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
+{{- else if .IsCreator -}}
+created by {{.Frame.Call}}
+	{{.Frame.File}}:{{.Frame.Line}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
+{{- end -}}
+`
+
+	compactTemplateText = `{{- if .IsHeader -}}
+goroutine {{.Goroutine.ID}} [{{.Goroutine.State}}]
+{{- else -}}
+{{if .IsCreator}}creator{{else}}frame{{end}} {{.Frame.File}}:{{.Frame.Line}} {{.Frame.Call}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
+{{- end -}}
+`
+)
+
+var (
+	panicTemplateCompiled   = template.Must(template.New("goroutines_panic").Parse(panicTemplateText))
+	compactTemplateCompiled = template.Must(template.New("goroutines_compact").Parse(compactTemplateText))
+)
+
+// PanicTemplate returns a template that mimics the formatting produced by a
+// Go panic stack trace. The returned template is a clone of an internal
+// instance, so callers may modify it without affecting future calls.
+func PanicTemplate() (*template.Template, error) {
+	return panicTemplateCompiled.Clone()
+}
+
+// CompactTemplate returns a single-line-per-frame representation template that
+// emits concise goroutine information.
+func CompactTemplate() (*template.Template, error) {
+	return compactTemplateCompiled.Clone()
+}
 
 // Goroutine represents a single goroutine.
 type Goroutine struct {
@@ -158,4 +197,108 @@ func Format(gs ...*Goroutine) string {
 		g.writeTo(out)
 	}
 	return out.String()
+}
+
+// TemplateData provides the context passed to templates executed by
+// FormatWithTemplate. Fields are exported so they can be accessed from the
+// template, including convenience booleans describing the position of the
+// current line.
+type TemplateData struct {
+	Goroutine *Goroutine
+	Frame     *Frame
+
+	GoroutineIndex int
+	GoroutineCount int
+	FrameIndex     int
+	FrameCount     int
+
+	IsHeader         bool
+	IsFrame          bool
+	IsCreator        bool
+	IsFirstGoroutine bool
+	IsLastGoroutine  bool
+	IsFirstFrame     bool
+	IsLastFrame      bool
+	HasFrames        bool
+	HasCreator       bool
+	HasOffset        bool
+	OffsetHex        string
+}
+
+// FormatWithTemplate renders a collection of goroutines using the supplied
+// template. The template is executed once for each line that would appear in the
+// textual stack trace: the goroutine header, each frame, and the optional
+// creator frame. The provided TemplateData exposes the raw goroutine/frame
+// values along with helper booleans that enable conditional formatting from the
+// template itself.
+func FormatWithTemplate(tmpl *template.Template, gs ...*Goroutine) (string, error) {
+	if tmpl == nil {
+		return "", fmt.Errorf("goroutines: template is nil")
+	}
+	var buf bytes.Buffer
+	total := len(gs)
+
+	for gi, g := range gs {
+		data := TemplateData{
+			Goroutine:        g,
+			GoroutineIndex:   gi,
+			GoroutineCount:   total,
+			FrameIndex:       -1,
+			FrameCount:       len(g.Stack),
+			IsHeader:         true,
+			HasFrames:        len(g.Stack) > 0,
+			HasCreator:       g.Creator != nil,
+			IsFirstGoroutine: gi == 0,
+			IsLastGoroutine:  gi == total-1,
+		}
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return "", err
+		}
+
+		for fi, frame := range g.Stack {
+			data = TemplateData{
+				Goroutine:        g,
+				Frame:            frame,
+				GoroutineIndex:   gi,
+				GoroutineCount:   total,
+				FrameIndex:       fi,
+				FrameCount:       len(g.Stack),
+				IsFrame:          true,
+				HasFrames:        len(g.Stack) > 0,
+				HasCreator:       g.Creator != nil,
+				IsFirstGoroutine: gi == 0,
+				IsLastGoroutine:  gi == total-1,
+				IsFirstFrame:     fi == 0,
+				IsLastFrame:      fi == len(g.Stack)-1,
+				HasOffset:        frame.Offset != 0,
+				OffsetHex:        fmt.Sprintf("%x", frame.Offset),
+			}
+			if err := tmpl.Execute(&buf, data); err != nil {
+				return "", err
+			}
+		}
+
+		if g.Creator != nil {
+			data = TemplateData{
+				Goroutine:        g,
+				Frame:            g.Creator,
+				GoroutineIndex:   gi,
+				GoroutineCount:   total,
+				FrameIndex:       len(g.Stack),
+				FrameCount:       len(g.Stack),
+				IsCreator:        true,
+				HasFrames:        len(g.Stack) > 0,
+				HasCreator:       true,
+				IsFirstGoroutine: gi == 0,
+				IsLastGoroutine:  gi == total-1,
+				HasOffset:        g.Creator.Offset != 0,
+				OffsetHex:        fmt.Sprintf("%x", g.Creator.Offset),
+			}
+			if err := tmpl.Execute(&buf, data); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	return buf.String(), nil
 }
