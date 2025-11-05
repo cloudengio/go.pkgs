@@ -221,9 +221,13 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	if len(path) == 0 {
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
+	dataDir := os.Getenv("CHROME_USER_DATA_DIR")
+	fmt.Printf("Detected CI environment via CHROME_BIN_PATH=%s\n", path)
+	fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", dataDir)
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	opts = append(opts,
 		chromedp.ExecPath(path),
+		chromedp.UserDataDir(dataDir),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-setuid-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
