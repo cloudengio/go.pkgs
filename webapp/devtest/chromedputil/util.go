@@ -238,9 +238,14 @@ var AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
 	chromedp.Flag("disable-setuid-sandbox", true),
 	chromedp.Flag("disable-dev-shm-usage", true),
 	chromedp.Flag("disable-gpu", true),
-	chromedp.Flag("headless", true),
+	// Use new headless mode.
+	chromedp.Flag("headless", "new"),
 	chromedp.Flag("no-first-run", true),
 	chromedp.Flag("no-default-browser-check", true),
+	// Added for stability on CI.
+	chromedp.Flag("use-mock-keychain", true),
+	chromedp.Flag("disable-background-networking", true),
+	chromedp.Flag("remote-allow-origins", "*"),
 }
 
 // WithContextForCI returns a chromedp context that may be different on a CI
