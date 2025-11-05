@@ -12,11 +12,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"cloudeng.io/debug/goroutines"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"github.com/chromedp/cdproto/log"
@@ -26,120 +26,44 @@ import (
 )
 
 func captureAllGoroutineStacks() string {
-	buf := make([]byte, 1<<20)
-	n := goruntime.Stack(buf, true)
-	return formatGoroutineStacks(string(buf[:n]))
+	gs, err := goroutines.Get()
+	if err != nil {
+		return fmt.Sprintf("failed to capture goroutines: %v", err)
+	}
+	return formatGoroutineStacks(gs)
 }
 
-func formatGoroutineStacks(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+func formatGoroutineStacks(gs []*goroutines.Goroutine) string {
+	if len(gs) == 0 {
 		return ""
 	}
 
-	lines := strings.Split(raw, "\n")
-	var formatted strings.Builder
-
-	for i := 0; i < len(lines); {
-		i = skipEmptyLines(lines, i)
-		if i >= len(lines) {
-			break
+	var b strings.Builder
+	for i, g := range gs {
+		if i > 0 {
+			b.WriteByte('\n')
 		}
-
-		line := strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(line, "goroutine ") {
-			i++
-			continue
+		fmt.Fprintf(&b, "goroutine %d [%s]\n", g.ID, g.State)
+		writeFrames(&b, g.Stack)
+		if g.Creator != nil {
+			fmt.Fprintf(&b, "  created by %s:%d %s\n", safeFile(g.Creator.File), g.Creator.Line, g.Creator.Call)
 		}
-
-		block, next := formatGoroutineBlock(lines, i)
-		if block != "" {
-			if formatted.Len() > 0 {
-				formatted.WriteByte('\n')
-			}
-			formatted.WriteString(block)
-		}
-		i = next
 	}
 
-	return formatted.String()
+	return strings.TrimSpace(b.String())
 }
 
-func formatGoroutineBlock(lines []string, start int) (string, int) {
-	header := strings.TrimSpace(lines[start])
-	if header == "" {
-		return "", start + 1
+func writeFrames(b *strings.Builder, frames []*goroutines.Frame) {
+	for _, f := range frames {
+		fmt.Fprintf(b, "  %s:%d %s\n", safeFile(f.File), f.Line, f.Call)
 	}
-
-	var block strings.Builder
-	block.WriteString(header)
-	block.WriteByte('\n')
-	i := start + 1
-
-	for i < len(lines) {
-		i = skipEmptyLines(lines, i)
-		if i >= len(lines) {
-			break
-		}
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "goroutine ") {
-			break
-		}
-
-		fnLine := trimmed
-		i++
-		fileLine, next := extractFileLine(lines, i)
-		i = next
-		if fileLine != "" {
-			fmt.Fprintf(&block, "  %s %s\n", fileLine, fnLine)
-			continue
-		}
-		fmt.Fprintf(&block, "  %s\n", fnLine)
-	}
-
-	return strings.TrimSpace(block.String()), i
 }
 
-func extractFileLine(lines []string, idx int) (string, int) {
-	idx = skipEmptyLines(lines, idx)
-	if idx >= len(lines) {
-		return "", idx
+func safeFile(file string) string {
+	if file == "" {
+		return "<unknown>"
 	}
-
-	raw := lines[idx]
-	trimmed := strings.TrimSpace(raw)
-	if !(strings.HasPrefix(raw, "\t") || looksLikeFileLine(trimmed)) {
-		return "", idx
-	}
-
-	if cut := strings.Index(trimmed, " +"); cut >= 0 {
-		trimmed = trimmed[:cut]
-	}
-
-	return trimmed, idx + 1
-}
-
-func skipEmptyLines(lines []string, idx int) int {
-	for idx < len(lines) {
-		if strings.TrimSpace(lines[idx]) != "" {
-			break
-		}
-		idx++
-	}
-	return idx
-}
-
-func looksLikeFileLine(s string) bool {
-	colon := strings.LastIndex(s, ":")
-	if colon <= 0 || colon == len(s)-1 {
-		return false
-	}
-	for i := colon + 1; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
+	return file
 }
 
 func logAllGoroutineStacks(t testing.TB) {
@@ -224,7 +148,6 @@ func TestListen(t *testing.T) {
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
 	go func() {
-		logAllGoroutineStacks(t)
 		time.Sleep(5 * time.Second)
 		logAllGoroutineStacks(t)
 	}()
