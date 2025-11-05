@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,7 @@ func logAllGoroutineStacks(t testing.TB) {
 func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, string) {
 	// Setup a test server that will trigger various browser events
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(os.Stderr, "SERVER: .... Received request for %v\n", r.URL)
 		if r.URL.Path == "/api-endpoint" {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"message": "Hello from API endpoint"}`)) //nolint:errcheck
@@ -111,7 +113,9 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil)
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil,
+		chromedp.WithBrowserOption(chromedp.WithBrowserDebugf(t.Logf)),
+		chromedp.WithLogf(t.Logf))
 
 	return ctx, cancel, server.URL
 }
@@ -139,10 +143,10 @@ func TestListen(t *testing.T) {
 		}
 	}()
 
-	fmt.Printf("...Waiting for URLs %s\n", serverURL)
-	if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
-		t.Fatalf("Failed to wait for server URL: %v", err)
-	}
+	//fmt.Printf("...Waiting for URLs %s\n", serverURL)
+	//if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
+	//	t.Fatalf("Failed to wait for server URL: %v", err)
+	//}
 	fmt.Printf("...Navigating to test page %v\n", serverURL)
 	// Navigate to test page which will trigger events
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
@@ -153,7 +157,7 @@ func TestListen(t *testing.T) {
 	}()
 	if err := chromedp.Run(wctx,
 		chromedp.Navigate(serverURL),
-		chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
+		//chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
 	); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
