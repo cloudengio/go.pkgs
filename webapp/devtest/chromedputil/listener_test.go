@@ -59,7 +59,7 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil, chromedp.WithLogf(t.Logf))
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil)
 
 	return ctx, cancel, server.URL
 }
@@ -71,12 +71,21 @@ func TestListen(t *testing.T) {
 	// Create channels to receive different event types
 	consoleCh := make(chan *runtime.EventConsoleAPICalled, 10)
 	exceptionCh := make(chan *runtime.EventExceptionThrown, 10)
+	anyCh := make(chan any, 100)
 
 	// Set up event handlers for console events and exceptions
 	chromedputil.Listen(ctx,
 		chromedputil.NewListenHandler(consoleCh),
 		chromedputil.NewListenHandler(exceptionCh),
+		chromedputil.NewListenHandler(anyCh),
 	)
+
+	go func() {
+		for {
+			ev := <-anyCh
+			fmt.Printf("....Received any event of type %T: %+v\n", ev, ev)
+		}
+	}()
 
 	if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
 		t.Fatalf("Failed to wait for server URL: %v", err)
