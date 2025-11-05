@@ -95,11 +95,14 @@ func TestListen(t *testing.T) {
 	// Navigate to test page which will trigger events
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
+	go func() {
+		time.Sleep(5 * time.Second)
+		panic("timeout")
+	}()
 	if err := chromedp.Run(wctx,
 		chromedp.Navigate(serverURL),
 		chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
 	); err != nil {
-		panic(fmt.Sprintf("Failed to navigate: %v", err))
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
