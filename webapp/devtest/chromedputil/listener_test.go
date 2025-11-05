@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -113,9 +114,16 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil,
-		chromedp.WithBrowserOption(chromedp.WithBrowserDebugf(t.Logf)),
-		chromedp.WithLogf(t.Logf))
+	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
+	opts = append(opts, chromedp.Flag("enable-logging", true))
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
+		opts,
+		chromedp.WithBrowserOption(
+			chromedp.WithBrowserDebugf(t.Logf),
+			chromedp.WithBrowserLogf(t.Logf),
+		),
+		chromedp.WithLogf(t.Logf),
+	)
 
 	return ctx, cancel, server.URL
 }

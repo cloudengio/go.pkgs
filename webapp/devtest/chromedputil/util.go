@@ -228,13 +228,19 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	opts = append(opts,
 		chromedp.ExecPath(path),
 		chromedp.UserDataDir(dataDir),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-setuid-sandbox", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("headless", true),
 	)
+	opts = append(opts, AllocatorOptsForCI...)
 	return chromedp.NewExecAllocator(ctx, opts...)
+}
+
+var AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+	chromedp.Flag("no-sandbox", true),
+	chromedp.Flag("disable-setuid-sandbox", true),
+	chromedp.Flag("disable-dev-shm-usage", true),
+	chromedp.Flag("disable-gpu", true),
+	chromedp.Flag("headless", true),
+	chromedp.Flag("no-first-run", true),
+	chromedp.Flag("no-default-browser-check", true),
 }
 
 // WithContextForCI returns a chromedp context that may be different on a CI
