@@ -99,6 +99,7 @@ func TestListen(t *testing.T) {
 		chromedp.Navigate(serverURL),
 		chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
 	); err != nil {
+		panic(fmt.Sprintf("Failed to navigate: %v", err))
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
