@@ -247,7 +247,7 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 		modifyCmd = func(cmd *exec.Cmd) {
 			// Prepend `launchctl asuser <uid>` to the command
 			uid := os.Getuid()
-			newArgs := []string{"asuser", fmt.Sprint(uid), cmd.Path}
+			newArgs := []string{fmt.Sprintf("asuser/%d", uid), cmd.Path}
 			newArgs = append(newArgs, cmd.Args[1:]...)
 			cmd.Path = "/bin/launchctl"
 			cmd.Args = newArgs
