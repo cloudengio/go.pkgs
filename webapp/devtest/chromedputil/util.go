@@ -240,16 +240,13 @@ var (
 	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
 		chromedp.NoSandbox,
 		chromedp.DisableGPU,
-		//chromedp.Flag("headless", "new"),
 		chromedp.Flag("use-mock-keychain", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
-		//chromedp.Flag("disable-ipc-flooding-protection", true),
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("enable-logging", "stderr"),
 		chromedp.Flag("v", "1"),
-
-		// Run in single-process mode to avoid IPC issues on macOS CI.
-		//chromedp.Flag("single-process", true),
+		// Disable process singleton to allow multiple Chrome instances with same profile.
+		chromedp.Flag("disable-features", "ProcessSingleton"),
 	)
 
 	/*
