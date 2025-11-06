@@ -22,6 +22,8 @@ jobs:
           USERDATA_DIR="$HOME/Library/Application Support/Google/Chrome for Testing"
           PROFILE_DIR="$USERDATA_DIR/Default"
 
+          mkdir -p "$PROFILE_DIR"
+
           #ls "$USERDATA_DIR"
           #ls "$PROFILE_DIR"
 
@@ -31,6 +33,7 @@ jobs:
             --disable-gpu \
             --no-first-run \
             --no-default-browser-check \
+            --user-data-dir="$USERDATA_DIR" \
             about:blank &
 
           CHROME_PID=$!
