@@ -228,7 +228,7 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(path),
-		chromedp.UserDataDir(dataDir),
+		//chromedp.UserDataDir(dataDir),
 	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, opts...)
@@ -246,7 +246,7 @@ var (
 		chromedp.Flag("enable-logging", "stderr"),
 		chromedp.Flag("v", "1"),
 		// Disable process singleton to allow multiple Chrome instances with same profile.
-		chromedp.Flag("disable-features", "ProcessSingleton"),
+		//chromedp.Flag("disable-features", "ProcessSingleton"),
 	)
 
 	/*

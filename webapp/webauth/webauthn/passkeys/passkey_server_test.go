@@ -80,7 +80,7 @@ func runServer(ctx context.Context, t *testing.T, tmpDir string, w *passkeys.Han
 }
 
 func TestPasskeysServer(t *testing.T) {
-	ctx, serverCancel := context.WithCancel(context.Background())
+	ctx, serverCancel := context.WithCancel(t.Context())
 	defer serverCancel()
 
 	wa, err := webauthn.New(&webauthn.Config{
