@@ -10,38 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  find:
-    runs-on: macos-latest
-    steps:
-      - name: Find Chrome for Testing
-        run: |
-          ls "$HOME"
-          CHROME_PATH="/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-          "$CHROME_PATH" --version
-
-          USERDATA_DIR="$HOME/Library/Application Support/Google/Chrome for Testing"
-          PROFILE_DIR="$USERDATA_DIR/Default"
-
-          mkdir -p "$PROFILE_DIR"
-
-          #ls "$USERDATA_DIR"
-          #ls "$PROFILE_DIR"
-
-          "$CHROME_PATH" \
-            --headless=new \
-            --no-sandbox \
-            --disable-gpu \
-            --no-first-run \
-            --no-default-browser-check \
-            --user-data-dir="$USERDATA_DIR" \
-            about:blank &
-
-          CHROME_PID=$!
-
-          sleep 5s
-          ls -R $HOME/Library/Application\ Support/Google
-          kill $CHROME_PID
-
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
