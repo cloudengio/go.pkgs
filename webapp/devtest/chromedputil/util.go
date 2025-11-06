@@ -237,7 +237,7 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 		// to get around namespace issues when running in CI on github.
 		// Using launchctl asuser in this way ensures that all Chrome's
 		// child processes are also launched in the same namespace as
-		// the parent and hence can use mach IPC rendevous to discover
+		// the parent and hence can use mach IPC rendezvous to discover
 		// the IPC port for their parent and hence to communicate with it.
 		modifyCmd := func(cmd *exec.Cmd) {
 			// Prepend `launchctl asuser <uid>` to the command
@@ -265,6 +265,8 @@ var (
 	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
 
 		// Additional flags for CI.
+		chromedp.NoSandbox,
+		chromedp.Flag("disable-setuid-sandbox", true),
 		chromedp.Flag("disable-breakpad", true),
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),

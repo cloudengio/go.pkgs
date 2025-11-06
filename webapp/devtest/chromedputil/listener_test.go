@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"cloudeng.io/debug/goroutines"
 	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"github.com/chromedp/cdproto/log"
@@ -27,57 +26,6 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
-
-func captureAllGoroutineStacks() string {
-	gs, err := goroutines.Get()
-	if err != nil {
-		return fmt.Sprintf("failed to capture goroutines: %v", err)
-	}
-	return formatGoroutineStacks(gs)
-}
-
-func formatGoroutineStacks(gs []*goroutines.Goroutine) string {
-	if len(gs) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	for i, g := range gs {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		fmt.Fprintf(&b, "goroutine %d [%s]\n", g.ID, g.State)
-		writeFrames(&b, g.Stack)
-		if g.Creator != nil {
-			fmt.Fprintf(&b, "  created by %s:%d %s\n", safeFile(g.Creator.File), g.Creator.Line, g.Creator.Call)
-		}
-	}
-
-	return strings.TrimSpace(b.String())
-}
-
-func writeFrames(b *strings.Builder, frames []*goroutines.Frame) {
-	for _, f := range frames {
-		fmt.Fprintf(b, "  %s:%d %s\n", safeFile(f.File), f.Line, f.Call)
-	}
-}
-
-func safeFile(file string) string {
-	if file == "" {
-		return "<unknown>"
-	}
-	return file
-}
-
-func logAllGoroutineStacks(t testing.TB) {
-	t.Helper()
-	formatted := captureAllGoroutineStacks()
-	if formatted == "" {
-		t.Log("no goroutine stacks captured")
-		return
-	}
-	t.Logf("\n%s", formatted)
-}
 
 func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, string) {
 	// Setup a test server that will trigger various browser events
@@ -159,7 +107,6 @@ func TestListen(t *testing.T) {
 
 	if err := chromedp.Run(wctx,
 		chromedp.Navigate(serverURL),
-		//chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
 	); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
