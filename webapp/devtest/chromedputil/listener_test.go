@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +29,6 @@ import (
 func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, string) {
 	// Setup a test server that will trigger various browser events
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(os.Stderr, "SERVER: .... Received request for %v\n", r.URL)
 		if r.URL.Path == "/api-endpoint" {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"message": "Hello from API endpoint"}`)) //nolint:errcheck
@@ -55,20 +53,20 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
                         // This will trigger an exception event
                         throw new Error("Planned test error");
-                     </script>
-                </body>
+                     </script>                </body>
             </html>
         `))
 	}))
 
 	t.Cleanup(func() { server.Close() })
 
-	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
-	opts = append(opts, chromedputil.AllocatorOptsVerboseLogging...)
-	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}))
+	extraExecOpts := []chromedp.ExecAllocatorOption{
+		chromedp.CombinedOutput(&chromeWriter{os.Stderr}),
+	}
+	extraExecOpts = append(extraExecOpts, chromedputil.AllocatorOptsVerboseLogging...)
 
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
-		opts,
+		extraExecOpts,
 		chromedp.WithBrowserOption(
 			chromedp.WithBrowserDebugf(t.Logf),
 			chromedp.WithBrowserLogf(t.Logf),
@@ -83,7 +81,7 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 type chromeWriter struct{ io.Writer }
 
 func (w chromeWriter) Write(p []byte) (n int, err error) {
-	o := append([]byte("chrome(output):"), p...)
+	o := append([]byte("chrome(output): "), p...)
 	_, err = w.Writer.Write(o)
 	return len(p), err
 }

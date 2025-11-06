@@ -216,12 +216,14 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 	return platformInfo.Type != ""
 }
 
-// WithExecAllocatorForCI returns a chromedp context with an ExecAllocator that may
-// be configured differently on a CI system than when running locally.
+// WithExecAllocatorForCI returns a chromedp context with an ExecAllocator
+// configured appropriately for CI systems as opposed to when running locally.
 // The CI configuration may disable sandboxing for example.
-func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
-	chromeBin := os.Getenv("CHROME_BIN	chromeBin")
+func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
+	chromeBin := ChromeBinPathOnCI()
 	if len(chromeBin) == 0 {
+		opts := slices.Clone(chromedp.DefaultExecAllocatorOptions[:])
+		opts = append(opts, extraExecAllocOpts...)
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
 	fmt.Printf("Detected CI environment via CHROME_BIN=%s\n", chromeBin)
@@ -230,7 +232,7 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 		chromedp.ExecPath(chromeBin),
 	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
-	allOpts = append(allOpts, opts...)
+	allOpts = append(allOpts, extraExecAllocOpts...)
 
 	modifyCmd := func(cmd *exec.Cmd) {
 		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
@@ -262,6 +264,11 @@ func UserDataDirOnCI() string {
 	return os.Getenv("CHROME_USER_DATA_DIR")
 }
 
+// ChromeBinPathOnCI returns the Chrome binary path for CI.
+func ChromeBinPathOnCI() string {
+	return os.Getenv("CHROME_BIN_PATH")
+}
+
 var (
 
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
@@ -288,16 +295,10 @@ var (
 
 // WithContextForCI returns a chromedp context that may be different on a CI
 // system than when running locally. The CI configuration may disable
-// sandboxing etc. The ExecAllocator used is created with default options
-// (eg. headless) if execAllocOpts is nil or empty via a call WithExecAllocatorForCI,
-func WithContextForCI(ctx context.Context, execAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func()) {
-	allocOpts := []chromedp.ExecAllocatorOption{}
-	if len(execAllocOpts) == 0 {
-		allocOpts = append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
-	} else {
-		allocOpts = append(allocOpts, execAllocOpts...)
-	}
-	ctx, cancelA := WithExecAllocatorForCI(ctx, allocOpts...)
+// sandboxing etc. The ExecAllocator is always created with appropriate options for
+// the various CI environments and extraExecAllocOpts is appended to these.
+func WithContextForCI(ctx context.Context, extraExecAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func()) {
+	ctx, cancelA := WithExecAllocatorForCI(ctx, extraExecAllocOpts...)
 	ctx, cancelB := chromedp.NewContext(ctx, opts...)
 	return ctx, func() {
 		cancelB()
