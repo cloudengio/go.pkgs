@@ -172,7 +172,7 @@ func TestListen(t *testing.T) {
 		t.Error("Timed out waiting for exception event")
 	}
 
-	t.Fail()
+	//t.Fail()
 }
 
 // 1. String

@@ -10,6 +10,14 @@ permissions:
   contents: read
 
 jobs:
+  find:
+    runs-on: macos-latest
+    steps:
+      - name: Find Chrome for Testing
+        run: |
+          find / -name "Google Chrome for Testing"
+          find / -name "Google Chrome"
+
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
