@@ -116,13 +116,14 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	userDataDir := t.TempDir()
-	fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", userDataDir)
+	//userDataDir := t.TempDir()
+	//userDataDir := chromedputil.UserDataDirOnCI()
+	//fmt.Printf("Using chrome user data dir=%s\n", userDataDir)
 	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
 	opts = append(opts, chromedputil.AllocatorOptsVerboseLogging...)
-	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}),
-		chromedp.UserDataDir(userDataDir),
-	)
+	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr})) //chromedp.UserDataDir(userDataDir),
+	//chromedp.Flag("disable-features", "ProcessSingleton"),
+
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		opts,
 		chromedp.WithBrowserOption(
