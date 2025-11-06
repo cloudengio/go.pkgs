@@ -232,6 +232,9 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, opts...)
 
+	modifyCmd := func(cmd *exec.Cmd) {
+		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
+	}
 	if goruntime.GOOS == "darwin" {
 		// On macOS we need to launch Chrome via launchctl asuser
 		// to get around namespace issues when running in CI on github.
@@ -239,16 +242,17 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 		// child processes are also launched in the same namespace as
 		// the parent and hence can use mach IPC rendezvous to discover
 		// the IPC port for their parent and hence to communicate with it.
-		modifyCmd := func(cmd *exec.Cmd) {
+		modifyCmd = func(cmd *exec.Cmd) {
 			// Prepend `launchctl asuser <uid>` to the command
 			uid := os.Getuid()
 			newArgs := []string{"asuser", fmt.Sprint(uid), cmd.Path}
 			newArgs = append(newArgs, cmd.Args[1:]...)
 			cmd.Path = "/bin/launchctl"
 			cmd.Args = newArgs
+			fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
 		}
-		allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
 	}
+	allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
 
 	return chromedp.NewExecAllocator(ctx, allOpts...)
 }
@@ -267,10 +271,12 @@ var (
 		// Additional flags for CI.
 		chromedp.NoSandbox,
 		chromedp.Flag("disable-setuid-sandbox", true),
+		chromedp.Flag("headless", "new"),
 		chromedp.Flag("disable-breakpad", true),
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
 		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
+		chromedp.Flag("disable-features", "PowerManager,MediaSessionService"),
 	)
 
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
