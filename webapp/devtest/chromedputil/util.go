@@ -274,7 +274,39 @@ var (
 
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
 	// they extend chromedp.DefaultExecAllocatorOptions.
-	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
+	AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.Flag("headless", "new"),
+
+		// After Puppeteer's default behavior.
+
+		chromedp.Flag("disable-background-networking", true),
+		// chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
+		// don't use NetworkService.
+		chromedp.Flag("enable-features", "NetworkServiceInProcess"),
+
+		chromedp.Flag("disable-background-timer-throttling", true),
+		chromedp.Flag("disable-backgrounding-occluded-windows", true),
+		chromedp.Flag("disable-breakpad", true),
+		chromedp.Flag("disable-client-side-phishing-detection", true),
+		chromedp.Flag("disable-default-apps", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-extensions", true),
+		chromedp.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees"),
+		chromedp.Flag("disable-hang-monitor", true),
+		chromedp.Flag("disable-ipc-flooding-protection", true),
+		chromedp.Flag("disable-popup-blocking", true),
+		chromedp.Flag("disable-prompt-on-repost", true),
+		chromedp.Flag("disable-renderer-backgrounding", true),
+		chromedp.Flag("disable-sync", true),
+		chromedp.Flag("force-color-profile", "srgb"),
+		chromedp.Flag("metrics-recording-only", true),
+		chromedp.Flag("safebrowsing-disable-auto-update", true),
+		chromedp.Flag("enable-automation", true),
+		chromedp.Flag("password-store", "basic"),
+		chromedp.Flag("use-mock-keychain", true),
+
 		// Additional flags for CI.
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
@@ -284,8 +316,7 @@ var (
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
 		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
-		chromedp.Flag("disable-features", "NetworkService,MetricsReporting,UserMetrics"),
-	)
+	}
 
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
 		chromedp.Flag("enable-logging", "stderr"),
