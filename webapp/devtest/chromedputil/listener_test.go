@@ -117,6 +117,7 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 	t.Cleanup(func() { server.Close() })
 
 	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
+	opts = append(opts, chromedputil.AllocatorOptsVerboseLogging...)
 	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}))
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		opts,

@@ -257,11 +257,11 @@ var (
 			//chromedp.Flag("enable-logging", "stderr"),
 			//chromedp.Flag("v", "1"),
 		}
-
-		AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
-			chromedp.Flag("enable-logging", "stderr"),
-			chromedp.Flag("v", "1"),
-		}*/
+	*/
+	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
+		chromedp.Flag("enable-logging", "stderr"),
+		chromedp.Flag("v", "1"),
+	}
 )
 
 // WithContextForCI returns a chromedp context that may be different on a CI
