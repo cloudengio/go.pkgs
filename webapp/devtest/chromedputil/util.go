@@ -247,9 +247,9 @@ var (
 		chromedp.Flag("no-default-browser-check", true),
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("enable-logging", "stderr"),
-		//chromedp.Flag("v", "1"),
+		chromedp.Flag("v", "1"),
 		// Run in single-process mode to avoid IPC issues on macOS CI.
-		chromedp.Flag("single-process", true),
+		//chromedp.Flag("single-process", true),
 	}
 
 	AllocatorOptsForTests = []chromedp.ExecAllocatorOption{
