@@ -10,13 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  find:
-    runs-on: windows-latest
-    steps:
-      - name: list
-        run: |
-          ls "C:\Program Files"
-
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:

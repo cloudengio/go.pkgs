@@ -255,17 +255,18 @@ var (
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
 	// they extend chromedp.DefaultExecAllocatorOptions.
 	AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+		// Replicating chromedp.DefaultExecAllocatorOptions but
+		// with modifications for CI environments and avoiding the possibility
+		// of enable/disable features conflicts.
+
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
 		chromedp.Flag("headless", "new"),
 
-		// After Puppeteer's default behavior.
-
 		chromedp.Flag("disable-background-networking", true),
+		// don't use enable-features + disable-features in the same command line
+		// since it's unclear which takes precedence.
 		// chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
-		// don't use NetworkService.
-		//chromedp.Flag("enable-features", "NetworkServiceInProcess"),
-
 		chromedp.Flag("disable-background-timer-throttling", true),
 		chromedp.Flag("disable-backgrounding-occluded-windows", true),
 		chromedp.Flag("disable-breakpad", true),
@@ -295,7 +296,7 @@ var (
 		chromedp.Flag("disable-breakpad", true),
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
-		chromedp.Flag("disable-features", "NetworkService,NetworkServiceInProcess,MetricsReporting,UserMetrics"),
+		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
 	}
 
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
