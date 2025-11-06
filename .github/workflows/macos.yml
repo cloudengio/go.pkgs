@@ -15,8 +15,14 @@ jobs:
     steps:
       - name: Find Chrome for Testing
         run: |
-          find / -name "Google Chrome for Testing"
-          find / -name "Google Chrome"
+          ls "$HOME"
+          CHROME_PATH="/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+          "$CHROME_PATH" --version
+
+          USERDATA_DIR="$HOME/Library/Application\ Support/Google/Chrome\ for\ Testing"
+          PROFILE_DIR="$USERDATA_DIR/Default"
+
+          waitforfiles --initial=2s --interval=1s --total=30s "$PROFILE_DIR
 
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
