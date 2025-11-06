@@ -15,8 +15,7 @@ jobs:
     steps:
       - name: list
         run: |
-          ls "C:\Program Files\Google\Chrome"
-          ls "C:\Program Files\Google\Chrome for Testing"
+          ls -R "C:\Program Files\Google"
 
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
