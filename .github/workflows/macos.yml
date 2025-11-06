@@ -33,4 +33,6 @@ jobs:
         env:
           CHROME_BIN_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           CHROME_USER_DATA_DIR: ${{ steps.setup-chrome.outputs.chrome-user-data-dir }}
-        run: go test -v -race ./webapp/...
+        run: |
+          cd webapp
+          go test -v -race ./...
