@@ -234,11 +234,6 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(chromeBin),
 	}
-	if userDataDir := UserDataDirOnCI(); userDataDir != "" {
-		// doesn't work for linux.
-		//allOpts = append(allOpts, chromedp.UserDataDir(userDataDir))
-
-	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, extraExecAllocOpts...)
 	allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))

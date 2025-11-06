@@ -5,6 +5,7 @@
 package chromedputil_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,6 +15,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +28,29 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
+
+func printLaunchctl(ctx context.Context, msg string) {
+	if goruntime.GOOS != "darwin" {
+		return
+	}
+	out := &bytes.Buffer{}
+	fmt.Fprintf(out, "%v: Printing launchctl for current user\n", msg)
+
+	uid := os.Getuid()
+	cmd := exec.CommandContext(ctx, "launchctl", "print", fmt.Sprintf("user/%d", uid))
+	cout, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("%v: launchctl failed: %v\n", msg, err)
+	}
+	sc := bufio.NewScanner(bytes.NewReader(cout))
+	for sc.Scan() {
+		if strings.Contains(sc.Text(), "MachPortRendezvousServer") {
+			fmt.Fprintf(out, "%v: launchctl output line: %s\n", msg, sc.Text())
+		}
+	}
+	fmt.Fprintf(out, "%v: launchctl output complete\n", msg)
+	fmt.Print(out.String())
+}
 
 func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, string) {
 	// Setup a test server that will trigger various browser events
@@ -87,6 +113,7 @@ func (w chromeWriter) Write(p []byte) (n int, err error) {
 }
 
 func TestListen(t *testing.T) {
+	printLaunchctl(t.Context(), "launctl: start of TestListen")
 	ctx, cancel, serverURL := setupTestEnvironment(t)
 	defer cancel()
 
@@ -100,8 +127,22 @@ func TestListen(t *testing.T) {
 		chromedputil.NewListenHandler(exceptionCh),
 	)
 
+	time.Sleep(time.Second)
+	printLaunchctl(t.Context(), "launctl: browser should be running now")
+
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
+
+	go func() {
+		for {
+			select {
+			case <-wctx.Done():
+				return
+			case <-time.After(time.Second):
+				printLaunchctl(t.Context(), "launctl: inside TestListen goroutine")
+			}
+		}
+	}()
 
 	if err := chromedp.Run(wctx,
 		chromedp.Navigate(serverURL),
