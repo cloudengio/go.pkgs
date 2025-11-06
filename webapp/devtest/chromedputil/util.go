@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -227,14 +228,17 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(chromeBin),
-		//chromedp.UserDataDir(dataDir),
-		//chromedp.Flag("single-process", true),
 	}
-
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, opts...)
 
 	if goruntime.GOOS == "darwin" {
+		// On macOS we need to launch Chrome via launchctl asuser
+		// to get around namespace issues when running in CI on github.
+		// Using launchctl asuser in this way ensures that all Chrome's
+		// child processes are also launched in the same namespace as
+		// the parent and hence can use mach IPC rendevous to discover
+		// the IPC port for their parent and hence to communicate with it.
 		modifyCmd := func(cmd *exec.Cmd) {
 			// Prepend `launchctl asuser <uid>` to the command
 			uid := os.Getuid()
@@ -242,7 +246,6 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 			newArgs = append(newArgs, cmd.Args[1:]...)
 			cmd.Path = "/bin/launchctl"
 			cmd.Args = newArgs
-			fmt.Printf("Modified command for launchctl: %v %+v\n", cmd.Path, cmd.Args)
 		}
 		allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
 	}
@@ -259,65 +262,15 @@ var (
 
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
 	// they extend chromedp.DefaultExecAllocatorOptions.
-	AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
-		// Copied from chromedp.DefaultExecAllocatorOptions with
-		// headless=new and only enabling NetworkServiceInProcess.
-		chromedp.Flag("headless", "new"),
-		chromedp.NoFirstRun,
-		chromedp.NoDefaultBrowserCheck,
-		chromedp.NoSandbox,
-		chromedp.DisableGPU,
-
-		// After Puppeteer's default behavior.
-		chromedp.Flag("disable-background-networking", true),
-		chromedp.Flag("enable-features", "NetworkServiceInProcess"), // Only enable NetworkServiceInProcess and not NetworkService
-		chromedp.Flag("disable-background-timer-throttling", true),
-		chromedp.Flag("disable-backgrounding-occluded-windows", true),
-		chromedp.Flag("disable-breakpad", true),
-		chromedp.Flag("disable-client-side-phishing-detection", true),
-		chromedp.Flag("disable-default-apps", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees"),
-		chromedp.Flag("disable-hang-monitor", true),
-		chromedp.Flag("disable-ipc-flooding-protection", true),
-		chromedp.Flag("disable-popup-blocking", true),
-		chromedp.Flag("disable-prompt-on-repost", true),
-		chromedp.Flag("disable-renderer-backgrounding", true),
-		chromedp.Flag("disable-sync", true),
-		chromedp.Flag("force-color-profile", "srgb"),
-		chromedp.Flag("metrics-recording-only", true),
-		chromedp.Flag("safebrowsing-disable-auto-update", true),
-		chromedp.Flag("enable-automation", true),
-		chromedp.Flag("password-store", "basic"),
-		chromedp.Flag("use-mock-keychain", true),
-
-		chromedp.Flag("disable-setuid-sandbox", true),
+	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
 
 		// Additional flags for CI.
 		chromedp.Flag("disable-breakpad", true),
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
-		chromedp.Flag("disable-features", "NetworkService,MetricsReporting,UserMetrics"),
+		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
+	)
 
-		// chromedp.Flag("enable-chrome-browser-cloud-management", true),
-		// chromedp.Flag("use-mock-keychain", true),
-		// chromedp.Flag("disable-background-networking", true),
-		//		chromedp.Flag("enable-logging", "stderr"),
-		//		chromedp.Flag("v", "1"),
-		// Disable process singleton to allow multiple Chrome instances with same profile.
-		// chromedp.Flag("disable-features", "ProcessSingleton"),
-	}
-
-	/*
-		AllocatorOptsForTests = []chromedp.ExecAllocatorOption{
-			chromedp.Flag("headless", "new"),
-			chromedp.Flag("no-first-run", true),
-			chromedp.Flag("no-default-browser-check", true),
-			// chromedp.Flag("enable-logging", "stderr"),
-			// chromedp.Flag("v", "1"),
-		}
-	*/
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
 		chromedp.Flag("enable-logging", "stderr"),
 		chromedp.Flag("v", "2"),

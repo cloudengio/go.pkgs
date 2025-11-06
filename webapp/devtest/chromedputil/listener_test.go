@@ -5,7 +5,6 @@
 package chromedputil_test
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,8 +14,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
-	goruntime "runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -30,22 +27,6 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
-
-func printLaunchctl(ctx context.Context, msg string) {
-	fmt.Printf("%v: Printing launchctl for current user\n", msg)
-	uid := os.Getuid()
-	cmd := exec.CommandContext(ctx, "launchctl", "print", fmt.Sprintf("user/%d", uid))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("%v: launchctl failed: %v\n", msg, err)
-	}
-	sc := bufio.NewScanner(bytes.NewReader(out))
-	for sc.Scan() {
-		if strings.Contains(sc.Text(), "MachPortRendezvousServer") {
-			fmt.Printf("%v: launchctl output line: %s\n", msg, sc.Text())
-		}
-	}
-}
 
 func captureAllGoroutineStacks() string {
 	gs, err := goroutines.Get()
@@ -134,13 +115,9 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	//userDataDir := t.TempDir()
-	//userDataDir := chromedputil.UserDataDirOnCI()
-	//fmt.Printf("Using chrome user data dir=%s\n", userDataDir)
 	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
 	opts = append(opts, chromedputil.AllocatorOptsVerboseLogging...)
-	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr})) //chromedp.UserDataDir(userDataDir),
-	//chromedp.Flag("disable-features", "ProcessSingleton"),
+	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}))
 
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		opts,
@@ -164,53 +141,22 @@ func (w chromeWriter) Write(p []byte) (n int, err error) {
 }
 
 func TestListen(t *testing.T) {
-	ctx := t.Context()
-	printLaunchctl(ctx, "start of TestListen")
 	ctx, cancel, serverURL := setupTestEnvironment(t)
 	defer cancel()
 
 	// Create channels to receive different event types
 	consoleCh := make(chan *runtime.EventConsoleAPICalled, 10)
 	exceptionCh := make(chan *runtime.EventExceptionThrown, 10)
-	anyCh := make(chan any, 100)
 
 	// Set up event handlers for console events and exceptions
 	chromedputil.Listen(ctx,
 		chromedputil.NewListenHandler(consoleCh),
 		chromedputil.NewListenHandler(exceptionCh),
-		chromedputil.NewListenHandler(anyCh),
 	)
 
-	go func() {
-		for {
-			ev := <-anyCh
-			fmt.Printf("....Received any event of type %T: %+v\n", ev, ev)
-		}
-	}()
-
-	time.Sleep(time.Second)
-	printLaunchctl(ctx, "before navigation in TestListen")
-
-	//fmt.Printf("...Waiting for URLs %s\n", serverURL)
-	//if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
-	//	t.Fatalf("Failed to wait for server URL: %v", err)
-	//}
-	fmt.Printf("...Navigating to test page %v\n", serverURL)
-	// Navigate to test page which will trigger events
 	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer wcancel()
-	if goruntime.GOOS == "darwin" {
-		go func() {
-			select {
-			case <-time.After(5 * time.Second):
-				logAllGoroutineStacks(t)
-				printLaunchctl(ctx, "during navigation in TestListen")
-				return
-			case <-ctx.Done():
-				return
-			}
-		}()
-	}
+
 	if err := chromedp.Run(wctx,
 		chromedp.Navigate(serverURL),
 		//chromedp.WaitVisible(`h1`), // Wait for h1 to be visible.
