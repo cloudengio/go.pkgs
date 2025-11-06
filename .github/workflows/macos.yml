@@ -28,23 +28,15 @@ jobs:
           "$CHROME_PATH" \
             --headless=new \
             --no-sandbox \
-            --disable-setuid-sandbox \
             --disable-gpu \
             --no-first-run \
             --no-default-browser-check \
-            --use-mock-keychain \
-            --disable-background-networking \
-            --remote-allow-origins='*' \
             about:blank &
 
           CHROME_PID=$!
 
           sleep 5s
-          ls "$USERDATA_DIR"
-          ls "$PROFILE_DIR"
-
-          ls $HOME/Library/Application\ Support/Google/Chrome
-
+          ls -R $HOME/Library/Application\ Support/Google
           kill $CHROME_PID
 
   test:
