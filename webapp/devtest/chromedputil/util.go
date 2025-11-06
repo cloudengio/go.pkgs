@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	goruntime "runtime"
 	"slices"
 	"strings"
 	"text/template"
@@ -221,9 +220,13 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 // The CI configuration may disable sandboxing for example.
 func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
 	chromeBin := ChromeBinPathOnCI()
+	modifyCmd := func(cmd *exec.Cmd) {
+		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
+	}
 	if len(chromeBin) == 0 {
 		opts := slices.Clone(chromedp.DefaultExecAllocatorOptions[:])
 		opts = append(opts, extraExecAllocOpts...)
+		opts = append(opts, chromedp.ModifyCmdFunc(modifyCmd))
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
 	fmt.Printf("Detected CI environment via CHROME_BIN=%s\n", chromeBin)
@@ -234,26 +237,24 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, extraExecAllocOpts...)
 
-	modifyCmd := func(cmd *exec.Cmd) {
-		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
-	}
-	if goruntime.GOOS == "darwin" {
-		// On macOS we need to launch Chrome via launchctl asuser
-		// to get around namespace issues when running in CI on github.
-		// Using launchctl asuser in this way ensures that all Chrome's
-		// child processes are also launched in the same namespace as
-		// the parent and hence can use mach IPC rendezvous to discover
-		// the IPC port for their parent and hence to communicate with it.
-		modifyCmd = func(cmd *exec.Cmd) {
-			// Prepend `launchctl asuser <uid>` to the command
-			uid := os.Getuid()
-			newArgs := []string{fmt.Sprintf("asuser/%d", uid), cmd.Path}
-			newArgs = append(newArgs, cmd.Args[1:]...)
-			cmd.Path = "/bin/launchctl"
-			cmd.Args = newArgs
-			fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
-		}
-	}
+	/*
+		if goruntime.GOOS == "darwin" {
+			// On macOS we need to launch Chrome via launchctl asuser
+			// to get around namespace issues when running in CI on github.
+			// Using launchctl asuser in this way ensures that all Chrome's
+			// child processes are also launched in the same namespace as
+			// the parent and hence can use mach IPC rendezvous to discover
+			// the IPC port for their parent and hence to communicate with it.
+			modifyCmd = func(cmd *exec.Cmd) {
+				// Prepend `launchctl asuser <uid>` to the command
+				uid := os.Getuid()
+				newArgs := []string{fmt.Sprintf("asuser/%d", uid), "--", cmd.Path}
+				newArgs = append(newArgs, cmd.Args[1:]...)
+				cmd.Path = "/bin/launchctl"
+				cmd.Args = newArgs
+				fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
+			}
+		}*/
 	allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
 
 	return chromedp.NewExecAllocator(ctx, allOpts...)
@@ -274,7 +275,6 @@ var (
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
 	// they extend chromedp.DefaultExecAllocatorOptions.
 	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
-
 		// Additional flags for CI.
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
