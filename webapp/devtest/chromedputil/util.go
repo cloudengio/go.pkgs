@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -236,34 +237,34 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 
 var (
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments.
-	AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
 		chromedp.NoSandbox,
 		chromedp.DisableGPU,
-		chromedp.Flag("headless", "new"),
+		//chromedp.Flag("headless", "new"),
 		chromedp.Flag("use-mock-keychain", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 		//chromedp.Flag("disable-ipc-flooding-protection", true),
-		chromedp.Flag("no-first-run", true),
-		chromedp.Flag("no-default-browser-check", true),
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("enable-logging", "stderr"),
 		chromedp.Flag("v", "1"),
+
 		// Run in single-process mode to avoid IPC issues on macOS CI.
 		//chromedp.Flag("single-process", true),
-	}
+	)
 
-	AllocatorOptsForTests = []chromedp.ExecAllocatorOption{
-		chromedp.Flag("headless", "new"),
-		chromedp.Flag("no-first-run", true),
-		chromedp.Flag("no-default-browser-check", true),
-		//chromedp.Flag("enable-logging", "stderr"),
-		//chromedp.Flag("v", "1"),
-	}
+	/*
+		AllocatorOptsForTests = []chromedp.ExecAllocatorOption{
+			chromedp.Flag("headless", "new"),
+			chromedp.Flag("no-first-run", true),
+			chromedp.Flag("no-default-browser-check", true),
+			//chromedp.Flag("enable-logging", "stderr"),
+			//chromedp.Flag("v", "1"),
+		}
 
-	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
-		chromedp.Flag("enable-logging", "stderr"),
-		chromedp.Flag("v", "1"),
-	}
+		AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
+			chromedp.Flag("enable-logging", "stderr"),
+			chromedp.Flag("v", "1"),
+		}*/
 )
 
 // WithContextForCI returns a chromedp context that may be different on a CI

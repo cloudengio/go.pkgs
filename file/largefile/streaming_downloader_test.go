@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -381,7 +382,10 @@ func testStreamingDownloaderStatus() error {
 		return fmt.Errorf("status.Blocks: got %v, want %v", status.DownloadBlocks, len(content)/blockSize)
 	}
 	if status.Duration <= 0 {
-		return fmt.Errorf("status.Duration should be > 0, got %v", status.Duration)
+		if status.Duration == 0 && runtime.GOOS != "windows" {
+			// On Windows time.Since can return 0 in tests due to timer resolution.
+			return fmt.Errorf("status.Duration should be > 0, got %v", status.Duration)
+		}
 	}
 
 	// With the first block delayed, the other 3 should arrive out of order.
