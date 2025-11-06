@@ -116,10 +116,12 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
+	userDataDir := t.TempDir()
+	fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", userDataDir)
 	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
 	opts = append(opts, chromedputil.AllocatorOptsVerboseLogging...)
 	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}),
-		chromedp.UserDataDir(t.TempDir()),
+		chromedp.UserDataDir(userDataDir),
 	)
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		opts,

@@ -222,9 +222,9 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	if len(path) == 0 {
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
-	dataDir := os.Getenv("CHROME_USER_DATA_DIR")
+	//dataDir := os.Getenv("CHROME_USER_DATA_DIR")
 	fmt.Printf("Detected CI environment via CHROME_BIN_PATH=%s\n", path)
-	fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", dataDir)
+	//fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", dataDir)
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(path),
@@ -247,6 +247,10 @@ var (
 		chromedp.NoSandbox,
 		chromedp.DisableGPU,
 		chromedp.Flag("headless", "new"),
+		chromedp.Flag("disable-breakpad", true),
+		chromedp.Flag("disable-crash-reporter", true),
+		chromedp.Flag("disable-component-update", true),
+		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
 		//chromedp.Flag("use-mock-keychain", true),
 		//chromedp.Flag("disable-background-networking", true),
 		//		chromedp.Flag("enable-logging", "stderr"),
@@ -266,7 +270,7 @@ var (
 	*/
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
 		chromedp.Flag("enable-logging", "stderr"),
-		chromedp.Flag("v", "1"),
+		chromedp.Flag("v", "2"),
 	}
 )
 
