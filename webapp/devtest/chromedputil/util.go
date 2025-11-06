@@ -235,6 +235,11 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	return chromedp.NewExecAllocator(ctx, allOpts...)
 }
 
+// UserDataDirOnCI returns the user data directory for Chrome on CI.
+func UserDataDirOnCI() string {
+	return os.Getenv("CHROME_USER_DATA_DIR")
+}
+
 var (
 	// AllocatorOptsForCI are the default ExecAllocator options for CI environments.
 	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),

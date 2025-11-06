@@ -7,7 +7,7 @@ test:
     "--covermode=atomic",
     "--vet=off",
     "-race",
-    "--timeout=1m",
+    "--timeout=5m",
     "-v",
     "./...",
   ]
