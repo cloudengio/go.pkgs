@@ -5,6 +5,7 @@
 package chromedputil_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	goruntime "runtime"
 	"slices"
 	"strings"
@@ -28,6 +30,22 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
+
+func printLaunchctl(ctx context.Context, msg string) {
+	fmt.Printf("%v: Printing launchctl for current user\n", msg)
+	uid := os.Getuid()
+	cmd := exec.CommandContext(ctx, "launchctl", "print", fmt.Sprintf("user/%d", uid))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("%v: launchctl failed: %v\n", msg, err)
+	}
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		if strings.Contains(sc.Text(), "MachPortRendezvousServer") {
+			fmt.Printf("%v: launchctl output line: %s\n", msg, sc.Text())
+		}
+	}
+}
 
 func captureAllGoroutineStacks() string {
 	gs, err := goroutines.Get()
@@ -146,6 +164,8 @@ func (w chromeWriter) Write(p []byte) (n int, err error) {
 }
 
 func TestListen(t *testing.T) {
+	ctx := t.Context()
+	printLaunchctl(ctx, "start of TestListen")
 	ctx, cancel, serverURL := setupTestEnvironment(t)
 	defer cancel()
 
@@ -169,6 +189,7 @@ func TestListen(t *testing.T) {
 	}()
 
 	time.Sleep(time.Second)
+	printLaunchctl(ctx, "before navigation in TestListen")
 
 	//fmt.Printf("...Waiting for URLs %s\n", serverURL)
 	//if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
@@ -183,6 +204,7 @@ func TestListen(t *testing.T) {
 			select {
 			case <-time.After(5 * time.Second):
 				logAllGoroutineStacks(t)
+				printLaunchctl(ctx, "during navigation in TestListen")
 				return
 			case <-ctx.Done():
 				return

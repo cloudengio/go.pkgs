@@ -303,7 +303,7 @@ var (
 	*/
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
 		chromedp.Flag("enable-logging", "stderr"),
-		chromedp.Flag("v", "3"),
+		chromedp.Flag("v", "2"),
 	}
 )
 
