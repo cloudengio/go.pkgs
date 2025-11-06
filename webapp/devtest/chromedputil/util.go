@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"text/template"
@@ -221,6 +222,10 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
 	chromeBin := ChromeBinPathOnCI()
 	//chromeBin = "/Users/cnicolaou/LocalOnly/chrome/mac_arm-142.0.7444.61/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+
+	if goruntime.GOOS == "darwin" {
+		chromeBin = "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+	}
 	modifyCmd := func(cmd *exec.Cmd) {
 		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
 	}

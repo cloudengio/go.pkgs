@@ -42,6 +42,8 @@ jobs:
           ls -R $HOME/Library/Application\ Support/Google
           kill $CHROME_PID
 
+  
+  \
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
