@@ -250,14 +250,14 @@ var (
 		chromedp.Flag("disable-breakpad", true),
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
-		//chromedp.Flag("disable-features", "NetworkService,MetricsReporting,UserMetrics"),
-		chromedp.Flag("enable-chrome-browser-cloud-management", true),
-		//chromedp.Flag("use-mock-keychain", true),
-		//chromedp.Flag("disable-background-networking", true),
+		chromedp.Flag("disable-features", "NetworkService,MetricsReporting,UserMetrics"),
+		// chromedp.Flag("enable-chrome-browser-cloud-management", true),
+		// chromedp.Flag("use-mock-keychain", true),
+		// chromedp.Flag("disable-background-networking", true),
 		//		chromedp.Flag("enable-logging", "stderr"),
 		//		chromedp.Flag("v", "1"),
 		// Disable process singleton to allow multiple Chrome instances with same profile.
-		//chromedp.Flag("disable-features", "ProcessSingleton"),
+		// chromedp.Flag("disable-features", "ProcessSingleton"),
 	)
 
 	/*
@@ -265,8 +265,8 @@ var (
 			chromedp.Flag("headless", "new"),
 			chromedp.Flag("no-first-run", true),
 			chromedp.Flag("no-default-browser-check", true),
-			//chromedp.Flag("enable-logging", "stderr"),
-			//chromedp.Flag("v", "1"),
+			// chromedp.Flag("enable-logging", "stderr"),
+			// chromedp.Flag("v", "1"),
 		}
 	*/
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{

@@ -168,6 +168,8 @@ func TestListen(t *testing.T) {
 		}
 	}()
 
+	time.Sleep(time.Second)
+
 	//fmt.Printf("...Waiting for URLs %s\n", serverURL)
 	//if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
 	//	t.Fatalf("Failed to wait for server URL: %v", err)
