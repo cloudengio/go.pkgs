@@ -276,7 +276,7 @@ var (
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
 		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
-		chromedp.Flag("disable-features", "PowerManager,MediaSessionService"),
+		chromedp.Flag("disable-features", "NetworkService,MetricsReporting,UserMetrics"),
 	)
 
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
