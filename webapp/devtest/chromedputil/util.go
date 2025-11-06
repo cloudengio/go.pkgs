@@ -269,6 +269,7 @@ var (
 	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
 
 		// Additional flags for CI.
+		chromedp.DisableGPU,
 		chromedp.NoSandbox,
 		chromedp.Flag("disable-setuid-sandbox", true),
 		chromedp.Flag("headless", "new"),
