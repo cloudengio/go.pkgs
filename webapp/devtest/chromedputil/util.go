@@ -234,27 +234,11 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(chromeBin),
 	}
+	if userDataDir := UserDataDirOnCI(); userDataDir != "" {
+		allOpts = append(allOpts, chromedp.UserDataDir(userDataDir))
+	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, extraExecAllocOpts...)
-
-	/*
-		if goruntime.GOOS == "darwin" {
-			// On macOS we need to launch Chrome via launchctl asuser
-			// to get around namespace issues when running in CI on github.
-			// Using launchctl asuser in this way ensures that all Chrome's
-			// child processes are also launched in the same namespace as
-			// the parent and hence can use mach IPC rendezvous to discover
-			// the IPC port for their parent and hence to communicate with it.
-			modifyCmd = func(cmd *exec.Cmd) {
-				// Prepend `launchctl asuser <uid>` to the command
-				uid := os.Getuid()
-				newArgs := []string{fmt.Sprintf("asuser/%d", uid), "--", cmd.Path}
-				newArgs = append(newArgs, cmd.Args[1:]...)
-				cmd.Path = "/bin/launchctl"
-				cmd.Args = newArgs
-				fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
-			}
-		}*/
 	allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
 
 	return chromedp.NewExecAllocator(ctx, allOpts...)
@@ -284,7 +268,7 @@ var (
 		chromedp.Flag("disable-background-networking", true),
 		// chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
 		// don't use NetworkService.
-		chromedp.Flag("enable-features", "NetworkServiceInProcess"),
+		//chromedp.Flag("enable-features", "NetworkServiceInProcess"),
 
 		chromedp.Flag("disable-background-timer-throttling", true),
 		chromedp.Flag("disable-backgrounding-occluded-windows", true),
@@ -315,7 +299,7 @@ var (
 		chromedp.Flag("disable-breakpad", true),
 		chromedp.Flag("disable-crash-reporter", true),
 		chromedp.Flag("disable-component-update", true),
-		chromedp.Flag("disable-features", "NetworkService,MetricsReporting,UserMetrics"),
+		chromedp.Flag("disable-features", "NetworkService,NetworkServiceInProcess,MetricsReporting,UserMetrics"),
 	}
 
 	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
