@@ -9,10 +9,28 @@ on:
 permissions:
   contents: read
 
+#jobs:
+#  test:
+#    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+#    with:
+#      os-version: macos-latest
+#      go-versions: |
+#        [ "1.25.x" ]
+
 jobs:
   test:
-    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
-    with:
-      os-version: macos-latest
-      go-versions: |
-        [ "1.25.x" ]
+    runs-on: macos
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cloudengio/.github/.github/actions/go@main
+      - uses: cloudengio/.github/.github/actions/pebble@main
+      - uses: cloudengio/.github/.github/actions/chrome@main
+        id: setup-chrome
+      - uses: cloudengio/.github/.github/actions/mkcert@main
+
+      - name: test
+        env:
+          CHROME_BIN_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROME_USER_DATA_DIR: ${{ steps.setup-chrome.outputs.chrome-user-data-dir }}
+        run: go test -v -race ./webapp/...

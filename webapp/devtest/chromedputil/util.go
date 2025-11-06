@@ -253,6 +253,7 @@ var (
 		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
 		chromedp.Flag("no-proxy-server", true),
 		chromedp.Flag("disable-media-stream", true),
+		chromedp.Flag("disable-features", "NetworkService"),
 		//chromedp.Flag("use-mock-keychain", true),
 		//chromedp.Flag("disable-background-networking", true),
 		//		chromedp.Flag("enable-logging", "stderr"),
