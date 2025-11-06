@@ -11,6 +11,8 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"os/exec"
+	goruntime "runtime"
 	"strings"
 	"text/template"
 
@@ -217,21 +219,34 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 // be configured differently on a CI system than when running locally.
 // The CI configuration may disable sandboxing for example.
 func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
-	path := os.Getenv("CHROME_BIN_PATH")
-	if len(path) == 0 {
+	chromeBin := os.Getenv("CHROME_BIN	chromeBin")
+	if len(chromeBin) == 0 {
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
-	//dataDir := os.Getenv("CHROME_USER_DATA_DIR")
-	fmt.Printf("Detected CI environment via CHROME_BIN_PATH=%s\n", path)
-	//fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", dataDir)
+	fmt.Printf("Detected CI environment via CHROME_BIN=%s\n", chromeBin)
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	allOpts := []chromedp.ExecAllocatorOption{
-		chromedp.ExecPath(path),
+		chromedp.ExecPath(chromeBin),
 		//chromedp.UserDataDir(dataDir),
 		//chromedp.Flag("single-process", true),
 	}
+
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, opts...)
+
+	if goruntime.GOOS == "darwin" {
+		modifyCmd := func(cmd *exec.Cmd) {
+			// Prepend `launchctl asuser <uid>` to the command
+			uid := os.Getuid()
+			newArgs := []string{"asuser", fmt.Sprint(uid), cmd.Path}
+			newArgs = append(newArgs, cmd.Args[1:]...)
+			cmd.Path = "/bin/launchctl"
+			cmd.Args = newArgs
+			fmt.Printf("Modified command for launchctl: %v %+v\n", cmd.Path, cmd.Args)
+		}
+		allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
+	}
+
 	return chromedp.NewExecAllocator(ctx, allOpts...)
 }
 
@@ -276,6 +291,8 @@ var (
 		chromedp.Flag("enable-automation", true),
 		chromedp.Flag("password-store", "basic"),
 		chromedp.Flag("use-mock-keychain", true),
+
+		chromedp.Flag("disable-setuid-sandbox", true),
 
 		// Additional flags for CI.
 		chromedp.Flag("disable-breakpad", true),
