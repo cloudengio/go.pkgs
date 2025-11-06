@@ -112,6 +112,7 @@ func TestPebble_RealServer(t *testing.T) {
 	}
 
 	if _, err := cfg.GetIssuingCA(ctx, 0); err != nil {
+		t.Logf("pebble log output: %s\n", out.String())
 		t.Fatalf("GetIssuingCA: %v", err)
 	}
 

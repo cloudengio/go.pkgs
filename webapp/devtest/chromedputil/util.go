@@ -230,6 +230,8 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 		chromedp.UserDataDir(dataDir),
 	)
 	opts = append(opts, AllocatorOptsForCI...)
+	fmt.Printf("Using chrome executable: %s\n", path)
+	fmt.Printf("Num options: %d\n", len(opts))
 	return chromedp.NewExecAllocator(ctx, opts...)
 }
 
@@ -243,9 +245,9 @@ var AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
 	chromedp.Flag("no-first-run", true),
 	chromedp.Flag("no-default-browser-check", true),
 	// Added for stability on CI.
-	chromedp.Flag("use-mock-keychain", true),
+	//chromedp.Flag("use-mock-keychain", true),
 	chromedp.Flag("disable-background-networking", true),
-	chromedp.Flag("remote-allow-origins", "*"),
+	//chromedp.Flag("remote-allow-origins", "*"),
 	chromedp.Flag("enable-logging", true),
 }
 

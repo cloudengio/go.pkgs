@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -116,17 +117,26 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 	t.Cleanup(func() { server.Close() })
 
 	opts := slices.Clone(chromedputil.AllocatorOptsForCI)
-	opts = append(opts, chromedp.Flag("enable-logging", true))
+	opts = append(opts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}))
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		opts,
 		chromedp.WithBrowserOption(
 			chromedp.WithBrowserDebugf(t.Logf),
 			chromedp.WithBrowserLogf(t.Logf),
+			chromedp.WithBrowserErrorf(t.Logf),
 		),
 		chromedp.WithLogf(t.Logf),
 	)
 
 	return ctx, cancel, server.URL
+}
+
+type chromeWriter struct{ io.Writer }
+
+func (w chromeWriter) Write(p []byte) (n int, err error) {
+	o := append([]byte("chrome(output):"), p...)
+	_, err = w.Writer.Write(o)
+	return len(p), err
 }
 
 func TestListen(t *testing.T) {
@@ -162,8 +172,13 @@ func TestListen(t *testing.T) {
 	defer wcancel()
 	if goruntime.GOOS == "darwin" {
 		go func() {
-			time.Sleep(5 * time.Second)
-			logAllGoroutineStacks(t)
+			select {
+			case <-time.After(5 * time.Second):
+				logAllGoroutineStacks(t)
+				return
+			case <-ctx.Done():
+				return
+			}
 		}()
 	}
 	if err := chromedp.Run(wctx,
