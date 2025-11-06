@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v5
