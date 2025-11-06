@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: list
         run: |
-          ls -R "C:\Program Files\Google"
+          ls "C:\Program Files"
 
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
