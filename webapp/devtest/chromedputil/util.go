@@ -241,15 +241,16 @@ func UserDataDirOnCI() string {
 }
 
 var (
-	// AllocatorOptsForCI are the default ExecAllocator options for CI environments.
+	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
+	// they extend chromedp.DefaultExecAllocatorOptions.
 	AllocatorOptsForCI = append(slices.Clone(chromedp.DefaultExecAllocatorOptions[:]),
 		chromedp.NoSandbox,
 		chromedp.DisableGPU,
-		chromedp.Flag("use-mock-keychain", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-background-networking", true),
-		chromedp.Flag("enable-logging", "stderr"),
-		chromedp.Flag("v", "1"),
+		chromedp.Flag("headless", "new"),
+		//chromedp.Flag("use-mock-keychain", true),
+		//chromedp.Flag("disable-background-networking", true),
+		//		chromedp.Flag("enable-logging", "stderr"),
+		//		chromedp.Flag("v", "1"),
 		// Disable process singleton to allow multiple Chrome instances with same profile.
 		//chromedp.Flag("disable-features", "ProcessSingleton"),
 	)
