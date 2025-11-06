@@ -225,31 +225,46 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	fmt.Printf("Detected CI environment via CHROME_BIN_PATH=%s\n", path)
 	fmt.Printf("Using chrome profile via CHROME_USER_DATA_DIR=%s\n", dataDir)
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
-	opts = append(opts,
+	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(path),
 		chromedp.UserDataDir(dataDir),
-	)
-	opts = append(opts, AllocatorOptsForCI...)
-	fmt.Printf("Using chrome executable: %s\n", path)
-	fmt.Printf("Num options: %d\n", len(opts))
-	return chromedp.NewExecAllocator(ctx, opts...)
+	}
+	allOpts = append(allOpts, AllocatorOptsForCI...)
+	allOpts = append(allOpts, opts...)
+	return chromedp.NewExecAllocator(ctx, allOpts...)
 }
 
-var AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
-	chromedp.Flag("no-sandbox", true),
-	chromedp.Flag("disable-setuid-sandbox", true),
-	chromedp.Flag("disable-dev-shm-usage", true),
-	chromedp.Flag("disable-gpu", true),
-	// Use new headless mode.
-	chromedp.Flag("headless", "new"),
-	chromedp.Flag("no-first-run", true),
-	chromedp.Flag("no-default-browser-check", true),
-	// Added for stability on CI.
-	//chromedp.Flag("use-mock-keychain", true),
-	chromedp.Flag("disable-background-networking", true),
-	//chromedp.Flag("remote-allow-origins", "*"),
-	chromedp.Flag("enable-logging", true),
-}
+var (
+	// AllocatorOptsForCI are the default ExecAllocator options for CI environments.
+	AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+		chromedp.NoSandbox,
+		chromedp.DisableGPU,
+		chromedp.Flag("headless", "new"),
+		chromedp.Flag("use-mock-keychain", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		//chromedp.Flag("disable-ipc-flooding-protection", true),
+		chromedp.Flag("no-first-run", true),
+		chromedp.Flag("no-default-browser-check", true),
+		chromedp.Flag("disable-background-networking", true),
+		chromedp.Flag("enable-logging", "stderr"),
+		//chromedp.Flag("v", "1"),
+		// Run in single-process mode to avoid IPC issues on macOS CI.
+		chromedp.Flag("single-process", true),
+	}
+
+	AllocatorOptsForTests = []chromedp.ExecAllocatorOption{
+		chromedp.Flag("headless", "new"),
+		chromedp.Flag("no-first-run", true),
+		chromedp.Flag("no-default-browser-check", true),
+		//chromedp.Flag("enable-logging", "stderr"),
+		//chromedp.Flag("v", "1"),
+	}
+
+	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
+		chromedp.Flag("enable-logging", "stderr"),
+		chromedp.Flag("v", "1"),
+	}
+)
 
 // WithContextForCI returns a chromedp context that may be different on a CI
 // system than when running locally. The CI configuration may disable
