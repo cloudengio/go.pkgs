@@ -171,6 +171,8 @@ func TestListen(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Error("Timed out waiting for exception event")
 	}
+
+	t.Fail()
 }
 
 // 1. String

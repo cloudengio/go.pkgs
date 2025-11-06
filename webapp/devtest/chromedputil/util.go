@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"text/template"
@@ -223,7 +224,7 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 	modifyCmd := func(cmd *exec.Cmd) {
 		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
 	}
-	if len(chromeBin) == 0 {
+	if len(chromeBin) == 0 || goruntime.GOOS == "darwin" {
 		opts := slices.Clone(chromedp.DefaultExecAllocatorOptions[:])
 		opts = append(opts, extraExecAllocOpts...)
 		opts = append(opts, chromedp.ModifyCmdFunc(modifyCmd))
@@ -233,6 +234,11 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(chromeBin),
+	}
+	if userDataDir := UserDataDirOnCI(); userDataDir != "" {
+		// doesn't work for linux.
+		//allOpts = append(allOpts, chromedp.UserDataDir(userDataDir))
+
 	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, extraExecAllocOpts...)
