@@ -228,7 +228,7 @@ func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorO
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(path),
 		//chromedp.UserDataDir(dataDir),
-		chromedp.Flag("single-process", true),
+		//chromedp.Flag("single-process", true),
 	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, opts...)
