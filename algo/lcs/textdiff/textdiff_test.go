@@ -125,7 +125,6 @@ func TestTextDiff(t *testing.T) {
 
 	insertedAll, deletedAll := processDiffOutput(t, filepath.Join("testdata", "textdiff.go.a.b"))
 
-	//	insertedAll[0] = strings.TrimPrefix(insertedAll[0], "\n") + "\n"
 	deletedAll[1] = "\n" + strings.TrimSuffix(deletedAll[1], "\n")
 	insertedAll[2] = "\n" + strings.TrimSuffix(insertedAll[2], "\n")
 
