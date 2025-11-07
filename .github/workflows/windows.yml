@@ -16,3 +16,4 @@ jobs:
       os-version: windows-latest
       go-versions: |
         [ "1.25.x" ]
+      multimod-action: "test-less-parallelism"

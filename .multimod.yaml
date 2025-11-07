@@ -9,6 +9,17 @@ test:
     "-race",
     "./...",
   ]
+test-less-parallelism:
+  [
+    "go",
+    "test",
+    "-failfast",
+    "--covermode=atomic",
+    "--vet=off",
+    "-race",
+    "-p=1",
+    "./...",
+  ]
 lint: ["golangci-lint", "run", "./..."]
 govuln: ["govulncheck", "./..."]
 generate: ["go", "generate", "./..."]
