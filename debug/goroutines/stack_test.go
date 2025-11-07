@@ -49,23 +49,25 @@ var sampleGoroutines = []*Goroutine{
 }
 
 const panicFormat = `goroutine 1 [running]:
-	main.main()
-	/Users/cnicolaou/go/src/main.go:10 +0xc
-	runtime.main()
-	/usr/local/go/src/runtime/proc.go:250
+main.main()
+    /Users/cnicolaou/go/src/main.go:10 +0xc
+runtime.main()
+    /usr/local/go/src/runtime/proc.go:250
 created by runtime.startm()
-	/usr/local/go/src/runtime/proc.go:1123 +0x22
+    /usr/local/go/src/runtime/proc.go:1123 +0x22
+
 goroutine 6 [chan receive]:
-	main.foobar()
-	/Users/cnicolaou/go/src/main.go:23
+main.foobar()
+    /Users/cnicolaou/go/src/main.go:23
 `
 
-const compactFormat = `goroutine 1 [running]
-frame /Users/cnicolaou/go/src/main.go:10 main.main() +0xc
-frame /usr/local/go/src/runtime/proc.go:250 runtime.main()
-creator /usr/local/go/src/runtime/proc.go:1123 runtime.startm() +0x22
-goroutine 6 [chan receive]
-frame /Users/cnicolaou/go/src/main.go:23 main.foobar()
+const compactFormat = `goroutine 1 [running]:
+    /Users/cnicolaou/go/src/main.go:10 main.main()
+    /usr/local/go/src/runtime/proc.go:250 runtime.main()
+    created by runtime.startm() /usr/local/go/src/runtime/proc.go:1123
+
+goroutine 6 [chan receive]:
+    /Users/cnicolaou/go/src/main.go:23 main.foobar()
 `
 
 func TestFormatWithTemplate(t *testing.T) {
@@ -79,6 +81,7 @@ func TestFormatWithTemplate(t *testing.T) {
 	}
 	if got, want := out, panicFormat; got != want {
 		t.Errorf("got\n%v\nwant\n%v", got, want)
+
 	}
 
 	compactT, err := CompactTemplate()

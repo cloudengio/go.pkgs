@@ -19,23 +19,19 @@ import (
 var goroutineHeaderRE = regexp.MustCompile(`^goroutine (\d+) \[([^\]]+)\]:$`)
 
 const (
-	panicTemplateText = `{{- if .IsHeader -}}
-goroutine {{.Goroutine.ID}} [{{.Goroutine.State}}]:
-{{- else if .IsFrame -}}
-	{{.Frame.Call}}
-	{{.Frame.File}}:{{.Frame.Line}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
-{{- else if .IsCreator -}}
-created by {{.Frame.Call}}
-	{{.Frame.File}}:{{.Frame.Line}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
-{{- end -}}
-`
+	panicTemplateText = `{{if .IsHeader }}goroutine {{.Goroutine.ID}} [{{.Goroutine.State}}]:
+{{end}}{{if .IsFrame}}{{.Frame.Call}}
+    {{.Frame.File}}:{{.Frame.Line}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
+{{end}}{{if .IsCreator}}created by {{.Frame.Call}}
+    {{.Frame.File}}:{{.Frame.Line}}{{if .HasOffset}} +0x{{.OffsetHex}}
+{{end}}
+{{end}}`
 
-	compactTemplateText = `{{- if .IsHeader -}}
-goroutine {{.Goroutine.ID}} [{{.Goroutine.State}}]
-{{- else -}}
-{{if .IsCreator}}creator{{else}}frame{{end}} {{.Frame.File}}:{{.Frame.Line}} {{.Frame.Call}}{{if .HasOffset}} +0x{{.OffsetHex}}{{end}}
-{{- end -}}
-`
+	compactTemplateText = `{{if .IsHeader }}goroutine {{.Goroutine.ID}} [{{.Goroutine.State}}]:
+{{end}}{{if .IsFrame}}    {{.Frame.File}}:{{.Frame.Line}} {{.Frame.Call}}
+{{end}}{{if .IsCreator}}    created by {{.Frame.Call}} {{.Frame.File}}:{{.Frame.Line}}
+
+{{end}}`
 )
 
 var (
