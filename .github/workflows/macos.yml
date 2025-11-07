@@ -13,6 +13,6 @@ jobs:
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
-      os-version: macos-latest-xlarge
+      os-version: macos-latest
       go-versions: |
         [ "1.25.x" ]

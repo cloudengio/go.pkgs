@@ -668,6 +668,7 @@ func TestRunLoggingListenerEvaluate(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Stop the listener and capture the output.
+	t.Logf("Stopping listener")
 	cancel()
 
 	<-doneCh
