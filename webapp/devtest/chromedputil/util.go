@@ -11,6 +11,8 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -213,35 +215,106 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 	return platformInfo.Type != ""
 }
 
-// WithExecAllocatorForCI returns a chromedp context with an ExecAllocator that may
-// be configured differently on a CI system than when running locally.
+// WithExecAllocatorForCI returns a chromedp context with an ExecAllocator
+// configured appropriately for CI systems as opposed to when running locally.
 // The CI configuration may disable sandboxing for example.
-func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
-	path := os.Getenv("CHROME_BIN_PATH")
-	if len(path) == 0 {
+func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
+	chromeBin := ChromeBinPathOnCI()
+	modifyCmd := func(cmd *exec.Cmd) {
+		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args[1:])
+	}
+	if len(chromeBin) == 0 {
+		opts := slices.Clone(chromedp.DefaultExecAllocatorOptions[:])
+		opts = append(opts, extraExecAllocOpts...)
+		opts = append(opts, chromedp.ModifyCmdFunc(modifyCmd))
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
+	fmt.Printf("Detected CI environment via CHROME_BIN=%s\n", chromeBin)
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
-	opts = append(opts,
-		chromedp.ExecPath(path),
-		chromedp.Flag("no-sandbox", true),
+	allOpts := []chromedp.ExecAllocatorOption{
+		chromedp.ExecPath(chromeBin),
+	}
+	allOpts = append(allOpts, AllocatorOptsForCI...)
+	allOpts = append(allOpts, extraExecAllocOpts...)
+	allOpts = append(allOpts, chromedp.ModifyCmdFunc(modifyCmd))
+	return chromedp.NewExecAllocator(ctx, allOpts...)
+}
+
+// UserDataDirOnCI returns the user data directory for Chrome on CI.
+func UserDataDirOnCI() string {
+	return os.Getenv("CHROME_USER_DATA_DIR")
+}
+
+// ChromeBinPathOnCI returns the Chrome binary path for CI.
+func ChromeBinPathOnCI() string {
+	return os.Getenv("CHROME_BIN_PATH")
+}
+
+var (
+
+	// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
+	// they extend chromedp.DefaultExecAllocatorOptions.
+	AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+		// Replicating chromedp.DefaultExecAllocatorOptions but
+		// with modifications for CI environments and avoiding the possibility
+		// of enable/disable features conflicts.
+
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.Flag("headless", "new"),
+
+		chromedp.Flag("disable-background-networking", true),
+		// don't use enable-features + disable-features in the same command line
+		// since it's unclear which takes precedence.
+		// chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
+		chromedp.Flag("disable-background-timer-throttling", true),
+		chromedp.Flag("disable-backgrounding-occluded-windows", true),
+		chromedp.Flag("disable-breakpad", true),
+		chromedp.Flag("disable-client-side-phishing-detection", true),
+		chromedp.Flag("disable-default-apps", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-extensions", true),
+		chromedp.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees"),
+		chromedp.Flag("disable-hang-monitor", true),
+		chromedp.Flag("disable-ipc-flooding-protection", true),
+		chromedp.Flag("disable-popup-blocking", true),
+		chromedp.Flag("disable-prompt-on-repost", true),
+		chromedp.Flag("disable-renderer-backgrounding", true),
+		chromedp.Flag("disable-sync", true),
+		chromedp.Flag("force-color-profile", "srgb"),
+		chromedp.Flag("metrics-recording-only", true),
+		chromedp.Flag("safebrowsing-disable-auto-update", true),
+		chromedp.Flag("enable-automation", true),
+		chromedp.Flag("password-store", "basic"),
+		chromedp.Flag("use-mock-keychain", true),
+
+		// Additional flags for CI.
+		chromedp.DisableGPU,
+		chromedp.NoSandbox,
 		chromedp.Flag("disable-setuid-sandbox", true),
-	)
-	return chromedp.NewExecAllocator(ctx, opts...)
+		chromedp.Flag("headless", "new"),
+		chromedp.Flag("disable-breakpad", true),
+		chromedp.Flag("disable-crash-reporter", true),
+		chromedp.Flag("disable-component-update", true),
+		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
+	}
+)
+
+// AllocatorOptsVerboseLogging provides ExecAllocator options for verbose logging
+// at the specified level.
+func AllocatorLoggingWithLevel(level int) []chromedp.ExecAllocatorOption {
+	return []chromedp.ExecAllocatorOption{
+		chromedp.Flag("enable-logging", "stderr"),
+		chromedp.Flag("v", fmt.Sprintf("%d", level)),
+	}
 }
 
 // WithContextForCI returns a chromedp context that may be different on a CI
 // system than when running locally. The CI configuration may disable
-// sandboxing etc. The ExecAllocator used is created with default options
-// (eg. headless) if execAllocOpts is nil or empty via a call WithExecAllocatorForCI,
-func WithContextForCI(ctx context.Context, execAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func()) {
-	allocOpts := []chromedp.ExecAllocatorOption{}
-	if len(execAllocOpts) == 0 {
-		allocOpts = append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
-	} else {
-		allocOpts = append(allocOpts, execAllocOpts...)
-	}
-	ctx, cancelA := WithExecAllocatorForCI(ctx, allocOpts...)
+// sandboxing etc. The ExecAllocator is always created with appropriate options for
+// the various CI environments and extraExecAllocOpts is appended to these.
+func WithContextForCI(ctx context.Context, extraExecAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func()) {
+	ctx, cancelA := WithExecAllocatorForCI(ctx, extraExecAllocOpts...)
 	ctx, cancelB := chromedp.NewContext(ctx, opts...)
 	return ctx, func() {
 		cancelB()

@@ -13,11 +13,12 @@ jobs:
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
+      os-version: ubuntu-latest
       go-versions: |
         [ "1.25.x" ]
-      init-chrome: true
-      init-pebble: true
-      init-mkcert: true
 
   lint:
     uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
+    with:
+      os-version: ubuntu-latest
+      go-version: "1.25.x"

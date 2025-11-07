@@ -262,6 +262,9 @@ func TestNewLocalDownloadCacheErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to open cache files: %v", err)
 		}
+		defer cacheFile.Close()
+		defer indexFile.Close()
+
 		_, err = largefile.NewLocalDownloadCache(cacheFile, indexFile)
 		if err == nil {
 			t.Fatal("NewLocalDownloadCache() error = nil, wantErr true for corrupt index")

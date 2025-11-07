@@ -176,6 +176,7 @@ func TestInternalCacheErrorsWrite(t *testing.T) {
 		simulatedErr := errors.New("simulated data write error")
 		mockDataFile := newMockFile("mock.dat", nil)
 		mockDataFile.writeAtErr = simulatedErr
+		cache.data.Close()        //nolint:errcheck
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -194,6 +195,7 @@ func TestInternalCacheErrorsWrite(t *testing.T) {
 		simulatedErr := errors.New("simulated data sync error")
 		mockDataFile := newMockFile("mock.dat", make([]byte, 64))
 		mockDataFile.syncErr = simulatedErr
+		cache.data.Close()        //nolint:errcheck
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -212,6 +214,7 @@ func TestInternalCacheErrorsWrite(t *testing.T) {
 		simulatedErr := errors.New("simulated index write error")
 		mockIndexFile := newMockFile("mock.idx", nil)
 		mockIndexFile.writeAtErr = simulatedErr
+		cache.indexStore.wr.Close()         //nolint:errcheck
 		cache.indexStore.wr = mockIndexFile // Replace real index file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -229,6 +232,7 @@ func TestInternalCacheErrorsWrite(t *testing.T) {
 
 		mockIndexFile := newMockFile("mock.idx", nil)
 		mockIndexFile.shortWrite = true
+		cache.indexStore.wr.Close()         //nolint:errcheck
 		cache.indexStore.wr = mockIndexFile // Replace real index file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -256,6 +260,7 @@ func TestInternalCacheErrorsRead(t *testing.T) {
 		simulatedErr := errors.New("simulated data read error")
 		mockDataFile := newMockFile("mock.dat", nil)
 		mockDataFile.readAtErr = simulatedErr
+		cache.data.Close()        //nolint:errcheck
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.ReadAt(make([]byte, 64), 0)
@@ -279,6 +284,7 @@ func TestInternalCacheErrorsRead(t *testing.T) {
 		// Replace real file with a mock that will perform a short read.
 		// A short read from an io.ReaderAt returns io.EOF.
 		mockDataFile := newMockFile("mock.dat", make([]byte, 63)) // 1 byte short
+		cache.data.Close()                                        //nolint:errcheck
 		cache.data = mockDataFile
 
 		_, err := cache.ReadAt(make([]byte, 64), 0)

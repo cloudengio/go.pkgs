@@ -137,7 +137,6 @@ func (v *Validator) Validate(ctx context.Context, host, port string) error {
 				CipherSuites:  v.opts.ciphersuites,
 				Renegotiation: tls.RenegotiateNever,
 			}, addr, port)
-			fmt.Printf("got tls state for %s:%s: %v %v\n", addr, port, s, err)
 			if err != nil {
 				return err
 			}
@@ -218,10 +217,8 @@ func (v *Validator) expandHost(host string) ([]string, error) {
 func (v *Validator) getTLSState(ctx context.Context, cfg *tls.Config, addr, port string) (tls.ConnectionState, error) {
 	cfg = cfg.Clone()
 	dialer := &net.Dialer{}
-	fmt.Printf("dialing %s:%s: %v\n", addr, port, net.JoinHostPort(addr, port))
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(addr, port))
 	if err != nil {
-		fmt.Printf("failed to dial %s:%s: %v\n", addr, port, err)
 		return tls.ConnectionState{}, err
 	}
 	defer conn.Close()
