@@ -4,11 +4,11 @@ go 1.25
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20251104161051-926cd34b5e43
-	cloudeng.io/debug v0.0.0-20251104161051-926cd34b5e43
 	cloudeng.io/errors v0.0.13-0.20251104161051-926cd34b5e43
 	cloudeng.io/file v0.0.0-20251104161051-926cd34b5e43
 	cloudeng.io/io v0.0.0-20251104161051-926cd34b5e43
 	cloudeng.io/logging v0.0.0-20251104161051-926cd34b5e43
+	cloudeng.io/net v0.0.0-20251104161051-926cd34b5e43
 	cloudeng.io/os v0.0.0-20251104161051-926cd34b5e43
 	cloudeng.io/sync v0.0.9-0.20251104161051-926cd34b5e43
 	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
@@ -23,7 +23,7 @@ require (
 
 require (
 	cloudeng.io/algo v0.0.0-20251104161051-926cd34b5e43 // indirect
-	cloudeng.io/net v0.0.0-20251104161051-926cd34b5e43 // indirect
+	cloudeng.io/debug v0.0.0-20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/sys v0.0.0-20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/windows v0.0.0-20251104161051-926cd34b5e43 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect

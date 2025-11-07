@@ -17,7 +17,7 @@ jobs:
       should-run: ${{ steps.check.outputs.contains-pattern }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check PR description for 'windows'
+      - name: Check PR description for 'test:windows'
         id: check
         uses: cloudengio/.github/.github/actions/check-pr-description@main
         with:

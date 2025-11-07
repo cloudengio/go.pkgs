@@ -15,6 +15,7 @@ require (
 	cloudeng.io/file v0.0.0-20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/io v0.0.0-20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/logging v0.0.0-20251104161051-926cd34b5e43 // indirect
+	cloudeng.io/net v0.0.0-20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/os v0.0.0-20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/sync v0.0.9-0.20251104161051-926cd34b5e43 // indirect
 	cloudeng.io/text v0.0.12-0.20251104161051-926cd34b5e43 // indirect

@@ -71,6 +71,20 @@ generally used for obtainint TLS certificates.
 
 
 ## Functions
+### Func FindLeafPEM
+```go
+func FindLeafPEM(certsPEM []*pem.Block) ([]byte, *x509.Certificate, error)
+```
+FindLeafPEM searches the supplied PEM blocks for the leaf certificate and
+returns its DER encoding along with the parsed x509.Certificate.
+
+### Func NewHTTPClient
+```go
+func NewHTTPClient(ctx context.Context, opts ...HTTPClientOption) (*http.Client, error)
+```
+NewHTTPClient creates a new HTTP client configured according to the
+specified options.
+
 ### Func NewHTTPServer
 ```go
 func NewHTTPServer(ctx context.Context, addr string, handler http.Handler) (net.Listener, *http.Server, error)
@@ -123,11 +137,25 @@ func ParsePEM(pemData []byte) (privateKeys, publicKeys, certs []*pem.Block)
 ```
 ParsePEM parses private keys and certificates from the provided PEM data.
 
+### Func ParsePrivateKeyDER
+```go
+func ParsePrivateKeyDER(der []byte) (crypto.Signer, error)
+```
+ParsePrivateKeyDER parses a DER encoded private key. It tries PKCS#1,
+PKCS#8 and then SEC 1 for EC keys.
+
 ### Func ReadAndParseCertsPEM
 ```go
 func ReadAndParseCertsPEM(ctx context.Context, fs file.ReadFileFS, pemFile string) ([]*x509.Certificate, error)
 ```
 ReadAndParseCertsPEM loads certificates from the specified PEM file.
+
+### Func ReadAndParsePrivateKeyPEM
+```go
+func ReadAndParsePrivateKeyPEM(ctx context.Context, fs file.ReadFileFS, pemFile string) (crypto.Signer, error)
+```
+ReadAndParsePrivateKeyPEM reads and parses a PEM encoded private key from
+the specified file.
 
 ### Func RedirectHandler
 ```go
@@ -206,6 +234,13 @@ WaitForServers waits for all supplied addresses to be available by
 attempting to open a TCP connection to each address at the specified
 interval.
 
+### Func WaitForURLs
+```go
+func WaitForURLs(ctx context.Context, interval time.Duration, urls ...string) error
+```
+WaitForURLs waits for all supplied URLs to be available by attempting to
+perform HTTP GET requests to each URL at the specified interval.
+
 
 
 ## Types
@@ -271,6 +306,37 @@ func CertCacheTTL(ttl time.Duration) CertServingCacheOption
 ```
 CertCacheTTL sets the in-memory TTL beyond which cache entries are
 refreshed. This is generally only required for testing purposes.
+
+
+
+
+### Type HTTPClientOption
+```go
+type HTTPClientOption func(o *httpClientOptions)
+```
+HTTPClientOption is used to configure an HTTP client.
+
+### Functions
+
+```go
+func WithCustomCAPEMFile(caPEMFile string) HTTPClientOption
+```
+WithCustomCAPEMFile configures the HTTP client to use the specified custom
+CA PEM data as a root CA.
+
+
+```go
+func WithCustomCAPool(caPool *x509.CertPool) HTTPClientOption
+```
+WithCustomCAPool configures the HTTP client to use the specified custom CA
+pool. It takes precedence over WithCustomCAPEMFile.
+
+
+```go
+func WithTracingTransport(to ...httptracing.TraceRoundtripOption) HTTPClientOption
+```
+WithTracingTransport configures the HTTP client to use a tracing round
+tripper with the specified options.
 
 
 
