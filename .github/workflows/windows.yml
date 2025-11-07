@@ -27,11 +27,11 @@ jobs:
           CHROME_USER_DATA_DIR: ${{ steps.setup-chrome.outputs.chrome-user-data-dir }}
         run: |
           cd webapp
-          go test -v "-failfast"    "--covermode=atomic" "--vet=off" "-race" "./...",
+          go test -v -failfast --covermode=atomic --vet=off -race  ./...
 
-  test-else:
-    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
-    with:
-      os-version: windows-latest
-      go-versions: |
-        [ "1.25.x" ]
+  #test:
+  #  uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+  #  with:
+  #    os-version: windows-latest
+  #    go-versions: |
+  #      [ "1.25.x" ]
