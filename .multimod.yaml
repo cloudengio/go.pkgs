@@ -7,8 +7,6 @@ test:
     "--covermode=atomic",
     "--vet=off",
     "-race",
-    "--timeout=5m",
-    "-v",
     "./...",
   ]
 lint: ["golangci-lint", "run", "./..."]
