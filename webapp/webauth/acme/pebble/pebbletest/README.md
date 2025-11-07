@@ -1,7 +1,7 @@
-# Package [cloudeng.io/webapp/webauth/acme/pebble/testpebble](https://pkg.go.dev/cloudeng.io/webapp/webauth/acme/pebble/testpebble?tab=doc)
+# Package [cloudeng.io/webapp/webauth/acme/pebble/pebbletest](https://pkg.go.dev/cloudeng.io/webapp/webauth/acme/pebble/pebbletest?tab=doc)
 
 ```go
-import cloudeng.io/webapp/webauth/acme/pebble/testpebble
+import cloudeng.io/webapp/webauth/acme/pebble/pebbletest
 ```
 
 
