@@ -17,7 +17,7 @@ test-less-parallelism:
     "--covermode=atomic",
     "--vet=off",
     "-race",
-    "-p=1",
+    "-p=2",
     "./...",
   ]
 lint: ["golangci-lint", "run", "./..."]
