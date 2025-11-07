@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,19 @@ import (
 	"cloudeng.io/net/http/httptracing"
 	"cloudeng.io/webapp"
 )
+
+func noCertError() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "x509: certificate signed by unknown authority"
+	case "darwin":
+		return "failed to verify certificate: x509: “localhost” certificate is not trusted"
+	case "linux":
+		return "x509: certificate signed by unknown authority"
+	default:
+		return "failed to verify certificate: x509: certificate signed by unknown authority"
+	}
+}
 
 func newCert(t *testing.T, name string, isCA bool, signer *x509.Certificate, signerKey *rsa.PrivateKey) (*x509.Certificate, *rsa.PrivateKey) {
 	t.Helper()
@@ -101,10 +115,11 @@ func TestNewHTTPClient(t *testing.T) {
 		serverCert, serverKey := newCert(t, "localhost", false, rootCert, rootKey)
 
 		// 2. Start a TLS server with the server cert.
-		server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		server.TLS = &tls.Config{
+			MinVersion: tls.VersionTLS13,
 			Certificates: []tls.Certificate{{
 				Certificate: [][]byte{serverCert.Raw},
 				PrivateKey:  serverKey,
@@ -122,7 +137,7 @@ func TestNewHTTPClient(t *testing.T) {
 		}
 
 		// 4. Create a client with the custom CA and make a request.
-		client, err := webapp.NewHTTPClient(ctx, webapp.WithCustomCA(caPemFile))
+		client, err := webapp.NewHTTPClient(ctx, webapp.WithCustomCAPEMFile(caPemFile))
 		if err != nil {
 			t.Fatalf("NewHTTPClient with custom CA failed: %v", err)
 		}
@@ -142,8 +157,9 @@ func TestNewHTTPClient(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected request with default client to fail")
 		}
-		if !strings.Contains(err.Error(), "failed to verify certificate: x509: “localhost” certificate is not trusted") {
-			t.Errorf("expected 'failed to verify certificate: x509: “localhost” certificate is not trusted', got: %v", err)
+		expected := noCertError()
+		if !strings.Contains(err.Error(), expected) {
+			t.Errorf("expected %q, got: %v", expected, err)
 		}
 	})
 
@@ -158,7 +174,7 @@ func TestNewHTTPClient(t *testing.T) {
 			t.Fatalf("NewHTTPClient with tracing failed: %v", err)
 		}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()

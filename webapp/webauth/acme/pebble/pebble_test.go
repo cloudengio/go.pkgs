@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +19,21 @@ import (
 )
 
 type output struct {
-	*strings.Builder
+	mu  sync.Mutex
+	out []byte
+}
+
+func (o *output) Write(p []byte) (n int, err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.out = append(o.out, p...)
+	return len(p), nil
+}
+
+func (o *output) String() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return string(o.out)
 }
 
 func (o *output) Close() error {
@@ -34,7 +49,7 @@ func TestPebble(t *testing.T) {
 		t.Fatalf("failed to build mock pebble: %v", err)
 	}
 	p := pebble.New(mockPebblePath)
-	out := &output{&strings.Builder{}}
+	out := &output{}
 	defer ensureStopped(t, p, out)
 
 	cfg := pebble.NewConfig()
@@ -78,7 +93,7 @@ func TestPebble_RealServer(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	p := pebble.New("pebble")
-	out := &output{&strings.Builder{}}
+	out := &output{}
 	defer ensureStopped(t, p, out)
 
 	cfg := pebble.NewConfig()
@@ -97,10 +112,15 @@ func TestPebble_RealServer(t *testing.T) {
 		t.Fatalf("WaitForReady: %v", err)
 	}
 
-	if _, err := cfg.GetIssuingCA(ctx, 0); err != nil {
-		t.Fatalf("GetIssuingCA: %v", err)
+	for range 2 {
+		if _, err := cfg.GetIssuingCA(ctx, 0); err != nil {
+			// Fix for linux CI runners wjere ipv6 does not seem to work.
+			if !strings.Contains(err.Error(), "dial tcp [::1]:15000: connect: connection refused") {
+				t.Logf("pebble log output: %s\n", out.String())
+				t.Fatalf("GetIssuingCA: %v", err)
+			}
+		}
 	}
-
 }
 
 func TestPossibleValidityPeriods(t *testing.T) {
