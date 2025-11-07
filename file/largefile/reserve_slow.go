@@ -66,9 +66,10 @@ func reserveSpace(ctx context.Context, fs *os.File, size int64, blockSize, concu
 	}
 	err := g.Wait()
 	if progressCh != nil {
+		// always send final progress update
 		select {
 		case progressCh <- atomic.LoadInt64(&written):
-		default:
+		case <-ctx.Done():
 		}
 		close(progressCh)
 	}

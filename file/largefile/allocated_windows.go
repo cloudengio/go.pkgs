@@ -8,11 +8,13 @@ package largefile
 
 import (
 	"os"
+
+	"golang.org/x/sys/windows"
 )
 
 func allocated(file *os.File, size int64) (bool, error) {
 	var fi windows.ByHandleFileInformation
-	err := windows.GetFileInformationByHandle(file.Fd(), &fi)
+	err := windows.GetFileInformationByHandle(windows.Handle(file.Fd()), &fi)
 	if err != nil {
 		return false, err
 	}

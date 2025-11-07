@@ -594,6 +594,8 @@ func TestNewLocalDownloadCacheErrors(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to open cache files: %v", err)
 				}
+				defer cacheFile.Close()
+				defer indexFile.Close()
 				_, err = NewLocalDownloadCache(cacheFile, indexFile)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("NewLocalDownloadCache() error = %v, wantErr %v", err, tt.wantErr)
@@ -610,7 +612,7 @@ func TestByteRanges(t *testing.T) { //nolint:gocyclo
 	const blockSize int = 64
 
 	_, cacheFilePath, indexFilePath, cache := setupTest(t, contentSize, blockSize)
-	defer cache.Close()
+	cache.Close()
 	err := CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
 	if err != nil {
 		t.Fatalf("NewFilesForCache failed: %v", err)

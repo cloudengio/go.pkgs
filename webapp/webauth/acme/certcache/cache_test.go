@@ -287,10 +287,8 @@ func TestCacheLocking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Remove the lock file to simulate lock acquisition failure.
-	err = os.Remove(filepath.Join(tmpDir, "dir.lock"))
-	require.NoError(t, err)
-	err = os.Chmod(tmpDir, 0000)
+	// Change the permissions on the lock file to simulate lock acquisition failure.
+	err = os.Chmod(filepath.Join(tmpDir, "dir.lock"), 0000)
 	require.NoError(t, err)
 
 	err = cache.Put(ctx, localName, []byte("new-data"))

@@ -125,7 +125,6 @@ func TestTextDiff(t *testing.T) {
 
 	insertedAll, deletedAll := processDiffOutput(t, filepath.Join("testdata", "textdiff.go.a.b"))
 
-	//	insertedAll[0] = strings.TrimPrefix(insertedAll[0], "\n") + "\n"
 	deletedAll[1] = "\n" + strings.TrimSuffix(deletedAll[1], "\n")
 	insertedAll[2] = "\n" + strings.TrimSuffix(insertedAll[2], "\n")
 
@@ -147,12 +146,18 @@ func TestTextDiff(t *testing.T) {
 			dg := diffs.Group(i)
 			if got, want := dg.Summary(), tc.output[i]; got != want {
 				t.Errorf("%v.%v: got %v, want %v", e, i, got, want)
+				t.Logf(" got: % 02x\n", got)
+				t.Logf("want: % 02x\n", want)
 			}
 			if got, want := dg.Inserted(), insertedAll[i]; got != want {
 				t.Errorf("%v.%v: got __%v__, want __%v__", e, i, got, want)
+				t.Logf(" got: % 02x\n", got)
+				t.Logf("want: % 02x\n", want)
 			}
 			if got, want := dg.Deleted(), deletedAll[i]; got != want {
 				t.Errorf("%v.%v: got %v, want %v", e, i, got, want)
+				t.Logf(" got: % 02x\n", got)
+				t.Logf("want: % 02x\n", want)
 			}
 		}
 	}
