@@ -27,7 +27,7 @@ jobs:
           CHROME_USER_DATA_DIR: ${{ steps.setup-chrome.outputs.chrome-user-data-dir }}
         run: |
           cd webapp/devtest/chromedputil
-          go test -v -failfast --covermode=atomic --vet=off -race  -run=TestRunLoggingListenerEvaluate .
+          go test -v -failfast --covermode=atomic --vet=off -race .
 
   #test:
   #  uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
