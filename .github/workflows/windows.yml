@@ -10,7 +10,23 @@ permissions:
   contents: read
 
 jobs:
+  check-description:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.contains-pattern }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PR description for 'windows'
+        id: check
+        uses: cloudengio/.github/.github/actions/check-pr-description@main
+        with:
+          phrase: test:windows
+          pr-body: ${{ github.event.pull_request.body }}
+
   test:
+    needs: check-description
+    if: github.event_name == 'push' || needs.check-description.outputs.should-run == 'true'
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
       os-version: windows-latest
