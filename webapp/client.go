@@ -24,7 +24,7 @@ type HTTPClientOption func(o *httpClientOptions)
 // custom CA PEM data as a root CA.
 func WithCustomCAPEMFile(caPEMFile string) HTTPClientOption {
 	return func(o *httpClientOptions) {
-		o.caPEMFIle = caPEMFile
+		o.caPEMFile = caPEMFile
 	}
 }
 
@@ -45,7 +45,7 @@ func WithTracingTransport(to ...httptracing.TraceRoundtripOption) HTTPClientOpti
 }
 
 type httpClientOptions struct {
-	caPEMFIle   string
+	caPEMFile   string
 	caPool      *x509.CertPool
 	tracingOpts []httptracing.TraceRoundtripOption
 }
@@ -64,7 +64,7 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPClientOption) (*http.Client,
 	if options.caPool != nil {
 		ctxlog.Logger(ctx).Warn("services.NewHTTPClient: using custom root CA pool")
 		transport.TLSClientConfig.RootCAs = options.caPool
-	} else if caPEMFile := options.caPEMFIle; caPEMFile != "" {
+	} else if caPEMFile := options.caPEMFile; caPEMFile != "" {
 		ctxlog.Logger(ctx).Warn("services.NewHTTPClient: using custom root CA pool containing", "ca", caPEMFile)
 		rootCAs, err := certPool(caPEMFile)
 		if err != nil {
@@ -87,11 +87,11 @@ func certPool(pemFile string) (*x509.CertPool, error) {
 	rootCAs := x509.NewCertPool()
 	certs, err := os.ReadFile(pemFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to append %q to RootCAs: %v", pemFile, err)
+		return nil, fmt.Errorf("failed to read CA file %q: %w", pemFile, err)
 	}
 	// Append our cert to the system pool
 	if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
-		return nil, fmt.Errorf("no certs appended")
+		return nil, fmt.Errorf("no certs appended from %q", pemFile)
 	}
 	return rootCAs, nil
 }
