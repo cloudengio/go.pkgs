@@ -7,6 +7,8 @@
 package executil
 
 import (
+	"os"
+	"os/exec"
 	"syscall"
 )
 
@@ -14,4 +16,11 @@ import (
 func isStopped(pid int) bool {
 	err := syscall.Kill(pid, syscall.Signal(0))
 	return err != nil
+}
+
+func signal(cmd *exec.Cmd, sig os.Signal) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	return cmd.Process.Signal(sig)
 }

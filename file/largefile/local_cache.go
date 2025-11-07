@@ -7,12 +7,12 @@ package largefile
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sync"
 
+	"cloudeng.io/errors"
 	"cloudeng.io/file/diskusage"
 )
 
@@ -356,22 +356,25 @@ func (c *LocalDownloadCache) ContentLengthAndBlockSize() (int64, int) {
 	return c.indexStore.contentSize, c.indexStore.blockSize
 }
 
+func (c *LocalDownloadCache) syncAndClose(f CacheFileReadWriter) error {
+	if err := f.Sync(); err != nil {
+		f.Close() //nolint:errcheck
+		return newInternalCacheError(fmt.Errorf("failed to sync %s: %w", f.Name(), err))
+	}
+	if err := f.Close(); err != nil {
+		return newInternalCacheError(fmt.Errorf("failed to close %s: %w", f.Name(), err))
+	}
+	return nil
+}
+
 // Close implements DownloadCache.
 func (c *LocalDownloadCache) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, f := range []CacheFileReadWriter{c.data, c.indexStore.wr} {
-		if f == nil {
-			continue
-		}
-		if err := f.Sync(); err != nil {
-			return newInternalCacheError(fmt.Errorf("failed to sync %s: %w", f.Name(), err))
-		}
-		if err := f.Close(); err != nil {
-			return newInternalCacheError(fmt.Errorf("failed to close %s: %w", f.Name(), err))
-		}
-	}
-	return nil
+	var errs errors.M
+	errs.Append(c.syncAndClose(c.data))
+	errs.Append(c.syncAndClose(c.indexStore.wr))
+	return errs.Err()
 }
 
 func (c *LocalDownloadCache) isExtended(to int64) bool {
