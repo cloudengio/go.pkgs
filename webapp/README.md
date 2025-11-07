@@ -234,6 +234,13 @@ WaitForServers waits for all supplied addresses to be available by
 attempting to open a TCP connection to each address at the specified
 interval.
 
+### Func WaitForURLs
+```go
+func WaitForURLs(ctx context.Context, interval time.Duration, urls ...string) error
+```
+WaitForURLs waits for all supplied URLs to be available by attempting to
+perform HTTP GET requests to each URL at the specified interval.
+
 
 
 ## Types
@@ -312,10 +319,17 @@ HTTPClientOption is used to configure an HTTP client.
 ### Functions
 
 ```go
-func WithCustomCA(caPem string) HTTPClientOption
+func WithCustomCAPEMFile(caPEMFile string) HTTPClientOption
 ```
-WithCustomCA configures the HTTP client to use the specified custom CA PEM
-data as a root CA.
+WithCustomCAPEMFile configures the HTTP client to use the specified custom
+CA PEM data as a root CA.
+
+
+```go
+func WithCustomCAPool(caPool *x509.CertPool) HTTPClientOption
+```
+WithCustomCAPool configures the HTTP client to use the specified custom CA
+pool. It takes precedence over WithCustomCAPEMFile.
 
 
 ```go

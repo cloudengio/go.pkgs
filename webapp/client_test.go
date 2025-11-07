@@ -157,7 +157,7 @@ func TestNewHTTPClient(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected request with default client to fail")
 		}
-		expected := "x509: certificate signed by unknown authority"
+		expected := noCertError()
 		if !strings.Contains(err.Error(), expected) {
 			t.Errorf("expected %q, got: %v", expected, err)
 		}
