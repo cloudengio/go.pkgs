@@ -17,7 +17,7 @@ import (
 	"cloudeng.io/webapp/webauth/acme/pebble"
 )
 
-type testing interface {
+type Testing interface {
 	Fatalf(format string, args ...interface{})
 	Helper()
 	Logf(format string, args ...interface{})
@@ -47,7 +47,7 @@ func (o *Recorder) String() string {
 }
 
 // Start starts a pebble ACME server for testing purposes.
-func Start(ctx context.Context, t testing, tmpDir string, configOpts ...pebble.ConfigOption) (*pebble.T, pebble.Config, *Recorder, string, string) {
+func Start(ctx context.Context, t Testing, tmpDir string, configOpts ...pebble.ConfigOption) (*pebble.T, pebble.Config, *Recorder, string, string) {
 	t.Helper()
 	pebbleCacheDir := filepath.Join(tmpDir, "certcache")
 	if err := os.MkdirAll(pebbleCacheDir, 0700); err != nil {
@@ -76,7 +76,7 @@ func Start(ctx context.Context, t testing, tmpDir string, configOpts ...pebble.C
 
 // WaitForNewCert waits for a new certificate to be issued at certPath with a
 // serial number different from previousSerial.
-func WaitForNewCert(ctx context.Context, t testing, msg, certPath string, previousSerial string) (*x509.Certificate, *x509.CertPool) {
+func WaitForNewCert(ctx context.Context, t Testing, msg, certPath string, previousSerial string) (*x509.Certificate, *x509.CertPool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -101,7 +101,7 @@ func WaitForNewCert(ctx context.Context, t testing, msg, certPath string, previo
 	}
 }
 
-func getCerts(t testing, certPath string) (*x509.Certificate, *x509.CertPool) {
+func getCerts(t Testing, certPath string) (*x509.Certificate, *x509.CertPool) {
 	t.Helper()
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
@@ -120,6 +120,7 @@ func getCerts(t testing, certPath string) (*x509.Certificate, *x509.CertPool) {
 		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
+			t.Logf("warning: failed to parse certificate in %v: %v", certPath, err)
 			continue
 		}
 		if !cert.IsCA {
