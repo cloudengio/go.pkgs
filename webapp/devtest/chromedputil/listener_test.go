@@ -60,22 +60,38 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
 	t.Cleanup(func() { server.Close() })
 
-	extraExecOpts := []chromedp.ExecAllocatorOption{
-		chromedp.CombinedOutput(&chromeWriter{os.Stderr}),
-	}
-	extraExecOpts = append(extraExecOpts, chromedputil.AllocatorLoggingWithLevel(1)...)
+	extraExecOpts := debuggingExecOpts(false)
 
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		extraExecOpts,
-		chromedp.WithBrowserOption(
-			chromedp.WithBrowserDebugf(t.Logf),
-			chromedp.WithBrowserLogf(t.Logf),
-			chromedp.WithBrowserErrorf(t.Logf),
-		),
-		chromedp.WithLogf(t.Logf),
+		debuggingCtxOpts(t, false)...,
 	)
 
 	return ctx, cancel, server.URL
+}
+
+func debuggingExecOpts(debug bool) []chromedp.ExecAllocatorOption {
+	var extraExecOpts []chromedp.ExecAllocatorOption
+	if debug {
+		extraExecOpts = append(extraExecOpts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}))
+		extraExecOpts = append(extraExecOpts, chromedputil.AllocatorLoggingWithLevel(1)...)
+	}
+	return extraExecOpts
+}
+
+func debuggingCtxOpts(t *testing.T, debug bool) []chromedp.ContextOption {
+	var ctxOpts []chromedp.ContextOption
+	if debug {
+		ctxOpts = append(ctxOpts,
+			chromedp.WithBrowserOption(
+				chromedp.WithBrowserDebugf(t.Logf),
+				chromedp.WithBrowserLogf(t.Logf),
+				chromedp.WithBrowserErrorf(t.Logf)),
+			chromedp.WithLogf(t.Logf),
+			chromedp.WithDebugf(t.Logf),
+			chromedp.WithErrorf(t.Logf))
+	}
+	return ctxOpts
 }
 
 type chromeWriter struct{ io.Writer }
@@ -429,10 +445,8 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	select {
 	case <-doneCh:
 		// Success - listener has terminated
-		fmt.Printf("...Listener terminated successfully\n")
 		t.Logf("Listener terminated successfully")
 	case <-time.After(5 * time.Second):
-		fmt.Printf("...Timed out waiting for listener to terminate\n")
 		t.Fatal("Timed out waiting for listener to terminate")
 	}
 
