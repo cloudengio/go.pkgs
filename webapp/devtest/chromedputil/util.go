@@ -221,7 +221,7 @@ func IsPlatformObject(obj *runtime.RemoteObject) bool {
 func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.ExecAllocatorOption) (context.Context, func()) {
 	chromeBin := ChromeBinPathOnCI()
 	modifyCmd := func(cmd *exec.Cmd) {
-		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args)
+		fmt.Printf("chrome command line: %v %v\n", cmd.Path, cmd.Args[1:])
 	}
 	if len(chromeBin) == 0 {
 		opts := slices.Clone(chromedp.DefaultExecAllocatorOptions[:])
@@ -298,12 +298,16 @@ var (
 		chromedp.Flag("disable-component-update", true),
 		chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
 	}
-
-	AllocatorOptsVerboseLogging = []chromedp.ExecAllocatorOption{
-		chromedp.Flag("enable-logging", "stderr"),
-		chromedp.Flag("v", "2"),
-	}
 )
+
+// AllocatorOptsVerboseLogging provides ExecAllocator options for verbose logging
+// at the specified level.
+func AllocatorLoggingWithLevel(level int) []chromedp.ExecAllocatorOption {
+	return []chromedp.ExecAllocatorOption{
+		chromedp.Flag("enable-logging", "stderr"),
+		chromedp.Flag("v", fmt.Sprintf("%d", level)),
+	}
+}
 
 // WithContextForCI returns a chromedp context that may be different on a CI
 // system than when running locally. The CI configuration may disable

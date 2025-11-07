@@ -63,7 +63,7 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 	extraExecOpts := []chromedp.ExecAllocatorOption{
 		chromedp.CombinedOutput(&chromeWriter{os.Stderr}),
 	}
-	extraExecOpts = append(extraExecOpts, chromedputil.AllocatorOptsVerboseLogging...)
+	extraExecOpts = append(extraExecOpts, chromedputil.AllocatorLoggingWithLevel(1)...)
 
 	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
 		extraExecOpts,
