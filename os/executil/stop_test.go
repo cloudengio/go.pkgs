@@ -25,7 +25,6 @@ import (
 func startStoppable(ctx context.Context, t *testing.T, hang bool, out *bytes.Buffer) *exec.Cmd {
 	t.Helper()
 	tmpDir := t.TempDir()
-	tmpDir, _ = os.MkdirTemp(tmpDir, "stoppable")
 	binary, err := executil.GoBuild(ctx, filepath.Join(tmpDir, "stoppable"), "./testdata/stoppable")
 	if err != nil {
 		t.Fatal(err)

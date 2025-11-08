@@ -6,14 +6,10 @@ package main
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,49 +17,13 @@ import (
 	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/webapp/webauth/acme"
 	"cloudeng.io/webapp/webauth/acme/pebble"
+	"cloudeng.io/webapp/webauth/acme/pebble/pebbletest"
 )
-
-type output struct {
-	io.Writer
-}
-
-func (o *output) Close() error {
-	return nil
-}
-
-func startPebble(ctx context.Context, t *testing.T, tmpDir string, configOpts ...pebble.ConfigOption) (*pebble.T, pebble.Config, *strings.Builder, string, string) {
-	t.Helper()
-	pebbleCacheDir := filepath.Join(tmpDir, "certcache")
-	if err := os.MkdirAll(pebbleCacheDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-
-	pebbleServer := pebble.New("pebble")
-	pebbleTestDir := filepath.Join(tmpDir, "pebble-test")
-
-	cfg := pebble.NewConfig(configOpts...)
-	pebbleCfg, err := cfg.CreateCertsAndUpdateConfig(ctx, pebbleTestDir)
-	if err != nil {
-		t.Fatalf("failed to create pebble certs: %v", err)
-	}
-
-	out := &strings.Builder{}
-	if err := pebbleServer.Start(ctx, pebbleTestDir, pebbleCfg, &output{io.MultiWriter(out, os.Stderr)}); err != nil {
-		t.Fatalf("failed to start pebble: %v", err)
-	}
-	if err := pebbleServer.WaitForReady(ctx); err != nil {
-		t.Fatalf("pebble not ready: %v\n%s", err, out.String())
-	}
-	t.Logf("cert cache dir: %s", pebbleCacheDir)
-	t.Logf("pebble dir: %s", pebbleTestDir)
-	return pebbleServer, cfg, out, pebbleCacheDir, pebbleTestDir
-}
 
 func defaultManagerFlags(pebbleCfg pebble.Config, pebbleTestDir, pebbleCacheDir string) certManagerFlags {
 	return certManagerFlags{
 		ClientHostFlag: ClientHostFlag{pebbleCfg.Address},
 		ServiceFlags: acme.ServiceFlags{
-
 			Provider: pebbleCfg.DirectoryURL(),
 			Email:    "dev@cloudeng.io",
 		},
@@ -82,7 +42,7 @@ func TestNewCert(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := startPebble(ctx, t, tmpDir)
+	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := pebbletest.Start(ctx, t, tmpDir)
 	defer pebbleServer.EnsureStopped(ctx, time.Second) //nolint:errcheck
 
 	mgrFlags := defaultManagerFlags(pebbleCfg, pebbleTestDir, pebbleCacheDir)
@@ -96,7 +56,7 @@ func TestNewCert(t *testing.T) {
 	}
 
 	localhostCert := filepath.Join(pebbleCacheDir, "certs", "pebble-test.example.com")
-	leaf, intermediates := waitForNewCert(ctx, t, "new cert", localhostCert, "")
+	leaf, intermediates := pebbletest.WaitForNewCert(ctx, t, "new cert", localhostCert, "")
 
 	if err := leaf.VerifyHostname("pebble-test.example.com"); err != nil {
 		t.Fatalf("hostname verification failed: %v", err)
@@ -127,7 +87,7 @@ func TestCertRenewal(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := startPebble(ctx, t, tmpDir,
+	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := pebbletest.Start(ctx, t, tmpDir,
 		pebble.WithValidityPeriod(10), // short lived certs to force renewal
 	)
 	defer pebbleServer.EnsureStopped(ctx, time.Second) //nolint:errcheck
@@ -147,7 +107,7 @@ func TestCertRenewal(t *testing.T) {
 
 		localhostCert := filepath.Join(pebbleCacheDir, "certs", "pebble-test.example.com")
 
-		leaf, intermediates := waitForNewCert(ctx, t,
+		leaf, intermediates := pebbletest.WaitForNewCert(ctx, t,
 			fmt.Sprintf("waiting for cert %v", i),
 			localhostCert, previousSerial)
 
@@ -204,6 +164,7 @@ func waitForServer(t *testing.T, errCh <-chan error) {
 	}
 }
 
+/*
 func waitForNewCert(ctx context.Context, t *testing.T, msg, certPath string, previousSerial string) (*x509.Certificate, *x509.CertPool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -228,6 +189,7 @@ func waitForNewCert(ctx context.Context, t *testing.T, msg, certPath string, pre
 		}
 	}
 }
+
 func getCerts(t *testing.T, certPath string) (*x509.Certificate, *x509.CertPool) {
 	t.Helper()
 	certPEM, err := os.ReadFile(certPath)
@@ -261,3 +223,4 @@ func getCerts(t *testing.T, certPath string) (*x509.Certificate, *x509.CertPool)
 	}
 	return leafCert, intermediates
 }
+*/
