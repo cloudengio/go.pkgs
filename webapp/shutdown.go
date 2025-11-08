@@ -165,7 +165,10 @@ func ParseAddrPortDefaults(addr, port string) string {
 // by attempting to open a TCP connection to each address at the
 // specified interval.
 func WaitForServers(ctx context.Context, interval time.Duration, addrs ...string) error {
-	if len(addrs) == 1 {
+	switch len(addrs) {
+	case 0:
+		return nil
+	case 1:
 		return ping(ctx, interval, addrs[0])
 	}
 	g, ctx := errgroup.WithContext(ctx)
@@ -193,6 +196,50 @@ func ping(ctx context.Context, interval time.Duration, addr string) error {
 		case <-time.After(interval):
 			ctxlog.Info(ctx, "ping: server timeout", "addr", addr, "duration", interval.String())
 
+		}
+	}
+}
+
+// WaitForURLs waits for all supplied URLs to be available
+// by attempting to perform HTTP GET requests to each URL
+// at the specified interval.
+func WaitForURLs(ctx context.Context, interval time.Duration, urls ...string) error {
+	switch len(urls) {
+	case 0:
+		return nil
+	case 1:
+		return pingURL(ctx, interval, urls[0])
+	}
+	g, ctx := errgroup.WithContext(ctx)
+	for _, url := range urls {
+		g.Go(func() error {
+			return pingURL(ctx, interval, url)
+		})
+	}
+	return g.Wait()
+}
+
+func pingURL(ctx context.Context, interval time.Duration, url string) error {
+	{
+		client := &http.Client{
+			Timeout: time.Millisecond * 250,
+		}
+		for {
+			ctxlog.Logger(ctx).Info("ping: url", "url", url)
+			resp, err := client.Get(url)
+			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				return nil
+			}
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(interval):
+				ctxlog.Info(ctx, "ping: url timeout", "url", url, "duration", interval.String())
+
+			}
 		}
 	}
 }

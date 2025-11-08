@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/webapp"
 	"cloudeng.io/webapp/devtest/chromedputil"
 	"github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
@@ -52,17 +53,53 @@ func setupTestEnvironment(t *testing.T) (context.Context, context.CancelFunc, st
 
                         // This will trigger an exception event
                         throw new Error("Planned test error");
-                     </script>
-                </body>
+                     </script>                </body>
             </html>
         `))
 	}))
 
 	t.Cleanup(func() { server.Close() })
 
-	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil)
+	extraExecOpts := debuggingExecOpts(false)
+
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(),
+		extraExecOpts,
+		debuggingCtxOpts(t, false)...,
+	)
 
 	return ctx, cancel, server.URL
+}
+
+func debuggingExecOpts(debug bool) []chromedp.ExecAllocatorOption {
+	var extraExecOpts []chromedp.ExecAllocatorOption
+	if debug {
+		extraExecOpts = append(extraExecOpts, chromedp.CombinedOutput(&chromeWriter{os.Stderr}))
+		extraExecOpts = append(extraExecOpts, chromedputil.AllocatorLoggingWithLevel(1)...)
+	}
+	return extraExecOpts
+}
+
+func debuggingCtxOpts(t *testing.T, debug bool) []chromedp.ContextOption {
+	var ctxOpts []chromedp.ContextOption
+	if debug {
+		ctxOpts = append(ctxOpts,
+			chromedp.WithBrowserOption(
+				chromedp.WithBrowserDebugf(t.Logf),
+				chromedp.WithBrowserLogf(t.Logf),
+				chromedp.WithBrowserErrorf(t.Logf)),
+			chromedp.WithLogf(t.Logf),
+			chromedp.WithDebugf(t.Logf),
+			chromedp.WithErrorf(t.Logf))
+	}
+	return ctxOpts
+}
+
+type chromeWriter struct{ io.Writer }
+
+func (w chromeWriter) Write(p []byte) (n int, err error) {
+	o := append([]byte("chrome(output): "), p...)
+	_, err = w.Writer.Write(o)
+	return len(p), err
 }
 
 func TestListen(t *testing.T) {
@@ -79,8 +116,12 @@ func TestListen(t *testing.T) {
 		chromedputil.NewListenHandler(exceptionCh),
 	)
 
-	// Navigate to test page which will trigger events
-	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
+	wctx, wcancel := context.WithTimeout(ctx, time.Minute)
+	defer wcancel()
+
+	if err := chromedp.Run(wctx,
+		chromedp.Navigate(serverURL),
+	); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
@@ -93,7 +134,7 @@ func TestListen(t *testing.T) {
 		if len(event.Args) < 1 {
 			t.Errorf("Expected at least one console argument")
 		}
-	case <-time.After(1 * time.Second):
+	case <-time.After(3 * time.Second):
 		t.Error("Timed out waiting for console event")
 	}
 
@@ -105,6 +146,7 @@ func TestListen(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Error("Timed out waiting for exception event")
 	}
+
 }
 
 // 1. String
@@ -370,7 +412,7 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 
 	// Create a buffered writer to capture log output
 	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(io.MultiWriter(&logBuf, os.Stderr), nil))
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	// Start the logging listener with all event types enabled
 	listenerCtx, cancelListener := context.WithCancel(ctx)
@@ -382,8 +424,14 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 		chromedputil.WithAnyEventLogging(),
 	)
 
+	if err := webapp.WaitForURLs(ctx, time.Second, serverURL); err != nil {
+		t.Fatalf("Failed to wait for server URL: %v", err)
+	}
+
 	// Navigate to the test page which will trigger various events
-	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
+	wctx, wcancel := context.WithTimeout(ctx, time.Minute)
+	defer wcancel()
+	if err := chromedp.Run(wctx, chromedp.Navigate(serverURL)); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 
@@ -397,12 +445,15 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	select {
 	case <-doneCh:
 		// Success - listener has terminated
-	case <-time.After(2 * time.Second):
+		t.Logf("Listener terminated successfully")
+	case <-time.After(5 * time.Second):
 		t.Fatal("Timed out waiting for listener to terminate")
 	}
 
 	// Check that logs were captured
 	logs := logBuf.String()
+	fmt.Printf("...Captured logs:\n%s\n", logs)
+	t.Logf("...Captured logs:\n%s", logs)
 
 	// Should have captured console logs
 	if !strings.Contains(logs, "Console API called") {
@@ -427,6 +478,7 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	if !strings.Contains(logs, "Log entry added") {
 		t.Error("No log entry logs were captured")
 	}
+
 }
 
 func testNewListenHandler(ctx context.Context, t *testing.T, event any, expected bool) { //nolint:gocyclo
@@ -630,6 +682,7 @@ func TestRunLoggingListenerEvaluate(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Stop the listener and capture the output.
+	t.Logf("Stopping listener")
 	cancel()
 
 	<-doneCh

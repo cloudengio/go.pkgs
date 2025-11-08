@@ -7,7 +7,68 @@ import cloudeng.io/webapp/devtest/chromedputil
 Package chromedputil provides utility functions for working with the Chrome
 DevTools Protocol via github.com/chromedp.
 
+## Variables
+### AllocatorOptsForCI
+```go
+// AllocatorOptsForCI are the default ExecAllocator options for CI environments,
+// they extend chromedp.DefaultExecAllocatorOptions.
+AllocatorOptsForCI = []chromedp.ExecAllocatorOption{
+
+	chromedp.NoFirstRun,
+	chromedp.NoDefaultBrowserCheck,
+	chromedp.Flag("headless", "new"),
+
+	chromedp.Flag("disable-background-networking", true),
+
+	chromedp.Flag("disable-background-timer-throttling", true),
+	chromedp.Flag("disable-backgrounding-occluded-windows", true),
+	chromedp.Flag("disable-breakpad", true),
+	chromedp.Flag("disable-client-side-phishing-detection", true),
+	chromedp.Flag("disable-default-apps", true),
+	chromedp.Flag("disable-dev-shm-usage", true),
+	chromedp.Flag("disable-extensions", true),
+	chromedp.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees"),
+	chromedp.Flag("disable-hang-monitor", true),
+	chromedp.Flag("disable-ipc-flooding-protection", true),
+	chromedp.Flag("disable-popup-blocking", true),
+	chromedp.Flag("disable-prompt-on-repost", true),
+	chromedp.Flag("disable-renderer-backgrounding", true),
+	chromedp.Flag("disable-sync", true),
+	chromedp.Flag("force-color-profile", "srgb"),
+	chromedp.Flag("metrics-recording-only", true),
+	chromedp.Flag("safebrowsing-disable-auto-update", true),
+	chromedp.Flag("enable-automation", true),
+	chromedp.Flag("password-store", "basic"),
+	chromedp.Flag("use-mock-keychain", true),
+
+	chromedp.DisableGPU,
+	chromedp.NoSandbox,
+	chromedp.Flag("disable-setuid-sandbox", true),
+	chromedp.Flag("headless", "new"),
+	chromedp.Flag("disable-breakpad", true),
+	chromedp.Flag("disable-crash-reporter", true),
+	chromedp.Flag("disable-component-update", true),
+	chromedp.Flag("disable-features", "MetricsReporting,UserMetrics"),
+}
+
+```
+
+
+
 ## Functions
+### Func AllocatorLoggingWithLevel
+```go
+func AllocatorLoggingWithLevel(level int) []chromedp.ExecAllocatorOption
+```
+AllocatorOptsVerboseLogging provides ExecAllocator options for verbose
+logging at the specified level.
+
+### Func ChromeBinPathOnCI
+```go
+func ChromeBinPathOnCI() string
+```
+ChromeBinPathOnCI returns the Chrome binary path for CI.
+
 ### Func ConsoleArgsAsJSON
 ```go
 func ConsoleArgsAsJSON(ctx context.Context, event *runtime.EventConsoleAPICalled) ([][]byte, error)
@@ -89,6 +150,12 @@ func SourceScript(ctx context.Context, script string) error
 ```
 SourceScript loads a JavaScript script into the current page.
 
+### Func UserDataDirOnCI
+```go
+func UserDataDirOnCI() string
+```
+UserDataDirOnCI returns the user data directory for Chrome on CI.
+
 ### Func WaitForPromise
 ```go
 func WaitForPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams
@@ -98,20 +165,19 @@ parameters.
 
 ### Func WithContextForCI
 ```go
-func WithContextForCI(ctx context.Context, execAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func())
+func WithContextForCI(ctx context.Context, extraExecAllocOpts []chromedp.ExecAllocatorOption, opts ...chromedp.ContextOption) (context.Context, func())
 ```
-WithContextForCI returns a chromedp context that may be different
-on a CI system than when running locally. The CI configuration may
-disable sandboxing etc. The ExecAllocator used is created with default
-options (eg. headless) if execAllocOpts is nil or empty via a call
-WithExecAllocatorForCI,
+WithContextForCI returns a chromedp context that may be different on a
+CI system than when running locally. The CI configuration may disable
+sandboxing etc. The ExecAllocator is always created with appropriate options
+for the various CI environments and extraExecAllocOpts is appended to these.
 
 ### Func WithExecAllocatorForCI
 ```go
-func WithExecAllocatorForCI(ctx context.Context, opts ...chromedp.ExecAllocatorOption) (context.Context, func())
+func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.ExecAllocatorOption) (context.Context, func())
 ```
-WithExecAllocatorForCI returns a chromedp context with an ExecAllocator that
-may be configured differently on a CI system than when running locally.
+WithExecAllocatorForCI returns a chromedp context with an ExecAllocator
+configured appropriately for CI systems as opposed to when running locally.
 The CI configuration may disable sandboxing for example.
 
 

@@ -1,169 +1,103 @@
-// Copyright 2022 cloudeng llc. All rights reserved.
+// Copyright 2023 cloudeng llc. All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package goroutines_test
+package goroutines
 
 import (
-	"fmt"
-	"runtime"
 	"strings"
-	"sync"
 	"testing"
-
-	"cloudeng.io/debug/goroutines"
-	"cloudeng.io/path/gopkgpath"
 )
 
-func wrappedWaitForIt(wg *sync.WaitGroup, wait chan struct{}, n int64) {
-	if n == 0 {
-		waitForIt(wg, wait)
-	} else {
-		wrappedWaitForIt(wg, wait, n-1)
-	}
+var sampleGoroutines = []*Goroutine{
+	{
+		ID:    1,
+		State: "running",
+		Stack: []*Frame{
+			{
+				Call:   "main.main()",
+				File:   "/Users/cnicolaou/go/src/main.go",
+				Line:   10,
+				Offset: 12,
+			},
+			{
+				Call:   "runtime.main()",
+				File:   "/usr/local/go/src/runtime/proc.go",
+				Line:   250,
+				Offset: 0,
+			},
+		},
+		Creator: &Frame{
+			Call:   "runtime.startm()",
+			File:   "/usr/local/go/src/runtime/proc.go",
+			Line:   1123,
+			Offset: 34,
+		},
+	},
+	{
+		ID:    6,
+		State: "chan receive",
+		Stack: []*Frame{
+			{
+				Call:   "main.foobar()",
+				File:   "/Users/cnicolaou/go/src/main.go",
+				Line:   23,
+				Offset: 0,
+			},
+		},
+	},
 }
 
-func waitForIt(wg *sync.WaitGroup, wait chan struct{}) {
-	wg.Done()
-	<-wait
-}
+const panicFormat = `goroutine 1 [running]:
+main.main()
+    /Users/cnicolaou/go/src/main.go:10 +0xc
+runtime.main()
+    /usr/local/go/src/runtime/proc.go:250
+created by runtime.startm()
+    /usr/local/go/src/runtime/proc.go:1123 +0x22
 
-func runGoA(wg *sync.WaitGroup, wait chan struct{}) {
-	go waitForIt(wg, wait)
-}
+goroutine 6 [chan receive]:
+main.foobar()
+    /Users/cnicolaou/go/src/main.go:23
+`
 
-func runGoB(wg *sync.WaitGroup, wait chan struct{}) {
-	go wrappedWaitForIt(wg, wait, 3)
-}
+const compactFormat = `goroutine 1 [running]:
+    /Users/cnicolaou/go/src/main.go:10 main.main()
+    /usr/local/go/src/runtime/proc.go:250 runtime.main()
+    created by runtime.startm() /usr/local/go/src/runtime/proc.go:1123
 
-func runGoC(wg *sync.WaitGroup, wait chan struct{}) {
-	go func() {
-		wg.Done()
-		<-wait
-	}()
-}
+goroutine 6 [chan receive]:
+    /Users/cnicolaou/go/src/main.go:23 main.foobar()
+`
 
-func findGoroutine(gs []*goroutines.Goroutine, caller string) *goroutines.Goroutine {
-	for _, g := range gs {
-		if g.Creator != nil && strings.HasPrefix(g.Creator.Call, caller) {
-			return g
-		}
-	}
-	return nil
-}
-
-func TestGet(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(3)
-	wait := make(chan struct{})
-	runGoA(&wg, wait)
-	runGoB(&wg, wait)
-	runGoC(&wg, wait)
-	wg.Wait()
-	gs, err := goroutines.Get()
+func TestFormatWithTemplate(t *testing.T) {
+	panicT, err := PanicTemplate()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(gs) < 4 {
-		t.Errorf("Got %d goroutines, expected at least 4", len(gs))
-	}
-	bycreator := map[string]*goroutines.Goroutine{}
-	for _, g := range gs {
-		key := ""
-		if g.Creator != nil {
-			key = g.Creator.Call
-		}
-		bycreator[key] = g
-	}
-
-	pkgPath, _ := gopkgpath.Caller()
-	pkgPath += "_test."
-	a := findGoroutine(gs, pkgPath+"runGoA")
-	switch {
-	case a == nil:
-		for _, g := range gs {
-			if g.Creator != nil {
-				t.Logf("%v", g.Creator.Call)
-			}
-		}
-		fmt.Printf("><>< %v\n", bycreator)
-		for k, v := range bycreator {
-			fmt.Printf(": %v: %v\n", k, v)
-		}
-		panic(pkgPath + "runGoA is missing")
-	case len(a.Stack) < 1:
-		t.Errorf("got %d expected at least 1: %s", len(a.Stack), goroutines.Format(a))
-	case !strings.HasPrefix(a.Stack[0].Call, pkgPath+"waitForIt"):
-		t.Errorf("got %s, wanted it to start with %swaitForIt",
-			a.Stack[0].Call, pkgPath)
-	}
-	b := findGoroutine(gs, pkgPath+"runGoB")
-	if b == nil {
-		t.Errorf("%srunGoB is missing", pkgPath)
-	} else if len(b.Stack) < 5 {
-		t.Errorf("got %d expected at least 5: %s", len(b.Stack), goroutines.Format(b))
-	}
-	c := findGoroutine(gs, pkgPath+"runGoC")
-	if c == nil {
-		t.Errorf("%srunGoC is missing", pkgPath)
-	} else if len(c.Stack) < 1 {
-		t.Errorf("got %d expected at least 1: %s", len(c.Stack), goroutines.Format(c))
-	}
-	// Allow goroutines to exit.
-	close(wait)
-}
-
-func TestGetIgnore(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(3)
-	wait := make(chan struct{})
-	runGoA(&wg, wait)
-	runGoB(&wg, wait)
-	runGoC(&wg, wait)
-	wg.Wait()
-	gs, err := goroutines.Get("runGoA", "runGoB")
+	out, err := FormatWithTemplate(panicT, sampleGoroutines...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bycreator := map[string]*goroutines.Goroutine{}
-	for _, g := range gs {
-		key := ""
-		if g.Creator != nil {
-			key = g.Creator.Call
-		}
-		bycreator[key] = g
+	if got, want := out, panicFormat; got != want {
+		t.Errorf("got\n%v\nwant\n%v", got, want)
+
 	}
 
-	pkgPath, _ := gopkgpath.Caller()
-	pkgPath += "_test."
-	for _, ignored := range []string{"runGoA", "runGoB"} {
-		if findGoroutine(gs, pkgPath+ignored) != nil {
-			t.Errorf("%v should have been recorded", ignored)
-		}
-	}
-	if findGoroutine(gs, pkgPath+"runGoC") == nil {
-		t.Errorf("%v should have been recorded", "runGoC")
-	}
-}
-
-func TestFormat(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(3)
-	wait := make(chan struct{})
-	runGoA(&wg, wait)
-	runGoB(&wg, wait)
-	runGoC(&wg, wait)
-	wg.Wait()
-
-	buf := make([]byte, 1<<20)
-	buf = buf[:runtime.Stack(buf, true)]
-	close(wait)
-
-	gs, err := goroutines.Parse(buf)
+	compactT, err := CompactTemplate()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if formatted := goroutines.Format(gs...); string(buf) != formatted {
-		t.Errorf("got:\n%s\nwanted:\n%s\n", formatted, buf)
+	out, err = FormatWithTemplate(compactT, sampleGoroutines...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out, compactFormat; got != want {
+		t.Errorf("got\n%v\nwant\n%v", got, want)
+	}
+
+	_, err = FormatWithTemplate(nil, sampleGoroutines...)
+	if err == nil || !strings.Contains(err.Error(), "template is nil") {
+		t.Errorf("missing or wrong error for nil template: %v", err)
 	}
 }

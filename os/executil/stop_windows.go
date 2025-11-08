@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 func isStopped(pid int) bool {
@@ -22,6 +24,17 @@ func isStopped(pid int) bool {
 	return false
 }
 
-func signal(*exec.Cmd, os.Signal) error {
-	return nil
+func signal(cmd *exec.Cmd, sig os.Signal) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	if sig == os.Kill {
+		return cmd.Process.Kill()
+	}
+	event := uint32(windows.CTRL_C_EVENT)
+	if sig != os.Interrupt {
+		event = uint32(windows.CTRL_BREAK_EVENT)
+	}
+	pid := uint32(cmd.Process.Pid)
+	return windows.GenerateConsoleCtrlEvent(event, pid)
 }

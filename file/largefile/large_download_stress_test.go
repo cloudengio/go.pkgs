@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -244,7 +245,8 @@ func runCacheStressTest(t *testing.T, cacheFilePath, indexFilePath string, concu
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if st.Duration == 0 {
+	// Windows timings are not reliable in CI environments.
+	if st.Duration == 0 && runtime.GOOS != "windows" {
 		t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
 	}
 	st.Duration = 0
@@ -302,6 +304,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
 	cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
+	defer cache.Close()
 
 	prevStats := largefile.DownloadStats{
 		DownloadSize:   cacheSize,
@@ -353,6 +356,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		if err != nil {
 			t.Fatalf("failed to create and allocate space for %s: %v", cacheFilePath, err)
 		}
+		defer cache.Close()
 
 		compareRestartStats(t, i, st.DownloadStats, prevStats)
 
@@ -519,6 +523,7 @@ func TestCacheRetriesAndRunToCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
 	}
+	defer cache.Close()
 
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
