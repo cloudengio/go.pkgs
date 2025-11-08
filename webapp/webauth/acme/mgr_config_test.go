@@ -31,7 +31,7 @@ func TestFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr, err := acme.NewAutocertManager(ctx, autocert.DirCache(t.TempDir()), cl.AutocertConfig(), "login.domain", "allowed-domain-a", "allowed-domain-b")
+	mgr, err := acme.NewAutocertManager(autocert.DirCache(t.TempDir()), cl.AutocertConfig(), "login.domain", "allowed-domain-a", "allowed-domain-b")
 	if err != nil {
 		t.Fatal(err)
 	}

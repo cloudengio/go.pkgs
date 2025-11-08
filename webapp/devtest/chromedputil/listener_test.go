@@ -383,9 +383,7 @@ func TestRunLoggingListenerClaude(t *testing.T) {
 	)
 
 	// Navigate to the test page which will trigger various events
-	if err := chromedp.Run(ctx,
-		chromedp.Navigate(serverURL),
-	); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Navigate(serverURL)); err != nil {
 		t.Fatalf("Failed to navigate: %v", err)
 	}
 

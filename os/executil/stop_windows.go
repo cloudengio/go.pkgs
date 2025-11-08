@@ -7,6 +7,8 @@
 package executil
 
 import (
+	"os"
+	"os/exec"
 	"syscall"
 )
 
@@ -18,4 +20,8 @@ func isStopped(pid int) bool {
 	}
 	syscall.CloseHandle(h)
 	return false
+}
+
+func signal(*exec.Cmd, os.Signal) error {
+	return nil
 }
