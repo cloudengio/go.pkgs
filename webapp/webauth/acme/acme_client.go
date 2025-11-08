@@ -36,10 +36,10 @@ func NewClient(mgr *autocert.Manager, refreshInterval time.Duration, hosts ...st
 }
 
 func (s *Client) Start(ctx context.Context) (func() error, error) {
-	_, cancel := context.WithCancel(ctx)
+	refreshCtx, cancel := context.WithCancel(ctx)
 	s.logger = ctxlog.Logger(ctx).With("component", "acme_client")
 	errCh := make(chan error, 1)
-	go s.refresh(ctx, errCh)
+	go s.refresh(refreshCtx, errCh)
 	return func() error {
 		return s.stop(cancel, errCh)
 	}, nil
