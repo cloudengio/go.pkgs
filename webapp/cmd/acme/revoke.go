@@ -55,7 +55,7 @@ func (revokeCmd) revokeUsingKey(ctx context.Context, flags any, args []string) e
 		return fmt.Errorf("failed to obtain acme account key: %w", err)
 	}
 
-	httpClient, err := webapp.NewHTTPClient(ctx, webapp.WithCustomCA(cl.TestingCAPEM))
+	httpClient, err := webapp.NewHTTPClient(ctx, webapp.WithCustomCAPEMFile(cl.TestingCAPEM))
 	if err != nil {
 		return fmt.Errorf("failed to create acme manager http client: %w", err)
 	}

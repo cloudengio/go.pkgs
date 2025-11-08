@@ -88,7 +88,7 @@ func (certManagerCmd) manageCerts(ctx context.Context, flags any, args []string)
 				httptracing.WithTraceResponseBody(httptracing.JSONResponseBodyLogger)),
 		)
 	}
-	clientOpts = append(clientOpts, webapp.WithCustomCA(cl.TestingCAPEM))
+	clientOpts = append(clientOpts, webapp.WithCustomCAPEMFile(cl.TestingCAPEM))
 
 	mgr.Client.HTTPClient, err = webapp.NewHTTPClient(ctx, clientOpts...)
 	if err != nil {

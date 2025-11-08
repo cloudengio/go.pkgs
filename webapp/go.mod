@@ -5,11 +5,11 @@ go 1.25
 require (
 	cloudeng.io/cmdutil v0.0.0-20251104161051-926cd34b5e43
 	cloudeng.io/errors v0.0.13-0.20251104161051-926cd34b5e43
-	cloudeng.io/file v0.0.0-20251104161051-926cd34b5e43
-	cloudeng.io/io v0.0.0-20251104161051-926cd34b5e43
-	cloudeng.io/logging v0.0.0-20251104161051-926cd34b5e43
-	cloudeng.io/net v0.0.0-20251104161051-926cd34b5e43
-	cloudeng.io/os v0.0.0-20251104161051-926cd34b5e43
+	cloudeng.io/file v0.0.0-20251108010837-bd51e7525b1b
+	cloudeng.io/io v0.0.0-20251107230714-8f6b418ff144
+	cloudeng.io/logging v0.0.0-20251107230714-8f6b418ff144
+	cloudeng.io/net v0.0.0-20251107230714-8f6b418ff144
+	cloudeng.io/os v0.0.0-20251108010837-bd51e7525b1b
 	cloudeng.io/sync v0.0.9-0.20251104161051-926cd34b5e43
 	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
 	github.com/chromedp/chromedp v0.14.2

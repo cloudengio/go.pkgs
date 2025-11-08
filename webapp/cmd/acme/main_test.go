@@ -17,7 +17,7 @@ import (
 	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/webapp/webauth/acme"
 	"cloudeng.io/webapp/webauth/acme/pebble"
-	"cloudeng.io/webapp/webauth/acme/pebble/testpebble"
+	"cloudeng.io/webapp/webauth/acme/pebble/pebbletest"
 )
 
 func defaultManagerFlags(pebbleCfg pebble.Config, pebbleTestDir, pebbleCacheDir string) certManagerFlags {
@@ -42,7 +42,7 @@ func TestNewCert(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := testpebble.Start(ctx, t, tmpDir)
+	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := pebbletest.Start(ctx, t, tmpDir)
 	defer pebbleServer.EnsureStopped(ctx, time.Second) //nolint:errcheck
 
 	mgrFlags := defaultManagerFlags(pebbleCfg, pebbleTestDir, pebbleCacheDir)
@@ -56,7 +56,7 @@ func TestNewCert(t *testing.T) {
 	}
 
 	localhostCert := filepath.Join(pebbleCacheDir, "certs", "pebble-test.example.com")
-	leaf, intermediates := testpebble.WaitForNewCert(ctx, t, "new cert", localhostCert, "")
+	leaf, intermediates := pebbletest.WaitForNewCert(ctx, t, "new cert", localhostCert, "")
 
 	if err := leaf.VerifyHostname("pebble-test.example.com"); err != nil {
 		t.Fatalf("hostname verification failed: %v", err)
@@ -87,7 +87,7 @@ func TestCertRenewal(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := testpebble.Start(ctx, t, tmpDir,
+	pebbleServer, pebbleCfg, _, pebbleCacheDir, pebbleTestDir := pebbletest.Start(ctx, t, tmpDir,
 		pebble.WithValidityPeriod(10), // short lived certs to force renewal
 	)
 	defer pebbleServer.EnsureStopped(ctx, time.Second) //nolint:errcheck
@@ -107,7 +107,7 @@ func TestCertRenewal(t *testing.T) {
 
 		localhostCert := filepath.Join(pebbleCacheDir, "certs", "pebble-test.example.com")
 
-		leaf, intermediates := testpebble.WaitForNewCert(ctx, t,
+		leaf, intermediates := pebbletest.WaitForNewCert(ctx, t,
 			fmt.Sprintf("waiting for cert %v", i),
 			localhostCert, previousSerial)
 
