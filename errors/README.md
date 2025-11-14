@@ -98,9 +98,9 @@ NewM is equivalent to:
 
 ### Func Squash
 ```go
-func Squash(err error, target error) error
+func Squash(err error, targets ...error) error
 ```
-Squash returns an error that contains at most one instance of target per
+Squash returns an error that contains at most one instance of targets per
 level in the error tree. If err is nil, it returns nil. If err is an *M,
 it calls Squash on that instance. Otherwise, it returns the original error.
 
@@ -186,10 +186,10 @@ Is supports errors.Is.
 
 
 ```go
-func (m *M) Squash(target error) error
+func (m *M) Squash(targets ...error) error
 ```
-Squash returns an error.M with at most one instance of target per level in
-the error tree.
+Squash returns an error.M with at most one instance of each of the targets
+per level in the error tree.
 
 
 ```go

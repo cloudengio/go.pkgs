@@ -1,3 +1,4 @@
+parallel_actions: ["test", "lint", "govuln"]
 test:
   [
     "go",
@@ -6,6 +7,17 @@ test:
     "--covermode=atomic",
     "--vet=off",
     "-race",
+    "./...",
+  ]
+test-less-parallelism:
+  [
+    "go",
+    "test",
+    "-failfast",
+    "--covermode=atomic",
+    "--vet=off",
+    "-race",
+    "-p=2",
     "./...",
   ]
 lint: ["golangci-lint", "run", "./..."]
@@ -20,3 +32,6 @@ annotate:
   ]
 usage: ["gousage", "--overwrite", "./..."]
 update: ["go", "get", "-u", "./...", ";", "go", "mod", "tidy"]
+exclusions:
+  govuln:
+    - webapp

@@ -7,6 +7,10 @@ package ctxlog
 
 import (
 	"context"
+	"log"
+	"runtime"
+	"strings"
+	"time"
 
 	"io"
 	"log/slog"
@@ -46,22 +50,53 @@ func WithAttributes(ctx context.Context, attributes ...any) context.Context {
 	return WithLogger(ctx, l.(*slog.Logger).With(attributes...))
 }
 
+func llog(ctx context.Context, level slog.Level, depth int, msg string, args ...any) {
+	logger := Logger(ctx)
+	if !logger.Enabled(ctx, level) {
+		return
+	}
+	var pcs [1]uintptr
+	runtime.Callers(depth, pcs[:]) // skip wrapper frames to get to the caller
+	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
+	r.Add(args...)
+	_ = logger.Handler().Handle(ctx, r)
+}
+
 func Info(ctx context.Context, msg string, args ...any) {
-	Logger(ctx).Log(ctx, slog.LevelInfo, msg, args...)
+	llog(ctx, slog.LevelInfo, 3, msg, args...)
 }
 
 func Error(ctx context.Context, msg string, args ...any) {
-	Logger(ctx).Log(ctx, slog.LevelError, msg, args...)
+	llog(ctx, slog.LevelError, 3, msg, args...)
 }
 
 func Debug(ctx context.Context, msg string, args ...any) {
-	Logger(ctx).Log(ctx, slog.LevelDebug, msg, args...)
+	llog(ctx, slog.LevelDebug, 3, msg, args...)
 }
 
 func Warn(ctx context.Context, msg string, args ...any) {
-	Logger(ctx).Log(ctx, slog.LevelWarn, msg, args...)
+	llog(ctx, slog.LevelWarn, 3, msg, args...)
 }
 
 func Log(ctx context.Context, level slog.Level, msg string, args ...any) {
-	Logger(ctx).Log(ctx, level, msg, args...)
+	llog(ctx, level, 3, msg, args...)
+}
+
+type customLogWriter struct {
+	ctx   context.Context
+	level slog.Level
+}
+
+func (c customLogWriter) Write(p []byte) (n int, err error) {
+	// The standard logger outputs messages followed by a newline,
+	// so trim it and log as an error.
+	msg := strings.TrimSuffix(string(p), "\n")
+	llog(c.ctx, c.level, 5, msg)
+	return len(p), nil
+}
+
+// NewLogLogger returns a new standard library logger that logs to the
+// provided context's logger at the specified level.
+func NewLogLogger(ctx context.Context, level slog.Level) *log.Logger {
+	return log.New(customLogWriter{ctx: ctx, level: level}, "", 0)
 }

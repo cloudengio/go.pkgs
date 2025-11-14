@@ -4,118 +4,83 @@
 import cloudeng.io/webapp/webauth/acme
 ```
 
-Package acme provides support for working with acme/letsencrypt providers.
+Package acme provides support for working with ACNE service providers such
+as letsencrypt.org.
 
 ## Constants
 ### LetsEncryptStaging, LetsEncryptProduction
 ```go
-// LetsEncryptStaging is the URL for letsencrypt.org's staging service
+// LetsEncryptStaging is the URL for the letsencrypt.org staging service
 // and is used as the default by this package.
 LetsEncryptStaging = "https://acme-staging-v02.api.letsencrypt.org/directory"
-// LetsEncryptProduction is the URL for letsencrypt.org's production service.
+// LetsEncryptProduction is the URL for the letsencrypt.org production service.
 LetsEncryptProduction = acme.LetsEncryptURL
 
 ```
 
 
 
-## Variables
-### AutoCertDiskStore, AutoCertNullStore
-```go
-// AutoCertDiskStore creates instances of webapp.CertStore using
-// NewDirCache with read-only set to true.
-AutoCertDiskStore = CertStoreFactory{dirCacheName}
-// AutoCertNullStore creates instances of webapp.CertStore using
-// NewNullCache.
-AutoCertNullStore = CertStoreFactory{nullCacheName}
-
-```
-
-### ErrCacheMiss
-```go
-ErrCacheMiss = autocert.ErrCacheMiss
-
-```
-ErrCacheMiss is the same as autocert.ErrCacheMiss
-
-
-
 ## Functions
-### Func NewDirCache
+### Func NewAutocertManager
 ```go
-func NewDirCache(dir string, readonly bool) autocert.Cache
+func NewAutocertManager(_ context.Context, cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error)
 ```
-NewDirCache returns an instance of a local filesystem based cache for
-certificates and the acme account key but with file system locking. Set
-the readonly argument for readonly access via the 'Get' method, this will
-typically be used to safely extract keys for use by other servers. However,
-ideally, a secure shared services such as Amazon's secrets manager should be
-used instead.
-
-### Func NewManagerFromFlags
-```go
-func NewManagerFromFlags(_ context.Context, cache autocert.Cache, cl CertFlags) (*autocert.Manager, error)
-```
-NewManagerFromFlags creates a new autocert.Manager from the flag values.
-The cache may be not be nil.
-
-### Func NewNullCache
-```go
-func NewNullCache() autocert.Cache
-```
-NewNullCache returns an autocert.Cache that never stores any data and is
-intended for use when testing.
+NewAutocertManager creates a new autocert.Manager from the supplied config.
+Any supplied hosts specify the allowed hosts for the manager, ie. those for
+which it will obtain/renew certificates.
 
 
 
 ## Types
-### Type CertFlags
+### Type AutocertConfig
 ```go
-type CertFlags struct {
-	AcmeClientHost string          `subcmd:"acme-client-host,,'host running the acme client responsible for refreshing certificates, https requests to this host for one of the certificate hosts will result in the certificate for the certificate host being refreshed if necessary'"`
-	Hosts          flags.Repeating `subcmd:"acme-cert-host,,'host for which certs are to be obtained'"`
-	AcmeProvider   string          `subcmd:"acme-service,letsencrypt-staging,'the acme service to use, specify letsencrypt or letsencrypt-staging or a url'"`
-	RenewBefore    time.Duration   `subcmd:"acme-renew-before,720h,how early certificates should be renewed before they expire."`
-	Email          string          `subcmd:"acme-email,,email to contact for information on the domain"`
-	TestingCAPem   string          `subcmd:"acme-testing-ca,,'pem file containing a CA to be trusted for testing purposes only, for example, when using letsencrypt\\'s staging service'"`
+type AutocertConfig struct {
+	// Contact email for the ACME account, note, changing this may create
+	// a new account with the ACME provider. The key associated with an account
+	// is required for revoking certificates issued using that account.
+	Email       string        `yaml:"email"`
+	UserAgent   string        `yaml:"user_agent"`    // User agent to use when connecting to the ACME service.
+	Provider    string        `yaml:"acme_provider"` // ACME service provider URL or 'letsencrypt' or 'letsencrypt-staging'.
+	RenewBefore time.Duration `yaml:"renew_before"`  // How early certificates should be renewed before they expire.
 }
 ```
-CertFlags represents the flags required to configure an autocert.Manager
-isntance for managing TLS certificates for hosts/domains using the acme
-http-01 challenge. Note that wildcard domains are not supported by this
-challenge. The currently supported/tested acme service providers are
-letsencrypt staging and production via the values 'letsencrypt-staging' and
-'letsencrypt' for the --acme-service flag; however any URL can be specified
-via this flag.
-
-
-### Type CertStoreFactory
-```go
-type CertStoreFactory struct {
-	// contains filtered or unexported fields
-}
-```
-CertStoreFactory represents the webapp.CertStore's that can be created by
-this package.
+AutocertConfig represents the configuration required to create an
+autocert.Manager.
 
 ### Methods
 
 ```go
-func (f CertStoreFactory) Describe() string
+func (ac AutocertConfig) DirectoryURL() string
 ```
-Describe implements webapp.CertStoreFactory.
 
+
+
+
+### Type ServiceFlags
+```go
+type ServiceFlags struct {
+	Provider    string        `subcmd:"acme-service,letsencrypt-staging,'the acme service to use, specify letsencrypt or letsencrypt-staging or a url'"`
+	RenewBefore time.Duration `subcmd:"acme-renew-before,720h,how early certificates should be renewed before they expire."`
+	Email       string        `subcmd:"acme-email,,email to contact for information on the domain"`
+	UserAgent   string        `subcmd:"acme-user-agent,cloudeng.io/webapp/webauth/acme,'user agent to use when connecting to the acme service'"`
+}
+```
+ServiceFlags represents the flags required to configure an ACME client
+instance for managing TLS certificates for hosts/domains using the acme
+http-01 challenge. Note that wildcard domains are not supported by this
+challenge. The currently supported/tested acme service providers are
+letsencrypt staging and production via the values 'letsencrypt-staging' and
+'letsencrypt' for the --acme-service flag; however any URL can be specified
+via this flag, in particular to use pebble for testing set this to the URL
+of the local pebble instance and also set the --acme-testing-ca flag to
+point to the pebble CA certificate pem file.
+
+### Methods
 
 ```go
-func (f CertStoreFactory) New(_ context.Context, dir string, _ ...interface{}) (webapp.CertStore, error)
+func (f ServiceFlags) AutocertConfig() AutocertConfig
 ```
-New implements webapp.CertStoreFactory.
-
-
-```go
-func (f CertStoreFactory) Type() string
-```
-Type implements webapp.CertStoreFactory.
+AutocertConfig converts the flag values to a AutocertConfig instance.
 
 
 

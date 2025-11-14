@@ -19,14 +19,15 @@ Usage of `webapp`
     this mode, this application will proxy all of the urls that it doesn't itself
     implement to the running development server. The dev server may be started by
     this server via the --webpack-dir option. Alternatively, a running dev server
-    may be used via the --webpack-server option.
+    may be used via the --webpack-server option. Similarly for vite with the--vite-dir
+    and --vite-server options. Note, that only one of webpack or vitemay be used
+    at a time.
 
     If a self-signed cerificate is required, the cert command can be used to generate
     one.
 
-                prod - run a production server.
-                 dev - run a development server.
-    self-signed-cert - create a self signed certificate
+    prod - run a production server.
+     dev - run a development server.
 
 This command is an example of how to create a simple `webapp` that uses react
 for the browser-side app and serves API endpoints for use by that app.

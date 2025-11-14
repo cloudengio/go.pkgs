@@ -25,6 +25,11 @@ func TestMain(m *testing.M) {
 		awstestutil.WithS3Tree("testdata/s3"))
 }
 
+// gnomock 1.32 uses the aws v2 sdk and virtual host style naming for s3,
+// ie. <bucket-name>.s3.... However, gnomock WithS3Files creates files with
+// a leading /, eg. testdata/bucket-a/0 creates /bucket-a and /0 is the key.
+// The leading / is a literal and hence must be stepped over in all of these tests.
+
 func TestJoin(t *testing.T) {
 	j := func(a ...string) []string {
 		return a
@@ -100,30 +105,30 @@ func TestScan(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
 	ctx := context.Background()
 	fs := newS3FS()
-	scanAndCompare(ctx, t, fs, "s3://bucket-a", []string{
-		"s3://bucket-a/0",
-		"s3://bucket-a/1",
-		"s3://bucket-a/2",
-		"s3://bucket-a/a/",
-		"s3://bucket-a/b/",
-		"s3://bucket-a/c/",
+	scanAndCompare(ctx, t, fs, "s3://bucket-a//", []string{
+		"s3://bucket-a//0",
+		"s3://bucket-a//1",
+		"s3://bucket-a//2",
+		"s3://bucket-a//a/",
+		"s3://bucket-a//b/",
+		"s3://bucket-a//c/",
 	})
-	scanAndCompare(ctx, t, fs, "s3://bucket-b", []string{
-		"s3://bucket-b/0",
-		"s3://bucket-b/1",
-		"s3://bucket-b/2",
-		"s3://bucket-b/x/",
-		"s3://bucket-b/y/",
+	scanAndCompare(ctx, t, fs, "s3://bucket-b//", []string{
+		"s3://bucket-b//0",
+		"s3://bucket-b//1",
+		"s3://bucket-b//2",
+		"s3://bucket-b//x/",
+		"s3://bucket-b//y/",
 	})
-	scanAndCompare(ctx, t, fs, "s3://bucket-b/x/", []string{
-		"s3://bucket-b/x/y/",
+	scanAndCompare(ctx, t, fs, "s3://bucket-b//x/", []string{
+		"s3://bucket-b//x/y/",
 	})
-	scanAndCompare(ctx, t, fs, "s3://bucket-b/x/y/", []string{
-		"s3://bucket-b/x/y/0",
-		"s3://bucket-b/x/y/z/",
+	scanAndCompare(ctx, t, fs, "s3://bucket-b//x/y/", []string{
+		"s3://bucket-b//x/y/0",
+		"s3://bucket-b//x/y/z/",
 	})
-	scanAndCompare(ctx, t, fs, "s3://bucket-b/x/y/z/", []string{
-		"s3://bucket-b/x/y/z/0",
+	scanAndCompare(ctx, t, fs, "s3://bucket-b//x/y/z/", []string{
+		"s3://bucket-b//x/y/z/0",
 	})
 }
 
@@ -132,7 +137,7 @@ func TestStat(t *testing.T) {
 	ctx := context.Background()
 	fs := newS3FS()
 
-	info, err := fs.Stat(ctx, "s3://bucket-a/0")
+	info, err := fs.Stat(ctx, "s3://bucket-a//0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +145,7 @@ func TestStat(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	for _, p := range []string{"s3://bucket-b/x/y", "s3://bucket-b/x/y"} {
+	for _, p := range []string{"s3://bucket-b//x/y", "s3://bucket-b//x/y"} {
 		info, err = fs.Stat(ctx, p)
 		if err != nil {
 			t.Error(err)
@@ -181,42 +186,42 @@ func TestWalk(t *testing.T) {
 	fs := newS3FS()
 
 	walkAndCompare(ctx, t, fs,
-		[]string{"s3://bucket-a",
-			"s3://bucket-b",
-			"s3://bucket-c"},
+		[]string{"s3://bucket-a//",
+			"s3://bucket-b//",
+			"s3://bucket-c//"},
 		[]string{
-			"s3://bucket-a",
-			"s3://bucket-a/a/",
-			"s3://bucket-a/b/",
-			"s3://bucket-a/c/",
-			"s3://bucket-b",
-			"s3://bucket-b/x/",
-			"s3://bucket-b/x/y/",
-			"s3://bucket-b/x/y/z/",
-			"s3://bucket-b/y/",
-			"s3://bucket-c",
+			"s3://bucket-a//",
+			"s3://bucket-a//a/",
+			"s3://bucket-a//b/",
+			"s3://bucket-a//c/",
+			"s3://bucket-b//",
+			"s3://bucket-b//x/",
+			"s3://bucket-b//x/y/",
+			"s3://bucket-b//x/y/z/",
+			"s3://bucket-b//y/",
+			"s3://bucket-c//",
 		},
-		[]string{"s3://bucket-a/0",
-			"s3://bucket-a/1",
-			"s3://bucket-a/2",
-			"s3://bucket-a/a/0",
-			"s3://bucket-a/a/1",
-			"s3://bucket-a/a/2",
-			"s3://bucket-a/b/0",
-			"s3://bucket-a/b/1",
-			"s3://bucket-a/b/2",
-			"s3://bucket-a/c/0",
-			"s3://bucket-a/c/1",
-			"s3://bucket-a/c/2",
-			"s3://bucket-b/0",
-			"s3://bucket-b/1",
-			"s3://bucket-b/2",
-			"s3://bucket-b/x/y/0",
-			"s3://bucket-b/x/y/z/0",
-			"s3://bucket-b/y/0",
-			"s3://bucket-c/0",
-			"s3://bucket-c/1",
-			"s3://bucket-c/2",
+		[]string{"s3://bucket-a//0",
+			"s3://bucket-a//1",
+			"s3://bucket-a//2",
+			"s3://bucket-a//a/0",
+			"s3://bucket-a//a/1",
+			"s3://bucket-a//a/2",
+			"s3://bucket-a//b/0",
+			"s3://bucket-a//b/1",
+			"s3://bucket-a//b/2",
+			"s3://bucket-a//c/0",
+			"s3://bucket-a//c/1",
+			"s3://bucket-a//c/2",
+			"s3://bucket-b//0",
+			"s3://bucket-b//1",
+			"s3://bucket-b//2",
+			"s3://bucket-b//x/y/0",
+			"s3://bucket-b//x/y/z/0",
+			"s3://bucket-b//y/0",
+			"s3://bucket-c//0",
+			"s3://bucket-c//1",
+			"s3://bucket-c//2",
 		},
 	)
 }
@@ -226,7 +231,7 @@ func TestPutGet(t *testing.T) {
 	ctx := context.Background()
 	fs := newS3ObjFS()
 
-	obj, err := fs.Get(ctx, "s3://bucket-a/a/2")
+	obj, err := fs.Get(ctx, "s3://bucket-a//a/2")
 	if err != nil {
 		t.Fatal(err)
 	}

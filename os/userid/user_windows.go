@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build windows
-// +build windows
 
 package userid
 
@@ -12,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"cloudeng.io/sys/windows/powershell"
+	"cloudeng.io/windows/powershell"
 )
 
 func runIDCommand(uid string) (string, error) {

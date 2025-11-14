@@ -16,8 +16,6 @@ import (
 
 	"cloudeng.io/file"
 	"cloudeng.io/net/http/httperror"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/aws/smithy-go"
 )
 
 type Option func(o *options)
@@ -64,7 +62,7 @@ func (fs *FS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		return nil, err
 	}
 	if req.URL.Scheme != fs.scheme {
-		return nil, fmt.Errorf("unsupported scheme: %v", req.URL.Scheme)
+		return nil, fmt.Errorf("%v: %w", req.URL.Scheme, file.ErrSchemeNotSupported)
 	}
 	req = req.WithContext(ctx)
 	resp, err := fs.client.Do(req)
@@ -76,17 +74,17 @@ func (fs *FS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 
 // Readlink returns the contents of a redirect without following it.
 func (fs *FS) Readlink(_ context.Context, _ string) (string, error) {
-	return "", fmt.Errorf("Readlink is not implemented for https")
+	return "", fmt.Errorf("httpfs.Readlink: %w", file.ErrNotImplemented)
 }
 
 // Stat issues a head request and will follow redirects.
 func (fs *FS) Stat(_ context.Context, _ string) (file.Info, error) {
-	return file.Info{}, fmt.Errorf("Stat is not implemented for https")
+	return file.Info{}, fmt.Errorf("httpfs.Stat: %w", file.ErrNotImplemented)
 }
 
 // Lstat issues a head request but will not follow redirects.
 func (fs *FS) Lstat(_ context.Context, _ string) (file.Info, error) {
-	return file.Info{}, fmt.Errorf("Lstat is not implemented for https")
+	return file.Info{}, fmt.Errorf("httpfs.Lstat: %w", file.ErrNotImplemented)
 }
 
 func (fs *FS) Join(components ...string) string {
@@ -98,17 +96,19 @@ func (fs *FS) Base(p string) string {
 }
 
 func (fs *FS) IsPermissionError(err error) bool {
-	var apiErr smithy.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.ErrorCode() == "AccessDenied"
+	var httpErr *httperror.T
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode == http.StatusForbidden
 	}
 	return false
 }
 
 func (fs *FS) IsNotExist(err error) bool {
-	var nsk *types.NoSuchKey
-	var nsb *types.NoSuchBucket
-	return errors.As(err, &nsk) || errors.As(err, &nsb)
+	var httpErr *httperror.T
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode == http.StatusNotFound
+	}
+	return false
 }
 
 type httpXAttr struct {

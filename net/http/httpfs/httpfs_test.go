@@ -6,12 +6,14 @@ package httpfs_test
 
 import (
 	"embed"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"cloudeng.io/file"
 	"cloudeng.io/net/http/httperror"
 	"cloudeng.io/net/http/httpfs"
 )
@@ -82,7 +84,7 @@ func TestScheme(t *testing.T) {
 	}
 
 	_, err := hfs.Open("http://foo")
-	if err == nil || err.Error() != "unsupported scheme: http" {
+	if err == nil || !errors.Is(err, file.ErrSchemeNotSupported) {
 		t.Fatal(err)
 	}
 
@@ -92,8 +94,43 @@ func TestScheme(t *testing.T) {
 	}
 
 	_, err = hfs.Open("https://foo")
-	if err == nil || err.Error() != "unsupported scheme: https" {
+	if err == nil || !errors.Is(err, file.ErrSchemeNotSupported) {
 		t.Fatal(err)
 	}
+}
 
+func TestIsPermissionError(t *testing.T) {
+	fs := httpfs.New(http.DefaultClient)
+
+	permErr := &httperror.T{StatusCode: http.StatusForbidden}
+	notPermErr := &httperror.T{StatusCode: http.StatusNotFound}
+	otherErr := errors.New("some other error")
+
+	if !fs.IsPermissionError(permErr) {
+		t.Errorf("expected IsPermissionError to return true for StatusForbidden")
+	}
+	if fs.IsPermissionError(notPermErr) {
+		t.Errorf("expected IsPermissionError to return false for StatusNotFound")
+	}
+	if fs.IsPermissionError(otherErr) {
+		t.Errorf("expected IsPermissionError to return false for unrelated error")
+	}
+}
+
+func TestIsNotExist(t *testing.T) {
+	fs := httpfs.New(http.DefaultClient)
+
+	notExistErr := &httperror.T{StatusCode: http.StatusNotFound}
+	permErr := &httperror.T{StatusCode: http.StatusForbidden}
+	otherErr := errors.New("some other error")
+
+	if !fs.IsNotExist(notExistErr) {
+		t.Errorf("expected IsNotExist to return true for StatusNotFound")
+	}
+	if fs.IsNotExist(permErr) {
+		t.Errorf("expected IsNotExist to return false for StatusForbidden")
+	}
+	if fs.IsNotExist(otherErr) {
+		t.Errorf("expected IsNotExist to return false for unrelated error")
+	}
 }

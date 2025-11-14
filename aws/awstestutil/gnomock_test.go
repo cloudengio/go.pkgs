@@ -73,6 +73,7 @@ func TestSecrets(t *testing.T) {
 }
 
 func getFile(ctx context.Context, t *testing.T, client *s3.Client, bucket, key string) string {
+	t.Helper()
 	_, err := client.GetBucketAcl(ctx, &s3.GetBucketAclInput{
 		Bucket: aws.String(bucket),
 	})
@@ -112,8 +113,10 @@ func TestS3(t *testing.T) {
 	if got, want := buckets, []string{"bucket-a", "bucket-b"}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	a := getFile(ctx, t, client, buckets[0], "f0")
-	b := getFile(ctx, t, client, buckets[1], "f0")
+	// gnomock localstack preset includes the leading / which is not implicitly
+	// removed when using v2 of the aws sdk and virtual host paths for s3.
+	a := getFile(ctx, t, client, buckets[0], "/f0")
+	b := getFile(ctx, t, client, buckets[1], "/f0")
 	if got, want := a+b, "hello\nworld\n"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

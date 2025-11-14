@@ -39,7 +39,7 @@ no requested algorithm was matched. The returned value is in the format
 
 ### Func ParseAlgoDigest
 ```go
-func ParseAlgoDigest(value string) (algo, base64Digest string, err error)
+func ParseAlgoDigest(value string) (algo, base64Digest string, bytes []byte, err error)
 ```
 
 ### Func ParseReprDigest

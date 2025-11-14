@@ -12,48 +12,43 @@ import (
 	"os/signal"
 	"time"
 
-	"cloudeng.io/aws/awscertstore"
 	"cloudeng.io/aws/awsconfig"
-	"cloudeng.io/cmdutil/subcmd"
 	"cloudeng.io/webapp"
+	"cloudeng.io/webapp/webauth/acme/certcache"
 )
 
 type testRedirectFlags struct {
+	TLSCertStoreFlags
 	webapp.HTTPServerFlags
+	AcmeClientHost string `subcmd:"acme-client-host,,the host (with optional port) to which ACME HTTP-01 challenge requests will be redirected."`
 	awsconfig.AWSFlags
 }
 
-func redirectCmd() *subcmd.Command {
-	testRedirectCmd := subcmd.NewCommand("redirect-test",
-		subcmd.MustRegisterFlagStruct(&testRedirectFlags{}, nil, nil),
-		testACMERedirect, subcmd.ExactlyNumArguments(0))
-	testRedirectCmd.Document(`test redirecting acme http-01 challenges back to a central server that implements the acme client.`)
-	return testRedirectCmd
-}
+type testRedirectCmd struct{}
 
-func testACMERedirect(ctx context.Context, values interface{}, _ []string) error {
+func (testRedirectCmd) redirect(ctx context.Context, values any, _ []string) error {
 	ctx, done := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer done()
 	cl := values.(*testRedirectFlags)
 
-	if len(cl.AcmeRedirectTarget) == 0 {
+	cfg := cl.HTTPServerConfig()
+
+	if len(cl.AcmeClientHost) == 0 {
 		return fmt.Errorf("must specific a target for the acme client")
 	}
 
-	if err := webapp.RedirectPort80(ctx, ":443", cl.AcmeRedirectTarget); err != nil {
+	if err := webapp.RedirectPort80(ctx,
+		webapp.RedirectToHTTPSPort(cfg.Address),
+		webapp.RedirectToHTTPSPort(cl.AcmeClientHost)); err != nil {
 		return err
 	}
 
-	storeOpts := []interface{}{}
-	if cl.AWS {
-		cfg, err := awsconfig.Load(ctx)
-		if err != nil {
-			return err
-		}
-		storeOpts = append(storeOpts, awscertstore.WithAWSConfig(cfg))
+	cache, err := newCertStore(ctx, cl.TLSCertStoreFlags, cl.AWSFlags, certcache.WithReadonly(false))
+	if err != nil {
+		return err
 	}
 
-	cfg, err := webapp.TLSConfigFromFlags(ctx, cl.HTTPServerFlags, storeOpts...)
+	tlsCfg, err := webapp.TLSConfigUsingCertStore(ctx, cache)
 	if err != nil {
 		return err
 	}
@@ -62,11 +57,11 @@ func testACMERedirect(ctx context.Context, values interface{}, _ []string) error
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "hello\n")
 	})
-	ln, srv, err := webapp.NewTLSServer(cl.Address, mux, cfg)
+	ln, srv, err := webapp.NewTLSServer(ctx, cl.Address, mux, tlsCfg)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("listening on: %v\n", ln.Addr())
-	srv.TLSConfig = cfg
+	srv.TLSConfig = tlsCfg
 	return webapp.ServeTLSWithShutdown(ctx, ln, srv, time.Minute)
 }

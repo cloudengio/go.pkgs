@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -183,8 +184,87 @@ func createNewCache(ctx context.Context, t *testing.T, cacheFilePath, indexFileP
 	return cache
 }
 
+func runCacheStressTest(t *testing.T, cacheFilePath, indexFilePath string, concurrency int) {
+	t.Helper()
+	ctx := t.Context()
+	cacheSize := int64(diskusage.KB * 7)
+	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
+
+	cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
+
+	dl, err := largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
+		cache,
+		largefile.WithDownloadRateController(&jitterRateLimiter{}),
+		largefile.WithDownloadConcurrency(concurrency))
+	if err != nil {
+		t.Fatalf("NewCachingDownloader failed: %v", err)
+	}
+	st, err := dl.Run(ctx)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	t.Logf("Download completed successfully, cache file %s is ready for use", cacheFilePath)
+	if err := cache.Close(); err != nil {
+		t.Fatalf("failed to close cache: %v", err)
+	}
+
+	nBlocks := int64(largefile.NumBlocks(cacheSize, blockSize))
+	expected := largefile.DownloadStats{
+		CachedOrStreamedBytes:  cacheSize,
+		CachedOrStreamedBlocks: nBlocks,
+		DownloadedBytes:        cacheSize,
+		DownloadedBlocks:       nBlocks,
+		DownloadSize:           cacheSize,
+		DownloadBlocks:         nBlocks,
+		Iterations:             1,
+	}
+	if st.Duration == 0 {
+		t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
+	}
+	st.Duration = 0
+	if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: expected}); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected status %+v, got %+v", want, got)
+	}
+
+	validateCacheFile(t, cacheFilePath, cacheSize)
+	validateIndexFile(t, indexFilePath, cacheSize, blockSize)
+	if !cache.Complete() {
+		t.Errorf("cache is not complete, expected complete cache")
+	}
+
+	// Make sure cache is used.
+	dl, err = largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
+		cache,
+		largefile.WithDownloadRateController(&jitterRateLimiter{}),
+		largefile.WithDownloadConcurrency(concurrency))
+	if err != nil {
+		t.Fatalf("NewCachingDownloader failed: %v", err)
+	}
+	st, err = dl.Run(ctx)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	// Windows timings are not reliable in CI environments.
+	if st.Duration == 0 && runtime.GOOS != "windows" {
+		t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
+	}
+	st.Duration = 0
+	cachedState := largefile.DownloadStats{
+		CachedOrStreamedBytes:  cacheSize,
+		CachedOrStreamedBlocks: nBlocks,
+		DownloadSize:           cacheSize,
+		DownloadBlocks:         nBlocks,
+		Iterations:             1,
+	}
+	if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: cachedState}); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected status %+v, got %+v", want, got)
+	}
+
+	validateCacheFile(t, cacheFilePath, cacheSize)
+}
+
 func TestCacheStressTest(t *testing.T) {
-	ctx := context.Background()
 	tmpDirAllCached := t.TempDir()
 	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
 	indexFilePath := filepath.Join(tmpDirAllCached, "cache.idx")
@@ -192,81 +272,24 @@ func TestCacheStressTest(t *testing.T) {
 	for _, concurrency := range []int{1, 10, 100} {
 		t.Run(fmt.Sprintf("concurrency=%d", concurrency), func(t *testing.T) {
 			t.Logf("Running stress test with concurrency %d", concurrency)
-			cacheSize := int64(diskusage.KB * 7)
-			blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
-			cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
-
-			dl, err := largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
-				cache,
-				largefile.WithDownloadRateController(&jitterRateLimiter{}),
-				largefile.WithDownloadConcurrency(concurrency))
-			if err != nil {
-				t.Fatalf("NewCachingDownloader failed: %v", err)
-			}
-			st, err := dl.Run(ctx)
-			if err != nil {
-				t.Fatalf("Run failed: %v", err)
-			}
-
-			t.Logf("Download completed successfully, cache file %s is ready for use", cacheFilePath)
-			if err := cache.Close(); err != nil {
-				t.Fatalf("failed to close cache: %v", err)
-			}
-
-			nBlocks := int64(largefile.NumBlocks(cacheSize, blockSize))
-			expected := largefile.DownloadStats{
-				CachedOrStreamedBytes:  cacheSize,
-				CachedOrStreamedBlocks: nBlocks,
-				DownloadedBytes:        cacheSize,
-				DownloadedBlocks:       nBlocks,
-				DownloadSize:           cacheSize,
-				DownloadBlocks:         nBlocks,
-				Iterations:             1,
-			}
-			if st.Duration == 0 {
-				t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
-			}
-			st.Duration = 0
-			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: expected}); !reflect.DeepEqual(got, want) {
-				t.Errorf("expected status %+v, got %+v", want, got)
-			}
-
-			validateCacheFile(t, cacheFilePath, cacheSize)
-			validateIndexFile(t, indexFilePath, cacheSize, blockSize)
-			if !cache.Complete() {
-				t.Errorf("cache is not complete, expected complete cache")
-			}
-
-			// Make sure cache is used.
-			dl, err = largefile.NewCachingDownloader(&mockLargeFile{size: cacheSize, blockSize: blockSize},
-				cache,
-				largefile.WithDownloadRateController(&jitterRateLimiter{}),
-				largefile.WithDownloadConcurrency(concurrency))
-			if err != nil {
-				t.Fatalf("NewCachingDownloader failed: %v", err)
-			}
-			st, err = dl.Run(ctx)
-			if err != nil {
-				t.Fatalf("Run failed: %v", err)
-			}
-			if st.Duration == 0 {
-				t.Errorf("expected non-zero duration in download status, got %v", st.Duration)
-			}
-			st.Duration = 0
-			cachedState := largefile.DownloadStats{
-				CachedOrStreamedBytes:  cacheSize,
-				CachedOrStreamedBlocks: nBlocks,
-				DownloadSize:           cacheSize,
-				DownloadBlocks:         nBlocks,
-				Iterations:             1,
-			}
-			if got, want := st, (largefile.DownloadStatus{Complete: true, DownloadStats: cachedState}); !reflect.DeepEqual(got, want) {
-				t.Errorf("expected status %+v, got %+v", want, got)
-			}
-
-			validateCacheFile(t, cacheFilePath, cacheSize)
+			runCacheStressTest(t, cacheFilePath, indexFilePath, concurrency)
 		})
+	}
+}
+
+func compareRestartStats(t *testing.T, i int, curr, prevStats largefile.DownloadStats) {
+	if curr.CachedOrStreamedBlocks <= prevStats.CachedOrStreamedBlocks {
+		t.Errorf("Run %d expected more cached blocks, got %d, want > %d", i, curr.CachedOrStreamedBlocks, prevStats.CachedOrStreamedBlocks)
+	}
+	if curr.CachedOrStreamedBytes <= prevStats.CachedOrStreamedBytes {
+		t.Errorf("Run %d expected more cached bytes, got %d, want > %d", i, curr.CachedOrStreamedBytes, prevStats.CachedOrStreamedBytes)
+	}
+	if curr.DownloadSize != prevStats.DownloadSize {
+		t.Errorf("Run %d expected download size %d, got %d", i, prevStats.DownloadSize, curr.DownloadSize)
+	}
+	if curr.DownloadBlocks != prevStats.DownloadBlocks {
+		t.Errorf("Run %d expected download blocks %d, got %d", i, prevStats.DownloadBlocks, curr.DownloadBlocks)
 	}
 }
 
@@ -281,6 +304,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	blockSize := 4 * 16 // Multiple of 4 to allow for writing uint32s to the test data
 
 	cache := createNewCache(ctx, t, cacheFilePath, indexFilePath, cacheSize, blockSize, concurrency)
+	defer cache.Close()
 
 	prevStats := largefile.DownloadStats{
 		DownloadSize:   cacheSize,
@@ -318,9 +342,10 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 			if got, want := cache.Complete(), true; got != want {
 				t.Errorf("Run %d expected cache to be complete, got complete: %v", i, got)
 			}
-		}
-		if err := cache.Close(); err != nil {
-			t.Fatalf("failed to close cache: %v", err)
+
+			if err := cache.Close(); err != nil {
+				t.Fatalf("failed to close cache: %v", err)
+			}
 		}
 
 		cacheFile, indexFile, err := largefile.OpenCacheFiles(cacheFilePath, indexFilePath)
@@ -331,18 +356,10 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 		if err != nil {
 			t.Fatalf("failed to create and allocate space for %s: %v", cacheFilePath, err)
 		}
-		if st.CachedOrStreamedBlocks <= prevStats.CachedOrStreamedBlocks {
-			t.Errorf("Run %d expected more cached blocks, got %d, want > %d", i, st.CachedOrStreamedBlocks, prevStats.CachedOrStreamedBlocks)
-		}
-		if st.CachedOrStreamedBytes <= prevStats.CachedOrStreamedBytes {
-			t.Errorf("Run %d expected more cached bytes, got %d, want > %d", i, st.CachedOrStreamedBytes, prevStats.CachedOrStreamedBytes)
-		}
-		if st.DownloadSize != prevStats.DownloadSize {
-			t.Errorf("Run %d expected download size %d, got %d", i, prevStats.DownloadSize, st.DownloadSize)
-		}
-		if st.DownloadBlocks != prevStats.DownloadBlocks {
-			t.Errorf("Run %d expected download blocks %d, got %d", i, prevStats.DownloadBlocks, st.DownloadBlocks)
-		}
+		defer cache.Close()
+
+		compareRestartStats(t, i, st.DownloadStats, prevStats)
+
 		if st.Iterations != 1 {
 			t.Errorf("Run %d expected 1 iteration, got %d", i, st.Iterations)
 		}
@@ -368,7 +385,7 @@ func TestCacheRestart(t *testing.T) { //nolint:gocyclo
 	validateIndexFile(t, indexFilePath, cacheSize, blockSize)
 
 	if got, want := totalErrors, strings.Count(logOut.String(), `"error":"mock failure`); got != int64(want) {
-		t.Errorf("got %d mock failure messages, did not match number of errors reported: %d", want, got)
+		t.Errorf("got %d mock failure messages, did not match number of errors reported in logs: %d", got, want)
 	}
 
 }
@@ -506,6 +523,7 @@ func TestCacheRetriesAndRunToCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create and allocate space for %s: %v", cacheFile, err)
 	}
+	defer cache.Close()
 
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()

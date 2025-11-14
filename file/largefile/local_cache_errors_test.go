@@ -231,13 +231,11 @@ func TestLocalDownloadExactBlockSizeFile(t *testing.T) {
 
 // GenAI: claude 2.7 wrote these tests.
 
-func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
-	ctx := context.Background()
-	const contentSize int64 = 130
-	const blockSize int = 64
-	tmpDir := t.TempDir()
-	cacheFilePath := filepath.Join(tmpDir, "cache.dat")
-	indexFilePath := filepath.Join(tmpDir, "cache.idx")
+func setupTest(t *testing.T, contentSize int64, blockSize int) (tmpDir, cacheFilePath, indexFilePath string, cache *LocalDownloadCache) {
+	ctx := t.Context()
+	tmpDir = t.TempDir()
+	cacheFilePath = filepath.Join(tmpDir, "cache.dat")
+	indexFilePath = filepath.Join(tmpDir, "cache.idx")
 
 	err := CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
 	if err != nil {
@@ -249,10 +247,19 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 		t.Fatalf("OpenCacheFiles failed: %v", err)
 	}
 
-	cache, err := NewLocalDownloadCache(cacheFile, indexFile)
+	cache, err = NewLocalDownloadCache(cacheFile, indexFile)
 	if err != nil {
 		t.Fatalf("NewLocalDownloadCache failed: %v", err)
 	}
+
+	return
+}
+
+func TestLocalDownloadWriteErrors(t *testing.T) {
+	const contentSize int64 = 130
+	const blockSize int = 64
+
+	_, cacheFilePath, _, cache := setupTest(t, contentSize, blockSize)
 	defer cache.Close()
 
 	t.Run("WriteAt error cases", func(t *testing.T) {
@@ -354,6 +361,15 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 		}
 	})
 
+}
+
+func TestLocalDownloadReadAtErrors(t *testing.T) {
+	const contentSize int64 = 130
+	const blockSize int = 64
+
+	_, cacheFilePath, _, cache := setupTest(t, contentSize, blockSize)
+	defer cache.Close()
+
 	t.Run("ReadAt error cases", func(t *testing.T) {
 		// First write some valid data for testing reads
 		validData := make([]byte, blockSize)
@@ -440,6 +456,16 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 		}
 	})
 
+}
+
+func TestNewFilesForCacheErrors(t *testing.T) {
+	ctx := t.Context()
+	const contentSize int64 = 130
+	const blockSize int = 64
+
+	tmpDir, _, indexFilePath, cache := setupTest(t, contentSize, blockSize)
+	defer cache.Close()
+
 	t.Run("NewFilesForCache errors", func(t *testing.T) {
 		tests := []struct {
 			name        string
@@ -485,6 +511,15 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 		}
 	})
 
+}
+
+func TestOpenCacheFilesErrors(t *testing.T) {
+	const contentSize int64 = 130
+	const blockSize int = 64
+
+	tmpDir, cacheFilePath, indexFilePath, cache := setupTest(t, contentSize, blockSize)
+	defer cache.Close()
+
 	t.Run("OpenCacheFiles errors", func(t *testing.T) {
 		tests := []struct {
 			name      string
@@ -520,6 +555,15 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 		}
 	})
 
+}
+
+func TestNewLocalDownloadCacheErrors(t *testing.T) {
+	const contentSize int64 = 130
+	const blockSize int = 64
+
+	tmpDir, cacheFilePath, _, cache := setupTest(t, contentSize, blockSize)
+	defer cache.Close()
+
 	t.Run("NewLocalDownloadCache errors", func(t *testing.T) {
 		tests := []struct {
 			name      string
@@ -550,6 +594,8 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 				if err != nil {
 					t.Fatalf("Failed to open cache files: %v", err)
 				}
+				defer cacheFile.Close()
+				defer indexFile.Close()
 				_, err = NewLocalDownloadCache(cacheFile, indexFile)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("NewLocalDownloadCache() error = %v, wantErr %v", err, tt.wantErr)
@@ -558,86 +604,93 @@ func TestLocalDownloadCacheErrors(t *testing.T) { //nolint:gocyclo
 		}
 	})
 
-	t.Run("ByteRanges functionality", func(t *testing.T) {
-		err := CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
-		if err != nil {
-			t.Fatalf("NewFilesForCache failed: %v", err)
-		}
-		cacheFile, indexFile, err := OpenCacheFiles(cacheFilePath, indexFilePath)
-		if err != nil {
-			t.Fatalf("Failed to open cache files: %v", err)
-		}
-		// Test that NextOutstanding and NextCached work correctly
-		// First, clear all cached data
-		freshCache, err := NewLocalDownloadCache(cacheFile, indexFile)
-		if err != nil {
-			t.Fatalf("Failed to create fresh cache: %v", err)
-		}
-		defer freshCache.Close()
+}
 
-		// Nothing should be cached initially
-		var br ByteRange
-		if idx := freshCache.NextCached(0, &br); idx != -1 {
-			t.Errorf("Expected no cached blocks, got index %d with range %+v", idx, br)
-		}
+func TestByteRanges(t *testing.T) { //nolint:gocyclo
+	ctx := t.Context()
+	const contentSize int64 = 130
+	const blockSize int = 64
 
-		// All blocks should be outstanding
-		if idx := freshCache.NextOutstanding(0, &br); idx == -1 {
-			t.Errorf("Expected outstanding blocks, got none")
-		}
+	_, cacheFilePath, indexFilePath, cache := setupTest(t, contentSize, blockSize)
+	cache.Close()
+	err := CreateNewFilesForCache(ctx, cacheFilePath, indexFilePath, contentSize, blockSize, 1, nil)
+	if err != nil {
+		t.Fatalf("NewFilesForCache failed: %v", err)
+	}
+	cacheFile, indexFile, err := OpenCacheFiles(cacheFilePath, indexFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open cache files: %v", err)
+	}
+	// Test that NextOutstanding and NextCached work correctly
+	// First, clear all cached data
+	freshCache, err := NewLocalDownloadCache(cacheFile, indexFile)
+	if err != nil {
+		t.Fatalf("Failed to create fresh cache: %v", err)
+	}
+	defer freshCache.Close()
 
-		// Write first block
-		data := make([]byte, blockSize)
-		if _, err := freshCache.WriteAt(data, 0); err != nil {
-			t.Fatalf("Failed to write first block: %v", err)
-		}
+	// Nothing should be cached initially
+	var br ByteRange
+	if idx := freshCache.NextCached(0, &br); idx != -1 {
+		t.Errorf("Expected no cached blocks, got index %d with range %+v", idx, br)
+	}
 
-		// Now first block should be cached
-		idx := freshCache.NextCached(0, &br)
-		if idx == -1 || br.From != 0 || br.Size() != int64(blockSize) {
-			t.Errorf("Expected first block cached, got index %d with range %+v", idx, br)
-		}
+	// All blocks should be outstanding
+	if idx := freshCache.NextOutstanding(0, &br); idx == -1 {
+		t.Errorf("Expected outstanding blocks, got none")
+	}
 
-		// Second block should be outstanding
-		idx = freshCache.NextOutstanding(0, &br)
-		if idx == -1 || br.From != int64(blockSize) {
-			t.Errorf("Expected second block outstanding, got index %d with range %+v", idx, br)
-		}
+	// Write first block
+	data := make([]byte, blockSize)
+	if _, err := freshCache.WriteAt(data, 0); err != nil {
+		t.Fatalf("Failed to write first block: %v", err)
+	}
 
-		// Complete() should return false
-		if freshCache.Complete() {
-			t.Errorf("Expected cache to be incomplete")
-		}
+	// Now first block should be cached
+	idx := freshCache.NextCached(0, &br)
+	if idx == -1 || br.From != 0 || br.Size() != int64(blockSize) {
+		t.Errorf("Expected first block cached, got index %d with range %+v", idx, br)
+	}
 
-		// Write second block
-		data = make([]byte, blockSize)
-		if _, err := freshCache.WriteAt(data, int64(blockSize)); err != nil {
-			t.Fatalf("Failed to write second block: %v", err)
-		}
+	// Second block should be outstanding
+	idx = freshCache.NextOutstanding(0, &br)
+	if idx == -1 || br.From != int64(blockSize) {
+		t.Errorf("Expected second block outstanding, got index %d with range %+v", idx, br)
+	}
 
-		// Write third (last) block
-		lastBlockSize := contentSize - int64(blockSize)*2
-		data = make([]byte, lastBlockSize)
-		if _, err := freshCache.WriteAt(data, int64(blockSize)*2); err != nil {
-			t.Fatalf("Failed to write last block: %v", err)
-		}
+	// Complete() should return false
+	if freshCache.Complete() {
+		t.Errorf("Expected cache to be incomplete")
+	}
 
-		// Now cache should be complete
-		if !freshCache.Complete() {
-			t.Errorf("Expected cache to be complete")
-		}
+	// Write second block
+	data = make([]byte, blockSize)
+	if _, err := freshCache.WriteAt(data, int64(blockSize)); err != nil {
+		t.Fatalf("Failed to write second block: %v", err)
+	}
 
-		// NextOutstanding should return -1
-		if idx := freshCache.NextOutstanding(0, &br); idx != -1 {
-			t.Errorf("Expected no outstanding blocks, got index %d with range %+v", idx, br)
-		}
+	// Write third (last) block
+	lastBlockSize := contentSize - int64(blockSize)*2
+	data = make([]byte, lastBlockSize)
+	if _, err := freshCache.WriteAt(data, int64(blockSize)*2); err != nil {
+		t.Fatalf("Failed to write last block: %v", err)
+	}
 
-		// Check cached bytes and blocks
-		bytes, blocks := freshCache.CachedBytesAndBlocks()
-		if bytes != contentSize || blocks != 3 {
-			t.Errorf("Expected %d bytes in %d blocks, got %d bytes in %d blocks", contentSize, 3, bytes, blocks)
-		}
-	})
+	// Now cache should be complete
+	if !freshCache.Complete() {
+		t.Errorf("Expected cache to be complete")
+	}
+
+	// NextOutstanding should return -1
+	if idx := freshCache.NextOutstanding(0, &br); idx != -1 {
+		t.Errorf("Expected no outstanding blocks, got index %d with range %+v", idx, br)
+	}
+
+	// Check cached bytes and blocks
+	bytes, blocks := freshCache.CachedBytesAndBlocks()
+	if bytes != contentSize || blocks != 3 {
+		t.Errorf("Expected %d bytes in %d blocks, got %d bytes in %d blocks", contentSize, 3, bytes, blocks)
+	}
 }
 
 func TestContentLengthAndBlockSize(t *testing.T) {

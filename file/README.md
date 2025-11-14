@@ -14,6 +14,12 @@ ErrNotImplemented = fmt.Errorf("not implemented")
 ErrNotImplemented is returned by methods that are not implemented by a
 particular filesystem.
 
+### ErrSchemeNotSupported
+```go
+ErrSchemeNotSupported = fmt.Errorf("scheme not supported")
+
+```
+
 
 
 ## Functions
@@ -281,6 +287,16 @@ by cloud or local filesystems. The permissions may be ignored by some
 implementations.
 
 
+### Type ReadFileFS
+```go
+type ReadFileFS interface {
+	ReadFile(name string) ([]byte, error)
+	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+}
+```
+ReadFileFS provides an interface for reading the entire contents of a file.
+
+
 ### Type WriteFileFS
 ```go
 type WriteFileFS interface {
@@ -288,7 +304,7 @@ type WriteFileFS interface {
 	WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
 }
 ```
-WriteFileFS defines an FS style interface for writing files.
+WriteFileFS provides an interface for writing the entire contents of a file.
 
 
 ### Type XAttr

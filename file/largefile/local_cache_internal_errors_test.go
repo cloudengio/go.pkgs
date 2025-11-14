@@ -168,7 +168,7 @@ func setupTestCache(t *testing.T) (*LocalDownloadCache, string, string) {
 	return cache, cacheFilePath, indexFilePath
 }
 
-func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
+func TestInternalCacheErrorsWrite(t *testing.T) {
 	t.Run("WriteAt data file error", func(t *testing.T) {
 		cache, _, _ := setupTestCache(t)
 		defer cache.Close()
@@ -176,6 +176,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		simulatedErr := errors.New("simulated data write error")
 		mockDataFile := newMockFile("mock.dat", nil)
 		mockDataFile.writeAtErr = simulatedErr
+		cache.data.Close()        //nolint:errcheck
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -194,6 +195,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		simulatedErr := errors.New("simulated data sync error")
 		mockDataFile := newMockFile("mock.dat", make([]byte, 64))
 		mockDataFile.syncErr = simulatedErr
+		cache.data.Close()        //nolint:errcheck
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -212,6 +214,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		simulatedErr := errors.New("simulated index write error")
 		mockIndexFile := newMockFile("mock.idx", nil)
 		mockIndexFile.writeAtErr = simulatedErr
+		cache.indexStore.wr.Close()         //nolint:errcheck
 		cache.indexStore.wr = mockIndexFile // Replace real index file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -229,6 +232,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 
 		mockIndexFile := newMockFile("mock.idx", nil)
 		mockIndexFile.shortWrite = true
+		cache.indexStore.wr.Close()         //nolint:errcheck
 		cache.indexStore.wr = mockIndexFile // Replace real index file with mock
 
 		_, err := cache.WriteAt(make([]byte, 64), 0)
@@ -239,6 +243,10 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 			t.Errorf("error message mismatch, got: %v", err)
 		}
 	})
+
+}
+
+func TestInternalCacheErrorsRead(t *testing.T) {
 
 	t.Run("ReadAt data file error", func(t *testing.T) {
 		cache, _, _ := setupTestCache(t)
@@ -252,6 +260,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		simulatedErr := errors.New("simulated data read error")
 		mockDataFile := newMockFile("mock.dat", nil)
 		mockDataFile.readAtErr = simulatedErr
+		cache.data.Close()        //nolint:errcheck
 		cache.data = mockDataFile // Replace real file with mock
 
 		_, err := cache.ReadAt(make([]byte, 64), 0)
@@ -275,6 +284,7 @@ func TestInternalCacheErrors(t *testing.T) { //nolint:gocyclo
 		// Replace real file with a mock that will perform a short read.
 		// A short read from an io.ReaderAt returns io.EOF.
 		mockDataFile := newMockFile("mock.dat", make([]byte, 63)) // 1 byte short
+		cache.data.Close()                                        //nolint:errcheck
 		cache.data = mockDataFile
 
 		_, err := cache.ReadAt(make([]byte, 64), 0)
