@@ -15,15 +15,15 @@ type fsKey int
 var fsKeyVal fsKey
 
 // ContextWithFS returns a new context that contains the provided instances
-// of fs.ReadFileFS stored with as a value within it.
-func ContextWithFS(ctx context.Context, container ...fs.ReadFileFS) context.Context {
+// of ReadFileFS stored with as a value within it.
+func ContextWithFS(ctx context.Context, container ...ReadFileFS) context.Context {
 	return context.WithValue(ctx, fsKeyVal, container)
 }
 
-// FSFromContext returns the list of fs.ReadFileFS instances, if any,
+// FSFromContext returns the list of ReadFileFS instances, if any,
 // stored within the context.
-func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool) {
-	c, ok := ctx.Value(fsKeyVal).([]fs.ReadFileFS)
+func FSFromContext(ctx context.Context) ([]ReadFileFS, bool) {
+	c, ok := ctx.Value(fsKeyVal).([]ReadFileFS)
 	return c, ok
 }
 
@@ -35,7 +35,7 @@ func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool) {
 func FSOpen(ctx context.Context, filename string) (fs.File, error) {
 	if fss, ok := FSFromContext(ctx); ok {
 		for _, fs := range fss {
-			if f, err := fs.Open(filename); err == nil {
+			if f, err := fs.OpenCtx(ctx, filename); err == nil {
 				return f, nil
 			}
 		}
@@ -47,7 +47,7 @@ func FSOpen(ctx context.Context, filename string) (fs.File, error) {
 func FSReadFile(ctx context.Context, name string) ([]byte, error) {
 	if fss, ok := FSFromContext(ctx); ok {
 		for _, fs := range fss {
-			if data, err := fs.ReadFile(name); err == nil {
+			if data, err := fs.ReadFileCtx(ctx, name); err == nil {
 				return data, nil
 			}
 		}

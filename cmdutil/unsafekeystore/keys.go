@@ -40,15 +40,6 @@ func ParseConfigFile(ctx context.Context, filename string) (Keys, error) {
 	return newKeys(auth)
 }
 
-// ParseConfigURI calls cmdyaml.ParseConfigURI for Keys.
-func ParseConfigURI(ctx context.Context, filename string, handlers map[string]cmdyaml.URLHandler) (Keys, error) {
-	var auth []KeyInfo
-	if err := cmdyaml.ParseConfigURI(ctx, filename, &auth, handlers); err != nil {
-		return nil, err
-	}
-	return newKeys(auth)
-}
-
 func newKeys(auth []KeyInfo) (Keys, error) {
 	am := Keys{}
 	for _, a := range auth {

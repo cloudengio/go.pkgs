@@ -27,7 +27,21 @@ func (c *container) ReadFile(filename string) ([]byte, error) {
 	return c.contents, nil
 }
 
+func (c *container) ReadFileCtx(_ context.Context, filename string) ([]byte, error) {
+	if filename != c.filename {
+		return nil, fs.ErrNotExist
+	}
+	return c.contents, nil
+}
+
 func (c *container) Open(filename string) (fs.File, error) {
+	if filename != c.filename {
+		return nil, fs.ErrNotExist
+	}
+	return nil, nil
+}
+
+func (c *container) OpenCtx(_ context.Context, filename string) (fs.File, error) {
 	if filename != c.filename {
 		return nil, fs.ErrNotExist
 	}
