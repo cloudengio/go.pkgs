@@ -95,3 +95,32 @@ func TestWrap(t *testing.T) {
 	}
 
 }
+
+func TestVerbatimAndPrefix(t *testing.T) {
+	const inputText = `line 1
+line 2
+
+line 4`
+
+	t.Run("Verbatim", func(t *testing.T) {
+		const expected = `  line 1
+  line 2
+
+  line 4
+`
+		if got, want := linewrap.Verbatim(2, inputText), expected; got != want {
+			t.Errorf("got:\n%q\nwant:\n%q", got, want)
+		}
+	})
+
+	t.Run("Prefix", func(t *testing.T) {
+		const expected = `  // line 1
+  // line 2
+
+  // line 4
+`
+		if got, want := linewrap.Prefix(2, "// ", inputText), expected; got != want {
+			t.Errorf("got:\n%q\nwant:\n%q", got, want)
+		}
+	})
+}

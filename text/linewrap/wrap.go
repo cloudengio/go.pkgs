@@ -85,3 +85,27 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	}
 	return out.String()
 }
+
+// Verbatim returns the supplied text with each nonempty
+// line prefixed by indent spaces.
+func Verbatim(indent int, text string) string {
+	return Prefix(indent, "", text)
+}
+
+// Prefix returns the supplied text with each nonempty
+// line prefixed by indent spaces and the supplied prefix.
+func Prefix(indent int, prefix, text string) string {
+	pad := strings.Repeat(" ", indent) + prefix
+	out := &strings.Builder{}
+	lines := bufio.NewScanner(bytes.NewBufferString(text))
+	for lines.Scan() {
+		if len(lines.Text()) == 0 {
+			out.WriteString("\n")
+			continue
+		}
+		out.WriteString(pad)
+		out.WriteString(lines.Text())
+		out.WriteString("\n")
+	}
+	return out.String()
+}
