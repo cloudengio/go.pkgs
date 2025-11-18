@@ -28,6 +28,20 @@ func Paragraph(initial, indent, width int, text string) string
 Paragraph wraps the supplied text as a 'paragraph' with separate indentation
 for the initial and subsequent lines to the specified width.
 
+### Func Prefix
+```go
+func Prefix(indent int, prefix, text string) string
+```
+Prefix returns the supplied text with each nonempty line prefixed by indent
+spaces and the supplied prefix.
+
+### Func Verbatim
+```go
+func Verbatim(indent int, text string) string
+```
+Verbatim returns the supplied text with each nonempty line prefixed by
+indent spaces.
+
 
 
 
