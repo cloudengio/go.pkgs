@@ -99,12 +99,10 @@ func Prefix(indent int, prefix, text string) string {
 	out := &strings.Builder{}
 	lines := bufio.NewScanner(bytes.NewBufferString(text))
 	for lines.Scan() {
-		if len(lines.Text()) == 0 {
-			out.WriteString("\n")
-			continue
+		if len(lines.Text()) > 0 {
+			out.WriteString(pad)
+			out.WriteString(lines.Text())
 		}
-		out.WriteString(pad)
-		out.WriteString(lines.Text())
 		out.WriteString("\n")
 	}
 	return out.String()
