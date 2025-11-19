@@ -8,6 +8,7 @@ package linewrap
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -30,67 +31,44 @@ func Comment(indent, width int, comment, text string) string {
 	return prefixedParagraph(indent, indent, width, comment, text)
 }
 
+func generateWordsAndNewLines(text string, ch chan<- string) {
+	scanner := bufio.NewScanner(bytes.NewBufferString(text))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		line := scanner.Text()
+		blankLine := true
+		words := bufio.NewScanner(bytes.NewBufferString(line))
+		words.Split(bufio.ScanWords)
+		for words.Scan() {
+			ch <- words.Text()
+			blankLine = false
+		}
+		if blankLine {
+			ch <- "\n"
+		}
+	}
+	close(ch)
+}
+
 func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	initialPad := strings.Repeat(" ", initial) + prefix
 	pad := strings.Repeat(" ", indent) + prefix
 	blankPad := strings.TrimRightFunc(pad, unicode.IsSpace)
+
+	wordCh := make(chan string, 100)
+	go func() {
+		generateWordsAndNewLines(text, wordCh)
+	}()
+
 	out := &strings.Builder{}
 	out.WriteString(initialPad)
 	offset := len(pad)
-	lines := bufio.NewScanner(bytes.NewBufferString(text))
+
+	newLine := true
 	nBlankLines := 0
-	lastWordWithPeriod := ""
-	for lines.Scan() {
-		line := lines.Text()
-
-		if lastWordWithPeriod != "" {
-			out.WriteRune(' ')
-		}
-
-		// Find the last word in the line to ensure that a space
-		// is added after it if the line is not wrapped. Otherwise
-		// the following:
-		// first word
-		// second word
-		// would be wrapped as:
-		// first wordsecond word
-		words := bufio.NewScanner(bytes.NewBufferString(line))
-		words.Split(bufio.ScanWords)
-		for words.Scan() {
-			lastWordWithPeriod = words.Text()
-		}
-
-		words = bufio.NewScanner(bytes.NewBufferString(line))
-		words.Split(bufio.ScanWords)
-		blankLine := true
-		newLine := true
-		for words.Scan() {
-			word := words.Text()
-			blankLine = false
-			displayWidth := 1
-			for range word {
-				displayWidth++
-			}
-			// Very simple 'jagginess' prevention, don't break the line
-			// until doing so is worse than not doing so.
-			remaining := width - offset
-			overage := offset + displayWidth - width
-			if (offset+displayWidth > width) && (overage > remaining) {
-				out.WriteString("\n")
-				out.WriteString(pad)
-				offset = len(pad)
-				newLine = true
-				lastWordWithPeriod = ""
-			}
-			if !newLine {
-				out.WriteRune(' ')
-			}
-			newLine = false
-			offset += displayWidth
-			out.WriteString(word)
-		}
-
-		if blankLine {
+	for word := range wordCh {
+		if word == "\n" {
+			fmt.Printf("got blank line %v\n", nBlankLines)
 			nBlankLines++
 			if nBlankLines == 1 {
 				out.WriteString("\n")
@@ -100,11 +78,32 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 				out.WriteString("\n")
 				out.WriteString(pad)
 				offset = len(pad)
+				newLine = true
 			}
-		} else {
-			nBlankLines = 0
+			continue
 		}
+		nBlankLines = 0
 
+		displayWidth := 1
+		for range word {
+			displayWidth++
+		}
+		// Very simple 'jagginess' prevention, don't break the line
+		// until doing so is worse than not doing so.
+		remaining := width - offset
+		overage := offset + displayWidth - width
+		if (offset+displayWidth > width) && (overage > remaining) {
+			out.WriteString("\n")
+			out.WriteString(pad)
+			offset = len(pad)
+			newLine = true
+		}
+		if !newLine {
+			out.WriteRune(' ')
+		}
+		newLine = false
+		offset += displayWidth
+		out.WriteString(word)
 	}
 	return strings.TrimRight(out.String(), " ")
 }
