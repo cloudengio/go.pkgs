@@ -113,6 +113,27 @@ func TestGetenv(t *testing.T) {
 			want: "1",
 			ok:   true,
 		},
+		{
+			name: "key is prefix of another key but no exact match",
+			env:  []string{"AB=2"},
+			key:  "A",
+			want: "",
+			ok:   false,
+		},
+		{
+			name: "malformed entry without equals",
+			env:  []string{"A", "B=2"},
+			key:  "A",
+			want: "",
+			ok:   false,
+		},
+		{
+			name: "empty key",
+			env:  []string{"=1", "A=2"},
+			key:  "",
+			want: "",
+			ok:   false,
+		},
 	}
 
 	for _, tc := range testCases {

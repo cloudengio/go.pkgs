@@ -21,10 +21,9 @@ func ReplaceEnvVar(env []string, key, value string) []string {
 
 // Getenv retrieves the value of an environment variable from the provided slice.
 func Getenv(env []string, key string) (string, bool) {
-	prefix := key + "="
 	for _, e := range env {
-		if after, ok := strings.CutPrefix(e, prefix); ok {
-			return after, true
+		if i := strings.IndexByte(e, '='); i > 0 && e[:i] == key {
+			return e[i+1:], true
 		}
 	}
 	return "", false
