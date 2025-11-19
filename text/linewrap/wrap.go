@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Paragraph wraps the supplied text as a 'paragraph' with separate indentation
@@ -30,45 +31,43 @@ func Comment(indent, width int, comment, text string) string {
 	return prefixedParagraph(indent, indent, width, comment, text)
 }
 
+func generateWordsAndNewLines(text string, ch chan<- string) {
+	scanner := bufio.NewScanner(bytes.NewBufferString(text))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		line := scanner.Text()
+		blankLine := true
+		words := bufio.NewScanner(bytes.NewBufferString(line))
+		words.Split(bufio.ScanWords)
+		for words.Scan() {
+			ch <- words.Text()
+			blankLine = false
+		}
+		if blankLine {
+			ch <- "\n"
+		}
+	}
+	close(ch)
+}
+
 func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	initialPad := strings.Repeat(" ", initial) + prefix
 	pad := strings.Repeat(" ", indent) + prefix
 	blankPad := strings.TrimRightFunc(pad, unicode.IsSpace)
+
+	wordCh := make(chan string, 100)
+	go func() {
+		generateWordsAndNewLines(text, wordCh)
+	}()
+
 	out := &strings.Builder{}
 	out.WriteString(initialPad)
 	offset := len(pad)
-	lines := bufio.NewScanner(bytes.NewBufferString(text))
+
+	newLine := true
 	nBlankLines := 0
-	for lines.Scan() {
-		words := bufio.NewScanner(bytes.NewBufferString(lines.Text()))
-		words.Split(bufio.ScanWords)
-		blankLine := true
-		newLine := true
-		for words.Scan() {
-			word := words.Text()
-			blankLine = false
-			displayWidth := 1
-			for range word {
-				displayWidth++
-			}
-			// Very simple 'jagginess' prevention, don't break the line
-			// until doing so is worse than not doing so.
-			remaining := width - offset
-			overage := offset + displayWidth - width
-			if (offset+displayWidth > width) && (overage > remaining) {
-				out.WriteString("\n")
-				out.WriteString(pad)
-				offset = len(pad)
-				newLine = true
-			}
-			if !newLine {
-				out.WriteRune(' ')
-			}
-			newLine = false
-			offset += displayWidth
-			out.WriteString(word)
-		}
-		if blankLine {
+	for word := range wordCh {
+		if word == "\n" {
 			nBlankLines++
 			if nBlankLines == 1 {
 				out.WriteString("\n")
@@ -78,10 +77,52 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 				out.WriteString("\n")
 				out.WriteString(pad)
 				offset = len(pad)
+				newLine = true
 			}
-		} else {
-			nBlankLines = 0
+			continue
 		}
+		nBlankLines = 0
+
+		displayWidth := utf8.RuneCountInString(word) + 1
+
+		// Very simple 'jagginess' prevention, don't break the line
+		// until doing so is worse than not doing so.
+		remaining := width - offset
+		overage := offset + displayWidth - width
+		if (offset+displayWidth > width) && (overage > remaining) {
+			out.WriteString("\n")
+			out.WriteString(pad)
+			offset = len(pad)
+			newLine = true
+		}
+		if !newLine {
+			out.WriteRune(' ')
+		}
+		newLine = false
+		offset += displayWidth
+		out.WriteString(word)
+	}
+	return out.String()
+}
+
+// Verbatim returns the supplied text with each nonempty
+// line prefixed by indent spaces.
+func Verbatim(indent int, text string) string {
+	return Prefix(indent, "", text)
+}
+
+// Prefix returns the supplied text with each nonempty
+// line prefixed by indent spaces and the supplied prefix.
+func Prefix(indent int, prefix, text string) string {
+	pad := strings.Repeat(" ", indent) + prefix
+	out := &strings.Builder{}
+	lines := bufio.NewScanner(bytes.NewBufferString(text))
+	for lines.Scan() {
+		if len(lines.Text()) > 0 {
+			out.WriteString(pad)
+			out.WriteString(lines.Text())
+		}
+		out.WriteString("\n")
 	}
 	return out.String()
 }
