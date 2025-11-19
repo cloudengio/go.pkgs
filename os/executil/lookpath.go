@@ -4,12 +4,14 @@
 
 package executil
 
+import "strings"
+
 // ReplaceEnvVar replaces the value of an environment variable in the provided slice.
 // If the variable does not exist, it is added to the slice.
 func ReplaceEnvVar(env []string, key, value string) []string {
 	prefix := key + "="
 	for i, e := range env {
-		if len(e) > len(prefix) && e[:len(prefix)] == prefix {
+		if strings.HasPrefix(e, prefix) {
 			env[i] = prefix + value
 			return env
 		}
