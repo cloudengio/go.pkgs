@@ -17,6 +17,12 @@ const multiParagraphText = `FieldsFunc splits the string s at each run of Unicod
 FieldsFunc splits the string s at each run of Unicode code points c satisfying f(c) and returns an array of slices of s. If all code points in s satisfy f(c) or the string is empty, an empty slice is returned. FieldsFunc makes no guarantees about the order in which it calls f(c). If f does not return consistent results for a given c, FieldsFunc may crash.
 `
 
+const oneSentencePerLinetextPeriod = `Word. One sentence per line.
+Should always have a space after the period. And this is ok.`
+
+const oneSentencePerLinetext = `Word. One sentence per line
+Should always have a space after the period. And this is ok.`
+
 const blockStringsText = `    FieldsFunc splits the string s at each run of Unicode code points c satisfying
     f(c) and returns an array of slices of s. If all code points in s satisfy
     f(c) or the string is empty, an empty slice is returned. FieldsFunc makes
@@ -71,27 +77,37 @@ func TestWrap(t *testing.T) {
 	}
 
 	if got, want := linewrap.Block(4, 78, stringsText), blockStringsText; got != want {
-		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+		t.Errorf("got \n>\n__%v__,\nwant \n__%v__\n", got, want)
 	}
 
 	if got, want := linewrap.Paragraph(2, 4, 78, stringsText), paragraphStringsText; got != want {
-		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+		t.Errorf("got \n>\n__%v__,\nwant \n__%v__\n", got, want)
 	}
 
 	if got, want := linewrap.Paragraph(4, 2, 78, stringsText), essayStringsText; got != want {
-		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+		t.Errorf("got \n>\n__%v__,\nwant \n__%v__\n", got, want)
 	}
 
 	if got, want := linewrap.Comment(2, 78, "// ", stringsText), commentStringsText; got != want {
-		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+		t.Errorf("got \n>\n__%v__,\nwant \n__%v__\n", got, want)
 	}
 
 	if got, want := linewrap.Block(4, 78, multiParagraphText), blockStringsText+"\n\n"+blockStringsText; got != want {
-		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+		t.Errorf("got \n>\n__%v__,\nwant \n__%v__\n", got, want)
 	}
 
 	if got, want := linewrap.Comment(2, 78, "// ", multiParagraphText), commentStringsText+"\n  //\n"+commentStringsText; got != want {
-		t.Errorf("got \n>\n%v, want \n%v\n", got, want)
+		t.Errorf("got \n>\n__%v__,\nwant \n__%v__\n", got, want)
+	}
+
+	if got, want := linewrap.Block(2, 78, oneSentencePerLinetextPeriod), `  Word. One sentence per line. Should always have a space after the period. And
+  this is ok.`; got != want {
+		t.Errorf("got \n>\n__%v__, want \n__%v__\n", got, want)
+	}
+
+	if got, want := linewrap.Block(2, 78, oneSentencePerLinetext), `  Word. One sentence per line Should always have a space after the period. And
+  this is ok.`; got != want {
+		t.Errorf("got \n>\n__%v__, want \n__%v__\n", got, want)
 	}
 
 }

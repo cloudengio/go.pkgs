@@ -39,8 +39,28 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	offset := len(pad)
 	lines := bufio.NewScanner(bytes.NewBufferString(text))
 	nBlankLines := 0
+	lastWordWithPeriod := ""
 	for lines.Scan() {
-		words := bufio.NewScanner(bytes.NewBufferString(lines.Text()))
+		line := lines.Text()
+
+		if lastWordWithPeriod != "" {
+			out.WriteRune(' ')
+		}
+
+		// Find the last word in the line to ensure that a space
+		// is added after it if the line is not wrapped. Otherwise
+		// the following:
+		// first word
+		// second word
+		// would be wrapped as:
+		// first wordsecond word
+		words := bufio.NewScanner(bytes.NewBufferString(line))
+		words.Split(bufio.ScanWords)
+		for words.Scan() {
+			lastWordWithPeriod = words.Text()
+		}
+
+		words = bufio.NewScanner(bytes.NewBufferString(line))
 		words.Split(bufio.ScanWords)
 		blankLine := true
 		newLine := true
@@ -60,6 +80,7 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 				out.WriteString(pad)
 				offset = len(pad)
 				newLine = true
+				lastWordWithPeriod = ""
 			}
 			if !newLine {
 				out.WriteRune(' ')
@@ -68,6 +89,7 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 			offset += displayWidth
 			out.WriteString(word)
 		}
+
 		if blankLine {
 			nBlankLines++
 			if nBlankLines == 1 {
@@ -82,8 +104,9 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 		} else {
 			nBlankLines = 0
 		}
+
 	}
-	return out.String()
+	return strings.TrimRight(out.String(), " ")
 }
 
 // Verbatim returns the supplied text with each nonempty
