@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Paragraph wraps the supplied text as a 'paragraph' with separate indentation
@@ -82,10 +83,8 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 		}
 		nBlankLines = 0
 
-		displayWidth := 1
-		for range word {
-			displayWidth++
-		}
+		displayWidth := utf8.RuneCountInString(word) + 1
+
 		// Very simple 'jagginess' prevention, don't break the line
 		// until doing so is worse than not doing so.
 		remaining := width - offset
