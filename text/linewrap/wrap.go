@@ -8,7 +8,6 @@ package linewrap
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"strings"
 	"unicode"
 )
@@ -68,7 +67,6 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 	nBlankLines := 0
 	for word := range wordCh {
 		if word == "\n" {
-			fmt.Printf("got blank line %v\n", nBlankLines)
 			nBlankLines++
 			if nBlankLines == 1 {
 				out.WriteString("\n")
