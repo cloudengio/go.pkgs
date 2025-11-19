@@ -18,3 +18,13 @@ func ReplaceEnvVar(env []string, key, value string) []string {
 	}
 	return append(env, prefix+value)
 }
+
+// Getenv retrieves the value of an environment variable from the provided slice.
+func Getenv(env []string, key string) (string, bool) {
+	for _, e := range env {
+		if i := strings.IndexByte(e, '='); i > 0 && e[:i] == key {
+			return e[i+1:], true
+		}
+	}
+	return "", false
+}
