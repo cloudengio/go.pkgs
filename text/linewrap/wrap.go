@@ -103,7 +103,7 @@ func prefixedParagraph(initial, indent, width int, prefix, text string) string {
 		offset += displayWidth
 		out.WriteString(word)
 	}
-	return strings.TrimRight(out.String(), " ")
+	return out.String()
 }
 
 // Verbatim returns the supplied text with each nonempty
