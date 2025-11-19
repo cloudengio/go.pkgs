@@ -68,3 +68,63 @@ func TestReplaceEnvVar(t *testing.T) {
 		})
 	}
 }
+
+func TestGetenv(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name string
+		env  []string
+		key  string
+		want string
+		ok   bool
+	}{
+		{
+			name: "exists",
+			env:  []string{"A=1", "B=2"},
+			key:  "A",
+			want: "1",
+			ok:   true,
+		},
+		{
+			name: "does not exist",
+			env:  []string{"A=1", "B=2"},
+			key:  "C",
+			want: "",
+			ok:   false,
+		},
+		{
+			name: "empty value",
+			env:  []string{"A=", "B=2"},
+			key:  "A",
+			want: "",
+			ok:   true,
+		},
+		{
+			name: "empty env",
+			env:  []string{},
+			key:  "A",
+			want: "",
+			ok:   false,
+		},
+		{
+			name: "key is prefix of another key",
+			env:  []string{"A=1", "AB=2"},
+			key:  "A",
+			want: "1",
+			ok:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			val, ok := Getenv(tc.env, tc.key)
+			if got, want := ok, tc.ok; got != want {
+				t.Errorf("%v: got %v, want %v", tc.name, got, want)
+			}
+			if got, want := val, tc.want; got != want {
+				t.Errorf("%v: got %v, want %v", tc.name, got, want)
+			}
+		})
+	}
+}
