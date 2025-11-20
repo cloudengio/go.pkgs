@@ -66,7 +66,10 @@ func run() error {
 	var contents []byte
 	if tempFileFlag != "" {
 		if req.Write {
-			dec, _ := base64.StdEncoding.DecodeString(req.Contents)
+			dec, err := base64.StdEncoding.DecodeString(req.Contents)
+			if err != nil {
+				return fmt.Errorf("failed to decode contents: %w", err)
+			}
 			if err := os.WriteFile(tempFileFlag, []byte(dec), 0600); err != nil {
 				return fmt.Errorf("failed to write to temp file: %w", err)
 			}

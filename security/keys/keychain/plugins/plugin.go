@@ -44,7 +44,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	cmd.Stderr = stderr
 	var resp Response
 	if err := cmd.Run(); err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("plugin failed: %w: %s", err, stderr.String())
 	}
 	if err := json.NewDecoder(out).Decode(&resp); err != nil {
 		return Response{}, fmt.Errorf("failed to decode plugin response: %v", err)
