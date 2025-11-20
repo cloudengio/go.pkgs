@@ -126,9 +126,9 @@ func (d *Description) String() string {
 
 // TypeName returns the fully qualified name of the supplied type or
 // the string representation of an anonymous type.
-func TypeName(t interface{}) string {
+func TypeName(t any) string {
 	typ := reflect.TypeOf(t)
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	if name := typ.Name(); len(name) > 0 {
@@ -140,9 +140,9 @@ func TypeName(t interface{}) string {
 // Describe generates a Description for the supplied type based on its
 // struct tags. Detail can be used to provide a top level of detail,
 // such as the type name and a summary.
-func Describe(t interface{}, tag, detail string) (*Description, error) {
+func Describe(t any, tag, detail string) (*Description, error) {
 	typ := reflect.TypeOf(t)
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	if typ.Kind() != reflect.Struct {

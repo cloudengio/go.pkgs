@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	flagValueType = reflect.TypeOf((*flag.Value)(nil)).Elem()
+	flagValueType = reflect.TypeFor[flag.Value]()
 )
 
 // consume up to the separator or end of data, allowing for escaping using \.
