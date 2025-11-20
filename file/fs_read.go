@@ -6,7 +6,6 @@ package file
 
 import (
 	"context"
-	"io/fs"
 	"os"
 )
 
@@ -25,22 +24,6 @@ func ContextWithFS(ctx context.Context, container ...ReadFileFS) context.Context
 func FSFromContext(ctx context.Context) ([]ReadFileFS, bool) {
 	c, ok := ctx.Value(fsKeyVal).([]ReadFileFS)
 	return c, ok
-}
-
-// FSOpen will attempt to open filename using the context's set of
-// fs.ReadFileFS instances (if any), in the order in which they were
-// provided to ContextWithFS, returning the first successful result.
-// If no fs.ReadFileFS instances are present in the context or
-// none successfully open the file, then os.Open is used.
-func FSOpen(ctx context.Context, filename string) (fs.File, error) {
-	if fss, ok := FSFromContext(ctx); ok {
-		for _, fs := range fss {
-			if f, err := fs.OpenCtx(ctx, filename); err == nil {
-				return f, nil
-			}
-		}
-	}
-	return os.Open(filename)
 }
 
 // FSreadFile is like FSOpen but calls ReadFile instead of Open.
