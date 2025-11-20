@@ -21,15 +21,15 @@ type item[T any] struct {
 	factory New[T]
 }
 
-// Registry represents a registry for a specific type T that
+// T represents a registry for a specific type T that
 // selected using a string key, which is typically a URI scheme.
-type Registry[T any] struct {
+type T[T any] struct {
 	mu    sync.RWMutex
 	items []item[T]
 }
 
 // Register registers a new factory function for the given key.
-func (r *Registry[T]) Register(key string, factory New[T]) {
+func (r *T[T]) Register(key string, factory New[T]) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.items = append(r.items, item[T]{key: key, factory: factory})
@@ -37,7 +37,7 @@ func (r *Registry[T]) Register(key string, factory New[T]) {
 
 // Get retrieves the factory function for the given key, or
 // nil if the key is not registered.
-func (r *Registry[T]) Get(key string) New[T] {
+func (r *T[T]) Get(key string) New[T] {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.items {
