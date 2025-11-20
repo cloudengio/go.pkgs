@@ -25,27 +25,10 @@ ErrSchemeNotSupported = fmt.Errorf("scheme not supported")
 ## Functions
 ### Func ContextWithFS
 ```go
-func ContextWithFS(ctx context.Context, container ...fs.ReadFileFS) context.Context
+func ContextWithFS(ctx context.Context, container ...ReadFileFS) context.Context
 ```
 ContextWithFS returns a new context that contains the provided instances of
-fs.ReadFileFS stored with as a value within it.
-
-### Func FSFromContext
-```go
-func FSFromContext(ctx context.Context) ([]fs.ReadFileFS, bool)
-```
-FSFromContext returns the list of fs.ReadFileFS instances, if any, stored
-within the context.
-
-### Func FSOpen
-```go
-func FSOpen(ctx context.Context, filename string) (fs.File, error)
-```
-FSOpen will attempt to open filename using the context's set of
-fs.ReadFileFS instances (if any), in the order in which they were provided
-to ContextWithFS, returning the first successful result. If no fs.ReadFileFS
-instances are present in the context or none successfully open the file,
-then os.Open is used.
+ReadFileFS stored with as a value within it.
 
 ### Func FSReadFile
 ```go
@@ -295,6 +278,16 @@ type ReadFileFS interface {
 }
 ```
 ReadFileFS provides an interface for reading the entire contents of a file.
+
+### Functions
+
+```go
+func FSFromContext(ctx context.Context) ([]ReadFileFS, bool)
+```
+FSFromContext returns the list of ReadFileFS instances, if any, stored
+within the context.
+
+
 
 
 ### Type WriteFileFS
