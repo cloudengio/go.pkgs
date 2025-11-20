@@ -59,7 +59,7 @@ func TestExtPlugin(t *testing.T) {
 		t.Fatalf("failed to unmarshal contents: %v", err)
 	}
 
-	if got, want := secret, "my-secret"; string(got) != string(want) {
+	if got, want := secret, "my-secret"; string(got) != want {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 
@@ -153,7 +153,7 @@ func TestWriteRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to unmarshal contents: %v", err)
 	}
-	if got, want := secret, "my-secret-that-i-just-created"; string(got) != string(want) {
+	if got, want := secret, "my-secret-that-i-just-created"; string(got) != want {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 }

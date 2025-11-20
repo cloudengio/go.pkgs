@@ -56,7 +56,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 }
 
 // IsExtPluginAvailable checks if the external keychain plugin is available.
-func IsExtPluginAvailable(ctx context.Context) bool {
+func IsExtPluginAvailable() bool {
 	_, err := exec.LookPath(KeyChainPluginName)
 	return err == nil
 }

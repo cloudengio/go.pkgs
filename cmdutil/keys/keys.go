@@ -71,14 +71,14 @@ func (ims *InmemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-func (s *InmemoryKeyStore) AddKey(key KeyInfo) {
-	s.keys = append(s.keys, key)
+func (ims *InmemoryKeyStore) AddKey(key KeyInfo) {
+	ims.keys = append(ims.keys, key)
 }
 
 // GetKey retrieves a key by its ID. It returns the key and a boolean
 // indicating whether the key was found.
-func (s *InmemoryKeyStore) GetKey(id string) (KeyInfo, bool) {
-	for _, key := range s.keys {
+func (ims *InmemoryKeyStore) GetKey(id string) (KeyInfo, bool) {
+	for _, key := range ims.keys {
 		if key.ID == id {
 			return key, true
 		}
@@ -87,8 +87,8 @@ func (s *InmemoryKeyStore) GetKey(id string) (KeyInfo, bool) {
 }
 
 // GetAllKeys returns all keys in the store.
-func (s *InmemoryKeyStore) GetAllKeys() []KeyInfo {
-	return slices.Clone(s.keys)
+func (ims *InmemoryKeyStore) GetAllKeys() []KeyInfo {
+	return slices.Clone(ims.keys)
 }
 
 type ctxKey struct{}

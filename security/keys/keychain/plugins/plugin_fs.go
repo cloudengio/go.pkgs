@@ -51,8 +51,8 @@ func (f *FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(resp.Contents)
 }
 
-func (fs *FS) WriteFile(name string, data []byte) error {
-	return fs.WriteFileCtx(context.Background(), name, data)
+func (f *FS) WriteFile(name string, data []byte) error {
+	return f.WriteFileCtx(context.Background(), name, data)
 }
 
 func (f *FS) WriteFileCtx(ctx context.Context, name string, data []byte) error {
