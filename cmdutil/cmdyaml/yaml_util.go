@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -50,32 +49,6 @@ func ParseConfigFile(ctx context.Context, filename string, cfg interface{}) erro
 		return fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 	return nil
-}
-
-// URLHandler is a function that uses the supplied URL to create a new
-// context containing an fs.ReadFileFS instance that can be used to read
-// the contents of the original URL using the returned pathname.
-type URLHandler func(context.Context, *url.URL) (ctx context.Context, pathname string)
-
-// WithFSForURI will parse the supplied URI and if it has a scheme that matches
-// one of the handlers, will call the handler to create a new context and pathname.
-// If no handler is found, the original context and URI are returned.
-func WithFSForURI(ctx context.Context, uri string, handlers map[string]URLHandler) (context.Context, string) {
-	u, err := url.Parse(uri)
-	if err != nil {
-		return ctx, uri
-	}
-	h, ok := handlers[u.Scheme]
-	if !ok {
-		return ctx, uri
-	}
-	return h(ctx, u)
-}
-
-// ParseConfigURI is like ParseConfigFile but for a URI.
-func ParseConfigURI(ctx context.Context, filename string, cfg interface{}, handlers map[string]URLHandler) error {
-	ctx, name := WithFSForURI(ctx, filename, handlers)
-	return ParseConfigFile(ctx, name, cfg)
 }
 
 // ErrorWithSource returns an error that includes the yaml source
