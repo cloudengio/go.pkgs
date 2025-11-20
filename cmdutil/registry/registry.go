@@ -9,6 +9,7 @@ package registry
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 )
 
@@ -68,7 +69,7 @@ func ConvertAnyArgs[T any](args ...any) []T {
 func Scheme(path string) string {
 	for i, c := range path {
 		if c == ':' {
-			return path[:i]
+			return strings.ToLower(path[:i])
 		}
 		if c == '/' || c == '\\' {
 			break
