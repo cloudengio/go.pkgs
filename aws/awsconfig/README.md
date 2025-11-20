@@ -41,6 +41,36 @@ specified flags.
 
 
 ## Types
+### Type AWSConfig
+```go
+type AWSConfig struct {
+	AWS            bool     `yaml:"aws"`
+	AWSProfile     string   `yaml:"aws_profile"`
+	AWSRegion      string   `yaml:"aws_region"`
+	AWSConfigFiles []string `yaml:"aws_config_files"`
+}
+```
+AWSConfig represents a minimal AWS configuration required to authenticate
+and interact with AWS services.
+
+### Methods
+
+```go
+func (c AWSConfig) Load(ctx context.Context) (aws.Config, error)
+```
+Load calls awsconfig.Load with options controlled by the config.
+
+
+```go
+func (c AWSConfig) Options() []ConfigOption
+```
+Options returns the ConfigOptions implied by the config. NOTE: it always
+includes config.WithEC2IMDSRegion so that the region information is
+retrieved from EC2 IMDS when it's not found by other means.
+
+
+
+
 ### Type AWSFlags
 ```go
 type AWSFlags struct {
@@ -51,6 +81,15 @@ type AWSFlags struct {
 }
 ```
 AWSFlags defines commonly used flags that control AWS behaviour.
+
+### Methods
+
+```go
+func (c AWSFlags) Config() AWSConfig
+```
+Config converts the flags to a AWSConfig instance.
+
+
 
 
 ### Type ConfigOption

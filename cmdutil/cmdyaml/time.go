@@ -13,7 +13,7 @@ import (
 // RFC3339Time is a time.Time that marshals to and from RFC3339 format.
 type RFC3339Time time.Time
 
-func (t *RFC3339Time) MarshalYAML() (interface{}, error) {
+func (t *RFC3339Time) MarshalYAML() (any, error) {
 	return time.Time(*t).Format(time.RFC3339), nil
 }
 
@@ -35,7 +35,7 @@ func (t RFC3339Time) String() string {
 // marshaled to time.RFC3339.
 type FlexTime time.Time
 
-func (t *FlexTime) MarshalYAML() (interface{}, error) {
+func (t *FlexTime) MarshalYAML() (any, error) {
 	return time.Time(*t).Format(time.RFC3339), nil
 }
 

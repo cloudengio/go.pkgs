@@ -19,14 +19,14 @@ line rather than the offending one.
 
 ### Func ParseConfig
 ```go
-func ParseConfig(spec []byte, cfg interface{}) error
+func ParseConfig(spec []byte, cfg any) error
 ```
 ParseConfig will parse the yaml config in spec into the requested type.
 It provides improved error reporting via ErrorWithSource.
 
 ### Func ParseConfigFile
 ```go
-func ParseConfigFile(ctx context.Context, filename string, cfg interface{}) error
+func ParseConfigFile(ctx context.Context, filename string, cfg any) error
 ```
 ParseConfigFile reads a yaml config file as per ParseConfig using
 file.FSReadFile to read the file. The use of FSReadFile allows for the
@@ -36,23 +36,9 @@ the context.
 
 ### Func ParseConfigString
 ```go
-func ParseConfigString(spec string, cfg interface{}) error
+func ParseConfigString(spec string, cfg any) error
 ```
 ParseConfigString is like ParseConfig but for a string.
-
-### Func ParseConfigURI
-```go
-func ParseConfigURI(ctx context.Context, filename string, cfg interface{}, handlers map[string]URLHandler) error
-```
-ParseConfigURI is like ParseConfigFile but for a URI.
-
-### Func WithFSForURI
-```go
-func WithFSForURI(ctx context.Context, uri string, handlers map[string]URLHandler) (context.Context, string)
-```
-WithFSForURI will parse the supplied URI and if it has a scheme that matches
-one of the handlers, will call the handler to create a new context and
-pathname. If no handler is found, the original context and URI are returned.
 
 
 
@@ -68,7 +54,7 @@ marshaled to time.RFC3339.
 ### Methods
 
 ```go
-func (t *FlexTime) MarshalYAML() (interface{}, error)
+func (t *FlexTime) MarshalYAML() (any, error)
 ```
 
 
@@ -93,7 +79,7 @@ RFC3339Time is a time.Time that marshals to and from RFC3339 format.
 ### Methods
 
 ```go
-func (t *RFC3339Time) MarshalYAML() (interface{}, error)
+func (t *RFC3339Time) MarshalYAML() (any, error)
 ```
 
 
@@ -107,15 +93,6 @@ func (t *RFC3339Time) UnmarshalYAML(value *yaml.Node) error
 ```
 
 
-
-
-### Type URLHandler
-```go
-type URLHandler func(context.Context, *url.URL) (ctx context.Context, pathname string)
-```
-URLHandler is a function that uses the supplied URL to create a new context
-containing an fs.ReadFileFS instance that can be used to read the contents
-of the original URL using the returned pathname.
 
 
 

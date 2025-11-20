@@ -84,7 +84,7 @@ type CallRecord struct {
 	GoCaller []runtime.Frame
 	// Arguments is either the formatted string for Logf or a slice
 	// containing the arguments to Log.
-	Arguments interface{}
+	Arguments any
 }
 ```
 CallRecord represents a recorded trace location.
@@ -124,7 +124,7 @@ found.
 ### Methods
 
 ```go
-func (ct *CallTrace) GoLog(skip int, args ...interface{}) *CallTrace
+func (ct *CallTrace) GoLog(skip int, args ...any) *CallTrace
 ```
 GoLog logs the current call site and returns a new CallTrace, that is
 a child of the existing one, to be used in a goroutine started from the
@@ -132,7 +132,7 @@ current one. Skip is the number of callers to skip, as per runtime.Callers.
 
 
 ```go
-func (ct *CallTrace) GoLogf(skip int, format string, args ...interface{}) *CallTrace
+func (ct *CallTrace) GoLogf(skip int, format string, args ...any) *CallTrace
 ```
 GoLogf logs the current call site and returns a new CallTrace, that is
 a child of the existing one, to be used in a goroutine started from the
@@ -147,7 +147,7 @@ on first use, otherwise their id is zero.
 
 
 ```go
-func (ct *CallTrace) Log(skip int, args ...interface{})
+func (ct *CallTrace) Log(skip int, args ...any)
 ```
 Log logs the current call site and its arguments. The supplied arguments are
 stored in a slice and retained until ReleaseArguments is called. Skip is the
@@ -155,7 +155,7 @@ number of callers to skip, as per runtime.Callers.
 
 
 ```go
-func (ct *CallTrace) Logf(skip int, format string, args ...interface{})
+func (ct *CallTrace) Logf(skip int, format string, args ...any)
 ```
 Logf logs the current call site with its arguments being immediately used
 to create a string (using fmt.Sprintf) that is stored within the trace.
@@ -306,7 +306,7 @@ time and finally by message status (in order of Waiting, Sent and Received).
 
 
 ```go
-func (mt *MessageTrace) GoLog(skip int, args ...interface{}) *MessageTrace
+func (mt *MessageTrace) GoLog(skip int, args ...any) *MessageTrace
 ```
 GoLog logs the current call site and returns a new MessageTrace, that is
 a child of the existing one, to be used in a goroutine started from the
@@ -314,7 +314,7 @@ current one. Skip is the number of callers to skip, as per runtime.Callers.
 
 
 ```go
-func (mt *MessageTrace) GoLogf(skip int, format string, args ...interface{}) *MessageTrace
+func (mt *MessageTrace) GoLogf(skip int, format string, args ...any) *MessageTrace
 ```
 GoLogf logs the current call site and returns a new MessageTrace, that is
 a child of the existing one, to be used in a goroutine started from the
@@ -329,7 +329,7 @@ id on first use, otherwise their id is zero.
 
 
 ```go
-func (mt *MessageTrace) Log(skip int, status MessagePrimitive, local, remote net.Addr, args ...interface{})
+func (mt *MessageTrace) Log(skip int, status MessagePrimitive, local, remote net.Addr, args ...any)
 ```
 Log logs the current call site and its arguments. The supplied arguments are
 stored in a slice and retained until ReleaseArguments is called. Skip is the
@@ -337,7 +337,7 @@ number of callers to skip, as per runtime.Callers.
 
 
 ```go
-func (mt *MessageTrace) Logf(skip int, status MessagePrimitive, local, remote net.Addr, format string, args ...interface{})
+func (mt *MessageTrace) Logf(skip int, status MessagePrimitive, local, remote net.Addr, format string, args ...any)
 ```
 Logf logs the current call site with its arguments being immediately used
 to create a string (using fmt.Sprintf) that is stored within the trace.

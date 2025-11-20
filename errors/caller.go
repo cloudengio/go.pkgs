@@ -37,7 +37,7 @@ func (ae *annotated) Is(target error) bool {
 }
 
 // As supports errors.As. It calls errors.As with the stored error.
-func (ae *annotated) As(target interface{}) bool {
+func (ae *annotated) As(target any) bool {
 	return errors.As(ae.err, target)
 }
 

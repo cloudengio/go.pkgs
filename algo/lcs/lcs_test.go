@@ -52,7 +52,7 @@ func isOneOf[T comparable](got []T, want [][]T) bool {
 	return false
 }
 
-func lcsFromEdits[T comparable](script *lcs.EditScript[T]) interface{} {
+func lcsFromEdits[T comparable](script *lcs.EditScript[T]) any {
 	r := []T{}
 	for _, op := range *script {
 		if op.Op == lcs.Identical {

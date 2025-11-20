@@ -136,7 +136,7 @@ encountered.
 ### Methods
 
 ```go
-func (e *Error) As(target interface{}) bool
+func (e *Error) As(target any) bool
 ```
 As implements errors.As.
 

@@ -40,7 +40,7 @@
 //	  To   int `subcmd:"to,2,end value for a range "`
 //	}
 //
-//	func printRange(ctx context.Context, values interface{}, args []string) error {
+//	func printRange(ctx context.Context, values any, args []string) error {
 //	  r := values.(*rangeFlags)
 //	  fmt.Printf("%v..%v\n", r.From, r.To)
 //	  return nil
@@ -146,7 +146,7 @@ import (
 // FlagSet represents the name, description and flag values for a command.
 type FlagSet struct {
 	flagSet    *flag.FlagSet
-	flagValues interface{}
+	flagValues any
 	sm         *flags.SetMap
 }
 
@@ -163,13 +163,13 @@ func NewFlagSet() *FlagSet {
 // usageDefaults are extracted from the defaults variadic parameter.
 // MustRegisteredFlagSet will panic if defaults contains inappopriate types
 // for the value and usage defaults.
-func RegisteredFlagSet(flagValues interface{}, defaults ...interface{}) (*FlagSet, error) {
+func RegisteredFlagSet(flagValues any, defaults ...any) (*FlagSet, error) {
 	fs := NewFlagSet()
-	var valueDefaults map[string]interface{}
+	var valueDefaults map[string]any
 	var usageDefaults map[string]string
 	for _, def := range defaults {
 		switch v := def.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			valueDefaults = v
 		case map[string]string:
 			usageDefaults = v
@@ -183,13 +183,13 @@ func RegisteredFlagSet(flagValues interface{}, defaults ...interface{}) (*FlagSe
 
 // MustRegisteredFlagSet is like RegisteredFlagSet but will panic if
 // defaults contains inappopriate types for the value and usage defaults.
-func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *FlagSet {
+func MustRegisteredFlagSet(flagValues any, defaults ...any) *FlagSet {
 	fs := NewFlagSet()
-	var valueDefaults map[string]interface{}
+	var valueDefaults map[string]any
 	var usageDefaults map[string]string
 	for _, def := range defaults {
 		switch v := def.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			valueDefaults = v
 		case map[string]string:
 			usageDefaults = v
@@ -204,7 +204,7 @@ func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *Fla
 // RegisterFlagStruct registers a struct, using flags.RegisterFlagsInStructWithSetMap.
 // The struct tag must be 'subcomd'. The returned SetMap can be queried by the
 // IsSet method.
-func (cf *FlagSet) RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error {
+func (cf *FlagSet) RegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) error {
 	sm, err := flags.RegisterFlagsInStructWithSetMap(cf.flagSet, "subcmd", flagValues, valueDefaults, usageDefaults)
 	cf.flagValues = flagValues
 	cf.sm = sm
@@ -214,7 +214,7 @@ func (cf *FlagSet) RegisterFlagStruct(flagValues interface{}, valueDefaults map[
 // MustRegisterFlagStruct is like RegisterFlagStruct except that it panics
 // on encountering an error. Its use is encouraged over RegisterFlagStruct from
 // within init functions.
-func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet {
+func (cf *FlagSet) MustRegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) *FlagSet {
 	err := cf.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
 	if err != nil {
 		panic(err)
@@ -224,7 +224,7 @@ func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults 
 
 // RegisterFlagStruct creates a new FlagSet and calls RegisterFlagStruct
 // on it.
-func RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*FlagSet, error) {
+func RegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) (*FlagSet, error) {
 	fs := NewFlagSet()
 	err := fs.RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
 	if err != nil {
@@ -236,7 +236,7 @@ func RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interfa
 // MustRegisterFlagStruct is like RegisterFlagStruct except that it panics
 // on encountering an error. Its use is encouraged over RegisterFlagStruct from
 // within init functions.
-func MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet {
+func MustRegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) *FlagSet {
 	fs, err := RegisterFlagStruct(flagValues, valueDefaults, usageDefaults)
 	if err != nil {
 		panic(err)
@@ -247,12 +247,12 @@ func MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]int
 // IsSet returns true if the supplied flag variable's value has been
 // set, either via a string literal in the struct or via the valueDefaults
 // argument to RegisterFlagStruct.
-func (cf *FlagSet) IsSet(field interface{}) (string, bool) {
+func (cf *FlagSet) IsSet(field any) (string, bool) {
 	return cf.sm.IsSet(field)
 }
 
 // Runner is the type of the function to be called to run a particular command.
-type Runner func(ctx context.Context, flagValues interface{}, args []string) error
+type Runner func(ctx context.Context, flagValues any, args []string) error
 
 // Main is the type of the function that can be used to intercept a call to
 // a Runner.
@@ -275,7 +275,7 @@ func NewCommand(name string, flags *FlagSet, runner Runner, options ...CommandOp
 		flags = &FlagSet{}
 	}
 	if runner == nil {
-		runner = func(_ context.Context, _ interface{}, _ []string) error {
+		runner = func(_ context.Context, _ any, _ []string) error {
 			return fmt.Errorf("no runner specified for: %v", name)
 		}
 	}

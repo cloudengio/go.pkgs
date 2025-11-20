@@ -41,7 +41,7 @@ func HandleSignals(fn func(), signals ...os.Signal) {
 
 // Exit formats and prints the supplied parameters to os.Stderr and then
 // calls os.Exit(1).
-func Exit(format string, args ...interface{}) {
+func Exit(format string, args ...any) {
 	if !strings.HasSuffix(format, "\n") {
 		format += "\n"
 	}

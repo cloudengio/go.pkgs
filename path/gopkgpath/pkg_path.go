@@ -87,7 +87,7 @@ func (pc *pathCache) pkgPath(file string) (string, error) {
 // Type returns the package path for the type of the supplied argument.
 // That type must be a defined/named type, anoymous types, function
 // variables etc will return "".
-func Type(v interface{}) string {
+func Type(v any) string {
 	return reflect.TypeOf(v).PkgPath()
 }
 

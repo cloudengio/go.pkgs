@@ -20,7 +20,7 @@ import (
 
 // ParseConfig will parse the yaml config in spec into the requested
 // type. It provides improved error reporting via ErrorWithSource.
-func ParseConfig(spec []byte, cfg interface{}) error {
+func ParseConfig(spec []byte, cfg any) error {
 	if err := yaml.Unmarshal(spec, cfg); err != nil {
 		return ErrorWithSource(spec, err)
 	}
@@ -28,7 +28,7 @@ func ParseConfig(spec []byte, cfg interface{}) error {
 }
 
 // ParseConfigString is like ParseConfig but for a string.
-func ParseConfigString(spec string, cfg interface{}) error {
+func ParseConfigString(spec string, cfg any) error {
 	return ParseConfig([]byte(spec), cfg)
 }
 
@@ -37,7 +37,7 @@ func ParseConfigString(spec string, cfg interface{}) error {
 // for the configuration file to be read from storage system, including
 // from embed.FS, instead of the local filesystem if an instance of fs.ReadFileFS
 // is stored in the context.
-func ParseConfigFile(ctx context.Context, filename string, cfg interface{}) error {
+func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
 	if len(filename) == 0 {
 		return fmt.Errorf("no config file specified")
 	}

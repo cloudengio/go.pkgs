@@ -38,7 +38,7 @@ func TestPackagePath(t *testing.T) {
 
 	type definedType int
 	for i, tc := range []struct {
-		variable interface{}
+		variable any
 		result   string
 	}{
 		{3, ""},

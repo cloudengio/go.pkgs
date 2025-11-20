@@ -28,7 +28,7 @@ func Is(err, target error) bool {
 }
 
 // As calls errors.As.
-func As(err error, target interface{}) bool {
+func As(err error, target any) bool {
 	return errors.As(err, target)
 }
 
@@ -90,7 +90,7 @@ func (m *M) Is(target error) bool {
 }
 
 // As supports errors.As.
-func (m *M) As(target interface{}) bool {
+func (m *M) As(target any) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, err := range m.errs {

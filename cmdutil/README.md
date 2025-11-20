@@ -50,7 +50,7 @@ set permissions. It is not suitable for very large fles.
 
 ### Func Exit
 ```go
-func Exit(format string, args ...interface{})
+func Exit(format string, args ...any)
 ```
 Exit formats and prints the supplied parameters to os.Stderr and then calls
 os.Exit(1).

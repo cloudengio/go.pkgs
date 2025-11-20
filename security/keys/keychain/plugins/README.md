@@ -30,7 +30,7 @@ found error.
 ## Functions
 ### Func IsExtPluginAvailable
 ```go
-func IsExtPluginAvailable(ctx context.Context) bool
+func IsExtPluginAvailable() bool
 ```
 IsExtPluginAvailable checks if the external keychain plugin is available.
 
@@ -87,7 +87,7 @@ file.ReadFileFS and file.WriteFileFS.
 ### Functions
 
 ```go
-func NewFS(pluginPath string, sysSpecific any, args ...string) (*FS, error)
+func NewFS(pluginPath string, sysSpecific any, args ...string) *FS
 ```
 NewFS creates a new FS instance with the specified plugin path,
 system-specific data, and plugin arguments.
@@ -107,7 +107,7 @@ func (f *FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 
 
 ```go
-func (fs *FS) WriteFile(name string, data []byte) error
+func (f *FS) WriteFile(name string, data []byte) error
 ```
 
 

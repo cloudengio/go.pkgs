@@ -8,7 +8,7 @@ import cloudeng.io/webapp/webauth/acme/pebble/pebbletest
 ## Functions
 ### Func WaitForNewCert
 ```go
-func WaitForNewCert(ctx context.Context, t testing, msg, certPath string, previousSerial string) (*x509.Certificate, *x509.CertPool)
+func WaitForNewCert(ctx context.Context, t Testing, msg, certPath string, previousSerial string) (*x509.Certificate, *x509.CertPool)
 ```
 WaitForNewCert waits for a new certificate to be issued at certPath with a
 serial number different from previousSerial.
@@ -27,7 +27,7 @@ Recorder is an io.WriteCloser that records all data written to it.
 ### Functions
 
 ```go
-func Start(ctx context.Context, t testing, tmpDir string, configOpts ...pebble.ConfigOption) (*pebble.T, pebble.Config, *Recorder, string, string)
+func Start(ctx context.Context, t Testing, tmpDir string, configOpts ...pebble.ConfigOption) (*pebble.T, pebble.Config, *Recorder, string, string)
 ```
 Start starts a pebble ACME server for testing purposes.
 
@@ -50,6 +50,16 @@ func (o *Recorder) Write(p []byte) (n int, err error)
 ```
 
 
+
+
+### Type Testing
+```go
+type Testing interface {
+	Fatalf(format string, args ...any)
+	Helper()
+	Logf(format string, args ...any)
+}
+```
 
 
 

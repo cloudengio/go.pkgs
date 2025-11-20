@@ -26,7 +26,7 @@ modules are being used.
 
 ### Func Type
 ```go
-func Type(v interface{}) string
+func Type(v any) string
 ```
 Type returns the package path for the type of the supplied argument.
 That type must be a defined/named type, anoymous types, function variables

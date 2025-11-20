@@ -16,7 +16,7 @@ type fakeErrorf struct {
 	calls int
 }
 
-func (f *fakeErrorf) Errorf(_ string, _ ...interface{}) {
+func (f *fakeErrorf) Errorf(_ string, _ ...any) {
 	f.calls++
 }
 

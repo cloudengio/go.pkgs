@@ -26,7 +26,7 @@ func ExampleCommandSet() {
 		From int `subcmd:"from,1,start value for a range"`
 		To   int `subcmd:"to,2,end value for a range "`
 	}
-	printRange := func(_ context.Context, values interface{}, _ []string) error {
+	printRange := func(_ context.Context, values any, _ []string) error {
 		r := values.(*rangeFlags)
 		fmt.Printf("%v: %v..%v\n", globalValues.Verbosity, r.From, r.To)
 		return nil
@@ -88,7 +88,7 @@ func TestCommandSet(t *testing.T) {
 	}
 
 	out := &strings.Builder{}
-	runnerA := func(_ context.Context, values interface{}, _ []string) error {
+	runnerA := func(_ context.Context, values any, _ []string) error {
 		fl, ok := values.(*flagsA)
 		if !ok {
 			t.Fatalf("wrong type: %T", values)
@@ -96,7 +96,7 @@ func TestCommandSet(t *testing.T) {
 		fmt.Fprintf(out, "%v .. %v\n", fl.A, fl.B)
 		return nil
 	}
-	runnerB := func(_ context.Context, values interface{}, _ []string) error {
+	runnerB := func(_ context.Context, values any, _ []string) error {
 		fl, ok := values.(*flagsB)
 		if !ok {
 			t.Fatalf("wrong type: %T", values)
@@ -171,7 +171,7 @@ func TestCommandOptions(t *testing.T) {
 	ctx := context.Background()
 
 	numArgs := -1
-	runnerA := func(_ context.Context, values interface{}, args []string) error {
+	runnerA := func(_ context.Context, values any, args []string) error {
 		if _, ok := values.(*flagsA); !ok {
 			t.Fatalf("wrong type: %T", values)
 		}
@@ -239,22 +239,22 @@ func TestMultiLevel(t *testing.T) {
 		l1Main, l2Main            bool
 	)
 
-	c2 := func(_ context.Context, _ interface{}, _ []string) error {
+	c2 := func(_ context.Context, _ any, _ []string) error {
 		cmd2 = true
 		return nil
 	}
 
-	c11 := func(_ context.Context, _ interface{}, _ []string) error {
+	c11 := func(_ context.Context, _ any, _ []string) error {
 		cmd11 = true
 		return nil
 	}
 
-	c12 := func(_ context.Context, _ interface{}, _ []string) error {
+	c12 := func(_ context.Context, _ any, _ []string) error {
 		cmd12 = true
 		return nil
 	}
 
-	c31 := func(_ context.Context, _ interface{}, _ []string) error {
+	c31 := func(_ context.Context, _ any, _ []string) error {
 		cmd31 = true
 		return nil
 	}

@@ -9,9 +9,6 @@ package lcs
 // An O(ND) Difference Algorithm and Its Variations, 1986.
 type Myers[T comparable] struct {
 	a, b []T
-	/*	na, nb int
-		slicer func(v interface{}, from, to int32) interface{}
-		edits  func(v interface{}, op EditOp, cx, cy int) []Edit*/
 }
 
 // NewMyers returns a new instance of Myers. The implementation supports slices
