@@ -20,15 +20,9 @@ func TestFS(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "keystore")
 
-	// Initialize the FS with the path to the pre-built example plugin.
-
 	newfs := func(args ...string) *plugins.FS {
 		t.Helper()
-		fs, err := plugins.NewFS(pluginPath, nil, args...)
-		if err != nil {
-			t.Fatalf("NewFS failed: %v", err)
-		}
-		return fs
+		return plugins.NewFS(pluginPath, nil, args...)
 	}
 
 	t.Run("write-and-read", func(t *testing.T) {

@@ -21,12 +21,12 @@ type FS struct {
 }
 
 // NewFS creates a new FS instance with the specified plugin path, system-specific data, and plugin arguments.
-func NewFS(pluginPath string, sysSpecific any, args ...string) (*FS, error) {
+func NewFS(pluginPath string, sysSpecific any, args ...string) *FS {
 	return &FS{
 		sysSpecific: sysSpecific,
 		binary:      pluginPath,
 		args:        args,
-	}, nil
+	}
 }
 
 func (f *FS) ReadFile(name string) ([]byte, error) {
