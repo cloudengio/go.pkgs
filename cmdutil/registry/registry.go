@@ -13,31 +13,31 @@ import (
 	"sync"
 )
 
-// New is a function that creates a new instance of type T
-type New[T any] func(ctx context.Context, args ...any) (T, error)
+// New is a function that creates a new instance of type RT
+type New[RT any] func(ctx context.Context, args ...any) (RT, error)
 
-type item[T any] struct {
+type item[RT any] struct {
 	key     string
-	factory New[T]
+	factory New[RT]
 }
 
-// Registry represents a registry for a specific type T that
+// T represents a registry for a specific type T that
 // selected using a string key, which is typically a URI scheme.
-type Registry[T any] struct {
+type T[RT any] struct {
 	mu    sync.RWMutex
-	items []item[T]
+	items []item[RT]
 }
 
 // Register registers a new factory function for the given key.
-func (r *Registry[T]) Register(key string, factory New[T]) {
+func (r *T[RT]) Register(key string, factory New[RT]) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.items = append(r.items, item[T]{key: key, factory: factory})
+	r.items = append(r.items, item[RT]{key: key, factory: factory})
 }
 
 // Get retrieves the factory function for the given key, or
 // nil if the key is not registered.
-func (r *Registry[T]) Get(key string) New[T] {
+func (r *T[RT]) Get(key string) New[RT] {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.items {
