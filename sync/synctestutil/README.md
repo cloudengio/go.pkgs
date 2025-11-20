@@ -43,7 +43,7 @@ period for goroutines to terminate.
 ### Type Errorf
 ```go
 type Errorf interface {
-	Errorf(format string, args ...interface{})
+	Errorf(format string, args ...any)
 }
 ```
 Errorf is called when an error is encountered and is defined so that

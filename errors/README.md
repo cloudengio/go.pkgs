@@ -58,7 +58,7 @@ the supplied annotation.
 
 ### Func As
 ```go
-func As(err error, target interface{}) bool
+func As(err error, target any) bool
 ```
 As calls errors.As.
 
@@ -150,7 +150,7 @@ Append appends the specified errors excluding nil values.
 
 
 ```go
-func (m *M) As(target interface{}) bool
+func (m *M) As(target any) bool
 ```
 As supports errors.As.
 

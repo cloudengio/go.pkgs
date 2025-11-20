@@ -144,7 +144,7 @@ func (e Error) Unwrap() error {
 }
 
 // As implements errors.As.
-func (e *Error) As(target interface{}) bool {
+func (e *Error) As(target any) bool {
 	if t, ok := target.(*Error); ok {
 		*t = *e
 		return true

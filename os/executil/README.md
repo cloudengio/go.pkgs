@@ -15,6 +15,13 @@ ExecName returns path in a form suitable for use as an executable. For unix
 systems the path is unchanged. For windows a '.exe' suffix is added if not
 already present.
 
+### Func Getenv
+```go
+func Getenv(env []string, key string) (string, bool)
+```
+Getenv retrieves the value of an environment variable from the provided
+slice.
+
 ### Func GoBuild
 ```go
 func GoBuild(ctx context.Context, binary string, args ...string) (string, error)
@@ -39,6 +46,13 @@ channel. It can be used to filter the output of a command started by the
 exec package for example for specific output. If no regexps are supplied,
 all lines are sent. Close must be called on the returned io.WriteCloser to
 ensure that all resources are reclaimed.
+
+### Func ReplaceEnvVar
+```go
+func ReplaceEnvVar(env []string, key, value string) []string
+```
+ReplaceEnvVar replaces the value of an environment variable in the provided
+slice. If the variable does not exist, it is added to the slice.
 
 ### Func SignalAndWait
 ```go

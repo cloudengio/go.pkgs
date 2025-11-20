@@ -72,7 +72,7 @@ type messageRecord struct {
 // Log logs the current call site and its arguments. The supplied arguments
 // are stored in a slice and retained until ReleaseArguments is called.
 // Skip is the number of callers to skip, as per runtime.Callers.
-func (mt *MessageTrace) Log(skip int, status MessagePrimitive, local, remote net.Addr, args ...interface{}) {
+func (mt *MessageTrace) Log(skip int, status MessagePrimitive, local, remote net.Addr, args ...any) {
 	record := newRecord(skip+2, args)
 	record.payload = messageRecord{
 		status: status,
@@ -93,14 +93,14 @@ func (mt *MessageTrace) ReleaseArguments() {
 // Logf logs the current call site with its arguments being immediately
 // used to create a string (using fmt.Sprintf) that is stored within the trace.
 // Skip is the number of callers to skip, as per runtime.Callers.
-func (mt *MessageTrace) Logf(skip int, status MessagePrimitive, local, remote net.Addr, format string, args ...interface{}) {
+func (mt *MessageTrace) Logf(skip int, status MessagePrimitive, local, remote net.Addr, format string, args ...any) {
 	mt.Log(skip+1, status, local, remote, fmt.Sprintf(format, args...))
 }
 
 // GoLog logs the current call site and returns a new MessageTrace, that is
 // a child of the existing one, to be used in a goroutine started from the
 // current one. Skip is the number of callers to skip, as per runtime.Callers.
-func (mt *MessageTrace) GoLog(skip int, args ...interface{}) *MessageTrace {
+func (mt *MessageTrace) GoLog(skip int, args ...any) *MessageTrace {
 	record := newRecord(skip+2, args)
 	record.payload = messageRecord{}
 	nct := &MessageTrace{}
@@ -111,7 +111,7 @@ func (mt *MessageTrace) GoLog(skip int, args ...interface{}) *MessageTrace {
 // GoLogf logs the current call site and returns a new MessageTrace, that is
 // a child of the existing one, to be used in a goroutine started from the
 // current one. Skip is the number of callers to skip, as per runtime.Callers.
-func (mt *MessageTrace) GoLogf(skip int, format string, args ...interface{}) *MessageTrace {
+func (mt *MessageTrace) GoLogf(skip int, format string, args ...any) *MessageTrace {
 	return mt.GoLog(skip+1, fmt.Sprintf(format, args...))
 }
 

@@ -117,7 +117,7 @@ func (es *EditScript[T]) Reverse() *EditScript[T] {
 	return &rev
 }
 
-func verticalFormatFor(a interface{}) string {
+func verticalFormatFor(a any) string {
 	switch a.(type) {
 	case []int8, []uint8, []rune:
 		return "%3c"
@@ -158,7 +158,7 @@ func (es *EditScript[T]) FormatVertical(out io.Writer, a []T) {
 	}
 }
 
-func horizontalFormatFor(a interface{}) string {
+func horizontalFormatFor(a any) string {
 	switch a.(type) {
 	case []int8, []uint8, []rune:
 		return "%c"

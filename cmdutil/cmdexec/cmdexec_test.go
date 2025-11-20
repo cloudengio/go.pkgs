@@ -22,7 +22,7 @@ type logger struct {
 	buf *bytes.Buffer
 }
 
-func (l *logger) Logf(format string, args ...interface{}) (int, error) {
+func (l *logger) Logf(format string, args ...any) (int, error) {
 	return fmt.Fprintf(l.buf, format, args...)
 }
 

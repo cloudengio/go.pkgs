@@ -25,7 +25,7 @@ type S3 struct {
 
 func TestStructDoc(t *testing.T) {
 	for i, tc := range []struct {
-		in   interface{}
+		in   any
 		doc  string
 		name string
 	}{

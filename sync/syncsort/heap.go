@@ -126,7 +126,7 @@ func (s *streamingHeap[T]) Push(x any) {
 	*s = append(*s, x.(Item[T]))
 }
 
-func (s *streamingHeap[T]) Pop() interface{} {
+func (s *streamingHeap[T]) Pop() any {
 	old := *s
 	n := len(old)
 	x := old[n-1]

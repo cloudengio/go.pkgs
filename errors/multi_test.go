@@ -31,7 +31,7 @@ func (es *ErrorStruct) Is(target error) bool {
 	return ok
 }
 
-func (es *ErrorStruct) As(target interface{}) bool {
+func (es *ErrorStruct) As(target any) bool {
 	v, ok := target.(*ErrorStruct)
 	if !ok {
 		return false

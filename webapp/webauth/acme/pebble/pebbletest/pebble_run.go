@@ -18,9 +18,9 @@ import (
 )
 
 type Testing interface {
-	Fatalf(format string, args ...interface{})
+	Fatalf(format string, args ...any)
 	Helper()
-	Logf(format string, args ...interface{})
+	Logf(format string, args ...any)
 }
 
 // Recorder is an io.WriteCloser that records all data written to it.

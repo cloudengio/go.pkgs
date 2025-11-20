@@ -34,13 +34,13 @@ func init() {
 	cmdSet.Document("describe l0")
 }
 
-func l0_1(ctx context.Context, values interface{}, args []string) error {
+func l0_1(ctx context.Context, values any, args []string) error {
 	fv := values.(*exampleFlags)
 	fmt.Printf("l0_1: flag value: %v\n", fv.Flag1)
 	return nil
 }
 
-func l0_2(ctx context.Context, values interface{}, args []string) error {
+func l0_2(ctx context.Context, values any, args []string) error {
 	fv := values.(*exampleFlags)
 	fmt.Printf("l0_2: flag value: %v\n", fv.Flag1)
 	return nil

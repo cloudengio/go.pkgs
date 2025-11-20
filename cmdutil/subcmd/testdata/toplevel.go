@@ -33,7 +33,7 @@ func init() {
 	cmdSet.TopLevel(toplevel)
 }
 
-func runner(ctx context.Context, values interface{}, args []string) error {
+func runner(ctx context.Context, values any, args []string) error {
 	fv := values.(*simpleFlags)
 	fmt.Printf("runner: flag values: %v %v\n", fv.Flag1, fv.Flag2)
 	return nil

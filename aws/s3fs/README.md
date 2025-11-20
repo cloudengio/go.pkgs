@@ -57,7 +57,7 @@ Client represents the set of AWS S3 client methods used by s3fs.
 ### Type Factory
 ```go
 type Factory struct {
-	Config  awsconfig.AWSFlags
+	Config  awsconfig.AWSConfig
 	Options []Option
 }
 ```

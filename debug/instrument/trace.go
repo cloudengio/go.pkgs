@@ -53,21 +53,21 @@ type record struct {
 	callers    []uintptr
 	gocall     bool
 	time       time.Time
-	arguments  interface{}
-	payload    interface{}
+	arguments  any
+	payload    any
 	goroutines []*trace
 }
 
-func newRecord(skip int, args []interface{}) *record {
+func newRecord(skip int, args []any) *record {
 	var buf [64]uintptr
 	n := runtime.Callers(skip, buf[:])
 	pcs := make([]uintptr, n)
 	copy(pcs, buf[:n])
-	var nargs interface{}
+	var nargs any
 	if len(args) == 1 {
 		nargs = args[0]
 	} else {
-		tmp := make([]interface{}, len(args))
+		tmp := make([]any, len(args))
 		copy(tmp, args)
 		nargs = tmp
 	}
@@ -138,8 +138,8 @@ func WriteFrames(out io.Writer, prefix string, frames []runtime.Frame) {
 }
 
 type walkRecord struct {
-	arguments                interface{}
-	payload                  interface{}
+	arguments                any
+	payload                  any
 	id, rootID               int64
 	time                     time.Time
 	gocall                   bool
@@ -184,8 +184,8 @@ func releaseArguments(tr *trace) {
 	}
 }
 
-func printArgs(args interface{}) string {
-	if sl, ok := args.([]interface{}); ok {
+func printArgs(args any) string {
+	if sl, ok := args.([]any); ok {
 		out := &strings.Builder{}
 		out.WriteRune(' ')
 		for i, v := range sl {

@@ -63,24 +63,24 @@ func init() {
 	cmdSet.WithMain(mainWrapper)
 }
 
-func runner(ctx context.Context, name string, values interface{}, args []string) error {
+func runner(ctx context.Context, name string, values any, args []string) error {
 	fmt.Printf("%s: flag value: %v\n", name, values.(*exampleFlags).Flag1)
 	return nil
 }
 
-func l0_1(ctx context.Context, values interface{}, args []string) error {
+func l0_1(ctx context.Context, values any, args []string) error {
 	return runner(ctx, "l0_1", values, args)
 }
 
-func l0_2(ctx context.Context, values interface{}, args []string) error {
+func l0_2(ctx context.Context, values any, args []string) error {
 	return runner(ctx, "l0_2", values, args)
 }
 
-func l1_1(ctx context.Context, values interface{}, args []string) error {
+func l1_1(ctx context.Context, values any, args []string) error {
 	return runner(ctx, "l1_1", values, args)
 }
 
-func l1_2(ctx context.Context, values interface{}, args []string) error {
+func l1_2(ctx context.Context, values any, args []string) error {
 	return runner(ctx, "l1_1", values, args)
 }
 

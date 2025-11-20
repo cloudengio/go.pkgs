@@ -22,7 +22,7 @@ field.
 
 ### Func TypeName
 ```go
-func TypeName(t interface{}) string
+func TypeName(t any) string
 ```
 TypeName returns the fully qualified name of the supplied type or the string
 representation of an anonymous type.
@@ -44,7 +44,7 @@ description.
 ### Functions
 
 ```go
-func Describe(t interface{}, tag, detail string) (*Description, error)
+func Describe(t any, tag, detail string) (*Description, error)
 ```
 Describe generates a Description for the supplied type based on its struct
 tags. Detail can be used to provide a top level of detail, such as the type

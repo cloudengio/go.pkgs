@@ -41,7 +41,7 @@ command functions via cmdset.Dispatch or DispatchWithArgs.
       To   int `subcmd:"to,2,end value for a range "`
     }
 
-    func printRange(ctx context.Context, values interface{}, args []string) error {
+    func printRange(ctx context.Context, values any, args []string) error {
       r := values.(*rangeFlags)
       fmt.Printf("%v..%v\n", r.From, r.To)
       return nil
@@ -516,7 +516,7 @@ GlobalFlagSet creates a new FlagSet that is to be used for global flags.
 
 
 ```go
-func MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet
+func MustRegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) *FlagSet
 ```
 MustRegisterFlagStruct is like RegisterFlagStruct except that it panics on
 encountering an error. Its use is encouraged over RegisterFlagStruct from
@@ -524,7 +524,7 @@ within init functions.
 
 
 ```go
-func MustRegisteredFlagSet(flagValues interface{}, defaults ...interface{}) *FlagSet
+func MustRegisteredFlagSet(flagValues any, defaults ...any) *FlagSet
 ```
 MustRegisteredFlagSet is like RegisteredFlagSet but will panic if defaults
 contains inappopriate types for the value and usage defaults.
@@ -537,13 +537,13 @@ NewFlagSet returns a new instance of FlagSet.
 
 
 ```go
-func RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) (*FlagSet, error)
+func RegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) (*FlagSet, error)
 ```
 RegisterFlagStruct creates a new FlagSet and calls RegisterFlagStruct on it.
 
 
 ```go
-func RegisteredFlagSet(flagValues interface{}, defaults ...interface{}) (*FlagSet, error)
+func RegisteredFlagSet(flagValues any, defaults ...any) (*FlagSet, error)
 ```
 RegisteredFlagSet is a convenience function that creates a new FlagSet
 and calls RegisterFlagStruct on it. The valueDefaults and usageDefaults
@@ -556,7 +556,7 @@ defaults.
 ### Methods
 
 ```go
-func (cf *FlagSet) IsSet(field interface{}) (string, bool)
+func (cf *FlagSet) IsSet(field any) (string, bool)
 ```
 IsSet returns true if the supplied flag variable's value has been set,
 either via a string literal in the struct or via the valueDefaults argument
@@ -564,7 +564,7 @@ to RegisterFlagStruct.
 
 
 ```go
-func (cf *FlagSet) MustRegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) *FlagSet
+func (cf *FlagSet) MustRegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) *FlagSet
 ```
 MustRegisterFlagStruct is like RegisterFlagStruct except that it panics on
 encountering an error. Its use is encouraged over RegisterFlagStruct from
@@ -572,7 +572,7 @@ within init functions.
 
 
 ```go
-func (cf *FlagSet) RegisterFlagStruct(flagValues interface{}, valueDefaults map[string]interface{}, usageDefaults map[string]string) error
+func (cf *FlagSet) RegisterFlagStruct(flagValues any, valueDefaults map[string]any, usageDefaults map[string]string) error
 ```
 RegisterFlagStruct registers a struct, using
 flags.RegisterFlagsInStructWithSetMap. The struct tag must be 'subcomd'.
@@ -591,7 +591,7 @@ Runner.
 
 ### Type Runner
 ```go
-type Runner func(ctx context.Context, flagValues interface{}, args []string) error
+type Runner func(ctx context.Context, flagValues any, args []string) error
 ```
 Runner is the type of the function to be called to run a particular command.
 

@@ -71,7 +71,7 @@ func (pf *ProfileFlag) String() string {
 }
 
 // Get implements flag.Getter.
-func (pf *ProfileFlag) Get() interface{} {
+func (pf *ProfileFlag) Get() any {
 	return pf.Profiles
 }
 

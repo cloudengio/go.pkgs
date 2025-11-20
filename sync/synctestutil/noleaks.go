@@ -14,7 +14,7 @@ import (
 // Errorf is called when an error is encountered and is defined so that
 // testing.T and testing.B implement Errorf.
 type Errorf interface {
-	Errorf(format string, args ...interface{})
+	Errorf(format string, args ...any)
 }
 
 // AssertNoGoroutines is used to detect goroutine leaks.

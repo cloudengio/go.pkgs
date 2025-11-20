@@ -23,7 +23,7 @@ LetsEncryptProduction = acme.LetsEncryptURL
 ## Functions
 ### Func NewAutocertManager
 ```go
-func NewAutocertManager(_ context.Context, cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error)
+func NewAutocertManager(cache autocert.Cache, cl AutocertConfig, allowedHosts ...string) (*autocert.Manager, error)
 ```
 NewAutocertManager creates a new autocert.Manager from the supplied config.
 Any supplied hosts specify the allowed hosts for the manager, ie. those for
@@ -51,6 +51,32 @@ autocert.Manager.
 
 ```go
 func (ac AutocertConfig) DirectoryURL() string
+```
+
+
+
+
+### Type Client
+```go
+type Client struct {
+	// contains filtered or unexported fields
+}
+```
+Client implements an ACME client that periodically refreshes certificates
+for a set of hosts using the provided autocert.Manager.
+
+### Functions
+
+```go
+func NewClient(mgr *autocert.Manager, refreshInterval time.Duration, hosts ...string) *Client
+```
+
+
+
+### Methods
+
+```go
+func (s *Client) Start(ctx context.Context) (func() error, error)
 ```
 
 

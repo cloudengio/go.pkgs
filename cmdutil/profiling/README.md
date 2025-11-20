@@ -64,7 +64,7 @@ ProfileFlag can be used to represent flags to request arbritrary profiles.
 ### Methods
 
 ```go
-func (pf *ProfileFlag) Get() interface{}
+func (pf *ProfileFlag) Get() any
 ```
 Get implements flag.Getter.
 

@@ -51,7 +51,7 @@ func (ct *CallTrace) RootID() int64 {
 // Log logs the current call site and its arguments. The supplied arguments
 // are stored in a slice and retained until ReleaseArguments is called.
 // Skip is the number of callers to skip, as per runtime.Callers.
-func (ct *CallTrace) Log(skip int, args ...interface{}) {
+func (ct *CallTrace) Log(skip int, args ...any) {
 	record := newRecord(skip+2, args)
 	appendRecord(&ct.trace, record)
 }
@@ -67,14 +67,14 @@ func (ct *CallTrace) ReleaseArguments() {
 // Logf logs the current call site with its arguments being immediately
 // used to create a string (using fmt.Sprintf) that is stored within the trace.
 // Skip is the number of callers to skip, as per runtime.Callers.
-func (ct *CallTrace) Logf(skip int, format string, args ...interface{}) {
+func (ct *CallTrace) Logf(skip int, format string, args ...any) {
 	ct.Log(skip+1, fmt.Sprintf(format, args...))
 }
 
 // GoLog logs the current call site and returns a new CallTrace, that is
 // a child of the existing one, to be used in a goroutine started from the
 // current one. Skip is the number of callers to skip, as per runtime.Callers.
-func (ct *CallTrace) GoLog(skip int, args ...interface{}) *CallTrace {
+func (ct *CallTrace) GoLog(skip int, args ...any) *CallTrace {
 	record := newRecord(skip+2, args)
 	nct := &CallTrace{}
 	appendGoroutineTrace(&ct.trace, &nct.trace, record)
@@ -84,7 +84,7 @@ func (ct *CallTrace) GoLog(skip int, args ...interface{}) *CallTrace {
 // GoLogf logs the current call site and returns a new CallTrace, that is
 // a child of the existing one, to be used in a goroutine started from the
 // current one. Skip is the number of callers to skip, as per runtime.Callers.
-func (ct *CallTrace) GoLogf(skip int, format string, args ...interface{}) *CallTrace {
+func (ct *CallTrace) GoLogf(skip int, format string, args ...any) *CallTrace {
 	return ct.GoLog(skip+1, fmt.Sprintf(format, args...))
 }
 
@@ -126,7 +126,7 @@ type CallRecord struct {
 	GoCaller []runtime.Frame
 	// Arguments is either the formatted string for Logf or a slice
 	// containing the arguments to Log.
-	Arguments interface{}
+	Arguments any
 }
 
 func (cr *CallRecord) prefix() string {
