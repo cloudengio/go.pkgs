@@ -65,11 +65,7 @@ func run() error {
 	var contents []byte
 	if tempFileFlag != "" {
 		if req.Write {
-			dec, err := plugins.DecodeContents(req.Contents)
-			if err != nil {
-				return fmt.Errorf("failed to decode contents: %w", err)
-			}
-			if err := os.WriteFile(tempFileFlag, []byte(dec), 0600); err != nil {
+			if err := os.WriteFile(tempFileFlag, req.Contents, 0600); err != nil {
 				return fmt.Errorf("failed to write to temp file: %w", err)
 			}
 		} else {

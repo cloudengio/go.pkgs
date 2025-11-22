@@ -47,7 +47,7 @@ func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("plugin error: %w", resp.Error)
 	}
-	return DecodeContents(resp.Contents)
+	return resp.Contents, nil
 }
 
 func (f FS) WriteFile(name string, data []byte) error {

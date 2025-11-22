@@ -5,7 +5,6 @@
 package plugins
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,32 +118,16 @@ func NewWriteRequest(keyname string, contents []byte, sysSpecific any) (Request,
 		ID:          NextID(),
 		Keyname:     keyname,
 		Write:       true,
-		Contents:    EncodeContents(contents),
+		Contents:    contents,
 		SysSpecific: sysSpecificJSON,
 	}, nil
-}
-
-// EncodeContents encodes the given contents as a base64 string without padding.
-func EncodeContents(contents []byte) string {
-	if len(contents) == 0 {
-		return ""
-	}
-	return base64.RawStdEncoding.EncodeToString(contents)
-}
-
-// DecodeContents decodes the given base64 string without padding into bytes.
-func DecodeContents(encoded string) ([]byte, error) {
-	if encoded == "" {
-		return nil, nil
-	}
-	return base64.RawStdEncoding.DecodeString(encoded)
 }
 
 // NewResponse creates a Response with the given contents and error.
 func (req Request) NewResponse(contents []byte, responseError *Error) *Response {
 	return &Response{
 		ID:       req.ID,
-		Contents: EncodeContents(contents),
+		Contents: contents,
 		Error:    responseError,
 	}
 }
@@ -167,14 +150,6 @@ func (resp Response) UnmarshalSysSpecific(v any) error {
 		return nil
 	}
 	return json.Unmarshal(resp.SysSpecific, v)
-}
-
-func (resp Response) UnmarshalContents() ([]byte, error) {
-	return DecodeContents(resp.Contents)
-}
-
-func (req Request) UnmarshalContents() ([]byte, error) {
-	return DecodeContents(req.Contents)
 }
 
 func AsError(err error) *Error {

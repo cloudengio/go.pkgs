@@ -5,6 +5,7 @@
 package plugins_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -87,11 +88,8 @@ func TestNewResponse(t *testing.T) {
 		t.Errorf("got %d, want %d", resp.ID, req.ID)
 	}
 
-	decoded, err := plugins.DecodeContents(resp.Contents)
-	if err != nil {
-		t.Fatalf("failed to decode contents: %v", err)
-	}
-	if string(decoded) != string(contents) {
+	decoded := resp.Contents
+	if !bytes.Equal(decoded, contents) {
 		t.Errorf("got %q, want %q", string(decoded), string(contents))
 	}
 
@@ -173,11 +171,8 @@ func TestNewWriteRequest(t *testing.T) {
 		t.Errorf("got ID %d, want > 0", req.ID)
 	}
 
-	decoded, err := plugins.DecodeContents(req.Contents)
-	if err != nil {
-		t.Fatalf("failed to decode contents: %v", err)
-	}
-	if string(decoded) != string(contents) {
+	decoded := req.Contents
+	if !bytes.Equal(decoded, contents) {
 		t.Errorf("got contents %q, want %q", string(decoded), string(contents))
 	}
 

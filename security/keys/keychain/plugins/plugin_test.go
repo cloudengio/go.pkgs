@@ -54,10 +54,7 @@ func TestExtPlugin(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	secret, err := resp.UnmarshalContents()
-	if err != nil {
-		t.Fatalf("failed to unmarshal contents: %v", err)
-	}
+	secret := string(resp.Contents)
 
 	if got, want := secret, "my-secret"; string(got) != want {
 		t.Errorf("expected contents %q, got %q", want, got)
@@ -150,11 +147,8 @@ func TestWriteRead(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("expected no error, got %v", resp.Error)
 	}
-	secret, err := resp.UnmarshalContents()
-	if err != nil {
-		t.Fatalf("failed to unmarshal contents: %v", err)
-	}
-	if got, want := secret, "my-secret-that-i-just-created"; string(got) != want {
+	secret := string(resp.Contents)
+	if got, want := secret, "my-secret-that-i-just-created"; got != want {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 }
