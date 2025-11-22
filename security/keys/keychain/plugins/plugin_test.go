@@ -56,7 +56,7 @@ func TestExtPlugin(t *testing.T) {
 
 	secret := string(resp.Contents)
 
-	if got, want := secret, "my-secret"; string(got) != want {
+	if got, want := secret, "my-secret"; got != want {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 
