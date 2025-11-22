@@ -49,17 +49,14 @@ func TestExtPlugin(t *testing.T) {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
 
-	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--contents=my-secret")
+	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--contents=my-secret", "--keyname=test_key")
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	secret, err := resp.UnmarshalContents()
-	if err != nil {
-		t.Fatalf("failed to unmarshal contents: %v", err)
-	}
+	secret := string(resp.Contents)
 
-	if got, want := secret, "my-secret"; string(got) != want {
+	if got, want := secret, "my-secret"; got != want {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 
@@ -80,7 +77,7 @@ func TestKeyNotFound(t *testing.T) {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
 
-	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--keyname=different-key")
+	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -129,6 +126,7 @@ func TestWriteRead(t *testing.T) {
 	}
 	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--tempfile="+tmpFile, "--keyname=test-key")
 	if err != nil {
+		t.Logf("response error: %+v", resp.Error)
 		t.Fatalf("Run failed: %v", err)
 	}
 	if resp.Error != nil {
@@ -149,11 +147,8 @@ func TestWriteRead(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("expected no error, got %v", resp.Error)
 	}
-	secret, err := resp.UnmarshalContents()
-	if err != nil {
-		t.Fatalf("failed to unmarshal contents: %v", err)
-	}
-	if got, want := secret, "my-secret-that-i-just-created"; string(got) != want {
+	secret := string(resp.Contents)
+	if got, want := secret, "my-secret-that-i-just-created"; got != want {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 }

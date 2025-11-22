@@ -8,7 +8,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -66,11 +65,7 @@ func run() error {
 	var contents []byte
 	if tempFileFlag != "" {
 		if req.Write {
-			dec, err := base64.StdEncoding.DecodeString(req.Contents)
-			if err != nil {
-				return fmt.Errorf("failed to decode contents: %w", err)
-			}
-			if err := os.WriteFile(tempFileFlag, []byte(dec), 0600); err != nil {
+			if err := os.WriteFile(tempFileFlag, req.Contents, 0600); err != nil {
 				return fmt.Errorf("failed to write to temp file: %w", err)
 			}
 		} else {
@@ -82,8 +77,8 @@ func run() error {
 	} else {
 		contents = []byte(contentsFlag)
 	}
-	resp, err := req.NewResponse(contents, respErr, req.SysSpecific)
-	if err != nil {
+	resp := req.NewResponse(contents, respErr)
+	if err := resp.WithSysSpecific(req.SysSpecific); err != nil {
 		// This would typically be a JSON marshaling error for the sysSpecific part.
 		return fmt.Errorf("failed to create response: %w", err)
 	}
