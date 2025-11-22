@@ -49,7 +49,7 @@ func TestExtPlugin(t *testing.T) {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
 
-	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--contents=my-secret")
+	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--contents=my-secret", "--keyname=test_key")
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestKeyNotFound(t *testing.T) {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
 
-	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--keyname=different-key")
+	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -129,6 +129,7 @@ func TestWriteRead(t *testing.T) {
 	}
 	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--tempfile="+tmpFile, "--keyname=test-key")
 	if err != nil {
+		t.Logf("response error: %+v", resp.Error)
 		t.Fatalf("Run failed: %v", err)
 	}
 	if resp.Error != nil {

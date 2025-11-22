@@ -21,17 +21,30 @@ func NewErrorKeyNotFound(keyname string) *Error {
 	}
 }
 
+func NewErrorKeyExists(keyname string) *Error {
+	return &Error{
+		Message: "key already exists",
+		Detail:  keyname,
+	}
+}
+
 // ErrKeyNotFound can be used as the target of errors.Is to check for a
 // key not found error.
 var ErrKeyNotFound = NewErrorKeyNotFound("")
+
+// ErrKeyExists can be used as the target of errors.Is to check for a
+// key already exists error.
+var ErrKeyExists = NewErrorKeyExists("")
 
 // Error represents an error returned by a plugin.
 type Error struct {
 	Message string `json:"message"`
 	Detail  string `json:"detail"`
+	Stderr  string `json:"-"` // Stderr is the stder output from the plugin and is
+	// filled in by the client of the plugin.
 }
 
-func (e *Error) Error() string {
+func (e Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.Message, e.Detail)
 }
 
@@ -51,14 +64,14 @@ type Request struct {
 	ID          int32           `json:"id,omitempty"`
 	Keyname     string          `json:"keyname"`
 	Write       bool            `json:"write,omitempty"`
-	Contents    string          `json:"contents,omitempty"` // base64 encoded
+	Contents    []byte          `json:"contents,omitempty"`
 	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
 }
 
 // Response represents the response from the keychain plugin.
 type Response struct {
 	ID          int32           `json:"id,omitempty"`
-	Contents    string          `json:"contents"` // base64 encoded
+	Contents    []byte          `json:"contents,omitempty"`
 	Error       *Error          `json:"error,omitempty"`
 	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
 }
@@ -106,27 +119,47 @@ func NewWriteRequest(keyname string, contents []byte, sysSpecific any) (Request,
 		ID:          NextID(),
 		Keyname:     keyname,
 		Write:       true,
-		Contents:    base64.StdEncoding.EncodeToString(contents),
+		Contents:    EncodeContents(contents),
 		SysSpecific: sysSpecificJSON,
 	}, nil
 }
 
-// NewResponse creates a Response with the given contents, error, and system-specific data.
-func (req Request) NewResponse(contents []byte, responseError *Error, sysSpecific any) (Response, error) {
-	var sysSpecificJSON json.RawMessage
+// EncodeContents encodes the given contents as a base64 string without padding.
+func EncodeContents(contents []byte) string {
+	if len(contents) == 0 {
+		return ""
+	}
+	return base64.RawStdEncoding.EncodeToString(contents)
+}
+
+// DecodeContents decodes the given base64 string without padding into bytes.
+func DecodeContents(encoded string) ([]byte, error) {
+	if encoded == "" {
+		return nil, nil
+	}
+	return base64.RawStdEncoding.DecodeString(encoded)
+}
+
+// NewResponse creates a Response with the given contents and error.
+func (req Request) NewResponse(contents []byte, responseError *Error) *Response {
+	return &Response{
+		ID:       req.ID,
+		Contents: EncodeContents(contents),
+		Error:    responseError,
+	}
+}
+
+// WithSysSpecific sets the SysSpecific field of the Response to the JSON
+// encoding of the given sysSpecific data.
+func (resp *Response) WithSysSpecific(sysSpecific any) error {
 	if sysSpecific != nil {
 		b, err := json.Marshal(sysSpecific)
 		if err != nil {
-			return Response{}, err
+			return err
 		}
-		sysSpecificJSON = b
+		resp.SysSpecific = b
 	}
-	return Response{
-		ID:          req.ID,
-		Contents:    base64.StdEncoding.EncodeToString(contents),
-		Error:       responseError,
-		SysSpecific: sysSpecificJSON,
-	}, nil
+	return nil
 }
 
 func (resp Response) UnmarshalSysSpecific(v any) error {
@@ -137,5 +170,17 @@ func (resp Response) UnmarshalSysSpecific(v any) error {
 }
 
 func (resp Response) UnmarshalContents() ([]byte, error) {
-	return base64.StdEncoding.DecodeString(resp.Contents)
+	return DecodeContents(resp.Contents)
+}
+
+func (req Request) UnmarshalContents() ([]byte, error) {
+	return DecodeContents(req.Contents)
+}
+
+func AsError(err error) *Error {
+	var e *Error
+	if errors.As(err, &e) {
+		return e
+	}
+	return nil
 }

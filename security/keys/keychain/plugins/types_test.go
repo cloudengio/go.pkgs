@@ -5,7 +5,6 @@
 package plugins_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -78,7 +77,8 @@ func TestNewResponse(t *testing.T) {
 	spec := sysSpec{Info: "meta"}
 
 	// Test case 1: Response with error and contents
-	resp, err := req.NewResponse(contents, respErr, spec)
+	resp := req.NewResponse(contents, respErr)
+	err := resp.WithSysSpecific(spec)
 	if err != nil {
 		t.Fatalf("NewResponse failed: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestNewResponse(t *testing.T) {
 		t.Errorf("got %d, want %d", resp.ID, req.ID)
 	}
 
-	decoded, err := base64.StdEncoding.DecodeString(resp.Contents)
+	decoded, err := plugins.DecodeContents(resp.Contents)
 	if err != nil {
 		t.Fatalf("failed to decode contents: %v", err)
 	}
@@ -112,10 +112,7 @@ func TestNewResponse(t *testing.T) {
 	}
 
 	// Test case 2: Response with nil error and nil sysSpecific
-	resp2, err := req.NewResponse(contents, nil, nil)
-	if err != nil {
-		t.Fatalf("NewResponse failed: %v", err)
-	}
+	resp2 := req.NewResponse(contents, nil)
 	if resp2.Error != nil {
 		t.Errorf("got %q, want nil", resp2.Error)
 	}
@@ -124,7 +121,7 @@ func TestNewResponse(t *testing.T) {
 	}
 
 	// Test case 3: JSON marshal error
-	_, err = req.NewResponse(contents, nil, make(chan int))
+	err = req.NewResponse(contents, nil).WithSysSpecific(make(chan int))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -136,14 +133,21 @@ func TestErrorNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
-
-	resp, err := req.NewResponse(nil, notFoundErr, nil)
-	if err != nil {
-		t.Fatalf("NewResponse failed: %v", err)
-	}
-
+	resp := req.NewResponse(nil, notFoundErr)
 	if !errors.Is(resp.Error, plugins.ErrKeyNotFound) {
 		t.Errorf("expected error to be ErrKeyNotFound, got %v", resp.Error)
+	}
+}
+
+func TestErrorKeyExists(t *testing.T) {
+	keyExistsErr := plugins.NewErrorKeyExists("my-key")
+	req, err := plugins.NewRequest("a key", nil)
+	if err != nil {
+		t.Fatalf("NewRequest failed: %v", err)
+	}
+	resp := req.NewResponse(nil, keyExistsErr)
+	if !errors.Is(resp.Error, plugins.ErrKeyExists) {
+		t.Errorf("expected error to be ErrKeyExists, got %v", resp.Error)
 	}
 }
 
@@ -169,7 +173,7 @@ func TestNewWriteRequest(t *testing.T) {
 		t.Errorf("got ID %d, want > 0", req.ID)
 	}
 
-	decoded, err := base64.StdEncoding.DecodeString(req.Contents)
+	decoded, err := plugins.DecodeContents(req.Contents)
 	if err != nil {
 		t.Fatalf("failed to decode contents: %v", err)
 	}

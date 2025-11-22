@@ -13,10 +13,6 @@ import (
 	"time"
 )
 
-// KeyChainPluginName is the default name of the external keychain plugin.
-// The plugin should be installed and available in the system PATH.
-const KeyChainPluginName = "keychain-plugin"
-
 // RunExtPlugin runs an external keychain plugin with the provided request
 // and returns the response. binary is either a command on the PATH or
 // an absolute path to the plugin executable. If binary is empty it defaults to
@@ -24,7 +20,7 @@ const KeyChainPluginName = "keychain-plugin"
 // the WithExternalPlugin function.
 func RunExtPlugin(ctx context.Context, binary string, req Request, args ...string) (Response, error) {
 	if binary == "" {
-		binary = KeyChainPluginName
+		return Response{}, fmt.Errorf("plugin binary not specified")
 	}
 	in := &bytes.Buffer{}
 	out := &bytes.Buffer{}
@@ -44,19 +40,31 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	cmd.Stderr = stderr
 	var resp Response
 	if err := cmd.Run(); err != nil {
-		return Response{}, fmt.Errorf("plugin failed: %w: %s", err, stderr.String())
+		return Response{
+			Error: &Error{
+				Message: "failed to start plugin",
+				Detail:  err.Error()}}, err
 	}
 	if err := json.NewDecoder(out).Decode(&resp); err != nil {
-		return Response{}, fmt.Errorf("failed to decode plugin response: %v", err)
+		rerr := &Error{
+			Message: "failed to decode plugin response",
+			Detail:  err.Error(),
+			Stderr:  stderr.String(),
+		}
+		return Response{Error: rerr},
+			fmt.Errorf("failed to decode plugin response: %v: %w", err, rerr)
 	}
 	if resp.ID != req.ID {
-		return Response{}, fmt.Errorf("response ID %d does not match request ID %d", resp.ID, req.ID)
+		rerr := &Error{
+			Message: "response ID does not match request ID",
+			Detail:  fmt.Sprintf("response ID %d does not match request ID %d", resp.ID, req.ID),
+			Stderr:  stderr.String(),
+		}
+		return Response{Error: rerr}, fmt.Errorf("response ID %d does not match request ID %d: %w", resp.ID, req.ID, rerr)
+	}
+	if resp.Error != nil {
+		resp.Error.Stderr = stderr.String()
+		return resp, nil
 	}
 	return resp, nil
-}
-
-// IsExtPluginAvailable checks if the external keychain plugin is available.
-func IsExtPluginAvailable() bool {
-	_, err := exec.LookPath(KeyChainPluginName)
-	return err == nil
 }
