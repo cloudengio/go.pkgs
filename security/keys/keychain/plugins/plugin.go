@@ -15,9 +15,7 @@ import (
 
 // RunExtPlugin runs an external keychain plugin with the provided request
 // and returns the response. binary is either a command on the PATH or
-// an absolute path to the plugin executable. If binary is empty it defaults to
-// KeyChainPluginName. The default external plugin can be installed using
-// the WithExternalPlugin function.
+// an absolute path to the plugin executable.
 func RunExtPlugin(ctx context.Context, binary string, req Request, args ...string) (Response, error) {
 	if binary == "" {
 		return Response{}, fmt.Errorf("plugin binary not specified")
