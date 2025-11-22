@@ -20,6 +20,8 @@ func NewErrorKeyNotFound(keyname string) *Error {
 	}
 }
 
+// NewErrorKeyExists creates a new Error indicating that the specified key
+// already exists that is compatible with errors.Is and ErrorKeyExists.
 func NewErrorKeyExists(keyname string) *Error {
 	return &Error{
 		Message: "key already exists",
@@ -152,6 +154,8 @@ func (resp Response) UnmarshalSysSpecific(v any) error {
 	return json.Unmarshal(resp.SysSpecific, v)
 }
 
+// AsError attempts to convert the given error to a *Error and returns it.
+// If the error is not a *Error, it returns nil.
 func AsError(err error) *Error {
 	var e *Error
 	if errors.As(err, &e) {
