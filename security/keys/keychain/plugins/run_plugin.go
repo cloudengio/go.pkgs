@@ -28,7 +28,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 		return Response{Error: &Error{
 			Message: "failed to create request",
 			Detail:  err.Error(),
-		}}, err
+		}}, fmt.Errorf("failed to create request: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -41,7 +41,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 		return Response{
 			Error: &Error{
 				Message: "failed to start plugin",
-				Detail:  err.Error()}}, err
+				Detail:  err.Error()}}, fmt.Errorf("failed to start plugin: %w", err)
 	}
 	if err := json.NewDecoder(out).Decode(&resp); err != nil {
 		rerr := &Error{
