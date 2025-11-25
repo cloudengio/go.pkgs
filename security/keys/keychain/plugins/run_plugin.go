@@ -43,7 +43,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 			Detail:  err.Error(),
 			Stderr:  stderr.String(),
 		}
-		return Response{Error: rerr}, fmt.Errorf("failed to start plugin:  %w", rerr)
+		return Response{Error: rerr}, fmt.Errorf("failed to run plugin:  %w", rerr)
 	}
 	if err := json.NewDecoder(stdout).Decode(&resp); err != nil {
 		rerr := &Error{
