@@ -21,7 +21,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 		return Response{}, fmt.Errorf("plugin binary not specified")
 	}
 	in := &bytes.Buffer{}
-	out := &bytes.Buffer{}
+	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	enc := json.NewEncoder(in)
 	if err := enc.Encode(req); err != nil {
@@ -34,16 +34,18 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Stdin = in
-	cmd.Stdout = out
+	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	var resp Response
 	if err := cmd.Run(); err != nil {
-		return Response{
-			Error: &Error{
-				Message: "failed to start plugin",
-				Detail:  err.Error()}}, fmt.Errorf("failed to start plugin: %v: %v %v %w", cmd.Args, out.String(), stderr.String(), err)
+		rerr := &Error{
+			Message: "failed to run plugin",
+			Detail:  err.Error(),
+			Stderr:  stderr.String(),
+		}
+		return Response{Error: rerr}, fmt.Errorf("failed to start plugin:  %w", rerr)
 	}
-	if err := json.NewDecoder(out).Decode(&resp); err != nil {
+	if err := json.NewDecoder(stdout).Decode(&resp); err != nil {
 		rerr := &Error{
 			Message: "failed to decode plugin response",
 			Detail:  err.Error(),
