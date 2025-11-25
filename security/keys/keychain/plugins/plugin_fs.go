@@ -64,7 +64,7 @@ func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte) error {
 		return fmt.Errorf("failed to run plugin: %w", err)
 	}
 	if resp.Error != nil {
-		return fmt.Errorf("plugin error: %s", resp.Error)
+		return fmt.Errorf("error reported by plugin: %w", resp.Error)
 	}
 	return nil
 }
