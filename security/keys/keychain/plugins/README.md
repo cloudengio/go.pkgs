@@ -5,18 +5,15 @@ import cloudeng.io/security/keys/keychain/plugins
 ```
 
 
-## Constants
-### KeyChainPluginName
+## Variables
+### ErrKeyExists
 ```go
-KeyChainPluginName = "keychain-plugin"
+ErrKeyExists = NewErrorKeyExists("")
 
 ```
-KeyChainPluginName is the default name of the external keychain plugin.
-The plugin should be installed and available in the system PATH.
+ErrKeyExists can be used as the target of errors.Is to check for a key
+already exists error.
 
-
-
-## Variables
 ### ErrKeyNotFound
 ```go
 ErrKeyNotFound = NewErrorKeyNotFound("")
@@ -28,12 +25,6 @@ found error.
 
 
 ## Functions
-### Func IsExtPluginAvailable
-```go
-func IsExtPluginAvailable() bool
-```
-IsExtPluginAvailable checks if the external keychain plugin is available.
-
 ### Func NextID
 ```go
 func NextID() int32
@@ -47,11 +38,27 @@ func NextID() int32
 type Error struct {
 	Message string `json:"message"`
 	Detail  string `json:"detail"`
+	Stderr  string `json:"-"` // Stderr is the stder output from the plugin and is
+
 }
 ```
 Error represents an error returned by a plugin.
 
 ### Functions
+
+```go
+func AsError(err error) *Error
+```
+AsError attempts to convert the given error to a *Error and returns it.
+If the error is not a *Error, it returns nil.
+
+
+```go
+func NewErrorKeyExists(keyname string) *Error
+```
+NewErrorKeyExists creates a new Error indicating that the specified key
+already exists that is compatible with errors.Is and ErrorKeyExists.
+
 
 ```go
 func NewErrorKeyNotFound(keyname string) *Error
@@ -64,7 +71,7 @@ was not found that is compatible with errors.Is and ErrorKeyNotFound.
 ### Methods
 
 ```go
-func (e *Error) Error() string
+func (e Error) Error() string
 ```
 
 
@@ -97,22 +104,22 @@ system-specific data, and plugin arguments.
 ### Methods
 
 ```go
-func (f *FS) ReadFile(name string) ([]byte, error)
+func (f FS) ReadFile(name string) ([]byte, error)
 ```
 
 
 ```go
-func (f *FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 ```
 
 
 ```go
-func (f *FS) WriteFile(name string, data []byte) error
+func (f FS) WriteFile(name string, data []byte) error
 ```
 
 
 ```go
-func (f *FS) WriteFileCtx(ctx context.Context, name string, data []byte) error
+func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte) error
 ```
 
 
@@ -124,7 +131,7 @@ type Request struct {
 	ID          int32           `json:"id,omitempty"`
 	Keyname     string          `json:"keyname"`
 	Write       bool            `json:"write,omitempty"`
-	Contents    string          `json:"contents,omitempty"` // base64 encoded
+	Contents    []byte          `json:"contents,omitempty"`
 	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
 }
 ```
@@ -152,10 +159,9 @@ unique for each call to this function.
 ### Methods
 
 ```go
-func (req Request) NewResponse(contents []byte, responseError *Error, sysSpecific any) (Response, error)
+func (req Request) NewResponse(contents []byte, responseError *Error) *Response
 ```
-NewResponse creates a Response with the given contents, error, and
-system-specific data.
+NewResponse creates a Response with the given contents and error.
 
 
 
@@ -164,7 +170,7 @@ system-specific data.
 ```go
 type Response struct {
 	ID          int32           `json:"id,omitempty"`
-	Contents    string          `json:"contents"` // base64 encoded
+	Contents    []byte          `json:"contents,omitempty"`
 	Error       *Error          `json:"error,omitempty"`
 	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
 }
@@ -176,24 +182,24 @@ Response represents the response from the keychain plugin.
 ```go
 func RunExtPlugin(ctx context.Context, binary string, req Request, args ...string) (Response, error)
 ```
-RunExtPlugin runs an external keychain plugin with the provided request
-and returns the response. binary is either a command on the PATH or an
-absolute path to the plugin executable. If binary is empty it defaults to
-KeyChainPluginName. The default external plugin can be installed using the
-WithExternalPlugin function.
+RunExtPlugin runs an external keychain plugin with the provided request and
+returns the response. binary is either a command on the PATH or an absolute
+path to the plugin executable.
 
 
 
 ### Methods
 
 ```go
-func (resp Response) UnmarshalContents() ([]byte, error)
+func (resp Response) UnmarshalSysSpecific(v any) error
 ```
 
 
 ```go
-func (resp Response) UnmarshalSysSpecific(v any) error
+func (resp *Response) WithSysSpecific(sysSpecific any) error
 ```
+WithSysSpecific sets the SysSpecific field of the Response to the JSON
+encoding of the given sysSpecific data.
 
 
 
