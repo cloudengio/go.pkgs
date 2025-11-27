@@ -6,171 +6,321 @@ package keys_test
 
 import (
 	"context"
-	"reflect"
+	"encoding/json"
 	"testing"
 
 	"cloudeng.io/cmdutil/keys"
 	"gopkg.in/yaml.v3"
 )
 
-func TestInmemoryKeyStore(t *testing.T) {
-	store := keys.NewInmemoryKeyStore()
-	if store == nil {
-		t.Fatal("NewInmemoryKeyStore returned nil")
+const (
+	yamlList = `
+- key_id: key1
+  token: value1
+  user: user1
+- key_id: key2
+  token: value2
+  user: user2
+`
+	yamlMap = `
+key1:
+  token: value1
+  user: user1
+key2:
+  token: value2
+  user: user2
+`
+	jsonList = `[
+    {"key_id": "key1", "token": "value1", "user": "user1"},
+    {"key_id": "key2", "token": "value2", "user": "user2"}
+]`
+	jsonMap = `{
+    "key1": {"token": "value1", "user": "user1"},
+    "key2": {"token": "value2", "user": "user2"}
+}`
+)
+
+func TestUnmarshalYAML(t *testing.T) {
+	var ks keys.InmemoryKeyStore
+	if err := yaml.Unmarshal([]byte(yamlList), &ks); err != nil {
+		t.Fatalf("yaml list: %v", err)
 	}
+	verifyKeys(t, &ks)
 
-	if len(store.GetAllKeys()) != 0 {
-		t.Error("new store should be empty")
+	ks = keys.InmemoryKeyStore{}
+	if err := yaml.Unmarshal([]byte(yamlMap), &ks); err != nil {
+		t.Fatalf("yaml map: %v", err)
 	}
+	verifyKeys(t, &ks)
+}
 
-	k1 := keys.KeyInfo{ID: "key1", User: "user1", Token: "token1"}
-	k2 := keys.KeyInfo{ID: "key2", User: "user2", Token: "token2"}
+func TestUnmarshalJSON(t *testing.T) {
+	var ks keys.InmemoryKeyStore
+	if err := json.Unmarshal([]byte(jsonList), &ks); err != nil {
+		t.Fatalf("json list: %v", err)
+	}
+	verifyKeys(t, &ks)
 
-	store.AddKey(k1)
-	store.AddKey(k2)
+	ks = keys.InmemoryKeyStore{}
+	if err := json.Unmarshal([]byte(jsonMap), &ks); err != nil {
+		t.Fatalf("json map: %v", err)
+	}
+	verifyKeys(t, &ks)
+}
 
-	// Test GetKey
-	retrievedKey, ok := store.GetKey("key1")
+func verifyKeys(t *testing.T, ks *keys.InmemoryKeyStore) {
+	k1, ok := ks.Get("key1")
 	if !ok {
-		t.Fatal("expected to find key1")
+		t.Fatalf("key1 not found")
 	}
-	if !reflect.DeepEqual(retrievedKey, k1) {
-		t.Errorf("got %v, want %v", retrievedKey, k1)
+	if got, want := string(k1.Token().Value()), "value1"; got != want {
+		t.Errorf("key1: got %v, want %v", got, want)
 	}
-
-	_, ok = store.GetKey("non-existent")
-	if ok {
-		t.Error("did not expect to find non-existent key")
+	if got, want := k1.User, "user1"; got != want {
+		t.Errorf("key1 user: got %v, want %v", got, want)
 	}
 
-	// Test GetAllKeys
-	allKeys := store.GetAllKeys()
-	if len(allKeys) != 2 {
-		t.Fatalf("expected 2 keys, got %d", len(allKeys))
+	k2, ok := ks.Get("key2")
+	if !ok {
+		t.Fatalf("key2 not found")
 	}
-	if !reflect.DeepEqual(allKeys, []keys.KeyInfo{k1, k2}) {
-		t.Errorf("got %v, want %v", allKeys, []keys.KeyInfo{k1, k2})
+	if got, want := string(k2.Token().Value()), "value2"; got != want {
+		t.Errorf("key2: got %v, want %v", got, want)
 	}
-
-	// Test that GetAllKeys returns a clone
-	allKeys[0].ID = "modified"
-	if store.GetAllKeys()[0].ID == "modified" {
-		t.Error("GetAllKeys should return a clone, not a reference")
+	if got, want := k2.User, "user2"; got != want {
+		t.Errorf("key2 user: got %v, want %v", got, want)
 	}
 }
 
 func TestContextFunctions(t *testing.T) {
 	store := keys.NewInmemoryKeyStore()
-	k1 := keys.KeyInfo{ID: "ctx-key", User: "ctx-user", Token: "ctx-token"}
-	store.AddKey(k1)
+	k1 := &keys.Info{ID: "ctx-key", User: "ctx-user"}
+	k1.SetToken(keys.NewToken([]byte("ctx-token")))
+	store.Add(*k1)
 
-	ctx := keys.ContextWithAuth(context.Background(), *store)
+	ctx := keys.ContextWithKeyStore(context.Background(), store)
 
 	// Test successful retrieval
-	retrievedKey, ok := keys.AuthFromContextForID(ctx, "ctx-key")
+	retrievedKey, ok := keys.KeyInfoFromContextForID(ctx, "ctx-key")
 	if !ok {
 		t.Fatal("expected to find key in context")
 	}
-	if !reflect.DeepEqual(retrievedKey, k1) {
-		t.Errorf("got %v, want %v", retrievedKey, k1)
+	if got, want := retrievedKey.ID, k1.ID; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := retrievedKey.User, k1.User; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := string(retrievedKey.Token().Value()), string(k1.Token().Value()); got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 
 	// Test retrieval of non-existent key from context
-	_, ok = keys.AuthFromContextForID(ctx, "non-existent")
+	_, ok = keys.KeyInfoFromContextForID(ctx, "non-existent")
 	if ok {
 		t.Error("did not expect to find non-existent key in context")
 	}
 
 	// Test retrieval from a context without the store
 	emptyCtx := context.Background()
-	_, ok = keys.AuthFromContextForID(emptyCtx, "ctx-key")
+	_, ok = keys.KeyInfoFromContextForID(emptyCtx, "ctx-key")
 	if ok {
 		t.Error("did not expect to find key in empty context")
 	}
 }
 
-type scopeType struct {
-	Scope string `yaml:"scope"`
+type extraType struct {
+	Scope string `json:"scope" yaml:"scope"`
 }
 
 const (
-	yamlDataArray = `
+	yamlListExtra = `
 - key_id: key1
+  token: value1
   user: user1
-  token: token1
   extra:
     scope: read
 - key_id: key2
+  token: value2
   user: user2
-  token: token2
+  extra:
+    scope: write
 `
-	yamlDataMap = `
+	yamlMapExtra = `
 key1:
+  token: value1
   user: user1
-  token: token1
   extra:
     scope: read
 key2:
+  token: value2
   user: user2
-  token: token2
+  extra:
+    scope: write
 `
+	jsonListExtra = `[
+    {"key_id": "key1", "token": "value1", "user": "user1", "extra": {"scope": "read"}},
+    {"key_id": "key2", "token": "value2", "user": "user2", "extra": {"scope": "write"}}
+]`
+	jsonMapExtra = `{
+    "key1": {"token": "value1", "user": "user1", "extra": {"scope": "read"}},
+    "key2": {"token": "value2", "user": "user2", "extra": {"scope": "write"}}
+}`
 )
 
-func TestUnmarshalYAML(t *testing.T) {
-	for _, yamlData := range []string{yamlDataArray, yamlDataMap} {
-		store := keys.NewInmemoryKeyStore()
-		err := yaml.Unmarshal([]byte(yamlData), store)
-		if err != nil {
-			t.Fatalf("UnmarshalYAML failed: %v", err)
-		}
+func TestUnmarshalYAMLExtra(t *testing.T) {
+	var ks keys.InmemoryKeyStore
+	if err := yaml.Unmarshal([]byte(yamlListExtra), &ks); err != nil {
+		t.Fatalf("yaml list: %v", err)
+	}
+	verifyKeysExtra(t, &ks)
 
-		allKeys := store.GetAllKeys()
-		if len(allKeys) != 2 {
-			t.Fatalf("expected 2 keys, got %d", len(allKeys))
-		}
+	ks = keys.InmemoryKeyStore{}
+	if err := yaml.Unmarshal([]byte(yamlMapExtra), &ks); err != nil {
+		t.Fatalf("yaml map: %v", err)
+	}
+	verifyKeysExtra(t, &ks)
+}
 
-		k1, ok := store.GetKey("key1")
-		if !ok {
-			t.Fatal("key1 not found")
-		}
-		if k1.User != "user1" || k1.Token != "token1" {
-			t.Errorf("unexpected data for key1: %v", k1)
-		}
-		extra, ok := k1.Extra.(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected type for extra data: %T", k1.Extra)
-		}
-		if extra["scope"] != "read" {
-			t.Errorf("unexpected extra data: %v", extra)
-		}
+func TestUnmarshalJSONExtra(t *testing.T) {
+	var ks keys.InmemoryKeyStore
+	if err := json.Unmarshal([]byte(jsonListExtra), &ks); err != nil {
+		t.Fatalf("json list: %v", err)
+	}
+	verifyKeysExtra(t, &ks)
 
-		var st scopeType
-		if err := k1.ExtraAs(&st); err != nil {
-			t.Errorf("failed to unmarshal extra data: %v", err)
-		}
-		if st.Scope != "read" {
-			t.Errorf("unexpected scope value: %v", st.Scope)
-		}
-		if err := k1.ExtraAs(&scopeType{}); err != nil {
-			t.Errorf("failed to unmarshal extra data: %v", err)
-		}
+	ks = keys.InmemoryKeyStore{}
+	if err := json.Unmarshal([]byte(jsonMapExtra), &ks); err != nil {
+		t.Fatalf("json map: %v", err)
+	}
+	verifyKeysExtra(t, &ks)
+}
 
-		k2, ok := store.GetKey("key2")
-		if !ok {
-			t.Fatal("key2 not found")
-		}
-		if k2.User != "user2" || k2.Token != "token2" {
-			t.Errorf("unexpected data for key2: %v", k2)
+func verifyKeysExtra(t *testing.T, ks *keys.InmemoryKeyStore) {
+	k1, ok := ks.Get("key1")
+	if !ok {
+		t.Fatalf("key1 not found")
+	}
+	var e1 extraType
+	if err := k1.ExtraAs(&e1); err != nil {
+		t.Fatalf("key1 extra: %v", err)
+	}
+	if got, want := e1.Scope, "read"; got != want {
+		t.Errorf("key1 scope: got %v, want %v", got, want)
+	}
+
+	k2, ok := ks.Get("key2")
+	if !ok {
+		t.Fatalf("key2 not found")
+	}
+	var e2 extraType
+	if err := k2.ExtraAs(&e2); err != nil {
+		t.Fatalf("key2 extra: %v", err)
+	}
+	if got, want := e2.Scope, "write"; got != want {
+		t.Errorf("key2 scope: got %v, want %v", got, want)
+	}
+}
+
+func TestToken(t *testing.T) {
+	val := []byte("secret")
+	tok := keys.NewToken(val)
+	if got, want := string(tok.Value()), "secret"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := tok.String(), "****"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// Verify input was cleared
+	if string(val) == "secret" {
+		t.Errorf("input slice was not cleared")
+	}
+	tok.Clear()
+	for _, b := range tok.Value() {
+		if b != 0 {
+			t.Errorf("token was not cleared")
 		}
 	}
 }
 
-func TestUnmarshalYAMLInvalid(t *testing.T) {
+func TestInfo(t *testing.T) {
+	val := []byte("secret")
+	extra := map[string]string{"a": "b"}
+	info := keys.NewInfo("id", "user", val, extra)
+
+	if got, want := info.ID, "id"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := info.User, "user"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := string(info.Token().Value()), "secret"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := info.String(), "id[user]"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := info.Extra().(map[string]string)["a"], "b"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Verify input was cleared
+	if string(val) == "secret" {
+		t.Errorf("input slice was not cleared")
+	}
+
+	newToken := keys.NewToken([]byte("new-secret"))
+	info.SetToken(newToken)
+	if got, want := string(info.Token().Value()), "new-secret"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestMoreContextFunctions(t *testing.T) {
+	ctx := context.Background()
+
+	// ContextWithoutKeyStore
 	store := keys.NewInmemoryKeyStore()
-	// Test invalid YAML
-	invalidYAML := `not: valid: yaml`
-	err := yaml.Unmarshal([]byte(invalidYAML), store)
-	if err == nil {
-		t.Fatal("expected an error for invalid YAML")
+	ctxWithStore := keys.ContextWithKeyStore(ctx, store)
+	if _, ok := keys.KeyStoreFromContext(ctxWithStore); !ok {
+		t.Fatal("expected store in context")
+	}
+
+	ctxNoStore := keys.ContextWithoutKeyStore(ctxWithStore)
+	if _, ok := keys.KeyStoreFromContext(ctxNoStore); ok {
+		t.Fatal("expected no store in context")
+	}
+
+	// ContextWithKey
+	k1 := keys.NewInfo("k1", "u1", []byte("t1"), nil)
+	ctxWithKey := keys.ContextWithKey(ctx, k1)
+
+	// Should have created a store and added the key
+	storeFromCtx, ok := keys.KeyStoreFromContext(ctxWithKey)
+	if !ok {
+		t.Fatal("expected store to be created")
+	}
+
+	gotKey, ok := storeFromCtx.Get("k1")
+	if !ok {
+		t.Fatal("expected key to be in store")
+	}
+	if gotKey.ID != "k1" {
+		t.Errorf("got %v, want k1", gotKey.ID)
+	}
+
+	// Add another key to existing store
+	k2 := keys.NewInfo("k2", "u2", []byte("t2"), nil)
+	ctxWithKey2 := keys.ContextWithKey(ctxWithKey, k2)
+
+	storeFromCtx2, ok := keys.KeyStoreFromContext(ctxWithKey2)
+	if !ok {
+		t.Fatal("expected store")
+	}
+	if _, ok := storeFromCtx2.Get("k2"); !ok {
+		t.Fatal("expected k2")
+	}
+	if _, ok := storeFromCtx2.Get("k1"); !ok {
+		t.Fatal("expected k1 to still be there")
 	}
 }
