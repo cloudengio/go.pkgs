@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"slices"
 	"sync"
-	"unsafe"
 
 	"gopkg.in/yaml.v3"
 )
@@ -171,24 +170,15 @@ func NewInmemoryKeyStore() *InmemoryKeyStore {
 }
 
 func copyInfo(src keyInfo) Info {
-	i := Info{
+	return Info{
 		ID:        src.ID,
 		User:      src.User,
 		token:     []byte(src.Token),
 		extraJSON: src.ExtraJSON,
 		extraYAML: src.ExtraYAML,
 	}
-	unsafeZeroString(src.Token)
-	return i
 }
 
-func unsafeZeroString(s string) {
-	ptr := unsafe.StringData(s)
-	b := unsafe.Slice(ptr, len(s))
-	for i := range b {
-		b[i] = 0
-	}
-}
 func copyInfoList(src []keyInfo) []Info {
 	dest := make([]Info, len(src))
 	for i, ki := range src {
