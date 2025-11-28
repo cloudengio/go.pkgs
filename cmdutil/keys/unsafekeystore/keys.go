@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package unsafekeystore is intended to document to use
+// Package unsafekeystore is intended to document the use
 // of plaintext, local filesystems being used to store keys.
 package unsafekeystore
 
