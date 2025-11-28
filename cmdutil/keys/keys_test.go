@@ -197,6 +197,7 @@ func TestUnmarshalJSONExtra(t *testing.T) {
 }
 
 func verifyKeysExtra(t *testing.T, ks *keys.InmemoryKeyStore) {
+	t.Helper()
 	k1, ok := ks.Get("key1")
 	if !ok {
 		t.Fatalf("key1 not found")

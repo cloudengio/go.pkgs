@@ -59,6 +59,9 @@ func NewToken(value []byte) Token {
 //   - user: optional user associated with the key
 //   - token: the token value
 //   - extra: optional extra information as a json or yaml object
+//
+// An Info instance can be created/populated using NewInfo or by unmarshaling
+// from json or yaml.
 type Info struct {
 	ID        string
 	User      string
@@ -105,8 +108,24 @@ func (k *Info) SetToken(t Token) {
 	k.token = slices.Clone(t.token)
 }
 
-// Extra returns the extra information associated with the key.
+// Extra returns the extra information associated with the key. If no value
+// was set using NewInfo, it will attempt to unmarshal the extra information
+// from either the json or yaml representation.
 func (k *Info) Extra() any {
+	if k.extraAny != nil {
+		return k.extraAny
+	}
+	if k.extraJSON != nil {
+		var val any
+		if json.Unmarshal(k.extraJSON, &val) == nil {
+			k.extraAny = val
+		}
+	} else if k.extraYAML.Kind != 0 {
+		var val any
+		if k.extraYAML.Decode(&val) == nil {
+			k.extraAny = val
+		}
+	}
 	return k.extraAny
 }
 
@@ -125,8 +144,11 @@ func (k Info) extraFromYAML(v any) error {
 }
 
 // ExtraAs unmarshals the extra json or yaml information into the provided
-// value.
+// value. It does not modify the stored extra information.
 func (k Info) ExtraAs(v any) error {
+	if k.extraJSON == nil && k.extraYAML.Kind == 0 {
+		return fmt.Errorf("no extra unmarshalled information for key_id: %v", k.ID)
+	}
 	if k.extraJSON != nil {
 		return k.extraFromJSON(v)
 	}
