@@ -22,7 +22,10 @@ import (
 // Token represents an API token. It is intended for temporary use
 // with the Clear() method being called to zero the token value when
 // it is no longer needed, typically using a defer statement.
+// It consists of an ID and a token value with the ID purely for
+// identification purposes.
 type Token struct {
+	ID    string
 	token []byte
 }
 
@@ -33,19 +36,20 @@ func (t Token) Value() []byte {
 
 // Clear zeros the token value.
 func (t *Token) Clear() {
+	t.ID = ""
 	for i := range t.token {
 		t.token[i] = 0
 	}
 }
 
 func (t Token) String() string {
-	return "****"
+	return t.ID + ":****"
 }
 
 // NewToken creates a new Token instance, cloning the provided value
 // and zeroing the input slice.
-func NewToken(value []byte) Token {
-	t := Token{token: slices.Clone(value)}
+func NewToken(id string, value []byte) Token {
+	t := Token{ID: id, token: slices.Clone(value)}
 	for i := range value {
 		value[i] = 0
 	}
@@ -101,11 +105,7 @@ func (k Info) String() string {
 }
 
 func (k Info) Token() *Token {
-	return &Token{token: slices.Clone(k.token)}
-}
-
-func (k *Info) SetToken(t Token) {
-	k.token = slices.Clone(t.token)
+	return &Token{ID: k.ID, token: slices.Clone(k.token)}
 }
 
 // Extra returns the extra information associated with the key. If no value
@@ -278,6 +278,9 @@ func KeyInfoFromContextForID(ctx context.Context, id string) (Info, bool) {
 	return am.Get(id)
 }
 
+// ContextWithKey returns a new context with the provided KeyInfo added
+// to an InmemoryKeyStore. If no InmemoryKeyStore exists in the context,
+// a new one is created.
 func ContextWithKey(ctx context.Context, ki Info) context.Context {
 	ims, ok := KeyStoreFromContext(ctx)
 	if !ok {

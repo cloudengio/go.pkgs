@@ -94,9 +94,8 @@ func verifyKeys(t *testing.T, ks *keys.InmemoryKeyStore) {
 
 func TestContextFunctions(t *testing.T) {
 	store := keys.NewInmemoryKeyStore()
-	k1 := &keys.Info{ID: "ctx-key", User: "ctx-user"}
-	k1.SetToken(keys.NewToken([]byte("ctx-token")))
-	store.Add(*k1)
+	k1 := keys.NewInfo("ctx-key", "ctx-user", []byte("ctx-token"), nil)
+	store.Add(k1)
 
 	ctx := keys.ContextWithKeyStore(context.Background(), store)
 
@@ -225,11 +224,11 @@ func verifyKeysExtra(t *testing.T, ks *keys.InmemoryKeyStore) {
 
 func TestToken(t *testing.T) {
 	val := []byte("secret")
-	tok := keys.NewToken(val)
+	tok := keys.NewToken("idval", val)
 	if got, want := string(tok.Value()), "secret"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := tok.String(), "****"; got != want {
+	if got, want := tok.String(), "idval:****"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	// Verify input was cleared
@@ -270,11 +269,6 @@ func TestInfo(t *testing.T) {
 		t.Errorf("input slice was not cleared")
 	}
 
-	newToken := keys.NewToken([]byte("new-secret"))
-	info.SetToken(newToken)
-	if got, want := string(info.Token().Value()), "new-secret"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
 }
 
 func TestMoreContextFunctions(t *testing.T) {
