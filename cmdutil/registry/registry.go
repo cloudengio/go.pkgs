@@ -48,6 +48,16 @@ func (r *T[T]) Get(key string) New[T] {
 	return nil
 }
 
+// Clone creates a shallow clone of the registry.
+func (r *T[RT]) Clone() *T[RT] {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	clone := &T[RT]{}
+	clone.items = make([]item[RT], len(r.items))
+	copy(clone.items, r.items)
+	return clone
+}
+
 // ErrUnknownKey is returned when an unregistered key
 // is encountered.
 var ErrUnknownKey = errors.New("unregistered key")
