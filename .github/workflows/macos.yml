@@ -9,7 +9,6 @@ on:
 permissions:
   contents: read
 
-  self-hosted macOS ARM64
 jobs:
   test:
     runs-on:
