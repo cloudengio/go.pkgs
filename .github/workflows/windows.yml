@@ -12,7 +12,8 @@ permissions:
 jobs:
   check-description:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runner: |
+      [ "ubuntu-latest" ]
     outputs:
       should-run: ${{ steps.check.outputs.contains-pattern }}
     steps:
@@ -29,7 +30,8 @@ jobs:
     if: github.event_name == 'push' || needs.check-description.outputs.should-run == 'true'
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
-      os-version: windows-latest
+      runner: |
+        [ "windows-latest" ]
       go-versions: |
         [ "1.25.x" ]
       multimod-action: "test-less-parallelism"

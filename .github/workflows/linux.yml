@@ -11,14 +11,9 @@ permissions:
 
 jobs:
   test:
-    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@locally-hosted-runners
     with:
-      os-version: ubuntu-latest
+      runner: |
+        [ "ubuntu-latest" ]
       go-versions: |
         [ "1.25.x" ]
-
-  lint:
-    uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
-    with:
-      os-version: ubuntu-latest
-      go-version: "1.25.x"
