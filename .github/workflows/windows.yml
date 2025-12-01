@@ -12,15 +12,14 @@ permissions:
 jobs:
   check-description:
     if: github.event_name == 'pull_request'
-    runner: |
-      [ "ubuntu-latest" ]
+    runs-on: "ubuntu-latest"
     outputs:
       should-run: ${{ steps.check.outputs.contains-pattern }}
     steps:
       - uses: actions/checkout@v4
       - name: Check PR description for 'test:windows'
         id: check
-        uses: cloudengio/.github/.github/actions/check-pr-description@main
+        uses: cloudengio/.github/.github/actions/check-pr-description@locally-hosted-runners
         with:
           phrase: test:windows
           pr-body: ${{ github.event.pull_request.body }}
@@ -28,7 +27,7 @@ jobs:
   test:
     needs: check-description
     if: github.event_name == 'push' || needs.check-description.outputs.should-run == 'true'
-    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@locally-hosted-runners
     with:
       runner: |
         [ "windows-latest" ]
