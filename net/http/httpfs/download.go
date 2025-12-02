@@ -47,6 +47,8 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 	if err := os.Remove(tmpName); err != nil && !os.IsNotExist(err) {
 		return 0, fmt.Errorf("removing existing partial download %q: %w", tmpName, err)
 	}
+	defer os.Remove(tmpName) //nolint:errcheck
+
 	_, err := url.Parse(u)
 	if err != nil {
 		return 0, fmt.Errorf("parsing url %q: %w", u, err)
@@ -59,6 +61,7 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 	if err != nil {
 		return 0, fmt.Errorf("creating download file %q: %w", dest, err)
 	}
+	defer wr.Close()
 	dl := largefile.NewStreamingDownloader(rd, d.downloaderOptions...)
 
 	errCh := make(chan error, 1)
