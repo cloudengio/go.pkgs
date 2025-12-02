@@ -61,7 +61,8 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 	if err != nil {
 		return 0, fmt.Errorf("creating download file %q: %w", dest, err)
 	}
-	defer wr.Close()
+	defer wr.Close() //nolint:errcheck
+
 	dl := largefile.NewStreamingDownloader(rd, d.downloaderOptions...)
 
 	errCh := make(chan error, 1)
@@ -81,6 +82,10 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 	}
 	if status.DownloadSize != n {
 		return 0, fmt.Errorf("downloaded size mismatch for %q: expected %d, got %d", u, status.DownloadSize, n)
+	}
+	if err := wr.Close(); err != nil {
+		// Need to close it for windows before renaming.
+		return 0, fmt.Errorf("closing download file %q: %w", dest, err)
 	}
 	if err := os.Rename(tmpName, dest); err != nil {
 		return 0, fmt.Errorf("renaming %q to %q: %w", tmpName, dest, err)
