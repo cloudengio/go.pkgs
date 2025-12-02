@@ -61,7 +61,8 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 	if err != nil {
 		return 0, fmt.Errorf("creating download file %q: %w", dest, err)
 	}
-	defer wr.Close()
+	defer wr.Close() //nolint:errcheck
+
 	dl := largefile.NewStreamingDownloader(rd, d.downloaderOptions...)
 
 	errCh := make(chan error, 1)

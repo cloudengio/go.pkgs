@@ -38,8 +38,16 @@ func TestDownloadFile(t *testing.T) {
 				http.Error(w, "invalid Range header", http.StatusBadRequest)
 				return
 			}
-			from, _ := strconv.Atoi(parts[0])
-			to, _ := strconv.Atoi(parts[1])
+			from, err := strconv.Atoi(parts[0])
+			if err != nil {
+				http.Error(w, "invalid Range header", http.StatusBadRequest)
+				return
+			}
+			to, err := strconv.Atoi(parts[1])
+			if err != nil {
+				http.Error(w, "invalid Range header", http.StatusBadRequest)
+				return
+			}
 			if from < 0 || to >= len(fileContent) || from > to {
 				http.Error(w, "invalid range", http.StatusRequestedRangeNotSatisfiable)
 				return
