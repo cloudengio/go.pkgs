@@ -229,10 +229,15 @@ func WithExecAllocatorForCI(ctx context.Context, extraExecAllocOpts ...chromedp.
 		opts = append(opts, chromedp.ModifyCmdFunc(modifyCmd))
 		return chromedp.NewExecAllocator(ctx, opts...)
 	}
-	fmt.Printf("Detected CI environment via CHROME_BIN=%s\n", chromeBin)
+	fmt.Printf("Detected CI environment via CHROME_BIN_PATH=%s\n", chromeBin)
+	userDataDir := UserDataDirOnCI()
 	fmt.Printf("WARNING: chromedp/chrome: sandboxing disabled\n")
 	allOpts := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(chromeBin),
+	}
+	if len(userDataDir) > 0 {
+		fmt.Printf("Detected CI environment, using  CHROME_USER_DATA_DIR=%s\n", userDataDir)
+		allOpts = append(allOpts, chromedp.UserDataDir(userDataDir))
 	}
 	allOpts = append(allOpts, AllocatorOptsForCI...)
 	allOpts = append(allOpts, extraExecAllocOpts...)
