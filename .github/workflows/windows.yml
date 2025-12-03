@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check PR description for 'test:windows'
         id: check
-        uses: cloudengio/.github/.github/actions/check-pr-description@locally-hosted-runners
+        uses: cloudengio/.github/.github/actions/check-pr-description@main
         with:
           phrase: test:windows
           pr-body: ${{ github.event.pull_request.body }}
@@ -27,7 +27,7 @@ jobs:
   test:
     needs: check-description
     if: github.event_name == 'push' || needs.check-description.outputs.should-run == 'true'
-    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@locally-hosted-runners
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
       runner: |
         [ "windows-latest" ]

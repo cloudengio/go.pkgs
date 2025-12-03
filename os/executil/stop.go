@@ -6,6 +6,7 @@ package executil
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"time"
@@ -33,7 +34,7 @@ func SignalAndWait(ctx context.Context, perSignalOrWait time.Duration, cmd *exec
 
 	for _, sig := range sigs {
 		if err := signal(cmd, sig); err != nil {
-			return err
+			return fmt.Errorf("signal returned (pid: %v) error: %w", pid, err)
 		}
 		if wait {
 			waitCtx, cancel := context.WithTimeout(ctx, perSignalOrWait)
