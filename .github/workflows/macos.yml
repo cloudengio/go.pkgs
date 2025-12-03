@@ -13,6 +13,9 @@ jobs:
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
-      os-version: macos-latest
+      #runner: | # use for self-hosted runners
+      #  [ "self-hosted", "mm1-vm1" ]
+      runner: |
+        [ "macos-latest" ]
       go-versions: |
         [ "1.25.x" ]

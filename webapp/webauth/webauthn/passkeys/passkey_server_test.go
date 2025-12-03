@@ -133,6 +133,7 @@ func TestPasskeysServer(t *testing.T) {
 		chromedputil.WithNetworkLogging(),
 		chromedputil.WithConsoleLogging(),
 		chromedputil.WithExceptionLogging(),
+		chromedputil.WithAnyEventLogging(),
 	)
 
 	// Run tests for registration and login.
@@ -181,7 +182,7 @@ func TestPasskeysServer(t *testing.T) {
 
 func setupBrowser(t *testing.T) (context.Context, context.CancelFunc, browserWebauthn.AuthenticatorID) {
 	t.Helper()
-	ctx, cancel := chromedputil.WithContextForCI(context.Background(), nil, chromedp.WithLogf(t.Logf))
+	ctx, cancel := chromedputil.WithContextForCI(context.Background(), chromedputil.AllocatorLoggingWithLevel(2), chromedp.WithLogf(t.Logf))
 
 	authOptions := &browserWebauthn.VirtualAuthenticatorOptions{
 		Protocol:                    browserWebauthn.AuthenticatorProtocolCtap2,
