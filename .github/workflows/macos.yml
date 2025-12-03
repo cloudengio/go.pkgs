@@ -13,14 +13,18 @@ jobs:
   test:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@locally-hosted-runners
     with:
-      #runner: |
-      #  [ "self-hosted" ]
+      #runner: | # use for self-hosted runners
+      #  [ "self-hosted", "mm1-vm1" ]
+      runner: |
+        [ "macos-latest" ]
       go-versions: |
         [ "1.25.x" ]
 
   lint:
     uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@locally-hosted-runners
     with:
-      #runner: |
+      #runner: | # use for self-hosted runners
       #  [ "self-hosted", "mm1-vm1" ]
+      runner: |
+        [ "macos-latest" ]
       go-version: "1.25.x"
