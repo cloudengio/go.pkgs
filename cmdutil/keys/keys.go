@@ -16,8 +16,22 @@ import (
 	"slices"
 	"sync"
 
+	"cloudeng.io/file"
 	"gopkg.in/yaml.v3"
 )
+
+// KeyOwner represents the owner of a key, identified by an ID and an optional user.
+type KeyOwner struct {
+	ID   string
+	User string
+}
+
+func (ko KeyOwner) String() string {
+	if ko.User != "" {
+		return ko.ID + "[" + ko.User + "]"
+	}
+	return ko.ID
+}
 
 // Token represents an API token. It is intended for temporary use
 // with the Clear() method being called to zero the token value when
@@ -25,7 +39,7 @@ import (
 // It consists of an ID and a token value with the ID purely for
 // identification purposes.
 type Token struct {
-	ID    string
+	KeyOwner
 	token []byte
 }
 
@@ -36,20 +50,20 @@ func (t Token) Value() []byte {
 
 // Clear zeros the token value.
 func (t *Token) Clear() {
-	t.ID = ""
+	t.KeyOwner = KeyOwner{}
 	for i := range t.token {
 		t.token[i] = 0
 	}
 }
 
 func (t Token) String() string {
-	return t.ID + ":****"
+	return t.KeyOwner.String() + ":****"
 }
 
 // NewToken creates a new Token instance, cloning the provided value
 // and zeroing the input slice.
-func NewToken(id string, value []byte) Token {
-	t := Token{ID: id, token: slices.Clone(value)}
+func NewToken(id, user string, value []byte) Token {
+	t := Token{KeyOwner: KeyOwner{ID: id, User: user}, token: slices.Clone(value)}
 	for i := range value {
 		value[i] = 0
 	}
@@ -105,7 +119,7 @@ func (k Info) String() string {
 }
 
 func (k Info) Token() *Token {
-	return &Token{ID: k.ID, token: slices.Clone(k.token)}
+	return &Token{KeyOwner: KeyOwner{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
 }
 
 // Extra returns the extra information associated with the key. If no value
@@ -155,18 +169,18 @@ func (k Info) ExtraAs(v any) error {
 	return k.extraFromYAML(v)
 }
 
-// InmemoryKeyStore is a simple in-memory key store intended for
+// InMemoryKeyStore is a simple in-memory key store intended for
 // passing a small number of keys within an application. It will
 // typically be stored in a context.Context to ease passing it across
 // API boundaries.
-type InmemoryKeyStore struct {
+type InMemoryKeyStore struct {
 	mu   sync.RWMutex
 	keys []Info
 }
 
-// NewInmemoryKeyStore creates a new InmemoryKeyStore instance.
-func NewInmemoryKeyStore() *InmemoryKeyStore {
-	return &InmemoryKeyStore{}
+// NewInMemoryKeyStore creates a new InMemoryKeyStore instance.
+func NewInMemoryKeyStore() *InMemoryKeyStore {
+	return &InMemoryKeyStore{}
 }
 
 func copyInfo(src keyInfo) Info {
@@ -189,7 +203,7 @@ func copyInfoList(src []keyInfo) []Info {
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
-func (ims *InmemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
+func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	var asList []keyInfo
 	err := node.Decode(&asList)
 	if err == nil {
@@ -210,7 +224,7 @@ func (ims *InmemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 
 // UnmarshalJSON implements the json.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
-func (ims *InmemoryKeyStore) UnmarshalJSON(data []byte) error {
+func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	var asList []keyInfo
 	err := json.Unmarshal(data, &asList)
 	if err == nil {
@@ -229,7 +243,18 @@ func (ims *InmemoryKeyStore) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (ims *InmemoryKeyStore) Add(key Info) {
+// KeyOwners returns the owners of keys in the store.
+func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	owners := make([]KeyOwner, len(ims.keys))
+	for i, key := range ims.keys {
+		owners[i] = KeyOwner{ID: key.ID, User: key.User}
+	}
+	return owners
+}
+
+func (ims *InMemoryKeyStore) Add(key Info) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	ims.keys = append(ims.keys, key)
@@ -237,7 +262,7 @@ func (ims *InmemoryKeyStore) Add(key Info) {
 
 // Get retrieves a key by its ID. It returns the key and a boolean
 // indicating whether the key was found.
-func (ims *InmemoryKeyStore) Get(id string) (Info, bool) {
+func (ims *InMemoryKeyStore) Get(id string) (Info, bool) {
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
 	for _, key := range ims.keys {
@@ -250,43 +275,72 @@ func (ims *InmemoryKeyStore) Get(id string) (Info, bool) {
 
 type ctxKey struct{}
 
-// ContextWithKeyStore returns a new context with the provided InmemoryKeyStore.
-func ContextWithKeyStore(ctx context.Context, ims *InmemoryKeyStore) context.Context {
+// ContextWithKeyStore returns a new context with the provided InMemoryKeyStore.
+func ContextWithKeyStore(ctx context.Context, ims *InMemoryKeyStore) context.Context {
 	return context.WithValue(ctx, ctxKey{}, ims)
 }
 
-// KeyStoreFromContext retrieves the InmemoryKeyStore from the context.
-func KeyStoreFromContext(ctx context.Context) (*InmemoryKeyStore, bool) {
-	am, ok := ctx.Value(ctxKey{}).(*InmemoryKeyStore)
+// KeyStoreFromContext retrieves the InMemoryKeyStore from the context.
+func KeyStoreFromContext(ctx context.Context) (*InMemoryKeyStore, bool) {
+	am, ok := ctx.Value(ctxKey{}).(*InMemoryKeyStore)
 	if !ok {
 		return nil, false
 	}
 	return am, true
 }
 
-// ContextWithoutKeyStore returns a new context without an InmemoryKeyStore.
+// ContextWithoutKeyStore returns a new context without an InMemoryKeyStore.
 func ContextWithoutKeyStore(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKey{}, nil)
 }
 
 // KeyInfoFromContextForID retrieves the KeyInfo for the specified ID from the context.
 func KeyInfoFromContextForID(ctx context.Context, id string) (Info, bool) {
-	am, ok := ctx.Value(ctxKey{}).(*InmemoryKeyStore)
+	am, ok := ctx.Value(ctxKey{}).(*InMemoryKeyStore)
 	if !ok {
 		return Info{}, false
 	}
 	return am.Get(id)
 }
 
+// TokenFromContextForID retrieves the Token for the specified ID from the context.
+func TokenFromContextForID(ctx context.Context, id string) (*Token, bool) {
+	ki, ok := KeyInfoFromContextForID(ctx, id)
+	if !ok {
+		return nil, false
+	}
+	return ki.Token(), true
+}
+
 // ContextWithKey returns a new context with the provided KeyInfo added
-// to an InmemoryKeyStore. If no InmemoryKeyStore exists in the context,
+// to an InMemoryKeyStore. If no InMemoryKeyStore exists in the context,
 // a new one is created.
 func ContextWithKey(ctx context.Context, ki Info) context.Context {
 	ims, ok := KeyStoreFromContext(ctx)
 	if !ok {
-		ims = NewInmemoryKeyStore()
+		ims = NewInMemoryKeyStore()
 		ctx = ContextWithKeyStore(ctx, ims)
 	}
 	ims.Add(ki)
 	return ctx
+}
+
+// ReadJSON reads key information from a JSON file using the provided
+// file.ReadFileFS and unmarshals it into the InMemoryKeyStore.
+func (ims *InMemoryKeyStore) ReadJSON(ctx context.Context, fs file.ReadFileFS, name string) error {
+	data, err := fs.ReadFileCtx(ctx, name)
+	if err != nil {
+		return err
+	}
+	return ims.UnmarshalJSON(data)
+}
+
+// ReadYAML reads key information from a YAML file using the provided
+// file.ReadFileFS and unmarshals it into the InMemoryKeyStore.
+func (ims *InMemoryKeyStore) ReadYAML(ctx context.Context, fs file.ReadFileFS, name string) error {
+	data, err := fs.ReadFileCtx(ctx, name)
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(data, ims)
 }

@@ -41,13 +41,13 @@ key2:
 )
 
 func TestUnmarshalYAML(t *testing.T) {
-	var ks keys.InmemoryKeyStore
+	var ks keys.InMemoryKeyStore
 	if err := yaml.Unmarshal([]byte(yamlList), &ks); err != nil {
 		t.Fatalf("yaml list: %v", err)
 	}
 	verifyKeys(t, &ks)
 
-	ks = keys.InmemoryKeyStore{}
+	ks = keys.InMemoryKeyStore{}
 	if err := yaml.Unmarshal([]byte(yamlMap), &ks); err != nil {
 		t.Fatalf("yaml map: %v", err)
 	}
@@ -55,20 +55,20 @@ func TestUnmarshalYAML(t *testing.T) {
 }
 
 func TestUnmarshalJSON(t *testing.T) {
-	var ks keys.InmemoryKeyStore
+	var ks keys.InMemoryKeyStore
 	if err := json.Unmarshal([]byte(jsonList), &ks); err != nil {
 		t.Fatalf("json list: %v", err)
 	}
 	verifyKeys(t, &ks)
 
-	ks = keys.InmemoryKeyStore{}
+	ks = keys.InMemoryKeyStore{}
 	if err := json.Unmarshal([]byte(jsonMap), &ks); err != nil {
 		t.Fatalf("json map: %v", err)
 	}
 	verifyKeys(t, &ks)
 }
 
-func verifyKeys(t *testing.T, ks *keys.InmemoryKeyStore) {
+func verifyKeys(t *testing.T, ks *keys.InMemoryKeyStore) {
 	k1, ok := ks.Get("key1")
 	if !ok {
 		t.Fatalf("key1 not found")
@@ -93,7 +93,7 @@ func verifyKeys(t *testing.T, ks *keys.InmemoryKeyStore) {
 }
 
 func TestContextFunctions(t *testing.T) {
-	store := keys.NewInmemoryKeyStore()
+	store := keys.NewInMemoryKeyStore()
 	k1 := keys.NewInfo("ctx-key", "ctx-user", []byte("ctx-token"), nil)
 	store.Add(k1)
 
@@ -168,13 +168,13 @@ key2:
 )
 
 func TestUnmarshalYAMLExtra(t *testing.T) {
-	var ks keys.InmemoryKeyStore
+	var ks keys.InMemoryKeyStore
 	if err := yaml.Unmarshal([]byte(yamlListExtra), &ks); err != nil {
 		t.Fatalf("yaml list: %v", err)
 	}
 	verifyKeysExtra(t, &ks)
 
-	ks = keys.InmemoryKeyStore{}
+	ks = keys.InMemoryKeyStore{}
 	if err := yaml.Unmarshal([]byte(yamlMapExtra), &ks); err != nil {
 		t.Fatalf("yaml map: %v", err)
 	}
@@ -182,20 +182,20 @@ func TestUnmarshalYAMLExtra(t *testing.T) {
 }
 
 func TestUnmarshalJSONExtra(t *testing.T) {
-	var ks keys.InmemoryKeyStore
+	var ks keys.InMemoryKeyStore
 	if err := json.Unmarshal([]byte(jsonListExtra), &ks); err != nil {
 		t.Fatalf("json list: %v", err)
 	}
 	verifyKeysExtra(t, &ks)
 
-	ks = keys.InmemoryKeyStore{}
+	ks = keys.InMemoryKeyStore{}
 	if err := json.Unmarshal([]byte(jsonMapExtra), &ks); err != nil {
 		t.Fatalf("json map: %v", err)
 	}
 	verifyKeysExtra(t, &ks)
 }
 
-func verifyKeysExtra(t *testing.T, ks *keys.InmemoryKeyStore) {
+func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
 	t.Helper()
 	k1, ok := ks.Get("key1")
 	if !ok {
@@ -224,11 +224,11 @@ func verifyKeysExtra(t *testing.T, ks *keys.InmemoryKeyStore) {
 
 func TestToken(t *testing.T) {
 	val := []byte("secret")
-	tok := keys.NewToken("idval", val)
+	tok := keys.NewToken("idval", "user", val)
 	if got, want := string(tok.Value()), "secret"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := tok.String(), "idval:****"; got != want {
+	if got, want := tok.String(), "idval[user]:****"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	// Verify input was cleared
@@ -240,6 +240,12 @@ func TestToken(t *testing.T) {
 		if b != 0 {
 			t.Errorf("token was not cleared")
 		}
+	}
+	if got, want := tok.ID, ""; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := tok.User, ""; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
@@ -275,7 +281,7 @@ func TestMoreContextFunctions(t *testing.T) {
 	ctx := context.Background()
 
 	// ContextWithoutKeyStore
-	store := keys.NewInmemoryKeyStore()
+	store := keys.NewInMemoryKeyStore()
 	ctxWithStore := keys.ContextWithKeyStore(ctx, store)
 	if _, ok := keys.KeyStoreFromContext(ctxWithStore); !ok {
 		t.Fatal("expected store in context")
