@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"iter"
 	"slices"
 	"sync"
 
@@ -244,21 +243,15 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// KeyOwners returns an iterator for the owners of keys in the store.
-func (ims *InMemoryKeyStore) KeyOwners() iter.Seq[KeyOwner] {
-	return func(yield func(KeyOwner) bool) {
-		ims.mu.RLock()
-		defer ims.mu.RUnlock()
-		for _, key := range ims.keys {
-			ki := KeyOwner{
-				ID:   key.ID,
-				User: key.User,
-			}
-			if !yield(ki) {
-				return
-			}
-		}
+// KeyOwners returns the owners of keys in the store.
+func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	owners := make([]KeyOwner, len(ims.keys))
+	for i, key := range ims.keys {
+		owners[i] = KeyOwner{ID: key.ID, User: key.User}
 	}
+	return owners
 }
 
 func (ims *InMemoryKeyStore) Add(key Info) {
