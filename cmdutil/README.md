@@ -102,6 +102,25 @@ boolean indicating whether the information was successfully extracted.
 
 
 ## Types
+### Type Logger
+```go
+type Logger struct {
+	*slog.Logger
+	// contains filtered or unexported fields
+}
+```
+Logger represents a logger with an optional closer for the log file if one
+is specified.
+
+### Methods
+
+```go
+func (l *Logger) Close() error
+```
+
+
+
+
 ### Type LoggingConfig
 ```go
 type LoggingConfig struct {
@@ -111,18 +130,18 @@ type LoggingConfig struct {
 	SourceCode bool
 }
 ```
-LoggingConfig represents logging Loggingconfiguration.
+LoggingConfig represents a logging configuration.
 
 ### Methods
 
 ```go
-func (c LoggingConfig) NewLogger() (*slog.Logger, error)
+func (c LoggingConfig) NewLogger() (*Logger, error)
 ```
 NewLogger creates a new logger based on the configuration.
 
 
 ```go
-func (c LoggingConfig) NewLoggerMust() *slog.Logger
+func (c LoggingConfig) NewLoggerMust() *Logger
 ```
 NewLoggerMust is like NewLogger but panics on error.
 

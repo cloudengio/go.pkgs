@@ -6,6 +6,7 @@ package cmdutil
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 )
@@ -18,7 +19,7 @@ type LoggingFlags struct {
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }
 
-// LoggingConfig represents logging Loggingconfiguration.
+// LoggingConfig represents a logging configuration.
 type LoggingConfig struct {
 	Level      int
 	File       string
@@ -53,19 +54,35 @@ func (l leveler) Level() slog.Level {
 	}
 }
 
+// Logger represents a logger with an optional closer for the log file
+// if one is specified.
+type Logger struct {
+	*slog.Logger
+	f io.Closer
+}
+
+func (l *Logger) Close() error {
+	if l.f != nil {
+		return l.f.Close()
+	}
+	return nil
+}
+
 // NewLogger creates a new logger based on the configuration.
-func (c LoggingConfig) NewLogger() (*slog.Logger, error) {
+func (c LoggingConfig) NewLogger() (*Logger, error) {
 	opts := &slog.HandlerOptions{
 		AddSource: c.SourceCode,
 		Level:     leveler{level: c.Level},
 	}
 	var handler slog.Handler
+	var closer io.Closer
 	out := os.Stderr
 	if c.File != "" {
 		f, err := os.OpenFile(c.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file %q: %w", c.File, err)
 		}
+		closer = f
 		out = f
 	}
 	switch c.Format {
@@ -76,11 +93,11 @@ func (c LoggingConfig) NewLogger() (*slog.Logger, error) {
 	default:
 		return nil, fmt.Errorf("unknown log format %q", c.Format)
 	}
-	return slog.New(handler), nil
+	return &Logger{Logger: slog.New(handler), f: closer}, nil
 }
 
 // NewLoggerMust is like NewLogger but panics on error.
-func (c LoggingConfig) NewLoggerMust() *slog.Logger {
+func (c LoggingConfig) NewLoggerMust() *Logger {
 	logger, err := c.NewLogger()
 	if err != nil {
 		panic(err)

@@ -87,7 +87,7 @@ func ExampleLoggingFlags() {
 	if err != nil {
 		panic(err)
 	}
-	slog.SetDefault(logger)
+	slog.SetDefault(logger.Logger)
 	slog.Info("hello world")
 	// Output:
 }
