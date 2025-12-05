@@ -9,16 +9,21 @@ import (
 	"io"
 )
 
+// JSONFormatter implements a log formatter that outputs JSON formatted logs.
 type JSONFormatter struct {
 	enc *json.Encoder
 }
 
+// NewJSONFormatter creates a new JSONFormatter that writes to with the specified
+// prefix and indent.
 func NewJSONFormatter(w io.Writer, prefix, indent string) *JSONFormatter {
 	enc := json.NewEncoder(w)
 	enc.SetIndent(prefix, indent)
 	return &JSONFormatter{enc: enc}
 }
 
+// Write implements the io.Writer interface and it assumes that it is
+// called with a complete JSON object.
 func (js *JSONFormatter) Write(p []byte) (n int, err error) {
 	err = js.Format(json.RawMessage(p))
 	if err != nil {
@@ -27,6 +32,7 @@ func (js *JSONFormatter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// Format formats the specified value as JSON.
 func (js *JSONFormatter) Format(v any) error {
 	return js.enc.Encode(v)
 }
