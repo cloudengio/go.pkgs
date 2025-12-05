@@ -101,4 +101,79 @@ boolean indicating whether the information was successfully extracted.
 
 
 
+## Types
+### Type Logger
+```go
+type Logger struct {
+	*slog.Logger
+	// contains filtered or unexported fields
+}
+```
+Logger represents a logger with an optional closer for the log file if one
+is specified.
+
+### Methods
+
+```go
+func (l *Logger) Close() error
+```
+
+
+
+
+### Type LoggingConfig
+```go
+type LoggingConfig struct {
+	Level      int
+	File       string
+	Format     string
+	SourceCode bool
+}
+```
+LoggingConfig represents a logging configuration.
+
+### Methods
+
+```go
+func (c LoggingConfig) NewLogger() (*Logger, error)
+```
+NewLogger creates a new logger based on the configuration.
+
+
+```go
+func (c LoggingConfig) NewLoggerMust() *Logger
+```
+NewLoggerMust is like NewLogger but panics on error.
+
+
+
+
+### Type LoggingFlags
+```go
+type LoggingFlags struct {
+	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
+	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr.'"`
+	Format     string `subcmd:"log-format,json,'log format: text or json'"`
+	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
+}
+```
+LoggingFlags represents common logging related command line flags.
+
+### Methods
+
+```go
+func (lf *LoggingFlags) LoggingConfig() LoggingConfig
+```
+LoggingConfig returns the logging configuration represented by the flags.
+
+
+
+
+
+
+## Examples
+### [ExampleLoggingFlags](https://pkg.go.dev/cloudeng.io/cmdutil?tab=doc#example-LoggingFlags)
+
+
+
 

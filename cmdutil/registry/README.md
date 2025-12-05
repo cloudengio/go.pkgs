@@ -54,6 +54,12 @@ key, which is typically a URI scheme.
 ### Methods
 
 ```go
+func (r *T[RT]) Clone() *T[RT]
+```
+Clone creates a shallow clone of the registry.
+
+
+```go
 func (r *T[T]) Get(key string) New[T]
 ```
 Get retrieves the factory function for the given key, or nil if the key is

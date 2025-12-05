@@ -4,8 +4,8 @@
 import cloudeng.io/cmdutil/keys/unsafekeystore
 ```
 
-Package unsafekeystore is intended to document to use of plaintext, local
-filesystems being used to store keys.
+Package unsafekeystore is intended to document the use of plaintext,
+local filesystems being used to store keys.
 
 ## Functions
 ### Func New
