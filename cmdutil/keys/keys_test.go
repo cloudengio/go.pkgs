@@ -468,6 +468,37 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	if ks2.Len() != 2 {
 		t.Errorf("got %v, want 2", ks2.Len())
 	}
+
+	// Verify the actual keys after unmarshalling
+	owners2 := ks2.KeyOwners()
+	if got, want := len(owners2), 2; got != want {
+		t.Fatalf("unmarshaled store has %v keys, want %v", got, want)
+	}
+
+	// Assuming order is preserved (which it should be for a slice)
+	if got, want := owners2[0].ID, "id1"; got != want {
+		t.Errorf("unmarshaled key 1 ID: got %v, want %v", got, want)
+	}
+	if got, want := owners2[0].User, "user1"; got != want {
+		t.Errorf("unmarshaled key 1 User: got %v, want %v", got, want)
+	}
+	if got, want := owners2[1].ID, "id2"; got != want {
+		t.Errorf("unmarshaled key 2 ID: got %v, want %v", got, want)
+	}
+	if got, want := owners2[1].User, "user2"; got != want {
+		t.Errorf("unmarshaled key 2 User: got %v, want %v", got, want)
+	}
+
+	// Also verify that the token values are preserved (lazy loaded)
+	k1_unmarshaled, _ := ks2.Get("id1")
+	if got, want := string(k1_unmarshaled.Token().Value()), "t1"; got != want {
+		t.Errorf("unmarshaled key 1 token: got %v, want %v", got, want)
+	}
+	k2_unmarshaled, _ := ks2.Get("id2")
+	if got, want := string(k2_unmarshaled.Token().Value()), "t2"; got != want {
+		t.Errorf("unmarshaled key 2 token: got %v, want %v", got, want)
+	}
+
 }
 
 func TestReadFiles(t *testing.T) {
