@@ -38,4 +38,4 @@
 //	errs.Append(errors.WithCaller(fn(a)))
 //	errs.Append(errors.WithCaller(fn(b)))
 //	err := errs.Err()
-package errors //nolint:revive // var-naming: avoid package names that conflict with Go standard library package names (revive)
+package errors
