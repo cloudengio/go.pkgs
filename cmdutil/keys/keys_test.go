@@ -325,3 +325,199 @@ func TestMoreContextFunctions(t *testing.T) {
 		t.Fatal("expected k1 to still be there")
 	}
 }
+
+type mockFS struct {
+	data map[string][]byte
+}
+
+func (m *mockFS) ReadFile(name string) ([]byte, error) {
+	if d, ok := m.data[name]; ok {
+		return d, nil
+	}
+	return nil, &json.SyntaxError{} // Just return some error
+}
+
+func (m *mockFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
+	return m.ReadFile(name)
+}
+
+func TestKeyOwnerString(t *testing.T) {
+	ko := keys.KeyOwner{ID: "id1"}
+	if got, want := ko.String(), "id1"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	ko.User = "user1"
+	if got, want := ko.String(), "id1[user1]"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestInfoMarshal(t *testing.T) {
+	info := keys.NewInfo("id1", "user1", []byte("token1"), map[string]string{"a": "b"})
+	buf, err := info.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	
+
+	// We need to unmarshal into a temporary struct that matches the structure expected by UnmarshalJSON
+	// effectively testing round trip if UnmarshalJSON was implemented on Info directly, 
+	// but Info implementation of UnmarshalJSON (via KeyStore.UnmarshalJSON) handles the structure.
+	// Actually Info doesn't have UnmarshalJSON, it's handled by KeyStore or manually.
+	// But let's check what MarshalJSON output.
+	
+	// Just verify it's valid JSON
+	var tmp map[string]interface{}
+	if err := json.Unmarshal(buf, &tmp); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got, want := tmp["key_id"], "id1"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	
+	// Test Lazy Loading of Extra
+	// Case 1: Extra already set (from NewInfo) - already tested in TestInfo
+	
+	// Case 2: Extra from JSON
+	jsonStr := `{"key_id": "id1", "token": "t1", "extra": {"foo": "bar"}}`
+	var ks keys.InMemoryKeyStore
+	if err := json.Unmarshal([]byte("["+jsonStr+"]"), &ks); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	k1, _ := ks.Get("id1")
+	// Extra() should trigger unmarshal
+	extra := k1.Extra()
+	if extra == nil {
+		t.Fatal("expected extra to be not nil")
+	}
+	// It comes back as map[string]interface{} by default for JSON
+	if m, ok := extra.(map[string]interface{}); ok {
+		if got, want := m["foo"], "bar"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	} else {
+		t.Errorf("expected map[string]interface{}, got %T", extra)
+	}
+
+	// Case 3: Extra from YAML
+	yamlStr := `
+- key_id: id2
+  token: t2
+  extra:
+    bar: baz
+`
+	var ks2 keys.InMemoryKeyStore
+	if err := yaml.Unmarshal([]byte(yamlStr), &ks2); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	k2, _ := ks2.Get("id2")
+	extra2 := k2.Extra()
+	if extra2 == nil {
+		t.Fatal("expected extra2 to be not nil")
+	}
+	// YAML unmarshal might return map[string]interface{} or map[interface{}]interface{}
+	// gopkg.in/yaml.v3 usually unmarshals to map[string]interface{} for string keys
+	if m, ok := extra2.(map[string]interface{}); ok {
+		if got, want := m["bar"], "baz"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	} else {
+		// handle potential map[interface{}]interface{} if that happens, though yaml.v3 usually avoids it for string keys
+		t.Logf("got %T for extra2", extra2)
+	}
+}
+
+func TestInMemoryKeyStoreMethods(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(keys.NewInfo("id1", "user1", []byte("t1"), nil))
+	ks.Add(keys.NewInfo("id2", "user2", []byte("t2"), nil))
+
+	// KeyOwners
+	owners := ks.KeyOwners()
+	if got, want := len(owners), 2; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// Order is preserved from append
+	if got, want := owners[0].ID, "id1"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Len
+	if got, want := ks.Len(), 2; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// MarshalJSON
+	buf, err := ks.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	// Verify we can read it back
+	var ks2 keys.InMemoryKeyStore
+	if err := json.Unmarshal(buf, &ks2); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if ks2.Len() != 2 {
+		t.Errorf("got %v, want 2", ks2.Len())
+	}
+}
+
+func TestReadFiles(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockFS{
+		data: map[string][]byte{
+			"keys.json": []byte(jsonList),
+			"keys.yaml": []byte(yamlList),
+		},
+	}
+
+	ks := keys.NewInMemoryKeyStore()
+	if err := ks.ReadJSON(ctx, mfs, "keys.json"); err != nil {
+		t.Fatalf("ReadJSON: %v", err)
+	}
+	if ks.Len() != 2 {
+		t.Errorf("got %v, want 2", ks.Len())
+	}
+
+	ks2 := keys.NewInMemoryKeyStore()
+	if err := ks2.ReadYAML(ctx, mfs, "keys.yaml"); err != nil {
+		t.Fatalf("ReadYAML: %v", err)
+	}
+	if ks2.Len() != 2 {
+		t.Errorf("got %v, want 2", ks2.Len())
+	}
+	
+	// Error cases
+	if err := ks.ReadJSON(ctx, mfs, "missing.json"); err == nil {
+		t.Error("expected error for missing file")
+	}
+	if err := ks.ReadYAML(ctx, mfs, "missing.yaml"); err == nil {
+		t.Error("expected error for missing file")
+	}
+}
+
+func TestTokenFromContext(t *testing.T) {
+	ctx := context.Background()
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(keys.NewInfo("k1", "u1", []byte("t1"), nil))
+	ctx = keys.ContextWithKeyStore(ctx, ks)
+
+	tok, ok := keys.TokenFromContextForID(ctx, "k1")
+	if !ok {
+		t.Fatal("expected token")
+	}
+	if got, want := string(tok.Value()), "t1"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	_, ok = keys.TokenFromContextForID(ctx, "missing")
+	if ok {
+		t.Error("expected no token")
+	}
+	
+	ctxNoStore := context.Background()
+	_, ok = keys.TokenFromContextForID(ctxNoStore, "k1")
+	if ok {
+		t.Error("expected no token")
+	}
+}
