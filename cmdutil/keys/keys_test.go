@@ -403,7 +403,7 @@ func TestInfoMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalJSON: %v", err)
 	}
-	if got, want := string(extraK1), strings.Replace(jsonStr, " ", "", -1); got != want {
+	if got, want := string(extraK1), strings.ReplaceAll(jsonStr, " ", ""); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -490,12 +490,12 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	}
 
 	// Also verify that the token values are preserved (lazy loaded)
-	k1_unmarshaled, _ := ks2.Get("id1")
-	if got, want := string(k1_unmarshaled.Token().Value()), "t1"; got != want {
+	k1Unmarshaled, _ := ks2.Get("id1")
+	if got, want := string(k1Unmarshaled.Token().Value()), "t1"; got != want {
 		t.Errorf("unmarshaled key 1 token: got %v, want %v", got, want)
 	}
-	k2_unmarshaled, _ := ks2.Get("id2")
-	if got, want := string(k2_unmarshaled.Token().Value()), "t2"; got != want {
+	k2Unmarshaled, _ := ks2.Get("id2")
+	if got, want := string(k2Unmarshaled.Token().Value()), "t2"; got != want {
 		t.Errorf("unmarshaled key 2 token: got %v, want %v", got, want)
 	}
 
