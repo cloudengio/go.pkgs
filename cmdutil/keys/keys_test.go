@@ -358,14 +358,13 @@ func TestInfoMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalJSON: %v", err)
 	}
-	
 
 	// We need to unmarshal into a temporary struct that matches the structure expected by UnmarshalJSON
-	// effectively testing round trip if UnmarshalJSON was implemented on Info directly, 
+	// effectively testing round trip if UnmarshalJSON was implemented on Info directly,
 	// but Info implementation of UnmarshalJSON (via KeyStore.UnmarshalJSON) handles the structure.
 	// Actually Info doesn't have UnmarshalJSON, it's handled by KeyStore or manually.
 	// But let's check what MarshalJSON output.
-	
+
 	// Just verify it's valid JSON
 	var tmp map[string]interface{}
 	if err := json.Unmarshal(buf, &tmp); err != nil {
@@ -374,10 +373,10 @@ func TestInfoMarshal(t *testing.T) {
 	if got, want := tmp["key_id"], "id1"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	
+
 	// Test Lazy Loading of Extra
 	// Case 1: Extra already set (from NewInfo) - already tested in TestInfo
-	
+
 	// Case 2: Extra from JSON
 	jsonStr := `{"key_id": "id1", "token": "t1", "extra": {"foo": "bar"}}`
 	var ks keys.InMemoryKeyStore
@@ -486,7 +485,7 @@ func TestReadFiles(t *testing.T) {
 	if ks2.Len() != 2 {
 		t.Errorf("got %v, want 2", ks2.Len())
 	}
-	
+
 	// Error cases
 	if err := ks.ReadJSON(ctx, mfs, "missing.json"); err == nil {
 		t.Error("expected error for missing file")
@@ -514,7 +513,7 @@ func TestTokenFromContext(t *testing.T) {
 	if ok {
 		t.Error("expected no token")
 	}
-	
+
 	ctxNoStore := context.Background()
 	_, ok = keys.TokenFromContextForID(ctxNoStore, "k1")
 	if ok {
