@@ -10,7 +10,6 @@
 package keys
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -158,20 +157,20 @@ func (k Info) extraFromYAML(v any) error {
 	return nil
 }
 
-func (k *Info) MarshalJSON() ([]byte, error) {
-	out := bytes.NewBuffer(make([]byte, 0, 1024))
-	enc := json.NewEncoder(out)
+func (k Info) MarshalJSON() ([]byte, error) {
 	kv := keyInfo{
-		ID:        k.ID,
-		User:      k.User,
-		Token:     string(k.token),
-		ExtraJSON: k.extraJSON,
-		ExtraYAML: k.extraYAML,
+		ID:    k.ID,
+		User:  k.User,
+		Token: string(k.token),
 	}
-	if err := enc.Encode(kv); err != nil {
-		return nil, err
+	if extra := k.Extra(); extra != nil {
+		var err error
+		kv.ExtraJSON, err = json.Marshal(extra)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return out.Bytes(), nil
+	return json.Marshal(kv)
 }
 
 // ExtraAs unmarshals the extra json or yaml information into the provided

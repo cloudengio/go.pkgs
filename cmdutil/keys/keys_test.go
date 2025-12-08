@@ -7,6 +7,7 @@ package keys_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"cloudeng.io/cmdutil/keys"
@@ -366,7 +367,7 @@ func TestInfoMarshal(t *testing.T) {
 	// But let's check what MarshalJSON output.
 
 	// Just verify it's valid JSON
-	var tmp map[string]interface{}
+	var tmp map[string]any
 	if err := json.Unmarshal(buf, &tmp); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
@@ -378,7 +379,7 @@ func TestInfoMarshal(t *testing.T) {
 	// Case 1: Extra already set (from NewInfo) - already tested in TestInfo
 
 	// Case 2: Extra from JSON
-	jsonStr := `{"key_id": "id1", "token": "t1", "extra": {"foo": "bar"}}`
+	jsonStr := `{"key_id": "id1", "user": "user1", "token": "t1", "extra": {"foo": "bar"}}`
 	var ks keys.InMemoryKeyStore
 	if err := json.Unmarshal([]byte("["+jsonStr+"]"), &ks); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -389,13 +390,21 @@ func TestInfoMarshal(t *testing.T) {
 	if extra == nil {
 		t.Fatal("expected extra to be not nil")
 	}
-	// It comes back as map[string]interface{} by default for JSON
-	if m, ok := extra.(map[string]interface{}); ok {
+	// It comes back as map[string]any by default for JSON
+	if m, ok := extra.(map[string]any); ok {
 		if got, want := m["foo"], "bar"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	} else {
-		t.Errorf("expected map[string]interface{}, got %T", extra)
+		t.Errorf("expected map[string]any, got %T", extra)
+	}
+
+	extraK1, err := json.Marshal(k1)
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	if got, want := string(extraK1), strings.Replace(jsonStr, " ", "", -1); got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 
 	// Case 3: Extra from YAML
@@ -414,14 +423,14 @@ func TestInfoMarshal(t *testing.T) {
 	if extra2 == nil {
 		t.Fatal("expected extra2 to be not nil")
 	}
-	// YAML unmarshal might return map[string]interface{} or map[interface{}]interface{}
-	// gopkg.in/yaml.v3 usually unmarshals to map[string]interface{} for string keys
-	if m, ok := extra2.(map[string]interface{}); ok {
+	// YAML unmarshal might return map[string]any or map[any]any
+	// gopkg.in/yaml.v3 usually unmarshals to map[string]any for string keys
+	if m, ok := extra2.(map[string]any); ok {
 		if got, want := m["bar"], "baz"; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	} else {
-		// handle potential map[interface{}]interface{} if that happens, though yaml.v3 usually avoids it for string keys
+		// handle potential map[any]any if that happens, though yaml.v3 usually avoids it for string keys
 		t.Logf("got %T for extra2", extra2)
 	}
 }
