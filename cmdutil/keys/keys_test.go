@@ -360,6 +360,35 @@ func TestInfoMarshal(t *testing.T) {
 		t.Fatalf("MarshalJSON: %v", err)
 	}
 
+	unmarshalJSON := func(buf []byte, tmp any) {
+		t.Helper()
+		if err := json.Unmarshal(buf, tmp); err != nil {
+			t.Fatalf("Unmarshal: %s: %v", string(buf), err)
+		}
+	}
+
+	marshalJSON := func(v any) []byte {
+		t.Helper()
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		return b
+	}
+
+	getExtra := func(ims *keys.InMemoryKeyStore, id string) any {
+		t.Helper()
+		k, ok := ims.Get(id)
+		if !ok {
+			t.Fatalf("key %q not found", id)
+		}
+		v := k.Extra()
+		if v == nil {
+			t.Fatalf("Extra is nil")
+		}
+		return v
+	}
+
 	// We need to unmarshal into a temporary struct that matches the structure expected by UnmarshalJSON
 	// effectively testing round trip if UnmarshalJSON was implemented on Info directly,
 	// but Info implementation of UnmarshalJSON (via KeyStore.UnmarshalJSON) handles the structure.
@@ -368,11 +397,16 @@ func TestInfoMarshal(t *testing.T) {
 
 	// Just verify it's valid JSON
 	var tmp map[string]any
-	if err := json.Unmarshal(buf, &tmp); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
+	unmarshalJSON(buf, &tmp)
 	if got, want := tmp["key_id"], "id1"; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+	if extra, ok := tmp["extra"].(map[string]any); ok {
+		if got, want := extra["a"], "b"; got != want {
+			t.Errorf("got extra.a %v, want %v", got, want)
+		}
+	} else {
+		t.Fatalf("extra field is not a map[string]any or is missing, got: %T", tmp["extra"])
 	}
 
 	// Test Lazy Loading of Extra
@@ -381,15 +415,8 @@ func TestInfoMarshal(t *testing.T) {
 	// Case 2: Extra from JSON
 	jsonStr := `{"key_id": "id1", "user": "user1", "token": "t1", "extra": {"foo": "bar"}}`
 	var ks keys.InMemoryKeyStore
-	if err := json.Unmarshal([]byte("["+jsonStr+"]"), &ks); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	k1, _ := ks.Get("id1")
-	// Extra() should trigger unmarshal
-	extra := k1.Extra()
-	if extra == nil {
-		t.Fatal("expected extra to be not nil")
-	}
+	unmarshalJSON([]byte("["+jsonStr+"]"), &ks)
+	extra := getExtra(&ks, "id1")
 	// It comes back as map[string]any by default for JSON
 	if m, ok := extra.(map[string]any); ok {
 		if got, want := m["foo"], "bar"; got != want {
@@ -399,11 +426,8 @@ func TestInfoMarshal(t *testing.T) {
 		t.Errorf("expected map[string]any, got %T", extra)
 	}
 
-	extraK1, err := json.Marshal(k1)
-	if err != nil {
-		t.Fatalf("MarshalJSON: %v", err)
-	}
-	if got, want := string(extraK1), strings.ReplaceAll(jsonStr, " ", ""); got != want {
+	extraK1 := marshalJSON(&ks)
+	if got, want := string(extraK1), "["+strings.ReplaceAll(jsonStr, " ", "")+"]"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -415,14 +439,11 @@ func TestInfoMarshal(t *testing.T) {
     bar: baz
 `
 	var ks2 keys.InMemoryKeyStore
+
 	if err := yaml.Unmarshal([]byte(yamlStr), &ks2); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
+		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
-	k2, _ := ks2.Get("id2")
-	extra2 := k2.Extra()
-	if extra2 == nil {
-		t.Fatal("expected extra2 to be not nil")
-	}
+	extra2 := getExtra(&ks2, "id2")
 	// YAML unmarshal might return map[string]any or map[any]any
 	// gopkg.in/yaml.v3 usually unmarshals to map[string]any for string keys
 	if m, ok := extra2.(map[string]any); ok {
@@ -431,7 +452,7 @@ func TestInfoMarshal(t *testing.T) {
 		}
 	} else {
 		// handle potential map[any]any if that happens, though yaml.v3 usually avoids it for string keys
-		t.Logf("got %T for extra2", extra2)
+		t.Fatalf("got %T for extra2", extra2)
 	}
 }
 
