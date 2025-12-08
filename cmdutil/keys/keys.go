@@ -157,6 +157,22 @@ func (k Info) extraFromYAML(v any) error {
 	return nil
 }
 
+func (k Info) MarshalJSON() ([]byte, error) {
+	kv := keyInfo{
+		ID:    k.ID,
+		User:  k.User,
+		Token: string(k.token),
+	}
+	if extra := k.Extra(); extra != nil {
+		var err error
+		kv.ExtraJSON, err = json.Marshal(extra)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(kv)
+}
+
 // ExtraAs unmarshals the extra json or yaml information into the provided
 // value. It does not modify the stored extra information.
 func (k Info) ExtraAs(v any) error {
@@ -273,6 +289,12 @@ func (ims *InMemoryKeyStore) Get(id string) (Info, bool) {
 	return Info{}, false
 }
 
+func (ims *InMemoryKeyStore) Len() int {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	return len(ims.keys)
+}
+
 type ctxKey struct{}
 
 // ContextWithKeyStore returns a new context with the provided InMemoryKeyStore.
@@ -343,4 +365,12 @@ func (ims *InMemoryKeyStore) ReadYAML(ctx context.Context, fs file.ReadFileFS, n
 		return err
 	}
 	return yaml.Unmarshal(data, ims)
+}
+
+// MarshalJSON implements the json.Marshaler interface to allow
+// marshaling the InMemoryKeyStore to JSON.
+func (ims *InMemoryKeyStore) MarshalJSON() ([]byte, error) {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	return json.Marshal(ims.keys)
 }
