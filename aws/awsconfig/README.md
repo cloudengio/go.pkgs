@@ -48,6 +48,7 @@ type AWSConfig struct {
 	AWSProfile     string   `yaml:"aws_profile"`
 	AWSRegion      string   `yaml:"aws_region"`
 	AWSConfigFiles []string `yaml:"aws_config_files"`
+	AWSKeyInfoID   string   `yaml:"aws_key_info_id"`
 }
 ```
 AWSConfig represents a minimal AWS configuration required to authenticate
@@ -62,7 +63,7 @@ Load calls awsconfig.Load with options controlled by the config.
 
 
 ```go
-func (c AWSConfig) Options() []ConfigOption
+func (c AWSConfig) Options(ctx context.Context) ([]ConfigOption, error)
 ```
 Options returns the ConfigOptions implied by the config. NOTE: it always
 includes config.WithEC2IMDSRegion so that the region information is
@@ -78,6 +79,7 @@ type AWSFlags struct {
 	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" cmd:"aws profile to use for config/authentication"`
 	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" cmd:"aws region to use, overrides the region set in the profile"`
 	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" cmd:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
+	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"key_info_id" cmd:"key info ID to use for authentication"`
 }
 ```
 AWSFlags defines commonly used flags that control AWS behaviour.
@@ -101,11 +103,16 @@ ConfigOption represents an option to Load.
 ### Functions
 
 ```go
-func ConfigOptionsFromFlags(cl AWSFlags) []ConfigOption
+func ConfigOptionsFromFlags(ctx context.Context, cl AWSFlags) ([]ConfigOption, error)
 ```
 ConfigOptionsFromFlags returns the ConfigOptions implied by the flags. NOTE:
 it always includes config.WithEC2IMDSRegion so that the region information
 is retrieved from EC2 IMDS when it's not found by other means.
+
+
+```go
+func ConfigOptionsFromKeyInfo(keyInfo keys.Info) []ConfigOption
+```
 
 
 ```go
@@ -115,6 +122,15 @@ WithConfigOptions will pass the supplied options from the aws config
 package.
 
 
+
+
+### Type KeyInfoExtra
+```go
+type KeyInfoExtra struct {
+	AccessKeyID string `yaml:"access_key_id"`
+	Region      string `yaml:"region"`
+}
+```
 
 
 
