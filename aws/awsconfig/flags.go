@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"cloudeng.io/cmdutil/keys"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 )
@@ -19,6 +20,7 @@ type AWSFlags struct {
 	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" cmd:"aws profile to use for config/authentication"`
 	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" cmd:"aws region to use, overrides the region set in the profile"`
 	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" cmd:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
+	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"key_info_id" cmd:"key info ID to use for authentication"`
 }
 
 // LoadUsingFlags calls awsconfig.Load with options controlled by the
@@ -27,16 +29,20 @@ func LoadUsingFlags(ctx context.Context, cl AWSFlags) (aws.Config, error) {
 	if !cl.AWS {
 		return aws.Config{}, fmt.Errorf("aws not enabled")
 	}
-	return Load(ctx, ConfigOptionsFromFlags(cl)...)
+	opts, err := ConfigOptionsFromFlags(ctx, cl)
+	if err != nil {
+		return aws.Config{}, err
+	}
+	return Load(ctx, opts...)
 }
 
 // ConfigOptionsFromFlags returns the ConfigOptions implied by the flags.
 // NOTE: it always includes config.WithEC2IMDSRegion so that the region
 // information is retrieved from EC2 IMDS when it's not found by other
 // means.
-func ConfigOptionsFromFlags(cl AWSFlags) []ConfigOption {
+func ConfigOptionsFromFlags(ctx context.Context, cl AWSFlags) ([]ConfigOption, error) {
 	cfg := cl.Config()
-	return cfg.Options()
+	return cfg.Options(ctx)
 }
 
 // AWSConfig represents a minimal AWS configuration required to authenticate
@@ -46,6 +52,7 @@ type AWSConfig struct {
 	AWSProfile     string   `yaml:"aws_profile"`
 	AWSRegion      string   `yaml:"aws_region"`
 	AWSConfigFiles []string `yaml:"aws_config_files"`
+	AWSKeyInfoID   string   `yaml:"aws_key_info_id"`
 }
 
 // Config converts the flags to a AWSConfig instance.
@@ -59,6 +66,7 @@ func (c AWSFlags) Config() AWSConfig {
 		AWSProfile:     c.AWSProfile,
 		AWSRegion:      c.AWSRegion,
 		AWSConfigFiles: files,
+		AWSKeyInfoID:   c.AWSKeyInfoID,
 	}
 }
 
@@ -67,16 +75,20 @@ func (c AWSConfig) Load(ctx context.Context) (aws.Config, error) {
 	if !c.AWS {
 		return aws.Config{}, fmt.Errorf("aws not enabled")
 	}
-	return Load(ctx, c.Options()...)
+	opts, err := c.Options(ctx)
+	if err != nil {
+		return aws.Config{}, err
+	}
+	return Load(ctx, opts...)
 }
 
 // Options returns the ConfigOptions implied by the config.
 // NOTE: it always includes config.WithEC2IMDSRegion so that the region
 // information is retrieved from EC2 IMDS when it's not found by other
 // means.
-func (c AWSConfig) Options() []ConfigOption {
+func (c AWSConfig) Options(ctx context.Context) ([]ConfigOption, error) {
 	if !c.AWS {
-		return nil
+		return nil, nil
 	}
 	opts := []ConfigOption{}
 	if len(c.AWSConfigFiles) > 0 {
@@ -90,8 +102,15 @@ func (c AWSConfig) Options() []ConfigOption {
 		opts = append(opts,
 			WithConfigOptions(config.WithRegion(c.AWSRegion)))
 	}
+	if len(c.AWSKeyInfoID) > 0 {
+		if ki, ok := keys.KeyInfoFromContextForID(ctx, c.AWSKeyInfoID); ok {
+			opts = append(opts, ConfigOptionsFromKeyInfo(ki)...)
+		} else {
+			return nil, fmt.Errorf("key info ID %q not found", c.AWSKeyInfoID)
+		}
+	}
 	opts = append(opts, WithConfigOptions(
 		config.WithEC2IMDSRegion(),
 	))
-	return opts
+	return opts, nil
 }

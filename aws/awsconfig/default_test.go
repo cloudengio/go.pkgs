@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"cloudeng.io/aws/awsconfig"
+	"cloudeng.io/cmdutil/keys"
 )
 
 func TestLoad(t *testing.T) {
@@ -45,6 +46,32 @@ func TestLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, want := creds.AccessKeyID, "AAAAA"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestLoadFromKeys(t *testing.T) {
+	ctx := context.Background()
+	k := keys.NewInfo("test", "", []byte("1234"), awsconfig.KeyInfoExtra{
+		AccessKeyID: "access-key",
+		Region:      "us-west-2",
+	})
+	opts := awsconfig.ConfigOptionsFromKeyInfo(k)
+	cfg, err := awsconfig.Load(ctx, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.Region, "us-west-2"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	creds, err := cfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := creds.AccessKeyID, "access-key"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := creds.SecretAccessKey, "1234"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
