@@ -102,7 +102,6 @@ extra:
 	verifyKey(t, k, 1)
 	verifyExtra(t, k, extraType{Scope: "read"})
 
-	fmt.Printf("----------- %#v\n", k)
 	// Round trip with extra
 	out = marshalYAML(t, &k)
 	var k2 keys.Info
@@ -203,7 +202,6 @@ func TestYAMLStore(t *testing.T) {
 
 	// round trip
 	buf := marshalYAML(t, &ks)
-	fmt.Printf("%s\n", string(buf))
 	ks = keys.InMemoryKeyStore{}
 	unmarshalYAML(t, buf, &ks)
 	verifyKeys(t, &ks)

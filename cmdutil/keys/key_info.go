@@ -81,8 +81,9 @@ type Info struct {
 	extraAny  any
 }
 
-// NewInfo creates a new Info instance with the specified id, user, token, and
-// extra information. The token slice is cloned and the input slice is zeroed.
+// NewInfo creates a new Info instance with the specified id, user, token.
+// The token slice is cloned and the input slice is zeroed. Extra information
+// can be set using WithExtra and accessed using UnmarshalExtra.
 func NewInfo(id, user string, token []byte) Info {
 	i := Info{
 		ID:    id,
@@ -95,7 +96,8 @@ func NewInfo(id, user string, token []byte) Info {
 	return i
 }
 
-// WithExtra sets the extra information for the key.
+// WithExtra sets the extra information for the key. Extra information can
+// be accessed using UnmarshalExtra.
 func (k *Info) WithExtra(v any) {
 	k.extraAny = v
 }
