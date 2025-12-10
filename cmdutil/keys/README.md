@@ -160,8 +160,9 @@ context.
 ```go
 func NewInfo(id, user string, token []byte) Info
 ```
-NewInfo creates a new Info instance with the specified id, user, token, and
-extra information. The token slice is cloned and the input slice is zeroed.
+NewInfo creates a new Info instance with the specified id, user, token.
+The token slice is cloned and the input slice is zeroed. Extra information
+can be set using WithExtra and accessed using UnmarshalExtra.
 
 
 
@@ -210,7 +211,8 @@ func (k *Info) UnmarshalYAML(node *yaml.Node) error
 ```go
 func (k *Info) WithExtra(v any)
 ```
-WithExtra sets the extra information for the key.
+WithExtra sets the extra information for the key. Extra information can be
+accessed using UnmarshalExtra.
 
 
 
