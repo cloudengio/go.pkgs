@@ -38,6 +38,13 @@ func LoadUsingFlags(ctx context.Context, cl AWSFlags) (aws.Config, error)
 LoadUsingFlags calls awsconfig.Load with options controlled by the the
 specified flags.
 
+### Func NewKeyInfo
+```go
+func NewKeyInfo(id, user string, token []byte, extra *KeyInfoExtra) keys.Info
+```
+NewKeyInfo creates a new keys.Info appropriate for use with static
+credentials for AWS.
+
 
 
 ## Types
@@ -79,7 +86,7 @@ type AWSFlags struct {
 	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" cmd:"aws profile to use for config/authentication"`
 	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" cmd:"aws region to use, overrides the region set in the profile"`
 	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" cmd:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
-	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"key_info_id" cmd:"key info ID to use for authentication"`
+	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"aws_key_info_id" cmd:"key info ID to use for authentication"`
 }
 ```
 AWSFlags defines commonly used flags that control AWS behaviour.
@@ -113,6 +120,7 @@ is retrieved from EC2 IMDS when it's not found by other means.
 ```go
 func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error)
 ```
+ConfigOptionsFromKeyInfo returns the ConfigOptions implied by the key info.
 
 
 ```go
@@ -131,6 +139,9 @@ type KeyInfoExtra struct {
 	Region      string `yaml:"region"`
 }
 ```
+KeyInfoExtra is the extra information stored in a key info for AWS.
+It is used to populate the AWS config with the access key ID and region.
+The SecretAccessKey is stored in the token field of the key info.
 
 
 

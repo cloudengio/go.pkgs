@@ -23,7 +23,7 @@ type KeyInfoExtra struct {
 // ConfigOptionsFromKeyInfo returns the ConfigOptions implied by the key info.
 func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 	var extra KeyInfoExtra
-	if err := keyInfo.ExtraAs(&extra); err != nil {
+	if err := keyInfo.UnmarshalExtra(&extra); err != nil {
 		return []ConfigOption{}, fmt.Errorf("failed to extract %T from key info: %w", extra, err)
 	}
 	token := keyInfo.Token()
@@ -39,5 +39,7 @@ func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 // NewKeyInfo creates a new keys.Info appropriate for use with
 // static credentials for AWS.
 func NewKeyInfo(id, user string, token []byte, extra *KeyInfoExtra) keys.Info {
-	return keys.NewInfo(id, user, token, extra)
+	ki := keys.NewInfo(id, user, token)
+	ki.WithExtra(extra)
+	return ki
 }

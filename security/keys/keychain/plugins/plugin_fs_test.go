@@ -31,7 +31,7 @@ func TestFS(t *testing.T) {
 		secret := []byte("my-super-secret-value")
 
 		// Write the secret.
-		if err := fs.WriteFileCtx(ctx, key, secret); err != nil {
+		if err := fs.WriteFileCtx(ctx, key, secret, 0600); err != nil {
 			t.Fatalf("WriteFileCtx failed: %v", err)
 		}
 
@@ -59,7 +59,7 @@ func TestFS(t *testing.T) {
 
 	t.Run("write-error", func(t *testing.T) {
 		fs := newfs("--error=write-failed")
-		err := fs.WriteFileCtx(ctx, "any-key", []byte("any-data"))
+		err := fs.WriteFileCtx(ctx, "any-key", []byte("any-data"), 0600)
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
