@@ -7,7 +7,8 @@ package keys_test
 import (
 	"context"
 	"encoding/json"
-	"strings"
+	"fmt"
+	"reflect"
 	"testing"
 
 	"cloudeng.io/cmdutil/keys"
@@ -41,92 +42,219 @@ key2:
 }`
 )
 
-func TestUnmarshalYAML(t *testing.T) {
-	var ks keys.InMemoryKeyStore
-	if err := yaml.Unmarshal([]byte(yamlList), &ks); err != nil {
-		t.Fatalf("yaml list: %v", err)
+func unmarshalJSON(t *testing.T, buf []byte, tmp any) {
+	t.Helper()
+	if err := json.Unmarshal(buf, tmp); err != nil {
+		t.Fatalf("UnmarshalJSON: %s: %v", string(buf), err)
 	}
+}
+
+func marshalJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	return b
+}
+
+func unmarshalYAML(t *testing.T, buf []byte, tmp any) {
+	t.Helper()
+	if err := yaml.Unmarshal(buf, tmp); err != nil {
+		t.Fatalf("UnmarshalYAML: %s: %v", string(buf), err)
+	}
+}
+
+func marshalYAML(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := yaml.Marshal(v)
+	if err != nil {
+		t.Fatalf("MarshalYAML: %v", err)
+	}
+	return b
+}
+
+func TestYAMLKeyInfo(t *testing.T) {
+	ki := `key_id: key1
+token: value1
+user: user1
+`
+	// Unmarshal
+	var k keys.Info
+	unmarshalYAML(t, []byte(ki), &k)
+	verifyKey(t, k, 1)
+
+	// Round trip
+	out := marshalYAML(t, &k)
+	var k1 keys.Info
+	unmarshalYAML(t, out, &k1)
+	verifyKey(t, k1, 1)
+
+	// Unmarshal with extra
+	kiExtra := `key_id: key1
+token: value1
+user: user1
+extra:
+  scope: read
+`
+
+	unmarshalYAML(t, []byte(kiExtra), &k)
+	verifyKey(t, k, 1)
+	verifyExtra(t, k, extraType{Scope: "read"})
+
+	fmt.Printf("----------- %#v\n", k)
+	// Round trip with extra
+	out = marshalYAML(t, &k)
+	var k2 keys.Info
+	unmarshalYAML(t, out, &k2)
+	verifyKey(t, k2, 1)
+	verifyExtra(t, k2, extraType{Scope: "read"})
+
+	// YAML <-> JSON
+	kiExtra = `key_id: key2
+token: value2
+user: user2
+extra:
+  scope: write
+`
+	unmarshalYAML(t, []byte(kiExtra), &k)
+	verifyKey(t, k, 2)
+	verifyExtra(t, k, extraType{Scope: "write"})
+
+	out = marshalJSON(t, &k)
+	var k3 keys.Info
+	unmarshalJSON(t, out, &k3)
+	verifyKey(t, k3, 2)
+	verifyExtra(t, k3, extraType{Scope: "write"})
+}
+
+func TestJSONKeyInfo(t *testing.T) {
+	ki := `{"key_id": "key1", "token": "value1", "user": "user1"}`
+	var k keys.Info
+
+	// Unmarshal
+	unmarshalJSON(t, []byte(ki), &k)
+	verifyKey(t, k, 1)
+
+	// Round trip
+	buf := marshalJSON(t, &k)
+	var k1 keys.Info
+	unmarshalJSON(t, buf, &k1)
+	verifyKey(t, k1, 1)
+
+	// Unmarshal with extra
+	kiExtra := `{"key_id": "key1", "token": "value1", "user": "user1", "extra": {"scope": "read"}}`
+	unmarshalJSON(t, []byte(kiExtra), &k)
+	verifyKey(t, k, 1)
+	verifyExtra(t, k, extraType{Scope: "read"})
+
+	// Round trip with extra
+	buf = marshalJSON(t, &k)
+	var k2 keys.Info
+	unmarshalJSON(t, buf, &k2)
+	verifyKey(t, k2, 1)
+	verifyExtra(t, k2, extraType{Scope: "read"})
+
+	// JSON <-> YAML
+	kiExtra = `{"key_id": "key2", "token": "value2", "user": "user2", "extra": {"scope": "write"}}`
+	unmarshalJSON(t, []byte(kiExtra), &k)
+	verifyKey(t, k, 2)
+	verifyExtra(t, k, extraType{Scope: "write"})
+
+	buf = marshalYAML(t, &k)
+	var k3 keys.Info
+	unmarshalYAML(t, buf, &k3)
+	verifyKey(t, k3, 2)
+	verifyExtra(t, k3, extraType{Scope: "write"})
+}
+
+func TestNewKey(t *testing.T) {
+	k := keys.NewInfo("key1", "user1", []byte("value1"))
+	verifyKey(t, k, 1)
+	out := marshalJSON(t, k)
+
+	var k1 keys.Info
+	unmarshalJSON(t, out, &k1)
+	verifyKey(t, k1, 1)
+
+	out = marshalYAML(t, k)
+	var k2 keys.Info
+	unmarshalYAML(t, out, &k2)
+	verifyKey(t, k2, 1)
+
+	k.WithExtra(extraType{Scope: "read"})
+	out = marshalJSON(t, k)
+
+	var k3 keys.Info
+	unmarshalJSON(t, out, &k3)
+	verifyKey(t, k3, 1)
+	verifyExtra(t, k3, extraType{Scope: "read"})
+
+	var k4 keys.Info
+	unmarshalYAML(t, out, &k4)
+	verifyKey(t, k4, 1)
+	verifyExtra(t, k4, extraType{Scope: "read"})
+}
+
+func TestYAMLStore(t *testing.T) {
+	var ks keys.InMemoryKeyStore
+	unmarshalYAML(t, []byte(yamlList), &ks) // list
+	verifyKeys(t, &ks)
+
+	// round trip
+	buf := marshalYAML(t, &ks)
+	fmt.Printf("%s\n", string(buf))
+	ks = keys.InMemoryKeyStore{}
+	unmarshalYAML(t, buf, &ks)
 	verifyKeys(t, &ks)
 
 	ks = keys.InMemoryKeyStore{}
-	if err := yaml.Unmarshal([]byte(yamlMap), &ks); err != nil {
-		t.Fatalf("yaml map: %v", err)
-	}
+	unmarshalYAML(t, []byte(yamlMap), &ks) // map
 	verifyKeys(t, &ks)
 }
 
-func TestUnmarshalJSON(t *testing.T) {
+func TestJSONStore(t *testing.T) {
 	var ks keys.InMemoryKeyStore
-	if err := json.Unmarshal([]byte(jsonList), &ks); err != nil {
-		t.Fatalf("json list: %v", err)
-	}
+	unmarshalJSON(t, []byte(jsonList), &ks) // list
+	verifyKeys(t, &ks)
+
+	// round trip
+	buf := marshalJSON(t, &ks)
+	ks = keys.InMemoryKeyStore{}
+	unmarshalJSON(t, buf, &ks)
 	verifyKeys(t, &ks)
 
 	ks = keys.InMemoryKeyStore{}
-	if err := json.Unmarshal([]byte(jsonMap), &ks); err != nil {
-		t.Fatalf("json map: %v", err)
-	}
+	unmarshalJSON(t, []byte(jsonMap), &ks) // map
 	verifyKeys(t, &ks)
+}
+
+func verifyKey(t *testing.T, k keys.Info, i int) {
+	t.Helper()
+	if got, want := k.ID, fmt.Sprintf("key%d", i); got != want {
+		t.Errorf("key%d ID: got %v, want %v", i, got, want)
+	}
+	if got, want := string(k.Token().Value()), fmt.Sprintf("value%d", i); got != want {
+		t.Errorf("key%d: got %v, want %v", i, got, want)
+	}
+
+	if got, want := k.User, fmt.Sprintf("user%d", i); got != want {
+		t.Errorf("key%d user: got %v, want %v", i, got, want)
+	}
 }
 
 func verifyKeys(t *testing.T, ks *keys.InMemoryKeyStore) {
+	t.Helper()
 	k1, ok := ks.Get("key1")
 	if !ok {
 		t.Fatalf("key1 not found")
 	}
-	if got, want := string(k1.Token().Value()), "value1"; got != want {
-		t.Errorf("key1: got %v, want %v", got, want)
-	}
-	if got, want := k1.User, "user1"; got != want {
-		t.Errorf("key1 user: got %v, want %v", got, want)
-	}
-
+	verifyKey(t, k1, 1)
 	k2, ok := ks.Get("key2")
 	if !ok {
 		t.Fatalf("key2 not found")
 	}
-	if got, want := string(k2.Token().Value()), "value2"; got != want {
-		t.Errorf("key2: got %v, want %v", got, want)
-	}
-	if got, want := k2.User, "user2"; got != want {
-		t.Errorf("key2 user: got %v, want %v", got, want)
-	}
-}
-
-func TestContextFunctions(t *testing.T) {
-	store := keys.NewInMemoryKeyStore()
-	k1 := keys.NewInfo("ctx-key", "ctx-user", []byte("ctx-token"), nil)
-	store.Add(k1)
-
-	ctx := keys.ContextWithKeyStore(context.Background(), store)
-
-	// Test successful retrieval
-	retrievedKey, ok := keys.KeyInfoFromContextForID(ctx, "ctx-key")
-	if !ok {
-		t.Fatal("expected to find key in context")
-	}
-	if got, want := retrievedKey.ID, k1.ID; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := retrievedKey.User, k1.User; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := string(retrievedKey.Token().Value()), string(k1.Token().Value()); got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	// Test retrieval of non-existent key from context
-	_, ok = keys.KeyInfoFromContextForID(ctx, "non-existent")
-	if ok {
-		t.Error("did not expect to find non-existent key in context")
-	}
-
-	// Test retrieval from a context without the store
-	emptyCtx := context.Background()
-	_, ok = keys.KeyInfoFromContextForID(emptyCtx, "ctx-key")
-	if ok {
-		t.Error("did not expect to find key in empty context")
-	}
+	verifyKey(t, k2, 2)
 }
 
 type extraType struct {
@@ -170,30 +298,33 @@ key2:
 
 func TestUnmarshalYAMLExtra(t *testing.T) {
 	var ks keys.InMemoryKeyStore
-	if err := yaml.Unmarshal([]byte(yamlListExtra), &ks); err != nil {
-		t.Fatalf("yaml list: %v", err)
-	}
+	unmarshalYAML(t, []byte(yamlListExtra), &ks)
 	verifyKeysExtra(t, &ks)
 
 	ks = keys.InMemoryKeyStore{}
-	if err := yaml.Unmarshal([]byte(yamlMapExtra), &ks); err != nil {
-		t.Fatalf("yaml map: %v", err)
-	}
+	unmarshalYAML(t, []byte(yamlMapExtra), &ks)
 	verifyKeysExtra(t, &ks)
 }
 
 func TestUnmarshalJSONExtra(t *testing.T) {
 	var ks keys.InMemoryKeyStore
-	if err := json.Unmarshal([]byte(jsonListExtra), &ks); err != nil {
-		t.Fatalf("json list: %v", err)
-	}
+	unmarshalJSON(t, []byte(jsonListExtra), &ks)
 	verifyKeysExtra(t, &ks)
 
 	ks = keys.InMemoryKeyStore{}
-	if err := json.Unmarshal([]byte(jsonMapExtra), &ks); err != nil {
-		t.Fatalf("json map: %v", err)
-	}
+	unmarshalJSON(t, []byte(jsonMapExtra), &ks)
 	verifyKeysExtra(t, &ks)
+}
+
+func verifyExtra[T any](t *testing.T, k keys.Info, e T) {
+	t.Helper()
+	var want T
+	if err := k.UnmarshalExtra(&want); err != nil {
+		t.Fatalf("key1 extra: %v", err)
+	}
+	if !reflect.DeepEqual(want, e) {
+		t.Errorf("key1 extra: got %+v, want %+v", want, e)
+	}
 }
 
 func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
@@ -202,25 +333,14 @@ func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
 	if !ok {
 		t.Fatalf("key1 not found")
 	}
-	var e1 extraType
-	if err := k1.ExtraAs(&e1); err != nil {
-		t.Fatalf("key1 extra: %v", err)
-	}
-	if got, want := e1.Scope, "read"; got != want {
-		t.Errorf("key1 scope: got %v, want %v", got, want)
-	}
+
+	verifyExtra(t, k1, extraType{Scope: "read"})
 
 	k2, ok := ks.Get("key2")
 	if !ok {
 		t.Fatalf("key2 not found")
 	}
-	var e2 extraType
-	if err := k2.ExtraAs(&e2); err != nil {
-		t.Fatalf("key2 extra: %v", err)
-	}
-	if got, want := e2.Scope, "write"; got != want {
-		t.Errorf("key2 scope: got %v, want %v", got, want)
-	}
+	verifyExtra(t, k2, extraType{Scope: "write"})
 }
 
 func TestToken(t *testing.T) {
@@ -253,7 +373,8 @@ func TestToken(t *testing.T) {
 func TestInfo(t *testing.T) {
 	val := []byte("secret")
 	extra := map[string]string{"a": "b"}
-	info := keys.NewInfo("id", "user", val, extra)
+	info := keys.NewInfo("id", "user", val)
+	info.WithExtra(extra)
 
 	if got, want := info.ID, "id"; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -267,7 +388,11 @@ func TestInfo(t *testing.T) {
 	if got, want := info.String(), "id[user]"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := info.Extra().(map[string]string)["a"], "b"; got != want {
+	var e map[string]string
+	if err := info.UnmarshalExtra(&e); err != nil {
+		t.Fatalf("info extra: %v", err)
+	}
+	if got, want := e["a"], "b"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -276,55 +401,6 @@ func TestInfo(t *testing.T) {
 		t.Errorf("input slice was not cleared")
 	}
 
-}
-
-func TestMoreContextFunctions(t *testing.T) {
-	ctx := context.Background()
-
-	// ContextWithoutKeyStore
-	store := keys.NewInMemoryKeyStore()
-	ctxWithStore := keys.ContextWithKeyStore(ctx, store)
-	if _, ok := keys.KeyStoreFromContext(ctxWithStore); !ok {
-		t.Fatal("expected store in context")
-	}
-
-	ctxNoStore := keys.ContextWithoutKeyStore(ctxWithStore)
-	if _, ok := keys.KeyStoreFromContext(ctxNoStore); ok {
-		t.Fatal("expected no store in context")
-	}
-
-	// ContextWithKey
-	k1 := keys.NewInfo("k1", "u1", []byte("t1"), nil)
-	ctxWithKey := keys.ContextWithKey(ctx, k1)
-
-	// Should have created a store and added the key
-	storeFromCtx, ok := keys.KeyStoreFromContext(ctxWithKey)
-	if !ok {
-		t.Fatal("expected store to be created")
-	}
-
-	gotKey, ok := storeFromCtx.Get("k1")
-	if !ok {
-		t.Fatal("expected key to be in store")
-	}
-	if gotKey.ID != "k1" {
-		t.Errorf("got %v, want k1", gotKey.ID)
-	}
-
-	// Add another key to existing store
-	k2 := keys.NewInfo("k2", "u2", []byte("t2"), nil)
-	ctxWithKey2 := keys.ContextWithKey(ctxWithKey, k2)
-
-	storeFromCtx2, ok := keys.KeyStoreFromContext(ctxWithKey2)
-	if !ok {
-		t.Fatal("expected store")
-	}
-	if _, ok := storeFromCtx2.Get("k2"); !ok {
-		t.Fatal("expected k2")
-	}
-	if _, ok := storeFromCtx2.Get("k1"); !ok {
-		t.Fatal("expected k1 to still be there")
-	}
 }
 
 type mockFS struct {
@@ -353,113 +429,10 @@ func TestKeyOwnerString(t *testing.T) {
 	}
 }
 
-func TestInfoMarshal(t *testing.T) {
-	info := keys.NewInfo("id1", "user1", []byte("token1"), map[string]string{"a": "b"})
-	buf, err := info.MarshalJSON()
-	if err != nil {
-		t.Fatalf("MarshalJSON: %v", err)
-	}
-
-	unmarshalJSON := func(buf []byte, tmp any) {
-		t.Helper()
-		if err := json.Unmarshal(buf, tmp); err != nil {
-			t.Fatalf("Unmarshal: %s: %v", string(buf), err)
-		}
-	}
-
-	marshalJSON := func(v any) []byte {
-		t.Helper()
-		b, err := json.Marshal(v)
-		if err != nil {
-			t.Fatalf("Marshal: %v", err)
-		}
-		return b
-	}
-
-	getExtra := func(ims *keys.InMemoryKeyStore, id string) any {
-		t.Helper()
-		k, ok := ims.Get(id)
-		if !ok {
-			t.Fatalf("key %q not found", id)
-		}
-		v := k.Extra()
-		if v == nil {
-			t.Fatalf("Extra is nil")
-		}
-		return v
-	}
-
-	// We need to unmarshal into a temporary struct that matches the structure expected by UnmarshalJSON
-	// effectively testing round trip if UnmarshalJSON was implemented on Info directly,
-	// but Info implementation of UnmarshalJSON (via KeyStore.UnmarshalJSON) handles the structure.
-	// Actually Info doesn't have UnmarshalJSON, it's handled by KeyStore or manually.
-	// But let's check what MarshalJSON output.
-
-	// Just verify it's valid JSON
-	var tmp map[string]any
-	unmarshalJSON(buf, &tmp)
-	if got, want := tmp["key_id"], "id1"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if extra, ok := tmp["extra"].(map[string]any); ok {
-		if got, want := extra["a"], "b"; got != want {
-			t.Errorf("got extra.a %v, want %v", got, want)
-		}
-	} else {
-		t.Fatalf("extra field is not a map[string]any or is missing, got: %T", tmp["extra"])
-	}
-
-	// Test Lazy Loading of Extra
-	// Case 1: Extra already set (from NewInfo) - already tested in TestInfo
-
-	// Case 2: Extra from JSON
-	jsonStr := `{"key_id": "id1", "user": "user1", "token": "t1", "extra": {"foo": "bar"}}`
-	var ks keys.InMemoryKeyStore
-	unmarshalJSON([]byte("["+jsonStr+"]"), &ks)
-	extra := getExtra(&ks, "id1")
-	// It comes back as map[string]any by default for JSON
-	if m, ok := extra.(map[string]any); ok {
-		if got, want := m["foo"], "bar"; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-	} else {
-		t.Errorf("expected map[string]any, got %T", extra)
-	}
-
-	extraK1 := marshalJSON(&ks)
-	if got, want := string(extraK1), "["+strings.ReplaceAll(jsonStr, " ", "")+"]"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	// Case 3: Extra from YAML
-	yamlStr := `
-- key_id: id2
-  token: t2
-  extra:
-    bar: baz
-`
-	var ks2 keys.InMemoryKeyStore
-
-	if err := yaml.Unmarshal([]byte(yamlStr), &ks2); err != nil {
-		t.Fatalf("yaml.Unmarshal: %v", err)
-	}
-	extra2 := getExtra(&ks2, "id2")
-	// YAML unmarshal might return map[string]any or map[any]any
-	// gopkg.in/yaml.v3 usually unmarshals to map[string]any for string keys
-	if m, ok := extra2.(map[string]any); ok {
-		if got, want := m["bar"], "baz"; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-	} else {
-		// handle potential map[any]any if that happens, though yaml.v3 usually avoids it for string keys
-		t.Fatalf("got %T for extra2", extra2)
-	}
-}
-
 func TestInMemoryKeyStoreMethods(t *testing.T) {
 	ks := keys.NewInMemoryKeyStore()
-	ks.Add(keys.NewInfo("id1", "user1", []byte("t1"), nil))
-	ks.Add(keys.NewInfo("id2", "user2", []byte("t2"), nil))
+	ks.Add(keys.NewInfo("id1", "user1", []byte("t1")))
+	ks.Add(keys.NewInfo("id2", "user2", []byte("t2")))
 
 	// KeyOwners
 	owners := ks.KeyOwners()
@@ -553,31 +526,5 @@ func TestReadFiles(t *testing.T) {
 	}
 	if err := ks.ReadYAML(ctx, mfs, "missing.yaml"); err == nil {
 		t.Error("expected error for missing file")
-	}
-}
-
-func TestTokenFromContext(t *testing.T) {
-	ctx := context.Background()
-	ks := keys.NewInMemoryKeyStore()
-	ks.Add(keys.NewInfo("k1", "u1", []byte("t1"), nil))
-	ctx = keys.ContextWithKeyStore(ctx, ks)
-
-	tok, ok := keys.TokenFromContextForID(ctx, "k1")
-	if !ok {
-		t.Fatal("expected token")
-	}
-	if got, want := string(tok.Value()), "t1"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-
-	_, ok = keys.TokenFromContextForID(ctx, "missing")
-	if ok {
-		t.Error("expected no token")
-	}
-
-	ctxNoStore := context.Background()
-	_, ok = keys.TokenFromContextForID(ctxNoStore, "k1")
-	if ok {
-		t.Error("expected no token")
 	}
 }

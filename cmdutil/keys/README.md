@@ -81,6 +81,25 @@ KeyOwners returns the owners of keys in the store.
 
 
 ```go
+func (ims *InMemoryKeyStore) Len() int
+```
+
+
+```go
+func (ims *InMemoryKeyStore) MarshalJSON() ([]byte, error)
+```
+MarshalJSON implements the json.Marshaler interface to allow marshaling the
+InMemoryKeyStore to JSON.
+
+
+```go
+func (ims *InMemoryKeyStore) MarshalYAML() (any, error)
+```
+MarshalYAML implements the yaml.Marshaler interface to allow marshaling the
+InMemoryKeyStore to YAML.
+
+
+```go
 func (ims *InMemoryKeyStore) ReadJSON(ctx context.Context, fs file.ReadFileFS, name string) error
 ```
 ReadJSON reads key information from a JSON file using the provided
@@ -139,7 +158,7 @@ context.
 
 
 ```go
-func NewInfo(id, user string, token []byte, extra any) Info
+func NewInfo(id, user string, token []byte) Info
 ```
 NewInfo creates a new Info instance with the specified id, user, token, and
 extra information. The token slice is cloned and the input slice is zeroed.
@@ -149,18 +168,13 @@ extra information. The token slice is cloned and the input slice is zeroed.
 ### Methods
 
 ```go
-func (k *Info) Extra() any
+func (k Info) MarshalJSON() ([]byte, error)
 ```
-Extra returns the extra information associated with the key. If no value was
-set using NewInfo, it will attempt to unmarshal the extra information from
-either the json or yaml representation.
 
 
 ```go
-func (k Info) ExtraAs(v any) error
+func (k Info) MarshalYAML() (any, error)
 ```
-ExtraAs unmarshals the extra json or yaml information into the provided
-value. It does not modify the stored extra information.
 
 
 ```go
@@ -173,6 +187,30 @@ Extra fields redacted.
 ```go
 func (k Info) Token() *Token
 ```
+
+
+```go
+func (k Info) UnmarshalExtra(v any) error
+```
+UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
+information into the provided value. It does not modify the stored extra
+information.
+
+
+```go
+func (k *Info) UnmarshalJSON(data []byte) error
+```
+
+
+```go
+func (k *Info) UnmarshalYAML(node *yaml.Node) error
+```
+
+
+```go
+func (k *Info) WithExtra(v any)
+```
+WithExtra sets the extra information for the key.
 
 
 
