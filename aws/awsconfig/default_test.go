@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"cloudeng.io/aws/awsconfig"
-	"cloudeng.io/cmdutil/keys"
 )
 
 func TestLoad(t *testing.T) {
@@ -52,11 +51,14 @@ func TestLoad(t *testing.T) {
 
 func TestLoadFromKeys(t *testing.T) {
 	ctx := context.Background()
-	k := keys.NewInfo("test", "", []byte("1234"), awsconfig.KeyInfoExtra{
+	k := awsconfig.NewKeyInfo("test", "", []byte("1234"), &awsconfig.KeyInfoExtra{
 		AccessKeyID: "access-key",
 		Region:      "us-west-2",
 	})
-	opts := awsconfig.ConfigOptionsFromKeyInfo(k)
+	opts, err := awsconfig.ConfigOptionsFromKeyInfo(k)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg, err := awsconfig.Load(ctx, opts...)
 	if err != nil {
 		t.Fatal(err)

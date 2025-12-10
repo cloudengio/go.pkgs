@@ -111,7 +111,7 @@ is retrieved from EC2 IMDS when it's not found by other means.
 
 
 ```go
-func ConfigOptionsFromKeyInfo(keyInfo keys.Info) []ConfigOption
+func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error)
 ```
 
 

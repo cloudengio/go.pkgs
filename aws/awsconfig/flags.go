@@ -20,7 +20,7 @@ type AWSFlags struct {
 	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" cmd:"aws profile to use for config/authentication"`
 	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" cmd:"aws region to use, overrides the region set in the profile"`
 	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" cmd:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
-	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"key_info_id" cmd:"key info ID to use for authentication"`
+	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"aws_key_info_id" cmd:"key info ID to use for authentication"`
 }
 
 // LoadUsingFlags calls awsconfig.Load with options controlled by the
@@ -104,7 +104,11 @@ func (c AWSConfig) Options(ctx context.Context) ([]ConfigOption, error) {
 	}
 	if len(c.AWSKeyInfoID) > 0 {
 		if ki, ok := keys.KeyInfoFromContextForID(ctx, c.AWSKeyInfoID); ok {
-			opts = append(opts, ConfigOptionsFromKeyInfo(ki)...)
+			co, err := ConfigOptionsFromKeyInfo(ki)
+			if err != nil {
+				return nil, err
+			}
+			opts = append(opts, co...)
 		} else {
 			return nil, fmt.Errorf("key info ID %q not found", c.AWSKeyInfoID)
 		}
