@@ -125,7 +125,6 @@ func (smfs *T) WriteFileCtx(ctx context.Context, nameOrArn string, data []byte, 
 	if err != nil {
 		return err
 	}
-
 	if exists {
 		if !smfs.options.allowUpdates {
 			return fmt.Errorf("updates are not allowed: %w", fs.ErrPermission)
@@ -248,7 +247,7 @@ func readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsm
 func translateError(err error) error {
 	var rnfe *types.ResourceNotFoundException
 	if errors.As(err, &rnfe) {
-		return fs.ErrNotExist
+		return fmt.Errorf("%v: %w", rnfe.Error(), fs.ErrNotExist)
 	}
 	var ire *types.InvalidRequestException
 	if errors.As(err, &ire) {

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 )
 
@@ -50,11 +51,11 @@ func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 	return resp.Contents, nil
 }
 
-func (f FS) WriteFile(name string, data []byte) error {
-	return f.WriteFileCtx(context.Background(), name, data)
+func (f FS) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return f.WriteFileCtx(context.Background(), name, data, perm)
 }
 
-func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte) error {
+func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.FileMode) error {
 	req, err := NewWriteRequest(name, data, f.sysSpecific)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
