@@ -3,17 +3,15 @@ module cloudeng.io/aws
 go 1.25.5
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20251210223200-d710d758807c
+	cloudeng.io/cmdutil v0.0.0-20251210231338-d661eee74313
 	cloudeng.io/errors v0.0.13-0.20251104042927-f7e1e5e3ef21
-	cloudeng.io/file v0.0.0-20251210223200-d710d758807c
-	cloudeng.io/macos v0.0.0-20251208193947-11b38e1c1280
+	cloudeng.io/file v0.0.0-20251210231338-d661eee74313
 	cloudeng.io/path v0.0.10-0.20251104042927-f7e1e5e3ef21
-	cloudeng.io/security v0.0.0-20251210223200-d710d758807c
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.5
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.5
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.93.2
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.40.5
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.5
 	github.com/aws/smithy-go v1.24.0
 	github.com/orlangure/gnomock v0.32.0
@@ -22,12 +20,10 @@ require (
 require (
 	cloudeng.io/algo v0.0.0-20251120181725-ae601f12dbbf // indirect
 	cloudeng.io/debug v0.0.0-20251104042927-f7e1e5e3ef21 // indirect
-	cloudeng.io/logging v0.0.0-20251210223200-d710d758807c // indirect
 	cloudeng.io/net v0.0.0-20251120181725-ae601f12dbbf // indirect
-	cloudeng.io/os v0.0.0-20251210223200-d710d758807c // indirect
+	cloudeng.io/os v0.0.0-20251210231338-d661eee74313 // indirect
 	cloudeng.io/sync v0.0.9-0.20251104042927-f7e1e5e3ef21 // indirect
 	cloudeng.io/sys v0.0.0-20251120181725-ae601f12dbbf // indirect
-	cloudeng.io/text v0.0.13 // indirect
 	cloudeng.io/windows v0.0.0-20251104042927-f7e1e5e3ef21 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -45,7 +41,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.12 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudengio/go-keychain v0.0.0-20251120230617-c4053f60cda7 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
