@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
+    uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@conditional-webapp-actions
     with:
       runner: |
         [ "ubuntu-latest" ]
