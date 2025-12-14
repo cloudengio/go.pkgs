@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -107,34 +106,6 @@ type roundtripOptions struct {
 	requestBody  TraceRequestBody
 	responseBody TraceResponseBody
 	traceHooks   TraceHooks
-}
-
-// JSONRequestBodyLogger logs the request body as a JSON object.
-// The supplied logger is pre-configured with relevant request information.
-func JSONRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
-	if len(data) == 0 {
-		logger.Info("HTTP Request Body", "direction", "request", "body", "(empty)")
-		return
-	}
-	logger.Info("HTTP Request Body", "direction", "request", "body", json.RawMessage(data))
-}
-
-// JSONResponseBodyLogger logs the response body as a JSON object.
-// The supplied logger is pre-configured with relevant request information.
-func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
-	if len(data) == 0 {
-		logger.Info("HTTP Response Body", "direction", "response", "body", "(empty)")
-		return
-	}
-	logger.Info("HTTP Response Body", "direction", "response", "body", json.RawMessage(data))
-}
-
-func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte) {
-	if len(data) == 0 {
-		logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", "(empty)")
-		return
-	}
-	logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", json.RawMessage(data))
 }
 
 // NewTracingRoundTripper creates a new TracingRoundTripper.
