@@ -21,7 +21,7 @@ func (tl tracingLogger[T]) requestBody(logger *slog.Logger, _ *http.Request, dat
 		return
 	}
 	logger.Info("HTTP Request Body", "direction", "request", "body",
-		tl.formatter(json.RawMessage(data)))
+		tl.formatter(data))
 }
 
 func (tl tracingLogger[T]) responseBody(logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
@@ -30,24 +30,24 @@ func (tl tracingLogger[T]) responseBody(logger *slog.Logger, _ *http.Request, _ 
 		return
 	}
 	logger.Info("HTTP Response Body", "direction", "response", "body",
-		tl.formatter(json.RawMessage(data)))
+		tl.formatter(data))
 }
 
-func (tl tracingLogger[T]) handlerResponseBody(logger *slog.Logger, _ *http.Request, hdr http.Header, statusCode int, data []byte) {
+func (tl tracingLogger[T]) handlerResponseBody(logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte) {
 	if len(data) == 0 {
 		logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", "(empty)")
 		return
 	}
-	logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", tl.formatter(json.RawMessage(data)))
+	logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", tl.formatter(data))
 }
 
-var jsonFormatter tracingLogger[json.RawMessage] = tracingLogger[json.RawMessage]{
+var jsonFormatter = tracingLogger[json.RawMessage]{
 	formatter: func(v []byte) json.RawMessage {
 		return json.RawMessage(v)
 	},
 }
 
-var textFormatter tracingLogger[string] = tracingLogger[string]{
+var textFormatter = tracingLogger[string]{
 	formatter: func(v []byte) string {
 		return string(v)
 	},
