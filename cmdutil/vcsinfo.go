@@ -5,6 +5,7 @@
 package cmdutil
 
 import (
+	"encoding/json"
 	"runtime/debug"
 	"time"
 )
@@ -13,12 +14,13 @@ import (
 // if available. The returned values are the revision, last commit time,
 // a boolean indicating whether there were uncommitted changes (dirty)
 // and a boolean indicating whether the information was successfully extracted.
-func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool) {
+func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool) {
 	var info *debug.BuildInfo
 	info, ok = debug.ReadBuildInfo()
 	if !ok {
 		return
 	}
+	goVersion = info.GoVersion
 	ok = false
 	for _, kv := range info.Settings {
 		switch kv.Key {
@@ -34,4 +36,14 @@ func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool) {
 		}
 	}
 	return
+}
+
+// BuildInfoJSON returns the build information as a JSON raw message
+// or nil if the build information is not available.
+func BuildInfoJSON() json.RawMessage {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		d, _ := json.Marshal(bi)
+		return d
+	}
+	return nil
 }

@@ -104,3 +104,12 @@ func (c LoggingConfig) NewLoggerMust() *Logger {
 	}
 	return logger
 }
+
+func LogBuildInfo(logger *slog.Logger) {
+	goVersion, version, when, dirty, ok := VCSInfo()
+	if !ok {
+		logger.Warn("failed to determine version information")
+		return
+	}
+	logger.Info("build info", "go.version", goVersion, "commit", version, "build.date", when, "dirty", dirty)
+}
