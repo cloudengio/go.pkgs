@@ -5,6 +5,9 @@
 package cmdutil_test
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -90,4 +93,74 @@ func ExampleLoggingFlags() {
 	slog.SetDefault(logger.Logger)
 	slog.Info("hello world")
 	// Output:
+}
+
+func TestLogBuildInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "buildinfo.log")
+
+	config := cmdutil.LoggingConfig{
+		Level:  2, // Info level
+		File:   logFile,
+		Format: "json",
+	}
+
+	logger, err := config.NewLogger()
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	// Test the Logger.LogBuildInfo method
+	logger.LogBuildInfo()
+
+	// Test the standalone LogBuildInfo function
+	cmdutil.LogBuildInfo(logger.Logger)
+
+	if err := logger.Close(); err != nil {
+		t.Fatalf("failed to close logger: %v", err)
+	}
+
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+
+	if len(content) == 0 {
+		t.Fatal("log file is empty")
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	var entries []map[string]interface{}
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var entry map[string]interface{}
+		if err := json.Unmarshal(line, &entry); err != nil {
+			t.Fatalf("failed to unmarshal log entry: %s", line)
+		}
+		entries = append(entries, entry)
+	}
+
+	if got, want := len(entries), 2; got != want {
+		t.Fatalf("expected %d log entries, got %d", want, got)
+	}
+
+	_, _, _, _, ok := cmdutil.VCSInfo()
+	expectedMsg := "failed to determine version information"
+	expectedLevel := "WARN"
+	if ok {
+		expectedMsg = "build info"
+		expectedLevel = "INFO"
+	}
+
+	for i, entry := range entries {
+		if msg, ok := entry["msg"].(string); !ok || msg != expectedMsg {
+			t.Errorf("entry %d: unexpected message: got %v, want %q", i, entry["msg"], expectedMsg)
+		}
+		if level, ok := entry["level"].(string); !ok || level != expectedLevel {
+			t.Errorf("entry %d: unexpected level: got %v, want %q", i, entry["level"], expectedLevel)
+		}
+	}
 }
