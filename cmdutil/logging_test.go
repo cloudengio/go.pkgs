@@ -91,3 +91,46 @@ func ExampleLoggingFlags() {
 	slog.Info("hello world")
 	// Output:
 }
+
+func TestLogBuildInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "buildinfo.log")
+
+	config := cmdutil.LoggingConfig{
+		Level:  2, // Info level
+		File:   logFile,
+		Format: "json",
+	}
+
+	logger, err := config.NewLogger()
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+	defer logger.Close()
+
+	// Test the Logger.LogBuildInfo method
+	logger.LogBuildInfo()
+
+	// Verify log file was created and has content
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+
+	if len(content) == 0 {
+		t.Error("log file is empty")
+	}
+
+	// Test the standalone LogBuildInfo function
+	cmdutil.LogBuildInfo(logger.Logger)
+
+	// Verify more content was written
+	content2, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+
+	if len(content2) <= len(content) {
+		t.Error("expected more log content after second LogBuildInfo call")
+	}
+}

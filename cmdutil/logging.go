@@ -68,6 +68,11 @@ func (l *Logger) Close() error {
 	return nil
 }
 
+// LogBuildInfo logs build information using the logger.
+func (l *Logger) LogBuildInfo() {
+	LogBuildInfo(l.Logger)
+}
+
 // NewLogger creates a new logger based on the configuration.
 func (c LoggingConfig) NewLogger() (*Logger, error) {
 	opts := &slog.HandlerOptions{
@@ -105,6 +110,7 @@ func (c LoggingConfig) NewLoggerMust() *Logger {
 	return logger
 }
 
+// LogBuildInfo logs build information using the provided logger.
 func LogBuildInfo(logger *slog.Logger) {
 	goVersion, version, when, dirty, ok := VCSInfo()
 	if !ok {
