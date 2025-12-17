@@ -647,11 +647,11 @@ func (cmds *CommandSet) processHelp(usage string, args []string) error {
 		fmt.Fprintln(cmds.out, cmds.Usage(usage))
 		return flag.ErrHelp
 	case "vcsinfo":
-		version, when, dirty, ok := cmdutil.VCSInfo()
+		goVersion, version, when, dirty, ok := cmdutil.VCSInfo()
 		if !ok {
 			return fmt.Errorf("failed to determine version information")
 		}
-		fmt.Fprintf(cmds.out, "commit: %v, build date: %v, dirty: %v\n", version, when, dirty)
+		fmt.Fprintf(cmds.out, "go: %v, commit: %v, build date: %v, dirty: %v\n", goVersion, version, when, dirty)
 		return flag.ErrHelp
 	case "help":
 		if cmds.cmd != nil {

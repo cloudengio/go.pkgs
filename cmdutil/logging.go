@@ -21,10 +21,10 @@ type LoggingFlags struct {
 
 // LoggingConfig represents a logging configuration.
 type LoggingConfig struct {
-	Level      int
-	File       string
-	Format     string
-	SourceCode bool
+	Level      int    `yaml:"level" cmd:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
+	File       string `yaml:"file" cmd:"log file path. If not specified logs are written to stderr."`
+	Format     string `yaml:"format" cmd:"log format: text or json"`
+	SourceCode bool   `yaml:"source_code" cmd:"include source code file and line number in logs"`
 }
 
 // LoggingConfig returns the logging configuration represented by the flags.
@@ -103,4 +103,13 @@ func (c LoggingConfig) NewLoggerMust() *Logger {
 		panic(err)
 	}
 	return logger
+}
+
+func LogBuildInfo(logger *slog.Logger) {
+	goVersion, version, when, dirty, ok := VCSInfo()
+	if !ok {
+		logger.Warn("failed to determine version information")
+		return
+	}
+	logger.Info("build info", "go.version", goVersion, "commit", version, "build.date", when, "dirty", dirty)
 }

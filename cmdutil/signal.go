@@ -6,12 +6,10 @@ package cmdutil
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"strings"
 )
 
@@ -47,14 +45,4 @@ func Exit(format string, args ...any) {
 	}
 	fmt.Fprintf(os.Stderr, format, args...)
 	os.Exit(1)
-}
-
-// BuildInfoJSON returns the build information as a JSON raw message
-// or nil if the build information is not available.
-func BuildInfoJSON() json.RawMessage {
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		d, _ := json.Marshal(bi)
-		return d
-	}
-	return nil
 }
