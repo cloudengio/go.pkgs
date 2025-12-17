@@ -51,5 +51,5 @@ formatters:
         path: 'cmdutil/*'
         text: 'var-naming: avoid package names that conflict with Go standard library package names'
       - linter: revive
-        path: 'debug/*'
+        path: 'errors/*'
         text: 'var-naming: avoid package names that conflict with Go standard library package names'
