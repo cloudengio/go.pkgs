@@ -15,12 +15,24 @@ func AccountID(ctx context.Context, cfg aws.Config) (string, error)
 AccountID uses the sts service to obtain the calling processes Amazon
 Account ID (number).
 
+### Func ContextWith
+```go
+func ContextWith(ctx context.Context, cfg *aws.Config) context.Context
+```
+ContextWith returns a new context with the aws.Config stored in it.
+
 ### Func DebugPrintConfig
 ```go
 func DebugPrintConfig(ctx context.Context, out io.Writer, cfg aws.Config) error
 ```
 DebugPrintConfig dumps the aws.Config to help with debugging configuration
 issues. It displays the types of the fields that can't be directly printed.
+
+### Func FromContext
+```go
+func FromContext(ctx context.Context) (*aws.Config, bool)
+```
+FromContext returns the aws.Config stored in the context.
 
 ### Func Load
 ```go
@@ -37,6 +49,12 @@ func LoadUsingFlags(ctx context.Context, cl AWSFlags) (aws.Config, error)
 ```
 LoadUsingFlags calls awsconfig.Load with options controlled by the the
 specified flags.
+
+### Func LogAWSConfig
+```go
+func LogAWSConfig(ctx context.Context, cfg *aws.Config) error
+```
+LogAWSConfig logs the aws.Config to the slog.Logger in the context.
 
 ### Func NewKeyInfo
 ```go

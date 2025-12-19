@@ -90,9 +90,15 @@ func ListRegular(dir string) ([]string, error)
 ListRegular returns the lexicographically ordered regular files that lie
 beneath dir.
 
+### Func LogBuildInfo
+```go
+func LogBuildInfo(logger *slog.Logger)
+```
+LogBuildInfo logs build information using the provided logger.
+
 ### Func VCSInfo
 ```go
-func VCSInfo() (revision string, lastCommit time.Time, dirty, ok bool)
+func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool)
 ```
 VCSInfo extracts version control system information from the build info
 if available. The returned values are the revision, last commit time,
@@ -119,15 +125,21 @@ func (l *Logger) Close() error
 ```
 
 
+```go
+func (l *Logger) LogBuildInfo()
+```
+LogBuildInfo logs build information using the logger.
+
+
 
 
 ### Type LoggingConfig
 ```go
 type LoggingConfig struct {
-	Level      int
-	File       string
-	Format     string
-	SourceCode bool
+	Level      int    `yaml:"level" cmd:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
+	File       string `yaml:"file" cmd:"log file path. If not specified logs are written to stderr."`
+	Format     string `yaml:"format" cmd:"log format: text or json"`
+	SourceCode bool   `yaml:"source_code" cmd:"include source code file and line number in logs"`
 }
 ```
 LoggingConfig represents a logging configuration.

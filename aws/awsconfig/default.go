@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
+	"cloudeng.io/logging/ctxlog"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -89,4 +91,36 @@ func DebugPrintConfig(ctx context.Context, out io.Writer, cfg aws.Config) error 
 	fmt.Fprintf(out, "logger: %T\n", cfg.Logger)
 	fmt.Fprintf(out, "client log mode: %v\n", cfg.ClientLogMode)
 	return nil
+}
+
+// LogAWSConfig logs the aws.Config to the slog.Logger in the context.
+func LogAWSConfig(ctx context.Context, cfg *aws.Config) {
+	attrs := []slog.Attr{
+		slog.String("aws_region", cfg.Region),
+	}
+	if cp := cfg.Credentials; cp != nil {
+		attrs = append(attrs,
+			slog.String("aws_credentials_provider", fmt.Sprintf("%T", cfg.Credentials)))
+		creds, err := cp.Retrieve(ctx)
+		if err == nil {
+			creds.SecretAccessKey = ""
+			creds.SessionToken = ""
+			attrs = append(attrs, slog.Any("aws_credentials", creds))
+		}
+	}
+	logger := ctxlog.Logger(ctx)
+	logger.LogAttrs(ctx, slog.LevelInfo, "aws configuration loaded", attrs...)
+}
+
+type contextKey struct{}
+
+// ContextWith returns a new context with the aws.Config stored in it.
+func ContextWith(ctx context.Context, cfg *aws.Config) context.Context {
+	return context.WithValue(ctx, contextKey{}, cfg)
+}
+
+// FromContext returns the aws.Config stored in the context.
+func FromContext(ctx context.Context) (*aws.Config, bool) {
+	cfg, ok := ctx.Value(contextKey{}).(*aws.Config)
+	return cfg, ok
 }

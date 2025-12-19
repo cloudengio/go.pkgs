@@ -8,6 +8,8 @@ cloudeng.io/errors v0.0.13-0.20251104042927-f7e1e5e3ef21 h1:IowiyuoI7e4o2Cb5tOWI
 cloudeng.io/errors v0.0.13-0.20251104042927-f7e1e5e3ef21/go.mod h1:+IAMDlCNxHDxlWE9vjkPxED0d7Wzt7Nl3REebuCO4m8=
 cloudeng.io/file v0.0.0-20251210231338-d661eee74313 h1:h1u0FHa1M74Ze1J3wivjJQfe+JHnEydVwP69pIZVznI=
 cloudeng.io/file v0.0.0-20251210231338-d661eee74313/go.mod h1:dgJl/nOmxeGrrC3mZRfPHFtKyDjN5cbZ2OUQBCyCHt4=
+cloudeng.io/logging v0.0.0-20251219025116-3ab353c35b05 h1:YK7zzj3WJacobp7uGy5C0zo2gSOkRG04aXoygyxkVdw=
+cloudeng.io/logging v0.0.0-20251219025116-3ab353c35b05/go.mod h1:D0TUs3Aiwa1c7xI/TE7JITYnICck34r6DR5twakJjIs=
 cloudeng.io/net v0.0.0-20251120181725-ae601f12dbbf h1:PRu2ULQ2Gdnarww+CSUKBpuHzBnknBRq1rhYbYdSsHY=
 cloudeng.io/net v0.0.0-20251120181725-ae601f12dbbf/go.mod h1:axC62OVIKFR0L0uamfK8txQDIJbQNqSHOwxxfLYFRRs=
 cloudeng.io/os v0.0.0-20251210231338-d661eee74313 h1:YnwkCOCysdPifhz3d8YcRR82oAGE2zAVfx/ZEJHwlOE=

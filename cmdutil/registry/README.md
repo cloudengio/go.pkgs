@@ -23,7 +23,7 @@ ErrUnknownKey is returned when an unregistered key is encountered.
 func ConvertAnyArgs[T any](args ...any) []T
 ```
 ConvertAnyArgs converts a variadic list of any to a slice of the specified
-type T.
+type T, ignoring any arguments that are not of type T.
 
 ### Func Scheme
 ```go
