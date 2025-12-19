@@ -10,8 +10,10 @@ import (
 	"cloudeng.io/cmdutil/registry"
 )
 
+type Option func(o *int)
+
 func TestGetOpts(t *testing.T) {
-	opts := registry.GetOpts[int](1, "a", 2, "b", 3.0)
+	opts := registry.ConvertAnyArgs[int](1, "a", 2, "b", 3.0)
 	if got, want := len(opts), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -22,7 +24,7 @@ func TestGetOpts(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	strs := registry.GetOpts[string](1, "a", 2, "b", 3.0)
+	strs := registry.ConvertAnyArgs[string](1, "a", 2, "b", 3.0)
 	if got, want := len(strs), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -33,15 +35,22 @@ func TestGetOpts(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	floats := registry.GetOpts[float64](1, "a", 2, "b", 3.0)
-	if got, want := len(floats), 1; got != want {
+	ofn := func(o *int) { *o = 2 }
+	options := registry.ConvertAnyArgs[Option](1, "a", 2, Option(ofn), 3.0)
+	if got, want := len(options), 1; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := floats[0], 3.0; got != want {
+	if got := options[0]; got == nil {
+		t.Errorf("got %v, want %v", got, nil)
+	}
+	var a, b int
+	options[0](&a)
+	options[0](&b)
+	if got, want := a, b; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	none := registry.GetOpts[bool](1, "a", 2, "b", 3.0)
+	none := registry.ConvertAnyArgs[bool](1, "a", 2, "b", 3.0)
 	if got, want := len(none), 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
