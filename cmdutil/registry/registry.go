@@ -63,7 +63,7 @@ func (r *T[RT]) Clone() *T[RT] {
 var ErrUnknownKey = errors.New("unregistered key")
 
 // ConvertAnyArgs converts a variadic list of any to a slice
-// of the specified type T.
+// of the specified type T, ignoring any arguments that are not of type T.
 func ConvertAnyArgs[T any](args ...any) []T {
 	result := make([]T, 0, len(args))
 	for _, arg := range args {
