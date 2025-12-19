@@ -38,6 +38,33 @@ func ParseConfigString(spec string, cfg any) error {
 // from embed.FS, instead of the local filesystem if an instance of fs.ReadFileFS
 // is stored in the context.
 func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
+	return parseConfigFile(ctx, filename, cfg, ParseConfig)
+}
+
+// ParseConfigStrict is like ParseConfig but reports an error if there
+// are unknown fields in the yaml specification.
+func ParseConfigStrict(spec []byte, cfg any) error {
+	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
+		return ErrorWithSource(spec, err)
+	}
+	return nil
+}
+
+// ParseConfigStringStrict is like ParseConfigString but reports an error if there
+// are unknown fields in the yaml specification.
+func ParseConfigStringStrict(spec string, cfg any) error {
+	return ParseConfigStrict([]byte(spec), cfg)
+}
+
+// ParseConfigFileStrict is like ParseConfigFile but reports an error if there
+// are unknown fields in the yaml specification.
+func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error {
+	return parseConfigFile(ctx, filename, cfg, ParseConfigStrict)
+}
+
+func parseConfigFile(ctx context.Context, filename string, cfg any, parser func([]byte, any) error) error {
 	if len(filename) == 0 {
 		return fmt.Errorf("no config file specified")
 	}
@@ -45,7 +72,7 @@ func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
 	if err != nil {
 		return err
 	}
-	if err := ParseConfig(spec, cfg); err != nil {
+	if err := parser(spec, cfg); err != nil {
 		return fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 	return nil

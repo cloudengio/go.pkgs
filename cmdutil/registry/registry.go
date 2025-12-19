@@ -87,3 +87,15 @@ func Scheme(path string) string {
 	}
 	return "file"
 }
+
+// GetOpts extracts the specified type T from the variadic list of args.
+// If an arg is not of type T then it is ignored.
+func GetOpts[T any](args ...any) []T {
+	var opts []T
+	for _, arg := range args {
+		if v, ok := arg.(T); ok {
+			opts = append(opts, v)
+		}
+	}
+	return opts
+}

@@ -56,3 +56,23 @@ list:
 		}
 	}
 }
+
+func TestStrictParse(t *testing.T) {
+	var ts testStruct
+	input := `
+field: [1,2]
+unknown: [3,4]
+`
+	err := cmdyaml.ParseConfigString(input, &ts)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	err = cmdyaml.ParseConfigStringStrict(input, &ts)
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	if got, want := err.Error(), `line 3: "unknown: [3,4]": field unknown not found in type cmdyaml_test.testStruct`; !strings.Contains(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
