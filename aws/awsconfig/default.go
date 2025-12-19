@@ -115,13 +115,13 @@ func LogAWSConfig(ctx context.Context, cfg *aws.Config) error {
 
 type contextKey struct{}
 
-// ContextWithAWSConfig returns a new context with the aws.Config stored in it.
-func ContextWithAWSConfig(ctx context.Context, cfg *aws.Config) context.Context {
+// ContextWith returns a new context with the aws.Config stored in it.
+func ContextWith(ctx context.Context, cfg *aws.Config) context.Context {
 	return context.WithValue(ctx, contextKey{}, cfg)
 }
 
-// AWSConfigFromContext returns the aws.Config stored in the context.
-func AWSConfigFromContext(ctx context.Context) (*aws.Config, bool) {
+// FromContext returns the aws.Config stored in the context.
+func FromContext(ctx context.Context) (*aws.Config, bool) {
 	cfg, ok := ctx.Value(contextKey{}).(*aws.Config)
 	return cfg, ok
 }

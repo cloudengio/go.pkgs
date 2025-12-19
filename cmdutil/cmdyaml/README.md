@@ -34,11 +34,32 @@ configuration file to be read from storage system, including from embed.FS,
 instead of the local filesystem if an instance of fs.ReadFileFS is stored in
 the context.
 
+### Func ParseConfigFileStrict
+```go
+func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error
+```
+ParseConfigFileStrict is like ParseConfigFile but reports an error if there
+are unknown fields in the yaml specification.
+
+### Func ParseConfigStrict
+```go
+func ParseConfigStrict(spec []byte, cfg any) error
+```
+ParseConfigStrict is like ParseConfig but reports an error if there are
+unknown fields in the yaml specification.
+
 ### Func ParseConfigString
 ```go
 func ParseConfigString(spec string, cfg any) error
 ```
 ParseConfigString is like ParseConfig but for a string.
+
+### Func ParseConfigStringStrict
+```go
+func ParseConfigStringStrict(spec string, cfg any) error
+```
+ParseConfigStringStrict is like ParseConfigString but reports an error if
+there are unknown fields in the yaml specification.
 
 
 
