@@ -49,7 +49,7 @@ formatters:
     rules:
       - linter: revive
         path: 'cmdutil/*'
-        text: 'var-naming: avoid package names that conflict with Go standard library package names'
+        text: 'var-naming: avoid package names that conflict with Go standard library package names (revive)'
       - linter: revive
         path: 'errors/*'
-        text: 'var-naming: avoid package names that conflict with Go standard library package names'
+        text: 'var-naming: avoid package names that conflict with Go standard library package names (revive)'
