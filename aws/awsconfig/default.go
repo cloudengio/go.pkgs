@@ -94,7 +94,7 @@ func DebugPrintConfig(ctx context.Context, out io.Writer, cfg aws.Config) error 
 }
 
 // LogAWSConfig logs the aws.Config to the slog.Logger in the context.
-func LogAWSConfig(ctx context.Context, cfg *aws.Config) error {
+func LogAWSConfig(ctx context.Context, cfg *aws.Config) {
 	attrs := []slog.Attr{
 		slog.String("aws_region", cfg.Region),
 	}
@@ -110,7 +110,6 @@ func LogAWSConfig(ctx context.Context, cfg *aws.Config) error {
 	}
 	logger := ctxlog.Logger(ctx)
 	logger.LogAttrs(ctx, slog.LevelInfo, "aws configuration loaded", attrs...)
-	return nil
 }
 
 type contextKey struct{}
