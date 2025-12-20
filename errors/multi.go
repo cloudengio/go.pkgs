@@ -242,15 +242,13 @@ func (m *M) Clone() *M {
 	return c
 }
 
-type errJSON struct {
-	Errors []any `json:"errors"`
-}
-
-func recurse(errs []error) []any {
-	je := make([]any, len(errs))
-	for i, err := range errs {
+func (m *M) marshalRecurse() []any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	je := make([]any, len(m.errs))
+	for i, err := range m.errs {
 		if me, ok := err.(*M); ok {
-			je[i] = recurse(me.errs)
+			je[i] = me.marshalRecurse()
 			continue
 		}
 		je[i] = err.Error()
@@ -259,12 +257,12 @@ func recurse(errs []error) []any {
 }
 
 func (m *M) MarshalJSON() ([]byte, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	e := errJSON{
-		Errors: make([]any, len(m.errs)),
+	type errJSON struct {
+		Errors []any `json:"errors"`
 	}
-	e.Errors = recurse(m.errs)
+	e := errJSON{
+		Errors: m.marshalRecurse(),
+	}
 	return json.Marshal(e)
 }
 
