@@ -5,6 +5,7 @@
 package errors //nolint:revive
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -239,6 +240,30 @@ func (m *M) Clone() *M {
 	c.errs = make([]error, len(m.errs))
 	copy(c.errs, m.errs)
 	return c
+}
+
+func (m *M) marshalRecurse() []any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	je := make([]any, len(m.errs))
+	for i, err := range m.errs {
+		if me, ok := err.(*M); ok {
+			je[i] = me.marshalRecurse()
+			continue
+		}
+		je[i] = err.Error()
+	}
+	return je
+}
+
+func (m *M) MarshalJSON() ([]byte, error) {
+	type errJSON struct {
+		Errors []any `json:"errors"`
+	}
+	e := errJSON{
+		Errors: m.marshalRecurse(),
+	}
+	return json.Marshal(e)
 }
 
 // Squash returns an error that contains at most one instance of targets

@@ -6,6 +6,7 @@ package errors_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -470,4 +471,30 @@ func ExampleM() {
 	//   file already exists
 	//   --- 2 of 2 errors
 	//   invalid argument
+}
+
+func TestJSON(t *testing.T) {
+	m1 := &errors.M{}
+	m1.Append(fmt.Errorf("error 1"))
+	m1.Append(fmt.Errorf("error 2"))
+
+	m2 := &errors.M{}
+	m2.Append(fmt.Errorf("error 3"))
+	m2.Append(m1)
+	m2.Append(fmt.Errorf("error 4"))
+
+	m3 := &errors.M{}
+	m3.Append(m2)
+	m3.Append(fmt.Errorf("error 5"))
+
+	buf, err := json.Marshal(m3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(buf)
+	want := `{"errors":[["error 3",["error 1","error 2"],"error 4"],"error 5"]}`
+	if got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
