@@ -14,7 +14,7 @@ import (
 // LoggingFlags represents common logging related command line flags.
 type LoggingFlags struct {
 	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
-	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr.'"`
+	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr, if set to - logs are written to stdout'"`
 	Format     string `subcmd:"log-format,json,'log format: text or json'"`
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }
@@ -62,15 +62,18 @@ type Logger struct {
 }
 
 func (l *Logger) Close() error {
-	if l.f != nil {
-		return l.f.Close()
-	}
-	return nil
+	return l.f.Close()
 }
 
 // LogBuildInfo logs build information using the logger.
 func (l *Logger) LogBuildInfo() {
 	LogBuildInfo(l.Logger)
+}
+
+type noopCloser struct{}
+
+func (noopCloser) Close() error {
+	return nil
 }
 
 // NewLogger creates a new logger based on the configuration.
@@ -81,8 +84,15 @@ func (c LoggingConfig) NewLogger() (*Logger, error) {
 	}
 	var handler slog.Handler
 	var closer io.Closer
-	out := os.Stderr
-	if c.File != "" {
+	var out io.Writer
+	switch c.File {
+	case "":
+		out = os.Stderr
+		closer = &noopCloser{}
+	case "-":
+		out = os.Stdout
+		closer = &noopCloser{}
+	default:
 		f, err := os.OpenFile(c.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file %q: %w", c.File, err)

@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -162,5 +163,46 @@ func TestLogBuildInfo(t *testing.T) {
 		if level, ok := entry["level"].(string); !ok || level != expectedLevel {
 			t.Errorf("entry %d: unexpected level: got %v, want %q", i, entry["level"], expectedLevel)
 		}
+	}
+}
+
+func TestLoggingToStdout(t *testing.T) {
+	// Keep a backup of the real stdout
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	// Restore functionality
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	config := cmdutil.LoggingConfig{
+		Level:  2,
+		File:   "-",
+		Format: "text",
+	}
+
+	logger, err := config.NewLogger()
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	logger.Info("testing stdout logging")
+
+	// Close the writer so we can read from the reader
+	w.Close()
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+
+	output := buf.String()
+	if !bytes.Contains(buf.Bytes(), []byte("testing stdout logging")) {
+		t.Errorf("stdout logging failed, got: %q", output)
 	}
 }
