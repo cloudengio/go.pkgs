@@ -62,15 +62,18 @@ type Logger struct {
 }
 
 func (l *Logger) Close() error {
-	if l.f != nil {
-		return l.f.Close()
-	}
-	return nil
+	return l.f.Close()
 }
 
 // LogBuildInfo logs build information using the logger.
 func (l *Logger) LogBuildInfo() {
 	LogBuildInfo(l.Logger)
+}
+
+type noopCloser struct{}
+
+func (noopCloser) Close() error {
+	return nil
 }
 
 // NewLogger creates a new logger based on the configuration.
@@ -85,8 +88,10 @@ func (c LoggingConfig) NewLogger() (*Logger, error) {
 	switch c.File {
 	case "":
 		out = os.Stderr
+		closer = &noopCloser{}
 	case "-":
 		out = os.Stdout
+		closer = &noopCloser{}
 	default:
 		f, err := os.OpenFile(c.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {

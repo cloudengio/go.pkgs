@@ -178,7 +178,6 @@ func TestLoggingToStdout(t *testing.T) {
 	// Restore functionality
 	defer func() {
 		os.Stdout = oldStdout
-		w.Close()
 	}()
 
 	config := cmdutil.LoggingConfig{
@@ -194,9 +193,9 @@ func TestLoggingToStdout(t *testing.T) {
 
 	logger.Info("testing stdout logging")
 
-    // Close the writer so we can read from the reader
+	// Close the writer so we can read from the reader
 	w.Close()
-	
+
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
 		t.Fatal(err)
