@@ -164,7 +164,7 @@ NewLoggerMust is like NewLogger but panics on error.
 ```go
 type LoggingFlags struct {
 	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
-	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr.'"`
+	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr, if set to - logs are written to stdout'"`
 	Format     string `subcmd:"log-format,json,'log format: text or json'"`
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }
