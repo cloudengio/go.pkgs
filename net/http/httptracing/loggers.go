@@ -58,8 +58,8 @@ var jsonOrTextFormatter = tracingLogger[any]{
 		var anyVal any
 		if err := json.Unmarshal(v, &anyVal); err != nil {
 			return struct {
-				Text string `json:"invalid_json"`
-			}{Text: string(v)}
+				TextBody string `json:"text_body"`
+			}{TextBody: string(v)}
 		}
 		return anyVal
 	},
@@ -92,7 +92,7 @@ func JSONOrTextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http
 
 // JSONOrTextResponseBodyLogger logs the response body as a JSON object
 // if it is valid JSON, otherwise as text. Use the JSON or Text variants
-// wherever possible as they are more efficient
+// wherever possible as they are more efficient.
 // The supplied logger is pre-configured with relevant request information.
 func JSONOrTextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 	jsonOrTextFormatter.responseBody(logger, nil, nil, data)
@@ -100,7 +100,7 @@ func JSONOrTextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *htt
 
 // JSONOrTextHandlerResponseLogger logs the response body from an http.Handler
 // as a JSON object if it is valid JSON, otherwise as text. Use the JSON or
-// Text variants wherever possible as they are more efficient
+// Text variants wherever possible as they are more efficient.
 func JSONOrTextHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte) {
 	jsonOrTextFormatter.handlerResponseBody(logger, nil, nil, statusCode, data)
 }
