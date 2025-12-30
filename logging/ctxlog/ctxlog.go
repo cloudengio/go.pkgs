@@ -53,6 +53,9 @@ func WithAttributes(ctx context.Context, attributes ...any) context.Context {
 // LogDepth logs a message at the specified level with the caller
 // information adjusted by the provided depth.
 func LogDepth(ctx context.Context, logger *slog.Logger, level slog.Level, depth int, msg string, args ...any) {
+	if !logger.Enabled(ctx, level) {
+		return
+	}
 	var pcs [1]uintptr
 	runtime.Callers(depth, pcs[:]) // skip wrapper frames to get to the caller
 	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
@@ -60,42 +63,24 @@ func LogDepth(ctx context.Context, logger *slog.Logger, level slog.Level, depth 
 	_ = logger.Handler().Handle(ctx, r)
 }
 
-func isEnabled(ctx context.Context, level slog.Level) *slog.Logger {
-	logger := Logger(ctx)
-	if !logger.Enabled(ctx, level) {
-		return nil
-	}
-	return logger
-}
-
 func Info(ctx context.Context, msg string, args ...any) {
-	if logger := isEnabled(ctx, slog.LevelInfo); logger != nil {
-		LogDepth(ctx, logger, slog.LevelInfo, 3, msg, args...)
-	}
+	LogDepth(ctx, Logger(ctx), slog.LevelInfo, 3, msg, args...)
 }
 
 func Error(ctx context.Context, msg string, args ...any) {
-	if logger := isEnabled(ctx, slog.LevelError); logger != nil {
-		LogDepth(ctx, logger, slog.LevelError, 3, msg, args...)
-	}
+	LogDepth(ctx, Logger(ctx), slog.LevelError, 3, msg, args...)
 }
 
 func Debug(ctx context.Context, msg string, args ...any) {
-	if logger := isEnabled(ctx, slog.LevelDebug); logger != nil {
-		LogDepth(ctx, logger, slog.LevelDebug, 3, msg, args...)
-	}
+	LogDepth(ctx, Logger(ctx), slog.LevelDebug, 3, msg, args...)
 }
 
 func Warn(ctx context.Context, msg string, args ...any) {
-	if logger := isEnabled(ctx, slog.LevelWarn); logger != nil {
-		LogDepth(ctx, logger, slog.LevelWarn, 3, msg, args...)
-	}
+	LogDepth(ctx, Logger(ctx), slog.LevelWarn, 3, msg, args...)
 }
 
 func Log(ctx context.Context, level slog.Level, msg string, args ...any) {
-	if logger := isEnabled(ctx, level); logger != nil {
-		LogDepth(ctx, logger, level, 3, msg, args...)
-	}
+	LogDepth(ctx, Logger(ctx), level, 3, msg, args...)
 }
 
 type customLogWriter struct {
