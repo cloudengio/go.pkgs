@@ -27,7 +27,7 @@ type TracingHandler struct {
 // handlerOptions specifies the options for a TracingHandler.
 type handlerOptions struct {
 	logger       *slog.Logger
-	requestBody  TraceRequestBody
+	requestBody  TraceHandlerRequestBody
 	responseBody TraceHandlerResponseBody
 }
 
@@ -47,12 +47,24 @@ func WithHandlerLogger(logger *slog.Logger) TraceHandlerOption {
 // The supplied callback will be called with the request body. The request
 // body is read and replaced with a new reader, so the next handler in the
 // chain can still read it.
-func WithHandlerRequestBody(bl TraceRequestBody) TraceHandlerOption {
+func WithHandlerRequestBody(bl TraceHandlerRequestBody) TraceHandlerOption {
 	return func(o *handlerOptions) {
 		o.requestBody = bl
 	}
 }
 
+// TraceHandlerRequestBody is called to log request body data. The supplied data
+// is a copy of the original request body.
+type TraceHandlerRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+
+func WithHandlerRequestBodyJSON(bl TraceHandlerRequestBody) TraceHandlerOption {
+	return func(o *handlerOptions) {
+		o.requestBody = bl
+	}
+}
+
+// TraceHandlerResponseBody is called to log response body data. The supplied data
+// is a copy of the original response body.
 type TraceHandlerResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, hdr http.Header, statusCode int, data []byte)
 
 // WithHandlerResponseBody sets a callback to be invoked to log the response body.
@@ -96,14 +108,14 @@ func (th *TracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Body = body
 		th.opts.requestBody(r.Context(), logger, r, data)
 	} else {
-		logger.Info("http request")
+		logger.Info("HTTP Request")
 	}
 	trw := &tracingResponseWriter{wr: w}
 	th.next.ServeHTTP(trw, r)
 	if th.opts.responseBody != nil {
 		th.opts.responseBody(r.Context(), logger, r, w.Header(), trw.statusCode, trw.Data())
 	} else {
-		logger.Info("http request completed", "status", trw.statusCode, "response_size", len(trw.Data()))
+		logger.Info("HTTP Request Completed", "status", trw.statusCode, "response_size", len(trw.Data()))
 	}
 }
 
