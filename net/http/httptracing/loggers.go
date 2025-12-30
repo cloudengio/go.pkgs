@@ -33,6 +33,15 @@ func (tl tracingLogger[T]) responseBody(logger *slog.Logger, _ *http.Request, _ 
 		tl.formatter(data))
 }
 
+func (tl tracingLogger[T]) handlerRequestBody(logger *slog.Logger, _ *http.Request, data []byte) {
+	if len(data) == 0 {
+		logger.Info("HTTP Handler Request Body", "direction", "request", "body", "(empty)")
+		return
+	}
+	logger.Info("HTTP Handler Request Body", "direction", "request", "body",
+		tl.formatter(data))
+}
+
 func (tl tracingLogger[T]) handlerResponseBody(logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte) {
 	if len(data) == 0 {
 		logger.Info("HTTP Handler Response Body", "direction", "response", "status_code", statusCode, "body", "(empty)")
@@ -77,6 +86,12 @@ func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Requ
 	jsonFormatter.responseBody(logger, nil, nil, data)
 }
 
+// JSONHandlerRequestBodyLogger logs the request body as a JSON object.
+// The supplied logger is pre-configured with relevant request information.
+func JSONHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+	jsonFormatter.handlerRequestBody(logger, nil, data)
+}
+
 // JSONHandlerResponseLogger logs the response body from an http.Handler as a JSON object.
 func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte) {
 	jsonFormatter.handlerResponseBody(logger, nil, nil, statusCode, data)
@@ -115,6 +130,12 @@ func TextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Reque
 // The supplied logger is pre-configured with relevant request information.
 func TextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 	textFormatter.responseBody(logger, nil, nil, data)
+}
+
+// TextHandlerRequestBodyLogger logs the request body as a text object.
+// The supplied logger is pre-configured with relevant request information.
+func TextHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+	textFormatter.handlerRequestBody(logger, nil, data)
 }
 
 // TextHandlerResponseLogger logs the response body from an http.Handler as a text object.

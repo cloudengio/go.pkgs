@@ -55,11 +55,11 @@ func TestTracingHandler(t *testing.T) {
 	}
 
 	logLines := logBuf.String()
-	if !strings.Contains(logLines, "http request started") {
-		t.Errorf("missing 'http request started' in log: %v", logLines)
+	if strings.Contains(logLines, `"msg":"HTTP Request"`) {
+		t.Errorf("unexpected 'HTTP Request' in log: %v", logLines)
 	}
-	if !strings.Contains(logLines, "http request completed") {
-		t.Errorf("missing 'http request completed' in log: %v", logLines)
+	if !strings.Contains(logLines, `"msg":"HTTP Request Completed"`) {
+		t.Errorf("missing 'HTTP Request Completed' in log: %v", logLines)
 	}
 }
 
@@ -117,8 +117,8 @@ func TestTracingRoundTripper(t *testing.T) {
 	}
 
 	logs := logBuf.String()
-	if !strings.Contains(logs, "HTTP Request trace") {
-		t.Errorf("missing 'HTTP Request trace' in log: %v", logs)
+	if strings.Contains(logs, `"msg":"HTTP Request trace"`) {
+		t.Errorf("unexpected 'HTTP Request trace' in log: %v", logs)
 	}
 
 	// Check for a hook from each category.

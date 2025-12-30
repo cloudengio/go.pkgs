@@ -276,6 +276,7 @@ func (t *TracingRoundTripper) logAndReplaceBody(ctx context.Context, logger *slo
 			t.opts.requestBody(ctx, logger, req, data)
 			return body
 		}
+		logger.Info("HTTP Request trace")
 		return req.Body
 	}
 	if t.opts.responseBody != nil {
@@ -302,8 +303,6 @@ func (t *TracingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	trace := t.newClientTrace(logger)
 	ctx := req.Context()
 	req = req.WithContext(httptrace.WithClientTrace(ctx, trace))
-
-	logger.Info("HTTP Request trace")
 
 	req.Body = t.logAndReplaceBody(ctx, logger, req, nil)
 
