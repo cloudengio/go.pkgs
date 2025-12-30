@@ -170,3 +170,48 @@ func TestSource(t *testing.T) {
 	_, _, line, _ = runtime.Caller(0)
 	check(line+1, func() { logLogger.Print("log logger") })
 }
+
+func TestLogDepth(t *testing.T) {
+	ctx := context.Background()
+	buf := &bytes.Buffer{}
+	ctx = ctxlog.NewJSONLogger(ctx, buf, &slog.HandlerOptions{
+		AddSource: true,
+	})
+
+	_, file, _, _ := runtime.Caller(0)
+
+	// depth 2 should report the caller of LogDepth
+	_, _, line, _ := runtime.Caller(0)
+	ctxlog.LogDepth(ctx, ctxlog.Logger(ctx), slog.LevelInfo, 2, "depth 2")
+
+	var logged struct {
+		Source struct {
+			File string `json:"file"`
+			Line int    `json:"line"`
+		} `json:"source"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &logged); err != nil {
+		t.Fatal(err)
+	}
+	if logged.Source.File != file {
+		t.Errorf("got %v, want %v", logged.Source.File, file)
+	}
+	if logged.Source.Line != line+1 {
+		t.Errorf("got %v, want %v", logged.Source.Line, line+1)
+	}
+
+	// depth 3 should report the caller of the function calling LogDepth
+	buf.Reset()
+	wrapper := func() {
+		ctxlog.LogDepth(ctx, ctxlog.Logger(ctx), slog.LevelInfo, 3, "depth 3")
+	}
+	_, _, line, _ = runtime.Caller(0)
+	wrapper()
+
+	if err := json.Unmarshal(buf.Bytes(), &logged); err != nil {
+		t.Fatal(err)
+	}
+	if logged.Source.Line != line+1 {
+		t.Errorf("got %v, want %v", logged.Source.Line, line+1)
+	}
+}
