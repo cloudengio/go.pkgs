@@ -28,6 +28,13 @@ func Info(ctx context.Context, msg string, args ...any)
 func Log(ctx context.Context, level slog.Level, msg string, args ...any)
 ```
 
+### Func LogDepth
+```go
+func LogDepth(ctx context.Context, logger *slog.Logger, level slog.Level, depth int, msg string, args ...any)
+```
+LogDepth logs a message at the specified level with the caller information
+adjusted by the provided depth.
+
 ### Func Logger
 ```go
 func Logger(ctx context.Context) *slog.Logger
