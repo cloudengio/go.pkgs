@@ -50,8 +50,9 @@ func WithAttributes(ctx context.Context, attributes ...any) context.Context {
 	return WithLogger(ctx, l.(*slog.Logger).With(attributes...))
 }
 
-func llog(ctx context.Context, level slog.Level, depth int, msg string, args ...any) {
-	logger := Logger(ctx)
+// LogDepth logs a message at the specified level with the caller
+// information adjusted by the provided depth.
+func LogDepth(ctx context.Context, logger *slog.Logger, level slog.Level, depth int, msg string, args ...any) {
 	if !logger.Enabled(ctx, level) {
 		return
 	}
@@ -63,23 +64,23 @@ func llog(ctx context.Context, level slog.Level, depth int, msg string, args ...
 }
 
 func Info(ctx context.Context, msg string, args ...any) {
-	llog(ctx, slog.LevelInfo, 3, msg, args...)
+	LogDepth(ctx, Logger(ctx), slog.LevelInfo, 3, msg, args...)
 }
 
 func Error(ctx context.Context, msg string, args ...any) {
-	llog(ctx, slog.LevelError, 3, msg, args...)
+	LogDepth(ctx, Logger(ctx), slog.LevelError, 3, msg, args...)
 }
 
 func Debug(ctx context.Context, msg string, args ...any) {
-	llog(ctx, slog.LevelDebug, 3, msg, args...)
+	LogDepth(ctx, Logger(ctx), slog.LevelDebug, 3, msg, args...)
 }
 
 func Warn(ctx context.Context, msg string, args ...any) {
-	llog(ctx, slog.LevelWarn, 3, msg, args...)
+	LogDepth(ctx, Logger(ctx), slog.LevelWarn, 3, msg, args...)
 }
 
 func Log(ctx context.Context, level slog.Level, msg string, args ...any) {
-	llog(ctx, level, 3, msg, args...)
+	LogDepth(ctx, Logger(ctx), level, 3, msg, args...)
 }
 
 type customLogWriter struct {
@@ -91,7 +92,7 @@ func (c customLogWriter) Write(p []byte) (n int, err error) {
 	// The standard logger outputs messages followed by a newline,
 	// so trim it and log as an error.
 	msg := strings.TrimSuffix(string(p), "\n")
-	llog(c.ctx, c.level, 5, msg)
+	LogDepth(c.ctx, Logger(c.ctx), c.level, 5, msg)
 	return len(p), nil
 }
 
