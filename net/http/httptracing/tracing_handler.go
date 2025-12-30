@@ -90,11 +90,13 @@ func (th *TracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"from", r.RemoteAddr,
 	)
 	logger := th.logger.With(grp)
-	logger.Info("http request started")
+
 	if th.opts.requestBody != nil {
 		data, body := copyAndReplace(logger, r.Body)
 		r.Body = body
 		th.opts.requestBody(r.Context(), logger, r, data)
+	} else {
+		logger.Info("http request")
 	}
 	trw := &tracingResponseWriter{wr: w}
 	th.next.ServeHTTP(trw, r)
