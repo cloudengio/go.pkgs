@@ -41,22 +41,27 @@ func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
 // ParseAddrDefaultPort parses an IP address string. If the address string
 // already contains a port, it is parsed and returned. Otherwise, the
 // supplied default port is used to construct and parse an address with
-// that port.
-func ParseAddrDefaultPort(addr, port string) (netip.AddrPort, error) {
-	ap, err := netip.ParseAddrPort(addr)
+// that port. If the address contains only a port an address of "0.0.0.0"
+// is used.
+func ParseAddrDefaultPort(addr, defaultPort string) (netip.AddrPort, error) {
+	host, port, err := net.SplitHostPort(addr)
 	if err == nil {
-		return ap, nil
+		// Addr is of the form :<port> with no address.
+		if host == "" {
+			host = "0.0.0.0"
+		}
+		return netip.ParseAddrPort(net.JoinHostPort(host, port))
 	}
 	if len(addr) == 0 {
 		addr = "0.0.0.0"
 	}
-	switch port {
+	switch defaultPort {
 	case "http":
-		port = "80"
+		defaultPort = "80"
 	case "https":
-		port = "443"
+		defaultPort = "443"
 	}
-	return netip.ParseAddrPort(net.JoinHostPort(addr, port))
+	return netip.ParseAddrPort(net.JoinHostPort(addr, defaultPort))
 }
 
 // HTTPServerAddr returns the address of an HTTP server based on the

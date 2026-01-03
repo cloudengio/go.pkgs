@@ -21,11 +21,12 @@ port will be used.
 
 ### Func ParseAddrDefaultPort
 ```go
-func ParseAddrDefaultPort(addr, port string) (netip.AddrPort, error)
+func ParseAddrDefaultPort(addr, defaultPort string) (netip.AddrPort, error)
 ```
 ParseAddrDefaultPort parses an IP address string. If the address string
 already contains a port, it is parsed and returned. Otherwise, the supplied
 default port is used to construct and parse an address with that port.
+If the address contains only a port an address of "0.0.0.0" is used.
 
 ### Func ParseAddrIgnoringPort
 ```go

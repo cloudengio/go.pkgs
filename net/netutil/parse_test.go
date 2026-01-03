@@ -67,6 +67,9 @@ func TestParseAddrDefaultPort(t *testing.T) {
 		{"192.168.1.1", "https", "192.168.1.1:443"},
 		{"::1", "80", "[::1]:80"},
 		{"", "80", "0.0.0.0:80"},
+		{"", "http", "0.0.0.0:80"},
+		{"", "https", "0.0.0.0:443"},
+		{":80", "443", "0.0.0.0:80"},
 	} {
 		addr, err := netutil.ParseAddrDefaultPort(tc.input, tc.defaultPort)
 		if err != nil {
