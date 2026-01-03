@@ -81,3 +81,18 @@ func HTTPServerAddr(addrPort netip.AddrPort) string {
 		return net.JoinHostPort(addr, strconv.Itoa(int(addrPort.Port())))
 	}
 }
+
+// Resolve replaces the address component of addr with the first IP address
+// resolved for the host component of addr. If the host component of addr
+// cannot be resolved, addr is returned unchanged.
+func Resolve(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		return addr
+	}
+	return net.JoinHostPort(ips[0].String(), port)
+}

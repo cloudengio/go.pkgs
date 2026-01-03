@@ -93,4 +93,27 @@ func TestHTTPServerAddr(t *testing.T) {
 			t.Errorf("HTTPServerAddr(%v): got %v, want %v", tc.addr, got, tc.want)
 		}
 	}
+
+}
+
+func TestResolve(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{"localhost:80", []string{"127.0.0.1:80", "[::1]:80"}},
+		{"127.0.0.1:80", []string{"127.0.0.1:80"}},
+	} {
+		got := netutil.Resolve(tc.input)
+		found := false
+		for _, w := range tc.want {
+			if got == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Resolve(%q): got %v, want one of %v", tc.input, got, tc.want)
+		}
+	}
 }
