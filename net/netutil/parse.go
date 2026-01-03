@@ -94,5 +94,8 @@ func Resolve(addr string) string {
 	if err != nil || len(ips) == 0 {
 		return addr
 	}
+	if len(port) == 0 {
+		return ips[0].String()
+	}
 	return net.JoinHostPort(ips[0].String(), port)
 }

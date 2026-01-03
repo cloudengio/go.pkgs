@@ -6,6 +6,7 @@ package netutil_test
 
 import (
 	"net/netip"
+	"slices"
 	"testing"
 
 	"cloudeng.io/net/netutil"
@@ -102,16 +103,18 @@ func TestResolve(t *testing.T) {
 		want  []string
 	}{
 		{"localhost:80", []string{"127.0.0.1:80", "[::1]:80"}},
+		{"localhost", []string{"127.0.0.1", "::1"}},
+		{"localhost:http", []string{"127.0.0.1:http", "[::1]:http"}},
+		{"localhost:https", []string{"127.0.0.1:https", "[::1]:https"}},
 		{"127.0.0.1:80", []string{"127.0.0.1:80"}},
+		{"[::1]:80", []string{"[::1]:80"}},
+		{"host.invalid:80", []string{"host.invalid:80"}},
+		{"host.invalid", []string{"host.invalid"}},
+		{"", []string{""}},
+		{":80", []string{":80"}},
 	} {
 		got := netutil.Resolve(tc.input)
-		found := false
-		for _, w := range tc.want {
-			if got == w {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(tc.want, got)
 		if !found {
 			t.Errorf("Resolve(%q): got %v, want one of %v", tc.input, got, tc.want)
 		}
