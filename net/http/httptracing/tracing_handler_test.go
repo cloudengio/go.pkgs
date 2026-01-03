@@ -195,7 +195,7 @@ func TestTracingHandlerResponseBody(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if !strings.Contains(buf.String(), "HTTP Request") {
+	if !strings.Contains(buf.String(), `"msg":"HTTP Request"`) {
 		t.Errorf("log output does not contain 'HTTP Request':\n%s", buf.String())
 	}
 }

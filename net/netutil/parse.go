@@ -14,25 +14,17 @@ import (
 )
 
 // ParseAddrOrPrefix parses an IP address or prefix string and returns the
-// address. If the string is a prefix, it will be parsed as a prefix and the
-// address will be returned.
+// address. If the string is an IP address without a prefix, it is treated
+// as a full-bit prefix (/32 for IPv4, /128 for IPv6).
 func ParseAddrOrPrefix(addr string) (netip.Addr, error) {
-	if !strings.Contains(addr, "/") {
-		ip, err := netip.ParseAddr(addr)
+	if strings.Contains(addr, "/") {
+		p, err := netip.ParsePrefix(addr)
 		if err != nil {
 			return netip.Addr{}, err
 		}
-		if ip.Is4() {
-			addr += "/32"
-		} else {
-			addr += "/128"
-		}
+		return p.Addr(), nil
 	}
-	p, err := netip.ParsePrefix(addr)
-	if err != nil {
-		return netip.Addr{}, err
-	}
-	return p.Addr(), nil
+	return netip.ParseAddr(addr)
 }
 
 // ParseAddrIgnoringPort parses an IP address string and returns the address.
@@ -46,11 +38,10 @@ func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
 	return netip.ParseAddr(addr)
 }
 
-// ParseAddrDefaultPort parses an IP address with an optional port, if
-// the port is specified the address it will be parsed as an address
-// with a port and the address will be returned, otherwise the default
-// port will be appended to the address and the address will be parsed
-// as an address with that default port.
+// ParseAddrDefaultPort parses an IP address string. If the address string
+// already contains a port, it is parsed and returned. Otherwise, the
+// supplied default port is used to construct and parse an address with
+// that port.
 func ParseAddrDefaultPort(addr, port string) (netip.AddrPort, error) {
 	ap, err := netip.ParseAddrPort(addr)
 	if err == nil {
@@ -73,7 +64,7 @@ func ParseAddrDefaultPort(addr, port string) (netip.AddrPort, error) {
 // If the address is unspecified then it will be replaced with an empty string.
 // If the port is 80 then "http" will be appended to the address, if the
 // port is 443 then "https" will be appended to the address, otherwise the
-// address will be returned as is.
+// numeric port will be used.
 func HTTPServerAddr(addrPort netip.AddrPort) string {
 	var addr string
 	if addrPort.Addr().IsUnspecified() {
