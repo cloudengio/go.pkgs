@@ -43,6 +43,14 @@ ParseAddrOrPrefix parses an IP address or prefix string and returns the
 address. If the string is an IP address without a prefix, it is treated as a
 full-bit prefix (/32 for IPv4, /128 for IPv6).
 
+### Func Resolve
+```go
+func Resolve(addr string) string
+```
+Resolve replaces the address component of addr with the first IP address
+resolved for the host component of addr. If the host component of addr
+cannot be resolved, addr is returned unchanged.
+
 
 
 

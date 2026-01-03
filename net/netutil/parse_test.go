@@ -6,6 +6,7 @@ package netutil_test
 
 import (
 	"net/netip"
+	"slices"
 	"testing"
 
 	"cloudeng.io/net/netutil"
@@ -91,6 +92,31 @@ func TestHTTPServerAddr(t *testing.T) {
 	} {
 		if got := netutil.HTTPServerAddr(tc.addr); got != tc.want {
 			t.Errorf("HTTPServerAddr(%v): got %v, want %v", tc.addr, got, tc.want)
+		}
+	}
+
+}
+
+func TestResolve(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{"localhost:80", []string{"127.0.0.1:80", "[::1]:80"}},
+		{"localhost", []string{"127.0.0.1", "::1"}},
+		{"localhost:http", []string{"127.0.0.1:http", "[::1]:http"}},
+		{"localhost:https", []string{"127.0.0.1:https", "[::1]:https"}},
+		{"127.0.0.1:80", []string{"127.0.0.1:80"}},
+		{"[::1]:80", []string{"[::1]:80"}},
+		{"host.invalid:80", []string{"host.invalid:80"}},
+		{"host.invalid", []string{"host.invalid"}},
+		{"", []string{""}},
+		{":80", []string{":80"}},
+	} {
+		got := netutil.Resolve(tc.input)
+		found := slices.Contains(tc.want, got)
+		if !found {
+			t.Errorf("Resolve(%q): got %v, want one of %v", tc.input, got, tc.want)
 		}
 	}
 }
