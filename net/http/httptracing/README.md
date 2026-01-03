@@ -6,6 +6,13 @@ import cloudeng.io/net/http/httptracing
 
 
 ## Functions
+### Func JSONHandlerRequestBodyLogger
+```go
+func JSONHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+```
+JSONHandlerRequestBodyLogger logs the request body as a JSON object.
+The supplied logger is pre-configured with relevant request information.
+
 ### Func JSONHandlerResponseLogger
 ```go
 func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte)
@@ -53,6 +60,13 @@ func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Requ
 JSONResponseBodyLogger logs the response body as a JSON object. The supplied
 logger is pre-configured with relevant request information.
 
+### Func TextHandlerRequestBodyLogger
+```go
+func TextHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+```
+TextHandlerRequestBodyLogger logs the request body as a text object.
+The supplied logger is pre-configured with relevant request information.
+
 ### Func TextHandlerResponseLogger
 ```go
 func TextHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ http.Header, statusCode int, data []byte)
@@ -94,12 +108,17 @@ If not specified a default logger that discards all output is used.
 
 
 ```go
-func WithHandlerRequestBody(bl TraceRequestBody) TraceHandlerOption
+func WithHandlerRequestBody(bl TraceHandlerRequestBody) TraceHandlerOption
 ```
 WithHandlerRequestBody sets a callback to be invoked to log the request
 body. The supplied callback will be called with the request body. The
 request body is read and replaced with a new reader, so the next handler in
 the chain can still read it.
+
+
+```go
+func WithHandlerRequestBodyJSON(bl TraceHandlerRequestBody) TraceHandlerOption
+```
 
 
 ```go
@@ -111,10 +130,20 @@ body. The supplied callback will be called with the response body.
 
 
 
+### Type TraceHandlerRequestBody
+```go
+type TraceHandlerRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+```
+TraceHandlerRequestBody is called to log request body data. The supplied
+data is a copy of the original request body.
+
+
 ### Type TraceHandlerResponseBody
 ```go
 type TraceHandlerResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, hdr http.Header, statusCode int, data []byte)
 ```
+TraceHandlerResponseBody is called to log response body data. The supplied
+data is a copy of the original response body.
 
 
 ### Type TraceHooks

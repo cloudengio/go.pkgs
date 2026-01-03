@@ -35,6 +35,50 @@ file.largefile.Reader.
 
 
 ## Types
+### Type Downloader
+```go
+type Downloader struct {
+	// contains filtered or unexported fields
+}
+```
+Downloader facilitates downloading files using largefile with configurable
+options.
+
+### Functions
+
+```go
+func NewDownloader() *Downloader
+```
+NewDownloader creates a new Downloader instance.
+
+
+
+### Methods
+
+```go
+func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, error)
+```
+DownloadFile downloads the file from the specified URL to the destination
+path using a temporary file for the download process that is renamed to the
+destination path on successful completion. The partial download file has a
+suffix of ".partialdownload".
+
+
+```go
+func (d *Downloader) WithDownloaderOptions(opts ...largefile.DownloadOption) *Downloader
+```
+WithDownloaderOptions appends the specified largefile.DownloadOptions to the
+Downloader.
+
+
+```go
+func (d *Downloader) WithReaderOptions(opts ...LargeFileOption) *Downloader
+```
+WithReaderOptions appends the specified LargeFileOptions to the Downloader.
+
+
+
+
 ### Type FS
 ```go
 type FS struct {
