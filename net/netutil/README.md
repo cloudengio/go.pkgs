@@ -16,17 +16,16 @@ HTTPServerAddr returns the address of an HTTP server based on the address
 and port of the server in a form to be used with http.Server.Addr.
 If the address is unspecified then it will be replaced with an empty string.
 If the port is 80 then "http" will be appended to the address, if the port
-is 443 then "https" will be appended to the address, otherwise the address
-will be returned as is.
+is 443 then "https" will be appended to the address, otherwise the numeric
+port will be used.
 
 ### Func ParseAddrDefaultPort
 ```go
 func ParseAddrDefaultPort(addr, port string) (netip.AddrPort, error)
 ```
-ParseAddrDefaultPort parses an IP address with an optional port, if the port
-is specified the address it will be parsed as an address with a port and the
-address will be returned, otherwise the default port will be appended to the
-address and the address will be parsed as an address with that default port.
+ParseAddrDefaultPort parses an IP address string. If the address string
+already contains a port, it is parsed and returned. Otherwise, the supplied
+default port is used to construct and parse an address with that port.
 
 ### Func ParseAddrIgnoringPort
 ```go
@@ -41,8 +40,8 @@ with a port and the address will be returned, ignoring the port.
 func ParseAddrOrPrefix(addr string) (netip.Addr, error)
 ```
 ParseAddrOrPrefix parses an IP address or prefix string and returns the
-address. If the string is a prefix, it will be parsed as a prefix and the
-address will be returned.
+address. If the string is an IP address without a prefix, it is treated as a
+full-bit prefix (/32 for IPv4, /128 for IPv6).
 
 
 
