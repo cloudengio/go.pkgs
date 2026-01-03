@@ -41,19 +41,19 @@ func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
 // ParseAddrDefaultPort parses an IP address string. If the address string
 // already contains a port, it is parsed and returned. Otherwise, the
 // supplied default port is used to construct and parse an address with
-// that port. If the address contains only a port an address of "0.0.0.0"
-// is used.
+// that port. If the address contains only a port an address of "::" is
+// used.
 func ParseAddrDefaultPort(addr, defaultPort string) (netip.AddrPort, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err == nil {
 		// Addr is of the form :<port> with no address.
 		if host == "" {
-			host = "0.0.0.0"
+			host = "::"
 		}
 		return netip.ParseAddrPort(net.JoinHostPort(host, port))
 	}
 	if len(addr) == 0 {
-		addr = "0.0.0.0"
+		addr = "::"
 	}
 	switch defaultPort {
 	case "http":
