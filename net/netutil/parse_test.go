@@ -1,0 +1,96 @@
+// Copyright 2025 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+package netutil_test
+
+import (
+	"net/netip"
+	"testing"
+
+	"cloudeng.io/net/netutil"
+)
+
+func TestParseAddrOrPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{"192.168.1.1", "192.168.1.1"},
+		{"192.168.1.1/32", "192.168.1.1"},
+		{"192.168.1.1/24", "192.168.1.1"},
+		{"::1", "::1"},
+		{"::1/128", "::1"},
+	} {
+		addr, err := netutil.ParseAddrOrPrefix(tc.input)
+		if err != nil {
+			t.Errorf("ParseAddrOrPrefix(%q): %v", tc.input, err)
+			continue
+		}
+		if got := addr.String(); got != tc.want {
+			t.Errorf("ParseAddrOrPrefix(%q): got %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestParseAddrIgnoringPort(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{"192.168.1.1", "192.168.1.1"},
+		{"192.168.1.1:80", "192.168.1.1"},
+		{"[::1]:80", "::1"},
+		{"::1", "::1"},
+	} {
+		addr, err := netutil.ParseAddrIgnoringPort(tc.input)
+		if err != nil {
+			t.Errorf("ParseAddrIgnoringPort(%q): %v", tc.input, err)
+			continue
+		}
+		if got := addr.String(); got != tc.want {
+			t.Errorf("ParseAddrIgnoringPort(%q): got %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestParseAddrDefaultPort(t *testing.T) {
+	for _, tc := range []struct {
+		input       string
+		defaultPort string
+		want        string
+	}{
+		{"192.168.1.1:80", "443", "192.168.1.1:80"},
+		{"192.168.1.1", "80", "192.168.1.1:80"},
+		{"192.168.1.1", "http", "192.168.1.1:80"},
+		{"192.168.1.1", "https", "192.168.1.1:443"},
+		{"::1", "80", "[::1]:80"},
+		{"", "80", "0.0.0.0:80"},
+	} {
+		addr, err := netutil.ParseAddrDefaultPort(tc.input, tc.defaultPort)
+		if err != nil {
+			t.Errorf("ParseAddrDefaultPort(%q, %q): %v", tc.input, tc.defaultPort, err)
+			continue
+		}
+		if got := addr.String(); got != tc.want {
+			t.Errorf("ParseAddrDefaultPort(%q, %q): got %v, want %v", tc.input, tc.defaultPort, got, tc.want)
+		}
+	}
+}
+
+func TestHTTPServerAddr(t *testing.T) {
+	for _, tc := range []struct {
+		addr netip.AddrPort
+		want string
+	}{
+		{netip.AddrPortFrom(netip.MustParseAddr("0.0.0.0"), 80), ":http"},
+		{netip.AddrPortFrom(netip.MustParseAddr("0.0.0.0"), 443), ":https"},
+		{netip.AddrPortFrom(netip.MustParseAddr("1.1.1.1"), 80), "1.1.1.1:http"},
+		{netip.AddrPortFrom(netip.MustParseAddr("1.1.1.1"), 443), "1.1.1.1:https"},
+		{netip.AddrPortFrom(netip.MustParseAddr("1.1.1.1"), 8080), "1.1.1.1:8080"},
+	} {
+		if got := netutil.HTTPServerAddr(tc.addr); got != tc.want {
+			t.Errorf("HTTPServerAddr(%v): got %v, want %v", tc.addr, got, tc.want)
+		}
+	}
+}
