@@ -24,11 +24,11 @@ func ParseAddrOrPrefix(addr string) (netip.Prefix, error) {
 		if err != nil {
 			return netip.Prefix{}, err
 		}
+		bits := 128
 		if ip.Is4() {
-			addr += "/32"
-		} else {
-			addr += "/128"
+			bits = 32
 		}
+		return netip.PrefixFrom(ip, bits), nil
 	}
 	return netip.ParsePrefix(addr)
 }

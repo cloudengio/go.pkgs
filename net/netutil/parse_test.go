@@ -115,7 +115,7 @@ func TestResolveInFunctions(t *testing.T) {
 				}
 				return addr.String(), nil
 			},
-			want: []string{"127.0.0.1", "::1"},
+			want: []string{"127.0.0.1", "::1/128"},
 		},
 		{
 			name: "ParseAddrIgnoringPort",
