@@ -6,12 +6,12 @@ import cloudeng.io/net/http/httptracing
 
 
 ## Functions
-### Func JSONHandlerRequestBodyLogger
+### Func JSONHandlerRequestLogger
 ```go
-func JSONHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func JSONHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-JSONHandlerRequestBodyLogger logs the request body as a JSON object.
-The supplied logger is pre-configured with relevant request information.
+JSONHandlerRequestLogger logs the request body as a JSON object. The
+supplied logger is pre-configured with relevant request information.
 
 ### Func JSONHandlerResponseLogger
 ```go
@@ -28,44 +28,44 @@ JSONOrTextHandlerResponseLogger logs the response body from an http.Handler
 as a JSON object if it is valid JSON, otherwise as text. Use the JSON or
 Text variants wherever possible as they are more efficient.
 
-### Func JSONOrTextRequestBodyLogger
+### Func JSONOrTextRequestLogger
 ```go
-func JSONOrTextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func JSONOrTextRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-JSONOrTextRequestBodyLogger logs the request body as a JSON object if it
+JSONOrTextRequestLogger logs the request body as a JSON object if it is
+valid JSON, otherwise as text. Use the JSON or Text variants wherever
+possible as they are more efficient. The supplied logger is pre-configured
+with relevant request information.
+
+### Func JSONOrTextResponseLogger
+```go
+func JSONOrTextResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+```
+JSONOrTextResponseLogger logs the response body as a JSON object if it
 is valid JSON, otherwise as text. Use the JSON or Text variants wherever
 possible as they are more efficient. The supplied logger is pre-configured
 with relevant request information.
 
-### Func JSONOrTextResponseBodyLogger
+### Func JSONRequestLogger
 ```go
-func JSONOrTextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+func JSONRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-JSONOrTextResponseBodyLogger logs the response body as a JSON object if it
-is valid JSON, otherwise as text. Use the JSON or Text variants wherever
-possible as they are more efficient. The supplied logger is pre-configured
-with relevant request information.
-
-### Func JSONRequestBodyLogger
-```go
-func JSONRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
-```
-JSONRequestBodyLogger logs the request body as a JSON object. The supplied
+JSONRequestLogger logs the request body as a JSON object. The supplied
 logger is pre-configured with relevant request information.
 
-### Func JSONResponseBodyLogger
+### Func JSONResponseLogger
 ```go
-func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+func JSONResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
 ```
-JSONResponseBodyLogger logs the response body as a JSON object. The supplied
+JSONResponseLogger logs the response body as a JSON object. The supplied
 logger is pre-configured with relevant request information.
 
-### Func TextHandlerRequestBodyLogger
+### Func TextHandlerRequestLogger
 ```go
-func TextHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func TextHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-TextHandlerRequestBodyLogger logs the request body as a text object.
-The supplied logger is pre-configured with relevant request information.
+TextHandlerRequestLogger logs the request body as a text object. The
+supplied logger is pre-configured with relevant request information.
 
 ### Func TextHandlerResponseLogger
 ```go
@@ -74,18 +74,18 @@ func TextHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.R
 TextHandlerResponseLogger logs the response body from an http.Handler as a
 text object.
 
-### Func TextRequestBodyLogger
+### Func TextRequestLogger
 ```go
-func TextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func TextRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-TextRequestBodyLogger logs the request body as a text object. The supplied
+TextRequestLogger logs the request body as a text object. The supplied
 logger is pre-configured with relevant request information.
 
-### Func TextResponseBodyLogger
+### Func TextResponseLogger
 ```go
-func TextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+func TextResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
 ```
-TextResponseBodyLogger logs the response body as a text object. The supplied
+TextResponseLogger logs the response body as a text object. The supplied
 logger is pre-configured with relevant request information.
 
 
