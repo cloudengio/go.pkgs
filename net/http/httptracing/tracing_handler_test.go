@@ -166,8 +166,8 @@ func TestTracingHandlerResponseBody(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(buf, nil))
 
 	handler := NewTracingHandler(nextHandler,
-		WithHandlerLogger(logger),
-		WithHandlerResponseBody(responseBodyCB))
+		WithTraceHandlerLogger(logger),
+		WithTraceHandlerResponse(responseBodyCB))
 
 	req := httptest.NewRequest("GET", "http://example.com/foo", nil)
 	w := httptest.NewRecorder()

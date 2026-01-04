@@ -110,30 +110,30 @@ NewTracingHandler.
 ### Functions
 
 ```go
-func WithHandlerLogger(logger *slog.Logger) TraceHandlerOption
+func WithHandlerRequestBodyJSON(bl TraceHandlerRequest) TraceHandlerOption
 ```
-WithHandlerLogger provides a logger to be used by the TracingHandler.
+
+
+```go
+func WithTraceHandlerLogger(logger *slog.Logger) TraceHandlerOption
+```
+WithTraceHandlerLogger provides a logger to be used by the TracingHandler.
 If not specified a default logger that discards all output is used.
 
 
 ```go
-func WithHandlerRequestBody(bl TraceHandlerRequest) TraceHandlerOption
+func WithTraceHandlerRequest(bl TraceHandlerRequest) TraceHandlerOption
 ```
-WithHandlerRequestBody sets a callback to be invoked to log the request
+WithTraceHandlerRequest sets a callback to be invoked to log the request
 body. The supplied callback will be called with the request body. The
 request body is read and replaced with a new reader, so the next handler in
 the chain can still read it.
 
 
 ```go
-func WithHandlerRequestBodyJSON(bl TraceHandlerRequest) TraceHandlerOption
+func WithTraceHandlerResponse(bl TraceHandlerResponse) TraceHandlerOption
 ```
-
-
-```go
-func WithHandlerResponseBody(bl TraceHandlerResponse) TraceHandlerOption
-```
-WithHandlerResponseBody sets a callback to be invoked to log the response
+WithTraceHandlerResponse sets a callback to be invoked to log the response
 body. The supplied callback will be called with the response body.
 
 
@@ -200,20 +200,20 @@ TraceAll TraceHooks = TraceConnections | TraceDNS | TraceConnect | TraceTLS | Tr
 
 
 
-### Type TraceRequestBody
+### Type TraceRequest
 ```go
-type TraceRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+type TraceRequest func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
 ```
-TraceRequestBody is called to log request body data. The supplied data is a
-copy of the original request body.
+TraceRequest is called to log request body data. The supplied data is a copy
+of the original request body.
 
 
-### Type TraceResponseBody
+### Type TraceResponse
 ```go
-type TraceResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
+type TraceResponse func(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
 ```
-TraceResponseBody is called to log response body data. The supplied data is
-a copy of the original response body.
+TraceResponse is called to log response body data. The supplied data is a
+copy of the original response body.
 
 
 ### Type TraceRoundtripOption
@@ -231,21 +231,21 @@ WithTraceHooks sets the trace hooks to be enabled.
 
 
 ```go
-func WithTraceRequestBody(bl TraceRequestBody) TraceRoundtripOption
+func WithTraceLogger(logger *slog.Logger) TraceRoundtripOption
 ```
-WithTraceRequestBody sets a callback to log request body data.
+WithTraceLogger sets the logger to be used for tracing output.
 
 
 ```go
-func WithTraceResponseBody(bl TraceResponseBody) TraceRoundtripOption
+func WithTraceRequest(bl TraceRequest) TraceRoundtripOption
 ```
-WithTraceResponseBody sets a callback to log response body data.
+WithTraceRequest sets a callback to log request body data.
 
 
 ```go
-func WithTracingLogger(logger *slog.Logger) TraceRoundtripOption
+func WithTraceResponse(bl TraceResponse) TraceRoundtripOption
 ```
-WithTracingLogger sets the logger to be used for tracing output.
+WithTraceResponse sets a callback to log response body data.
 
 
 
