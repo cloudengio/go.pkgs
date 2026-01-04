@@ -100,6 +100,32 @@ func TestHTTPServerAddr(t *testing.T) {
 
 }
 
+func TestResolveInFunctions(t *testing.T) {
+	// Test ParseAddrOrPrefix with Resolve
+	addr, err := netutil.ParseAddrOrPrefix("localhost")
+	if err != nil {
+		t.Errorf("ParseAddrOrPrefix(\"localhost\"): %v", err)
+	} else if got := addr.String(); got != "127.0.0.1" && got != "::1" {
+		t.Errorf("ParseAddrOrPrefix(\"localhost\"): got %v, want 127.0.0.1 or ::1", got)
+	}
+
+	// Test ParseAddrIgnoringPort with Resolve
+	addr, err = netutil.ParseAddrIgnoringPort("localhost:80")
+	if err != nil {
+		t.Errorf("ParseAddrIgnoringPort(\"localhost:80\"): %v", err)
+	} else if got := addr.String(); got != "127.0.0.1" && got != "::1" {
+		t.Errorf("ParseAddrIgnoringPort(\"localhost:80\"): got %v, want 127.0.0.1 or ::1", got)
+	}
+
+	// Test ParseAddrDefaultPort with Resolve
+	ap, err := netutil.ParseAddrDefaultPort("localhost", "80")
+	if err != nil {
+		t.Errorf("ParseAddrDefaultPort(\"localhost\", \"80\"): %v", err)
+	} else if got := ap.String(); got != "127.0.0.1:80" && got != "[::1]:80" {
+		t.Errorf("ParseAddrDefaultPort(\"localhost\", \"80\"): got %v, want 127.0.0.1:80 or [::1]:80", got)
+	}
+}
+
 func TestResolve(t *testing.T) {
 	for _, tc := range []struct {
 		input string
