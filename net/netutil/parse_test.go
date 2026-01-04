@@ -101,28 +101,56 @@ func TestHTTPServerAddr(t *testing.T) {
 }
 
 func TestResolveInFunctions(t *testing.T) {
-	// Test ParseAddrOrPrefix with Resolve
-	addr, err := netutil.ParseAddrOrPrefix("localhost")
-	if err != nil {
-		t.Errorf("ParseAddrOrPrefix(\"localhost\"): %v", err)
-	} else if got := addr.String(); got != "127.0.0.1" && got != "::1" {
-		t.Errorf("ParseAddrOrPrefix(\"localhost\"): got %v, want 127.0.0.1 or ::1", got)
+	testCases := []struct {
+		name string
+		run  func() (string, error)
+		want []string
+	}{
+		{
+			name: "ParseAddrOrPrefix",
+			run: func() (string, error) {
+				addr, err := netutil.ParseAddrOrPrefix("localhost")
+				if err != nil {
+					return "", err
+				}
+				return addr.String(), nil
+			},
+			want: []string{"127.0.0.1", "::1"},
+		},
+		{
+			name: "ParseAddrIgnoringPort",
+			run: func() (string, error) {
+				addr, err := netutil.ParseAddrIgnoringPort("localhost:80")
+				if err != nil {
+					return "", err
+				}
+				return addr.String(), nil
+			},
+			want: []string{"127.0.0.1", "::1"},
+		},
+		{
+			name: "ParseAddrDefaultPort",
+			run: func() (string, error) {
+				ap, err := netutil.ParseAddrDefaultPort("localhost", "80")
+				if err != nil {
+					return "", err
+				}
+				return ap.String(), nil
+			},
+			want: []string{"127.0.0.1:80", "[::1]:80"},
+		},
 	}
 
-	// Test ParseAddrIgnoringPort with Resolve
-	addr, err = netutil.ParseAddrIgnoringPort("localhost:80")
-	if err != nil {
-		t.Errorf("ParseAddrIgnoringPort(\"localhost:80\"): %v", err)
-	} else if got := addr.String(); got != "127.0.0.1" && got != "::1" {
-		t.Errorf("ParseAddrIgnoringPort(\"localhost:80\"): got %v, want 127.0.0.1 or ::1", got)
-	}
-
-	// Test ParseAddrDefaultPort with Resolve
-	ap, err := netutil.ParseAddrDefaultPort("localhost", "80")
-	if err != nil {
-		t.Errorf("ParseAddrDefaultPort(\"localhost\", \"80\"): %v", err)
-	} else if got := ap.String(); got != "127.0.0.1:80" && got != "[::1]:80" {
-		t.Errorf("ParseAddrDefaultPort(\"localhost\", \"80\"): got %v, want 127.0.0.1:80 or [::1]:80", got)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.run()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !slices.Contains(tc.want, got) {
+				t.Errorf("got %q, want one of %v", got, tc.want)
+			}
+		})
 	}
 }
 
