@@ -100,6 +100,60 @@ func TestHTTPServerAddr(t *testing.T) {
 
 }
 
+func TestResolveInFunctions(t *testing.T) {
+	testCases := []struct {
+		name string
+		run  func() (string, error)
+		want []string
+	}{
+		{
+			name: "ParseAddrOrPrefix",
+			run: func() (string, error) {
+				addr, err := netutil.ParseAddrOrPrefix("localhost")
+				if err != nil {
+					return "", err
+				}
+				return addr.String(), nil
+			},
+			want: []string{"127.0.0.1", "::1"},
+		},
+		{
+			name: "ParseAddrIgnoringPort",
+			run: func() (string, error) {
+				addr, err := netutil.ParseAddrIgnoringPort("localhost:80")
+				if err != nil {
+					return "", err
+				}
+				return addr.String(), nil
+			},
+			want: []string{"127.0.0.1", "::1"},
+		},
+		{
+			name: "ParseAddrDefaultPort",
+			run: func() (string, error) {
+				ap, err := netutil.ParseAddrDefaultPort("localhost", "80")
+				if err != nil {
+					return "", err
+				}
+				return ap.String(), nil
+			},
+			want: []string{"127.0.0.1:80", "[::1]:80"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.run()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !slices.Contains(tc.want, got) {
+				t.Errorf("got %q, want one of %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestResolve(t *testing.T) {
 	for _, tc := range []struct {
 		input string

@@ -16,7 +16,9 @@ import (
 // ParseAddrOrPrefix parses an IP address or prefix string and returns the
 // address. If the string is an IP address without a prefix, it is treated
 // as a full-bit prefix (/32 for IPv4, /128 for IPv6).
+// ParseAddrOrPrefix calls Resolve to resolve the address before parsing it.
 func ParseAddrOrPrefix(addr string) (netip.Addr, error) {
+	addr = Resolve(addr)
 	if strings.Contains(addr, "/") {
 		p, err := netip.ParsePrefix(addr)
 		if err != nil {
@@ -30,7 +32,9 @@ func ParseAddrOrPrefix(addr string) (netip.Addr, error) {
 // ParseAddrIgnoringPort parses an IP address string and returns the address.
 // If the string is an address with a port, it will be parsed as an address
 // with a port and the address will be returned, ignoring the port.
+// ParseAddrIgnoringPort calls Resolve to resolve the address before parsing it.
 func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
+	addr = Resolve(addr)
 	ap, err := netip.ParseAddrPort(addr)
 	if err == nil {
 		return ap.Addr(), nil
@@ -42,8 +46,10 @@ func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
 // already contains a port, it is parsed and returned. Otherwise, the
 // supplied default port is used to construct and parse an address with
 // that port. If the address contains only a port an address of "::" is
-// used.
+// used. ParseAddrDefaultPort calls Resolve to resolve the address before
+// parsing it.
 func ParseAddrDefaultPort(addr, defaultPort string) (netip.AddrPort, error) {
+	addr = Resolve(addr)
 	host, port, err := net.SplitHostPort(addr)
 	if err == nil {
 		// Addr is of the form :<port> with no address.
