@@ -110,11 +110,6 @@ NewTracingHandler.
 ### Functions
 
 ```go
-func WithHandlerRequestBodyJSON(bl TraceHandlerRequest) TraceHandlerOption
-```
-
-
-```go
 func WithTraceHandlerLogger(logger *slog.Logger) TraceHandlerOption
 ```
 WithTraceHandlerLogger provides a logger to be used by the TracingHandler.
