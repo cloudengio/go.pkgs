@@ -6,12 +6,12 @@ import cloudeng.io/net/http/httptracing
 
 
 ## Functions
-### Func JSONHandlerRequestBodyLogger
+### Func JSONHandlerRequestLogger
 ```go
-func JSONHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func JSONHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-JSONHandlerRequestBodyLogger logs the request body as a JSON object.
-The supplied logger is pre-configured with relevant request information.
+JSONHandlerRequestLogger logs the request body as a JSON object. The
+supplied logger is pre-configured with relevant request information.
 
 ### Func JSONHandlerResponseLogger
 ```go
@@ -19,6 +19,15 @@ func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.R
 ```
 JSONHandlerResponseLogger logs the response body from an http.Handler as a
 JSON object.
+
+### Func JSONOrTextHandlerRequestLogger
+```go
+func JSONOrTextHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+```
+JSONOrTextHandlerRequestLogger logs the request body as a JSON object if it
+is valid JSON, otherwise as text. Use the JSON or Text variants wherever
+possible as they are more efficient. The supplied logger is pre-configured
+with relevant request information.
 
 ### Func JSONOrTextHandlerResponseLogger
 ```go
@@ -28,44 +37,44 @@ JSONOrTextHandlerResponseLogger logs the response body from an http.Handler
 as a JSON object if it is valid JSON, otherwise as text. Use the JSON or
 Text variants wherever possible as they are more efficient.
 
-### Func JSONOrTextRequestBodyLogger
+### Func JSONOrTextRequestLogger
 ```go
-func JSONOrTextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func JSONOrTextRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-JSONOrTextRequestBodyLogger logs the request body as a JSON object if it
+JSONOrTextRequestLogger logs the request body as a JSON object if it is
+valid JSON, otherwise as text. Use the JSON or Text variants wherever
+possible as they are more efficient. The supplied logger is pre-configured
+with relevant request information.
+
+### Func JSONOrTextResponseLogger
+```go
+func JSONOrTextResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+```
+JSONOrTextResponseLogger logs the response body as a JSON object if it
 is valid JSON, otherwise as text. Use the JSON or Text variants wherever
 possible as they are more efficient. The supplied logger is pre-configured
 with relevant request information.
 
-### Func JSONOrTextResponseBodyLogger
+### Func JSONRequestLogger
 ```go
-func JSONOrTextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+func JSONRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-JSONOrTextResponseBodyLogger logs the response body as a JSON object if it
-is valid JSON, otherwise as text. Use the JSON or Text variants wherever
-possible as they are more efficient. The supplied logger is pre-configured
-with relevant request information.
-
-### Func JSONRequestBodyLogger
-```go
-func JSONRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
-```
-JSONRequestBodyLogger logs the request body as a JSON object. The supplied
+JSONRequestLogger logs the request body as a JSON object. The supplied
 logger is pre-configured with relevant request information.
 
-### Func JSONResponseBodyLogger
+### Func JSONResponseLogger
 ```go
-func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+func JSONResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
 ```
-JSONResponseBodyLogger logs the response body as a JSON object. The supplied
+JSONResponseLogger logs the response body as a JSON object. The supplied
 logger is pre-configured with relevant request information.
 
-### Func TextHandlerRequestBodyLogger
+### Func TextHandlerRequestLogger
 ```go
-func TextHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func TextHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-TextHandlerRequestBodyLogger logs the request body as a text object.
-The supplied logger is pre-configured with relevant request information.
+TextHandlerRequestLogger logs the request body as a text object. The
+supplied logger is pre-configured with relevant request information.
 
 ### Func TextHandlerResponseLogger
 ```go
@@ -74,18 +83,18 @@ func TextHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.R
 TextHandlerResponseLogger logs the response body from an http.Handler as a
 text object.
 
-### Func TextRequestBodyLogger
+### Func TextRequestLogger
 ```go
-func TextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
+func TextRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte)
 ```
-TextRequestBodyLogger logs the request body as a text object. The supplied
+TextRequestLogger logs the request body as a text object. The supplied
 logger is pre-configured with relevant request information.
 
-### Func TextResponseBodyLogger
+### Func TextResponseLogger
 ```go
-func TextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
+func TextResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte)
 ```
-TextResponseBodyLogger logs the response body as a text object. The supplied
+TextResponseLogger logs the response body as a text object. The supplied
 logger is pre-configured with relevant request information.
 
 
@@ -101,49 +110,44 @@ NewTracingHandler.
 ### Functions
 
 ```go
-func WithHandlerLogger(logger *slog.Logger) TraceHandlerOption
+func WithTraceHandlerLogger(logger *slog.Logger) TraceHandlerOption
 ```
-WithHandlerLogger provides a logger to be used by the TracingHandler.
+WithTraceHandlerLogger provides a logger to be used by the TracingHandler.
 If not specified a default logger that discards all output is used.
 
 
 ```go
-func WithHandlerRequestBody(bl TraceHandlerRequestBody) TraceHandlerOption
+func WithTraceHandlerRequest(bl TraceHandlerRequest) TraceHandlerOption
 ```
-WithHandlerRequestBody sets a callback to be invoked to log the request
+WithTraceHandlerRequest sets a callback to be invoked to log the request
 body. The supplied callback will be called with the request body. The
 request body is read and replaced with a new reader, so the next handler in
 the chain can still read it.
 
 
 ```go
-func WithHandlerRequestBodyJSON(bl TraceHandlerRequestBody) TraceHandlerOption
+func WithTraceHandlerResponse(bl TraceHandlerResponse) TraceHandlerOption
 ```
-
-
-```go
-func WithHandlerResponseBody(bl TraceHandlerResponseBody) TraceHandlerOption
-```
-WithHandlerResponseBody sets a callback to be invoked to log the response
+WithTraceHandlerResponse sets a callback to be invoked to log the response
 body. The supplied callback will be called with the response body.
 
 
 
 
-### Type TraceHandlerRequestBody
+### Type TraceHandlerRequest
 ```go
-type TraceHandlerRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+type TraceHandlerRequest func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
 ```
-TraceHandlerRequestBody is called to log request body data. The supplied
-data is a copy of the original request body.
+TraceHandlerRequest is called to log request body data. The supplied data is
+a copy of the original request body.
 
 
-### Type TraceHandlerResponseBody
+### Type TraceHandlerResponse
 ```go
-type TraceHandlerResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, hdr http.Header, statusCode int, data []byte)
+type TraceHandlerResponse func(ctx context.Context, logger *slog.Logger, req *http.Request, hdr http.Header, statusCode int, data []byte)
 ```
-TraceHandlerResponseBody is called to log response body data. The supplied
-data is a copy of the original response body.
+TraceHandlerResponse is called to log response body data. The supplied data
+is a copy of the original response body.
 
 
 ### Type TraceHooks
@@ -191,20 +195,20 @@ TraceAll TraceHooks = TraceConnections | TraceDNS | TraceConnect | TraceTLS | Tr
 
 
 
-### Type TraceRequestBody
+### Type TraceRequest
 ```go
-type TraceRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+type TraceRequest func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
 ```
-TraceRequestBody is called to log request body data. The supplied data is a
-copy of the original request body.
+TraceRequest is called to log request body data. The supplied data is a copy
+of the original request body.
 
 
-### Type TraceResponseBody
+### Type TraceResponse
 ```go
-type TraceResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
+type TraceResponse func(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
 ```
-TraceResponseBody is called to log response body data. The supplied data is
-a copy of the original response body.
+TraceResponse is called to log response body data. The supplied data is a
+copy of the original response body.
 
 
 ### Type TraceRoundtripOption
@@ -222,21 +226,21 @@ WithTraceHooks sets the trace hooks to be enabled.
 
 
 ```go
-func WithTraceRequestBody(bl TraceRequestBody) TraceRoundtripOption
+func WithTraceLogger(logger *slog.Logger) TraceRoundtripOption
 ```
-WithTraceRequestBody sets a callback to log request body data.
+WithTraceLogger sets the logger to be used for tracing output.
 
 
 ```go
-func WithTraceResponseBody(bl TraceResponseBody) TraceRoundtripOption
+func WithTraceRequest(bl TraceRequest) TraceRoundtripOption
 ```
-WithTraceResponseBody sets a callback to log response body data.
+WithTraceRequest sets a callback to log request body data.
 
 
 ```go
-func WithTracingLogger(logger *slog.Logger) TraceRoundtripOption
+func WithTraceResponse(bl TraceResponse) TraceRoundtripOption
 ```
-WithTracingLogger sets the logger to be used for tracing output.
+WithTraceResponse sets a callback to log response body data.
 
 
 

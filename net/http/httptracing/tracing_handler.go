@@ -27,49 +27,43 @@ type TracingHandler struct {
 // handlerOptions specifies the options for a TracingHandler.
 type handlerOptions struct {
 	logger       *slog.Logger
-	requestBody  TraceHandlerRequestBody
-	responseBody TraceHandlerResponseBody
+	requestBody  TraceHandlerRequest
+	responseBody TraceHandlerResponse
 }
 
 // TraceHandlerOption is the type for options that can be passed to
 // NewTracingHandler.
 type TraceHandlerOption func(*handlerOptions)
 
-// WithHandlerLogger provides a logger to be used by the TracingHandler. If not
+// WithTraceHandlerLogger provides a logger to be used by the TracingHandler. If not
 // specified a default logger that discards all output is used.
-func WithHandlerLogger(logger *slog.Logger) TraceHandlerOption {
+func WithTraceHandlerLogger(logger *slog.Logger) TraceHandlerOption {
 	return func(o *handlerOptions) {
 		o.logger = logger
 	}
 }
 
-// WithHandlerRequestBody sets a callback to be invoked to log the request body.
+// TraceHandlerRequest is called to log request body data. The supplied data
+// is a copy of the original request body.
+type TraceHandlerRequest func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+
+// WithTraceHandlerRequest sets a callback to be invoked to log the request body.
 // The supplied callback will be called with the request body. The request
 // body is read and replaced with a new reader, so the next handler in the
 // chain can still read it.
-func WithHandlerRequestBody(bl TraceHandlerRequestBody) TraceHandlerOption {
+func WithTraceHandlerRequest(bl TraceHandlerRequest) TraceHandlerOption {
 	return func(o *handlerOptions) {
 		o.requestBody = bl
 	}
 }
 
-// TraceHandlerRequestBody is called to log request body data. The supplied data
-// is a copy of the original request body.
-type TraceHandlerRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
-
-func WithHandlerRequestBodyJSON(bl TraceHandlerRequestBody) TraceHandlerOption {
-	return func(o *handlerOptions) {
-		o.requestBody = bl
-	}
-}
-
-// TraceHandlerResponseBody is called to log response body data. The supplied data
+// TraceHandlerResponse is called to log response body data. The supplied data
 // is a copy of the original response body.
-type TraceHandlerResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, hdr http.Header, statusCode int, data []byte)
+type TraceHandlerResponse func(ctx context.Context, logger *slog.Logger, req *http.Request, hdr http.Header, statusCode int, data []byte)
 
-// WithHandlerResponseBody sets a callback to be invoked to log the response body.
+// WithTraceHandlerResponse sets a callback to be invoked to log the response body.
 // The supplied callback will be called with the response body.
-func WithHandlerResponseBody(bl TraceHandlerResponseBody) TraceHandlerOption {
+func WithTraceHandlerResponse(bl TraceHandlerResponse) TraceHandlerOption {
 	return func(o *handlerOptions) {
 		o.responseBody = bl
 	}

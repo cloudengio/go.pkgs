@@ -65,8 +65,8 @@ type TracingRoundTripper struct {
 // TraceRoundtripOption is an option for configuring a TracingRoundTripper.
 type TraceRoundtripOption func(*roundtripOptions)
 
-// WithTracingLogger sets the logger to be used for tracing output.
-func WithTracingLogger(logger *slog.Logger) TraceRoundtripOption {
+// WithTraceLogger sets the logger to be used for tracing output.
+func WithTraceLogger(logger *slog.Logger) TraceRoundtripOption {
 	return func(to *roundtripOptions) {
 		to.logger = logger
 	}
@@ -79,23 +79,23 @@ func WithTraceHooks(hooks TraceHooks) TraceRoundtripOption {
 	}
 }
 
-// TraceRequestBody is called to log request body data. The supplied data
+// TraceRequest is called to log request body data. The supplied data
 // is a copy of the original request body.
-type TraceRequestBody func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
+type TraceRequest func(ctx context.Context, logger *slog.Logger, req *http.Request, data []byte)
 
-// TraceResponseBody is called to log response body data. The supplied data
+// TraceResponse is called to log response body data. The supplied data
 // is a copy of the original response body.
-type TraceResponseBody func(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
+type TraceResponse func(ctx context.Context, logger *slog.Logger, req *http.Request, resp *http.Response, data []byte)
 
-// WithTraceRequestBody sets a callback to log request body data.
-func WithTraceRequestBody(bl TraceRequestBody) TraceRoundtripOption {
+// WithTraceRequest sets a callback to log request body data.
+func WithTraceRequest(bl TraceRequest) TraceRoundtripOption {
 	return func(o *roundtripOptions) {
 		o.requestBody = bl
 	}
 }
 
-// WithTraceResponseBody sets a callback to log response body data.
-func WithTraceResponseBody(bl TraceResponseBody) TraceRoundtripOption {
+// WithTraceResponse sets a callback to log response body data.
+func WithTraceResponse(bl TraceResponse) TraceRoundtripOption {
 	return func(o *roundtripOptions) {
 		o.responseBody = bl
 	}
@@ -103,8 +103,8 @@ func WithTraceResponseBody(bl TraceResponseBody) TraceRoundtripOption {
 
 type roundtripOptions struct {
 	logger       *slog.Logger
-	requestBody  TraceRequestBody
-	responseBody TraceResponseBody
+	requestBody  TraceRequest
+	responseBody TraceResponse
 	traceHooks   TraceHooks
 }
 

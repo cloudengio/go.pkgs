@@ -74,21 +74,21 @@ var jsonOrTextFormatter = tracingLogger[any]{
 	},
 }
 
-// JSONRequestBodyLogger logs the request body as a JSON object.
+// JSONRequestLogger logs the request body as a JSON object.
 // The supplied logger is pre-configured with relevant request information.
-func JSONRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+func JSONRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
 	jsonFormatter.requestBody(logger, nil, data)
 }
 
-// JSONResponseBodyLogger logs the response body as a JSON object.
+// JSONResponseLogger logs the response body as a JSON object.
 // The supplied logger is pre-configured with relevant request information.
-func JSONResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
+func JSONResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 	jsonFormatter.responseBody(logger, nil, nil, data)
 }
 
-// JSONHandlerRequestBodyLogger logs the request body as a JSON object.
+// JSONHandlerRequestLogger logs the request body as a JSON object.
 // The supplied logger is pre-configured with relevant request information.
-func JSONHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+func JSONHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
 	jsonFormatter.handlerRequestBody(logger, nil, data)
 }
 
@@ -97,20 +97,28 @@ func JSONHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *http.R
 	jsonFormatter.handlerResponseBody(logger, nil, nil, statusCode, data)
 }
 
-// JSONOrTextRequestBodyLogger logs the request body as a JSON object
+// JSONOrTextRequestLogger logs the request body as a JSON object
 // if it is valid JSON, otherwise as text. Use the JSON or Text variants
 // wherever possible as they are more efficient.
 // The supplied logger is pre-configured with relevant request information.
-func JSONOrTextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+func JSONOrTextRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
 	jsonOrTextFormatter.requestBody(logger, nil, data)
 }
 
-// JSONOrTextResponseBodyLogger logs the response body as a JSON object
+// JSONOrTextResponseLogger logs the response body as a JSON object
 // if it is valid JSON, otherwise as text. Use the JSON or Text variants
 // wherever possible as they are more efficient.
 // The supplied logger is pre-configured with relevant request information.
-func JSONOrTextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
+func JSONOrTextResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 	jsonOrTextFormatter.responseBody(logger, nil, nil, data)
+}
+
+// JSONOrTextHandlerRequestLogger logs the request body as a JSON object
+// if it is valid JSON, otherwise as text. Use the JSON or Text variants
+// wherever possible as they are more efficient.
+// The supplied logger is pre-configured with relevant request information.
+func JSONOrTextHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+	jsonOrTextFormatter.handlerRequestBody(logger, nil, data)
 }
 
 // JSONOrTextHandlerResponseLogger logs the response body from an http.Handler
@@ -120,21 +128,21 @@ func JSONOrTextHandlerResponseLogger(_ context.Context, logger *slog.Logger, _ *
 	jsonOrTextFormatter.handlerResponseBody(logger, nil, nil, statusCode, data)
 }
 
-// TextRequestBodyLogger logs the request body as a text object.
+// TextRequestLogger logs the request body as a text object.
 // The supplied logger is pre-configured with relevant request information.
-func TextRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+func TextRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
 	textFormatter.requestBody(logger, nil, data)
 }
 
-// TextResponseBodyLogger logs the response body as a text object.
+// TextResponseLogger logs the response body as a text object.
 // The supplied logger is pre-configured with relevant request information.
-func TextResponseBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
+func TextResponseLogger(_ context.Context, logger *slog.Logger, _ *http.Request, _ *http.Response, data []byte) {
 	textFormatter.responseBody(logger, nil, nil, data)
 }
 
-// TextHandlerRequestBodyLogger logs the request body as a text object.
+// TextHandlerRequestLogger logs the request body as a text object.
 // The supplied logger is pre-configured with relevant request information.
-func TextHandlerRequestBodyLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
+func TextHandlerRequestLogger(_ context.Context, logger *slog.Logger, _ *http.Request, data []byte) {
 	textFormatter.handlerRequestBody(logger, nil, data)
 }
 

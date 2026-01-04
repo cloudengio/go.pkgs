@@ -31,8 +31,8 @@ func TestTracingHandler(t *testing.T) {
 	}
 
 	th := httptracing.NewTracingHandler(h,
-		httptracing.WithHandlerLogger(logger),
-		httptracing.WithHandlerRequestBody(bodyCB))
+		httptracing.WithTraceHandlerLogger(logger),
+		httptracing.WithTraceHandlerRequest(bodyCB))
 
 	reqBody := "request body"
 	req := httptest.NewRequest("POST", "/some/path", strings.NewReader(reqBody))
@@ -84,10 +84,10 @@ func TestTracingRoundTripper(t *testing.T) {
 
 	rt := httptracing.NewTracingRoundTripper(
 		http.DefaultTransport,
-		httptracing.WithTracingLogger(logger),
+		httptracing.WithTraceLogger(logger),
 		httptracing.WithTraceHooks(httptracing.TraceAll),
-		httptracing.WithTraceRequestBody(reqBodyCB),
-		httptracing.WithTraceResponseBody(resBodyCB),
+		httptracing.WithTraceRequest(reqBodyCB),
+		httptracing.WithTraceResponse(resBodyCB),
 	)
 
 	client := &http.Client{Transport: rt}
@@ -142,7 +142,7 @@ func TestTracingRoundTripperHookMask(t *testing.T) {
 	// Test with only DNS hooks enabled.
 	rt := httptracing.NewTracingRoundTripper(
 		http.DefaultTransport,
-		httptracing.WithTracingLogger(logger),
+		httptracing.WithTraceLogger(logger),
 		httptracing.WithTraceHooks(httptracing.TraceDNS),
 	)
 
