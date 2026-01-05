@@ -23,26 +23,30 @@ port will be used.
 ```go
 func ParseAddrDefaultPort(addr, defaultPort string) (netip.AddrPort, error)
 ```
-ParseAddrDefaultPort parses an IP address string. If the address string
-already contains a port, it is parsed and returned. Otherwise, the supplied
-default port is used to construct and parse an address with that port.
-If the address contains only a port an address of "::" is used.
+ParseAddrDefaultPort parses an IP address string. If the address
+string already contains a port, it is parsed and returned. Otherwise,
+the supplied default port is used to construct and parse an address with
+that port. If the address contains only a port an address of "::" is used.
+ParseAddrDefaultPort calls Resolve to resolve the address before parsing it.
 
 ### Func ParseAddrIgnoringPort
 ```go
 func ParseAddrIgnoringPort(addr string) (netip.Addr, error)
 ```
 ParseAddrIgnoringPort parses an IP address string and returns the address.
-If the string is an address with a port, it will be parsed as an address
-with a port and the address will be returned, ignoring the port.
+If the string is an address with a port, it will be parsed as an
+address with a port and the address will be returned, ignoring the port.
+ParseAddrIgnoringPort calls Resolve to resolve the address before parsing
+it.
 
 ### Func ParseAddrOrPrefix
 ```go
-func ParseAddrOrPrefix(addr string) (netip.Addr, error)
+func ParseAddrOrPrefix(addr string) (netip.Prefix, error)
 ```
-ParseAddrOrPrefix parses an IP address or prefix string and returns the
-address. If the string is an IP address without a prefix, it is treated as a
-full-bit prefix (/32 for IPv4, /128 for IPv6).
+ParseAddrOrPrefix parses an IP address or prefix string and returns a
+netip.Prefix. If the string is an IP address without a prefix, it is treated
+as a full-bit prefix (/32 for IPv4, /128 for IPv6). ParseAddrOrPrefix calls
+Resolve to resolve the address before parsing it.
 
 ### Func Resolve
 ```go

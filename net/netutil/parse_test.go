@@ -17,11 +17,11 @@ func TestParseAddrOrPrefix(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"192.168.1.1", "192.168.1.1"},
-		{"192.168.1.1/32", "192.168.1.1"},
-		{"192.168.1.1/24", "192.168.1.1"},
-		{"::1", "::1"},
-		{"::1/128", "::1"},
+		{"192.168.1.1", "192.168.1.1/32"},
+		{"192.168.1.1/32", "192.168.1.1/32"},
+		{"192.168.1.1/24", "192.168.1.1/24"},
+		{"::1", "::1/128"},
+		{"::1/128", "::1/128"},
 	} {
 		addr, err := netutil.ParseAddrOrPrefix(tc.input)
 		if err != nil {
@@ -115,7 +115,7 @@ func TestResolveInFunctions(t *testing.T) {
 				}
 				return addr.String(), nil
 			},
-			want: []string{"127.0.0.1", "::1"},
+			want: []string{"127.0.0.1/32", "::1/128"},
 		},
 		{
 			name: "ParseAddrIgnoringPort",

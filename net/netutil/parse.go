@@ -13,20 +13,24 @@ import (
 	"strings"
 )
 
-// ParseAddrOrPrefix parses an IP address or prefix string and returns the
-// address. If the string is an IP address without a prefix, it is treated
+// ParseAddrOrPrefix parses an IP address or prefix string and returns a
+// netip.Prefix. If the string is an IP address without a prefix, it is treated
 // as a full-bit prefix (/32 for IPv4, /128 for IPv6).
 // ParseAddrOrPrefix calls Resolve to resolve the address before parsing it.
-func ParseAddrOrPrefix(addr string) (netip.Addr, error) {
+func ParseAddrOrPrefix(addr string) (netip.Prefix, error) {
 	addr = Resolve(addr)
-	if strings.Contains(addr, "/") {
-		p, err := netip.ParsePrefix(addr)
+	if !strings.Contains(addr, "/") {
+		ip, err := netip.ParseAddr(addr)
 		if err != nil {
-			return netip.Addr{}, err
+			return netip.Prefix{}, err
 		}
-		return p.Addr(), nil
+		bits := 128
+		if ip.Is4() {
+			bits = 32
+		}
+		return netip.PrefixFrom(ip, bits), nil
 	}
-	return netip.ParseAddr(addr)
+	return netip.ParsePrefix(addr)
 }
 
 // ParseAddrIgnoringPort parses an IP address string and returns the address.
