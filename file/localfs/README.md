@@ -83,6 +83,142 @@ type Option func(o *options)
 ```go
 func WithScannerOpenWait(d time.Duration) Option
 ```
+WithScannerOpenWait configures the amount of time to wait for the scanner to
+open a file before timing out. If zero then no timeout is applied and open
+is called directly.
+
+
+
+
+### Type R
+```go
+type R struct {
+	*T
+	// contains filtered or unexported fields
+}
+```
+R represents a local filesystem tree rooted at a specified directory.
+
+### Functions
+
+```go
+func NewTree(root string, opts ...Option) *R
+```
+NewTree returns an instance of file.FS that provides access to the local
+filesystem tree rooted at the specified directory.
+
+
+
+### Methods
+
+```go
+func (f *R) Base(path string) string
+```
+
+
+```go
+func (f *R) Delete(ctx context.Context, path string) error
+```
+
+
+```go
+func (f *R) DeleteAll(ctx context.Context, path string) error
+```
+
+
+```go
+func (f *R) EnsurePrefix(ctx context.Context, path string, perm fs.FileMode) error
+```
+
+
+```go
+func (f *R) Get(ctx context.Context, path string) ([]byte, error)
+```
+
+
+```go
+func (f *R) IsNotExist(err error) bool
+```
+
+
+```go
+func (f *R) IsPermissionError(err error) bool
+```
+
+
+```go
+func (f *R) Join(components ...string) string
+```
+
+
+```go
+func (f *R) LevelScanner(prefix string) filewalk.LevelScanner
+```
+
+
+```go
+func (f *R) Lstat(ctx context.Context, path string) (file.Info, error)
+```
+
+
+```go
+func (f *R) Open(name string) (fs.File, error)
+```
+
+
+```go
+func (f *R) OpenCtx(_ context.Context, name string) (fs.File, error)
+```
+
+
+```go
+func (f *R) Put(ctx context.Context, path string, perm fs.FileMode, data []byte) error
+```
+
+
+```go
+func (f *R) ReadFile(name string) ([]byte, error)
+```
+
+
+```go
+func (f *R) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+```
+
+
+```go
+func (f *R) Readlink(ctx context.Context, path string) (string, error)
+```
+
+
+```go
+func (f *R) Scheme() string
+```
+
+
+```go
+func (f *R) Stat(ctx context.Context, path string) (file.Info, error)
+```
+
+
+```go
+func (f *R) SysXAttr(existing any, merge file.XAttr) any
+```
+
+
+```go
+func (f *R) WriteFile(name string, data []byte, perm fs.FileMode) error
+```
+
+
+```go
+func (f *R) WriteFileCtx(ctx context.Context, name string, data []byte, perm fs.FileMode) error
+```
+
+
+```go
+func (f *R) XAttr(ctx context.Context, name string, info file.Info) (file.XAttr, error)
+```
 
 
 
@@ -101,7 +237,7 @@ filewalk.FS
 ```go
 func New(opts ...Option) *T
 ```
-NewLocalFS returns an instance of file.FS that provides access to the local
+New returns an instance of file.FS that provides access to the local
 filesystem.
 
 
