@@ -15,8 +15,14 @@ import (
 
 	"cloudeng.io/algo/digests"
 	"cloudeng.io/file"
+	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/localfs"
 )
+
+var _ file.FS = (*localfs.R)(nil)
+var _ file.FS = (*localfs.T)(nil)
+var _ filewalk.FS = (*localfs.R)(nil)
+var _ filewalk.FS = (*localfs.T)(nil)
 
 func TestXAttr(t *testing.T) {
 	tmpdir := t.TempDir()
@@ -145,5 +151,120 @@ func TestLargeFile(t *testing.T) {
 
 	if err := rd.Close(); err != nil {
 		t.Errorf("close failed: %v", err)
+	}
+}
+
+func TestLocalFS(t *testing.T) {
+	ctx := context.Background()
+	tmpdir := t.TempDir()
+	fs := localfs.New()
+
+	// Test Join and Base
+	path := fs.Join("a", "b", "c")
+	if got, want := path, filepath.Join("a", "b", "c"); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := fs.Base(path), "c"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// WriteFile
+	name := filepath.Join(tmpdir, "testfile")
+	content := []byte("hello world")
+	if err := fs.WriteFile(name, content, 0600); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// ReadFile
+	readContent, err := fs.ReadFile(name)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if got, want := string(readContent), string(content); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Stat
+	info, err := fs.Stat(ctx, name)
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+	if got, want := info.Name(), "testfile"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := info.Size(), int64(len(content)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Delete
+	if err := fs.Delete(ctx, name); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	if _, err := fs.Stat(ctx, name); !fs.IsNotExist(err) {
+		t.Errorf("expected NotExist error, got %v", err)
+	}
+}
+
+func TestRootedFS(t *testing.T) {
+	ctx := context.Background()
+	tmpdir := t.TempDir()
+	root := filepath.Join(tmpdir, "root")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	rfs := localfs.NewTree(root)
+
+	// Test Join -> should join relative paths
+	if got, want := rfs.Join("a", "b"), filepath.Join("a", "b"); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// WriteFile using relative path
+	name := "testfile"
+	content := []byte("rooted data")
+	if err := rfs.WriteFile(name, content, 0600); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Verify file exists on disk at expected location
+	diskPath := filepath.Join(root, name)
+	if _, err := os.Stat(diskPath); err != nil {
+		t.Errorf("file not found on disk at %v: %v", diskPath, err)
+	}
+
+	// ReadFile
+	readContent, err := rfs.ReadFile(name)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if got, want := string(readContent), string(content); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Stat
+	info, err := rfs.Stat(ctx, name)
+	if err != nil {
+		t.Fatalf("Stat failed: %v", err)
+	}
+	if got, want := info.Name(), "testfile"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// EnsurePrefix (MkdirAll)
+	subDir := "sub/dir"
+	if err := rfs.EnsurePrefix(ctx, subDir, 0700); err != nil {
+		t.Fatalf("EnsurePrefix failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, subDir)); err != nil {
+		t.Errorf("directory not created on disk: %v", err)
+	}
+
+	// Delete
+	if err := rfs.Delete(ctx, name); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	if _, err := os.Stat(diskPath); !os.IsNotExist(err) {
+		t.Errorf("file still exists on disk")
 	}
 }
