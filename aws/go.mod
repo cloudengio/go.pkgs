@@ -3,15 +3,15 @@ module cloudeng.io/aws
 go 1.25.5
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20251210231338-d661eee74313
-	cloudeng.io/errors v0.0.13-0.20251104042927-f7e1e5e3ef21
-	cloudeng.io/file v0.0.0-20251210231338-d661eee74313
-	cloudeng.io/logging v0.0.0-20251219025116-3ab353c35b05
+	cloudeng.io/cmdutil v0.0.0-20260108054113-6b0ece4b9fa3
+	cloudeng.io/errors v0.0.13
+	cloudeng.io/file v0.0.0-20260108054113-6b0ece4b9fa3
+	cloudeng.io/logging v0.0.0-20260108054113-6b0ece4b9fa3
 	cloudeng.io/path v0.0.10-0.20251104042927-f7e1e5e3ef21
 	github.com/aws/aws-sdk-go-v2 v1.41.0
-	github.com/aws/aws-sdk-go-v2/config v1.32.5
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.5
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.93.2
+	github.com/aws/aws-sdk-go-v2/config v1.32.6
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.6
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.5
 	github.com/aws/smithy-go v1.24.0
@@ -19,13 +19,12 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20251120181725-ae601f12dbbf // indirect
+	cloudeng.io/algo v0.0.0-20251210231338-d661eee74313 // indirect
 	cloudeng.io/debug v0.0.0-20251104042927-f7e1e5e3ef21 // indirect
-	cloudeng.io/net v0.0.0-20251120181725-ae601f12dbbf // indirect
-	cloudeng.io/os v0.0.0-20251210231338-d661eee74313 // indirect
+	cloudeng.io/net v0.0.0-20251210231338-d661eee74313 // indirect
+	cloudeng.io/os v0.0.0-20260108054113-6b0ece4b9fa3 // indirect
 	cloudeng.io/sync v0.0.9-0.20251104042927-f7e1e5e3ef21 // indirect
-	cloudeng.io/sys v0.0.0-20251120181725-ae601f12dbbf // indirect
-	cloudeng.io/windows v0.0.0-20251104042927-f7e1e5e3ef21 // indirect
+	cloudeng.io/sys v0.0.0-20251210231338-d661eee74313 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
@@ -39,7 +38,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.30.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.30.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.12 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -67,7 +66,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/grpc v1.73.0 // indirect

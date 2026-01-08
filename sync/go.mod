@@ -1,10 +1,8 @@
 module cloudeng.io/sync
 
-go 1.23.0
-
-toolchain go1.24.2
+go 1.24.9
 
 require (
-	cloudeng.io/debug v0.0.0-20251211204117-4e579d75a9c7
-	cloudeng.io/errors v0.0.12
+	cloudeng.io/debug v0.0.0-20260108054113-6b0ece4b9fa3
+	cloudeng.io/errors v0.0.13
 )
