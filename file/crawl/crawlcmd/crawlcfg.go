@@ -26,34 +26,34 @@ import (
 // ExponentialBackoffConfig is the configuration for an exponential backoff
 // retry strategy for downloads.
 type ExponentialBackoff struct {
-	InitialDelay time.Duration `yaml:"initial_delay" cmd:"the initial delay between retries for exponential backoff"`
-	Steps        int           `yaml:"steps" cmd:"the number of steps of exponential backoff before giving up"`
-	StatusCodes  []int         `yaml:"status_codes,flow" cmd:"the status codes that trigger a retry"`
+	InitialDelay time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
+	Steps        int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
+	StatusCodes  []int         `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
 }
 
 // Rate specifies a rate in one of several forms, only one should
 // be used.
 type Rate struct {
-	Tick            time.Duration `yaml:"tick" cmd:"the duration of a tick"`
-	RequestsPerTick int           `yaml:"requests_per_tick" cmd:"the number of requests per tick"`
-	BytesPerTick    int           `yaml:"bytes_per_tick" cmd:"the number of bytes per tick"`
+	Tick            time.Duration `yaml:"tick" doc:"the duration of a tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick" doc:"the number of requests per tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
 }
 
 // RateControl is the configuration for rate based control of download
 // requests.
 type RateControl struct {
-	Rate               Rate               `yaml:"rate_control" cmd:"the rate control parameters"`
-	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff" cmd:"the exponential backoff parameters"`
+	Rate               Rate               `yaml:"rate_control" doc:"the rate control parameters"`
+	ExponentialBackoff ExponentialBackoff `yaml:"exponential_backoff" doc:"the exponential backoff parameters"`
 }
 
 // DownloadFactoryConfig is the configuration for a crawl.DownloaderFactory.
 type DownloadFactoryConfig struct {
-	DefaultConcurrency       int   `yaml:"default_concurrency" cmd:"the number of concurrent downloads (defaults to GOMAXPROCS(0)), used when a per crawl depth value is not specified via per_depth_concurrency."`
-	DefaultRequestChanSize   int   `yaml:"default_request_chan_size" cmd:"the size of the channel used to queue download requests, used when a per crawl depth value is not specified via per_depth_request_chan_sizes. Increased values allow for more concurrency between discovering new items to crawl and crawling them."`
-	DefaultCrawledChanSize   int   `yaml:"default_crawled_chan_size" cmd:"the size of the channel used to queue downloaded items, used when a per crawl depth value is not specified via per_depth_crawled_chan_sizes. Increased values allow for more concurrency between downloading documents and processing them."`
-	PerDepthConcurrency      []int `yaml:"per_depth_concurrency" cmd:"per crawl depth values for the number of concurrent downloads"`
-	PerDepthRequestChanSizes []int `yaml:"per_depth_request_chan_sizes" cmd:"per crawl depth values for the size of the channel used to queue download requests"`
-	PerDepthCrawledChanSizes []int `yaml:"per_depth_crawled_chan_sizes" cmd:"per crawl depth values for the size of the channel used to queue downloaded items"`
+	DefaultConcurrency       int   `yaml:"default_concurrency" doc:"the number of concurrent downloads (defaults to GOMAXPROCS(0)), used when a per crawl depth value is not specified via per_depth_concurrency."`
+	DefaultRequestChanSize   int   `yaml:"default_request_chan_size" doc:"the size of the channel used to queue download requests, used when a per crawl depth value is not specified via per_depth_request_chan_sizes. Increased values allow for more concurrency between discovering new items to crawl and crawling them."`
+	DefaultCrawledChanSize   int   `yaml:"default_crawled_chan_size" doc:"the size of the channel used to queue downloaded items, used when a per crawl depth value is not specified via per_depth_crawled_chan_sizes. Increased values allow for more concurrency between downloading documents and processing them."`
+	PerDepthConcurrency      []int `yaml:"per_depth_concurrency" doc:"per crawl depth values for the number of concurrent downloads"`
+	PerDepthRequestChanSizes []int `yaml:"per_depth_request_chan_sizes" doc:"per crawl depth values for the size of the channel used to queue download requests"`
+	PerDepthCrawledChanSizes []int `yaml:"per_depth_crawled_chan_sizes" doc:"per crawl depth values for the size of the channel used to queue downloaded items"`
 }
 
 type DownloadConfig struct {
@@ -70,12 +70,12 @@ type DownloadConfig struct {
 // using the scheme of the Downloads path (e.g s3://... would imply an AWS
 // specific configuration).
 type CrawlCacheConfig struct {
-	Downloads         string    `yaml:"downloads" cmd:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
-	ClearBeforeCrawl  bool      `yaml:"clear_before_crawl" cmd:"if true, the cache and checkpoint will be cleared before the crawl starts."`
-	Checkpoint        string    `yaml:"checkpoint" cmd:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
-	ShardingPrefixLen int       `yaml:"sharding_prefix_len" cmd:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
-	Concurrency       int       `yaml:"concurrency" cmd:"the number of concurrent operations to use when reading/writing to the cache."`
-	ServiceConfig     yaml.Node `yaml:"service_config,omitempty" cmd:"cache service specific configuration, eg. AWS specific configuration"`
+	Downloads         string    `yaml:"downloads" doc:"the prefix/directory to use for the cache of downloaded documents. This is an absolute path the root directory of the crawl."`
+	ClearBeforeCrawl  bool      `yaml:"clear_before_crawl" doc:"if true, the cache and checkpoint will be cleared before the crawl starts."`
+	Checkpoint        string    `yaml:"checkpoint" doc:"the location of any checkpoint data used to resume a crawl, this is an absolute path."`
+	ShardingPrefixLen int       `yaml:"sharding_prefix_len" doc:"the number of characters of the filename to use for sharding the cache. This is intended to avoid filesystem limits on the number of files in a directory."`
+	Concurrency       int       `yaml:"concurrency" doc:"the number of concurrent operations to use when reading/writing to the cache."`
+	ServiceConfig     yaml.Node `yaml:"service_config,omitempty" doc:"cache service specific configuration, eg. AWS specific configuration"`
 }
 
 // DownloadPath returns the expanded downloads path.
@@ -118,16 +118,16 @@ func (c CrawlCacheConfig) PrepareCheckpoint(ctx context.Context, op checkpoint.O
 
 // Config represents the configuration for a single crawl.
 type Config struct {
-	Name          string           `yaml:"name" cmd:"the name of the crawl"`
-	Depth         int              `yaml:"depth" cmd:"the maximum depth to crawl"`
-	Seeds         []string         `yaml:"seeds" cmd:"the initial set of URIs to crawl"`
-	NoFollowRules []string         `yaml:"nofollow" cmd:"a set of regular expressions that will be used to determine which links to not follow. The regular expressions are applied to the full URL."`
-	FollowRules   []string         `yaml:"follow" cmd:"a set of regular expressions that will be used to determine which links to follow. The regular expressions are applied to the full URL."`
-	RewriteRules  []string         `yaml:"rewrite" cmd:"a set of regular expressions that will be used to rewrite links. The regular expressions are applied to the full URL."`
-	Download      DownloadConfig   `yaml:"download" cmd:"the configuration for downloading documents"`
-	NumExtractors int              `yaml:"num_extractors" cmd:"the number of concurrent link extractors to use"`
-	Extractors    []content.Type   `yaml:"extractors" cmd:"the content types to extract links from"`
-	Cache         CrawlCacheConfig `yaml:"cache" cmd:"the configuration for the cache of downloaded documents"`
+	Name          string           `yaml:"name" doc:"the name of the crawl"`
+	Depth         int              `yaml:"depth" doc:"the maximum depth to crawl"`
+	Seeds         []string         `yaml:"seeds" doc:"the initial set of URIs to crawl"`
+	NoFollowRules []string         `yaml:"nofollow" doc:"a set of regular expressions that will be used to determine which links to not follow. The regular expressions are applied to the full URL."`
+	FollowRules   []string         `yaml:"follow" doc:"a set of regular expressions that will be used to determine which links to follow. The regular expressions are applied to the full URL."`
+	RewriteRules  []string         `yaml:"rewrite" doc:"a set of regular expressions that will be used to rewrite links. The regular expressions are applied to the full URL."`
+	Download      DownloadConfig   `yaml:"download" doc:"the configuration for downloading documents"`
+	NumExtractors int              `yaml:"num_extractors" doc:"the number of concurrent link extractors to use"`
+	Extractors    []content.Type   `yaml:"extractors" doc:"the content types to extract links from"`
+	Cache         CrawlCacheConfig `yaml:"cache" doc:"the configuration for the cache of downloaded documents"`
 }
 
 // NewLinkProcessor creates a outlinks.RegexpProcessor using the
