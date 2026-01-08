@@ -341,6 +341,29 @@ func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
 	verifyExtra(t, k2, extraType{Scope: "write"})
 }
 
+func TestExtraWithPrivateFields(t *testing.T) {
+	ki := keys.NewInfo("key1", "user1", []byte("value1"))
+	type extraTypeWithPrivate struct {
+		Scope   string `json:"scope" yaml:"scope"`
+		private int
+	}
+
+	// Verify that private fields can be retrieved for extra
+	// values set directly.
+	ki.WithExtra(extraTypeWithPrivate{Scope: "read", private: 1})
+	var e extraTypeWithPrivate
+	if err := ki.UnmarshalExtra(&e); err != nil {
+		t.Fatalf("key1 extra: %v", err)
+	}
+	if got, want := e.Scope, "read"; got != want {
+		t.Errorf("key1 extra: got %v, want %v", got, want)
+	}
+	if got, want := e.private, 1; got != want {
+		t.Errorf("key1 extra: got %v, want %v", got, want)
+	}
+
+}
+
 func TestToken(t *testing.T) {
 	val := []byte("secret")
 	tok := keys.NewToken("idval", "user", val)
