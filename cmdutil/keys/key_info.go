@@ -97,7 +97,7 @@ func NewInfo(id, user string, token []byte) Info {
 }
 
 // WithExtra sets the extra information for the key. Extra information can
-// be accessed using UnmarshalExtra.
+// be accessed using UnmarshalExtra or GetExtra.
 func (k *Info) WithExtra(v any) {
 	k.extraAny = v
 }
@@ -246,4 +246,9 @@ func (k Info) UnmarshalExtra(v any) error {
 		return k.extraFromJSON(v)
 	}
 	return k.extraFromYAML(v)
+}
+
+// GetExtra returns the extra information for the key.
+func (k Info) GetExtra() any {
+	return k.extraAny
 }
