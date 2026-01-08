@@ -145,6 +145,12 @@ representations with the following fields:
   - token: the token value
   - extra: optional extra information as a json or yaml object
 
+In addition, extra information can be set directly using WithExtra and
+retrieved using UnmarshalExtra. If WithExtra is called and the KeyInfo
+instance has already been unmarshaled from json or yaml then the extra
+information from unmarshaling will be deleted and the new extra information
+will be stored in its place.
+
 An Info instance can be created/populated using NewInfo or by unmarshaling
 from json or yaml.
 
@@ -167,6 +173,12 @@ can be set using WithExtra and accessed using UnmarshalExtra.
 
 
 ### Methods
+
+```go
+func (k Info) GetExtra() any
+```
+GetExtra returns the extra information for the key.
+
 
 ```go
 func (k Info) MarshalJSON() ([]byte, error)
@@ -195,7 +207,12 @@ func (k Info) UnmarshalExtra(v any) error
 ```
 UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
 information into the provided value. It does not modify the stored extra
-information.
+information. If the extra information is stored as a json.RawMessage then
+it will be unmarshaled into the provided value. If the extra information
+is stored as a yaml.Node then it will be decoded into the provided value.
+If the extra information was provided using WithExtra then it will assigned
+to the supplied value v, if it v is a pointer to the type of the extra
+information and can be assigned to it.
 
 
 ```go
@@ -211,8 +228,9 @@ func (k *Info) UnmarshalYAML(node *yaml.Node) error
 ```go
 func (k *Info) WithExtra(v any)
 ```
-WithExtra sets the extra information for the key. Extra information can be
-accessed using UnmarshalExtra.
+WithExtra sets the extra information for the key. Extra information can
+be accessed using UnmarshalExtra or GetExtra. WithExtra is intended to be
+called for
 
 
 

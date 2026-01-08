@@ -71,6 +71,12 @@ func NewToken(id, user string, value []byte) Token {
 //   - token: the token value
 //   - extra: optional extra information as a json or yaml object
 //
+// In addition, extra information can be set directly using WithExtra and
+// retrieved using UnmarshalExtra. If WithExtra is called and the KeyInfo
+// instance has already been unmarshaled from json or yaml then the
+// extra information from unmarshaling will be deleted and the new extra
+// information will be stored in its place.
+//
 // An Info instance can be created/populated using NewInfo or by unmarshaling
 // from json or yaml.
 type Info struct {
@@ -98,9 +104,12 @@ func NewInfo(id, user string, token []byte) Info {
 }
 
 // WithExtra sets the extra information for the key. Extra information can
-// be accessed using UnmarshalExtra or GetExtra.
+// be accessed using UnmarshalExtra or GetExtra. WithExtra is intended to be
+// called for
 func (k *Info) WithExtra(v any) {
 	k.extraAny = v
+	k.extraJSON = nil
+	k.extraYAML = yaml.Node{}
 }
 
 type keyInfo struct {
@@ -230,34 +239,33 @@ func copyInfo(src keyInfo) Info {
 	}
 }
 
-func (k Info) handleExtra(v any) bool {
+func (k Info) handleExtra(v any) error {
+	if k.extraAny == nil {
+		return fmt.Errorf("no extra unmarshalled information for key_id: %v", k.ID)
+	}
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer {
-		return false
+		return fmt.Errorf("supplied value is not a pointer to the type of the extra information %T", k.extraAny)
 	}
 	et := reflect.TypeOf(k.extraAny)
 	if et.AssignableTo(rv.Type().Elem()) {
 		rv.Elem().Set(reflect.ValueOf(k.extraAny))
-		return true
+		return nil
 	}
-	return false
+	return fmt.Errorf("supplied value is not a pointer/assignable to the type of the extra information %T", k.extraAny)
 }
 
 // UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
-// information into the provided value. It does not modify the stored extra information.
+// information into the provided value. It does not modify the stored extra
+// information. If the extra information is stored as a json.RawMessage then it
+// will be unmarshaled into the provided value. If the extra information is
+// stored as a yaml.Node then it will be decoded into the provided value. If the
+// extra information was provided using WithExtra then it will assigned to the
+// supplied value v, if it v is a pointer to the type of the extra information
+// and can be assigned to it.
 func (k Info) UnmarshalExtra(v any) error {
 	if k.extraJSON == nil && k.extraYAML.Kind == 0 {
-		if k.extraAny == nil {
-			return fmt.Errorf("no extra unmarshalled information for key_id: %v", k.ID)
-		}
-		if k.handleExtra(v) {
-			return nil
-		}
-		buf, err := json.Marshal(k.extraAny)
-		if err != nil {
-			return fmt.Errorf("failed to marshal extra json for key_id: %v: %w", k.ID, err)
-		}
-		return json.Unmarshal(buf, v)
+		return k.handleExtra(v)
 	}
 	if k.extraJSON != nil {
 		return k.extraFromJSON(v)
