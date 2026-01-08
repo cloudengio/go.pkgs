@@ -13,8 +13,11 @@ import (
 )
 
 type ErrorDetail struct {
-	download.Result
-	Error error
+	download.Result // Use Err in download.Result to record errors that occur after a successful download.
+}
+
+func (e ErrorDetail) Error() string {
+	return fmt.Sprintf("%v: %v", e.Name, e.Err)
 }
 
 type Errors struct {
@@ -26,7 +29,11 @@ type Errors struct {
 func (e Errors) String() string {
 	var out strings.Builder
 	for _, detail := range e.Errors {
-		fmt.Fprintf(&out, "%v: %v\n", detail.Name, detail.Error.Error())
+		fmt.Fprintf(&out, "%v: %v\n", detail.Name, detail.Err)
 	}
 	return out.String()
+}
+
+func (e Errors) Error() string {
+	return e.String()
 }

@@ -7,7 +7,6 @@ package crawlcmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 
@@ -18,6 +17,7 @@ import (
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
+	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/path"
 	"cloudeng.io/path/cloudpath"
 )
@@ -147,10 +147,13 @@ func (c *Crawler) run(ctx context.Context, downloads string) error {
 		}
 	}()
 
+	logger := ctxlog.Logger(ctx)
 	go func() {
 		for err := range extractorErrCh {
 			if len(err.Errors) > 0 {
-				log.Printf("crawl: extractor error: %v\n", err)
+				for _, e := range err.Errors {
+					logger.Error("crawl: extractor error", "error", e)
+				}
 			}
 		}
 	}()
@@ -164,18 +167,18 @@ func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawle
 	sharder := path.NewSharder(
 		path.WithSHA1PrefixLength(c.config.Cache.ShardingPrefixLen))
 	join := c.cache.FS().Join
-
+	logger := ctxlog.Logger(ctx)
 	written := 0
 	defer func() {
-		log.Printf("crawl: total written: %v", written)
+		logger.Info("crawl: done", "total written", written)
 	}()
 
 	for crawled := range crawledCh {
 		if c.displayOutlinks {
+			logger.Info("crawl: found outlinks", "source", strings.Join(crawled.Request.Names(), " "))
 			for _, req := range crawled.Outlinks {
-				log.Printf("%v\n", strings.Join(crawled.Request.Names(), " "))
 				for _, name := range req.Names() {
-					log.Printf("\t-> %v\n", name)
+					logger.Info("crawl: outlink", "name", name)
 				}
 			}
 		}
@@ -183,18 +186,19 @@ func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawle
 		for _, obj := range objs {
 			dld := obj.Response
 			if dld.Err != nil {
-				log.Printf("crawl: download error: %v: %v\n", dld.Name, dld.Err)
+				logger.Error("crawl: download error", "name", dld.Name, "error", dld.Err)
 				continue
 			}
 			prefix, suffix := sharder.Assign(name + dld.Name)
 			prefix = join(downloads, prefix)
+			logger.Info("crawl: downloaded", "name", dld.Name, "prefix", prefix, "suffix", suffix)
 			if err := obj.Store(ctx, c.cache, prefix, suffix, content.GOBObjectEncoding, content.GOBObjectEncoding); err != nil {
-				log.Printf("crawl: failed to write: %v as prefix: %v, suffix: %v: %v\n", dld.Name, prefix, suffix, err)
+				logger.Error("crawl: failed to write", "name", dld.Name, "prefix", prefix, "suffix", suffix, "error", err)
 				continue
 			}
 			written++
 			if written%100 == 0 {
-				log.Printf("crawl: written: %v", written)
+				logger.Info("crawl: progress", "written", written)
 			}
 		}
 	}
