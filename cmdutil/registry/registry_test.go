@@ -5,6 +5,7 @@
 package registry_test
 
 import (
+	"slices"
 	"testing"
 
 	"cloudeng.io/cmdutil/registry"
@@ -53,5 +54,22 @@ func TestGetOpts(t *testing.T) {
 	none := registry.ConvertAnyArgs[bool](1, "a", 2, "b", 3.0)
 	if got, want := len(none), 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestKeys(t *testing.T) {
+	r := &registry.T[any]{}
+	if len(r.Keys()) != 0 {
+		t.Errorf("expected empty slice for new registry, got %v", r.Keys())
+	}
+	r.Register("c", nil)
+	r.Register("a", nil)
+	r.Register("b", nil)
+
+	keys := r.Keys()
+	expected := []string{"a", "b", "c"}
+	// The 'slices' package may need to be imported in the test file.
+	if !slices.Equal(keys, expected) {
+		t.Errorf("got %v, want %v", keys, expected)
 	}
 }
