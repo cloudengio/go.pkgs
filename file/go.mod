@@ -20,5 +20,6 @@ require (
 
 require (
 	cloudeng.io/debug v0.0.0-20251104013446-a84136171725 // indirect
+	cloudeng.io/logging v0.0.0-20260105001028-464ff5af0c62 // indirect
 	golang.org/x/mod v0.28.0 // indirect
 )

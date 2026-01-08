@@ -175,8 +175,8 @@ func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawle
 
 	for crawled := range crawledCh {
 		if c.displayOutlinks {
+			logger.Info("crawl: found outlinks", "source", strings.Join(crawled.Request.Names(), " "))
 			for _, req := range crawled.Outlinks {
-				logger.Info("crawl: outlink", "names", strings.Join(crawled.Request.Names(), " "))
 				for _, name := range req.Names() {
 					logger.Info("crawl: outlink", "name", name)
 				}
@@ -198,7 +198,7 @@ func (c Crawler) saveCrawled(ctx context.Context, downloads, name string, crawle
 			}
 			written++
 			if written%100 == 0 {
-				logger.Info("crawl:", "written", written)
+				logger.Info("crawl: progress", "written", written)
 			}
 		}
 	}
