@@ -214,7 +214,7 @@ func TestRootedFS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rfs := localfs.NewTree(root)
+	rfs := localfs.NewRoot(root)
 
 	// Test Join -> should join relative paths
 	if got, want := rfs.Join("a", "b"), filepath.Join("a", "b"); got != want {
