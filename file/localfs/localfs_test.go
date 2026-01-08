@@ -203,6 +203,7 @@ func TestLocalFS(t *testing.T) {
 	if _, err := fs.Stat(ctx, name); !fs.IsNotExist(err) {
 		t.Errorf("expected NotExist error, got %v", err)
 	}
+
 }
 
 func TestRootedFS(t *testing.T) {

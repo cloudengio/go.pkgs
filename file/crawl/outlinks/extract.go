@@ -53,19 +53,15 @@ func (g *generic) Extract(ctx context.Context, depth int, downloaded download.Do
 		ctype := content.TypeForPath(dl.Name)
 		exts, err := g.extractors.LookupHandlers(ctype)
 		if err != nil {
-			errs.Errors = append(errs.Errors, ErrorDetail{
-				Result: dl,
-				Error:  fmt.Errorf("no extractor found for %v: %v, found in %v", ctype, dl.Name, downloaded.Request.Requester()),
-			})
+			dl.Err = fmt.Errorf("no extractor found for content type %q: download %v, requested by: %v", ctype, dl.Name, downloaded.Request.Requester())
+			errs.Errors = append(errs.Errors, ErrorDetail{Result: dl})
 			continue
 		}
 		for _, ext := range exts {
 			links, err := ext.Outlinks(ctx, depth, single, bytes.NewReader(dl.Contents))
 			if err != nil {
-				errs.Errors = append(errs.Errors, ErrorDetail{
-					Result: dl,
-					Error:  err,
-				})
+				dl.Err = err
+				errs.Errors = append(errs.Errors, ErrorDetail{Result: dl})
 				continue
 			}
 			links = g.linkProcessor.Process(links)

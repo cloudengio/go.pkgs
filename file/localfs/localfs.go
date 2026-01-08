@@ -163,8 +163,8 @@ func (f *R) Scheme() string {
 	return "file"
 }
 
-func (f *R) OpenCtx(_ context.Context, name string) (fs.File, error) {
-	return f.T.Open(filepath.Join(f.root, name))
+func (f *R) OpenCtx(ctx context.Context, name string) (fs.File, error) {
+	return f.T.OpenCtx(ctx, filepath.Join(f.root, name))
 }
 
 func (f *R) Readlink(ctx context.Context, path string) (string, error) {
@@ -212,7 +212,7 @@ func (f *R) IsNotExist(err error) bool {
 }
 
 func (f *R) XAttr(ctx context.Context, name string, info file.Info) (file.XAttr, error) {
-	return f.T.XAttr(ctx, name, info)
+	return f.T.XAttr(ctx, filepath.Join(f.root, name), info)
 }
 
 func (f *R) SysXAttr(existing any, merge file.XAttr) any {
