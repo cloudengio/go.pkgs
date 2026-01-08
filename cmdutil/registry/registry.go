@@ -9,6 +9,7 @@ package registry
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -46,6 +47,18 @@ func (r *T[T]) Get(key string) New[T] {
 		}
 	}
 	return nil
+}
+
+// Keys returns a sorted list of all registered keys.
+func (r *T[T]) Keys() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	keys := make([]string, len(r.items))
+	for i, item := range r.items {
+		keys[i] = item.key
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 // Clone creates a shallow clone of the registry.

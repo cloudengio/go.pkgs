@@ -67,6 +67,12 @@ not registered.
 
 
 ```go
+func (r *T[T]) Keys() []string
+```
+Keys returns a sorted list of all registered keys.
+
+
+```go
 func (r *T[T]) Register(key string, factory New[T])
 ```
 Register registers a new factory function for the given key.
