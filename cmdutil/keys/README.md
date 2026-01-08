@@ -208,11 +208,11 @@ func (k Info) UnmarshalExtra(v any) error
 UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
 information into the provided value. It does not modify the stored extra
 information. If the extra information is stored as a json.RawMessage then
-it will be unmarshaled into the provided value. If the extra information
-is stored as a yaml.Node then it will be decoded into the provided value.
-If the extra information was provided using WithExtra then it will assigned
-to the supplied value v, if it v is a pointer to the type of the extra
-information and can be assigned to it.
+it will be unmarshaled into the provided value. If the extra information is
+stored as a yaml.Node then it will be decoded into the provided value. If
+the extra information was provided using WithExtra then it will be assigned
+to the supplied value v, provided that v is a pointer to a type to which the
+extra information is assignable.
 
 
 ```go
@@ -228,9 +228,10 @@ func (k *Info) UnmarshalYAML(node *yaml.Node) error
 ```go
 func (k *Info) WithExtra(v any)
 ```
-WithExtra sets the extra information for the key. Extra information can
-be accessed using UnmarshalExtra or GetExtra. WithExtra is intended to be
-called for
+WithExtra sets the extra information for the key. Extra information can be
+accessed using UnmarshalExtra or GetExtra. WithExtra is intended to be used
+to associate extra information that is not obtained via unmarshaling from
+json or yaml.
 
 
 

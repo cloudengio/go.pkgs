@@ -105,7 +105,8 @@ func NewInfo(id, user string, token []byte) Info {
 
 // WithExtra sets the extra information for the key. Extra information can
 // be accessed using UnmarshalExtra or GetExtra. WithExtra is intended to be
-// called for
+// used to associate extra information that is not obtained via unmarshaling
+// from json or yaml.
 func (k *Info) WithExtra(v any) {
 	k.extraAny = v
 	k.extraJSON = nil
@@ -241,18 +242,18 @@ func copyInfo(src keyInfo) Info {
 
 func (k Info) handleExtra(v any) error {
 	if k.extraAny == nil {
-		return fmt.Errorf("no extra unmarshalled information for key_id: %v", k.ID)
+		return fmt.Errorf("UnmarshalExtra: no extra unmarshalled information for key_id: %v", k.ID)
 	}
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer {
-		return fmt.Errorf("supplied value is not a pointer to the type of the extra information %T", k.extraAny)
+		return fmt.Errorf("UnmarshalExtra: value must be a pointer, but got %T for key_id: %v", v, k.ID)
 	}
 	et := reflect.TypeOf(k.extraAny)
 	if et.AssignableTo(rv.Type().Elem()) {
 		rv.Elem().Set(reflect.ValueOf(k.extraAny))
 		return nil
 	}
-	return fmt.Errorf("supplied value is not a pointer/assignable to the type of the extra information %T", k.extraAny)
+	return fmt.Errorf("UnmarshalExtra: supplied value of type %T, is not assignable to the type of the extra information %T for key_id: %v", v, k.extraAny, k.ID)
 }
 
 // UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
@@ -260,9 +261,9 @@ func (k Info) handleExtra(v any) error {
 // information. If the extra information is stored as a json.RawMessage then it
 // will be unmarshaled into the provided value. If the extra information is
 // stored as a yaml.Node then it will be decoded into the provided value. If the
-// extra information was provided using WithExtra then it will assigned to the
-// supplied value v, if it v is a pointer to the type of the extra information
-// and can be assigned to it.
+// extra information was provided using WithExtra then it will be assigned to
+// the supplied value v, provided that v is a pointer to a type to which the
+// extra information is assignable.
 func (k Info) UnmarshalExtra(v any) error {
 	if k.extraJSON == nil && k.extraYAML.Kind == 0 {
 		return k.handleExtra(v)
