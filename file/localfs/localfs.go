@@ -141,15 +141,15 @@ func (f *T) EnsurePrefix(_ context.Context, path string, perm fs.FileMode) error
 	return os.MkdirAll(path, perm)
 }
 
-// R represents a local filesystem tree rooted at a specified directory.
+// R represents a local filesystem tree that is rooted at a specified directory.
 type R struct {
 	root string
 	*T
 }
 
-// NewTree returns an instance of file.FS that provides access to the
+// NewRoot returns an instance of file.FS that provides access to the
 // local filesystem tree rooted at the specified directory.
-func NewTree(root string, opts ...Option) *R {
+func NewRoot(root string, opts ...Option) *R {
 	r := &R{root: root}
 	r.T = New(opts...)
 	return r

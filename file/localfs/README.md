@@ -97,14 +97,15 @@ type R struct {
 	// contains filtered or unexported fields
 }
 ```
-R represents a local filesystem tree rooted at a specified directory.
+R represents a local filesystem tree that is rooted at a specified
+directory.
 
 ### Functions
 
 ```go
-func NewTree(root string, opts ...Option) *R
+func NewRoot(root string, opts ...Option) *R
 ```
-NewTree returns an instance of file.FS that provides access to the local
+NewRoot returns an instance of file.FS that provides access to the local
 filesystem tree rooted at the specified directory.
 
 
@@ -167,7 +168,7 @@ func (f *R) Open(name string) (fs.File, error)
 
 
 ```go
-func (f *R) OpenCtx(_ context.Context, name string) (fs.File, error)
+func (f *R) OpenCtx(ctx context.Context, name string) (fs.File, error)
 ```
 
 
