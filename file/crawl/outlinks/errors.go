@@ -13,11 +13,11 @@ import (
 )
 
 type ErrorDetail struct {
-	download.Result
+	download.Result // Use Err in download.Result to record errors that occur after a successful download.
 }
 
 func (e ErrorDetail) Error() string {
-	return fmt.Sprintf("%v: %v", e.Result.Name, e.Err)
+	return fmt.Sprintf("%v: %v", e.Name, e.Err)
 }
 
 type Errors struct {

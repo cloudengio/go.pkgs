@@ -82,7 +82,7 @@ func TestGenericExtractor(t *testing.T) {
 
 	for _, err := range errs {
 		for _, detail := range err.Errors {
-			if detail.Error != nil {
+			if detail.Err != nil {
 				t.Fatal(err)
 			}
 		}
