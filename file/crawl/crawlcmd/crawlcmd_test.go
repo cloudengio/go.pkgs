@@ -7,6 +7,7 @@ package crawlcmd_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/file/filewalk/filewalktestutil"
 	"cloudeng.io/file/localfs"
+	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/path"
 )
 
@@ -48,6 +50,7 @@ func expectedOutput(fs file.FS, name, root, downloads string, seeds ...string) (
 
 func TestCrawlCmd(t *testing.T) {
 	ctx := context.Background()
+	ctx = ctxlog.WithLogger(ctx, slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	tmpDir, err := os.MkdirTemp("", "crawlcmd")
 	if err != nil {
 		t.Fatal(err)
