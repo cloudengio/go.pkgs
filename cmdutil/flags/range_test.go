@@ -208,11 +208,11 @@ func TestIntRanges(t *testing.T) {
 
 func TestRangeFlags(t *testing.T) {
 	rangeFlags := struct {
-		A flags.RangeSpecs    `cmd:"strings,,string ranges"`
-		B flags.IntRangeSpecs `cmd:"ints,,int ranges"`
+		A flags.RangeSpecs    `doc:"strings,,string ranges"`
+		B flags.IntRangeSpecs `doc:"ints,,int ranges"`
 	}{}
 	flagSet := &flag.FlagSet{}
-	err := flags.RegisterFlagsInStruct(flagSet, "cmd", &rangeFlags, nil, nil)
+	err := flags.RegisterFlagsInStruct(flagSet, "doc", &rangeFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

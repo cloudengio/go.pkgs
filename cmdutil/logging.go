@@ -21,10 +21,10 @@ type LoggingFlags struct {
 
 // LoggingConfig represents a logging configuration.
 type LoggingConfig struct {
-	Level      int    `yaml:"level" cmd:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
-	File       string `yaml:"file" cmd:"log file path. If not specified logs are written to stderr."`
-	Format     string `yaml:"format" cmd:"log format: text or json"`
-	SourceCode bool   `yaml:"source_code" cmd:"include source code file and line number in logs"`
+	Level      int    `yaml:"level" doc:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
+	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr."`
+	Format     string `yaml:"format" doc:"log format: text or json"`
+	SourceCode bool   `yaml:"source_code" doc:"include source code file and line number in logs"`
 }
 
 // LoggingConfig returns the logging configuration represented by the flags.
