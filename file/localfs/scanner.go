@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
 	"cloudeng.io/file/filewalk"
@@ -108,6 +109,10 @@ func NewLevelScanner(path string, openwait time.Duration) filewalk.LevelScanner 
 
 func (f *T) LevelScanner(prefix string) filewalk.LevelScanner {
 	return NewLevelScanner(prefix, f.opts.scannerOpenWait)
+}
+
+func (f *R) LevelScanner(prefix string) filewalk.LevelScanner {
+	return f.T.LevelScanner(filepath.Join(f.root, prefix))
 }
 
 func newContents(des []fs.DirEntry) []filewalk.Entry {
