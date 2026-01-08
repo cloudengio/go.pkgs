@@ -7,6 +7,7 @@ package keys
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 
 	"gopkg.in/yaml.v3"
@@ -97,7 +98,7 @@ func NewInfo(id, user string, token []byte) Info {
 }
 
 // WithExtra sets the extra information for the key. Extra information can
-// be accessed using UnmarshalExtra.
+// be accessed using UnmarshalExtra or GetExtra.
 func (k *Info) WithExtra(v any) {
 	k.extraAny = v
 }
@@ -229,12 +230,28 @@ func copyInfo(src keyInfo) Info {
 	}
 }
 
+func (k Info) handleExtra(v any) bool {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Pointer {
+		return false
+	}
+	et := reflect.TypeOf(k.extraAny)
+	if et.AssignableTo(rv.Type().Elem()) {
+		rv.Elem().Set(reflect.ValueOf(k.extraAny))
+		return true
+	}
+	return false
+}
+
 // UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
 // information into the provided value. It does not modify the stored extra information.
 func (k Info) UnmarshalExtra(v any) error {
 	if k.extraJSON == nil && k.extraYAML.Kind == 0 {
 		if k.extraAny == nil {
 			return fmt.Errorf("no extra unmarshalled information for key_id: %v", k.ID)
+		}
+		if k.handleExtra(v) {
+			return nil
 		}
 		buf, err := json.Marshal(k.extraAny)
 		if err != nil {
@@ -246,4 +263,9 @@ func (k Info) UnmarshalExtra(v any) error {
 		return k.extraFromJSON(v)
 	}
 	return k.extraFromYAML(v)
+}
+
+// GetExtra returns the extra information for the key.
+func (k Info) GetExtra() any {
+	return k.extraAny
 }
