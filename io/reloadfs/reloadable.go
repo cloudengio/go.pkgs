@@ -11,7 +11,7 @@ package reloadfs
 
 import (
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -23,11 +23,10 @@ type reloadable struct {
 	embedded    fs.FS
 	root        string
 	prefix      string
-	logger      func(action Action, name, path string, err error)
+	logger      *slog.Logger
 	stat        map[string]fs.FileInfo
 	reloadAfter time.Time
 	loadNew     bool
-	debug       bool
 }
 
 func (r *reloadable) reloadablePath(p string) string {
@@ -64,10 +63,7 @@ func (r *reloadable) statEmbedded(name string) (fs.FileInfo, error) {
 }
 
 func (r *reloadable) reload(name string) (bool, bool, error) {
-	if r.debug {
-		log.Printf("reload: %v: embedded: %v, disk: %v",
-			name, r.embeddedPath(name), r.reloadablePath(name))
-	}
+	r.logger.Debug("reload", "name", name, "embedded", r.embeddedPath(name), "disk", r.reloadablePath(name))
 	ondisk, err := os.Stat(r.reloadablePath(name))
 	if err == nil {
 		inram, err := r.statEmbedded(name)
@@ -80,21 +76,17 @@ func (r *reloadable) reload(name string) (bool, bool, error) {
 			}
 			return false, true, os.ErrNotExist
 		}
-		if r.debug {
-			log.Printf("reload: embedded: %v %v", inram.Size(), r.reloadAfter)
-			log.Printf("reload: ondisk: %v %v", ondisk.Size(), ondisk.ModTime())
-			log.Printf("reload: ondisk: %v", r.embeddedIsStale(inram, ondisk))
-		}
+		r.logger.Debug("reload check",
+			"embedded_size", inram.Size(),
+			"embedded_modtime_threshold", r.reloadAfter,
+			"ondisk_size", ondisk.Size(),
+			"ondisk_modtime", ondisk.ModTime(),
+			"stale", r.embeddedIsStale(inram, ondisk))
 		return r.embeddedIsStale(inram, ondisk), false, nil
 	}
 	if os.IsNotExist(err) {
-		if r.debug {
-			log.Printf("reload: %v: on disk %v - does not exist on disk\n", name, r.reloadablePath(name))
-		}
+		r.logger.Debug("reload: on disk", "name", name, "path", r.reloadablePath(name), "err", err)
 		return false, false, nil
-	}
-	if r.debug {
-		log.Printf("reload: %v: error: %v\n", name, err)
 	}
 	return false, false, err
 }
@@ -112,7 +104,7 @@ func (r *reloadable) Open(name string) (fs.File, error) {
 	if err != nil {
 		rp := r.reloadablePath(name)
 		if isNew && !r.loadNew && os.IsNotExist(err) {
-			r.logger(NewFilesNotAllowed, name, rp, err)
+			r.logger.Info("new files not allowed", "name", name, "path", rp, "err", err)
 		}
 		return nil, &fs.PathError{
 			Op:   "open",
@@ -123,7 +115,7 @@ func (r *reloadable) Open(name string) (fs.File, error) {
 	if !shouldReload {
 		ep := r.embeddedPath(name)
 		f, err := r.embedded.Open(ep)
-		r.logger(Reused, name, ep, err)
+		r.logger.Info("reused", "name", name, "path", ep, "err", err)
 		return f, err
 	}
 	rl := r.reloadablePath(name)
@@ -132,42 +124,35 @@ func (r *reloadable) Open(name string) (fs.File, error) {
 	if isNew {
 		action = ReloadedNewFile
 	}
-	r.logger(action, name, rl, err)
+	r.logger.Info(action.String(), "name", name, "path", rl, "err", err)
 	return f, err
 }
 
-// ReloadableOption represents an option to ReloadableFS.
-type ReloadableOption func(*reloadable)
+// Option represents an option to ReloadableFS.
+type Option func(*reloadable)
 
-// UseLogger provides a logger to be used by the underlying implementation.
-func UseLogger(logger func(action Action, name, path string, err error)) ReloadableOption {
+// WithLogger provides a logger to be used by the underlying implementation.
+func WithLogger(logger *slog.Logger) Option {
 	return func(r *reloadable) {
 		r.logger = logger
 	}
 }
 
-// LoadNewFiles controls whether files that exist only in file system
+// WithNewFiles controls whether files that exist only in file system
 // and not in the embedded FS are returned. If false, only files that
 // exist in the embedded FS may be reloaded from the new FS.
-func LoadNewFiles(a bool) ReloadableOption {
+func WithNewFiles(a bool) Option {
 	return func(r *reloadable) {
 		r.loadNew = a
 	}
 }
 
-// ReloadAfter sets the time after which assets are to be reloaded
+// WithReloadAfter sets the time after which assets are to be reloaded
 // rather than reused. Note that the current implementation of go:embed
 // does not record
-func ReloadAfter(t time.Time) ReloadableOption {
+func WithReloadAfter(t time.Time) Option {
 	return func(r *reloadable) {
 		r.reloadAfter = t
-	}
-}
-
-// DebugOutput debug output.
-func DebugOutput(enable bool) ReloadableOption {
-	return func(r *reloadable) {
-		r.debug = enable
 	}
 }
 
@@ -223,7 +208,7 @@ func (a Action) String() string {
 // provided to watch for changes and reload (or update metdata) those
 // ahead of time. Reloaded files are not cached and will be reloaded on
 // every access.
-func New(root, prefix string, embedded fs.FS, opts ...ReloadableOption) fs.FS {
+func New(root, prefix string, embedded fs.FS, opts ...Option) fs.FS {
 	r := &reloadable{
 		embedded:    embedded,
 		root:        root,
@@ -235,7 +220,8 @@ func New(root, prefix string, embedded fs.FS, opts ...ReloadableOption) fs.FS {
 		fn(r)
 	}
 	if r.logger == nil {
-		r.logger = func(_ Action, _, _ string, _ error) {}
+		r.logger = slog.New(slog.DiscardHandler)
 	}
+	r.logger = r.logger.With("reloadfs root", r.root, "reloadfs prefix", r.prefix)
 	return r
 }

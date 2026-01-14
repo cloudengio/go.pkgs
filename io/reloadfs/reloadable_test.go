@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -117,7 +118,7 @@ not d0/world....`; got != want {
 		}
 	}
 
-	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.LoadNewFiles(true))
+	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.WithNewFiles(true))
 	fs, err := dynamic.Open("a-new-file.txt")
 	if err != nil {
 		t.Errorf("new file should have been found: %v", err)
@@ -149,19 +150,25 @@ not d0/world....`; got != want {
 	}
 }
 
+func replaceAttrNoTime(_ []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+	return a
+}
+
 func TestLogging(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	out := &strings.Builder{}
-	logger := func(action reloadfs.Action, name, path string, err error) {
-		fmt.Fprintf(out, "%s: %s -> %s: %v", action, name, path, err)
-	}
+	opts := &slog.HandlerOptions{ReplaceAttr: replaceAttrNoTime}
+	logger := slog.New(slog.NewTextHandler(out, opts))
 
-	dynamic := reloadfs.New(tmpDir, "testdata", content, reloadfs.UseLogger(logger))
+	dynamic := reloadfs.New(tmpDir, "testdata", content, reloadfs.WithLogger(logger))
 	if _, err := dynamic.Open("hello.txt"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := out.String(), "reused: hello.txt -> testdata/hello.txt: <nil>"; got != want {
+	if got, want := out.String(), fmt.Sprintf("level=INFO msg=reused \"reloadfs root\"=%s \"reloadfs prefix\"=testdata name=hello.txt path=testdata/hello.txt err=<nil>\n", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -173,21 +180,21 @@ func TestLogging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
+	if got, want := out.String(), fmt.Sprintf("level=INFO msg=\"reloaded existing\" \"reloadfs root\"=%s \"reloadfs prefix\"=testdata name=hello.txt path=%s/testdata/hello.txt err=<nil>\n", tmpDir, tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	fs.Close()
 
 	out.Reset()
 	_, _ = dynamic.Open("a-new-file.txt")
-	if got, want := out.String(), fmt.Sprintf("new files not allowed: a-new-file.txt -> %s/testdata/a-new-file.txt: file does not exist", tmpDir); got != want {
+	if got, want := out.String(), fmt.Sprintf("level=INFO msg=\"new files not allowed\" \"reloadfs root\"=%s \"reloadfs prefix\"=testdata name=a-new-file.txt path=%s/testdata/a-new-file.txt err=\"file does not exist\"\n", tmpDir, tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.UseLogger(logger), reloadfs.LoadNewFiles(true))
+	dynamic = reloadfs.New(tmpDir, "testdata", content, reloadfs.WithLogger(logger), reloadfs.WithNewFiles(true))
 	out.Reset()
 	fs, _ = dynamic.Open("a-new-file.txt")
-	if got, want := out.String(), fmt.Sprintf("reloaded new file: a-new-file.txt -> %s/testdata/a-new-file.txt: <nil>", tmpDir); got != want {
+	if got, want := out.String(), fmt.Sprintf("level=INFO msg=\"reloaded new file\" \"reloadfs root\"=%s \"reloadfs prefix\"=testdata name=a-new-file.txt path=%s/testdata/a-new-file.txt err=<nil>\n", tmpDir, tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	fs.Close()
@@ -197,21 +204,21 @@ func TestModTime(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	out := &strings.Builder{}
-	logger := func(action reloadfs.Action, name, path string, err error) {
-		fmt.Fprintf(out, "%s: %s -> %s: %v", action, name, path, err)
-	}
+	opts := &slog.HandlerOptions{ReplaceAttr: replaceAttrNoTime}
+
+	logger := slog.New(slog.NewTextHandler(out, opts))
 
 	cleanup := createMirror(t, tmpDir)
 	defer cleanup()
 
 	dynamic := reloadfs.New(tmpDir, "testdata", content,
-		reloadfs.UseLogger(logger),
-		reloadfs.ReloadAfter(time.Now().Add(time.Hour)),
+		reloadfs.WithLogger(logger),
+		reloadfs.WithReloadAfter(time.Now().Add(time.Hour)),
 	)
 
 	// Sizes differ.
 	fs, _ := dynamic.Open("hello.txt")
-	if got, want := out.String(), fmt.Sprintf("reloaded existing: hello.txt -> %s/testdata/hello.txt: <nil>", tmpDir); got != want {
+	if got, want := out.String(), fmt.Sprintf("level=INFO msg=\"reloaded existing\" \"reloadfs root\"=%s \"reloadfs prefix\"=testdata name=hello.txt path=%s/testdata/hello.txt err=<nil>\n", tmpDir, tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	fs.Close()
@@ -219,7 +226,7 @@ func TestModTime(t *testing.T) {
 	// Same size, but considered too old.
 	out.Reset()
 	fs, _ = dynamic.Open("world.txt")
-	if got, want := out.String(), "reused: world.txt -> testdata/world.txt: <nil>"; got != want {
+	if got, want := out.String(), fmt.Sprintf("level=INFO msg=reused \"reloadfs root\"=%s \"reloadfs prefix\"=testdata name=world.txt path=testdata/world.txt err=<nil>\n", tmpDir); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	fs.Close()

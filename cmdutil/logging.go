@@ -28,13 +28,8 @@ type LoggingConfig struct {
 }
 
 // LoggingConfig returns the logging configuration represented by the flags.
-func (lf *LoggingFlags) LoggingConfig() LoggingConfig {
-	return LoggingConfig{
-		Level:      lf.Level,
-		File:       lf.File,
-		Format:     lf.Format,
-		SourceCode: lf.SourceCode,
-	}
+func (lf LoggingFlags) LoggingConfig() LoggingConfig {
+	return LoggingConfig(lf)
 }
 
 type leveler struct {
@@ -76,12 +71,22 @@ func (noopCloser) Close() error {
 	return nil
 }
 
-// NewLogger creates a new logger based on the configuration.
-func (c LoggingConfig) NewLogger() (*Logger, error) {
-	opts := &slog.HandlerOptions{
+func (c LoggingConfig) Leveler() slog.Leveler {
+	return leveler{level: c.Level}
+}
+
+func (c LoggingConfig) Options() *slog.HandlerOptions {
+	return &slog.HandlerOptions{
 		AddSource: c.SourceCode,
 		Level:     leveler{level: c.Level},
 	}
+}
+
+// NewLogger creates a new logger based on the configuration.
+func (c LoggingConfig) NewLogger() (*Logger, error) {
+	return c.newLogger(c.Options())
+}
+func (c LoggingConfig) newLogger(opts *slog.HandlerOptions) (*Logger, error) {
 	var handler slog.Handler
 	var closer io.Closer
 	var out io.Writer
@@ -111,9 +116,18 @@ func (c LoggingConfig) NewLogger() (*Logger, error) {
 	return &Logger{Logger: slog.New(handler), f: closer}, nil
 }
 
+// NewLoggerOpts creates a new logger based on the configuration and custom
+// handler options.
+func (c LoggingConfig) NewLoggerOpts(opts *slog.HandlerOptions) (*Logger, error) {
+	if opts == nil {
+		opts = c.Options()
+	}
+	return c.newLogger(opts)
+}
+
 // NewLoggerMust is like NewLogger but panics on error.
-func (c LoggingConfig) NewLoggerMust() *Logger {
-	logger, err := c.NewLogger()
+func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions) *Logger {
+	logger, err := c.NewLoggerOpts(opts)
 	if err != nil {
 		panic(err)
 	}
@@ -128,4 +142,13 @@ func LogBuildInfo(logger *slog.Logger) {
 		return
 	}
 	logger.Info("build info", "go.version", goVersion, "commit", version, "build.date", when, "dirty", dirty)
+}
+
+// ReplaceAttrNoTime returns a slog.Attr with the time attribute removed.
+// This is useful for tests where the time is not deterministic.
+func ReplaceAttrNoTime(_ []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+	return a
 }

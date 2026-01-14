@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"cloudeng.io/cmdutil"
@@ -204,5 +205,39 @@ func TestLoggingToStdout(t *testing.T) {
 	output := buf.String()
 	if !bytes.Contains(buf.Bytes(), []byte("testing stdout logging")) {
 		t.Errorf("stdout logging failed, got: %q", output)
+	}
+}
+
+func TestReplaceAttrNoTimeWithConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "test-config.log")
+	cfg := cmdutil.LoggingConfig{
+		File:   logFile,
+		Format: "json",
+	}
+
+	opts := &slog.HandlerOptions{
+		ReplaceAttr: cmdutil.ReplaceAttrNoTime,
+	}
+
+	logger, err := cfg.NewLoggerOpts(opts)
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	logger.Info("test message with config")
+	logger.Close()
+
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+
+	output := string(content)
+	if strings.Contains(output, `"time":`) {
+		t.Errorf("expected no time field, got: %s", output)
+	}
+	if !strings.Contains(output, "test message with config") {
+		t.Errorf("expected log message, got: %s", output)
 	}
 }
