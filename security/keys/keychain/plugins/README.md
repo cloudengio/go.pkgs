@@ -114,12 +114,12 @@ func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 
 
 ```go
-func (f FS) WriteFile(name string, data []byte) error
+func (f FS) WriteFile(name string, data []byte, perm fs.FileMode) error
 ```
 
 
 ```go
-func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte) error
+func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.FileMode) error
 ```
 
 

@@ -52,13 +52,13 @@ specified flags.
 
 ### Func LogAWSConfig
 ```go
-func LogAWSConfig(ctx context.Context, cfg *aws.Config) error
+func LogAWSConfig(ctx context.Context, cfg *aws.Config)
 ```
 LogAWSConfig logs the aws.Config to the slog.Logger in the context.
 
 ### Func NewKeyInfo
 ```go
-func NewKeyInfo(id, user string, token []byte, extra *KeyInfoExtra) keys.Info
+func NewKeyInfo(id, user string, token []byte, extra KeyInfoExtra) keys.Info
 ```
 NewKeyInfo creates a new keys.Info appropriate for use with static
 credentials for AWS.
@@ -100,11 +100,11 @@ retrieved from EC2 IMDS when it's not found by other means.
 ### Type AWSFlags
 ```go
 type AWSFlags struct {
-	AWS            bool   `subcmd:"aws,false,set to enable AWS functionality" yaml:"aws" cmd:"set to true enable AWS functionality"`
-	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" cmd:"aws profile to use for config/authentication"`
-	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" cmd:"aws region to use, overrides the region set in the profile"`
-	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" cmd:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
-	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"aws_key_info_id" cmd:"key info ID to use for authentication"`
+	AWS            bool   `subcmd:"aws,false,set to enable AWS functionality" yaml:"aws" doc:"set to true enable AWS functionality"`
+	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" doc:"aws profile to use for config/authentication"`
+	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" doc:"aws region to use, overrides the region set in the profile"`
+	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" doc:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
+	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"aws_key_info_id" doc:"key info ID to use for authentication"`
 }
 ```
 AWSFlags defines commonly used flags that control AWS behaviour.

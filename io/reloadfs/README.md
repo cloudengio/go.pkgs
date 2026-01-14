@@ -13,7 +13,7 @@ assets.
 ## Functions
 ### Func New
 ```go
-func New(root, prefix string, embedded fs.FS, opts ...ReloadableOption) fs.FS
+func New(root, prefix string, embedded fs.FS, opts ...Option) fs.FS
 ```
 New returns a new fs.FS that will dynamically reload files that have either
 been changed, or optionally only exist, in the filesystem as compared to
@@ -72,39 +72,34 @@ func (a Action) String() string
 
 
 
-### Type ReloadableOption
+### Type Option
 ```go
-type ReloadableOption func(*reloadable)
+type Option func(*reloadable)
 ```
-ReloadableOption represents an option to ReloadableFS.
+Option represents an option to ReloadableFS.
 
 ### Functions
 
 ```go
-func DebugOutput(enable bool) ReloadableOption
+func WithLogger(logger *slog.Logger) Option
 ```
-DebugOutput debug output.
+WithLogger provides a logger to be used by the underlying implementation.
 
 
 ```go
-func LoadNewFiles(a bool) ReloadableOption
+func WithNewFiles(a bool) Option
 ```
-LoadNewFiles controls whether files that exist only in file system and not
+WithNewFiles controls whether files that exist only in file system and not
 in the embedded FS are returned. If false, only files that exist in the
 embedded FS may be reloaded from the new FS.
 
 
 ```go
-func ReloadAfter(t time.Time) ReloadableOption
+func WithReloadAfter(t time.Time) Option
 ```
-ReloadAfter sets the time after which assets are to be reloaded rather than
-reused. Note that the current implementation of go:embed does not record
-
-
-```go
-func UseLogger(logger func(action Action, name, path string, err error)) ReloadableOption
-```
-UseLogger provides a logger to be used by the underlying implementation.
+WithReloadAfter sets the time after which assets are to be reloaded rather
+than reused. Note that the current implementation of go:embed does not
+record
 
 
 

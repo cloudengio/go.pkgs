@@ -96,6 +96,13 @@ func LogBuildInfo(logger *slog.Logger)
 ```
 LogBuildInfo logs build information using the provided logger.
 
+### Func ReplaceAttrNoTime
+```go
+func ReplaceAttrNoTime(_ []string, a slog.Attr) slog.Attr
+```
+ReplaceAttrNoTime returns a slog.Attr with the time attribute removed.
+This is useful for tests where the time is not deterministic.
+
 ### Func VCSInfo
 ```go
 func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool)
@@ -136,15 +143,20 @@ LogBuildInfo logs build information using the logger.
 ### Type LoggingConfig
 ```go
 type LoggingConfig struct {
-	Level      int    `yaml:"level" cmd:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
-	File       string `yaml:"file" cmd:"log file path. If not specified logs are written to stderr."`
-	Format     string `yaml:"format" cmd:"log format: text or json"`
-	SourceCode bool   `yaml:"source_code" cmd:"include source code file and line number in logs"`
+	Level      int    `yaml:"level" doc:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
+	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr."`
+	Format     string `yaml:"format" doc:"log format: text or json"`
+	SourceCode bool   `yaml:"source_code" doc:"include source code file and line number in logs"`
 }
 ```
 LoggingConfig represents a logging configuration.
 
 ### Methods
+
+```go
+func (c LoggingConfig) Leveler() slog.Leveler
+```
+
 
 ```go
 func (c LoggingConfig) NewLogger() (*Logger, error)
@@ -153,9 +165,21 @@ NewLogger creates a new logger based on the configuration.
 
 
 ```go
-func (c LoggingConfig) NewLoggerMust() *Logger
+func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions) *Logger
 ```
 NewLoggerMust is like NewLogger but panics on error.
+
+
+```go
+func (c LoggingConfig) NewLoggerOpts(opts *slog.HandlerOptions) (*Logger, error)
+```
+NewLoggerOpts creates a new logger based on the configuration and custom
+handler options.
+
+
+```go
+func (c LoggingConfig) Options() *slog.HandlerOptions
+```
 
 
 
@@ -174,7 +198,7 @@ LoggingFlags represents common logging related command line flags.
 ### Methods
 
 ```go
-func (lf *LoggingFlags) LoggingConfig() LoggingConfig
+func (lf LoggingFlags) LoggingConfig() LoggingConfig
 ```
 LoggingConfig returns the logging configuration represented by the flags.
 
