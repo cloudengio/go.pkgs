@@ -1,6 +1,6 @@
 module cloudeng.io/google
 
-go 1.25
+go 1.25.5
 
 require (
 	cloudeng.io/algo v0.0.0-20260108054113-6b0ece4b9fa3

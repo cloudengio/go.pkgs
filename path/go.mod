@@ -1,8 +1,6 @@
 module cloudeng.io/path
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.25.5
 
 require (
 	cloudeng.io/errors v0.0.9
