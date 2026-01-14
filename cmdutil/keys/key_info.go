@@ -249,11 +249,11 @@ func (k Info) handleExtra(v any) error {
 		return fmt.Errorf("UnmarshalExtra: value must be a pointer, but got %T for key_id: %v", v, k.ID)
 	}
 	et := reflect.TypeOf(k.extraAny)
-	if et.AssignableTo(rv.Type().Elem()) {
+	if et.AssignableTo(rv.Elem().Type()) {
 		rv.Elem().Set(reflect.ValueOf(k.extraAny))
 		return nil
 	}
-	return fmt.Errorf("UnmarshalExtra: supplied value of type %T, is not assignable to the type of the extra information %T for key_id: %v", v, k.extraAny, k.ID)
+	return fmt.Errorf("UnmarshalExtra: extra information of type %v is not assignable to argument of type %v for key_id: %v", et, rv.Elem().Type(), k.ID)
 }
 
 // UnmarshalExtra unmarshals the extra json, yaml, or explicitly stored extra
