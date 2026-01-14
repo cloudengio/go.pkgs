@@ -10,10 +10,10 @@ cloudeng.io/debug v0.0.0-20251104042927-f7e1e5e3ef21 h1:8X8fYjZHc+kayF+OuT1dCJw1
 cloudeng.io/debug v0.0.0-20251104042927-f7e1e5e3ef21/go.mod h1:XmMPhxxJQ3OEPfcwsIUNqj9cjlTiwwSDK3hCCAQYeLw=
 cloudeng.io/errors v0.0.13 h1:VNAhh/LMgXDzfSx/LxeYU+A6UUBP6K65yTyvQd2OJ5E=
 cloudeng.io/errors v0.0.13/go.mod h1:+IAMDlCNxHDxlWE9vjkPxED0d7Wzt7Nl3REebuCO4m8=
-cloudeng.io/file v0.0.0-20260114022837-ddf7a119f076 h1:5pDfhEirqYIkF1zTv3Krqw1Otfce9XJZi1EvTZEj3C4=
-cloudeng.io/file v0.0.0-20260114022837-ddf7a119f076/go.mod h1:vCRzdxyGkyTDq0KjdG2Z1cmEXM/Cof6mO1LkYv7WJos=
-cloudeng.io/net v0.0.0-20260114022837-ddf7a119f076 h1:WVTcg2XthaISxSgNokeNEnttbYOU4bnUHgCwHULWJyQ=
-cloudeng.io/net v0.0.0-20260114022837-ddf7a119f076/go.mod h1:oHtaAJ5yc0uZXctcnPX60pq+HY6xs/OpD9KxrYirmNw=
+cloudeng.io/file v0.0.0-20260114055159-4427906ad267 h1:cr4DyMi7oNfIw7cNsmZeM//TNktlZ+qhgJAQnuf36pk=
+cloudeng.io/file v0.0.0-20260114055159-4427906ad267/go.mod h1:vCRzdxyGkyTDq0KjdG2Z1cmEXM/Cof6mO1LkYv7WJos=
+cloudeng.io/net v0.0.0-20260114055159-4427906ad267 h1:uu1202iC7bOT7r9ii+w0DBUmBj8ZlW2Y0VZ7DCHqo+4=
+cloudeng.io/net v0.0.0-20260114055159-4427906ad267/go.mod h1:oHtaAJ5yc0uZXctcnPX60pq+HY6xs/OpD9KxrYirmNw=
 cloudeng.io/sync v0.0.9-0.20251104042927-f7e1e5e3ef21 h1:euZCs56b25in7dFfFScc5nlmBiMlGvUdTjloGPA9c+w=
 cloudeng.io/sync v0.0.9-0.20251104042927-f7e1e5e3ef21/go.mod h1:bPp7qbb4lSaOsQEAsGX7NCvyKAgekc4/Vxd2yYeyVM0=
 cloudeng.io/sys v0.0.0-20260114022837-ddf7a119f076 h1:G6jOBEOeZtJPEvvCiq1FCkQ3n2G4jFA7q2vQSSOHgXs=

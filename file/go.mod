@@ -4,11 +4,11 @@ go 1.25.5
 
 require (
 	cloudeng.io/algo v0.0.0-20260114022837-ddf7a119f076
-	cloudeng.io/cmdutil v0.0.0-20260114022837-ddf7a119f076
+	cloudeng.io/cmdutil v0.0.0-20260114055159-4427906ad267
 	cloudeng.io/errors v0.0.13
 	cloudeng.io/logging v0.0.0-20260114022837-ddf7a119f076
-	cloudeng.io/net v0.0.0-20260114022837-ddf7a119f076
-	cloudeng.io/os v0.0.0-20260114022837-ddf7a119f076
+	cloudeng.io/net v0.0.0-20260114055159-4427906ad267
+	cloudeng.io/os v0.0.0-20260114055159-4427906ad267
 	cloudeng.io/path v0.0.10-0.20251104042927-f7e1e5e3ef21
 	cloudeng.io/sync v0.0.9-0.20251104042927-f7e1e5e3ef21
 	cloudeng.io/sys v0.0.0-20260114022837-ddf7a119f076

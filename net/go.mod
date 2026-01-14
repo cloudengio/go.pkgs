@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	cloudeng.io/algo v0.0.0-20260114022837-ddf7a119f076
 	cloudeng.io/errors v0.0.13
-	cloudeng.io/file v0.0.0-20260114022837-ddf7a119f076
+	cloudeng.io/file v0.0.0-20260114055159-4427906ad267
 )
 
 require (
