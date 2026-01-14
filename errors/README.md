@@ -186,6 +186,11 @@ Is supports errors.Is.
 
 
 ```go
+func (m *M) MarshalJSON() ([]byte, error)
+```
+
+
+```go
 func (m *M) Squash(targets ...error) error
 ```
 Squash returns an error.M with at most one instance of each of the targets

@@ -32,10 +32,17 @@ It's a convenience for use by the Extractor interface.
 ### Type ErrorDetail
 ```go
 type ErrorDetail struct {
-	download.Result
-	Error error
+	download.Result // Use Err in download.Result to record errors that occur after a successful download.
 }
 ```
+
+### Methods
+
+```go
+func (e ErrorDetail) Error() string
+```
+
+
 
 
 ### Type Errors
@@ -48,6 +55,11 @@ type Errors struct {
 ```
 
 ### Methods
+
+```go
+func (e Errors) Error() string
+```
+
 
 ```go
 func (e Errors) String() string
