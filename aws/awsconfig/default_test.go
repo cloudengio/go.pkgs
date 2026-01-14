@@ -51,9 +51,9 @@ func TestLoad(t *testing.T) {
 
 func TestLoadFromKeys(t *testing.T) {
 	ctx := context.Background()
-	k := awsconfig.NewKeyInfo("test", "", []byte("1234"), &awsconfig.KeyInfoExtra{
+	k := awsconfig.NewKeyInfo("test", "", []byte("1234"), awsconfig.KeyInfoExtra{
 		AccessKeyID: "access-key",
-		Region:      "us-west-2",
+		Region:      "us-west-233",
 	})
 	opts, err := awsconfig.ConfigOptionsFromKeyInfo(k)
 	if err != nil {
@@ -63,7 +63,7 @@ func TestLoadFromKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := cfg.Region, "us-west-2"; got != want {
+	if got, want := cfg.Region, "us-west-233"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	creds, err := cfg.Credentials.Retrieve(ctx)
