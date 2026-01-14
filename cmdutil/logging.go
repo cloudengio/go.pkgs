@@ -29,12 +29,7 @@ type LoggingConfig struct {
 
 // LoggingConfig returns the logging configuration represented by the flags.
 func (lf LoggingFlags) LoggingConfig() LoggingConfig {
-	return LoggingConfig{
-		Level:      lf.Level,
-		File:       lf.File,
-		Format:     lf.Format,
-		SourceCode: lf.SourceCode,
-	}
+	return LoggingConfig(lf)
 }
 
 type leveler struct {
@@ -151,7 +146,7 @@ func LogBuildInfo(logger *slog.Logger) {
 
 // ReplaceAttrNoTime returns a slog.Attr with the time attribute removed.
 // This is useful for tests where the time is not deterministic.
-func ReplaceAttrNoTime(groups []string, a slog.Attr) slog.Attr {
+func ReplaceAttrNoTime(_ []string, a slog.Attr) slog.Attr {
 	if a.Key == slog.TimeKey {
 		return slog.Attr{}
 	}
