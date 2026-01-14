@@ -76,9 +76,12 @@ func (r *reloadable) reload(name string) (bool, bool, error) {
 			}
 			return false, true, os.ErrNotExist
 		}
-		r.logger.Debug("reload: embedded", "size", inram.Size(), "modtime", r.reloadAfter)
-		r.logger.Debug("reload: ondisk", "size", ondisk.Size(), "modtime", ondisk.ModTime())
-		r.logger.Debug("reload: stale", "stale", r.embeddedIsStale(inram, ondisk))
+		r.logger.Debug("reload check",
+			"embedded_size", inram.Size(),
+			"embedded_modtime_threshold", r.reloadAfter,
+			"ondisk_size", ondisk.Size(),
+			"ondisk_modtime", ondisk.ModTime(),
+			"stale", r.embeddedIsStale(inram, ondisk))
 		return r.embeddedIsStale(inram, ondisk), false, nil
 	}
 	if os.IsNotExist(err) {

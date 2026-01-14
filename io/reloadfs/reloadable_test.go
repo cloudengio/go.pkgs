@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"cloudeng.io/cmdutil"
 	"cloudeng.io/io/reloadfs"
 	"cloudeng.io/windows/win32testutil"
 )
@@ -151,13 +150,18 @@ not d0/world....`; got != want {
 	}
 }
 
+func replaceAttrNoTime(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+	return a
+}
+
 func TestLogging(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	out := &strings.Builder{}
-	opts := &slog.HandlerOptions{
-		ReplaceAttr: cmdutil.ReplaceAttrNoTime,
-	}
+	opts := &slog.HandlerOptions{ReplaceAttr: replaceAttrNoTime}
 	logger := slog.New(slog.NewTextHandler(out, opts))
 
 	dynamic := reloadfs.New(tmpDir, "testdata", content, reloadfs.WithLogger(logger))
@@ -200,14 +204,8 @@ func TestModTime(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	out := &strings.Builder{}
-	opts := &slog.HandlerOptions{
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.Attr{}
-			}
-			return a
-		},
-	}
+	opts := &slog.HandlerOptions{ReplaceAttr: replaceAttrNoTime}
+
 	logger := slog.New(slog.NewTextHandler(out, opts))
 
 	cleanup := createMirror(t, tmpDir)

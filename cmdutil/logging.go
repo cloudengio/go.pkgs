@@ -121,8 +121,8 @@ func (c LoggingConfig) newLogger(opts *slog.HandlerOptions) (*Logger, error) {
 	return &Logger{Logger: slog.New(handler), f: closer}, nil
 }
 
-// NewLoggerOpts creates a new logger based on the configuration and a
-// replaceAttr function to modify attributes.
+// NewLoggerOpts creates a new logger based on the configuration and custom
+// handler options.
 func (c LoggingConfig) NewLoggerOpts(opts *slog.HandlerOptions) (*Logger, error) {
 	if opts == nil {
 		opts = c.Options()
