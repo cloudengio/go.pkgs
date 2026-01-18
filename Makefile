@@ -12,8 +12,9 @@ lint:
 	multimod lint
 
 deps:
-	go work sync
 	multimod update
+	go work sync
+	multimod tidy
 
 pr:
 	go install cloudeng.io/go/cmd/goannotate@latest \

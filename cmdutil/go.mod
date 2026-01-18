@@ -15,5 +15,8 @@ require (
 	cloudeng.io/net v0.0.0-20260114060639-052fa943c25b // indirect
 	cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 // indirect
 	cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	golang.org/x/sys v0.40.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
