@@ -3,17 +3,20 @@ module cloudeng.io/cmdutil
 go 1.25.5
 
 require (
-	cloudeng.io/errors v0.0.13
-	cloudeng.io/file v0.0.0-20260114055159-4427906ad267
+	cloudeng.io/errors v0.0.14-0.20260114020737-744f6c0f8e64
+	cloudeng.io/file v0.0.0-20260114060639-052fa943c25b
 	cloudeng.io/text v0.0.13
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260114022837-ddf7a119f076 // indirect
-	cloudeng.io/net v0.0.0-20260114055159-4427906ad267 // indirect
-	cloudeng.io/sync v0.0.9-0.20251104042927-f7e1e5e3ef21 // indirect
-	cloudeng.io/sys v0.0.0-20260114022837-ddf7a119f076 // indirect
-	github.com/kr/text v0.2.0 // indirect
+	cloudeng.io/algo v0.0.0-20260114060639-052fa943c25b // indirect
+	cloudeng.io/debug v0.0.0-20260114020737-744f6c0f8e64 // indirect
+	cloudeng.io/net v0.0.0-20260114060639-052fa943c25b // indirect
+	cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 // indirect
+	cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	golang.org/x/sys v0.40.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
