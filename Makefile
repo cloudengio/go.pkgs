@@ -12,6 +12,7 @@ lint:
 	multimod lint
 
 deps:
+	go work sync
 	multimod update
 
 pr:

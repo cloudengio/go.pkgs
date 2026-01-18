@@ -3,10 +3,10 @@ module cloudeng.io/aws
 go 1.25.5
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20260114055159-4427906ad267
+	cloudeng.io/cmdutil v0.0.0-20260114060639-052fa943c25b
 	cloudeng.io/errors v0.0.14-0.20260114020737-744f6c0f8e64
-	cloudeng.io/file v0.0.0-20260114055159-4427906ad267
-	cloudeng.io/logging v0.0.0-20260114022837-ddf7a119f076
+	cloudeng.io/file v0.0.0-20260114060639-052fa943c25b
+	cloudeng.io/logging v0.0.0-20260114060639-052fa943c25b
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
@@ -19,12 +19,12 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260114020737-744f6c0f8e64 // indirect
+	cloudeng.io/algo v0.0.0-20260114060639-052fa943c25b // indirect
 	cloudeng.io/debug v0.0.0-20260114020737-744f6c0f8e64 // indirect
-	cloudeng.io/net v0.0.0-20260114020737-744f6c0f8e64 // indirect
-	cloudeng.io/os v0.0.0-20260114055159-4427906ad267 // indirect
+	cloudeng.io/net v0.0.0-20260114055159-4427906ad267 // indirect
+	cloudeng.io/os v0.0.0-20260114060639-052fa943c25b // indirect
 	cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 // indirect
-	cloudeng.io/sys v0.0.0-20260114020737-744f6c0f8e64 // indirect
+	cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
@@ -67,8 +67,10 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
+	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260112192933-99fd39fd28a9 // indirect
 	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
