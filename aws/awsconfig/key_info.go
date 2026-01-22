@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"cloudeng.io/cmdutil/keys"
+	"cloudeng.io/text/textutil"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 )
@@ -29,7 +30,9 @@ func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 	token := keyInfo.Token()
 	defer token.Clear()
 	provider := credentials.NewStaticCredentialsProvider(
-		extra.AccessKeyID, string(token.Value()), "")
+		textutil.TrimUnicodeQuotes(extra.AccessKeyID),
+		textutil.TrimUnicodeQuotes(string(token.Value())),
+		"")
 	return []ConfigOption{
 		WithConfigOptions(config.WithRegion(extra.Region)),
 		WithConfigOptions(config.WithCredentialsProvider(provider)),
