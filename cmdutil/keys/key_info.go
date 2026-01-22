@@ -158,6 +158,8 @@ func (k *Info) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// UnmarshalYAML implements the yaml.Unmarshaler interface and
+// calls textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 func (k *Info) UnmarshalYAML(node *yaml.Node) error {
 	var kv keyInfo
 	if err := node.Decode(&kv); err != nil {

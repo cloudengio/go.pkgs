@@ -22,6 +22,8 @@ type KeyInfoExtra struct {
 }
 
 // ConfigOptionsFromKeyInfo returns the ConfigOptions implied by the key info.
+// Note that it will textutil.TrimUnicodeQuotes on the AccessKeyID
+// and token value to remove any leading/trailing unicode quotes.
 func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 	var extra KeyInfoExtra
 	if err := keyInfo.UnmarshalExtra(&extra); err != nil {

@@ -124,7 +124,8 @@ unmarshaling from both a list and a map of keys.
 func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error
 ```
 UnmarshalYAML implements the yaml.Unmarshaler interface to allow
-unmarshaling from both a list and a map of keys.
+unmarshaling from both a list and a map of keys. textutil.TrimUnicodeQuotes
+is used on the ID, User, and Token fields.
 
 
 
@@ -223,6 +224,8 @@ func (k *Info) UnmarshalJSON(data []byte) error
 ```go
 func (k *Info) UnmarshalYAML(node *yaml.Node) error
 ```
+UnmarshalYAML implements the yaml.Unmarshaler interface and calls
+textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 
 
 ```go
