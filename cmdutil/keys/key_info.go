@@ -146,14 +146,16 @@ func (k Info) extraFromYAML(v any) error {
 	return nil
 }
 
+// UnmarshalJSON implements the json.Unmarshaler interface and
+// calls textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 func (k *Info) UnmarshalJSON(data []byte) error {
 	var kv keyInfo
 	if err := json.Unmarshal(data, &kv); err != nil {
 		return err
 	}
-	k.ID = kv.ID
-	k.User = kv.User
-	k.token = []byte(kv.Token)
+	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
+	k.User = textutil.TrimUnicodeQuotes(kv.User)
+	k.token = []byte(textutil.TrimUnicodeQuotes(kv.Token))
 	k.extraJSON = kv.ExtraJSON
 	return nil
 }
