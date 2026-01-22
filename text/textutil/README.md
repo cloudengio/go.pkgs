@@ -38,6 +38,13 @@ supplied string without any allocations or copies. It should only
 be used when the resulting byte slice will never be modified. See
 https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
 
+### Func TrimUnicodeQuotes
+```go
+func TrimUnicodeQuotes(text string) string
+```
+TrimUnicodeQuotes trims leading and trailing UTF-8 curly quotes from text
+using unicode properties (Pi and Pf).
+
 
 
 ## Types
