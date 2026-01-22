@@ -5,19 +5,28 @@
 package textutil
 
 import (
-	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // TrimUnicodeQuotes trims leading and trailing UTF-8 curly quotes from text
 // using unicode properties (Pi and Pf).
 func TrimUnicodeQuotes(text string) string {
-	text = strings.TrimLeftFunc(text, func(r rune) bool {
-		// Punctuation, Initial quote (e.g. “, ‘, «)
-		return unicode.Is(unicode.Pi, r)
-	})
-	return strings.TrimRightFunc(text, func(r rune) bool {
-		// Punctuation, Final quote   (e.g. ”, ’, »)
-		return unicode.Is(unicode.Pf, r)
-	})
+	start := 0
+	for start < len(text) {
+		r, size := utf8.DecodeRuneInString(text[start:])
+		if !unicode.Is(unicode.Pi, r) {
+			break
+		}
+		start += size
+	}
+	end := len(text)
+	for end > start {
+		r, size := utf8.DecodeLastRuneInString(text[:end])
+		if !unicode.Is(unicode.Pf, r) {
+			break
+		}
+		end -= size
+	}
+	return text[start:end]
 }

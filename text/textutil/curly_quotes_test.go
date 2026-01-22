@@ -62,9 +62,9 @@ func TestTrimUnicodeQuotes(t *testing.T) {
 			want:  "(hello)",
 		},
 		{
-			name:  "no_end_quotes",
-			input: "hello “world”",
-			want:  "hello “world",
+			name:  "quotes_inside_text",
+			input: "h“ello «»“world”",
+			want:  "h“ello «»“world",
 		},
 		{
 			name:  "empty",
