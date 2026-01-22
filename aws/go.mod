@@ -25,6 +25,7 @@ require (
 	cloudeng.io/os v0.0.0-20260114060639-052fa943c25b // indirect
 	cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 // indirect
 	cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b // indirect
+	cloudeng.io/text v0.0.14 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
