@@ -117,14 +117,16 @@ file.ReadFileFS and unmarshals it into the InMemoryKeyStore.
 func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error
 ```
 UnmarshalJSON implements the json.Unmarshaler interface to allow
-unmarshaling from both a list and a map of keys.
+unmarshaling from both a list and a map of keys. textutil.TrimUnicodeQuotes
+is used on the ID, User, and Token fields.
 
 
 ```go
 func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error
 ```
 UnmarshalYAML implements the yaml.Unmarshaler interface to allow
-unmarshaling from both a list and a map of keys.
+unmarshaling from both a list and a map of keys. textutil.TrimUnicodeQuotes
+is used on the ID, User, and Token fields.
 
 
 
@@ -218,11 +220,15 @@ extra information is assignable.
 ```go
 func (k *Info) UnmarshalJSON(data []byte) error
 ```
+UnmarshalJSON implements the json.Unmarshaler interface and calls
+textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 
 
 ```go
 func (k *Info) UnmarshalYAML(node *yaml.Node) error
 ```
+UnmarshalYAML implements the yaml.Unmarshaler interface and calls
+textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 
 
 ```go

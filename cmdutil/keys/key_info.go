@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 
+	"cloudeng.io/text/textutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -145,26 +146,30 @@ func (k Info) extraFromYAML(v any) error {
 	return nil
 }
 
+// UnmarshalJSON implements the json.Unmarshaler interface and
+// calls textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 func (k *Info) UnmarshalJSON(data []byte) error {
 	var kv keyInfo
 	if err := json.Unmarshal(data, &kv); err != nil {
 		return err
 	}
-	k.ID = kv.ID
-	k.User = kv.User
-	k.token = []byte(kv.Token)
+	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
+	k.User = textutil.TrimUnicodeQuotes(kv.User)
+	k.token = []byte(textutil.TrimUnicodeQuotes(kv.Token))
 	k.extraJSON = kv.ExtraJSON
 	return nil
 }
 
+// UnmarshalYAML implements the yaml.Unmarshaler interface and
+// calls textutil.TrimUnicodeQuotes on the ID, User, and Token fields.
 func (k *Info) UnmarshalYAML(node *yaml.Node) error {
 	var kv keyInfo
 	if err := node.Decode(&kv); err != nil {
 		return err
 	}
-	k.ID = kv.ID
-	k.User = kv.User
-	k.token = []byte(kv.Token)
+	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
+	k.User = textutil.TrimUnicodeQuotes(kv.User)
+	k.token = []byte(textutil.TrimUnicodeQuotes(kv.Token))
 	k.extraYAML = kv.ExtraYAML
 	return nil
 }
@@ -232,9 +237,9 @@ func (k Info) MarshalYAML() (any, error) {
 
 func copyInfo(src keyInfo) Info {
 	return Info{
-		ID:        src.ID,
-		User:      src.User,
-		token:     []byte(src.Token),
+		ID:        textutil.TrimUnicodeQuotes(src.ID),
+		User:      textutil.TrimUnicodeQuotes(src.User),
+		token:     []byte(textutil.TrimUnicodeQuotes(src.Token)),
 		extraJSON: src.ExtraJSON,
 		extraYAML: src.ExtraYAML,
 	}

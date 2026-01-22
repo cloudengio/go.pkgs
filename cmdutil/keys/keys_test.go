@@ -18,7 +18,7 @@ import (
 const (
 	yamlList = `
 - key_id: key1
-  token: value1
+  token: "value1"
   user: user1
 - key_id: key2
   token: value2
@@ -76,7 +76,7 @@ func marshalYAML(t *testing.T, v any) []byte {
 
 func TestYAMLKeyInfo(t *testing.T) {
 	ki := `key_id: key1
-token: value1
+token: “value1”
 user: user1
 `
 	// Unmarshal
@@ -114,7 +114,7 @@ extra:
 token: value2
 user: user2
 extra:
-  scope: write
+  scope: "write"
 `
 	unmarshalYAML(t, []byte(kiExtra), &k)
 	verifyKey(t, k, 2)

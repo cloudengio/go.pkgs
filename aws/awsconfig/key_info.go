@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"cloudeng.io/cmdutil/keys"
+	"cloudeng.io/text/textutil"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 )
@@ -21,6 +22,8 @@ type KeyInfoExtra struct {
 }
 
 // ConfigOptionsFromKeyInfo returns the ConfigOptions implied by the key info.
+// Note that it will textutil.TrimUnicodeQuotes on the AccessKeyID
+// and token value to remove any leading/trailing unicode quotes.
 func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 	var extra KeyInfoExtra
 	if err := keyInfo.UnmarshalExtra(&extra); err != nil {
@@ -29,7 +32,9 @@ func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 	token := keyInfo.Token()
 	defer token.Clear()
 	provider := credentials.NewStaticCredentialsProvider(
-		extra.AccessKeyID, string(token.Value()), "")
+		textutil.TrimUnicodeQuotes(extra.AccessKeyID),
+		textutil.TrimUnicodeQuotes(string(token.Value())),
+		"")
 	return []ConfigOption{
 		WithConfigOptions(config.WithRegion(extra.Region)),
 		WithConfigOptions(config.WithCredentialsProvider(provider)),

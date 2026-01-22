@@ -43,6 +43,7 @@ func copyInfoList(src []keyInfo) []Info {
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
+// textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	var asList []keyInfo
 	err := node.Decode(&asList)
@@ -64,6 +65,7 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 
 // UnmarshalJSON implements the json.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
+// textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	var asList []keyInfo
 	err := json.Unmarshal(data, &asList)

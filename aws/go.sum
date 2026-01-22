@@ -20,6 +20,8 @@ cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 h1:Mg+W3M/f1eSFtzBbF1l7y7g
 cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64/go.mod h1:0lA6WiBA1Uq3Uvzo0Yyr1xcWIgreeTyX2FxaBIzzvs8=
 cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b h1:Yq2D9LJRQQIKGQZGS989mGt5H8nmSSljftm+x1EEcXY=
 cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b/go.mod h1:LDe7ke+SdFTGgq4tSfReeptDPv0+jdSWkVtoEm6DQtg=
+cloudeng.io/text v0.0.14 h1:VncYlTxCtvVRvv9PA2JAYw1kS/K8ElF3FnCv6T4YnWg=
+cloudeng.io/text v0.0.14/go.mod h1:bZd+iMNGHuFhRwk30Ife7WW56IZAMnAqApeEt4KEc0c=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e h1:88FLgbskFkcsZSgh3jncYqYBg1J2eLHGzmdp74APrCQ=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e/go.mod h1:tUOArMXLISe8OY+lHimWwdHMev5N7MwQGczQgTYZb3Y=
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 h1:L/gRVlceqvL25UVaW/CKtUDjefjrs0SPonmDGUVOYP0=
