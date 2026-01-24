@@ -92,14 +92,14 @@ type mockKMSClient struct {
 	signErr error
 }
 
-func (m *mockKMSClient) Sign(ctx context.Context, input *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error) {
+func (m *mockKMSClient) Sign(_ context.Context, _ *kms.SignInput, _ ...func(*kms.Options)) (*kms.SignOutput, error) {
 	if m.signErr != nil {
 		return nil, m.signErr
 	}
 	return &kms.SignOutput{Signature: []byte("mock-signature")}, nil
 }
 
-func (m *mockKMSClient) GetPublicKey(ctx context.Context, input *kms.GetPublicKeyInput, optFns ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
+func (m *mockKMSClient) GetPublicKey(_ context.Context, _ *kms.GetPublicKeyInput, _ ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
 	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	der, _ := x509.MarshalPKIXPublicKey(&priv.PublicKey)
 
