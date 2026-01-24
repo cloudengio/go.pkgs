@@ -15,10 +15,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/pkg/errors"
 )
+
+const defaultTimeout = time.Second * 5
 
 type Client interface {
 	Sign(ctx context.Context, input *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error)
@@ -29,7 +29,6 @@ type Signer struct {
 	client Client
 	keyID  string
 	algo   kmstypes.SigningAlgorithmSpec
-	ctx    context.Context
 	pubKey crypto.PublicKey
 }
 
@@ -38,15 +37,15 @@ func (s *Signer) Sign(_ io.Reader, digest []byte, _ crypto.SignerOpts) ([]byte, 
 		KeyId:            aws.String(s.keyID),
 		SigningAlgorithm: s.algo,
 		Message:          digest,
-		MessageType:      types.MessageTypeDigest,
+		MessageType:      kmstypes.MessageTypeDigest,
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx, time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
 	resp, err := s.client.Sign(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "awskms Sign failed")
+		return nil, fmt.Errorf("awskms Sign failed: %w", err)
 	}
 
 	return resp.Signature, nil
@@ -54,7 +53,7 @@ func (s *Signer) Sign(_ io.Reader, digest []byte, _ crypto.SignerOpts) ([]byte, 
 
 func getPublicKey(ctx context.Context, client Client, keyID string) (crypto.PublicKey, error) {
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
 
 	input := kms.GetPublicKeyInput{
@@ -65,7 +64,7 @@ func getPublicKey(ctx context.Context, client Client, keyID string) (crypto.Publ
 		return nil, fmt.Errorf(`failed to get public key from KMS: %w`, err)
 	}
 
-	if output.KeyUsage != types.KeyUsageTypeSignVerify {
+	if output.KeyUsage != kmstypes.KeyUsageTypeSignVerify {
 		return nil, fmt.Errorf(`invalid key usage. expected SIGN_VERIFY, got %q`, output.KeyUsage)
 	}
 
@@ -90,17 +89,16 @@ func init() {
 
 func NewSigner(ctx context.Context, client Client, keyID, signingAlgo string) (crypto.Signer, error) {
 	if len(keyID) == 0 {
-		return nil, errors.New("awskms.NewSigner: keyID is empty")
+		return nil, fmt.Errorf("awskms.NewSigner: keyID is empty")
 	}
 	algo := kmstypes.SigningAlgorithmSpec(signingAlgo)
 	if !slices.Contains(supportedAlgoSpecs, algo) {
-		return nil, errors.Errorf("awskms.NewSigner: signingAlgo %v is not supported", signingAlgo)
+		return nil, fmt.Errorf("awskms.NewSigner: signingAlgo %v is not supported", signingAlgo)
 	}
 	s := &Signer{
 		client: client,
 		keyID:  keyID,
 		algo:   algo,
-		ctx:    ctx,
 	}
 	pk, err := getPublicKey(ctx, s.client, keyID)
 	if err != nil {
