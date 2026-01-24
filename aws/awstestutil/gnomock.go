@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smithyendpoints "github.com/aws/smithy-go/endpoints"
 	"github.com/orlangure/gnomock"
@@ -64,6 +65,12 @@ func WithS3() Option {
 func WithSecretsManager() Option {
 	return func(o *Options) {
 		o.localStackServices = append(o.localStackServices, localstack.SecretsManager)
+	}
+}
+
+func WithKMS() Option {
+	return func(o *Options) {
+		o.localStackServices = append(o.localStackServices, localstack.KMS)
 	}
 }
 
@@ -155,10 +162,21 @@ func (a *AWS) uri() url.URL {
 	return u
 }
 
+func (a *AWS) URL() string {
+	u := a.uri()
+	return u.String()
+}
+
 func (a *AWS) SecretsManager(cfg aws.Config) *secretsmanager.Client {
 	res := newHostOnlyResolver[secretsmanager.EndpointParameters](a.uri())
 	opt := secretsmanager.WithEndpointResolverV2(res)
 	return secretsmanager.NewFromConfig(cfg, opt)
+}
+
+func (a *AWS) KMS(cfg aws.Config) *kms.Client {
+	res := newHostOnlyResolver[kms.EndpointParameters](a.uri())
+	opt := kms.WithEndpointResolverV2(res)
+	return kms.NewFromConfig(cfg, opt)
 }
 
 func DefaultAWSConfig() aws.Config {

@@ -139,6 +139,8 @@ is retrieved from EC2 IMDS when it's not found by other means.
 func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error)
 ```
 ConfigOptionsFromKeyInfo returns the ConfigOptions implied by the key info.
+Note that it will textutil.TrimUnicodeQuotes on the AccessKeyID and token
+value to remove any leading/trailing unicode quotes.
 
 
 ```go
