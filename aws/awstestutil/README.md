@@ -43,6 +43,11 @@ func NewLocalAWS(opts ...Option) *AWS
 ### Methods
 
 ```go
+func (a *AWS) KMS(cfg aws.Config) *kms.Client
+```
+
+
+```go
 func (a *AWS) S3(cfg aws.Config) *s3.Client
 ```
 
@@ -62,6 +67,11 @@ func (a *AWS) Stop() error
 ```
 
 
+```go
+func (a *AWS) URL() string
+```
+
+
 
 
 ### Type Option
@@ -73,6 +83,11 @@ type Option func(o *Options)
 
 ```go
 func WithDebug(log io.Writer) Option
+```
+
+
+```go
+func WithKMS() Option
 ```
 
 
