@@ -8,6 +8,7 @@ require (
 	cloudeng.io/file v0.0.0-20260114060639-052fa943c25b
 	cloudeng.io/logging v0.0.0-20260114060639-052fa943c25b
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
+	cloudeng.io/text v0.0.14
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
@@ -17,7 +18,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6
 	github.com/aws/smithy-go v1.24.0
 	github.com/orlangure/gnomock v0.32.0
-	github.com/pkg/errors v0.9.1
 )
 
 require (
@@ -27,7 +27,6 @@ require (
 	cloudeng.io/os v0.0.0-20260114060639-052fa943c25b // indirect
 	cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 // indirect
 	cloudeng.io/sys v0.0.0-20260114060639-052fa943c25b // indirect
-	cloudeng.io/text v0.0.14 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
@@ -58,6 +57,7 @@ require (
 	github.com/moby/sys/sequential v0.6.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0 // indirect
 	go.opentelemetry.io/otel v1.39.0 // indirect

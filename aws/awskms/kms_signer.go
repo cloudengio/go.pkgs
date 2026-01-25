@@ -53,9 +53,6 @@ func (s *Signer) Sign(_ io.Reader, digest []byte, _ crypto.SignerOpts) ([]byte, 
 
 func getPublicKey(ctx context.Context, client Client, keyID string) (crypto.PublicKey, error) {
 
-	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
-	defer cancel()
-
 	input := kms.GetPublicKeyInput{
 		KeyId: aws.String(keyID),
 	}
