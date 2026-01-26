@@ -48,25 +48,3 @@ func TestStringSplitIterator(t *testing.T) {
 		})
 	}
 }
-
-func TestCountRune(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		input string
-		r     rune
-		want  int
-	}{
-		{"empty", "", 'a', 0},
-		{"none", "abc", 'd', 0},
-		{"single", "aba", 'b', 1},
-		{"multiple", "ababa", 'a', 3},
-		{"unicode", "⌘a⌘", '⌘', 2},
-		{"multi-byte target", "a⌘b⌘c", '⌘', 2},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := textutil.CountRune(tc.input, tc.r); got != tc.want {
-				t.Errorf("CountRune(%q, %q) = %v, want %v", tc.input, tc.r, got, tc.want)
-			}
-		})
-	}
-}

@@ -11,8 +11,8 @@ import (
 )
 
 // SplitString splits a string into components separated by the given rune.
-// It returns an iterator that yields the components in order and the index of
-// the component in the string.
+// It returns an iterator that yields the components in order and the 0-based
+// index of the component in the string.
 // It is functionally equivalent to strings.Split but returns an iterator
 // instead of a slice, i.e. create a slice by iterating over SplitString
 // and appending the components to the slice is identical to the output of
@@ -44,15 +44,4 @@ func SplitString(s string, sep rune) iter.Seq2[int, string] {
 			i++
 		}
 	}
-}
-
-// CountRune counts the number of occurrences of a rune in a string.
-func CountRune(s string, r rune) int {
-	n := 0
-	for _, r2 := range s {
-		if r2 == r {
-			n++
-		}
-	}
-	return n
 }
