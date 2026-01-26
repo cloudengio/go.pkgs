@@ -29,6 +29,25 @@ func ReverseString(input string) string
 ```
 ReverseString is like ReverseBytes but returns a string.
 
+### Func SplitString
+```go
+func SplitString(s string, sep rune) iter.Seq2[int, string]
+```
+SplitString splits a string into components separated by the given rune.
+It returns an iterator that yields the components in order and the 0-based
+index of the component in the string. It is functionally equivalent to
+strings.Split but returns an iterator instead of a slice, i.e. create a
+slice by iterating over SplitString and appending the components to the
+slice is identical to the output of strings.Split.
+
+    var expected []string
+    for i, s := range SplitString(input, sep) {
+      expected = append(expected, s)
+    }
+    if !slices.Equal(expected, strings.Split(input, string(sep))) {
+      t.Errorf("SplitString(%q, %q) = %v, want %v", input, sep, expected, strings.Split(input, string(sep)))
+    }
+
 ### Func StringToBytes
 ```go
 func StringToBytes(s string) []byte
