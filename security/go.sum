@@ -1,4 +1,4 @@
-cloudeng.io/os v0.0.0-20260114060639-052fa943c25b h1:zJDcsWkzfbUiDeAF4NREBZKfZHlmS/gv2BigYyM1o44=
-cloudeng.io/os v0.0.0-20260114060639-052fa943c25b/go.mod h1:Z8uzqbo0uguUwm/M9JZePOJjOW3wjh8ri0dlT6GWqcU=
+cloudeng.io/os v0.0.0-20260126200038-d63c3c252f7f h1:LcJY9u6ND82MUmecLehRmxe7Go8qa6BNOm84rb/K0zU=
+cloudeng.io/os v0.0.0-20260126200038-d63c3c252f7f/go.mod h1:S9sHRS5g4gc/016s+q4VH9AD+m0ecwdo9NT6+thTlBs=
 golang.org/x/sys v0.40.0 h1:DBZZqJ2Rkml6QMQsZywtnjnnGvHza6BTfYFWY9kjEWQ=
 golang.org/x/sys v0.40.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
