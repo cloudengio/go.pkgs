@@ -631,30 +631,30 @@ func (cmds *CommandSet) processHelp(usage string, args []string) error {
 	}
 	switch args[0] {
 	case "-help", "--help", "-h", "--h":
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: not relevant here
 		return flag.ErrHelp
 	case "vcsinfo":
 		goVersion, version, when, dirty, ok := cmdutil.VCSInfo()
 		if !ok {
 			return fmt.Errorf("failed to determine version information")
 		}
-		fmt.Fprintf(cmds.out, "go: %v, commit: %v, build date: %v, dirty: %v\n", goVersion, version, when, dirty)
+		fmt.Fprintf(cmds.out, "go: %v, commit: %v, build date: %v, dirty: %v\n", goVersion, version, when, dirty) //nolint:gosec // G705: not relevant here
 		return flag.ErrHelp
 	case "help":
 		if cmds.cmd != nil {
 			if len(args) < 2 || args[1] == cmds.cmd.name {
-				fmt.Fprintln(cmds.out, cmds.cmd.Usage())
+				fmt.Fprintln(cmds.out, cmds.cmd.Usage()) //nolint:gosec // G705: not relevant here
 				return flag.ErrHelp
 			}
 			return fmt.Errorf("%v is not one of the supported commands", args[1])
 		}
 		if len(args) == 1 {
-			fmt.Fprintln(cmds.out, cmds.Usage(usage))
+			fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: not relevant here
 			return flag.ErrHelp
 		}
 		for _, cmd := range cmds.cmds {
 			if args[1] == cmd.name {
-				fmt.Fprintln(cmds.out, cmd.Usage())
+				fmt.Fprintln(cmds.out, cmd.Usage()) //nolint:gosec // G705: not relevant here
 				return flag.ErrHelp
 			}
 		}
