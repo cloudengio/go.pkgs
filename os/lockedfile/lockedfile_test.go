@@ -242,7 +242,7 @@ func TestSpuriousEDEADLK(t *testing.T) {
 		defer b.Close()
 
 		// #nosec G306
-		if err := os.WriteFile(filepath.Join(dir, "locked"), []byte("ok"), 0666); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "locked"), []byte("ok"), 0666); err != nil { //nolint:gosec // G703 not relevant here.
 			t.Fatal(err)
 		}
 
@@ -267,7 +267,7 @@ func TestSpuriousEDEADLK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(os.Args[0], "-test.run="+t.Name()) // #nosec G204
+	cmd := exec.Command(os.Args[0], "-test.run="+t.Name()) //nolint:gosec // G204 not relevant here.
 	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", dirVar, dir))
 
 	qDone := make(chan struct{})

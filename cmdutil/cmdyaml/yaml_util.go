@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -113,9 +112,7 @@ func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
 			newError.WriteRune('\n')
 			continue
 		}
-		esc := html.EscapeString(fmt.Sprintf("%vline %d: %q: %v", matches[1], l, specLines[l-1], matches[3]))
-		_, _ = newError.WriteString(esc)
-
+		fmt.Fprintf(&newError, "%vline %d: %q: %v", matches[1], l, specLines[l-1], matches[3]) //nolint:gosec // G705: XSS via taint analysis not relevant here.
 	}
 	return errors.New(newError.String())
 }

@@ -113,7 +113,7 @@ func NewLargeFile(ctx context.Context, name string, opts ...LargeFileOption) (la
 		return nil, err
 	}
 	req = req.WithContext(ctx)
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704 is overly restrictive here.
 	if err := httperror.CheckResponse(err, resp); err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (f *LargeFile) GetReader(ctx context.Context, from, to int64) (io.ReadClose
 	if err != nil {
 		return nil, nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704 is overly restrictive here.
 	if err == nil {
 		switch resp.StatusCode {
 		case http.StatusOK, http.StatusPartialContent:

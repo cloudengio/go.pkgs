@@ -10,7 +10,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"html"
 	"io"
 	"regexp"
 	"slices"
@@ -153,8 +152,7 @@ func readLines(rd io.Reader, out io.Writer, ch chan<- *inputEvent) {
 	for {
 		str, err := brd.ReadString('\n')
 		if out != nil {
-			// use html.EscapeString for G705 XSS safety, even though the input is not expected to be rendered as HTML.
-			_, _ = out.Write([]byte(html.EscapeString("> " + str)))
+			fmt.Fprintf(out, "> %s", str) //nolint:gosec // G705: XSS via taint analysis
 		}
 		if err != nil {
 			if err == io.EOF {

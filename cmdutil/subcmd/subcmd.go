@@ -133,7 +133,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"html"
 	"io"
 	"os"
 	"path/filepath"
@@ -464,26 +463,13 @@ func (cmds *CommandSet) TopLevel(cmd *Command) {
 	cmds.cmd = cmd
 }
 
-// defaults returns the value of Defaults for each command in commands.
-func (cmds *CommandSet) defaults() string { //nolint:unused
-	out := &strings.Builder{}
-	out.WriteString(cmds.globalDefaults())
-	for i, cmd := range cmds.cmds {
-		out.WriteString(cmd.Usage())
-		if i < len(cmds.cmds)-1 {
-			out.WriteString("\n")
-		}
-	}
-	return out.String()
-}
-
 func lineWrapDefaults(input string) string {
 	out := &strings.Builder{}
 	sc := bufio.NewScanner(bytes.NewBufferString(input))
 	block := &strings.Builder{}
 	writeBlock := func() {
 		if block.Len() > 0 {
-			fmt.Fprintln(out, html.EscapeString(linewrap.Block(4, 75, block.String())))
+			fmt.Fprintln(out, linewrap.Block(4, 75, block.String())) //nolint:gosec // G705: not relevant here
 			block.Reset()
 		}
 	}
@@ -494,10 +480,10 @@ func lineWrapDefaults(input string) string {
 		}
 		if l[:3] == "  -" {
 			writeBlock()
-			fmt.Fprintln(out, html.EscapeString(l)) //nolint:gosec // G705 is not relevant here as the input is not expected to be rendered as HTML.
+			fmt.Fprintln(out, l) //nolint:gosec // G705: not relevant here
 			continue
 		}
-		fmt.Fprintln(block, html.EscapeString(l)) //nolint:gosec // G705 is not relevant here as the input is not expected to be
+		fmt.Fprintln(block, l) //nolint:gosec // G705: not relevant here
 	}
 	writeBlock()
 	return out.String()
@@ -528,8 +514,7 @@ func (cmds *CommandSet) globalDefaults() string {
 
 // Usage returns the usage message for the command set.
 func (cmds *CommandSet) Usage(name string) string {
-	esc := html.EscapeString(fmt.Sprintf("Usage of %v\n\n%s\n", name, cmds.Summary()))
-	return esc
+	return fmt.Sprintf("Usage of %v\n\n%s\n", name, cmds.Summary())
 }
 
 // Defaults returns the usage message and flag defaults.
@@ -537,7 +522,7 @@ func (cmds *CommandSet) Defaults(name string) string {
 	out := &strings.Builder{}
 	out.WriteString(cmds.Usage(name))
 	if gd := cmds.globalDefaults(); len(gd) > 0 {
-		fmt.Fprintf(out, "\n%s", html.EscapeString(gd))
+		fmt.Fprintf(out, "\n%s", gd)
 	}
 	return out.String()
 }
@@ -577,7 +562,7 @@ func (cmds *CommandSet) Summary() string {
 			out.WriteByte('\n')
 		}
 	}
-	return html.EscapeString(out.String())
+	return out.String()
 }
 
 // Dispatch will dispatch the appropriate sub command or return an error.
@@ -618,9 +603,9 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 		fs := cmds.global.flagSet
 		if err := fs.Parse(args); err != nil {
 			if err == flag.ErrHelp {
-				fmt.Fprintln(cmds.out, cmds.Usage(usage))
+				fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: not relevant here
 				if gd := cmds.globalDefaults(); len(gd) > 0 {
-					_, _ = cmds.out.Write([]byte(html.EscapeString(gd)))
+					_, _ = cmds.out.Write([]byte(gd))
 				}
 			}
 			return err
@@ -692,7 +677,7 @@ func (cmds *CommandSet) parseArgs(fs *flag.FlagSet, cmd *Command, args []string)
 func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args []string) error {
 	tlcmd := cmds.cmd
 	if len(args) == 0 && tlcmd == nil {
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: false positive
 		return fmt.Errorf("no command specified")
 	}
 
@@ -711,7 +696,7 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 	}
 
 	if len(args) == 0 {
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: false positive
 		return fmt.Errorf("no command specified")
 	}
 

@@ -98,7 +98,7 @@ func TestTracingRoundTripper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := client.Do(req)
+	res, err := client.Do(req) //nolint:gosec // G704 is overly restrictive here.
 	if err != nil {
 		t.Fatal(err)
 	}

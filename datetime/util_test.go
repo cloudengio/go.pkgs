@@ -62,7 +62,7 @@ func newCalendarDateList(d ...datetime.CalendarDate) datetime.CalendarDateList {
 func newDateRangeList(d ...datetime.Date) datetime.DateRangeList {
 	r := make([]datetime.DateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, datetime.NewDateRange(d[i], d[i+1]))
+		r = append(r, datetime.NewDateRange(d[i], d[i+1])) //nolint:gosec // G602 is a false positive here.
 	}
 	return r
 }
@@ -70,7 +70,7 @@ func newDateRangeList(d ...datetime.Date) datetime.DateRangeList {
 func newCalendarDateRangeList(d ...datetime.CalendarDate) datetime.CalendarDateRangeList {
 	r := make([]datetime.CalendarDateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, datetime.NewCalendarDateRange(d[i], d[i+1]))
+		r = append(r, datetime.NewCalendarDateRange(d[i], d[i+1])) //nolint:gosec // G602 is a false positive here.
 	}
 	return r
 }
