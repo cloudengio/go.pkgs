@@ -63,11 +63,11 @@ type Item struct {
 type expression []Item
 
 func (e expression) String() string {
-	res := ""
+	var res strings.Builder
 	for _, i := range e {
-		res += i.String()
+		res.WriteString(i.String())
 	}
-	return res
+	return res.String()
 }
 
 func (it Item) String() string {

@@ -61,7 +61,7 @@ func TestAsyncWrite(t *testing.T) {
 		}
 
 		prefix := fs.Join(root, "l1", "l2")
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			writeObject(ctx, t, store, prefix, i)
 		}
 		if err := store.Finish(ctx); err != nil {
@@ -73,7 +73,7 @@ func TestAsyncWrite(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			var obj content.Object[string, int]
 			ctype, err := obj.Load(ctx, store, prefix, fmt.Sprintf("c-%03v", i))
 			if err != nil {
@@ -119,7 +119,7 @@ func TestAsyncWriteCancel(t *testing.T) {
 
 	var errCh = make(chan error, 1)
 	go func() {
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			obj := content.Object[string, int]{
 				Value:    fmt.Sprintf("test-0%3v", i),
 				Response: i,
@@ -162,7 +162,7 @@ func TestAsyncRead(t *testing.T) {
 	syncStore := stores.NewSync(fs)
 	mkdirall(t, root)
 	names := []string{}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		name := writeObject(ctx, t, syncStore, root, i)
 		names = append(names, name)
 	}

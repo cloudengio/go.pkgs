@@ -318,7 +318,7 @@ func TestGenericHeap_Duplicates(t *testing.T) {
 func BenchmarkPushPop(b *testing.B) {
 	const size = 10000
 	data := make([]IntType, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = IntType(size - i) // Push in reverse sorted order
 	}
 

@@ -132,13 +132,13 @@ func TestLogBuildInfo(t *testing.T) {
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))
-	var entries []map[string]interface{}
+	var entries []map[string]any
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		var entry map[string]interface{}
+		var entry map[string]any
 		if err := json.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("failed to unmarshal log entry: %s", line)
 		}

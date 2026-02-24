@@ -7,6 +7,7 @@ package testtext
 import (
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -78,7 +79,7 @@ func init() {
 // requested number of nBytes (1-4) per rune.
 func (r Random) WithRuneLen(nBytes int, nRunes int) string {
 	sb := &strings.Builder{}
-	for i := 0; i < nRunes; i++ {
+	for range nRunes {
 		sb.WriteRune(r.genInRange(tableRanges[nBytes-1]))
 	}
 	return sb.String()
@@ -101,12 +102,7 @@ func (r Random) genInRange(tr tableRange) rune {
 func uniqueNRand(rnd *rand.Rand, nItems int) []int {
 	pattern := []int{}
 	exists := func(c int) bool {
-		for _, p := range pattern {
-			if c == p {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(pattern, c)
 	}
 	for {
 		c := rnd.Intn(nItems)
@@ -126,7 +122,7 @@ func uniqueNRand(rnd *rand.Rand, nItems int) []int {
 func (r Random) AllRuneLens(nRunes int) string {
 	sb := &strings.Builder{}
 	pattern := uniqueNRand(r.r, 4)
-	for i := 0; i < nRunes; i++ {
+	for i := range nRunes {
 		tr := tableRanges[pattern[i%4]]
 		sb.WriteRune(r.genInRange(tr))
 	}

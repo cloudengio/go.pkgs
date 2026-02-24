@@ -69,7 +69,7 @@ func Caller(depth, nameLen int) string {
 		return filepath.Base(file) + ":" + strconv.Itoa(line)
 	}
 	base := ""
-	for i := 0; i < nameLen; i++ {
+	for range nameLen {
 		idx := strings.LastIndex(file, "/")
 		if idx < 0 {
 			break

@@ -139,8 +139,8 @@ type TimeOfDayList []TimeOfDay
 
 // Parse val as a comma separated list of TimeOfDay values.
 func (tl *TimeOfDayList) Parse(val string) error {
-	parts := strings.Split(val, ",")
-	for _, p := range parts {
+	parts := strings.SplitSeq(val, ",")
+	for p := range parts {
 		var tod TimeOfDay
 		if err := tod.Parse(p); err != nil {
 			return err

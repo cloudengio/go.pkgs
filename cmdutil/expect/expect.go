@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 
 	"cloudeng.io/errors"
@@ -211,12 +212,10 @@ func (s *Lines) ExpectNext(ctx context.Context, lines ...string) error {
 		return err
 	}
 	if !s.eof {
-		for _, line := range lines {
-			if line == s.input {
-				s.lastMatch = s.input
-				s.lastLine = s.line
-				return nil
-			}
+		if slices.Contains(lines, s.input) {
+			s.lastMatch = s.input
+			s.lastLine = s.line
+			return nil
 		}
 	}
 	err := &UnexpectedInputError{
@@ -292,12 +291,10 @@ func (s *Lines) eventually(ctx context.Context, literals []string, expressions [
 			}
 			s.input = rec.input
 			s.line++
-			for _, line := range literals {
-				if s.input == line {
-					s.lastMatch = s.input
-					s.lastLine = s.line
-					return nil
-				}
+			if slices.Contains(literals, s.input) {
+				s.lastMatch = s.input
+				s.lastLine = s.line
+				return nil
 			}
 			for _, expr := range expressions {
 				if expr.MatchString(s.input) {

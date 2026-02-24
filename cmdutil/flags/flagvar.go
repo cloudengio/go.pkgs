@@ -289,7 +289,7 @@ func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue any, fieldType refle
 		ptr := (*int)(unsafe.Pointer(fieldValue.Addr().Pointer()))
 		fs.IntVar(ptr, name, dv, description)
 	case int64:
-		if fieldType.Type == reflect.TypeOf(time.Duration(0)) {
+		if fieldType.Type == reflect.TypeFor[time.Duration]() {
 			// If no default value is specified, time.Duration defaults appear
 			// here as int64s rather than time.Duration with a zero value.
 			ptr := (*time.Duration)(unsafe.Pointer(fieldValue.Addr().Pointer()))
@@ -325,7 +325,7 @@ func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue any, fieldType refle
 func getTypeVal(structWithFlags any) (reflect.Type, reflect.Value, error) {
 	typ := reflect.TypeOf(structWithFlags)
 	val := reflect.ValueOf(structWithFlags)
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 		val = reflect.Indirect(val)
 	}
@@ -388,7 +388,7 @@ func (reg *registrar) registerFlagsInStruct(structWithFlags any) error {
 			return fmt.Sprintf("field: %v of type %v for flag %v", fieldName, fieldTypeName, name)
 		}
 
-		if fieldType.Type.Kind() == reflect.Ptr {
+		if fieldType.Type.Kind() == reflect.Pointer {
 			return fmt.Errorf("%v: field can't be a pointer", errPrefix())
 		}
 

@@ -81,7 +81,7 @@ func pushMinMax(t *testing.T, h *heap.MinMax[int, int], input []int) {
 
 func TestMinMaxDups(t *testing.T) {
 	h := heap.NewMinMax[uint32, int]()
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		h.Push(0, i)
 		// The new duplicate will always be left at the end of the heap.
 		if got, want := h.Vals[len(h.Vals)-1], i; got != want {
@@ -104,7 +104,7 @@ func TestMinMaxDups(t *testing.T) {
 }
 
 func TestMinMaxHeap(t *testing.T) {
-	for i := 0; i < 33; i++ {
+	for i := range 33 {
 		minmax := heap.NewMinMax[int, int]()
 		pushMinMax(t, minmax, ascending(i))
 		output := popMin(t, minmax)
@@ -137,7 +137,7 @@ func TestMinMaxHeap(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	for i := 0; i < 33; i++ {
+	for i := range 33 {
 		rnd = uniformRand(0, i)
 		pushMinMax(t, minmax, rnd)
 		output = popAltMinMax(t, minmax)
@@ -165,7 +165,7 @@ func alternateData(data []int) ([]int, []int) {
 }
 
 func TestMinMaxBounded(t *testing.T) {
-	for i := 0; i < 33; i++ {
+	for i := range 33 {
 		minmax := heap.NewMinMax[int, int]()
 		n := i / 2
 		if n == 0 {
@@ -176,10 +176,7 @@ func TestMinMaxBounded(t *testing.T) {
 			minmax.Verify(t)
 		}
 		output := popMin(t, minmax)
-		ln := n
-		if i < n {
-			ln = i
-		}
+		ln := min(i, n)
 		if got, want := len(output), ln; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}

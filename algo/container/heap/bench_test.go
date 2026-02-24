@@ -65,7 +65,7 @@ func zipfRand(seed int64, n int) []uint64 {
 
 func benchmarkStdeap[K heap.Ordered, V any](b *testing.B, h *withValueSlice[K, V], keys []K, v V) {
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < len(keys); j++ {
+		for j := range keys {
 			stdheap.Push(h, withValue[K, V]{k: keys[j], v: v})
 		}
 		for h.Len() > 0 {
@@ -103,7 +103,7 @@ func BenchmarkStdHeapZipf_10000(b *testing.B) {
 
 func benchmarkGenHeap[K heap.Ordered, V any](b *testing.B, h *heap.T[K, V], keys []K, v V) {
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < len(keys); j++ {
+		for j := range keys {
 			h.Push(keys[j], v)
 		}
 		for h.Len() > 0 {
@@ -138,7 +138,7 @@ func BenchmarkGenHeapZipf_10000(b *testing.B) {
 
 func benchmarkMinMax[K heap.Ordered, V any](b *testing.B, h *heap.MinMax[K, V], keys []K, v V) {
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < len(keys); j++ {
+		for j := range keys {
 			h.Push(keys[j], v)
 		}
 		for h.Len() > 0 {

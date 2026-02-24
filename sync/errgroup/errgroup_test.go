@@ -150,7 +150,7 @@ func testConcurrency(t *testing.T, concurrency int) {
 	}()
 
 	invocations := 50
-	for i := 0; i < invocations; i++ {
+	for range invocations {
 		g.Go(func() error {
 			atomic.AddInt64(&started, 1)
 			select {
@@ -210,7 +210,7 @@ func TestGoContext(t *testing.T) {
 	}()
 
 	invocations := 10
-	for i := 0; i < invocations; i++ {
+	for i := range invocations {
 		g.GoContext(ctx, func() error {
 			atomic.AddInt64(&started, 1)
 			if i == 0 {
@@ -273,7 +273,7 @@ func ExampleT_pipeline() {
 	src := newRandGen()
 
 	// numGenerators goroutines produce random numbers in the range of 0..99.
-	for i := 0; i < numGenerators; i++ {
+	for range numGenerators {
 		g.Go(func() error {
 			for {
 				select {
@@ -292,7 +292,7 @@ func ExampleT_pipeline() {
 
 	// numCounters consume the random numbers and count which decile
 	// each one falls into.
-	for i := 0; i < numCounters; i++ {
+	for range numCounters {
 		g.Go(func() error {
 			for {
 				select {

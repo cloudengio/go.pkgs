@@ -63,7 +63,7 @@ func (e *extractor) Extract(_ context.Context, depth int, downloaded download.Do
 }
 
 func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
-	for i := 0; i < nItems; i++ {
+	for i := range nItems {
 		req := crawl.SimpleRequest{}
 		req.RequestedBy = "issueCrawlRequest"
 		req.FS = reader
@@ -109,14 +109,14 @@ func (df dlFactory) New(_ context.Context, depth int) (
 
 func expectedFilenames(nItems, depth, fanOut int) []string {
 	names := []string{}
-	for i := 0; i < nItems; i++ {
+	for i := range nItems {
 		names = append(names, fmt.Sprintf("%08v", i))
 	}
 	prev := names
 	for d := 1; d <= depth; d++ {
 		extracted := []string{}
 		for _, p := range prev {
-			for f := 0; f < fanOut; f++ {
+			for f := range fanOut {
 				extracted = append(extracted, p+fmt.Sprintf("-%02v", f))
 			}
 		}
@@ -177,7 +177,7 @@ func runCrawl(ctx context.Context, t *testing.T, readFS file.FS, nItems, depth, 
 func checkCrawlResults(ctx context.Context, t *testing.T, readFS file.FS, crawled []crawl.Crawled, nDownloads, nOutlinks, nItems, depth, fanOut int) {
 	expectedDownloads := nItems
 	prev := nItems
-	for d := 0; d < depth; d++ {
+	for range depth {
 		prev *= fanOut
 		expectedDownloads += prev
 	}

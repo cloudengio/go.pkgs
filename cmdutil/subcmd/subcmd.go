@@ -301,11 +301,11 @@ func NewCommandLevel(name string, subcmds *CommandSet) *Command {
 }
 
 func splitArgument(arg, sep string) (name, detail string) {
-	idx := strings.Index(arg, sep)
-	if idx < 0 {
+	before, after, ok := strings.Cut(arg, sep)
+	if !ok {
 		return arg, ""
 	}
-	return strings.TrimSpace(arg[:idx]), strings.TrimSpace(arg[idx+len(sep):])
+	return strings.TrimSpace(before), strings.TrimSpace(after)
 }
 
 func splitArguments(args []string, sep string) (names, details []string) {

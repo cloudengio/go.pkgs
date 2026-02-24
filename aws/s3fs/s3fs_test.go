@@ -284,7 +284,7 @@ func TestDelete(t *testing.T) {
 		"g/g/4",
 	} {
 		p := fs.Join(prefix, name)
-		if err := fs.Put(ctx, p, 0x00, []byte(fmt.Sprintf("%03v\n", i))); err != nil {
+		if err := fs.Put(ctx, p, 0x00, fmt.Appendf(nil, "%03v\n", i)); err != nil {
 			t.Fatal(err)
 		}
 	}

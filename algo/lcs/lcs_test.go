@@ -244,16 +244,16 @@ world
 	edits := myers.SES()
 	validateInsertions(t, 0, edits, b)
 
-	var reconstructed string
+	var reconstructed strings.Builder
 	for _, op := range *edits {
 		switch op.Op {
 		case lcs.Identical:
-			reconstructed += lines[uint64(a[op.A])] + "\n"
+			reconstructed.WriteString(lines[uint64(a[op.A])] + "\n")
 		case lcs.Insert:
-			reconstructed += lines[uint64(op.Val)] + "\n"
+			reconstructed.WriteString(lines[uint64(op.Val)] + "\n")
 		}
 	}
-	if got, want := reconstructed, lb; got != want {
+	if got, want := reconstructed.String(), lb; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

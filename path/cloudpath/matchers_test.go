@@ -6,6 +6,7 @@ package cloudpath_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -19,11 +20,11 @@ func sliceFromComponents(components ...string) []string {
 }
 
 func joinComponents(components ...string) string {
-	out := ""
+	var out strings.Builder
 	for _, c := range components {
-		out += c
+		out.WriteString(c)
 	}
-	return out
+	return out.String()
 }
 
 func TestMatch(t *testing.T) {

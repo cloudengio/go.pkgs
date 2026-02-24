@@ -126,27 +126,27 @@ func appendYearToRanges(year int, val string) string {
 }
 
 func datesAsString(m, d int) string {
-	s := ""
+	var s strings.Builder
 	for i := 1; i <= d; i++ {
-		s += fmt.Sprintf("%02d/%02d,", m, i)
+		s.WriteString(fmt.Sprintf("%02d/%02d,", m, i))
 	}
-	return s
+	return s.String()
 }
 
 func calendarDatesAsString(y, m, d int) string {
-	s := ""
+	var s strings.Builder
 	for i := 1; i <= d; i++ {
-		s += fmt.Sprintf("%02d/%02d/%04d,", m, i, y)
+		s.WriteString(fmt.Sprintf("%02d/%02d/%04d,", m, i, y))
 	}
-	return s
+	return s.String()
 }
 
 func calendarMonthsAsString(y int, months ...int) string {
-	s := ""
+	var s strings.Builder
 	for _, m := range months {
 		for d := 1; d <= int(datetime.DaysInMonth(y, datetime.Month(m))); d++ {
-			s += fmt.Sprintf("%02d/%02d/%04d,", m, d, y)
+			s.WriteString(fmt.Sprintf("%02d/%02d/%04d,", m, d, y))
 		}
 	}
-	return s
+	return s.String()
 }

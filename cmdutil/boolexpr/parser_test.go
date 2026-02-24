@@ -5,6 +5,7 @@
 package boolexpr_test
 
 import (
+	"strings"
 	"testing"
 
 	"cloudeng.io/cmdutil/boolexpr"
@@ -91,12 +92,12 @@ func TestList(t *testing.T) {
 	if got, want := len(operands), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	doc := ""
+	var doc strings.Builder
 	for _, op := range operands {
-		doc += op.Document() + "\n"
+		doc.WriteString(op.Document() + "\n")
 	}
 
-	if got, want := doc, "op2: regular expression\nre: regular expression\n"; got != want {
+	if got, want := doc.String(), "op2: regular expression\nre: regular expression\n"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

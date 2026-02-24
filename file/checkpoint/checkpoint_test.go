@@ -116,8 +116,8 @@ func TestCompact(t *testing.T) {
 	}
 
 	expected := []string{}
-	for i := 0; i < 5; i++ {
-		_, err = op.Checkpoint(ctx, "", []byte(fmt.Sprintf("%02v", i)))
+	for i := range 5 {
+		_, err = op.Checkpoint(ctx, "", fmt.Appendf(nil, "%02v", i))
 		assert()
 		expected = append(expected, fmt.Sprintf("%08v.chk", i))
 	}
@@ -134,7 +134,7 @@ func TestCompact(t *testing.T) {
 	}
 	latest, err := op.Latest(ctx)
 	assert()
-	if got, want := latest, []byte(fmt.Sprintf("%02v", 4)); !bytes.Equal(got, want) {
+	if got, want := latest, fmt.Appendf(nil, "%02v", 4); !bytes.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

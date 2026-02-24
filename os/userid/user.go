@@ -79,7 +79,7 @@ func ParseIDCommandOutput(out string) (IDInfo, error) {
 	}
 	x, y = parseEquals(parts[2])
 	if x == "groups" {
-		for _, grp := range strings.Split(y, ",") {
+		for grp := range strings.SplitSeq(y, ",") {
 			gid, name := parseItem(grp)
 			id.Groups = append(id.Groups, user.Group{Gid: gid, Name: name})
 		}

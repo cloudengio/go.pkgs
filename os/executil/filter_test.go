@@ -35,13 +35,11 @@ func Example() {
 	filter := executil.NewLineFilter(all, ch, regexp.MustCompile("filter me:"))
 	cmd.Stdout = filter
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		if err := cmd.Start(); err != nil {
 			panic(err)
 		}
-		wg.Done()
-	}()
+	})
 
 	buf := <-ch
 	fmt.Println("filtered output")

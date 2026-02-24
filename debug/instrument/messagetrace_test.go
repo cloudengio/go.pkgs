@@ -75,12 +75,12 @@ func generateMessageTrace() *instrument.MessageTrace {
 	n, m := 2, 2
 	wg1.Add(n)
 	wg2.Add(n * m)
-	for i := 0; i < n; i++ {
+	for range n {
 		mt := mt.GoLogf(1, "launch goroutine 1")
 		go func() {
 			wg1.Done()
 			mt = mt.GoLogf(1, "launch goroutine 2")
-			for j := 0; j < m; j++ {
+			for range m {
 				go func() {
 					mt.Log(1, instrument.MessageWait, localAddr, remoteAddr, "waiting")
 					wg2.Done()

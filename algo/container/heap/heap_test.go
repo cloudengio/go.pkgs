@@ -58,7 +58,7 @@ func checkDupValues(t *testing.T, vals []int) {
 func checkUnique(t *testing.T, vals []int) {
 	// Check for uniqueness of all vals.
 	sort.IntSlice(vals).Sort()
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if got, want := vals[i], i; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
@@ -67,7 +67,7 @@ func checkUnique(t *testing.T, vals []int) {
 
 func TestDups(t *testing.T) {
 	h := heap.NewMin[uint32, int]()
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		h.Push(0, i)
 		// The new duplicate will always be left at the end of the heap.
 		if got, want := h.Vals[len(h.Vals)-1], i; got != want {
@@ -168,7 +168,7 @@ func pop(t *testing.T, h heapIfc[int, int]) []int {
 }
 
 func TestHeap(t *testing.T) {
-	for i := 0; i < 33; i++ {
+	for i := range 33 {
 		minv := heap.NewMin[int, int]()
 		output := testData(t, minv, ascending(i))
 		if got, want := output, ascending(i); !reflect.DeepEqual(got, want) {
