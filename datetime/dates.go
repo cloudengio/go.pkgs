@@ -311,7 +311,7 @@ func (dl DateList) String() string {
 		if i > 0 && i < len(dl)-1 {
 			out.WriteString(", ")
 		}
-		out.WriteString(fmt.Sprintf("%02d-%02d", d.Month(), d.Day()))
+		fmt.Fprintf(&out, "%02d-%02d", d.Month(), d.Day())
 	}
 	return out.String()
 }

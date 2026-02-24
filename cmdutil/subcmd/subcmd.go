@@ -133,6 +133,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"path/filepath"
@@ -482,7 +483,7 @@ func lineWrapDefaults(input string) string {
 	block := &strings.Builder{}
 	writeBlock := func() {
 		if block.Len() > 0 {
-			fmt.Fprintf(out, "%s\n", linewrap.Block(4, 75, block.String()))
+			fmt.Fprintln(out, html.EscapeString(linewrap.Block(4, 75, block.String())))
 			block.Reset()
 		}
 	}
@@ -493,10 +494,10 @@ func lineWrapDefaults(input string) string {
 		}
 		if l[:3] == "  -" {
 			writeBlock()
-			fmt.Fprintf(out, "%s\n", l)
+			fmt.Fprintln(out, html.EscapeString(l)) //nolint:gosec // G705 is not relevant here as the input is not expected to be rendered as HTML.
 			continue
 		}
-		fmt.Fprintf(block, "%s\n", l)
+		fmt.Fprintln(block, html.EscapeString(l)) //nolint:gosec // G705 is not relevant here as the input is not expected to be
 	}
 	writeBlock()
 	return out.String()
@@ -527,7 +528,8 @@ func (cmds *CommandSet) globalDefaults() string {
 
 // Usage returns the usage message for the command set.
 func (cmds *CommandSet) Usage(name string) string {
-	return fmt.Sprintf("Usage of %v\n\n%s\n", name, cmds.Summary())
+	esc := html.EscapeString(fmt.Sprintf("Usage of %v\n\n%s\n", name, cmds.Summary()))
+	return esc
 }
 
 // Defaults returns the usage message and flag defaults.
@@ -535,7 +537,7 @@ func (cmds *CommandSet) Defaults(name string) string {
 	out := &strings.Builder{}
 	out.WriteString(cmds.Usage(name))
 	if gd := cmds.globalDefaults(); len(gd) > 0 {
-		fmt.Fprintf(out, "\n%s", gd)
+		fmt.Fprintf(out, "\n%s", html.EscapeString(gd))
 	}
 	return out.String()
 }
@@ -575,7 +577,7 @@ func (cmds *CommandSet) Summary() string {
 			out.WriteByte('\n')
 		}
 	}
-	return out.String()
+	return html.EscapeString(out.String())
 }
 
 // Dispatch will dispatch the appropriate sub command or return an error.
@@ -618,7 +620,7 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 			if err == flag.ErrHelp {
 				fmt.Fprintln(cmds.out, cmds.Usage(usage))
 				if gd := cmds.globalDefaults(); len(gd) > 0 {
-					fmt.Fprintf(cmds.out, "%s", gd)
+					_, _ = cmds.out.Write([]byte(html.EscapeString(gd)))
 				}
 			}
 			return err

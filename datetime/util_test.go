@@ -94,7 +94,7 @@ type dateList []datetime.CalendarDate
 func (dr *dateList) String() string {
 	var out strings.Builder
 	for _, d := range *dr {
-		out.WriteString(fmt.Sprintf("%02d/%02d/%04d,", d.Month(), d.Day(), d.Year()))
+		fmt.Fprintf(&out, "%02d/%02d/%04d,", d.Month(), d.Day(), d.Year())
 	}
 	if out.Len() == 0 {
 		return ""
@@ -128,7 +128,7 @@ func appendYearToRanges(year int, val string) string {
 func datesAsString(m, d int) string {
 	var s strings.Builder
 	for i := 1; i <= d; i++ {
-		s.WriteString(fmt.Sprintf("%02d/%02d,", m, i))
+		fmt.Fprintf(&s, "%02d/%02d,", m, i)
 	}
 	return s.String()
 }
@@ -136,7 +136,7 @@ func datesAsString(m, d int) string {
 func calendarDatesAsString(y, m, d int) string {
 	var s strings.Builder
 	for i := 1; i <= d; i++ {
-		s.WriteString(fmt.Sprintf("%02d/%02d/%04d,", m, i, y))
+		fmt.Fprintf(&s, "%02d/%02d/%04d,", m, i, y)
 	}
 	return s.String()
 }
@@ -145,7 +145,7 @@ func calendarMonthsAsString(y int, months ...int) string {
 	var s strings.Builder
 	for _, m := range months {
 		for d := 1; d <= int(datetime.DaysInMonth(y, datetime.Month(m))); d++ {
-			s.WriteString(fmt.Sprintf("%02d/%02d/%04d,", m, d, y))
+			fmt.Fprintf(&s, "%02d/%02d/%04d,", m, d, y)
 		}
 	}
 	return s.String()

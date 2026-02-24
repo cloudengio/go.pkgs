@@ -102,7 +102,7 @@ func (tl tokenList) String() string {
 			continue
 		}
 		if t.operandValue {
-			sb.WriteString(fmt.Sprintf("'%v' ", t.text))
+			fmt.Fprintf(&sb, "'%v' ", t.text)
 		}
 	}
 	return strings.TrimSpace(sb.String())

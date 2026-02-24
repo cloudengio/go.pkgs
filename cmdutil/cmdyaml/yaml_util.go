@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -112,7 +113,9 @@ func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
 			newError.WriteRune('\n')
 			continue
 		}
-		fmt.Fprintf(&newError, "%vline %d: %q: %v", matches[1], l, specLines[l-1], matches[3])
+		esc := html.EscapeString(fmt.Sprintf("%vline %d: %q: %v", matches[1], l, specLines[l-1], matches[3]))
+		_, _ = newError.WriteString(esc)
+
 	}
 	return errors.New(newError.String())
 }

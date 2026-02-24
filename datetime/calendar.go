@@ -300,7 +300,7 @@ func (cdl CalendarDateList) String() string {
 		if i > 0 && i < len(cdl)-1 {
 			out.WriteString(", ")
 		}
-		out.WriteString(fmt.Sprintf("%04d-%02d-%02d", d.Year(), d.Month(), d.Day()))
+		fmt.Fprintf(&out, "%04d-%02d-%02d", d.Year(), d.Month(), d.Day())
 	}
 	return out.String()
 }
