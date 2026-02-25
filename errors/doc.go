@@ -38,4 +38,4 @@
 //	errs.Append(errors.WithCaller(fn(a)))
 //	errs.Append(errors.WithCaller(fn(b)))
 //	err := errs.Err()
-package errors //nolint:revive
+package errors
