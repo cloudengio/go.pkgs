@@ -38,19 +38,7 @@ linters:
       - examples$
     rules:
       - linter: revive
-        path: 'cmdutil/*'
-        text: 'var-naming: avoid package names that conflict with Go standard library package names'
-      - linter: revive
-        path: 'algo/container/heap/*'
-        text: 'var-naming: avoid package names that conflict with Go standard library package names'
-      - linter: revive
-        path: 'algo/container/list/*'
-        text: 'var-naming: avoid package names that conflict with Go standard library package names'
-      - linter: revive
-        path: 'errors/*'
-        text: 'var-naming: avoid package names that conflict with Go standard library package names'
-      - linter: revive
-        path: 'path/*'
+        path: '^(algo/container/(heap|list)|cmdutil|errors|path)/'
         text: 'var-naming: avoid package names that conflict with Go standard library package names'
 formatters:
   enable:
