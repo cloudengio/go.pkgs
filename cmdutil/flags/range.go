@@ -158,7 +158,7 @@ type RangeSpecs []RangeSpec
 
 // Set implements flag.Value.
 func (rs *RangeSpecs) Set(val string) error {
-	for _, p := range strings.Split(val, ",") {
+	for p := range strings.SplitSeq(val, ",") {
 		rg, err := parseRangeSpec('-', p)
 		if err != nil {
 			return err
@@ -203,7 +203,7 @@ type ColonRangeSpecs []ColonRangeSpec
 
 // Set implements flag.Value.
 func (crs *ColonRangeSpecs) Set(val string) error {
-	for _, p := range strings.Split(val, ",") {
+	for p := range strings.SplitSeq(val, ",") {
 		crg, err := parseRangeSpec(':', p)
 		if err != nil {
 			return err
@@ -283,7 +283,7 @@ type IntRangeSpecs []IntRangeSpec
 
 // Set implements flag.Value.
 func (irs *IntRangeSpecs) Set(val string) error {
-	for _, p := range strings.Split(val, ",") {
+	for p := range strings.SplitSeq(val, ",") {
 		var rs IntRangeSpec
 		if err := rs.Set(p); err != nil {
 			return err

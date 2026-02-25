@@ -44,7 +44,7 @@ func (eq regexOp) Eval(v any) bool {
 }
 
 func (eq regexOp) Needs(t reflect.Type) bool {
-	return t == reflect.TypeOf("")
+	return t == reflect.TypeFor[string]()
 }
 
 func parse(input string) []boolexpr.Item {
@@ -55,7 +55,7 @@ func parse(input string) []boolexpr.Item {
 	input = strings.ReplaceAll(input, "!", " ! ")
 	items := []boolexpr.Item{}
 	tokens := strings.Split(input, " ")
-	for i := 0; i < len(tokens); i++ {
+	for i := range tokens {
 		if len(tokens[i]) == 0 {
 			continue
 		}
@@ -260,7 +260,7 @@ type nameIfc interface {
 type regexNameOp struct{}
 
 func (rno regexNameOp) Needs(t reflect.Type) bool {
-	needs := reflect.TypeOf((*nameIfc)(nil)).Elem()
+	needs := reflect.TypeFor[nameIfc]()
 	return t.Implements(needs)
 }
 

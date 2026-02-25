@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package heap
+package heap //nolint:revive // intentional shadowing
 
 // Orderded represents the set of types that can be used as keys in a heap.
 type Ordered interface {

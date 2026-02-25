@@ -301,11 +301,11 @@ func NewCommandLevel(name string, subcmds *CommandSet) *Command {
 }
 
 func splitArgument(arg, sep string) (name, detail string) {
-	idx := strings.Index(arg, sep)
-	if idx < 0 {
+	before, after, ok := strings.Cut(arg, sep)
+	if !ok {
 		return arg, ""
 	}
-	return strings.TrimSpace(arg[:idx]), strings.TrimSpace(arg[idx+len(sep):])
+	return strings.TrimSpace(before), strings.TrimSpace(after)
 }
 
 func splitArguments(args []string, sep string) (names, details []string) {
@@ -463,26 +463,13 @@ func (cmds *CommandSet) TopLevel(cmd *Command) {
 	cmds.cmd = cmd
 }
 
-// defaults returns the value of Defaults for each command in commands.
-func (cmds *CommandSet) defaults() string { //nolint:unused
-	out := &strings.Builder{}
-	out.WriteString(cmds.globalDefaults())
-	for i, cmd := range cmds.cmds {
-		out.WriteString(cmd.Usage())
-		if i < len(cmds.cmds)-1 {
-			out.WriteString("\n")
-		}
-	}
-	return out.String()
-}
-
 func lineWrapDefaults(input string) string {
 	out := &strings.Builder{}
 	sc := bufio.NewScanner(bytes.NewBufferString(input))
 	block := &strings.Builder{}
 	writeBlock := func() {
 		if block.Len() > 0 {
-			fmt.Fprintf(out, "%s\n", linewrap.Block(4, 75, block.String()))
+			fmt.Fprintln(out, linewrap.Block(4, 75, block.String())) //nolint:gosec // G705: not relevant here
 			block.Reset()
 		}
 	}
@@ -493,10 +480,10 @@ func lineWrapDefaults(input string) string {
 		}
 		if l[:3] == "  -" {
 			writeBlock()
-			fmt.Fprintf(out, "%s\n", l)
+			fmt.Fprintln(out, l) //nolint:gosec // G705: not relevant here
 			continue
 		}
-		fmt.Fprintf(block, "%s\n", l)
+		fmt.Fprintln(block, l) //nolint:gosec // G705: not relevant here
 	}
 	writeBlock()
 	return out.String()
@@ -616,9 +603,9 @@ func (cmds *CommandSet) DispatchWithArgs(ctx context.Context, usage string, args
 		fs := cmds.global.flagSet
 		if err := fs.Parse(args); err != nil {
 			if err == flag.ErrHelp {
-				fmt.Fprintln(cmds.out, cmds.Usage(usage))
+				fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: not relevant here
 				if gd := cmds.globalDefaults(); len(gd) > 0 {
-					fmt.Fprintf(cmds.out, "%s", gd)
+					_, _ = cmds.out.Write([]byte(gd))
 				}
 			}
 			return err
@@ -644,30 +631,30 @@ func (cmds *CommandSet) processHelp(usage string, args []string) error {
 	}
 	switch args[0] {
 	case "-help", "--help", "-h", "--h":
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: not relevant here
 		return flag.ErrHelp
 	case "vcsinfo":
 		goVersion, version, when, dirty, ok := cmdutil.VCSInfo()
 		if !ok {
 			return fmt.Errorf("failed to determine version information")
 		}
-		fmt.Fprintf(cmds.out, "go: %v, commit: %v, build date: %v, dirty: %v\n", goVersion, version, when, dirty)
+		fmt.Fprintf(cmds.out, "go: %v, commit: %v, build date: %v, dirty: %v\n", goVersion, version, when, dirty) //nolint:gosec // G705: not relevant here
 		return flag.ErrHelp
 	case "help":
 		if cmds.cmd != nil {
 			if len(args) < 2 || args[1] == cmds.cmd.name {
-				fmt.Fprintln(cmds.out, cmds.cmd.Usage())
+				fmt.Fprintln(cmds.out, cmds.cmd.Usage()) //nolint:gosec // G705: not relevant here
 				return flag.ErrHelp
 			}
 			return fmt.Errorf("%v is not one of the supported commands", args[1])
 		}
 		if len(args) == 1 {
-			fmt.Fprintln(cmds.out, cmds.Usage(usage))
+			fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: not relevant here
 			return flag.ErrHelp
 		}
 		for _, cmd := range cmds.cmds {
 			if args[1] == cmd.name {
-				fmt.Fprintln(cmds.out, cmd.Usage())
+				fmt.Fprintln(cmds.out, cmd.Usage()) //nolint:gosec // G705: not relevant here
 				return flag.ErrHelp
 			}
 		}
@@ -690,7 +677,7 @@ func (cmds *CommandSet) parseArgs(fs *flag.FlagSet, cmd *Command, args []string)
 func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args []string) error {
 	tlcmd := cmds.cmd
 	if len(args) == 0 && tlcmd == nil {
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: false positive
 		return fmt.Errorf("no command specified")
 	}
 
@@ -709,7 +696,7 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 	}
 
 	if len(args) == 0 {
-		fmt.Fprintln(cmds.out, cmds.Usage(usage))
+		fmt.Fprintln(cmds.out, cmds.Usage(usage)) //nolint:gosec // G705: false positive
 		return fmt.Errorf("no command specified")
 	}
 

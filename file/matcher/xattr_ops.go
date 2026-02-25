@@ -62,7 +62,7 @@ func XAttr(opname, value, doc string,
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + doc,
-			requires: reflect.TypeOf((*XAttrIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[XAttrIfc](),
 		}}
 }
 

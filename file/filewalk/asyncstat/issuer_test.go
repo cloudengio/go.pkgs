@@ -216,7 +216,7 @@ func TestASyncIssue(t *testing.T) {
 	fs := localfs.New()
 	tmpdir := t.TempDir()
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		buf := make([]byte, i+1)
 		if err := os.WriteFile(fs.Join(tmpdir, fmt.Sprintf("file%v", i)), buf, 0600); err != nil {
 			t.Fatal(err)

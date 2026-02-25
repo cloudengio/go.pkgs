@@ -30,7 +30,7 @@ func sanitizeString(s string) string {
 		}
 		parts := captureLeaderRE.FindStringSubmatch(l)
 		if len(parts) == 4 {
-			fmt.Fprintf(out, "%s%s\n", parts[1], parts[3])
+			fmt.Fprintln(out, parts[1]+parts[3]) //nolint:gosec // G705 not relevant here
 			continue
 		}
 		out.WriteString(l)

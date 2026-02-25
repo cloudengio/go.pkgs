@@ -65,7 +65,7 @@ func (fs *FS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 		return nil, fmt.Errorf("%v: %w", req.URL.Scheme, file.ErrSchemeNotSupported)
 	}
 	req = req.WithContext(ctx)
-	resp, err := fs.client.Do(req)
+	resp, err := fs.client.Do(req) //nolint:gosec // G704 is overly restrictive here.
 	if err := httperror.CheckResponse(err, resp); err != nil {
 		return nil, err
 	}

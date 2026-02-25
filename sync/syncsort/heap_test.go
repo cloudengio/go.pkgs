@@ -34,7 +34,7 @@ func partitionSlices[T any](seq *syncsort.Sequencer[[]T], data []T, blockSize in
 	dataSize := len(data)
 	numBlocks := (dataSize / blockSize) + 1
 	sblocks := make([]syncsort.Item[[]T], numBlocks)
-	for i := 0; i < numBlocks; i++ {
+	for i := range numBlocks {
 		size := blockSize
 		offset := i * size
 		if offset+size > dataSize {
@@ -161,9 +161,7 @@ func TestStreamingCancel(t *testing.T) {
 	seq := syncsort.NewSequencer(ctx, ich)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case ich <- seq.NextItem(100):
@@ -171,7 +169,7 @@ func TestStreamingCancel(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
 	i := 0
 

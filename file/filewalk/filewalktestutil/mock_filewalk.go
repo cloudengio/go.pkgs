@@ -233,10 +233,7 @@ func (s *scanner) Scan(_ context.Context, n int) bool {
 		return false
 	}
 	s.pos = s.end
-	s.end = s.pos + n
-	if s.end > len(s.entries) {
-		s.end = len(s.entries)
-	}
+	s.end = min(s.pos+n, len(s.entries))
 	return true
 }
 

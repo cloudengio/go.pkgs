@@ -22,7 +22,7 @@ func ExampleCallTrace() {
 	var wg sync.WaitGroup
 	n := 2
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ct := ct.GoLogf(1, "goroutine launch")
 		go func(i int) {
 			ct.Logf(1, "%s", fmt.Sprintf("inside goroutine %v", i))
@@ -99,14 +99,14 @@ func TestCallTraceGoroutines(t *testing.T) {
 	n, m := 2, 2
 	wg1.Add(n)
 	wg2.Add(n * m)
-	for i := 0; i < n; i++ {
+	for range n {
 		ct := ct.GoLogf(1, "goroutine L1 launch")
 		go func() {
 			ct.Logf(1, "inside L1 goroutine")
 			wg1.Done()
 			ct.Logf(1, "inside L1 goroutine")
 			ct = ct.GoLogf(1, "goroutine L2 launch")
-			for j := 0; j < m; j++ {
+			for range m {
 				go func() {
 					ct.Logf(1, "inside L2 goroutine")
 					wg2.Done()

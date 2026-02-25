@@ -80,7 +80,7 @@ func testRunAndFormat(t *testing.T, delay time.Duration) error {
 func TestRunAndFormat(t *testing.T) {
 	var err error
 	delay := time.Second
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		spawned = make(chan struct{})
 		err = testRunAndFormat(t, delay)
 		if err == nil {

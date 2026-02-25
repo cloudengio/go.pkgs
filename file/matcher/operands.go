@@ -87,7 +87,7 @@ func Regexp(opname string, re string) boolexpr.Operand {
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + "=<regexp> matches a regular expression",
-			requires: reflect.TypeOf((*PathIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[PathIfc](),
 		},
 	}
 }
@@ -125,7 +125,7 @@ func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + "=<glob> matches a glob pattern",
-			requires: reflect.TypeOf((*NameIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[NameIfc](),
 		}}
 }
 
@@ -140,7 +140,7 @@ func (op glob) Prepare() (boolexpr.Operand, error) {
 	if err != nil {
 		return op, err
 	}
-	op.requires = reflect.TypeOf((*NameIfc)(nil)).Elem()
+	op.requires = reflect.TypeFor[NameIfc]()
 	return op, nil
 }
 
@@ -203,10 +203,10 @@ func (op fileType) Prepare() (boolexpr.Operand, error) {
 	switch op.text {
 	case "d", "l", "f":
 		op.needsMode = false
-		op.requires = reflect.TypeOf((*FileTypeIfc)(nil)).Elem()
+		op.requires = reflect.TypeFor[FileTypeIfc]()
 	case "x":
 		op.needsMode = true
-		op.requires = reflect.TypeOf((*FileModeIfc)(nil)).Elem()
+		op.requires = reflect.TypeFor[FileModeIfc]()
 	default:
 		return op, fmt.Errorf("invalid file type: %q, use one of d, f, l or x", op.text)
 	}
@@ -261,7 +261,7 @@ func NewerThanParsed(opname string, value string) boolexpr.Operand {
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + newerThanDoc,
-			requires: reflect.TypeOf((*ModTimeIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[ModTimeIfc](),
 		}}
 }
 
@@ -275,7 +275,7 @@ func NewerThanTime(opname string, when time.Time) boolexpr.Operand {
 		commonOperand: commonOperand{
 			name:     opname,
 			document: opname + newerThanDoc,
-			requires: reflect.TypeOf((*ModTimeIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[ModTimeIfc](),
 		}}
 }
 
@@ -289,13 +289,13 @@ type newerThan struct {
 
 func (op newerThan) Prepare() (boolexpr.Operand, error) {
 	if !op.when.IsZero() {
-		op.requires = reflect.TypeOf((*ModTimeIfc)(nil)).Elem()
+		op.requires = reflect.TypeFor[ModTimeIfc]()
 		return op, nil
 	}
 	for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
 		if t, err := time.Parse(format, op.text); err == nil {
 			op.when = t
-			op.requires = reflect.TypeOf((*ModTimeIfc)(nil)).Elem()
+			op.requires = reflect.TypeFor[ModTimeIfc]()
 			return op, nil
 		}
 	}
@@ -334,7 +334,7 @@ func DirSize(opname, value string, larger bool) boolexpr.Operand {
 		commonOperand: commonOperand{
 			name:     opname,
 			document: doc,
-			requires: reflect.TypeOf((*DirSizeIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[DirSizeIfc](),
 		}}
 }
 
@@ -409,7 +409,7 @@ func FileSize(opname, value string, larger bool) boolexpr.Operand {
 		commonOperand: commonOperand{
 			name:     opname,
 			document: doc,
-			requires: reflect.TypeOf((*FileSizeIfc)(nil)).Elem(),
+			requires: reflect.TypeFor[FileSizeIfc](),
 		}}
 }
 

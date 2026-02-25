@@ -537,7 +537,7 @@ func testBitmapAllSetRange(totalSize, from, to int) bitmap.T {
 // Helper to create a bitmap with all bits set up to 'setUntil', then clear from 'setUntil' onwards.
 func testBitmapAllSetThenClearFrom(totalSize, setUntil int) bitmap.T {
 	bm := bitmap.New(totalSize)
-	for i := 0; i < setUntil; i++ {
+	for i := range setUntil {
 		if i < totalSize {
 			bm.Set(i)
 		}

@@ -15,7 +15,7 @@ func ReverseBytes(input string) []byte {
 	for _, r := range input {
 		nb := utf8.EncodeRune(runeBytes, r)
 		lp -= nb
-		for i := 0; i < nb; i++ {
+		for i := range nb {
 			reversed[lp+i] = runeBytes[i]
 		}
 	}

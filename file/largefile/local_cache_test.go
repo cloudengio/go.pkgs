@@ -540,7 +540,7 @@ func TestLocalDownloadCache_Tail(t *testing.T) { //nolint:gocyclo
 		for i := range block {
 			block[i] = byte(i)
 		}
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			_, err := cache.WriteAt(block, int64(i*blockSize))
 			if err != nil {
 				t.Fatalf("WriteAt failed: %v", err)

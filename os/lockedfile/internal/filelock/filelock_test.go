@@ -58,14 +58,14 @@ func mustTempFile(t *testing.T) (f *os.File, remove func()) {
 
 	return f, func() {
 		f.Close()
-		os.Remove(f.Name())
+		os.Remove(f.Name()) //nolint:gosec // G703 not relevant here.
 	}
 }
 
 func mustOpen(t *testing.T, name string) *os.File {
 	t.Helper()
 
-	f, err := os.OpenFile(name, os.O_RDWR, 0)
+	f, err := os.OpenFile(name, os.O_RDWR, 0) //nolint:gosec // G703 not relevant here.
 	if err != nil {
 		t.Fatalf("os.Open(%q) = %v", name, err)
 	}
@@ -199,7 +199,7 @@ func TestLockNotDroppedByExecCommand(t *testing.T) {
 	// Some kinds of file locks are dropped when a duplicated or forked file
 	// descriptor is unlocked. Double-check that the approach used by os/exec does
 	// not accidentally drop locks.
-	cmd := exec.Command(os.Args[0], "-test.run=^$") // #nosec G204
+	cmd := exec.Command(os.Args[0], "-test.run=^$") //nolint:gosec // G204 not relevant here.
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("exec failed: %v", err)
 	}

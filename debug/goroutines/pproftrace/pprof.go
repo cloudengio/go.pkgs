@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/pprof"
+	"slices"
 	"strings"
 
 	"github.com/google/pprof/profile"
@@ -94,10 +95,5 @@ func hasLabel(sample *profile.Sample, key, value string) bool {
 	if !hasLabel {
 		return false
 	}
-	for _, v := range values {
-		if v == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, value)
 }

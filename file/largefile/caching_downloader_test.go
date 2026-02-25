@@ -180,7 +180,7 @@ func newDefaultMockReader() *MockReader {
 		GetReaderFunc: func(_ context.Context, from, to int64) (rd io.ReadCloser, retry largefile.RetryResponse, err error) {
 			dataSize := int(to-from) + 1
 			d := make([]byte, dataSize)
-			for i := 0; i < dataSize; i++ {
+			for i := range dataSize {
 				d[i] = byte(from + int64(i)) // Unique data per block start
 			}
 			return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
@@ -345,7 +345,7 @@ func TestCachingDownloaderSimple(t *testing.T) {
 			t.Errorf("PutCall range mismatch: got %+v, want %+v", mockCache.PutCalls[0].Off, outstandingRange.From)
 		}
 		expectedData := make([]byte, defaultBlockSize)
-		for i := 0; i < defaultBlockSize; i++ {
+		for i := range defaultBlockSize {
 			expectedData[i] = byte(outstandingRange.From + int64(i))
 		}
 		if !bytes.Equal(mockCache.PutCalls[0].Data, expectedData) {
@@ -383,7 +383,7 @@ func TestCachingDownloaderOutstandingBlocks(t *testing.T) {
 			GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
 				dataSize := int(to - from + 1)
 				d := make([]byte, dataSize)
-				for i := 0; i < dataSize; i++ {
+				for i := range dataSize {
 					d[i] = byte(from + int64(i)) // Unique data per block
 				}
 				return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
@@ -478,7 +478,7 @@ func TestCachingDownloaderMultipleBlockSizes(t *testing.T) {
 		GetReaderFunc: func(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
 			dataSize := int(to - from + 1)
 			d := make([]byte, dataSize)
-			for i := 0; i < dataSize; i++ {
+			for i := range dataSize {
 				d[i] = byte(from + int64(i))
 			}
 			return io.NopCloser(bytes.NewReader(d)), noRetryResponse{}, nil
@@ -546,7 +546,7 @@ func TestCachingDownloaderMultipleBlockSizes(t *testing.T) {
 		// Verify data content for the last partial block specifically
 		if i == numFullBlocks { // Last block
 			expectedPartialData := make([]byte, partialBlockSize)
-			for j := 0; j < partialBlockSize; j++ {
+			for j := range partialBlockSize {
 				expectedPartialData[j] = byte(expectedRange.From + int64(j))
 			}
 			if !bytes.Equal(putCall.Data, expectedPartialData) {
@@ -646,7 +646,7 @@ func TestCachingDownloaderConcurrencyAndCancellation(t *testing.T) {
 		currentConcurrency := 2
 		numRanges := currentConcurrency * 2
 		ranges := make([]largefile.ByteRange, numRanges)
-		for i := 0; i < numRanges; i++ {
+		for i := range numRanges {
 			ranges[i] = largefile.ByteRange{From: int64(i * defaultBlockSize), To: int64((i+1)*defaultBlockSize) - 1} // Corrected To
 		}
 		mockCache.OutstandingFunc = func(s int, b *largefile.ByteRange) int {

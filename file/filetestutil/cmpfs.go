@@ -29,10 +29,7 @@ func CompareFS(a, b file.FS) error {
 			return fmt.Errorf("%v: mismatched sizes: got %v, want %v", name, got, want)
 		}
 		if !bytes.Equal(contents, cb[name]) {
-			n := 10
-			if n > len(contents) {
-				n = len(contents)
-			}
+			n := min(10, len(contents))
 			errs.Append(fmt.Errorf("mismatched contents (sha1) for %v (%v): %02x -- %02x", name, len(contents), contents[:n], cb[name]))
 		}
 	}

@@ -62,7 +62,7 @@ func newCalendarDateList(d ...datetime.CalendarDate) datetime.CalendarDateList {
 func newDateRangeList(d ...datetime.Date) datetime.DateRangeList {
 	r := make([]datetime.DateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, datetime.NewDateRange(d[i], d[i+1]))
+		r = append(r, datetime.NewDateRange(d[i], d[i+1])) //nolint:gosec // G602 is a false positive here.
 	}
 	return r
 }
@@ -70,7 +70,7 @@ func newDateRangeList(d ...datetime.Date) datetime.DateRangeList {
 func newCalendarDateRangeList(d ...datetime.CalendarDate) datetime.CalendarDateRangeList {
 	r := make([]datetime.CalendarDateRange, 0, len(d)/2)
 	for i := 0; i < len(d); i += 2 {
-		r = append(r, datetime.NewCalendarDateRange(d[i], d[i+1]))
+		r = append(r, datetime.NewCalendarDateRange(d[i], d[i+1])) //nolint:gosec // G602 is a false positive here.
 	}
 	return r
 }
@@ -94,7 +94,7 @@ type dateList []datetime.CalendarDate
 func (dr *dateList) String() string {
 	var out strings.Builder
 	for _, d := range *dr {
-		out.WriteString(fmt.Sprintf("%02d/%02d/%04d,", d.Month(), d.Day(), d.Year()))
+		fmt.Fprintf(&out, "%02d/%02d/%04d,", d.Month(), d.Day(), d.Year())
 	}
 	if out.Len() == 0 {
 		return ""
@@ -126,27 +126,27 @@ func appendYearToRanges(year int, val string) string {
 }
 
 func datesAsString(m, d int) string {
-	s := ""
+	var s strings.Builder
 	for i := 1; i <= d; i++ {
-		s += fmt.Sprintf("%02d/%02d,", m, i)
+		fmt.Fprintf(&s, "%02d/%02d,", m, i)
 	}
-	return s
+	return s.String()
 }
 
 func calendarDatesAsString(y, m, d int) string {
-	s := ""
+	var s strings.Builder
 	for i := 1; i <= d; i++ {
-		s += fmt.Sprintf("%02d/%02d/%04d,", m, i, y)
+		fmt.Fprintf(&s, "%02d/%02d/%04d,", m, i, y)
 	}
-	return s
+	return s.String()
 }
 
 func calendarMonthsAsString(y int, months ...int) string {
-	s := ""
+	var s strings.Builder
 	for _, m := range months {
 		for d := 1; d <= int(datetime.DaysInMonth(y, datetime.Month(m))); d++ {
-			s += fmt.Sprintf("%02d/%02d/%04d,", m, d, y)
+			fmt.Fprintf(&s, "%02d/%02d/%04d,", m, d, y)
 		}
 	}
-	return s
+	return s.String()
 }

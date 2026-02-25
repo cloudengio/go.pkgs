@@ -178,7 +178,7 @@ func TestBackoff(t *testing.T) {
 	ctx := context.Background()
 	numRetries := 10
 	c := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Millisecond, numRetries))
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		retries := backoff(ctx, t, c)
 		if got, want := retries, numRetries; got != want {
 			t.Errorf("got %v, want %v", got, want)

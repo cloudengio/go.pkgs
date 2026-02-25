@@ -62,7 +62,7 @@ func WithConcurrency(g *T, n int) *T {
 	}
 	if n > 0 {
 		ch := make(chan struct{}, n)
-		for i := 0; i < n; i++ {
+		for range n {
 			ch <- struct{}{}
 		}
 		r.ch = ch

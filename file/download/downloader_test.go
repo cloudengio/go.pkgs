@@ -71,7 +71,7 @@ func copyDownloadsToFS(ctx context.Context, t *testing.T, downloaded []download.
 }
 
 func issueDownloadRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
-	for i := 0; i < nItems; i++ {
+	for i := range nItems {
 		select {
 		case input <- download.SimpleRequest{RequestedBy: "issueDownloadRequest", FS: reader, Mode: fs.FileMode(0600), Filenames: []string{fmt.Sprintf("%04v", i)}}:
 		case <-ctx.Done():

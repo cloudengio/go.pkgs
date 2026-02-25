@@ -65,14 +65,14 @@ func (es *EditScript[T]) String() string {
 		out.WriteString(opStr[e.Op])
 		if e.Op == Insert || e.Op == Identical {
 			out.WriteString(" ")
-			out.WriteString(fmt.Sprintf("%v", e.Val))
+			fmt.Fprintf(&out, "%v", e.Val)
 			if e.Op == Identical {
-				out.WriteString(fmt.Sprintf("@[%v == %v]", e.A, e.B))
+				fmt.Fprintf(&out, "@[%v == %v]", e.A, e.B)
 			} else {
-				out.WriteString(fmt.Sprintf("@[%v < %v]", e.A, e.B))
+				fmt.Fprintf(&out, "@[%v < %v]", e.A, e.B)
 			}
 		} else {
-			out.WriteString(fmt.Sprintf(" @[%v]", e.A))
+			fmt.Fprintf(&out, " @[%v]", e.A)
 		}
 		if i < len(*es)-1 {
 			out.WriteString(", ")

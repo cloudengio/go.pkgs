@@ -189,8 +189,8 @@ func secondArrow(v uint8) rune {
 func (dp *DP[T]) Fprint(out io.Writer) {
 	mx, my := len(dp.a), len(dp.b)
 	row := &strings.Builder{}
-	for y := 0; y < my; y++ {
-		for x := 0; x < mx; x++ {
+	for y := range my {
+		for x := range mx {
 			dir := dp.directions[x][y]
 			fmt.Fprintf(row, "  %c%c ", firstArrow(dir), secondArrow(dir))
 		}

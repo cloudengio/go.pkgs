@@ -165,8 +165,8 @@ func testLocalWalk(ctx context.Context, t *testing.T, tmpDir string, wk *filewal
 	el := strings.Split(expected, "\n")
 	for i, l := range lg.lines {
 		state := ""
-		if idx := strings.Index(l, "*"); idx >= 0 {
-			p := l[:idx]
+		if before, _, ok := strings.Cut(l, "*"); ok {
+			p := before
 			state = fmt.Sprintf(" [%v]", lg.state[p])
 		}
 		if idx := strings.Index(l, ":"); idx > 0 {

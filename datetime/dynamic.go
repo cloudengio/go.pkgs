@@ -4,6 +4,8 @@
 
 package datetime
 
+import "strings"
+
 // DynamicDateRange is a function that returns a DateRange for
 // a given year and is intended to be evaluated once per year
 // to calculate events such as solstices, seasons or holidays.
@@ -23,14 +25,14 @@ type DynamicTimeOfDay interface {
 type DynamicDateRangeList []DynamicDateRange
 
 func (dl DynamicDateRangeList) String() string {
-	var out string
+	var out strings.Builder
 	for i, d := range dl {
 		if i > 0 {
-			out += ", "
+			out.WriteString(", ")
 		}
-		out += d.Name()
+		out.WriteString(d.Name())
 	}
-	return out
+	return out.String()
 }
 
 func (dl DynamicDateRangeList) Evaluate(year int) []CalendarDateRange {

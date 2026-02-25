@@ -57,11 +57,11 @@ func init() {
 	dayOfYear = make([]int, 12)
 	dayOfYearLeap = make([]int, 12)
 
-	for i := uint8(0); i < 12; i++ {
+	for i := range uint8(12) {
 		daysInMonth[i] = daysInMonthForYearInit(2023, i+1)
 		daysInMonthLeap[i] = daysInMonthForYearInit(2024, i+1)
 	}
-	for i := uint8(0); i < 11; i++ {
+	for i := range uint8(11) {
 		dayOfYear[i+1] += dayOfYear[i] + int(daysInMonth[i])
 		dayOfYearLeap[i+1] += dayOfYearLeap[i] + int(daysInMonthLeap[i])
 	}
@@ -162,7 +162,7 @@ func (yd YearDay) String() string {
 }
 
 func dateFromDay(day int, daysInMonth []uint8) Date {
-	for month := uint8(0); month < 12; month++ {
+	for month := range uint8(12) {
 		dm := int(daysInMonth[month])
 		if day <= dm {
 			return NewDate(Month(month+1), day)

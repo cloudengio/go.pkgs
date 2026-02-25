@@ -26,11 +26,11 @@ func mkdirall(t *testing.T, paths ...string) {
 
 func TestTypes(t *testing.T) {
 	a := stores.New(nil, 0)
-	if got, want := reflect.TypeOf(a), reflect.TypeOf(new(stores.Sync)); got != want {
+	if got, want := reflect.TypeOf(a), reflect.TypeFor[*stores.Sync](); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	a = stores.New(nil, 100)
-	if got, want := reflect.TypeOf(a), reflect.TypeOf(new(stores.Async)); got != want {
+	if got, want := reflect.TypeOf(a), reflect.TypeFor[*stores.Async](); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

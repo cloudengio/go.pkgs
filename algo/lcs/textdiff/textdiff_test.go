@@ -39,7 +39,7 @@ func TestDiffGroups(t *testing.T) {
 				t.Errorf("%v.%v: got %v, want %v\n", e, i, got, want)
 				continue
 			}
-			for g := 0; g < ng; g++ {
+			for g := range ng {
 				if got, want := diffs.Group(g).Summary(), tc.summary[g]; got != want {
 					t.Errorf("%v.%v: got %v, want %v\n", e, i, got, want)
 				}
