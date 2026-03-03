@@ -15,7 +15,7 @@ type mockSES struct {
 	lastInput *sesv2.SendEmailInput
 }
 
-func (m *mockSES) SendEmail(ctx context.Context, params *sesv2.SendEmailInput, optFns ...func(*sesv2.Options)) (*sesv2.SendEmailOutput, error) {
+func (m *mockSES) SendEmail(_ context.Context, params *sesv2.SendEmailInput, optFns ...func(*sesv2.Options)) (*sesv2.SendEmailOutput, error) {
 	m.lastInput = params
 	return &sesv2.SendEmailOutput{}, nil
 }
