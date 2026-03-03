@@ -1,3 +1,4 @@
 cloudeng.io/os v0.0.0-20260225012014-415f78789833 h1:VLPR9kNZWW20p/lJQ4rie3aUwd2eUC73J+/Oj+YmRvE=
+cloudeng.io/os v0.0.0-20260225012014-415f78789833/go.mod h1:HpH11hUM8QgbcIEhtEB3iDjZyCM00y+tupY5+9LwzwM=
 golang.org/x/sys v0.41.0 h1:Ivj+2Cp/ylzLiEU89QhWblYnOE9zerudt9Ftecq2C6k=
 golang.org/x/sys v0.41.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=

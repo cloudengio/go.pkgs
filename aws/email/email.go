@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
@@ -40,30 +41,20 @@ func NewSenderFromAPI(api SendEmailAPI, from string) *Sender {
 // It allows setting both a text and HTML body. Either textBody or htmlBody can be empty,
 // but not both.
 func (s *Sender) Send(ctx context.Context, to []string, subject, textBody, htmlBody string) error {
-	var body *types.Body
-	if textBody != "" && htmlBody != "" {
-		body = &types.Body{
-			Text: &types.Content{
-				Data: aws.String(textBody),
-			},
-			Html: &types.Content{
-				Data: aws.String(htmlBody),
-			},
-		}
-	} else if textBody != "" {
-		body = &types.Body{
-			Text: &types.Content{
-				Data: aws.String(textBody),
-			},
-		}
-	} else if htmlBody != "" {
-		body = &types.Body{
-			Html: &types.Content{
-				Data: aws.String(htmlBody),
-			},
+	if textBody == "" && htmlBody == "" {
+		return fmt.Errorf("textBody and htmlBody cannot both be empty")
+	}
+	body := &types.Body{}
+	if textBody != "" {
+		body.Text = &types.Content{
+			Data: aws.String(textBody),
 		}
 	}
-
+	if htmlBody != "" {
+		body.Html = &types.Content{
+			Data: aws.String(htmlBody),
+		}
+	}
 	content := &types.EmailContent{
 		Simple: &types.Message{
 			Body: body,
