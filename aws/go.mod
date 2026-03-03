@@ -6,7 +6,7 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20260129005915-7139df7f9f73
 	cloudeng.io/errors v0.0.14-0.20260118175335-f191a42253cc
 	cloudeng.io/file v0.0.0-20260129005915-7139df7f9f73
-	cloudeng.io/logging v0.0.0-20260129005915-7139df7f9f73
+	cloudeng.io/logging v0.0.0-20260225012014-415f78789833
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.15
 	github.com/aws/aws-sdk-go-v2 v1.41.2
@@ -15,17 +15,18 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.50.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.1
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.2
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.59.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7
-	github.com/aws/smithy-go v1.24.1
+	github.com/aws/smithy-go v1.24.2
 	github.com/orlangure/gnomock v0.32.0
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260129005915-7139df7f9f73 // indirect
+	cloudeng.io/algo v0.0.0-20260225012014-415f78789833 // indirect
 	cloudeng.io/net v0.0.0-20260126200038-d63c3c252f7f // indirect
-	cloudeng.io/os v0.0.0-20260129005915-7139df7f9f73 // indirect
+	cloudeng.io/os v0.0.0-20260225012014-415f78789833 // indirect
 	cloudeng.io/sync v0.0.9-0.20260114020737-744f6c0f8e64 // indirect
-	cloudeng.io/sys v0.0.0-20260129005915-7139df7f9f73 // indirect
+	cloudeng.io/sys v0.0.0-20260225012014-415f78789833 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.5 // indirect
@@ -67,7 +68,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
-	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/time v0.14.0 // indirect

@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	smithyendpoints "github.com/aws/smithy-go/endpoints"
 	"github.com/orlangure/gnomock"
 	"github.com/orlangure/gnomock/preset/localstack"
@@ -30,6 +31,7 @@ type Service string
 const (
 	S3             Service = Service(localstack.S3)
 	SecretsManager Service = Service(localstack.SecretsManager)
+	SES            Service = Service(localstack.SES)
 )
 
 func withGnomock(m *testing.M, service **AWS, opts []Option) {
@@ -145,14 +147,14 @@ type hostOnlyResolver[T any] struct {
 	ep smithyendpoints.Endpoint
 }
 
-func (r hostOnlyResolver[T]) ResolveEndpoint(_ context.Context, _ T) (smithyendpoints.Endpoint, error) {
+func (r *hostOnlyResolver[T]) ResolveEndpoint(_ context.Context, _ T) (smithyendpoints.Endpoint, error) {
 	return r.ep, nil
 }
 
-func newHostOnlyResolver[T any](u url.URL) hostOnlyResolver[T] {
+func newHostOnlyResolver[T any](u url.URL) *hostOnlyResolver[T] {
 	var r hostOnlyResolver[T]
 	r.ep.URI = u
-	return r
+	return &r
 }
 
 func (a *AWS) uri() url.URL {
@@ -177,6 +179,18 @@ func (a *AWS) KMS(cfg aws.Config) *kms.Client {
 	res := newHostOnlyResolver[kms.EndpointParameters](a.uri())
 	opt := kms.WithEndpointResolverV2(res)
 	return kms.NewFromConfig(cfg, opt)
+}
+
+func WithSES() Option {
+	return func(o *Options) {
+		o.localStackServices = append(o.localStackServices, localstack.SES)
+	}
+}
+
+func (a *AWS) SESV2(cfg aws.Config) *sesv2.Client {
+	res := newHostOnlyResolver[sesv2.EndpointParameters](a.uri())
+	opt := sesv2.WithEndpointResolverV2(res)
+	return sesv2.NewFromConfig(cfg, opt)
 }
 
 func DefaultAWSConfig() aws.Config {
