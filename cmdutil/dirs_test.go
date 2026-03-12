@@ -7,6 +7,7 @@ package cmdutil_test
 import (
 	"crypto/sha1" // #nosec G505
 	"encoding/hex"
+	"io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -17,27 +18,37 @@ import (
 	"cloudeng.io/errors"
 )
 
-func list(t *testing.T, root string) ([]string, []string, []string) {
+func list(t *testing.T, dir string) ([]string, []string, []string) {
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatalf("OpenRoot: %v: %v", dir, err)
+	}
+	defer r.Close()
+
 	var names, perms, shas []string
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if path == root {
-			return nil
-		}
+	err = fs.WalkDir(r.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		names = append(names, path)
+		if path == "." {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		names = append(names, filepath.Join(dir, path))
 		perms = append(perms, info.Mode().Perm().String())
-		if info.IsDir() {
-			fn := strings.TrimPrefix(path, root)
+		if d.IsDir() {
+			fn := string(filepath.Separator) + path
 			if isWindows() {
-				fn = strings.ReplaceAll(strings.TrimPrefix(path, root), `\`, `/`)
+				fn = "/" + strings.ReplaceAll(path, `\`, `/`)
 			}
 			s := sha1.Sum([]byte(fn)) // #nosec G401
 			shas = append(shas, hex.EncodeToString(s[:]))
-			return err
+			return nil
 		}
-		buf, err := os.ReadFile(path)
+		buf, err := r.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -46,7 +57,7 @@ func list(t *testing.T, root string) ([]string, []string, []string) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("filepath.Walk: %v: %v", root, err)
+		t.Fatalf("fs.WalkDir: %v: %v", dir, err)
 	}
 	return names, perms, shas
 }
