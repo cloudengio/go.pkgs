@@ -42,7 +42,7 @@ type T struct {
 // derived from the supplied context once on either a first non-nil error
 // being returned by a goroutine or when Wait is called.
 func WithContext(ctx context.Context) (*T, context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // G118 false positive
 	return &T{cancelFunc: cancel}, ctx
 }
 

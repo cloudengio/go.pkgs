@@ -16,7 +16,7 @@ import (
 func ExampleWaitGroup() {
 	var wg ctxsync.WaitGroup
 	wg.Add(1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118 false positive
 	go func() {
 		time.Sleep(time.Second)
 		cancel()
