@@ -53,6 +53,11 @@ func (a *AWS) S3(cfg aws.Config) *s3.Client
 
 
 ```go
+func (a *AWS) SESV2(cfg aws.Config) *sesv2.Client
+```
+
+
+```go
 func (a *AWS) SecretsManager(cfg aws.Config) *secretsmanager.Client
 ```
 
@@ -106,6 +111,11 @@ those buckets etc.
 
 
 ```go
+func WithSES() Option
+```
+
+
+```go
 func WithSecretsManager() Option
 ```
 
@@ -126,10 +136,11 @@ type Service string
 ```
 
 ### Constants
-### S3, SecretsManager
+### S3, SecretsManager, SES
 ```go
 S3 Service = Service(localstack.S3)
 SecretsManager Service = Service(localstack.SecretsManager)
+SES Service = Service(localstack.SES)
 
 ```
 

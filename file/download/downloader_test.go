@@ -121,7 +121,7 @@ func TestDownload(t *testing.T) {
 
 func TestDownloadCancel(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // G118 false positive
 
 	src := rand.NewSource(time.Now().UnixMicro())
 

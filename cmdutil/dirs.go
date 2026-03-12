@@ -7,6 +7,7 @@ package cmdutil
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,8 +71,8 @@ func IsDir(path string) bool {
 //
 // If overwrite is set any existing files will be overwritten. Existing
 // directories will always have their contents updated.
-// It is suitable for very large directory trees since it uses filepath.Walk.
-func CopyAll(fromDir, toDir string, ovewrite bool) error {
+// It uses os.Root scoped APIs to prevent symlink TOCTOU traversal.
+func CopyAll(fromDir, toDir string, overwrite bool) error {
 	for _, path := range []string{fromDir, toDir} {
 		if !IsDir(path) {
 			return fmt.Errorf("%v: not a directory", path)
@@ -79,66 +80,150 @@ func CopyAll(fromDir, toDir string, ovewrite bool) error {
 	}
 	contents := strings.HasSuffix(fromDir, "/")
 	topdir := filepath.Base(fromDir)
-	toPath := func(p string) string {
-		if contents {
-			return filepath.Join(toDir, strings.TrimPrefix(p, topdir))
-		}
-		return filepath.Join(toDir, p)
+
+	fromRoot, err := os.OpenRoot(filepath.Clean(fromDir))
+	if err != nil {
+		return err
 	}
-	return filepath.Walk(fromDir, func(path string, info os.FileInfo, err error) error {
-		if contents && (fromDir == path) {
-			return nil
+	defer fromRoot.Close()
+
+	toRoot, err := os.OpenRoot(toDir)
+	if err != nil {
+		return err
+	}
+	defer toRoot.Close()
+
+	dstPath := func(p string) string {
+		if contents {
+			return p
 		}
+		return filepath.Join(topdir, p)
+	}
+
+	return fs.WalkDir(fromRoot.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		dst := toPath(path)
-		if info.IsDir() {
-			if err := os.Mkdir(dst, info.Mode().Perm()); err != nil && !os.IsExist(err) {
-				return err
+		if path == "." {
+			if !contents {
+				return mkdirFromEntry(toRoot, topdir, d)
 			}
 			return nil
 		}
-		return CopyFile(
-			path,
-			dst,
-			info.Mode().Perm(),
-			ovewrite,
-		)
+		return copyEntry(fromRoot, toRoot, path, dstPath(path), d, overwrite)
 	})
 }
 
+func mkdirFromEntry(root *os.Root, name string, d fs.DirEntry) error {
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	if err := root.Mkdir(name, info.Mode().Perm()); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return nil
+}
+
+func copyEntry(fromRoot, toRoot *os.Root, src, dst string, d fs.DirEntry, overwrite bool) error {
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	if d.IsDir() {
+		if err := toRoot.Mkdir(dst, info.Mode().Perm()); err != nil && !os.IsExist(err) {
+			return err
+		}
+		return nil
+	}
+	return copyFileRooted(fromRoot, toRoot, src, dst, info.Mode().Perm(), overwrite)
+}
+
+// copyFileRooted copies a file using root-scoped APIs to prevent symlink
+// TOCTOU traversal.
+func copyFileRooted(fromRoot, toRoot *os.Root, from, to string, perms os.FileMode, overwrite bool) (returnErr error) {
+	info, err := toRoot.Stat(to)
+	if err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("destination is a directory: %v", to)
+		}
+		if !overwrite {
+			return fmt.Errorf("will not overwrite existing file: %v", to)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	output, err := toRoot.OpenFile(to, os.O_CREATE|os.O_RDWR|os.O_TRUNC, perms)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := output.Chmod(perms); err != nil {
+			if returnErr == nil {
+				returnErr = err
+			}
+		}
+		if err := output.Close(); err != nil {
+			if returnErr == nil {
+				returnErr = err
+			}
+		}
+	}()
+
+	input, err := fromRoot.Open(from)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	_, returnErr = io.Copy(output, input)
+	return
+}
+
 // ListRegular returns the lexicographically ordered regular files that lie
-// beneath dir.
+// beneath dir. It uses os.Root scoped APIs to prevent symlink TOCTOU
+// traversal.
 func ListRegular(dir string) ([]string, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
 	var files []string
-	sdir := strings.TrimSuffix(dir, string(filepath.Separator)) + string(filepath.Separator)
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.Mode().IsDir() || (dir == path) {
+		if d.IsDir() || path == "." {
 			return nil
 		}
-		files = append(files, strings.TrimPrefix(path, sdir))
+		if d.Type().IsRegular() {
+			files = append(files, path)
+		}
 		return nil
 	})
 	return files, err
 }
 
 // ListDir returns the lexicographically ordered directories that lie beneath
-// dir.
+// dir. It uses os.Root scoped APIs to prevent symlink TOCTOU traversal.
 func ListDir(dir string) ([]string, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
 	var dirs []string
-	sdir := strings.TrimSuffix(dir, string(filepath.Separator)) + string(filepath.Separator)
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.Mode().IsDir() || (dir == path) {
+		if !d.IsDir() || path == "." {
 			return nil
 		}
-		dirs = append(dirs, strings.TrimPrefix(path, sdir))
+		dirs = append(dirs, path)
 		return nil
 	})
 	return dirs, err

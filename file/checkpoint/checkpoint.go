@@ -185,7 +185,7 @@ func (d *dirop) Compact(ctx context.Context, label string) error {
 		}
 	}
 	zero := formatFilename(0, label)
-	return os.WriteFile(filepath.Join(d.dir, zero), data, 0644) // #nosec G306
+	return os.WriteFile(filepath.Join(d.dir, zero), data, 0644) //nolint:gosec // #nosec G306
 }
 
 func readDirSorted(ctx context.Context, path string) ([]string, error) {

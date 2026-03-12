@@ -35,7 +35,7 @@ func runSubprocess(t *testing.T, args []string) (*exec.Cmd, io.Reader) {
 }
 
 func TestCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118 false positive
 	_, handler := signals.NotifyWithCancel(ctx, os.Interrupt)
 
 	go func() {
@@ -49,7 +49,7 @@ func TestCancel(t *testing.T) {
 }
 
 func TestMultipleCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118 false positive
 	_, handler := signals.NotifyWithCancel(ctx, os.Interrupt)
 	out := []string{}
 	mu := sync.Mutex{}

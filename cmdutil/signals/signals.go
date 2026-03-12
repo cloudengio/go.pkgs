@@ -82,7 +82,7 @@ func (h *Handler) WaitForSignal() os.Signal {
 // Subsequent signals are the same as the first are ignored for one second
 // but after that will similarly lead to os.Exit(ExitCode) being called.
 func NotifyWithCancel(ctx context.Context, signals ...os.Signal) (context.Context, *Handler) {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // G118 false positive
 
 	// Never drop the first two signals.
 	notifyCh := make(chan os.Signal, 2)
