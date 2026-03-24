@@ -1,5 +1,5 @@
-cloudeng.io/datetime v0.0.0-20260303213431-bb1cfd0f49cd h1:NVZVAf4AUa5ZAGztWTkjLRsLwgMEi1/zW6iiRe61t+s=
-cloudeng.io/datetime v0.0.0-20260303213431-bb1cfd0f49cd/go.mod h1:9da4jHud33B3oZ+ss/3Y+RHKx0NIICFrPpG3lpcV3mY=
+cloudeng.io/datetime v0.0.0-20260312171538-61fcde6ce278 h1:Qjc3mP4WAVD1N27I6xwNScxXlnewzhP5/799GKFOIsQ=
+cloudeng.io/datetime v0.0.0-20260312171538-61fcde6ce278/go.mod h1:BFcGOM2904dd1yzIp4dHicBOp2eLO5yvrY6WM4uvpoo=
 github.com/mooncaker816/learnmeeus/v3 v3.0.0-20180601123323-8217f4131761 h1:vYedVmd5TrlJ81C2+/cpTWBB4TNosKI+/ZX+xsVfxmw=
 github.com/mooncaker816/learnmeeus/v3 v3.0.0-20180601123323-8217f4131761/go.mod h1:8wv0gR1RFJAL+HmFF56VgVmoi+yJUcPWtJfboy31AQo=
 github.com/nathan-osman/go-sunrise v1.1.0 h1:ZqZmtmtzs8Os/DGQYi0YMHpuUqR/iRoJK+wDO0wTCw8=
