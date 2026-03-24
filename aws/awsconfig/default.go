@@ -124,3 +124,5 @@ func FromContext(ctx context.Context) (*aws.Config, bool) {
 	cfg, ok := ctx.Value(contextKey{}).(*aws.Config)
 	return cfg, ok
 }
+
+var ErrConfigNotFound = fmt.Errorf("AWS config not found in context")
