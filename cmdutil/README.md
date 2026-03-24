@@ -26,7 +26,7 @@ the build information is not available.
 
 ### Func CopyAll
 ```go
-func CopyAll(fromDir, toDir string, ovewrite bool) error
+func CopyAll(fromDir, toDir string, overwrite bool) error
 ```
 CopyAll will create an exact copy, including permissions, of a local
 filesystem hierarchy. The arguments must both refer to directories.
@@ -37,8 +37,8 @@ than fromDir itself. Thus:
     and both create an exact copy of the tree a/b rooted at c/b.
 
 If overwrite is set any existing files will be overwritten. Existing
-directories will always have their contents updated. It is suitable for very
-large directory trees since it uses filepath.Walk.
+directories will always have their contents updated. It uses os.Root scoped
+APIs to prevent symlink TOCTOU traversal.
 
 ### Func CopyFile
 ```go
@@ -81,14 +81,15 @@ IsDir returns true iff path exists and is a directory.
 func ListDir(dir string) ([]string, error)
 ```
 ListDir returns the lexicographically ordered directories that lie beneath
-dir.
+dir. It uses os.Root scoped APIs to prevent symlink TOCTOU traversal.
 
 ### Func ListRegular
 ```go
 func ListRegular(dir string) ([]string, error)
 ```
-ListRegular returns the lexicographically ordered regular files that lie
-beneath dir.
+ListRegular returns the lexicographically ordered regular files that
+lie beneath dir. It uses os.Root scoped APIs to prevent symlink TOCTOU
+traversal.
 
 ### Func LogBuildInfo
 ```go
