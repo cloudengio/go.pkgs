@@ -5,7 +5,6 @@
 package ssm
 
 import (
-	"context"
 	"testing"
 
 	"cloudeng.io/aws/awsconfig"
@@ -24,7 +23,7 @@ func TestSessionLocalPort(t *testing.T) {
 }
 
 func TestNewPortForwardingSession(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pfi := ssmclient.PortForwardingInput{
 		LocalPort: 8080,
 	}

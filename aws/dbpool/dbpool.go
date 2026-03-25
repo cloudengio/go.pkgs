@@ -50,16 +50,16 @@ func WithAcquireConnection(acquire bool) Option {
 	}
 }
 
-// T is a thin wrapper around pgxpool.Pool that simplifies
+// Pool is a thin wrapper around pgxpool.Pool that simplifies
 // creating connection pools.
-type T struct {
+type Pool struct {
 	*pgxpool.Pool
 }
 
 // TokenGenerator is a function type that generates an authentication token.
 type TokenGenerator func(ctx context.Context) (string, error)
 
-func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (*T, error) {
+func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (*Pool, error) {
 	var options options
 	for _, fn := range opts {
 		fn(&options)
@@ -104,5 +104,5 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 		conn.Release()
 	}
 
-	return &T{Pool: pool}, nil
+	return &Pool{Pool: pool}, nil
 }
