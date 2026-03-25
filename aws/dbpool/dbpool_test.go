@@ -16,7 +16,7 @@ import (
 // TestInvalidConnectionString verifies that a malformed connection string
 // causes NewConnectionPool to fail immediately.
 func TestInvalidConnectionString(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := dbpool.NewConnectionPool(ctx, "not::a::valid::connection::string")
 	if err == nil {
 		pool.Close()
@@ -31,7 +31,7 @@ func TestInvalidConnectionString(t *testing.T) {
 // connecting. pgxpool is lazy: connections are made on demand, not at pool
 // creation time, so an unreachable host is not an error here.
 func TestPoolCreation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test")
 	if err != nil {
 		t.Fatalf("expected no error for lazy pool creation: %v", err)
@@ -42,7 +42,7 @@ func TestPoolCreation(t *testing.T) {
 // TestWithServerName verifies that pool creation with WithServerName succeeds
 // and does not eagerly connect.
 func TestWithServerName(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test",
 		dbpool.WithServerName("my-cluster.dsql.us-east-1.on.aws"),
 	)
@@ -56,7 +56,7 @@ func TestWithServerName(t *testing.T) {
 // is not invoked at pool creation time. Connections are lazy, so the
 // BeforeConnect hook should not fire until a connection is actually acquired.
 func TestWithTokenGenerator_NotCalledAtCreation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	called := false
 	pool, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test",
 		dbpool.WithTokenGenerator(func(_ context.Context) (string, error) {
@@ -80,7 +80,7 @@ func TestWithTokenGenerator_NotCalledAtCreation(t *testing.T) {
 // reachable database server: the token generator fails first and the error is
 // wrapped and returned by NewConnectionPool.
 func TestWithTokenGenerator_ErrorPropagated(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tokenErr := errors.New("token generation failed")
 	_, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test",
 		dbpool.WithTokenGenerator(func(_ context.Context) (string, error) {
@@ -102,7 +102,7 @@ func TestWithTokenGenerator_ErrorPropagated(t *testing.T) {
 // TestWithAcquireConnection_Failure verifies that WithAcquireConnection(true)
 // returns an error when the database server is unreachable.
 func TestWithAcquireConnection_Failure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	_, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test",
 		dbpool.WithAcquireConnection(true),
 	)

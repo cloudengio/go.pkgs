@@ -31,6 +31,7 @@ func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingI
 	}
 	err := ssmclient.PortForwardingSessionWithContext(ctx, *cfg, &pfi)
 	if err != nil {
+		fmt.Printf("failed to start SSM port forwarding session: %v\n", err)
 		return nil, fmt.Errorf("failed to start SSM port forwarding session: %w", err)
 	}
 	return &Session{pfi: pfi}, nil
