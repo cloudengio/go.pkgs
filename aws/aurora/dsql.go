@@ -35,7 +35,7 @@ func GenerateDSQLToken(ctx context.Context, endpoint string) (string, error) {
 }
 
 // TokenGenerator returns a dbpool.TokenGenerator that generates DSQL authentication tokens.
-func TokenGenerator(ctx context.Context, endpoint string) dbpool.TokenGenerator {
+func TokenGenerator(endpoint string) dbpool.TokenGenerator {
 	return func(ctx context.Context) (string, error) {
 		return GenerateDSQLToken(ctx, endpoint)
 	}

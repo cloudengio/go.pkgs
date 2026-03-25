@@ -73,7 +73,9 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 	// Use a custom TLS config to set the ServerName for services that
 	// require it (eg. dsql)
 	if options.serverName != "" {
-		poolConfig.ConnConfig.TLSConfig = &tls.Config{}
+		if poolConfig.ConnConfig.TLSConfig == nil {
+			poolConfig.ConnConfig.TLSConfig = &tls.Config{}
+		}
 		poolConfig.ConnConfig.TLSConfig.ServerName = options.serverName
 	}
 

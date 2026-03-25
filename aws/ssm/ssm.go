@@ -26,7 +26,7 @@ type Session struct {
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
 	cfg, ok := awsconfig.FromContext(ctx)
-	if !ok {
+	if !ok || cfg == nil {
 		return nil, awsconfig.ErrConfigNotFound
 	}
 	err := ssmclient.PortForwardingSessionWithContext(ctx, *cfg, &pfi)
