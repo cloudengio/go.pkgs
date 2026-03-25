@@ -7,6 +7,15 @@ import cloudeng.io/aws/awsconfig
 Package awsconfig provides support for obtaining configuration and
 associated credentials information for use with AWS.
 
+## Variables
+### ErrConfigNotFound
+```go
+ErrConfigNotFound = errors.New("AWS config not found in context")
+
+```
+
+
+
 ## Functions
 ### Func AccountID
 ```go

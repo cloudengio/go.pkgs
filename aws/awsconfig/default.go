@@ -9,6 +9,7 @@ package awsconfig
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -124,3 +125,5 @@ func FromContext(ctx context.Context) (*aws.Config, bool) {
 	cfg, ok := ctx.Value(contextKey{}).(*aws.Config)
 	return cfg, ok
 }
+
+var ErrConfigNotFound = errors.New("AWS config not found in context")
