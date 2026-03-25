@@ -1,7 +1,7 @@
-# Package [cloudeng.io/aws/aurora](https://pkg.go.dev/cloudeng.io/aws/aurora?tab=doc)
+# Package [cloudeng.io/aws/rds](https://pkg.go.dev/cloudeng.io/aws/rds?tab=doc)
 
 ```go
-import cloudeng.io/aws/aurora
+import cloudeng.io/aws/rds
 ```
 
 
