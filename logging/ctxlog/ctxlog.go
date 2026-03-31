@@ -80,8 +80,3 @@ func Warn(ctx context.Context, msg string, args ...any) {
 func Log(ctx context.Context, level slog.Level, msg string, args ...any) {
 	LogDepth(ctx, Logger(ctx), level, 3, msg, args...)
 }
-
-type customLogWriter struct {
-	ctx   context.Context
-	level slog.Level
-}

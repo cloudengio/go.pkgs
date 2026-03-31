@@ -21,12 +21,17 @@ import (
 // call this once at program startup.
 func CaptureLog(ctx context.Context, level slog.Level) {
 	log.SetFlags(0)
-	log.SetOutput(customLogWriter{ctx: ctx, level: level})
+	log.SetOutput(customLogWriter{ctx: context.WithoutCancel(ctx), level: level})
+}
+
+type customLogWriter struct {
+	ctx   context.Context
+	level slog.Level
 }
 
 func (c customLogWriter) Write(p []byte) (n int, err error) {
 	// The standard logger outputs messages followed by a newline,
-	// so trim it and log as an error.
+	// so trim it and log it the configured level.
 	msg := strings.TrimSuffix(string(p), "\n")
 	LogDepth(c.ctx, Logger(c.ctx), c.level, 5, msg)
 	return len(p), nil

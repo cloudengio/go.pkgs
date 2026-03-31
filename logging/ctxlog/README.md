@@ -8,6 +8,19 @@ Package ctxlog provides a context key and functions for logging to a
 context.
 
 ## Functions
+### Func CaptureLog
+```go
+func CaptureLog(ctx context.Context, level slog.Level)
+```
+CaptureLog redirects the standard library's default logger to write through
+the slog logger stored in ctx at the given level. Callers that use log.Print
+/ log.Printf / log.Println will appear in the structured log stream
+alongside slog output.
+
+log's own date/time prefix flags are cleared because slog records the
+timestamp independently. The previous flags and output are not restored;
+call this once at program startup.
+
 ### Func Debug
 ```go
 func Debug(ctx context.Context, msg string, args ...any)
