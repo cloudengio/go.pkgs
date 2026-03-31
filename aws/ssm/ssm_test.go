@@ -5,7 +5,10 @@
 package ssm
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"cloudeng.io/aws/awsconfig"
 	"github.com/mmmorris1975/ssm-session-client/ssmclient"
@@ -25,15 +28,62 @@ func TestSessionLocalPort(t *testing.T) {
 func TestNewPortForwardingSession(t *testing.T) {
 	ctx := t.Context()
 	pfi := ssmclient.PortForwardingInput{
-		LocalPort: 8080,
+		LocalPort:  8080,
+		RemotePort: 80,
+		Target:     "example.com",
 	}
 
-	// 1. Missing config in context
+	// Missing config in context.
 	s, err := NewPortForwardingSession(ctx, pfi)
 	if s != nil {
 		t.Errorf("expected nil session, got %v", s)
 	}
 	if err != awsconfig.ErrConfigNotFound {
 		t.Errorf("expected %v, got %v", awsconfig.ErrConfigNotFound, err)
+	}
+}
+
+// TestSessionWaitClean verifies that Wait returns nil when the session ends
+// cleanly before the timeout.
+func TestSessionWaitClean(t *testing.T) {
+	errCh := make(chan error, 1)
+	close(errCh)
+
+	s := &Session{
+		pfi:   ssmclient.PortForwardingInput{LocalPort: 5432},
+		errCh: errCh,
+	}
+	if err := s.Wait(time.Second); err != nil {
+		t.Errorf("expected nil from Wait on clean shutdown, got %v", err)
+	}
+}
+
+// TestSessionWaitError verifies that Wait surfaces errors from the forwarding loop.
+func TestSessionWaitError(t *testing.T) {
+	sentinel := errors.New("forwarding error")
+	errCh := make(chan error, 1)
+	errCh <- sentinel
+	close(errCh)
+
+	s := &Session{
+		pfi:   ssmclient.PortForwardingInput{LocalPort: 5432},
+		errCh: errCh,
+	}
+	if got := s.Wait(time.Second); !errors.Is(got, sentinel) {
+		t.Errorf("expected sentinel error, got %v", got)
+	}
+}
+
+// TestSessionWaitTimeout verifies that Wait returns DeadlineExceeded when the
+// session does not end within the given duration.
+func TestSessionWaitTimeout(t *testing.T) {
+	errCh := make(chan error) // never closed or written to
+
+	s := &Session{
+		pfi:   ssmclient.PortForwardingInput{LocalPort: 5432},
+		errCh: errCh,
+	}
+	if got := s.Wait(50 * time.Millisecond); !errors.Is(got, context.DeadlineExceeded) {
+		t.Errorf("expected DeadlineExceeded, got %v", got)
 	}
 }

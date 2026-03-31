@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"cloudeng.io/aws/dbpool"
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 // TestInvalidConnectionString verifies that a malformed connection string
@@ -59,7 +60,7 @@ func TestWithTokenGenerator_NotCalledAtCreation(t *testing.T) {
 	ctx := t.Context()
 	called := false
 	pool, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test",
-		dbpool.WithTokenGenerator(func(_ context.Context) (string, error) {
+		dbpool.WithTokenGenerator(func(_ context.Context, _ aws.Config) (string, error) {
 			called = true
 			return "test-token", nil
 		}),
@@ -83,7 +84,7 @@ func TestWithTokenGenerator_ErrorPropagated(t *testing.T) {
 	ctx := t.Context()
 	tokenErr := errors.New("token generation failed")
 	_, err := dbpool.NewConnectionPool(ctx, "postgres://localhost:9999/test",
-		dbpool.WithTokenGenerator(func(_ context.Context) (string, error) {
+		dbpool.WithTokenGenerator(func(_ context.Context, _ aws.Config) (string, error) {
 			return "", tokenErr
 		}),
 		dbpool.WithAcquireConnection(true),
