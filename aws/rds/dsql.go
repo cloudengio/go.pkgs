@@ -8,17 +8,13 @@ import (
 	"context"
 	"fmt"
 
-	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/aws/dbpool"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dsql/auth"
 )
 
 // GenerateDSQLToken creates a 15-minute SigV4 signed authentication token.
-func GenerateDSQLToken(ctx context.Context, endpoint string) (string, error) {
-	cfg, ok := awsconfig.FromContext(ctx)
-	if !ok {
-		return "", awsconfig.ErrConfigNotFound
-	}
+func GenerateDSQLToken(ctx context.Context, endpoint string, cfg aws.Config) (string, error) {
 	// Generate the token using the built-in DSQL auth package.
 	// This performs a local cryptographic signing operation (no network call is made).
 	token, err := auth.GenerateDBConnectAdminAuthToken(
@@ -36,7 +32,7 @@ func GenerateDSQLToken(ctx context.Context, endpoint string) (string, error) {
 
 // TokenGenerator returns a dbpool.TokenGenerator that generates DSQL authentication tokens.
 func TokenGenerator(endpoint string) dbpool.TokenGenerator {
-	return func(ctx context.Context) (string, error) {
-		return GenerateDSQLToken(ctx, endpoint)
+	return func(ctx context.Context, cfg aws.Config) (string, error) {
+		return GenerateDSQLToken(ctx, endpoint, cfg)
 	}
 }

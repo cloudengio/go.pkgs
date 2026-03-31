@@ -6,7 +6,7 @@ package ssm
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"cloudeng.io/aws/awsconfig"
 	"github.com/mmmorris1975/ssm-session-client/ssmclient"
@@ -16,25 +16,35 @@ import (
 // It provides access to the local port that is being forwarded to the
 // remote host.
 type Session struct {
-	pfi ssmclient.PortForwardingInput
+	pfi   ssmclient.PortForwardingInput
+	errCh <-chan error
 }
 
-// NewPortForwardingSession starts a new SSM port forwarding session based
-// on the provided input parameters.
-// It returns a Session object that can be used to retrieve the local port
-// for the forwarded connection.
+// NewPortForwardingSession starts a new SSM port forwarding session based on
+// the provided input parameters. The underlying forwarding call runs in a
+// goroutine so the caller is not blocked.
+//
+// If PortForwardingSessionWithContext returns an error during the startup
+// window (before it has begun accepting connections), that error is returned
+// immediately. Once the session is forwarding, NewPortForwardingSession
+// returns a non-nil *Session; call Wait to block until the session ends and
+// retrieve any error that occurred during forwarding.
+//
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
 	cfg, ok := awsconfig.FromContext(ctx)
 	if !ok || cfg == nil {
 		return nil, awsconfig.ErrConfigNotFound
 	}
-	err := ssmclient.PortForwardingSessionWithContext(ctx, *cfg, &pfi)
-	if err != nil {
-		fmt.Printf("failed to start SSM port forwarding session: %v\n", err)
-		return nil, fmt.Errorf("failed to start SSM port forwarding session: %w", err)
-	}
-	return &Session{pfi: pfi}, nil
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := ssmclient.PortForwardingSessionWithContext(ctx, *cfg, &pfi); err != nil {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+	return &Session{pfi: pfi, errCh: errCh}, nil
 }
 
 // LocalPort returns the local port that is being forwarded to the remote
@@ -42,4 +52,19 @@ func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingI
 // through the SSM tunnel.
 func (s *Session) LocalPort() int {
 	return s.pfi.LocalPort
+}
+
+// Wait blocks until the session ends and returns any error that occurred
+// during forwarding. A nil error means the session was closed cleanly
+// (typically because the context was cancelled).
+func (s *Session) Wait(duration time.Duration) error {
+	select {
+	case <-time.After(duration):
+		return context.DeadlineExceeded
+	case err, ok := <-s.errCh:
+		if !ok {
+			return nil
+		}
+		return err
+	}
 }

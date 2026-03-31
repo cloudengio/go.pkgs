@@ -9,6 +9,8 @@ import (
 	"crypto/tls"
 	"fmt"
 
+	"cloudeng.io/aws/awsconfig"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -20,6 +22,7 @@ type options struct {
 	serverName        string
 	tokenGenerator    TokenGenerator
 	acquireConnection bool
+	cfg               aws.Config
 }
 
 // WithServerName sets the TLS ServerName for connections in the pool.
@@ -50,6 +53,15 @@ func WithAcquireConnection(acquire bool) Option {
 	}
 }
 
+// WithAWSConfig sets the AWS configuration to be used by the TokenGenerator.
+// The default is to look for the config in the context, but this option allows
+// it to be explicitly provided.
+func WithAWSConfig(cfg aws.Config) Option {
+	return func(o *options) {
+		o.cfg = cfg
+	}
+}
+
 // Pool is a thin wrapper around pgxpool.Pool that simplifies
 // creating connection pools.
 type Pool struct {
@@ -57,10 +69,14 @@ type Pool struct {
 }
 
 // TokenGenerator is a function type that generates an authentication token.
-type TokenGenerator func(ctx context.Context) (string, error)
+type TokenGenerator func(ctx context.Context, cfg aws.Config) (string, error)
 
 func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (*Pool, error) {
 	var options options
+	cfg, ok := awsconfig.FromContext(ctx)
+	if ok {
+		options.cfg = cfg.Copy()
+	}
 	for _, fn := range opts {
 		fn(&options)
 	}
@@ -81,7 +97,7 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 
 	if options.tokenGenerator != nil {
 		poolConfig.BeforeConnect = func(ctx context.Context, cc *pgx.ConnConfig) error {
-			token, err := options.tokenGenerator(ctx)
+			token, err := options.tokenGenerator(ctx, options.cfg)
 			if err != nil {
 				return fmt.Errorf("failed to generate token: %w", err)
 			}
