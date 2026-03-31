@@ -15,6 +15,14 @@ Option is a functional option for configuring the connection pool.
 ### Functions
 
 ```go
+func WithAWSConfig(cfg aws.Config) Option
+```
+WithAWSConfig sets the AWS configuration to be used by the TokenGenerator.
+The default is to look for the config in the context, but this option allows
+it to be explicitly provided.
+
+
+```go
 func WithAcquireConnection(acquire bool) Option
 ```
 WithAcquireConnection forces the pool to acquire a connection during
@@ -60,7 +68,7 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 
 ### Type TokenGenerator
 ```go
-type TokenGenerator func(ctx context.Context) (string, error)
+type TokenGenerator func(ctx context.Context, cfg aws.Config) (string, error)
 ```
 TokenGenerator is a function type that generates an authentication token.
 

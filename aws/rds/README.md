@@ -8,7 +8,7 @@ import cloudeng.io/aws/rds
 ## Functions
 ### Func GenerateDSQLToken
 ```go
-func GenerateDSQLToken(ctx context.Context, endpoint string) (string, error)
+func GenerateDSQLToken(ctx context.Context, endpoint string, cfg aws.Config) (string, error)
 ```
 GenerateDSQLToken creates a 15-minute SigV4 signed authentication token.
 
