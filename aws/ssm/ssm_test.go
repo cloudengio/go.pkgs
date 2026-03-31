@@ -28,7 +28,9 @@ func TestSessionLocalPort(t *testing.T) {
 func TestNewPortForwardingSession(t *testing.T) {
 	ctx := t.Context()
 	pfi := ssmclient.PortForwardingInput{
-		LocalPort: 8080,
+		LocalPort:  8080,
+		RemotePort: 80,
+		Target:     "example.com",
 	}
 
 	// Missing config in context.
