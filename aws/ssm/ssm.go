@@ -25,12 +25,6 @@ type Session struct {
 // the provided input parameters. The underlying forwarding call runs in a
 // goroutine so the caller is not blocked.
 //
-// If PortForwardingSessionWithContext returns an error during the startup
-// window (before it has begun accepting connections), that error is returned
-// immediately. Once the session is forwarding, NewPortForwardingSession
-// returns a non-nil *Session; call Wait to block until the session ends and
-// retrieve any error that occurred during forwarding.
-//
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
 	if pfi.LocalPort == 0 || pfi.RemotePort == 0 || pfi.Target == "" {
