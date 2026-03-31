@@ -7,9 +7,7 @@ package ctxlog
 
 import (
 	"context"
-	"log"
 	"runtime"
-	"strings"
 	"time"
 
 	"io"
@@ -86,18 +84,4 @@ func Log(ctx context.Context, level slog.Level, msg string, args ...any) {
 type customLogWriter struct {
 	ctx   context.Context
 	level slog.Level
-}
-
-func (c customLogWriter) Write(p []byte) (n int, err error) {
-	// The standard logger outputs messages followed by a newline,
-	// so trim it and log as an error.
-	msg := strings.TrimSuffix(string(p), "\n")
-	LogDepth(c.ctx, Logger(c.ctx), c.level, 5, msg)
-	return len(p), nil
-}
-
-// NewLogLogger returns a new standard library logger that logs to the
-// provided context's logger at the specified level.
-func NewLogLogger(ctx context.Context, level slog.Level) *log.Logger {
-	return log.New(customLogWriter{ctx: ctx, level: level}, "", 0)
 }
