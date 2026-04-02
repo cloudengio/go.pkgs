@@ -23,8 +23,8 @@ type Session struct {
 
 // NewPortForwardingSession starts a new SSM port forwarding session based on
 // the provided input parameters. The underlying forwarding call runs in a
-// goroutine so the caller is not blocked. Note the the tunnel is not
-// established when this function returns.
+// goroutine so the caller is not blocked. Note that the tunnel is not
+// guaranteed to be established when this function returns.
 //
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
@@ -57,8 +57,10 @@ func (s *Session) LocalPort() int {
 // during forwarding. A nil error means the session was closed cleanly
 // (typically because the context was cancelled).
 func (s *Session) Wait(ctx context.Context, duration time.Duration) error {
+	t := time.NewTimer(duration)
+	defer t.Stop()
 	select {
-	case <-time.After(duration):
+	case <-t.C:
 		return context.DeadlineExceeded
 	case <-ctx.Done():
 		return ctx.Err()

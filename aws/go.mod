@@ -9,6 +9,7 @@ require (
 	cloudeng.io/logging v0.0.0-20260324234026-22d5459ea85c
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.15
+	github.com/alexbacchin/ssm-session-client v0.7.0
 	github.com/aws/aws-sdk-go-v2 v1.41.4
 	github.com/aws/aws-sdk-go-v2/config v1.32.12
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.12
@@ -33,7 +34,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/mmmorris1975/ssm-session-client v0.404.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
@@ -50,7 +50,6 @@ require (
 	cloudeng.io/sys v0.0.0-20260312171538-61fcde6ce278 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/alexbacchin/ssm-session-client v0.7.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.20 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.20 // indirect
