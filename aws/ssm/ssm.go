@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"cloudeng.io/aws/awsconfig"
-	"github.com/mmmorris1975/ssm-session-client/ssmclient"
+	"github.com/alexbacchin/ssm-session-client/ssmclient"
 )
 
 // Session represents an active SSM port forwarding session.
@@ -23,7 +23,8 @@ type Session struct {
 
 // NewPortForwardingSession starts a new SSM port forwarding session based on
 // the provided input parameters. The underlying forwarding call runs in a
-// goroutine so the caller is not blocked.
+// goroutine so the caller is not blocked. Note the the tunnel is not
+// established when this function returns.
 //
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
@@ -55,10 +56,12 @@ func (s *Session) LocalPort() int {
 // Wait blocks until the session ends and returns any error that occurred
 // during forwarding. A nil error means the session was closed cleanly
 // (typically because the context was cancelled).
-func (s *Session) Wait(duration time.Duration) error {
+func (s *Session) Wait(ctx context.Context, duration time.Duration) error {
 	select {
 	case <-time.After(duration):
 		return context.DeadlineExceeded
+	case <-ctx.Done():
+		return ctx.Err()
 	case err, ok := <-s.errCh:
 		if !ok {
 			return nil

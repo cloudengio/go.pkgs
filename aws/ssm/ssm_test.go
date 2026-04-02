@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"cloudeng.io/aws/awsconfig"
-	"github.com/mmmorris1975/ssm-session-client/ssmclient"
+	"github.com/alexbacchin/ssm-session-client/ssmclient"
 )
 
 func TestSessionLocalPort(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSessionWaitClean(t *testing.T) {
 		pfi:   ssmclient.PortForwardingInput{LocalPort: 5432},
 		errCh: errCh,
 	}
-	if err := s.Wait(time.Second); err != nil {
+	if err := s.Wait(t.Context(), time.Second); err != nil {
 		t.Errorf("expected nil from Wait on clean shutdown, got %v", err)
 	}
 }
@@ -69,7 +69,7 @@ func TestSessionWaitError(t *testing.T) {
 		pfi:   ssmclient.PortForwardingInput{LocalPort: 5432},
 		errCh: errCh,
 	}
-	if got := s.Wait(time.Second); !errors.Is(got, sentinel) {
+	if got := s.Wait(t.Context(), time.Second); !errors.Is(got, sentinel) {
 		t.Errorf("expected sentinel error, got %v", got)
 	}
 }
@@ -83,7 +83,7 @@ func TestSessionWaitTimeout(t *testing.T) {
 		pfi:   ssmclient.PortForwardingInput{LocalPort: 5432},
 		errCh: errCh,
 	}
-	if got := s.Wait(50 * time.Millisecond); !errors.Is(got, context.DeadlineExceeded) {
+	if got := s.Wait(t.Context(), 50*time.Millisecond); !errors.Is(got, context.DeadlineExceeded) {
 		t.Errorf("expected DeadlineExceeded, got %v", got)
 	}
 }

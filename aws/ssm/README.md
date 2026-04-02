@@ -21,14 +21,9 @@ to the local port that is being forwarded to the remote host.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error)
 ```
 NewPortForwardingSession starts a new SSM port forwarding session based
-on the provided input parameters. The underlying forwarding call runs in a
-goroutine so the caller is not blocked.
-
-If PortForwardingSessionWithContext returns an error during the startup
-window (before it has begun accepting connections), that error is returned
-immediately. Once the session is forwarding, NewPortForwardingSession
-returns a non-nil *Session; call Wait to block until the session ends and
-retrieve any error that occurred during forwarding.
+on the provided input parameters. The underlying forwarding call runs
+in a goroutine so the caller is not blocked. Note the the tunnel is not
+established when this function returns.
 
 The session can be closed by canceling the supplied context.
 
@@ -45,7 +40,7 @@ SSM tunnel.
 
 
 ```go
-func (s *Session) Wait(duration time.Duration) error
+func (s *Session) Wait(ctx context.Context, duration time.Duration) error
 ```
 Wait blocks until the session ends and returns any error that occurred
 during forwarding. A nil error means the session was closed cleanly
