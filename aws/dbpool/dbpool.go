@@ -71,7 +71,7 @@ type Pool struct {
 // TokenGenerator is a function type that generates an authentication token.
 type TokenGenerator func(ctx context.Context, cfg aws.Config) (string, error)
 
-func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (*Pool, error) {
+func NewConnectionPool(ctx context.Context, poolConfig *pgxpool.Config, opts ...Option) (*Pool, error) {
 	var options options
 	cfg, ok := awsconfig.FromContext(ctx)
 	if ok {
@@ -79,11 +79,6 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 	}
 	for _, fn := range opts {
 		fn(&options)
-	}
-
-	poolConfig, err := pgxpool.ParseConfig(connection)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
 	// Use a custom TLS config to set the ServerName for services that
@@ -121,4 +116,27 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 	}
 
 	return &Pool{Pool: pool}, nil
+}
+
+// ConfigWithOverrides parses the connection string into a pgxpool.
+// Config and applies any overrides for the database, user, host, or
+// port if they are non-empty or non-zero.
+func ConfigWithOverrides(connection string, database, user, host string, port uint16) (*pgxpool.Config, error) {
+	poolConfig, err := pgxpool.ParseConfig(connection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse connection string: %w", err)
+	}
+	if database != "" {
+		poolConfig.ConnConfig.Database = database
+	}
+	if user != "" {
+		poolConfig.ConnConfig.User = user
+	}
+	if host != "" {
+		poolConfig.ConnConfig.Host = host
+	}
+	if port != 0 {
+		poolConfig.ConnConfig.Port = port
+	}
+	return poolConfig, nil
 }

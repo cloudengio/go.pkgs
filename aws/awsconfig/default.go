@@ -127,3 +127,17 @@ func FromContext(ctx context.Context) (*aws.Config, bool) {
 }
 
 var ErrConfigNotFound = errors.New("AWS config not found in context")
+
+// GetCallerIdentity uses the sts service to obtain the account, ARN
+// and userID that the supplied aws.Config identifies as.
+func GetCallerIdentity(cfg aws.Config) (account, arn, userID string, err error) {
+	svc := sts.NewFromConfig(cfg)
+	out, err := svc.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", "", "", fmt.Errorf("getting caller identity: %w", err)
+	}
+	account = aws.ToString(out.Account)
+	arn = aws.ToString(out.Arn)
+	userID = aws.ToString(out.UserId)
+	return
+}
