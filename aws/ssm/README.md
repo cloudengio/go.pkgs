@@ -21,9 +21,9 @@ to the local port that is being forwarded to the remote host.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error)
 ```
 NewPortForwardingSession starts a new SSM port forwarding session based
-on the provided input parameters. The underlying forwarding call runs
-in a goroutine so the caller is not blocked. Note the the tunnel is not
-established when this function returns.
+on the provided input parameters. The underlying forwarding call runs in a
+goroutine so the caller is not blocked. Note that the tunnel will be ready
+to accept connections when NewPortForwardingSession returns.
 
 The session can be closed by canceling the supplied context.
 

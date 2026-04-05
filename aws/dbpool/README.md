@@ -5,6 +5,17 @@ import cloudeng.io/aws/dbpool
 ```
 
 
+## Functions
+### Func ConfigWithOverrides
+```go
+func ConfigWithOverrides(connection string, database, user, host string, port uint16) (*pgxpool.Config, error)
+```
+ConfigWithOverrides parses the connection string into a pgxpool. Config
+and applies any overrides for the database, user, host, or port if they are
+non-empty or non-zero.
+
+
+
 ## Types
 ### Type Option
 ```go
@@ -60,7 +71,7 @@ connection pools.
 ### Functions
 
 ```go
-func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (*Pool, error)
+func NewConnectionPool(ctx context.Context, poolConfig *pgxpool.Config, opts ...Option) (*Pool, error)
 ```
 
 
