@@ -43,6 +43,13 @@ func FromContext(ctx context.Context) (*aws.Config, bool)
 ```
 FromContext returns the aws.Config stored in the context.
 
+### Func GetCallerIdentity
+```go
+func GetCallerIdentity(cfg aws.Config) (account, arn, userID string, err error)
+```
+GetCallerIdentity uses the sts service to obtain the account, ARN and userID
+that the supplied aws.Config identifies as.
+
 ### Func Load
 ```go
 func Load(ctx context.Context, opts ...ConfigOption) (aws.Config, error)

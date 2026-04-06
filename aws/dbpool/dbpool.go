@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	"cloudeng.io/aws/awsconfig"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -21,6 +22,7 @@ type Option func(o *options)
 type options struct {
 	serverName        string
 	tokenGenerator    TokenGenerator
+	tokenExpiration   time.Duration
 	acquireConnection bool
 	cfg               aws.Config
 }
@@ -37,9 +39,10 @@ func WithServerName(serverName string) Option {
 // WithTokenGenerator sets a custom TokenGenerator that will be called
 // to generate a fresh authentication token for every new connection.
 // This is essential for services like DSQL that require short-lived tokens.
-func WithTokenGenerator(tokenGenerator TokenGenerator) Option {
+func WithTokenGenerator(tokenGenerator TokenGenerator, tokenExpiration time.Duration) Option {
 	return func(o *options) {
 		o.tokenGenerator = tokenGenerator
+		o.tokenExpiration = tokenExpiration
 	}
 }
 
@@ -71,7 +74,15 @@ type Pool struct {
 // TokenGenerator is a function type that generates an authentication token.
 type TokenGenerator func(ctx context.Context, cfg aws.Config) (string, error)
 
-func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (*Pool, error) {
+// NewConnectionPool creates a new connection pool with the
+// given configuration and options. If the WithServerName name
+// option is used, the ServerName will be set in the TLS config for
+// all connections. If a TokenGenerator is provided, it will be called
+// to generate a fresh authentication token for every new connection
+// and the pools max connection lifetime will be set to the token
+// expiration specified in WithTokenGenerator (minus 10 seconds)
+// to ensure that connections are recycled before tokens expire.
+func NewConnectionPool(ctx context.Context, poolConfig *pgxpool.Config, opts ...Option) (*Pool, error) {
 	var options options
 	cfg, ok := awsconfig.FromContext(ctx)
 	if ok {
@@ -79,11 +90,6 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 	}
 	for _, fn := range opts {
 		fn(&options)
-	}
-
-	poolConfig, err := pgxpool.ParseConfig(connection)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
 	// Use a custom TLS config to set the ServerName for services that
@@ -96,6 +102,10 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 	}
 
 	if options.tokenGenerator != nil {
+		if options.tokenExpiration <= time.Second*10 {
+			return nil, fmt.Errorf("token expiration must be greater than 10 seconds")
+		}
+		poolConfig.MaxConnLifetime = options.tokenExpiration - (time.Second * 10)
 		poolConfig.BeforeConnect = func(ctx context.Context, cc *pgx.ConnConfig) error {
 			token, err := options.tokenGenerator(ctx, options.cfg)
 			if err != nil {
@@ -121,4 +131,27 @@ func NewConnectionPool(ctx context.Context, connection string, opts ...Option) (
 	}
 
 	return &Pool{Pool: pool}, nil
+}
+
+// ConfigWithOverrides parses the connection string into a pgxpool.
+// Config and applies any overrides for the database, user, host, or
+// port if they are non-empty or non-zero.
+func ConfigWithOverrides(connection string, database, user, host string, port uint16) (*pgxpool.Config, error) {
+	poolConfig, err := pgxpool.ParseConfig(connection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse connection string: %w", err)
+	}
+	if database != "" {
+		poolConfig.ConnConfig.Database = database
+	}
+	if user != "" {
+		poolConfig.ConnConfig.User = user
+	}
+	if host != "" {
+		poolConfig.ConnConfig.Host = host
+	}
+	if port != 0 {
+		poolConfig.ConnConfig.Port = port
+	}
+	return poolConfig, nil
 }
