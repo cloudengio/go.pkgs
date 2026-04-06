@@ -1,0 +1,5 @@
+ignore:
+  - id: GO-2026-4887
+    why: we don't use any moby plugins and there is no fix as of 2025-04-06
+  - id: GO-2026-4883
+    why: we don't use any moby plugins and there is no fix as of 2025-04-06

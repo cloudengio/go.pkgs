@@ -20,7 +20,7 @@ test-less-parallelism:
     "./...",
   ]
 lint: ["golangci-lint", "run", "./..."]
-govuln: ["govulncheck", "./..."]
+govuln: ["govulnchecker", "--config=../govulncheck-exclusions.yml",  "./..."]
 generate: ["go", "generate", "./..."]
 markdown: ["gomarkdown", "-overwrite", "./..."]
 annotate:
