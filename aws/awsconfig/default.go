@@ -126,13 +126,24 @@ func FromContext(ctx context.Context) (*aws.Config, bool) {
 	return cfg, ok
 }
 
+// ContextWithoutConfig returns a new context with the
+// aws.Config removed from it.
+func ContextWithoutConfig(ctx context.Context) context.Context {
+	return context.WithValue(ctx, contextKey{}, nil)
+}
+
 var ErrConfigNotFound = errors.New("AWS config not found in context")
 
 // GetCallerIdentity uses the sts service to obtain the account, ARN
 // and userID that the supplied aws.Config identifies as.
-func GetCallerIdentity(cfg aws.Config) (account, arn, userID string, err error) {
+// The context passed to this function will have any aws.Config
+// set by this package stripped, ie. ContextWithoutConfig
+// is called by GetCallerIdentity before calling
+// sts.GetCallerIdentity.
+func GetCallerIdentity(ctx context.Context, cfg aws.Config) (account, arn, userID string, err error) {
+	ctx = ContextWithoutConfig(ctx)
 	svc := sts.NewFromConfig(cfg)
-	out, err := svc.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+	out, err := svc.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return "", "", "", fmt.Errorf("getting caller identity: %w", err)
 	}

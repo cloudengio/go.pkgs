@@ -14,7 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dsql/auth"
 )
 
-func WithDSLTokenExpiration(expiration time.Duration) func(o *auth.TokenOptions) {
+// WithDSQLTokenExpiration returns a function that can be passed to
+// GenerateDSQLToken to set the expiration time of the generated
+// token.
+func WithDSQLTokenExpiration(expiration time.Duration) func(o *auth.TokenOptions) {
 	return func(o *auth.TokenOptions) {
 		o.ExpiresIn = expiration
 	}

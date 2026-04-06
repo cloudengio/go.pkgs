@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/aws/dbpool"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -110,7 +111,7 @@ func TestWithTokenGenerator_NotCalledAtCreation(t *testing.T) {
 		dbpool.WithTokenGenerator(func(_ context.Context, _ aws.Config) (string, error) {
 			called = true
 			return "test-token", nil
-		}),
+		}, 15*time.Minute),
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -118,6 +119,41 @@ func TestWithTokenGenerator_NotCalledAtCreation(t *testing.T) {
 	defer pool.Close()
 	if called {
 		t.Error("token generator must not be called during pool creation (connections are lazy)")
+	}
+}
+
+// TestWithTokenGenerator_ExpirationTooShort verifies that a token expiration
+// of 10 seconds or less is rejected at pool creation time.
+func TestWithTokenGenerator_ExpirationTooShort(t *testing.T) {
+	ctx := t.Context()
+	for _, d := range []time.Duration{0, time.Second, 10 * time.Second} {
+		_, err := dbpool.NewConnectionPool(ctx, mustParseConfig(t, testDSN),
+			dbpool.WithTokenGenerator(func(_ context.Context, _ aws.Config) (string, error) {
+				return "tok", nil
+			}, d),
+		)
+		if err == nil {
+			t.Errorf("expected error for token expiration %v, got nil", d)
+		}
+	}
+}
+
+// TestWithTokenGenerator_SetsMaxConnLifetime verifies that NewConnectionPool
+// sets MaxConnLifetime to tokenExpiration minus 10 seconds.
+func TestWithTokenGenerator_SetsMaxConnLifetime(t *testing.T) {
+	ctx := t.Context()
+	expiration := 15 * time.Minute
+	pool, err := dbpool.NewConnectionPool(ctx, mustParseConfig(t, testDSN),
+		dbpool.WithTokenGenerator(func(_ context.Context, _ aws.Config) (string, error) {
+			return "tok", nil
+		}, expiration),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer pool.Close()
+	if got, want := pool.Config().MaxConnLifetime, expiration-10*time.Second; got != want {
+		t.Errorf("MaxConnLifetime: got %v, want %v", got, want)
 	}
 }
 
@@ -133,7 +169,7 @@ func TestWithTokenGenerator_ErrorPropagated(t *testing.T) {
 	_, err := dbpool.NewConnectionPool(ctx, mustParseConfig(t, testDSN),
 		dbpool.WithTokenGenerator(func(_ context.Context, _ aws.Config) (string, error) {
 			return "", tokenErr
-		}),
+		}, 15*time.Minute),
 		dbpool.WithAcquireConnection(true),
 	)
 	if err == nil {
@@ -174,7 +210,7 @@ func TestWithAWSConfig(t *testing.T) {
 		dbpool.WithTokenGenerator(func(_ context.Context, cfg aws.Config) (string, error) {
 			capturedCfg = cfg
 			return "", tokenErr
-		}),
+		}, 15*time.Minute),
 		dbpool.WithAcquireConnection(true),
 	)
 	if !errors.Is(err, tokenErr) {
