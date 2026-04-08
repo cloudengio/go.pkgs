@@ -15,6 +15,9 @@ type Deferred yaml.Node
 
 // UnmarshalYAML captures the raw YAML node for deferred decoding.
 func (d *Deferred) UnmarshalYAML(value *yaml.Node) error {
+	if d == nil {
+		return fmt.Errorf("nil Deferred node")
+	}
 	*d = Deferred(*value)
 	return nil
 }
