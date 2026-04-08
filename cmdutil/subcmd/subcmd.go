@@ -140,6 +140,7 @@ import (
 
 	"cloudeng.io/cmdutil"
 	"cloudeng.io/cmdutil/flags"
+	"cloudeng.io/errors"
 	"cloudeng.io/text/linewrap"
 )
 
@@ -265,6 +266,7 @@ type Command struct {
 	arguments       []string
 	argumentDetails []string
 	runner          Runner
+	preHooks        []PreHook
 	flags           *FlagSet
 	opts            options
 }
@@ -334,6 +336,12 @@ func splitArguments(args []string, sep string) (names, details []string) {
 func (cmd *Command) Document(description string, arguments ...string) {
 	cmd.description = description
 	cmd.arguments, cmd.argumentDetails = splitArguments(arguments, " - ")
+}
+
+// AppendPreHooks appends the supplied pre-hooks to the
+// command's pre-hooks.
+func (cmd *Command) AppendPreHooks(preHooks ...PreHook) {
+	cmd.opts.preHooks = append(cmd.opts.preHooks, preHooks...)
 }
 
 func namesAndDefault(name string, fs *flag.FlagSet) string {
@@ -408,6 +416,7 @@ type options struct {
 	atLeastArgs       bool
 	numArgs           int
 	subcmds           *CommandSet
+	preHooks          []PreHook
 }
 
 // WithoutArguments specifies that the command takes no arguments.
@@ -438,6 +447,14 @@ func AtLeastNArguments(n int) CommandOption {
 	return func(o *options) {
 		o.atLeastArgs = true
 		o.numArgs = n
+	}
+}
+
+// WithPreHooks appends the supplied pre-hooks to the command's
+// pre-hooks. Pre-hooks are executed before the command's main logic.
+func WithPreHooks(preHooks ...PreHook) CommandOption {
+	return func(o *options) {
+		o.preHooks = append(o.preHooks, preHooks...)
 	}
 }
 
@@ -748,6 +765,69 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		return cmd.opts.subcmds.dispatchWithArgs(ctx, usage, args)
 	}
 	return cmds.mainWrapper()(ctx, func(ctx context.Context) error {
-		return cmd.runner(ctx, cmd.flags.flagValues, args)
+		var errs errors.M
+		ctx, postHooks, err := cmds.runPreHooks(ctx, cmd.name, cmd.opts.preHooks)
+		errs.Append(err)
+		if err != nil {
+			return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
+		}
+		err = cmd.runner(ctx, cmd.flags.flagValues, args)
+		errs.Append(err)
+		cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
+		return errs.Err()
 	})
+}
+
+func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHooks []PreHook) (context.Context, []PostHook, error) {
+	var err error
+	var postHooks []PostHook
+	for _, pre := range preHooks {
+		var post PostHook
+		ctx, post, err = pre(ctx)
+		if err != nil {
+			return ctx, postHooks, fmt.Errorf("%v: pre-hook failed: %w", cmdName, err)
+		}
+		if post != nil {
+			postHooks = append(postHooks, post)
+		}
+	}
+	return ctx, postHooks, nil
+}
+
+func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHooks []PostHook, errs *errors.M) error {
+	for _, post := range postHooks {
+		if err := post(ctx); err != nil {
+			errs.Append(fmt.Errorf("%v: post-hook failed: %w", cmdName, err))
+		}
+	}
+	return errs.Err()
+}
+
+// AppendPrehooks appends the supplied pre-hooks to
+// the command set's pre-hooks and to the
+// pre-hooks of all sub-commands.
+func (cmds *CommandSet) AppendPrehooks(preHooks ...PreHook) {
+	if cmds.cmd != nil {
+		cmds.cmd.AppendPreHooks(preHooks...)
+	}
+	for _, cmd := range cmds.cmds {
+		cmd.AppendPreHooks(preHooks...)
+		if cmd.opts.subcmds != nil {
+			cmd.opts.subcmds.AppendPrehooks(preHooks...)
+		}
+	}
+}
+
+// SetPrehooks sets the supplied pre-hooks as the
+// command set's pre-hooks and for all sub-commands.
+func (cmds *CommandSet) SetPrehooks(preHooks ...PreHook) {
+	if cmds.cmd != nil {
+		cmds.cmd.opts.preHooks = preHooks
+	}
+	for _, cmd := range cmds.cmds {
+		cmd.opts.preHooks = preHooks
+		if cmd.opts.subcmds != nil {
+			cmd.opts.subcmds.SetPrehooks(preHooks...)
+		}
+	}
 }

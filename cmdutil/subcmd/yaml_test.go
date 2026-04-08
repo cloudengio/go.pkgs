@@ -357,6 +357,222 @@ func TestYAMLCompatibility(t *testing.T) {
 	}
 }
 
+func TestSetPreHooks(t *testing.T) {
+	ctx := context.Background()
+	hookCalled := map[string]int{}
+
+	makeHook := func(tag string) subcmd.PreHook {
+		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			hookCalled[tag]++
+			return ctx, nil, nil
+		}
+	}
+
+	noopRunner := func(_ context.Context, values any, _ []string) error { return nil }
+
+	const spec = `name: root
+summary: root
+commands:
+  - name: a
+    summary: a
+  - name: b
+    summary: b
+    commands:
+      - name: b1
+        summary: b1
+      - name: b2
+        summary: b2
+`
+	setup := func(t *testing.T) *subcmd.CommandSetYAML {
+		t.Helper()
+		cs := subcmd.MustFromYAML(spec)
+		cs.Set("a").MustRunner(noopRunner, &struct{}{})
+		cs.Set("b", "b1").MustRunner(noopRunner, &struct{}{})
+		cs.Set("b", "b2").MustRunner(noopRunner, &struct{}{})
+		return cs
+	}
+
+	t.Run("leaf command", func(t *testing.T) {
+		cs := setup(t)
+		hookCalled = map[string]int{}
+		cs.Set("a").MustSetPreHooks(makeHook("h"))
+		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
+			t.Fatal(err)
+		}
+		if hookCalled["h"] != 1 {
+			t.Errorf("hook called %d times, want 1", hookCalled["h"])
+		}
+	})
+
+	t.Run("intermediate node applies to all descendants", func(t *testing.T) {
+		cs := setup(t)
+		hookCalled = map[string]int{}
+		cs.Set("b").MustSetPreHooks(makeHook("h"))
+		if err := cs.DispatchWithArgs(ctx, "root", "b", "b1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cs.DispatchWithArgs(ctx, "root", "b", "b2"); err != nil {
+			t.Fatal(err)
+		}
+		if hookCalled["h"] != 2 {
+			t.Errorf("hook called %d times for b1+b2, want 2", hookCalled["h"])
+		}
+	})
+
+	t.Run("sibling unaffected", func(t *testing.T) {
+		cs := setup(t)
+		hookCalled = map[string]int{}
+		cs.Set("b").MustSetPreHooks(makeHook("h"))
+		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
+			t.Fatal(err)
+		}
+		if hookCalled["h"] != 0 {
+			t.Errorf("hook called %d times for sibling 'a', want 0", hookCalled["h"])
+		}
+	})
+
+	t.Run("error on unknown command", func(t *testing.T) {
+		cs := setup(t)
+		err := cs.Set("nonexistent").SetPreHooks(makeHook("h"))
+		if err == nil || !strings.Contains(err.Error(), "nonexistent") {
+			t.Errorf("expected error mentioning nonexistent, got %v", err)
+		}
+	})
+}
+
+func ExampleCurrentCommand_SetPreHooks() {
+	ctx := context.Background()
+	logged := []string{}
+
+	logHook := func(ctx context.Context) (subcmd.PostHook, subcmd.PostHook, error) {
+		return nil, nil, nil
+	}
+	_ = logHook
+
+	traceHook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		logged = append(logged, "pre")
+		post := func(_ context.Context) error {
+			logged = append(logged, "post")
+			return nil
+		}
+		return ctx, post, nil
+	})
+
+	out := &strings.Builder{}
+	cmdSet := subcmd.MustFromYAML(`name: tool
+summary: example tool
+commands:
+  - name: sub1
+    summary: first sub
+  - name: sub2
+    summary: second sub
+`)
+	cmdSet.Set("sub1").MustRunner((&runner{name: "sub1", out: out}).cmd, &exampleFlags{})
+	cmdSet.Set("sub2").MustRunner((&runner{name: "sub2", out: out}).cmd, &exampleFlags{})
+
+	// Apply the tracing hook to sub1 only.
+	cmdSet.Set("sub1").MustSetPreHooks(traceHook)
+
+	if err := cmdSet.DispatchWithArgs(ctx, "tool", "sub1"); err != nil {
+		panic(err)
+	}
+	fmt.Println(strings.Join(logged, ","))
+	// Output:
+	// pre,post
+}
+
+func TestAppendPreHooks(t *testing.T) {
+	ctx := context.Background()
+
+	const spec = `name: root
+summary: root
+commands:
+  - name: a
+    summary: a
+  - name: b
+    summary: b
+    commands:
+      - name: b1
+        summary: b1
+      - name: b2
+        summary: b2
+`
+	noopRunner := func(_ context.Context, values any, _ []string) error { return nil }
+
+	setup := func(t *testing.T) *subcmd.CommandSetYAML {
+		t.Helper()
+		cs := subcmd.MustFromYAML(spec)
+		cs.Set("a").MustRunner(noopRunner, &struct{}{})
+		cs.Set("b", "b1").MustRunner(noopRunner, &struct{}{})
+		cs.Set("b", "b2").MustRunner(noopRunner, &struct{}{})
+		return cs
+	}
+
+	t.Run("appends to existing hooks", func(t *testing.T) {
+		cs := setup(t)
+		order := []string{}
+		hookFirst := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			order = append(order, "first")
+			return ctx, nil, nil
+		})
+		hookSecond := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			order = append(order, "second")
+			return ctx, nil, nil
+		})
+		cs.Set("a").MustSetPreHooks(hookFirst)
+		cs.Set("a").MustAppendPreHooks(hookSecond)
+		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
+			t.Fatal(err)
+		}
+		if len(order) != 2 || order[0] != "first" || order[1] != "second" {
+			t.Errorf("got %v, want [first second]", order)
+		}
+	})
+
+	t.Run("appends to all descendants", func(t *testing.T) {
+		cs := setup(t)
+		callCount := 0
+		hook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			callCount++
+			return ctx, nil, nil
+		})
+		cs.Set("b").MustAppendPreHooks(hook)
+		if err := cs.DispatchWithArgs(ctx, "root", "b", "b1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cs.DispatchWithArgs(ctx, "root", "b", "b2"); err != nil {
+			t.Fatal(err)
+		}
+		if callCount != 2 {
+			t.Errorf("hook called %d times, want 2", callCount)
+		}
+	})
+
+	t.Run("does not affect siblings", func(t *testing.T) {
+		cs := setup(t)
+		callCount := 0
+		hook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			callCount++
+			return ctx, nil, nil
+		})
+		cs.Set("b").MustAppendPreHooks(hook)
+		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
+			t.Fatal(err)
+		}
+		if callCount != 0 {
+			t.Errorf("hook called %d times for sibling 'a', want 0", callCount)
+		}
+	})
+
+	t.Run("error on unknown command", func(t *testing.T) {
+		cs := setup(t)
+		err := cs.Set("nonexistent").AppendPreHooks()
+		if err == nil || !strings.Contains(err.Error(), "nonexistent") {
+			t.Errorf("expected error mentioning nonexistent, got %v", err)
+		}
+	})
+}
+
 func TestErrors(t *testing.T) {
 	r := &runner{name: "a", out: nil}
 	cmdSet := subcmd.MustFromYAMLTemplate(oneLevel)
