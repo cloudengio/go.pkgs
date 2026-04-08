@@ -87,13 +87,19 @@ Decode decodes the captured YAML node into the provided value.
 
 
 ```go
+func (d *Deferred) MarshalYAML() (any, error)
+```
+MarshalYAML marshals Deferred as the underlying YAML node.
+
+
+```go
 func (d *Deferred) UnmarshalYAML(value *yaml.Node) error
 ```
 UnmarshalYAML captures the raw YAML node for deferred decoding.
 
 
 ```go
-func (d Deferred) ValueFor(key string) (yaml.Node, bool)
+func (d *Deferred) ValueFor(key string) (*yaml.Node, bool)
 ```
 ValueFor retrieves the value associated with the specified key from a
 mapping node.
