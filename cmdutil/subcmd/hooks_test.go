@@ -315,7 +315,7 @@ func TestAppendPreHooksOnCommand(t *testing.T) {
 	}
 }
 
-func TestAppendPrehooksOnCommandSet(t *testing.T) {
+func TestAppendPreHooksOnCommandSet(t *testing.T) {
 	ctx := context.Background()
 	hookCallCount := 0
 
@@ -350,7 +350,7 @@ func TestAppendPrehooksOnCommandSet(t *testing.T) {
 	}
 }
 
-func TestSetPrehooksOnCommandSet(t *testing.T) {
+func TestSetPreHooksOnCommandSet(t *testing.T) {
 	ctx := context.Background()
 
 	hookA := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {

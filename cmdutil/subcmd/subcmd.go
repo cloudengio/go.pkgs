@@ -804,7 +804,7 @@ func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHo
 	return errs.Err()
 }
 
-// AppendPrehooks appends the supplied pre-hooks to
+// AppendPreHooks appends the supplied pre-hooks to
 // the command set's pre-hooks and to the
 // pre-hooks of all sub-commands.
 func (cmds *CommandSet) AppendPreHooks(preHooks ...PreHook) {

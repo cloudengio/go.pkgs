@@ -263,7 +263,7 @@ NewCommandSet creates a new command set.
 ```go
 func (cmds *CommandSet) AppendPreHooks(preHooks ...PreHook)
 ```
-AppendPrehooks appends the supplied pre-hooks to the command set's pre-hooks
+AppendPreHooks appends the supplied pre-hooks to the command set's pre-hooks
 and to the pre-hooks of all sub-commands.
 
 
