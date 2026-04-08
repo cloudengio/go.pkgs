@@ -581,6 +581,76 @@ commands:
 	})
 }
 
+func TestPreHooksOnToplevelCommand(t *testing.T) {
+	// A YAML spec with no sub-commands produces a single top-level command
+	// (cmdSet.cmd rather than cmdSet.cmds). Verify that Set().AppendPreHooks
+	// and Set().SetPreHooks work correctly in that case.
+	ctx := context.Background()
+
+	const spec = `name: toplevel
+summary: a single top-level command
+`
+	var order []string
+	out := &strings.Builder{}
+
+	makeHook := func(name string) subcmd.PreHook {
+		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			order = append(order, "pre-"+name)
+			return ctx, nil, nil
+		}
+	}
+
+	setup := func(t *testing.T) *subcmd.CommandSetYAML {
+		t.Helper()
+		order = nil
+		out.Reset()
+		cs := subcmd.MustFromYAML(spec)
+		cs.Set("toplevel").MustRunner((&runner{name: "toplevel", out: out}).cmd, &exampleFlags{})
+		return cs
+	}
+
+	t.Run("AppendPreHooks runs hook", func(t *testing.T) {
+		cs := setup(t)
+		cs.Set("toplevel").MustAppendPreHooks(makeHook("a"))
+		if err := cs.DispatchWithArgs(ctx, "toplevel"); err != nil {
+			t.Fatal(err)
+		}
+		if len(order) != 1 || order[0] != "pre-a" {
+			t.Errorf("got %v, want [pre-a]", order)
+		}
+	})
+
+	t.Run("AppendPreHooks accumulates", func(t *testing.T) {
+		cs := setup(t)
+		cs.Set("toplevel").MustAppendPreHooks(makeHook("a"))
+		cs.Set("toplevel").MustAppendPreHooks(makeHook("b"))
+		if err := cs.DispatchWithArgs(ctx, "toplevel"); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"pre-a", "pre-b"}
+		if len(order) != len(want) {
+			t.Fatalf("got %v, want %v", order, want)
+		}
+		for i, v := range want {
+			if order[i] != v {
+				t.Errorf("step %d: got %q, want %q", i, order[i], v)
+			}
+		}
+	})
+
+	t.Run("SetPreHooks replaces", func(t *testing.T) {
+		cs := setup(t)
+		cs.Set("toplevel").MustAppendPreHooks(makeHook("a"))
+		cs.Set("toplevel").MustSetPreHooks(makeHook("b"))
+		if err := cs.DispatchWithArgs(ctx, "toplevel"); err != nil {
+			t.Fatal(err)
+		}
+		if len(order) != 1 || order[0] != "pre-b" {
+			t.Errorf("got %v, want [pre-b]", order)
+		}
+	})
+}
+
 func TestErrors(t *testing.T) {
 	r := &runner{name: "a", out: nil}
 	cmdSet := subcmd.MustFromYAMLTemplate(oneLevel)
