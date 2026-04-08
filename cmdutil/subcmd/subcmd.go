@@ -773,8 +773,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		}
 		err = cmd.runner(ctx, cmd.flags.flagValues, args)
 		errs.Append(err)
-		cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
-		return errs.Err()
+		return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
 	})
 }
 

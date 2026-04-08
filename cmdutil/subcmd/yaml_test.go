@@ -368,7 +368,7 @@ func TestSetPreHooks(t *testing.T) {
 		}
 	}
 
-	noopRunner := func(_ context.Context, values any, _ []string) error { return nil }
+	noopRunner := func(_ context.Context, _ any, _ []string) error { return nil }
 
 	const spec = `name: root
 summary: root
@@ -505,7 +505,7 @@ commands:
       - name: b2
         summary: b2
 `
-	noopRunner := func(_ context.Context, values any, _ []string) error { return nil }
+	noopRunner := func(_ context.Context, _ any, _ []string) error { return nil }
 
 	setup := func(t *testing.T) *subcmd.CommandSetYAML {
 		t.Helper()

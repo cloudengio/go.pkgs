@@ -261,7 +261,7 @@ NewCommandSet creates a new command set.
 ### Methods
 
 ```go
-func (cmds *CommandSet) AppendPrehooks(preHooks ...PreHook)
+func (cmds *CommandSet) AppendPreHooks(preHooks ...PreHook)
 ```
 AppendPrehooks appends the supplied pre-hooks to the command set's pre-hooks
 and to the pre-hooks of all sub-commands.
@@ -317,9 +317,9 @@ SetOutput is like flag.FlagSet.SetOutput.
 
 
 ```go
-func (cmds *CommandSet) SetPrehooks(preHooks ...PreHook)
+func (cmds *CommandSet) SetPreHooks(preHooks ...PreHook)
 ```
-SetPrehooks sets the supplied pre-hooks as the command set's pre-hooks and
+SetPreHooks sets the supplied pre-hooks as the command set's pre-hooks and
 for all sub-commands.
 
 
@@ -656,7 +656,8 @@ type PreHook func(ctx context.Context) (context.Context, PostHook, error)
 ```
 PreHook represents a function that is called before the main command
 execution. It can modify the context and return a PostHook to be executed
-after the main command.
+after the main command. PostHooks are executed in LIFO order (last
+registered, first called).
 
 
 ### Type Runner
@@ -674,6 +675,11 @@ Runner is the type of the function to be called to run a particular command.
 ### [ExampleCommandSetYAML_multiple](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSetYAML_multiple)
 
 ### [ExampleCommandSetYAML_toplevel](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSetYAML_toplevel)
+
+### [ExamplePostHook_lifoOrder](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-PostHook_lifoOrder)
+ExamplePostHook_lifoOrder demonstrates that post-hooks run in LIFO order,
+mirroring the defer stack: the last pre-hook to run is the first post-hook
+called. This ensures inner resources are released before outer ones.
 
 
 

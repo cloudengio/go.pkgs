@@ -459,7 +459,7 @@ func ExampleWithPreHooks() {
 	dbHook := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
 		fmt.Println("pre: opening db connection")
 		ctx = context.WithValue(ctx, dbKey{}, "db-handle")
-		post := func(ctx context.Context) error {
+		post := func(context.Context) error {
 			fmt.Println("post: closing db connection")
 			return nil
 		}
@@ -485,6 +485,138 @@ func ExampleWithPreHooks() {
 	// pre: opening db connection
 	// runner: using db-handle
 	// post: closing db connection
+}
+
+func TestMidChainPreHookFailure(t *testing.T) {
+	ctx := context.Background()
+
+	// 5 pre-hooks; hook 3 fails.
+	// Hooks 1 and 2 each register a post-hook.
+	// Hooks 4 and 5 must never be called.
+	// The runner must never be called.
+	// Post-hooks for hooks 1 and 2 must run in LIFO order.
+
+	var order []string
+	failErr := fmt.Errorf("hook-3 failed")
+
+	makeHook := func(name string) subcmd.PreHook {
+		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			order = append(order, "pre-"+name)
+			post := func(_ context.Context) error {
+				order = append(order, "post-"+name)
+				return nil
+			}
+			return ctx, post, nil
+		}
+	}
+	failingHook := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		order = append(order, "pre-3")
+		return ctx, nil, failErr
+	}
+
+	runner := func(_ context.Context, _ any, _ []string) error {
+		order = append(order, "runner")
+		return nil
+	}
+
+	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(
+			makeHook("1"),
+			makeHook("2"),
+			failingHook,
+			makeHook("4"),
+			makeHook("5"),
+		),
+	)
+	cmd.Document("test command")
+	cs := subcmd.NewCommandSet(cmd)
+	err := cs.DispatchWithArgs(ctx, "test", "cmd")
+
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "hook-3 failed") {
+		t.Errorf("error should contain original cause: %v", err)
+	}
+	if !strings.Contains(err.Error(), "pre-hook failed") {
+		t.Errorf("error should mention pre-hook failed: %v", err)
+	}
+
+	// LIFO: post-2 runs before post-1; hooks 4 and 5 and runner never run.
+	want := []string{"pre-1", "pre-2", "pre-3", "post-2", "post-1"}
+	if len(order) != len(want) {
+		t.Fatalf("got %v, want %v", order, want)
+	}
+	for i, v := range want {
+		if order[i] != v {
+			t.Errorf("step %d: got %q, want %q", i, order[i], v)
+		}
+	}
+}
+
+func TestMidChainPreHookFailureWithPostHookError(t *testing.T) {
+	// Same scenario, but a compensating post-hook also fails.
+	// Both the pre-hook error and the post-hook error must appear in the
+	// returned error; the other post-hook must still run.
+	ctx := context.Background()
+
+	var order []string
+
+	hook1 := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		order = append(order, "pre-1")
+		post := func(_ context.Context) error {
+			order = append(order, "post-1")
+			return fmt.Errorf("post-1 error")
+		}
+		return ctx, post, nil
+	}
+	hook2 := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		order = append(order, "pre-2")
+		post := func(_ context.Context) error {
+			order = append(order, "post-2")
+			return nil
+		}
+		return ctx, post, nil
+	}
+	hook3 := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		order = append(order, "pre-3")
+		return ctx, nil, fmt.Errorf("pre-3 error")
+	}
+
+	runner := func(_ context.Context, _ any, _ []string) error {
+		order = append(order, "runner")
+		return nil
+	}
+
+	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(hook1, hook2, hook3),
+	)
+	cmd.Document("test command")
+	cs := subcmd.NewCommandSet(cmd)
+	err := cs.DispatchWithArgs(ctx, "test", "cmd")
+
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "pre-3 error") {
+		t.Errorf("error should contain pre-hook cause: %v", err)
+	}
+	if !strings.Contains(err.Error(), "post-1 error") {
+		t.Errorf("error should contain post-hook cause: %v", err)
+	}
+
+	// LIFO: post-2 runs first (succeeds), post-1 runs second (fails); runner never runs.
+	want := []string{"pre-1", "pre-2", "pre-3", "post-2", "post-1"}
+	if len(order) != len(want) {
+		t.Fatalf("got %v, want %v", order, want)
+	}
+	for i, v := range want {
+		if order[i] != v {
+			t.Errorf("step %d: got %q, want %q", i, order[i], v)
+		}
+	}
 }
 
 // ExamplePostHook_lifoOrder demonstrates that post-hooks run in LIFO order,
