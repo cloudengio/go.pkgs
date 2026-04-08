@@ -136,6 +136,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"cloudeng.io/cmdutil"
@@ -266,7 +267,6 @@ type Command struct {
 	arguments       []string
 	argumentDetails []string
 	runner          Runner
-	preHooks        []PreHook
 	flags           *FlagSet
 	opts            options
 }
@@ -341,7 +341,7 @@ func (cmd *Command) Document(description string, arguments ...string) {
 // AppendPreHooks appends the supplied pre-hooks to the
 // command's pre-hooks.
 func (cmd *Command) AppendPreHooks(preHooks ...PreHook) {
-	cmd.opts.preHooks = append(cmd.opts.preHooks, preHooks...)
+	cmd.opts.preHooks = append(cmd.opts.preHooks, slices.Clone(preHooks)...)
 }
 
 func namesAndDefault(name string, fs *flag.FlagSet) string {
@@ -794,8 +794,10 @@ func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHook
 	return ctx, postHooks, nil
 }
 
+// runPostHooks in LIFO order and append errors to the supplied errors.M.
 func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHooks []PostHook, errs *errors.M) error {
-	for _, post := range postHooks {
+	for i := len(postHooks) - 1; i >= 0; i-- {
+		post := postHooks[i]
 		if err := post(ctx); err != nil {
 			errs.Append(fmt.Errorf("%v: post-hook failed: %w", cmdName, err))
 		}
@@ -806,28 +808,29 @@ func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHo
 // AppendPrehooks appends the supplied pre-hooks to
 // the command set's pre-hooks and to the
 // pre-hooks of all sub-commands.
-func (cmds *CommandSet) AppendPrehooks(preHooks ...PreHook) {
+func (cmds *CommandSet) AppendPreHooks(preHooks ...PreHook) {
+	preHooks = slices.Clone(preHooks)
 	if cmds.cmd != nil {
 		cmds.cmd.AppendPreHooks(preHooks...)
 	}
 	for _, cmd := range cmds.cmds {
 		cmd.AppendPreHooks(preHooks...)
 		if cmd.opts.subcmds != nil {
-			cmd.opts.subcmds.AppendPrehooks(preHooks...)
+			cmd.opts.subcmds.AppendPreHooks(preHooks...)
 		}
 	}
 }
 
-// SetPrehooks sets the supplied pre-hooks as the
+// SetPreHooks sets the supplied pre-hooks as the
 // command set's pre-hooks and for all sub-commands.
-func (cmds *CommandSet) SetPrehooks(preHooks ...PreHook) {
+func (cmds *CommandSet) SetPreHooks(preHooks ...PreHook) {
 	if cmds.cmd != nil {
 		cmds.cmd.opts.preHooks = preHooks
 	}
 	for _, cmd := range cmds.cmds {
 		cmd.opts.preHooks = preHooks
 		if cmd.opts.subcmds != nil {
-			cmd.opts.subcmds.SetPrehooks(preHooks...)
+			cmd.opts.subcmds.SetPreHooks(preHooks...)
 		}
 	}
 }

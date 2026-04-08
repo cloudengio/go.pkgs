@@ -399,6 +399,13 @@ commands:
 		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
 			t.Fatal(err)
 		}
+		// no hooks.
+		if err := cs.DispatchWithArgs(ctx, "root", "b", "b1"); err != nil {
+			t.Fatal(err)
+		}
+		if len(hookCalled) != 1 {
+			t.Errorf("unexpected hook tags called: got %v, want [h]", hookCalled)
+		}
 		if hookCalled["h"] != 1 {
 			t.Errorf("hook called %d times, want 1", hookCalled["h"])
 		}
@@ -414,6 +421,9 @@ commands:
 		if err := cs.DispatchWithArgs(ctx, "root", "b", "b2"); err != nil {
 			t.Fatal(err)
 		}
+		if len(hookCalled) != 1 {
+			t.Errorf("unexpected hook tags called: got %v, want [h]", hookCalled)
+		}
 		if hookCalled["h"] != 2 {
 			t.Errorf("hook called %d times for b1+b2, want 2", hookCalled["h"])
 		}
@@ -425,6 +435,9 @@ commands:
 		cs.Set("b").MustSetPreHooks(makeHook("h"))
 		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
 			t.Fatal(err)
+		}
+		if len(hookCalled) != 0 {
+			t.Errorf("unexpected hook tags called: got %v, want none", hookCalled)
 		}
 		if hookCalled["h"] != 0 {
 			t.Errorf("hook called %d times for sibling 'a', want 0", hookCalled["h"])
@@ -443,11 +456,6 @@ commands:
 func ExampleCurrentCommand_SetPreHooks() {
 	ctx := context.Background()
 	logged := []string{}
-
-	logHook := func(ctx context.Context) (subcmd.PostHook, subcmd.PostHook, error) {
-		return nil, nil, nil
-	}
-	_ = logHook
 
 	traceHook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
 		logged = append(logged, "pre")

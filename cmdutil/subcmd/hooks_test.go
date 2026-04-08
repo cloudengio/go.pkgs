@@ -146,7 +146,8 @@ func TestMultiplePreHooksRunInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []string{"pre-a", "pre-b", "runner", "post-a", "post-b"}
+	// Post-hooks run in LIFO order (last registered, first called).
+	want := []string{"pre-a", "pre-b", "runner", "post-b", "post-a"}
 	if len(order) != len(want) {
 		t.Fatalf("got %v, want %v", order, want)
 	}
@@ -330,7 +331,7 @@ func TestAppendPrehooksOnCommandSet(t *testing.T) {
 	cmdB.Document("cmd b")
 
 	cs := subcmd.NewCommandSet(cmdA, cmdB)
-	cs.AppendPrehooks(hook)
+	cs.AppendPreHooks(hook)
 
 	hookCallCount = 0
 	if err := cs.DispatchWithArgs(ctx, "test", "cmd-a"); err != nil {
@@ -370,8 +371,8 @@ func TestSetPrehooksOnCommandSet(t *testing.T) {
 	cs := subcmd.NewCommandSet(cmd)
 
 	// Set hookA, run, replace with hookB, run — only hookB should appear.
-	cs.AppendPrehooks(hookA)
-	cs.SetPrehooks(hookB)
+	cs.AppendPreHooks(hookA)
+	cs.SetPreHooks(hookB)
 
 	if err := cs.DispatchWithArgs(ctx, "test", "cmd"); err != nil {
 		t.Fatal(err)
@@ -399,13 +400,55 @@ func TestPreHookWithSubcommands(t *testing.T) {
 	outer := subcmd.NewCommandLevel("outer", innerSet)
 	outer.Document("outer command")
 	cs := subcmd.NewCommandSet(outer)
-	cs.AppendPrehooks(hook)
+	cs.AppendPreHooks(hook)
 
 	if err := cs.DispatchWithArgs(ctx, "test", "outer", "inner"); err != nil {
 		t.Fatal(err)
 	}
 	if hookCallCount != 1 {
 		t.Errorf("hook called %d times, want 1", hookCallCount)
+	}
+}
+
+func TestPostHooksLIFOOrder(t *testing.T) {
+	ctx := context.Background()
+	var order []string
+
+	makeHook := func(name string) subcmd.PreHook {
+		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			order = append(order, "pre-"+name)
+			post := func(_ context.Context) error {
+				order = append(order, "post-"+name)
+				return nil
+			}
+			return ctx, post, nil
+		}
+	}
+
+	runner := func(_ context.Context, _ any, _ []string) error {
+		order = append(order, "runner")
+		return nil
+	}
+
+	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(makeHook("a"), makeHook("b"), makeHook("c")),
+	)
+	cmd.Document("test command")
+	cs := subcmd.NewCommandSet(cmd)
+	if err := cs.DispatchWithArgs(ctx, "test", "cmd"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-hooks run FIFO; post-hooks run LIFO (reverse of registration order).
+	want := []string{"pre-a", "pre-b", "pre-c", "runner", "post-c", "post-b", "post-a"}
+	if len(order) != len(want) {
+		t.Fatalf("got %v, want %v", order, want)
+	}
+	for i, v := range want {
+		if order[i] != v {
+			t.Errorf("step %d: got %q, want %q", i, order[i], v)
+		}
 	}
 }
 
@@ -442,4 +485,43 @@ func ExampleWithPreHooks() {
 	// pre: opening db connection
 	// runner: using db-handle
 	// post: closing db connection
+}
+
+// ExamplePostHook_lifoOrder demonstrates that post-hooks run in LIFO order,
+// mirroring the defer stack: the last pre-hook to run is the first post-hook
+// called. This ensures inner resources are released before outer ones.
+func ExamplePostHook_lifoOrder() {
+	makeHook := func(name string) subcmd.PreHook {
+		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+			fmt.Printf("open:  %s\n", name)
+			post := func(_ context.Context) error {
+				fmt.Printf("close: %s\n", name)
+				return nil
+			}
+			return ctx, post, nil
+		}
+	}
+
+	runner := func(_ context.Context, _ any, _ []string) error {
+		fmt.Println("runner")
+		return nil
+	}
+
+	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(makeHook("outer"), makeHook("middle"), makeHook("inner")),
+	)
+	cmd.Document("lifo example")
+	cs := subcmd.NewCommandSet(cmd)
+	if err := cs.DispatchWithArgs(context.Background(), "tool", "cmd"); err != nil {
+		panic(err)
+	}
+	// Output:
+	// open:  outer
+	// open:  middle
+	// open:  inner
+	// runner
+	// close: inner
+	// close: middle
+	// close: outer
 }

@@ -7,6 +7,7 @@ package subcmd
 import (
 	"flag"
 	"fmt"
+	"slices"
 	"strings"
 
 	"cloudeng.io/cmdutil/cmdyaml"
@@ -147,7 +148,7 @@ func (c *CurrentCommand) MustRunner(runner Runner, fs any) {
 }
 
 func applyPreHooksRecursive(cmd *Command, hooks []PreHook) {
-	cmd.opts.preHooks = hooks
+	cmd.opts.preHooks = slices.Clone(hooks)
 	if cmd.opts.subcmds != nil {
 		for _, sub := range cmd.opts.subcmds.cmds {
 			applyPreHooksRecursive(sub, hooks)

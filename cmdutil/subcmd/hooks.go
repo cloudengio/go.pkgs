@@ -10,6 +10,7 @@ import (
 
 // PreHook represents a function that is called before the main command execution.
 // It can modify the context and return a PostHook to be executed after the main command.
+// PostHooks are executed in LIFO order (last registered, first called).
 type PreHook func(ctx context.Context) (context.Context, PostHook, error)
 
 // PostHook represents a function that is called after the main command execution.
