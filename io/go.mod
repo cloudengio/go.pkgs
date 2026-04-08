@@ -4,4 +4,4 @@ go 1.25.5
 
 require cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
 
-require golang.org/x/sys v0.42.0 // indirect
+require golang.org/x/sys v0.43.0 // indirect

@@ -19,8 +19,8 @@ type pluginConfig struct {
 }
 
 type appConfig struct {
-	Name    string             `yaml:"name"`
-	Plugins []cmdyaml.Deferred `yaml:"plugins"`
+	Name    string             `yaml:"name,omitempty"`
+	Plugins []cmdyaml.Deferred `yaml:"plugins,omitempty"`
 }
 
 func TestDeferredValueFor(t *testing.T) {
@@ -141,6 +141,53 @@ plugins:
 	_, err := cmdyaml.ParseDeferred[strictConfig](&cfg.Plugins[0])
 	if err == nil {
 		t.Fatal("expected error decoding invalid int, got nil")
+	}
+}
+
+func TestDeferredRoundtrip(t *testing.T) {
+	input := `plugins:
+    - type: http
+      address: localhost
+      port: 8080
+    - type: grpc
+      address: remotehost
+      port: 9090
+`
+	var cfg appConfig
+	if err := cmdyaml.ParseConfigString(input, &cfg); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+
+	want := []string{
+		"type: http\naddress: localhost\nport: 8080\n",
+		"type: grpc\naddress: remotehost\nport: 9090\n",
+	}
+	for i, plugin := range cfg.Plugins {
+		out, err := yaml.Marshal((*yaml.Node)(&plugin))
+		if err != nil {
+			t.Fatalf("plugin %d: marshal error: %v", i, err)
+		}
+		if got := string(out); got != want[i] {
+			t.Errorf("plugin %d: roundtrip mismatch:\ngot:  %q\nwant: %q", i, got, want[i])
+		}
+	}
+
+	// Round-trip the whole config. Use a struct without extra fields so the
+	// marshaled output is predictable (yaml.Marshal always emits all fields,
+	// so a Name:"" would appear even when the original input omitted it).
+	type pluginsOnly struct {
+		Plugins []cmdyaml.Deferred `yaml:"plugins"`
+	}
+	var cfg2 pluginsOnly
+	if err := cmdyaml.ParseConfigString(input, &cfg2); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	out, err := yaml.Marshal(cfg2)
+	if err != nil {
+		t.Fatalf("error marshaling config: %v", err)
+	}
+	if got := string(out); got != input {
+		t.Errorf("roundtrip mismatch:\ngot:  %s\nwant: %s", got, input)
 	}
 }
 
