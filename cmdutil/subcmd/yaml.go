@@ -7,6 +7,7 @@ package subcmd
 import (
 	"flag"
 	"fmt"
+	"slices"
 	"strings"
 
 	"cloudeng.io/cmdutil/cmdyaml"
@@ -142,6 +143,58 @@ func (c *CurrentCommand) Runner(runner Runner, fs any, defaults ...any) error {
 // MustRunner is like Runner but will panic on error.
 func (c *CurrentCommand) MustRunner(runner Runner, fs any) {
 	if err := c.Runner(runner, fs); err != nil {
+		panic(fmt.Sprintf("%v", err))
+	}
+}
+
+func applyPreHooksRecursive(cmd *Command, hooks []PreHook) {
+	cmd.opts.preHooks = slices.Clone(hooks)
+	if cmd.opts.subcmds != nil {
+		for _, sub := range cmd.opts.subcmds.cmds {
+			applyPreHooksRecursive(sub, hooks)
+		}
+	}
+}
+
+// SetPreHooks applies the supplied pre-hooks to the command identified by Set
+// and all commands below it in the tree.
+func (c *CurrentCommand) SetPreHooks(hooks ...PreHook) error {
+	if c.err != nil {
+		return c.err
+	}
+	applyPreHooksRecursive(c.set, hooks)
+	return nil
+}
+
+// MustSetPreHooks is like SetPreHooks but panics on error.
+func (c *CurrentCommand) MustSetPreHooks(hooks ...PreHook) {
+	if err := c.SetPreHooks(hooks...); err != nil {
+		panic(fmt.Sprintf("%v", err))
+	}
+}
+
+func appendPreHooksRecursive(cmd *Command, hooks []PreHook) {
+	cmd.opts.preHooks = append(cmd.opts.preHooks, hooks...)
+	if cmd.opts.subcmds != nil {
+		for _, sub := range cmd.opts.subcmds.cmds {
+			appendPreHooksRecursive(sub, hooks)
+		}
+	}
+}
+
+// AppendPreHooks appends the supplied pre-hooks to the command identified by
+// Set and all commands below it in the tree, preserving any hooks already set.
+func (c *CurrentCommand) AppendPreHooks(hooks ...PreHook) error {
+	if c.err != nil {
+		return c.err
+	}
+	appendPreHooksRecursive(c.set, hooks)
+	return nil
+}
+
+// MustAppendPreHooks is like AppendPreHooks but panics on error.
+func (c *CurrentCommand) MustAppendPreHooks(hooks ...PreHook) {
+	if err := c.AppendPreHooks(hooks...); err != nil {
 		panic(fmt.Sprintf("%v", err))
 	}
 }

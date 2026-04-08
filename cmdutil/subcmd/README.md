@@ -174,6 +174,12 @@ NewCommandLevel returns a new instance of Command with subcommands.
 ### Methods
 
 ```go
+func (cmd *Command) AppendPreHooks(preHooks ...PreHook)
+```
+AppendPreHooks appends the supplied pre-hooks to the command's pre-hooks.
+
+
+```go
 func (cmd *Command) Document(description string, arguments ...string)
 ```
 Document adds a description of the command and optionally descriptions of
@@ -220,6 +226,13 @@ argument.
 
 
 ```go
+func WithPreHooks(preHooks ...PreHook) CommandOption
+```
+WithPreHooks appends the supplied pre-hooks to the command's pre-hooks.
+Pre-hooks are executed before the command's main logic.
+
+
+```go
 func WithoutArguments() CommandOption
 ```
 WithoutArguments specifies that the command takes no arguments.
@@ -246,6 +259,13 @@ NewCommandSet creates a new command set.
 
 
 ### Methods
+
+```go
+func (cmds *CommandSet) AppendPreHooks(preHooks ...PreHook)
+```
+AppendPreHooks appends the supplied pre-hooks to the command set's pre-hooks
+and to the pre-hooks of all sub-commands.
+
 
 ```go
 func (cmds *CommandSet) Commands() []string
@@ -294,6 +314,13 @@ Output is like flag.FlagSet.Output.
 func (cmds *CommandSet) SetOutput(out io.Writer)
 ```
 SetOutput is like flag.FlagSet.SetOutput.
+
+
+```go
+func (cmds *CommandSet) SetPreHooks(preHooks ...PreHook)
+```
+SetPreHooks sets the supplied pre-hooks as the command set's pre-hooks and
+for all sub-commands.
 
 
 ```go
@@ -409,6 +436,19 @@ type CurrentCommand struct {
 ### Methods
 
 ```go
+func (c *CurrentCommand) AppendPreHooks(hooks ...PreHook) error
+```
+AppendPreHooks appends the supplied pre-hooks to the command identified by
+Set and all commands below it in the tree, preserving any hooks already set.
+
+
+```go
+func (c *CurrentCommand) MustAppendPreHooks(hooks ...PreHook)
+```
+MustAppendPreHooks is like AppendPreHooks but panics on error.
+
+
+```go
 func (c *CurrentCommand) MustRunner(runner Runner, fs any)
 ```
 MustRunner is like Runner but will panic on error.
@@ -424,6 +464,12 @@ MustRunnerAndFlagSet is like RunnerAndFlagSet but will panic on error.
 func (c *CurrentCommand) MustRunnerAndFlags(runner Runner, fs *FlagSet)
 ```
 Deprecated: Use MustRunnerAndFlagSet or MustRunner.
+
+
+```go
+func (c *CurrentCommand) MustSetPreHooks(hooks ...PreHook)
+```
+MustSetPreHooks is like SetPreHooks but panics on error.
 
 
 ```go
@@ -444,6 +490,13 @@ command as returned by CommandSetYAML.Set.
 func (c *CurrentCommand) RunnerAndFlags(runner Runner, fs *FlagSet) error
 ```
 Deprecated: Use RunnerAndFlagSet or Runner.
+
+
+```go
+func (c *CurrentCommand) SetPreHooks(hooks ...PreHook) error
+```
+SetPreHooks applies the supplied pre-hooks to the command identified by Set
+and all commands below it in the tree.
 
 
 
@@ -589,6 +642,24 @@ Main is the type of the function that can be used to intercept a call to a
 Runner.
 
 
+### Type PostHook
+```go
+type PostHook func(ctx context.Context) error
+```
+PostHook represents a function that is called after the main command
+execution.
+
+
+### Type PreHook
+```go
+type PreHook func(ctx context.Context) (context.Context, PostHook, error)
+```
+PreHook represents a function that is called before the main command
+execution. It can modify the context and return a PostHook to be executed
+after the main command. PostHooks are executed in LIFO order (last
+registered, first called).
+
+
 ### Type Runner
 ```go
 type Runner func(ctx context.Context, flagValues any, args []string) error
@@ -604,6 +675,11 @@ Runner is the type of the function to be called to run a particular command.
 ### [ExampleCommandSetYAML_multiple](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSetYAML_multiple)
 
 ### [ExampleCommandSetYAML_toplevel](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-CommandSetYAML_toplevel)
+
+### [ExamplePostHook_lifoOrder](https://pkg.go.dev/cloudeng.io/cmdutil/subcmd?tab=doc#example-PostHook_lifoOrder)
+ExamplePostHook_lifoOrder demonstrates that post-hooks run in LIFO order,
+mirroring the defer stack: the last pre-hook to run is the first post-hook
+called. This ensures inner resources are released before outer ones.
 
 
 
