@@ -20,11 +20,8 @@ func (d *Deferred) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // MarshalYAML marshals Deferred as the underlying YAML node.
-func (d *Deferred) MarshalYAML() (any, error) {
-	if d == nil {
-		return nil, nil
-	}
-	return (*yaml.Node)(d), nil
+func (d Deferred) MarshalYAML() (any, error) {
+	return (*yaml.Node)(&d), nil
 }
 
 // Decode decodes the captured YAML node into the provided value.
