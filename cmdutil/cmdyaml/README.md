@@ -61,9 +61,46 @@ func ParseConfigStringStrict(spec string, cfg any) error
 ParseConfigStringStrict is like ParseConfigString but reports an error if
 there are unknown fields in the yaml specification.
 
+### Func ParseDeferred
+```go
+func ParseDeferred[T any](d *Deferred) (T, error)
+```
+ParseDeferred decodes the provided Deferred YAML node into a value of type
+T.
+
 
 
 ## Types
+### Type Deferred
+```go
+type Deferred yaml.Node
+```
+Deferred represents a YAML node that has been captured for deferred
+decoding.
+
+### Methods
+
+```go
+func (d *Deferred) Decode(v any) error
+```
+Decode decodes the captured YAML node into the provided value.
+
+
+```go
+func (d *Deferred) UnmarshalYAML(value *yaml.Node) error
+```
+UnmarshalYAML captures the raw YAML node for deferred decoding.
+
+
+```go
+func (d Deferred) ValueFor(key string) (yaml.Node, bool)
+```
+ValueFor retrieves the value associated with the specified key from a
+mapping node.
+
+
+
+
 ### Type FlexTime
 ```go
 type FlexTime time.Time
@@ -115,6 +152,13 @@ func (t *RFC3339Time) UnmarshalYAML(value *yaml.Node) error
 
 
 
+
+
+
+## Examples
+### [ExampleDeferred](https://pkg.go.dev/cloudeng.io/cmdutil/cmdyaml?tab=doc#example-Deferred)
+
+### [ExampleDeferred_valueFor](https://pkg.go.dev/cloudeng.io/cmdutil/cmdyaml?tab=doc#example-Deferred_valueFor)
 
 
 
