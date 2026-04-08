@@ -8,56 +8,39 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Deferred struct {
-	yaml.Node `yaml:",inline"`
-}
+// Deferred represents a YAML node that has been captured for deferred decoding.
+type Deferred yaml.Node
 
 // UnmarshalYAML captures the raw YAML node for deferred decoding.
 func (d *Deferred) UnmarshalYAML(value *yaml.Node) error {
-	d.Node = *value
+	*d = Deferred(*value)
 	return nil
 }
 
-func (c Deferred) ValueFor(key string) (yaml.Node, bool) {
-	if c.Kind != yaml.MappingNode {
+// Decode decodes the captured YAML node into the provided value.
+func (d *Deferred) Decode(v any) error {
+	return (*yaml.Node)(d).Decode(v)
+}
+
+// ValueFor retrieves the value associated with the specified key from a
+// mapping node.
+func (d Deferred) ValueFor(key string) (yaml.Node, bool) {
+	if d.Kind != yaml.MappingNode {
 		return yaml.Node{}, false
 	}
-	for i := 0; i+1 < len(c.Content); i += 2 {
-		if c.Content[i].Value == key {
-			return *c.Content[i+1], true
+	for i := 0; i+1 < len(d.Content); i += 2 {
+		if d.Content[i].Value == key {
+			return *d.Content[i+1], true
 		}
 	}
 	return yaml.Node{}, false
 }
 
-/*
-func (c *ConfigDeferred) UnmarshalYAML(value *yaml.Node) error {
-	/*
-		if value.Kind != yaml.MappingNode {
-			return fmt.Errorf("expected a mapping node, got %v", value.Kind)
-		}
-		detail := *value
-		detail.Content = nil
-		for i := 0; i+1 < len(value.Content); i += 2 {
-			if value.Content[i].Value == "type" {
-				c.Type = value.Content[i+1].Value
-				continue
-			}
-			detail.Content = append(detail.Content, value.Content[i], value.Content[i+1])
-		}
-		if c.Type == "" {
-			return fmt.Errorf("missing required field 'type'")
-
-		c.Content = detail*
-	c.Content = *value
-	c.Content.Content = slices.Clone(value.Content)
-	return nil
-}
-*/
-
-func ParseDeferred[T any](d Deferred) (T, error) {
+// ParseDeferred decodes the provided Deferred YAML node into a value of type T.
+func ParseDeferred[T any](d *Deferred) (T, error) {
 	var val T
-	if err := d.Decode(&val); err != nil {
+	node := (*yaml.Node)(d)
+	if err := node.Decode(&val); err != nil {
 		return val, err
 	}
 	return val, nil

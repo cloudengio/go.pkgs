@@ -95,7 +95,7 @@ plugins:
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 
-	p0, err := cmdyaml.ParseDeferred[pluginConfig](cfg.Plugins[0])
+	p0, err := cmdyaml.ParseDeferred[pluginConfig](&cfg.Plugins[0])
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -109,7 +109,7 @@ plugins:
 		t.Errorf("Port: got %d, want %d", got, want)
 	}
 
-	p1, err := cmdyaml.ParseDeferred[pluginConfig](cfg.Plugins[1])
+	p1, err := cmdyaml.ParseDeferred[pluginConfig](&cfg.Plugins[1])
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +138,7 @@ plugins:
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 
-	_, err := cmdyaml.ParseDeferred[strictConfig](cfg.Plugins[0])
+	_, err := cmdyaml.ParseDeferred[strictConfig](&cfg.Plugins[0])
 	if err == nil {
 		t.Fatal("expected error decoding invalid int, got nil")
 	}
@@ -172,14 +172,14 @@ backends:
 		return
 	}
 
-	db, err := cmdyaml.ParseDeferred[dbConfig](cfg.Backends[0])
+	db, err := cmdyaml.ParseDeferred[dbConfig](&cfg.Backends[0])
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		return
 	}
 	fmt.Printf("db host: %s, port: %d\n", db.Host, db.Port)
 
-	cache, err := cmdyaml.ParseDeferred[cacheConfig](cfg.Backends[1])
+	cache, err := cmdyaml.ParseDeferred[cacheConfig](&cfg.Backends[1])
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		return
