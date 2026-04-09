@@ -63,50 +63,54 @@ func (se *StructEnv) Expand(s any) error {
 
 func (se *StructEnv) expandFields(v reflect.Value, t reflect.Type) error {
 	for i := range t.NumField() {
-		field := t.Field(i)
-		fv := v.Field(i)
-
-		// Recurse into embedded (anonymous) structs and pointers to structs.
-		if field.Anonymous {
-			switch fv.Kind() {
-			case reflect.Struct:
-				if err := se.expandFields(fv, fv.Type()); err != nil {
-					return err
-				}
-				continue
-			case reflect.Pointer:
-				if fv.Type().Elem().Kind() == reflect.Struct && !fv.IsNil() {
-					if err := se.expandFields(fv.Elem(), fv.Elem().Type()); err != nil {
-						return err
-					}
-				}
-				continue
-			}
-		}
-
-		if !fv.CanSet() || fv.Kind() != reflect.String {
-			continue
-		}
-
-		if _, ok := field.Tag.Lookup("use_env"); ok {
-			fv.SetString(os.Expand(fv.String(), os.Getenv))
-			continue
-		}
-
-		if _, ok := field.Tag.Lookup("use_env_file"); ok {
-			filename, ref, found := splitFilenameRef(fv.String())
-			if !found {
-				continue
-			}
-			vars, err := se.cachedParseFile(filename)
-			if err != nil {
-				return fmt.Errorf("Expand: field %s: envfile %q: %w", field.Name, filename, err)
-			}
-			fv.SetString(os.Expand(ref, func(key string) string {
-				return vars[key]
-			}))
+		if err := se.expandField(v.Field(i), t.Field(i)); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func (se *StructEnv) expandField(fv reflect.Value, field reflect.StructField) error {
+	if field.Anonymous {
+		return se.expandEmbedded(fv)
+	}
+	if !fv.CanSet() || fv.Kind() != reflect.String {
+		return nil
+	}
+	if _, ok := field.Tag.Lookup("use_env"); ok {
+		fv.SetString(os.Expand(fv.String(), os.Getenv))
+		return nil
+	}
+	if _, ok := field.Tag.Lookup("use_env_file"); ok {
+		return se.expandEnvFile(fv, field.Name)
+	}
+	return nil
+}
+
+func (se *StructEnv) expandEmbedded(fv reflect.Value) error {
+	switch fv.Kind() {
+	case reflect.Struct:
+		return se.expandFields(fv, fv.Type())
+	case reflect.Pointer:
+		if fv.Type().Elem().Kind() == reflect.Struct && !fv.IsNil() {
+			return se.expandFields(fv.Elem(), fv.Elem().Type())
+		}
+	}
+	return nil
+}
+
+func (se *StructEnv) expandEnvFile(fv reflect.Value, fieldName string) error {
+	filename, ref, found := splitFilenameRef(fv.String())
+	if !found {
+		return nil
+	}
+	vars, err := se.cachedParseFile(filename)
+	if err != nil {
+		return fmt.Errorf("Expand: field %s: envfile %q: %w", fieldName, filename, err)
+	}
+	fv.SetString(os.Expand(ref, func(key string) string {
+		return vars[key]
+	}))
 	return nil
 }
 
