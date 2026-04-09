@@ -46,8 +46,8 @@ type StructEnv struct {
 }
 ```
 StructEnv expands environment variable references in struct fields using the
-`env` and `envfile` struct tags. It caches parsed envfiles across multiple
-calls to Expand so each file is read at most once.
+`use_env` and `use_env_file` struct tags. It caches parsed envfiles across
+multiple calls to Expand so each file is read at most once.
 
 ### Methods
 
@@ -59,15 +59,22 @@ and expands environment variable references in those fields.
 
 Two struct tags are recognised:
 
-  - `env`: the field's current value may contain $VAR or ${VAR} references
-    that are expanded using the process environment (os.LookupEnv).
+  - `use_env`: the field's current value may contain $VAR or ${VAR}
+    references that are expanded using the process environment
+    (os.LookupEnv).
 
-  - `envfile:"filename"`: the named file is parsed with ParseFile and $VAR
-    or ${VAR} references in the field's current value are expanded using the
-    variables defined in that file.
+  - `use_env_file`: the field's current value encodes both the source file
+    and the variable reference in the form:
 
-Both tags use the same ${VAR} / $VAR syntax as os.Expand. A field value that
-contains no $ is treated as a literal and left unchanged. Non-string fields
+    filename:$VAR filename:${VAR}
+
+    The filename is parsed greedily: it is everything before the last ':'
+    that is immediately followed by '$'. This allows filenames that contain
+    ':' (e.g. absolute Windows paths). The file is parsed with ParseFile and
+    the variable reference is expanded using the resulting map. If the field
+    value does not match the pattern it is left unchanged.
+
+Both tags use the same ${VAR} / $VAR syntax as os.Expand. Non-string fields
 are silently skipped regardless of tags.
 
 The struct must be passed as a non-nil pointer.

@@ -17,15 +17,14 @@ func TestExpandEnv(t *testing.T) {
 	t.Setenv("TEST_PORT", "5432")
 
 	type cfg struct {
-		Host    string `env:""`
-		Port    string `env:""`
+		Host    string `use_env:""`
+		Port    string `use_env:""`
 		Literal string // no tag — must not be changed
 	}
-
 	s := cfg{
 		Host:    "${TEST_HOST}",
 		Port:    "$TEST_PORT",
-		Literal: "$TEST_HOST", // no tag: stays as-is
+		Literal: "$TEST_HOST",
 	}
 
 	var se envfile.StructEnv
@@ -47,14 +46,13 @@ func TestExpandEnvMissing(t *testing.T) {
 	os.Unsetenv("DEFINITELY_NOT_SET_XYZ")
 
 	type cfg struct {
-		Val string `env:""`
+		Val string `use_env:""`
 	}
 	s := cfg{Val: "${DEFINITELY_NOT_SET_XYZ}"}
 	var se envfile.StructEnv
 	if err := se.Expand(&s); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Missing env vars expand to empty string, matching os.Expand behaviour.
 	if got, want := s.Val, ""; got != want {
 		t.Errorf("Val: got %q, want %q", got, want)
 	}
@@ -65,7 +63,7 @@ func TestExpandEnvMixed(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
 
 	type cfg struct {
-		Label string `env:""`
+		Label string `use_env:""`
 	}
 	s := cfg{Label: "${APP_NAME}-${APP_ENV}"}
 	var se envfile.StructEnv
@@ -79,25 +77,25 @@ func TestExpandEnvMixed(t *testing.T) {
 
 func TestExpandEnvFileTag(t *testing.T) {
 	dir := t.TempDir()
-	envPath := filepath.Join(dir, "secrets.env")
-	if err := os.WriteFile(envPath, []byte("SECRET_KEY=hunter2\nDB_URL=postgres://localhost/mydb\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "secrets.env"),
+		[]byte("SECRET_KEY=hunter2\nDB_URL=postgres://localhost/mydb\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	type credentials struct {
-		Key string `envfile:"secrets.env"`
-		URL string `envfile:"secrets.env"`
+		Key string `use_env_file:""`
+		URL string `use_env_file:""`
 	}
 	s := credentials{
-		Key: "${SECRET_KEY}",
-		URL: "$DB_URL",
+		Key: "secrets.env:${SECRET_KEY}",
+		URL: "secrets.env:$DB_URL",
 	}
 
 	orig, _ := os.Getwd()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(orig) })
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 
 	var se envfile.StructEnv
 	if err := se.Expand(&s); err != nil {
@@ -111,28 +109,74 @@ func TestExpandEnvFileTag(t *testing.T) {
 	}
 }
 
-func TestExpandEnvFileSharedCache(t *testing.T) {
-	// Two structs reference the same file across two Expand calls.
-	// The cache on StructEnv ensures the file is parsed only once.
+func TestExpandEnvFileGreedyFilename(t *testing.T) {
+	// Filename contains ':' — greedy parsing should take the whole name.
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "shared.env"), []byte("A=alpha\nB=beta\n"), 0600); err != nil {
+	subdir := filepath.Join(dir, "a:b")
+	if err := os.Mkdir(subdir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "cfg.env"),
+		[]byte("TOKEN=secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	type cfg struct {
+		Tok string `use_env_file:""`
+	}
+	s := cfg{Tok: "a:b/cfg.env:${TOKEN}"}
+
+	orig, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+
+	var se envfile.StructEnv
+	if err := se.Expand(&s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := s.Tok, "secret"; got != want {
+		t.Errorf("Tok: got %q, want %q", got, want)
+	}
+}
+
+func TestExpandEnvFileNoPattern(t *testing.T) {
+	// Field value without the filename:$VAR pattern is left unchanged.
+	type cfg struct {
+		Val string `use_env_file:""`
+	}
+	s := cfg{Val: "just-a-literal"}
+	var se envfile.StructEnv
+	if err := se.Expand(&s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := s.Val, "just-a-literal"; got != want {
+		t.Errorf("Val: got %q, want %q", got, want)
+	}
+}
+
+func TestExpandEnvFileSharedCache(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "shared.env"),
+		[]byte("A=alpha\nB=beta\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	orig, _ := os.Getwd()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(orig) })
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 
 	type first struct {
-		Val string `envfile:"shared.env"`
+		Val string `use_env_file:""`
 	}
 	type second struct {
-		Val string `envfile:"shared.env"`
+		Val string `use_env_file:""`
 	}
 
-	f := first{Val: "$A"}
-	s := second{Val: "${B}"}
+	f := first{Val: "shared.env:$A"}
+	s := second{Val: "shared.env:${B}"}
 
 	var se envfile.StructEnv
 	if err := se.Expand(&f); err != nil {
@@ -163,9 +207,9 @@ func TestExpandErrors(t *testing.T) {
 	}
 
 	type cfg struct {
-		Val string `envfile:"nonexistent_file_xyz.env"`
+		Val string `use_env_file:""`
 	}
-	s := cfg{Val: "$X"}
+	s := cfg{Val: "nonexistent_file_xyz.env:$X"}
 	if err := se.Expand(&s); err == nil {
 		t.Error("expected error for missing envfile")
 	}
@@ -175,8 +219,8 @@ func TestExpandNonStringFieldsIgnored(t *testing.T) {
 	t.Setenv("SOME_INT", "99")
 
 	type cfg struct {
-		Count int    `env:""` // int with env tag: must be silently ignored
-		Name  string `env:""`
+		Count int    `use_env:""` // int with env tag: must be silently ignored
+		Name  string `use_env:""`
 	}
 	s := cfg{Count: 7, Name: "$SOME_INT"}
 	var se envfile.StructEnv

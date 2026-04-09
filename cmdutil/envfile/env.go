@@ -11,7 +11,7 @@ import (
 )
 
 // StructEnv expands environment variable references in struct fields using
-// the `env` and `envfile` struct tags. It caches parsed envfiles across
+// the `use_env` and `use_env_file` struct tags. It caches parsed envfiles across
 // multiple calls to Expand so each file is read at most once.
 type StructEnv struct {
 	fileCache map[string]map[string]string
@@ -22,15 +22,22 @@ type StructEnv struct {
 //
 // Two struct tags are recognised:
 //
-//   - `env`: the field's current value may contain $VAR or ${VAR} references
+//   - `use_env`: the field's current value may contain $VAR or ${VAR} references
 //     that are expanded using the process environment (os.LookupEnv).
 //
-//   - `envfile:"filename"`: the named file is parsed with ParseFile and
-//     $VAR or ${VAR} references in the field's current value are expanded
-//     using the variables defined in that file.
+//   - `use_env_file`: the field's current value encodes both the source file and
+//     the variable reference in the form:
 //
-// Both tags use the same ${VAR} / $VAR syntax as os.Expand. A field value
-// that contains no $ is treated as a literal and left unchanged. Non-string
+//     filename:$VAR
+//     filename:${VAR}
+//
+//     The filename is parsed greedily: it is everything before the last ':'
+//     that is immediately followed by '$'. This allows filenames that contain
+//     ':' (e.g. absolute Windows paths). The file is parsed with ParseFile
+//     and the variable reference is expanded using the resulting map.
+//     If the field value does not match the pattern it is left unchanged.
+//
+// Both tags use the same ${VAR} / $VAR syntax as os.Expand. Non-string
 // fields are silently skipped regardless of tags.
 //
 // The struct must be passed as a non-nil pointer.
@@ -54,22 +61,44 @@ func (se *StructEnv) Expand(s any) error {
 			continue
 		}
 
-		if _, ok := field.Tag.Lookup("env"); ok {
+		if _, ok := field.Tag.Lookup("use_env"); ok {
 			fv.SetString(os.Expand(fv.String(), os.Getenv))
 			continue
 		}
 
-		if filename, ok := field.Tag.Lookup("envfile"); ok {
+		if _, ok := field.Tag.Lookup("use_env_file"); ok {
+			filename, ref, found := splitFilenameRef(fv.String())
+			if !found {
+				continue
+			}
 			vars, err := se.cachedParseFile(filename)
 			if err != nil {
 				return fmt.Errorf("Expand: field %s: envfile %q: %w", field.Name, filename, err)
 			}
-			fv.SetString(os.Expand(fv.String(), func(key string) string {
+			fv.SetString(os.Expand(ref, func(key string) string {
 				return vars[key]
 			}))
 		}
 	}
 	return nil
+}
+
+// splitFilenameRef splits a field value of the form "filename:$VAR" or
+// "filename:${VAR}" into the filename and the variable reference.
+// The filename is parsed greedily: it is everything before the last ':'
+// that is immediately followed by '$', so filenames containing ':' work
+// correctly. Returns ok=false if no such pattern is found.
+func splitFilenameRef(s string) (filename, ref string, ok bool) {
+	last := -1
+	for i := range len(s) - 1 {
+		if s[i] == ':' && s[i+1] == '$' {
+			last = i
+		}
+	}
+	if last < 0 {
+		return "", "", false
+	}
+	return s[:last], s[last+1:], true
 }
 
 func (se *StructEnv) cachedParseFile(filename string) (map[string]string, error) {
