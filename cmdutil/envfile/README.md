@@ -47,7 +47,8 @@ type StructEnv struct {
 ```
 StructEnv expands environment variable references in struct fields using the
 `use_env` and `use_env_file` struct tags. It caches parsed envfiles across
-multiple calls to Expand so each file is read at most once.
+multiple calls to Expand so each file is read at most once. StructEnv is
+safe for concurrent use.
 
 ### Methods
 
