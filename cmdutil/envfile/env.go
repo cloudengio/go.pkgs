@@ -66,12 +66,22 @@ func (se *StructEnv) expandFields(v reflect.Value, t reflect.Type) error {
 		field := t.Field(i)
 		fv := v.Field(i)
 
-		// Recurse into embedded (anonymous) structs.
-		if field.Anonymous && fv.Kind() == reflect.Struct {
-			if err := se.expandFields(fv, field.Type); err != nil {
-				return err
+		// Recurse into embedded (anonymous) structs and pointers to structs.
+		if field.Anonymous {
+			switch fv.Kind() {
+			case reflect.Struct:
+				if err := se.expandFields(fv, fv.Type()); err != nil {
+					return err
+				}
+				continue
+			case reflect.Pointer:
+				if fv.Type().Elem().Kind() == reflect.Struct && !fv.IsNil() {
+					if err := se.expandFields(fv.Elem(), fv.Elem().Type()); err != nil {
+						return err
+					}
+				}
+				continue
 			}
-			continue
 		}
 
 		if !fv.CanSet() || fv.Kind() != reflect.String {

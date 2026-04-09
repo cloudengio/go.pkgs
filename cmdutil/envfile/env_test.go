@@ -215,6 +215,44 @@ func TestExpandErrors(t *testing.T) {
 	}
 }
 
+func TestExpandEmbeddedPtrStruct(t *testing.T) {
+	t.Setenv("PTR_HOST", "ptr.internal")
+	t.Setenv("PTR_PORT", "9999")
+
+	type base struct {
+		Host string `use_env:""`
+	}
+	type derived struct {
+		*base
+		Port string `use_env:""`
+	}
+
+	// Non-nil embedded pointer: fields must be expanded.
+	s := derived{
+		base: &base{Host: "$PTR_HOST"},
+		Port: "$PTR_PORT",
+	}
+	var se envfile.StructEnv
+	if err := se.Expand(&s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := s.Host, "ptr.internal"; got != want {
+		t.Errorf("embedded *base.Host: got %q, want %q", got, want)
+	}
+	if got, want := s.Port, "9999"; got != want {
+		t.Errorf("Port: got %q, want %q", got, want)
+	}
+
+	// Nil embedded pointer: must not panic.
+	s2 := derived{base: nil, Port: "$PTR_PORT"}
+	if err := se.Expand(&s2); err != nil {
+		t.Fatalf("nil embedded pointer: unexpected error: %v", err)
+	}
+	if got, want := s2.Port, "9999"; got != want {
+		t.Errorf("nil case Port: got %q, want %q", got, want)
+	}
+}
+
 func TestExpandEmbedded(t *testing.T) {
 	t.Setenv("EMBED_HOST", "db.internal")
 	t.Setenv("EMBED_PORT", "5432")
