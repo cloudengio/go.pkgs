@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync"
 )
 
 // StructEnv expands environment variable references in struct fields using
 // the `use_env` and `use_env_file` struct tags. It caches parsed envfiles across
 // multiple calls to Expand so each file is read at most once.
+// StructEnv is safe for concurrent use.
 type StructEnv struct {
+	mu        sync.Mutex
 	fileCache map[string]map[string]string
 }
 
@@ -49,9 +52,11 @@ func (se *StructEnv) Expand(s any) error {
 	v = v.Elem()
 	t := v.Type()
 
+	se.mu.Lock()
 	if se.fileCache == nil {
 		se.fileCache = map[string]map[string]string{}
 	}
+	se.mu.Unlock()
 
 	for i := range t.NumField() {
 		field := t.Field(i)
@@ -102,13 +107,23 @@ func splitFilenameRef(s string) (filename, ref string, ok bool) {
 }
 
 func (se *StructEnv) cachedParseFile(filename string) (map[string]string, error) {
-	if vars, ok := se.fileCache[filename]; ok {
+	se.mu.Lock()
+	vars, ok := se.fileCache[filename]
+	se.mu.Unlock()
+	if ok {
 		return vars, nil
 	}
-	vars, err := ParseFile(filename)
+
+	// Parse outside the lock so concurrent calls for different files proceed
+	// in parallel. Two goroutines may both parse the same file; the last
+	// writer wins, which is harmless since the result is deterministic.
+	parsed, err := ParseFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	se.fileCache[filename] = vars
-	return vars, nil
+
+	se.mu.Lock()
+	se.fileCache[filename] = parsed
+	se.mu.Unlock()
+	return parsed, nil
 }
