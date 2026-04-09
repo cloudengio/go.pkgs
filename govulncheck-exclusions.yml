@@ -3,3 +3,7 @@ ignore:
     why: we don't use any moby plugins and there is no fix as of 2025-04-06
   - id: GO-2026-4883
     why: we don't use any moby plugins and there is no fix as of 2025-04-06
+  - id: GO-2026-4771
+    why: see https://github.com/jackc/pgx/issues/2530, false positive/not relevant to my yse
+  - id: GO-2026-4772
+    why: see https://github.com/jackc/pgx/issues/2530, false positive/not relevant to my yse
