@@ -58,9 +58,21 @@ func (se *StructEnv) Expand(s any) error {
 	}
 	se.mu.Unlock()
 
+	return se.expandFields(v, t)
+}
+
+func (se *StructEnv) expandFields(v reflect.Value, t reflect.Type) error {
 	for i := range t.NumField() {
 		field := t.Field(i)
 		fv := v.Field(i)
+
+		// Recurse into embedded (anonymous) structs.
+		if field.Anonymous && fv.Kind() == reflect.Struct {
+			if err := se.expandFields(fv, field.Type); err != nil {
+				return err
+			}
+			continue
+		}
 
 		if !fv.CanSet() || fv.Kind() != reflect.String {
 			continue

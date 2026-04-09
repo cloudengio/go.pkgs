@@ -215,6 +215,33 @@ func TestExpandErrors(t *testing.T) {
 	}
 }
 
+func TestExpandEmbedded(t *testing.T) {
+	t.Setenv("EMBED_HOST", "db.internal")
+	t.Setenv("EMBED_PORT", "5432")
+
+	type base struct {
+		Host string `use_env:""`
+	}
+	type derived struct {
+		base
+		Port string `use_env:""`
+	}
+	s := derived{
+		base: base{Host: "$EMBED_HOST"},
+		Port: "$EMBED_PORT",
+	}
+	var se envfile.StructEnv
+	if err := se.Expand(&s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := s.Host, "db.internal"; got != want {
+		t.Errorf("embedded Host: got %q, want %q", got, want)
+	}
+	if got, want := s.Port, "5432"; got != want {
+		t.Errorf("Port: got %q, want %q", got, want)
+	}
+}
+
 func TestExpandNonStringFieldsIgnored(t *testing.T) {
 	t.Setenv("SOME_INT", "99")
 
