@@ -34,17 +34,27 @@ import (
 // If a name appears more than once the last value wins.
 func Parse(r io.Reader) (map[string]string, error) {
 	result := map[string]string{}
-	scanner := bufio.NewScanner(r)
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		name, value, ok, err := parseLine(scanner.Text())
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNum, err)
+	br := bufio.NewReader(r)
+	for lineNum := 1; ; lineNum++ {
+		line, err := br.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimRight(line, "\r\n")
+			name, value, ok, perr := parseLine(line)
+			if perr != nil {
+				return nil, fmt.Errorf("line %d: %w", lineNum, perr)
+			}
+			if ok {
+				result[name] = value
+			}
 		}
-		if ok {
-			result[name] = value
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	return result, scanner.Err()
+	return result, nil
 }
 
 // ParseFile is a convenience wrapper around Parse that opens and reads a file.
