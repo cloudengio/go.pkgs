@@ -5,11 +5,25 @@
 package cmdutil
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 )
+
+// IsExplicitlySet returns true if the named flag was explicitly provided on
+// the command line (i.e. after FlagSet.Parse was called). It relies on
+// flag.FlagSet.Visit, which only visits flags that were set during parsing.
+func IsExplicitlySet(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
+}
 
 // LoggingFlags represents common logging related command line flags.
 type LoggingFlags struct {
@@ -86,6 +100,23 @@ func (c LoggingConfig) Options() *slog.HandlerOptions {
 func (c LoggingConfig) NewLogger() (*Logger, error) {
 	return c.newLogger(c.Options())
 }
+
+func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) LoggingConfig {
+	if IsExplicitlySet(fs, "log-level") {
+		c.Level = lf.Level
+	}
+	if IsExplicitlySet(fs, "log-file") {
+		c.File = lf.File
+	}
+	if IsExplicitlySet(fs, "log-format") {
+		c.Format = lf.Format
+	}
+	if IsExplicitlySet(fs, "log-source-code") {
+		c.SourceCode = lf.SourceCode
+	}
+	return c
+}
+
 func (c LoggingConfig) newLogger(opts *slog.HandlerOptions) (*Logger, error) {
 	var handler slog.Handler
 	var closer io.Closer
