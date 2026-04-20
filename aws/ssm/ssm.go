@@ -26,6 +26,9 @@ type Session struct {
 // the provided input parameters. The underlying forwarding call runs in a
 // goroutine so the caller is not blocked. Note that the tunnel will be
 // ready to accept connections when NewPortForwardingSession returns.
+// If LocalPort is not specified in the input, a free local port will be
+// automatically allocated and used for the session. The caller can retrieve
+// the local port being used via the LocalPort method.
 //
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
