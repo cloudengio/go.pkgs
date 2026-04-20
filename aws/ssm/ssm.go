@@ -7,6 +7,7 @@ package ssm
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"cloudeng.io/aws/awsconfig"
@@ -28,9 +29,22 @@ type Session struct {
 //
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
-	if pfi.LocalPort == 0 || pfi.RemotePort == 0 || pfi.Target == "" {
-		return nil, fmt.Errorf("invalid PortForwardingInput: LocalPort, RemotePort, and Target are required")
+	if pfi.RemotePort == 0 || pfi.Target == "" {
+		return nil, fmt.Errorf("invalid PortForwardingInput:  RemotePort, and Target are required")
 	}
+
+	if pfi.LocalPort == 0 {
+		l, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get a free port: %w", err)
+		}
+		allocatedPort := l.Addr().(*net.TCPAddr).Port
+		l.Close() // Close it so the SSM client can bind to it
+
+		// Explicitly pass the port
+		pfi.LocalPort = allocatedPort
+	}
+
 	cfg, ok := awsconfig.FromContext(ctx)
 	if !ok || cfg == nil {
 		return nil, awsconfig.ErrConfigNotFound

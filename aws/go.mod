@@ -25,7 +25,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.296.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.297.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.4 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260401221635-b79d06c1d3a2 // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
@@ -36,16 +36,16 @@ require (
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/xtaci/smux v1.5.57 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
-	golang.org/x/term v0.41.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/term v0.42.0 // indirect
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260408004016-f135a6b00509 // indirect
+	cloudeng.io/algo v0.0.0-20260409173323-3bd25554ff1b // indirect
 	cloudeng.io/net v0.0.0-20260312171538-61fcde6ce278 // indirect
-	cloudeng.io/os v0.0.0-20260408170907-48e748d6816c // indirect
+	cloudeng.io/os v0.0.0-20260409173323-3bd25554ff1b // indirect
 	cloudeng.io/sync v0.0.9-0.20260312171538-61fcde6ce278 // indirect
-	cloudeng.io/sys v0.0.0-20260408004016-f135a6b00509 // indirect
+	cloudeng.io/sys v0.0.0-20260409173323-3bd25554ff1b // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect
@@ -91,10 +91,10 @@ require (
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
