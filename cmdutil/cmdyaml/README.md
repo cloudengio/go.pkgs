@@ -17,6 +17,14 @@ the error is reported on. This seems to be particularly true for lists where
 errors with use of tabs to indent are often reported against the previous
 line rather than the offending one.
 
+### Func ExpandEnv
+```go
+func ExpandEnv(cfg any, envFunc func(string) string)
+```
+ExpandEnv recursively expands environment variables in the fields of the
+provided struct that have a 'yaml' tag. Embedded structs are also processed.
+The provided envFunc is used to look up environment variable values.
+
 ### Func ParseConfig
 ```go
 func ParseConfig(spec []byte, cfg any) error
@@ -87,7 +95,7 @@ Decode decodes the captured YAML node into the provided value.
 
 
 ```go
-func (d *Deferred) MarshalYAML() (any, error)
+func (d Deferred) MarshalYAML() (any, error)
 ```
 MarshalYAML marshals Deferred as the underlying YAML node.
 
