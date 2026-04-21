@@ -87,7 +87,7 @@ Decode decodes the captured YAML node into the provided value.
 
 
 ```go
-func (d *Deferred) MarshalYAML() (any, error)
+func (d Deferred) MarshalYAML() (any, error)
 ```
 MarshalYAML marshals Deferred as the underlying YAML node.
 
