@@ -7,6 +7,7 @@ package ssm
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"cloudeng.io/aws/awsconfig"
@@ -25,15 +26,31 @@ type Session struct {
 // the provided input parameters. The underlying forwarding call runs in a
 // goroutine so the caller is not blocked. Note that the tunnel will be
 // ready to accept connections when NewPortForwardingSession returns.
+// If LocalPort is not specified in the input, a free local port will be
+// automatically allocated and used for the session. The caller can retrieve
+// the local port being used via the LocalPort method.
 //
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
-	if pfi.LocalPort == 0 || pfi.RemotePort == 0 || pfi.Target == "" {
-		return nil, fmt.Errorf("invalid PortForwardingInput: LocalPort, RemotePort, and Target are required")
+	if pfi.RemotePort == 0 || pfi.Target == "" {
+		return nil, fmt.Errorf("invalid PortForwardingInput: RemotePort and Target are required")
 	}
+
 	cfg, ok := awsconfig.FromContext(ctx)
 	if !ok || cfg == nil {
 		return nil, awsconfig.ErrConfigNotFound
+	}
+
+	if pfi.LocalPort == 0 {
+		l, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get a free port: %w", err)
+		}
+		allocatedPort := l.Addr().(*net.TCPAddr).Port
+		l.Close() // Close it so the SSM client can bind to it
+
+		// Explicitly pass the port
+		pfi.LocalPort = allocatedPort
 	}
 
 	errCh := make(chan error, 1)
