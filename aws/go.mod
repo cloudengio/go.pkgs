@@ -3,10 +3,10 @@ module cloudeng.io/aws
 go 1.25.5
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20260409195307-0d32d333270c
+	cloudeng.io/cmdutil v0.0.0-20260421014045-3f1a4460a5df
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260409195307-0d32d333270c
-	cloudeng.io/logging v0.0.0-20260409195307-0d32d333270c
+	cloudeng.io/file v0.0.0-20260421014045-3f1a4460a5df
+	cloudeng.io/logging v0.0.0-20260421014045-3f1a4460a5df
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.15
 	github.com/alexbacchin/ssm-session-client v1.0.0
@@ -25,7 +25,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.297.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.298.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.5 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260401221635-b79d06c1d3a2 // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
@@ -43,7 +43,7 @@ require (
 require (
 	cloudeng.io/algo v0.0.0-20260409173323-3bd25554ff1b // indirect
 	cloudeng.io/net v0.0.0-20260312171538-61fcde6ce278 // indirect
-	cloudeng.io/os v0.0.0-20260409195307-0d32d333270c // indirect
+	cloudeng.io/os v0.0.0-20260421014045-3f1a4460a5df // indirect
 	cloudeng.io/sync v0.0.9-0.20260312171538-61fcde6ce278 // indirect
 	cloudeng.io/sys v0.0.0-20260409173323-3bd25554ff1b // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
