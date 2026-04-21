@@ -214,7 +214,7 @@ func TestExpandEnvSliceOfPointerToString(t *testing.T) {
 	}
 }
 
-func TestExpandEnvNilSafe(t *testing.T) {
+func TestExpandEnvNilSafe(*testing.T) {
 	// nil pointer and non-struct inputs must not panic.
 	cmdyaml.ExpandEnv(nil, func(string) string { return "" })
 
