@@ -194,6 +194,8 @@ func (c LoggingConfig) Options() *slog.HandlerOptions
 ```go
 func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) LoggingConfig
 ```
+WithFlagOverrides returns a new LoggingConfig with fields overridden by the
+explicitly set flags in the provided FlagSet.
 
 
 

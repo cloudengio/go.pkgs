@@ -16,6 +16,9 @@ import (
 // the command line (i.e. after FlagSet.Parse was called). It relies on
 // flag.FlagSet.Visit, which only visits flags that were set during parsing.
 func IsExplicitlySet(fs *flag.FlagSet, name string) bool {
+	if fs == nil {
+		return false
+	}
 	found := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == name {
@@ -101,19 +104,24 @@ func (c LoggingConfig) NewLogger() (*Logger, error) {
 	return c.newLogger(c.Options())
 }
 
+// WithFlagOverrides returns a new LoggingConfig with fields overridden by
+// the explicitly set flags in the provided FlagSet.
 func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) LoggingConfig {
-	if IsExplicitlySet(fs, "log-level") {
-		c.Level = lf.Level
+	if fs == nil {
+		return c
 	}
-	if IsExplicitlySet(fs, "log-file") {
-		c.File = lf.File
-	}
-	if IsExplicitlySet(fs, "log-format") {
-		c.Format = lf.Format
-	}
-	if IsExplicitlySet(fs, "log-source-code") {
-		c.SourceCode = lf.SourceCode
-	}
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "log-level":
+			c.Level = lf.Level
+		case "log-file":
+			c.File = lf.File
+		case "log-format":
+			c.Format = lf.Format
+		case "log-source-code":
+			c.SourceCode = lf.SourceCode
+		}
+	})
 	return c
 }
 
