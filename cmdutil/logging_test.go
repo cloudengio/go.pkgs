@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"flag"
 	"io"
 	"log/slog"
 	"os"
@@ -206,6 +207,80 @@ func TestLoggingToStdout(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte("testing stdout logging")) {
 		t.Errorf("stdout logging failed, got: %q", output)
 	}
+}
+
+func TestWithFlagOverrides(t *testing.T) {
+	base := cmdutil.LoggingConfig{
+		Level:      1,
+		File:       "base.log",
+		Format:     "text",
+		SourceCode: false,
+	}
+
+	newFS := func(t *testing.T, args []string) (*flag.FlagSet, cmdutil.LoggingFlags) {
+		t.Helper()
+		fs := flag.NewFlagSet("test", flag.ContinueOnError)
+		var lf cmdutil.LoggingFlags
+		fs.IntVar(&lf.Level, "log-level", 0, "")
+		fs.StringVar(&lf.File, "log-file", "", "")
+		fs.StringVar(&lf.Format, "log-format", "json", "")
+		fs.BoolVar(&lf.SourceCode, "log-source-code", false, "")
+		if err := fs.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		return fs, lf
+	}
+
+	t.Run("no flags set leaves config unchanged", func(t *testing.T) {
+		fs, lf := newFS(t, nil)
+		if got := base.WithFlagOverrides(fs, lf); got != base {
+			t.Errorf("got %+v, want %+v", got, base)
+		}
+	})
+
+	t.Run("level overrides only level", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-level=3"})
+		want := base
+		want.Level = 3
+		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("file overrides only file", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-file=override.log"})
+		want := base
+		want.File = "override.log"
+		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("format overrides only format", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-format=json"})
+		want := base
+		want.Format = "json"
+		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("source-code overrides only source-code", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-source-code=true"})
+		want := base
+		want.SourceCode = true
+		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("all flags override all fields", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-level=3", "-log-file=all.log", "-log-format=json", "-log-source-code=true"})
+		want := cmdutil.LoggingConfig{Level: 3, File: "all.log", Format: "json", SourceCode: true}
+		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
 }
 
 func TestReplaceAttrNoTimeWithConfig(t *testing.T) {
