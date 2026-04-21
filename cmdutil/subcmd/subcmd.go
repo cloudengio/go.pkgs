@@ -253,6 +253,11 @@ func (cf *FlagSet) IsSet(field any) (string, bool) {
 	return cf.sm.IsSet(field)
 }
 
+// FlagSet returns the underlying flag.FlagSet.
+func (cf *FlagSet) FlagSet() *flag.FlagSet {
+	return cf.flagSet
+}
+
 // Runner is the type of the function to be called to run a particular command.
 type Runner func(ctx context.Context, flagValues any, args []string) error
 

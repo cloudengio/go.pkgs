@@ -76,6 +76,14 @@ func IsDir(path string) bool
 ```
 IsDir returns true iff path exists and is a directory.
 
+### Func IsExplicitlySet
+```go
+func IsExplicitlySet(fs *flag.FlagSet, name string) bool
+```
+IsExplicitlySet returns true if the named flag was explicitly provided
+on the command line (i.e. after FlagSet.Parse was called). It relies on
+flag.FlagSet.Visit, which only visits flags that were set during parsing.
+
 ### Func ListDir
 ```go
 func ListDir(dir string) ([]string, error)
@@ -181,6 +189,13 @@ handler options.
 ```go
 func (c LoggingConfig) Options() *slog.HandlerOptions
 ```
+
+
+```go
+func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) LoggingConfig
+```
+WithFlagOverrides returns a new LoggingConfig with fields overridden by the
+explicitly set flags in the provided FlagSet.
 
 
 

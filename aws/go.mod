@@ -41,11 +41,11 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260408004016-f135a6b00509 // indirect
+	cloudeng.io/algo v0.0.0-20260409173323-3bd25554ff1b // indirect
 	cloudeng.io/net v0.0.0-20260312171538-61fcde6ce278 // indirect
 	cloudeng.io/os v0.0.0-20260421014045-3f1a4460a5df // indirect
 	cloudeng.io/sync v0.0.9-0.20260312171538-61fcde6ce278 // indirect
-	cloudeng.io/sys v0.0.0-20260408004016-f135a6b00509 // indirect
+	cloudeng.io/sys v0.0.0-20260409173323-3bd25554ff1b // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.9 // indirect

@@ -77,7 +77,7 @@ NewConnectionPool creates a new connection pool with the given configuration
 and options. If the WithServerName name option is used, the ServerName
 will be set in the TLS config for all connections. If a TokenGenerator is
 provided, it will be called to generate a fresh authentication token for
-every new connection and the pools max connection lifetime will be set to
+every new connection and the pool's max connection lifetime will be set to
 the token expiration specified in WithTokenGenerator (minus 10 seconds) to
 ensure that connections are recycled before tokens expire.
 
