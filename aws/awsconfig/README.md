@@ -30,6 +30,13 @@ func ContextWith(ctx context.Context, cfg *aws.Config) context.Context
 ```
 ContextWith returns a new context with the aws.Config stored in it.
 
+### Func ContextWithoutConfig
+```go
+func ContextWithoutConfig(ctx context.Context) context.Context
+```
+ContextWithoutConfig returns a new context with the aws.Config removed from
+it.
+
 ### Func DebugPrintConfig
 ```go
 func DebugPrintConfig(ctx context.Context, out io.Writer, cfg aws.Config) error
@@ -45,10 +52,13 @@ FromContext returns the aws.Config stored in the context.
 
 ### Func GetCallerIdentity
 ```go
-func GetCallerIdentity(cfg aws.Config) (account, arn, userID string, err error)
+func GetCallerIdentity(ctx context.Context, cfg aws.Config) (account, arn, userID string, err error)
 ```
-GetCallerIdentity uses the sts service to obtain the account, ARN and userID
-that the supplied aws.Config identifies as.
+GetCallerIdentity uses the sts service to obtain the account, ARN and
+userID that the supplied aws.Config identifies as. The context passed
+to this function will have any aws.Config set by this package stripped,
+ie. ContextWithoutConfig is called by GetCallerIdentity before calling
+sts.GetCallerIdentity.
 
 ### Func Load
 ```go

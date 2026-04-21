@@ -19,10 +19,12 @@ func TokenGenerator(endpoint string, admin bool, opts ...func(*auth.TokenOptions
 TokenGenerator returns a dbpool.TokenGenerator that generates DSQL
 authentication tokens.
 
-### Func WithDSLTokenExpiration
+### Func WithDSQLTokenExpiration
 ```go
-func WithDSLTokenExpiration(expiration time.Duration) func(o *auth.TokenOptions)
+func WithDSQLTokenExpiration(expiration time.Duration) func(o *auth.TokenOptions)
 ```
+WithDSQLTokenExpiration returns a function that can be passed to
+GenerateDSQLToken to set the expiration time of the generated token.
 
 
 

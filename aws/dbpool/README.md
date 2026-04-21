@@ -50,7 +50,7 @@ and authentication.
 
 
 ```go
-func WithTokenGenerator(tokenGenerator TokenGenerator) Option
+func WithTokenGenerator(tokenGenerator TokenGenerator, tokenExpiration time.Duration) Option
 ```
 WithTokenGenerator sets a custom TokenGenerator that will be called to
 generate a fresh authentication token for every new connection. This is
@@ -73,6 +73,13 @@ connection pools.
 ```go
 func NewConnectionPool(ctx context.Context, poolConfig *pgxpool.Config, opts ...Option) (*Pool, error)
 ```
+NewConnectionPool creates a new connection pool with the given configuration
+and options. If the WithServerName name option is used, the ServerName
+will be set in the TLS config for all connections. If a TokenGenerator is
+provided, it will be called to generate a fresh authentication token for
+every new connection and the pools max connection lifetime will be set to
+the token expiration specified in WithTokenGenerator (minus 10 seconds) to
+ensure that connections are recycled before tokens expire.
 
 
 
