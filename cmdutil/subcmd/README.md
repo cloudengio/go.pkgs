@@ -609,6 +609,12 @@ defaults.
 ### Methods
 
 ```go
+func (cf *FlagSet) FlagSet() *flag.FlagSet
+```
+FlagSet returns the underlying flag.FlagSet.
+
+
+```go
 func (cf *FlagSet) IsSet(field any) (string, bool)
 ```
 IsSet returns true if the supplied flag variable's value has been set,
