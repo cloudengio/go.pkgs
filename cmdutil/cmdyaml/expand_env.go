@@ -46,17 +46,34 @@ func expandEnvStruct(v reflect.Value, envFunc func(string) string) {
 		if _, ok := field.Tag.Lookup("yaml"); !ok {
 			continue
 		}
-		switch fv.Kind() {
-		case reflect.String:
-			if fv.CanSet() {
-				fv.SetString(os.Expand(fv.String(), envFunc))
-			}
-		case reflect.Struct:
-			expandEnvStruct(fv, envFunc)
-		case reflect.Pointer:
-			if fv.Type().Elem().Kind() == reflect.Struct && !fv.IsNil() {
-				expandEnvStruct(fv.Elem(), envFunc)
-			}
+		expandEnvValue(fv, envFunc)
+	}
+}
+
+func expandEnvValue(v reflect.Value, envFunc func(string) string) {
+	switch v.Kind() {
+	case reflect.String:
+		if v.CanSet() {
+			v.SetString(os.Expand(v.String(), envFunc))
+		}
+	case reflect.Struct:
+		expandEnvStruct(v, envFunc)
+	case reflect.Pointer:
+		if !v.IsNil() {
+			expandEnvValue(v.Elem(), envFunc)
+		}
+	case reflect.Slice:
+		for i := range v.Len() {
+			expandEnvValue(v.Index(i), envFunc)
+		}
+	case reflect.Map:
+		for _, key := range v.MapKeys() {
+			elem := v.MapIndex(key)
+			// Map values are not addressable; copy via a new value.
+			tmp := reflect.New(elem.Type()).Elem()
+			tmp.Set(elem)
+			expandEnvValue(tmp, envFunc)
+			v.SetMapIndex(key, tmp)
 		}
 	}
 }
