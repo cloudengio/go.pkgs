@@ -33,7 +33,12 @@ type Session struct {
 // The session can be closed by canceling the supplied context.
 func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingInput) (*Session, error) {
 	if pfi.RemotePort == 0 || pfi.Target == "" {
-		return nil, fmt.Errorf("invalid PortForwardingInput:  RemotePort, and Target are required")
+		return nil, fmt.Errorf("invalid PortForwardingInput: RemotePort and Target are required")
+	}
+
+	cfg, ok := awsconfig.FromContext(ctx)
+	if !ok || cfg == nil {
+		return nil, awsconfig.ErrConfigNotFound
 	}
 
 	if pfi.LocalPort == 0 {
@@ -46,11 +51,6 @@ func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingI
 
 		// Explicitly pass the port
 		pfi.LocalPort = allocatedPort
-	}
-
-	cfg, ok := awsconfig.FromContext(ctx)
-	if !ok || cfg == nil {
-		return nil, awsconfig.ErrConfigNotFound
 	}
 
 	errCh := make(chan error, 1)
