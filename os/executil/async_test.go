@@ -24,15 +24,17 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmpDir)
 
 	sleepHelper = filepath.Join(tmpDir, "sleep")
 	sleepHelper, err = executil.GoBuild(context.Background(), sleepHelper, "./testdata/sleep")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to build sleep helper: %v\n", err)
+		os.RemoveAll(tmpDir)
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	os.RemoveAll(tmpDir)
+	os.Exit(code)
 }
 
 func TestAsyncWaitSuccessfulCommand(t *testing.T) {

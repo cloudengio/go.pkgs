@@ -56,9 +56,7 @@ func (w *TailWriter) Bytes() []byte {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.full {
-		result := make([]byte, w.pos)
-		copy(result, w.buf[:w.pos])
-		return slices.Clone(result)
+		return slices.Clone(w.buf[:w.pos])
 	}
 	// Return rotated buffer
 	if w.size == 0 {
@@ -67,5 +65,5 @@ func (w *TailWriter) Bytes() []byte {
 	result := make([]byte, w.size)
 	copy(result, w.buf[w.pos:])
 	copy(result[w.size-w.pos:], w.buf[:w.pos])
-	return slices.Clone(result)
+	return result
 }
