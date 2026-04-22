@@ -33,9 +33,11 @@ func (w *TailWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	n = len(p)
+	if w.size == 0 {
+		return n, nil
+	}
 	if len(p) > w.size {
 		p = p[len(p)-w.size:]
-		w.full = true
 	}
 	for len(p) > 0 {
 		chunk := copy(w.buf[w.pos:], p)
