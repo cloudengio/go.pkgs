@@ -76,6 +76,82 @@ the specified duration. It assumes that Wait has been called.
 
 
 
+## Types
+### Type AsyncWait
+```go
+type AsyncWait struct {
+	// contains filtered or unexported fields
+}
+```
+AsyncWait simplifies implementing asynchronous waiting for an exec.Cmd.
+
+### Functions
+
+```go
+func NewAsyncWait(cmd *exec.Cmd) *AsyncWait
+```
+NewAsyncWait creates a new AsyncWait for the given exec.Cmd. It immediately
+starts a goroutine to wait for the cmd to complete.
+
+
+
+### Methods
+
+```go
+func (aw *AsyncWait) Wait() error
+```
+Wait waits for the cmd to complete and returns the error from cmd.Wait().
+If the cmd has already completed, it returns immediately with the error from
+cmd.Wait().
+
+
+```go
+func (aw *AsyncWait) WaitDone() (bool, error)
+```
+IsWaitDone() checks to see if th cmd has already completed. If so,
+it returns true and the error from cmd.Wait(), otherwise it returns false
+and nil.
+
+
+
+
+### Type TailWriter
+```go
+type TailWriter struct {
+	// contains filtered or unexported fields
+}
+```
+TailWriter is an io.Writer that keeps only the last N bytes written to it.
+It is useful for capturing the output of a command while limiting memory
+usage.
+
+### Functions
+
+```go
+func NewTailWriter(n int) *TailWriter
+```
+NewTailWriter creates a new TailWriter that keeps the last n bytes.
+
+
+
+### Methods
+
+```go
+func (w *TailWriter) Bytes() []byte
+```
+Bytes returns the contents of the TailWriter.
+
+
+```go
+func (w *TailWriter) Write(p []byte) (n int, err error)
+```
+Write implements the io.Writer interface.
+
+
+
+
+
+
 ## Examples
 ### [Example](https://pkg.go.dev/cloudeng.io/os/executil?tab=doc#example-)
 
