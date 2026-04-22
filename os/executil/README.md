@@ -108,9 +108,8 @@ cmd.Wait().
 ```go
 func (aw *AsyncWait) WaitDone() (bool, error)
 ```
-IsWaitDone() checks to see if th cmd has already completed. If so,
-it returns true and the error from cmd.Wait(), otherwise it returns false
-and nil.
+WaitDone() checks to see if the cmd has already completed. If so, it returns
+true and the error from cmd.Wait(), otherwise it returns false and nil.
 
 
 

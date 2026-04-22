@@ -40,7 +40,7 @@ func (aw *AsyncWait) runWait() {
 	}()
 }
 
-// IsWaitDone() checks to see if th cmd has already completed.
+// WaitDone() checks to see if the cmd has already completed.
 // If so, it returns true and the error from cmd.Wait(), otherwise
 // it returns false and nil.
 func (aw *AsyncWait) WaitDone() (bool, error) {

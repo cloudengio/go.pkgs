@@ -4,7 +4,10 @@
 
 package executil
 
-import "sync"
+import (
+	"slices"
+	"sync"
+)
 
 // TailWriter is an io.Writer that keeps only the last N bytes
 // written to it. It is useful for capturing the output of a
@@ -29,18 +32,21 @@ func NewTailWriter(n int) *TailWriter {
 func (w *TailWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.size == 0 {
-		return len(p), nil
+	n = len(p)
+	if len(p) > w.size {
+		p = p[len(p)-w.size:]
+		w.full = true
 	}
-	for _, b := range p {
-		w.buf[w.pos] = b
-		w.pos++
+	for len(p) > 0 {
+		chunk := copy(w.buf[w.pos:], p)
+		w.pos += chunk
 		if w.pos == w.size {
 			w.pos = 0
 			w.full = true
 		}
+		p = p[chunk:]
 	}
-	return len(p), nil
+	return n, nil
 }
 
 // Bytes returns the contents of the TailWriter.
@@ -48,7 +54,9 @@ func (w *TailWriter) Bytes() []byte {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.full {
-		return w.buf[:w.pos]
+		result := make([]byte, w.pos)
+		copy(result, w.buf[:w.pos])
+		return slices.Clone(result)
 	}
 	// Return rotated buffer
 	if w.size == 0 {
@@ -57,5 +65,5 @@ func (w *TailWriter) Bytes() []byte {
 	result := make([]byte, w.size)
 	copy(result, w.buf[w.pos:])
 	copy(result[w.size-w.pos:], w.buf[:w.pos])
-	return result
+	return slices.Clone(result)
 }
