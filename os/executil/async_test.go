@@ -5,12 +5,35 @@
 package executil_test
 
 import (
+	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"cloudeng.io/os/executil"
 )
+
+var sleepHelper string
+
+func TestMain(m *testing.M) {
+	tmpDir, err := os.MkdirTemp("", "sleep-helper")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	sleepHelper = filepath.Join(tmpDir, "sleep")
+	sleepHelper, err = executil.GoBuild(context.Background(), sleepHelper, "./testdata/sleep")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build sleep helper: %v\n", err)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
 
 func TestAsyncWaitSuccessfulCommand(t *testing.T) {
 	cmd := exec.Command("true")
@@ -70,7 +93,7 @@ func TestAsyncWaitDoneBeforeWait(t *testing.T) {
 }
 
 func TestAsyncWaitNotDoneWhileRunning(t *testing.T) {
-	cmd := exec.Command("sleep", "60")
+	cmd := exec.Command(sleepHelper, "60")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +111,7 @@ func TestAsyncWaitNotDoneWhileRunning(t *testing.T) {
 }
 
 func TestAsyncWaitMultipleWaiters(t *testing.T) {
-	cmd := exec.Command("sleep", "0.05")
+	cmd := exec.Command(sleepHelper, "0.05")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
