@@ -116,7 +116,7 @@ func (p *Pool) notify(kind EventKind, err error) {
 // ready or any creation step fails. The context governs both the initial fill
 // and background replenishment goroutines launched during the pool's lifetime.
 func (p *Pool) Start(ctx context.Context) error {
-	p.bgCtx, p.cancel = context.WithCancel(ctx)
+	p.bgCtx, p.cancel = context.WithCancel(ctx) //nolint:gosec // G118 false positive
 
 	type result struct{ err error }
 	results := make(chan result, p.options.size)
