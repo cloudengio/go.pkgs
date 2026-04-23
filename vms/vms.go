@@ -36,8 +36,8 @@ type Instance interface {
 
 	// Clone prepares an instance for being stated. It should be
 	// a synchronous operation and when it returns the state should be Stopped.
-	// States: success: [Initial] -> Cloning -> Stopped
-	// States:   error: [Initial] -> Cloning -> Initial
+	// States: success: [Initial, Deleted] -> Cloning -> Stopped
+	// States:   error: [Initial, Deleted] -> Cloning -> Initial
 	Clone(ctx context.Context) error
 
 	// Start starts the instance. It returns once the instance is running.
@@ -48,7 +48,7 @@ type Instance interface {
 	// Stop stops the instance. It returns once the instance is stopped.
 	// The timeout parameter specifies how long to wait for a graceful shutdown
 	// before forcefully shutting down the vm instance.
-	// States: success: [Running, Stopped] -> Stopping -> Stopped
+	// States: success: [Running] -> Stopping -> Stopped; ; [Stopped] -> Stopped
 	// States:   error: [Running] -> Stopping -> Stopped or StateErrorUnknown
 	Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error)
 
@@ -56,7 +56,7 @@ type Instance interface {
 	Suspendable() bool
 
 	// Suspend suspends the instance. It returns once the instance is suspended.
-	// States: success: [Running] -> Suspending -> Suspended
+	// States: success: [Running] -> Suspending -> Suspended; [Suspended]
 	// States:   error: [Running] -> Suspending -> Suspended or StateErrorUnknown
 	Suspend(ctx context.Context) error
 
@@ -173,7 +173,7 @@ func (s State) ValidActions() []Action {
 
 // Allowed returns true if the given action is valid from the current state.
 func (s State) Allowed(action Action) bool {
-	_, ok := transitionTable[s][action]
+	_, ok := s.Transition(action)
 	return ok
 }
 
@@ -263,6 +263,9 @@ func PrintStates(out io.Writer) {
 // allowed intermediate states on the way to the final state, returning an
 // error if an unexpected intermediate state is observed.
 func WaitForState(ctx context.Context, inst Instance, interval time.Duration, final State, intermediate ...State) error {
+	if interval <= 0 {
+		return fmt.Errorf("vms: WaitForState: interval must be positive: %v", interval)
+	}
 	found := func() (bool, error) {
 		got := inst.State(ctx)
 		if got == final {
