@@ -258,6 +258,12 @@ func (cf *FlagSet) FlagSet() *flag.FlagSet {
 	return cf.flagSet
 }
 
+// IsExplicitlySet returns true if the supplied flag was explicitly provided
+// on the command line.
+func (cf *FlagSet) IsExplicitlySet(field string) bool {
+	return cmdutil.IsExplicitlySet(cf.flagSet, field)
+}
+
 // Runner is the type of the function to be called to run a particular command.
 type Runner func(ctx context.Context, flagValues any, args []string) error
 
@@ -776,6 +782,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		if err != nil {
 			return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
 		}
+		ctx = WithFlagSet(ctx, cmd.flags) // Make the command's FlagSet available to the Runner and any functions it calls.
 		err = cmd.runner(ctx, cmd.flags.flagValues, args)
 		errs.Append(err)
 		return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
@@ -837,4 +844,22 @@ func (cmds *CommandSet) SetPreHooks(preHooks ...PreHook) {
 			cmd.opts.subcmds.SetPreHooks(preHooks...)
 		}
 	}
+}
+
+type flagsetContextKey struct{}
+
+// WithFlagSet returns a copy of the parent context with the FlagSet added.
+// It is used by subcmd to make the CommandSet's global FlagSet available to a
+// command's Runner and any functions it calls.
+func WithFlagSet(ctx context.Context, fs *FlagSet) context.Context {
+	return context.WithValue(ctx, flagsetContextKey{}, fs)
+}
+
+// FlagSetFromContext returns the global FlagSet from the context if it exists.
+func FlagSetFromContext(ctx context.Context) *FlagSet {
+	fs, ok := ctx.Value(flagsetContextKey{}).(*FlagSet)
+	if !ok {
+		return nil
+	}
+	return fs
 }

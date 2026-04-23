@@ -227,6 +227,86 @@ func TestCommandOptions(t *testing.T) {
 	expectedNArgs(3)
 }
 
+func TestFlagSetFromContext(t *testing.T) {
+	ctx := context.Background()
+
+	var capturedFS *subcmd.FlagSet
+	runner := func(ctx context.Context, _ any, _ []string) error {
+		capturedFS = subcmd.FlagSetFromContext(ctx)
+		return nil
+	}
+
+	cmdFS := subcmd.NewFlagSet()
+	if err := cmdFS.RegisterFlagStruct(&flagsA{}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	cmd := subcmd.NewCommand("cmd-a", cmdFS, runner)
+	cmdset := subcmd.NewCommandSet(cmd)
+
+	if err := cmdset.DispatchWithArgs(ctx, "test", "cmd-a"); err != nil {
+		t.Fatal(err)
+	}
+	if capturedFS == nil {
+		t.Fatal("expected FlagSet in context, got nil")
+	}
+	if capturedFS != cmdFS {
+		t.Error("FlagSet from context is not the command's FlagSet")
+	}
+
+	// FlagSetFromContext returns nil when there is no FlagSet in the context.
+	if got := subcmd.FlagSetFromContext(ctx); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func ExampleFlagSetFromContext() {
+	ctx := context.Background()
+
+	type rangeFlags struct {
+		From int `subcmd:"from,1,start value for a range"`
+		To   int `subcmd:"to,2,end value for a range"`
+	}
+
+	// fromFlag can be called from any helper that only has a context,
+	// without needing a closure over the flags struct.
+	fromFlag := func(ctx context.Context) string {
+		fs := subcmd.FlagSetFromContext(ctx)
+		if fs == nil {
+			return ""
+		}
+		// flag.FlagSet.Visit visits only flags explicitly set on the command line.
+		var val string
+		fs.FlagSet().Visit(func(f *flag.Flag) {
+			if f.Name == "from" {
+				val = f.Value.String()
+			}
+		})
+		return val
+	}
+
+	runner := func(ctx context.Context, values any, _ []string) error {
+		r := values.(*rangeFlags)
+		fmt.Printf("from-flag=%q %v..%v\n", fromFlag(ctx), r.From, r.To)
+		return nil
+	}
+
+	fs := subcmd.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
+	cmd := subcmd.NewCommand("ranger", fs, runner, subcmd.WithoutArguments())
+	cmd.Document("print an integer range")
+	cmdset := subcmd.NewCommandSet(cmd)
+
+	if err := cmdset.DispatchWithArgs(ctx, "example-command", "ranger"); err != nil {
+		panic(err)
+	}
+	if err := cmdset.DispatchWithArgs(ctx, "example-command", "ranger", "--from=10"); err != nil {
+		panic(err)
+	}
+
+	// Output:
+	// from-flag="" 1..2
+	// from-flag="10" 10..2
+}
+
 func TestMultiLevel(t *testing.T) {
 	ctx := context.Background()
 

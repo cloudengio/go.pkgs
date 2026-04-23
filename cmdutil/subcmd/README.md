@@ -145,6 +145,14 @@ SanitizeYAML replaces tabs with two spaces to make it easier to write YAML
 in go string literals (where most editors will always use tabs). This does
 not guarantee correct alignment when spaces and tabs are mixed arbitrarily.
 
+### Func WithFlagSet
+```go
+func WithFlagSet(ctx context.Context, fs *FlagSet) context.Context
+```
+WithFlagSet returns a copy of the parent context with the FlagSet added.
+It is used by subcmd to make the CommandSet's global FlagSet available to a
+command's Runner and any functions it calls.
+
 
 
 ## Types
@@ -563,6 +571,12 @@ FlagSet represents the name, description and flag values for a command.
 ### Functions
 
 ```go
+func FlagSetFromContext(ctx context.Context) *FlagSet
+```
+FlagSetFromContext returns the global FlagSet from the context if it exists.
+
+
+```go
 func GlobalFlagSet() *FlagSet
 ```
 GlobalFlagSet creates a new FlagSet that is to be used for global flags.
@@ -612,6 +626,13 @@ defaults.
 func (cf *FlagSet) FlagSet() *flag.FlagSet
 ```
 FlagSet returns the underlying flag.FlagSet.
+
+
+```go
+func (cf *FlagSet) IsExplicitlySet(field string) bool
+```
+IsExplicitlySet returns true if the supplied flag was explicitly provided on
+the command line.
 
 
 ```go
