@@ -70,7 +70,7 @@ func TestPool_Acquire(t *testing.T) {
 	factory := vmstestutil.NewMockFactory("acquire-test")
 	pool := newPool(t, 2, factory)
 
-	vm, err := pool.Acquire(context.Background())
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPool_Exec(t *testing.T) {
 	factory := vmstestutil.NewMockFactory("exec-test")
 	pool := newPool(t, 1, factory)
 
-	vm, err := pool.Acquire(context.Background())
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestPool_Release(t *testing.T) {
 	factory := vmstestutil.NewMockFactory("release-test")
 	pool := newPool(t, 1, factory)
 
-	vm, err := pool.Acquire(context.Background())
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestPool_Release(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	vm2, err := pool.Acquire(ctx)
+	vm2, err := pool.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("Acquire after replenishment: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestPool_AcquireCancelled(t *testing.T) {
 	pool := newPool(t, 1, factory)
 
 	// Drain the pool so the next Acquire will block.
-	vm, err := pool.Acquire(context.Background())
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestPool_AcquireCancelled(t *testing.T) {
 	// Now try to acquire with a pre-cancelled context.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = pool.Acquire(ctx)
+	_, err = pool.Acquire(ctx, io.Discard, io.Discard)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
@@ -200,7 +200,7 @@ func TestPool_Concurrency(t *testing.T) {
 	for i := range size {
 		go func(i int) {
 			defer wg.Done()
-			vmsAcquired[i], errs[i] = pool.Acquire(context.Background())
+			vmsAcquired[i], errs[i] = pool.Acquire(context.Background(), io.Discard, io.Discard)
 		}(i)
 	}
 	wg.Wait()
@@ -224,7 +224,7 @@ func TestPool_Concurrency(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for i := range size {
-		vm, err := pool.Acquire(ctx)
+		vm, err := pool.Acquire(ctx, io.Discard, io.Discard)
 		if err != nil {
 			t.Fatalf("re-Acquire[%d] after replenishment: %v", i, err)
 		}
@@ -294,7 +294,7 @@ func TestPool_Status(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	vm, err := p.Acquire(context.Background())
+	vm, err := p.Acquire(context.Background(), io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestPool_Status(t *testing.T) {
 	// goroutine that could race with p.Close cancelling the background context.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	vm2, err := p.Acquire(ctx)
+	vm2, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("second Acquire (wait for replenishment): %v", err)
 	}
@@ -392,7 +392,7 @@ func TestPool_ReleaseCloseRace(t *testing.T) {
 			t.Fatalf("Start: %v", err)
 		}
 
-		vm, err := p.Acquire(context.Background())
+		vm, err := p.Acquire(context.Background(), io.Discard, io.Discard)
 		if err != nil {
 			t.Fatalf("Acquire: %v", err)
 		}

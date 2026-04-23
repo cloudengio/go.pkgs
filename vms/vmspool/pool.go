@@ -33,6 +33,7 @@ type Pool struct {
 	ready       chan vms.Instance // suspended VMs waiting to be acquired
 	done        chan struct{}     // closed by Close to signal pool shutdown
 	startOnce   sync.Once
+	startErr    error
 	closeOnce   sync.Once
 
 	bgCtx  context.Context
@@ -106,11 +107,10 @@ func (p *Pool) notify(kind EventKind, err error) {
 // ready or any creation step fails. The context governs both the initial fill
 // and background replenishment goroutines launched during the pool's lifetime.
 func (p *Pool) Start(ctx context.Context) error {
-	var err error
 	p.startOnce.Do(func() {
-		err = p.start(ctx)
+		p.startErr = p.start(ctx)
 	})
-	return err
+	return p.startErr
 }
 
 func (p *Pool) start(ctx context.Context) error {
@@ -195,7 +195,7 @@ func (p *Pool) replenish() {
 // Acquire waits for a suspended VM, starts it, and returns a handle. The
 // caller must call VM.Release when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
-func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
+func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, error) {
 	p.mu.Lock()
 	closed := p.closed
 	p.mu.Unlock()
@@ -217,9 +217,9 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	case inst = <-p.ready:
 	}
 	p.notify(EventVMDequeued, nil)
-	if err := inst.Start(ctx, io.Discard, io.Discard); err != nil {
+	if err := inst.Start(ctx, stdout, stderr); err != nil {
 		// Start failed; clean up the VM and replenish so the pool stays full.
-		_ = vms.CleanupVM(context.Background(), inst)
+		p.cleanupVM(inst)
 		p.scheduleReplenish()
 		err = fmt.Errorf("vmspool: acquire: %w", err)
 		p.notify(EventAcquireFailed, err)
