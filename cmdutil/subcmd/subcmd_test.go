@@ -230,11 +230,6 @@ func TestCommandOptions(t *testing.T) {
 func TestFlagSetFromContext(t *testing.T) {
 	ctx := context.Background()
 
-	type globalFlags struct {
-		Verbose bool `subcmd:"v,false,enable verbose output"`
-	}
-	var globalValues globalFlags
-
 	var capturedFS *subcmd.FlagSet
 	runner := func(ctx context.Context, _ any, _ []string) error {
 		capturedFS = subcmd.FlagSetFromContext(ctx)
@@ -246,13 +241,7 @@ func TestFlagSetFromContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := subcmd.NewCommand("cmd-a", cmdFS, runner)
-
-	globals := subcmd.NewFlagSet()
-	if err := globals.RegisterFlagStruct(&globalValues, nil, nil); err != nil {
-		t.Fatal(err)
-	}
 	cmdset := subcmd.NewCommandSet(cmd)
-	cmdset.WithGlobalFlags(globals)
 
 	if err := cmdset.DispatchWithArgs(ctx, "test", "cmd-a"); err != nil {
 		t.Fatal(err)
@@ -260,8 +249,8 @@ func TestFlagSetFromContext(t *testing.T) {
 	if capturedFS == nil {
 		t.Fatal("expected FlagSet in context, got nil")
 	}
-	if capturedFS != globals {
-		t.Error("FlagSet from context is not the expected global FlagSet")
+	if capturedFS != cmdFS {
+		t.Error("FlagSet from context is not the command's FlagSet")
 	}
 
 	// FlagSetFromContext returns nil when there is no FlagSet in the context.
@@ -273,37 +262,31 @@ func TestFlagSetFromContext(t *testing.T) {
 func ExampleFlagSetFromContext() {
 	ctx := context.Background()
 
-	type globalFlags struct {
-		Verbosity int `subcmd:"v,,debugging verbosity"`
-	}
-	var globalValues globalFlags
-
 	type rangeFlags struct {
 		From int `subcmd:"from,1,start value for a range"`
 		To   int `subcmd:"to,2,end value for a range"`
 	}
 
-	// isVerbose can be called from any helper that only has a context,
-	// without needing a closure over globalValues.
-	isVerbose := func(ctx context.Context) bool {
+	// fromFlag can be called from any helper that only has a context,
+	// without needing a closure over the flags struct.
+	fromFlag := func(ctx context.Context) string {
 		fs := subcmd.FlagSetFromContext(ctx)
 		if fs == nil {
-			return false
+			return ""
 		}
 		// flag.FlagSet.Visit visits only flags explicitly set on the command line.
-		found := false
+		var val string
 		fs.FlagSet().Visit(func(f *flag.Flag) {
-			if f.Name == "v" {
-				found = true
+			if f.Name == "from" {
+				val = f.Value.String()
 			}
 		})
-		return found
+		return val
 	}
 
 	runner := func(ctx context.Context, values any, _ []string) error {
-		_ = globalValues // accessed via package-level variable as usual
 		r := values.(*rangeFlags)
-		fmt.Printf("verbose=%v %v..%v\n", isVerbose(ctx), r.From, r.To)
+		fmt.Printf("from-flag=%q %v..%v\n", fromFlag(ctx), r.From, r.To)
 		return nil
 	}
 
@@ -311,20 +294,17 @@ func ExampleFlagSetFromContext() {
 	cmd := subcmd.NewCommand("ranger", fs, runner, subcmd.WithoutArguments())
 	cmd.Document("print an integer range")
 	cmdset := subcmd.NewCommandSet(cmd)
-	globals := subcmd.NewFlagSet()
-	globals.MustRegisterFlagStruct(&globalValues, nil, nil)
-	cmdset.WithGlobalFlags(globals)
 
 	if err := cmdset.DispatchWithArgs(ctx, "example-command", "ranger"); err != nil {
 		panic(err)
 	}
-	if err := cmdset.DispatchWithArgs(ctx, "example-command", "-v=1", "ranger"); err != nil {
+	if err := cmdset.DispatchWithArgs(ctx, "example-command", "ranger", "--from=10"); err != nil {
 		panic(err)
 	}
 
 	// Output:
-	// verbose=false 1..2
-	// verbose=true 1..2
+	// from-flag="" 1..2
+	// from-flag="10" 10..2
 }
 
 func TestMultiLevel(t *testing.T) {
