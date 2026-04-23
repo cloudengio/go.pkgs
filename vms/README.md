@@ -11,15 +11,16 @@ followed by the actions that can be applied and the resulting next state.
 operation completes.
 
     Initial         Clone -> Cloning
+    Cloning         (waiting) -> Cloning
     Starting        (waiting) -> Starting
     Running         Stop -> Stopping,  Suspend -> Suspending
     Stopping        (waiting) -> Stopping
-    Stopped         Run -> Starting,  Stop -> Stopped,  Delete -> Deleting
+    Stopped         Start -> Starting,  Stop -> Stopped,  Delete -> Deleting
     Suspending      (waiting) -> Suspending
-    Suspended       Run -> Starting,  Suspend -> Suspended,  Delete -> Deleting
+    Suspended       Start -> Starting,  Suspend -> Suspended,  Delete -> Deleting
     Deleting        (waiting) -> Deleting
     Deleted         Clone -> Cloning
-    State(10)       Delete -> Deleting
+    ErrorUnknown    Delete -> Deleting
 
 ## Functions
 ### Func CleanupVM
@@ -41,11 +42,11 @@ transitions to out.
 ```go
 func WaitForState(ctx context.Context, inst Instance, interval time.Duration, final State, intermediate ...State) error
 ```
-WaitForStateermediate polls inst.State until it returns the requised
-final state or the context is done. If intermediate states are provided,
-it also checks that any intermediate states returned by inst.State are
-in the set of allowed intermediate states on the way to the final state,
-returning an error if an unexpected intermediate state is observed.
+WaitForState polls inst.State until it returns the requested final state
+or the context is done. If intermediate states are provided, it also checks
+that any intermediate states returned by inst.State are in the set of
+allowed intermediate states on the way to the final state, returning an
+error if an unexpected intermediate state is observed.
 
 
 
@@ -84,7 +85,7 @@ func (a Action) String() string
 type Instance interface {
 
 	// Clone prepares an instance for being stated. It should be
-	// a synchronouse operation and hwne it returns the state should be Stopped.
+	// a synchronous operation and when it returns the state should be Stopped.
 	// States: success: [Initial] -> Cloning -> Stopped
 	// States:   error: [Initial] -> Cloning -> Initial
 	Clone(ctx context.Context) error
@@ -97,20 +98,21 @@ type Instance interface {
 	// Stop stops the instance. It returns once the instance is stopped.
 	// The timeout parameter specifies how long to wait for a graceful shutdown
 	// before forcefully shutting down the vm instance.
-	// States: [Running, Stopped] -> Stopping -> Stopped
-	// States: error: [Running] -> Stopping -> Stopped or StateErrorUnknown
+	// States: success: [Running, Stopped] -> Stopping -> Stopped
+	// States:   error: [Running] -> Stopping -> Stopped or StateErrorUnknown
 	Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error)
 
 	// Suspendable returns true if the instance supports being suspended.
 	Suspendable() bool
 
 	// Suspend suspends the instance. It returns once the instance is suspended.
-	// States: [Running] -> Suspending -> Suspsended
-	// States: error: [Running] -> Suspending -> Suspended or StateErrorUnknown
+	// States: success: [Running] -> Suspending -> Suspended
+	// States:   error: [Running] -> Suspending -> Suspended or StateErrorUnknown
 	Suspend(ctx context.Context) error
 
 	// Delete deletes the instance.
-	// States: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted
+	// States: success: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted
+	// States:   error: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted or StateErrorUnknown
 	Delete(ctx context.Context) error
 
 	// State returns the current state of the instance, it may be
@@ -123,6 +125,7 @@ type Instance interface {
 	Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error
 
 	// Properties returns the properties of a running instance.
+	// Properties does not alter the state of an instance.
 	Properties(ctx context.Context) (Properties, error)
 }
 ```
@@ -130,8 +133,8 @@ Instance represents a virtual machine instance that can be managed through
 a lifecycle of states. Operations change the state of the instance as
 indicated below for successful operations. Error returning operations will
 either leave the state unchange, or transition to StateErrorUnknown if the
-state cannot be determined. Intgermediate states (eg. Stopping, Starting)
-may be observed while the operation is in progress.
+state cannot be determined. Intermediate states (eg. Stopping, Starting) may
+be observed while the operation is in progress.
 
 
 ### Type Properties
@@ -186,7 +189,7 @@ func (s State) String() string
 func (s State) Transition(action Action) (State, bool)
 ```
 Transition returns the next State reached by applying action to from,
-or an false if the transition is not valid.
+or false if the transition is not valid.
 
 
 ```go

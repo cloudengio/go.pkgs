@@ -7,13 +7,14 @@
 // no-op used to poll until an in-progress operation completes.
 //
 //	Initial         Clone -> Cloning
+//	Cloning         (waiting) -> Cloning
 //	Starting        (waiting) -> Starting
 //	Running         Stop -> Stopping,  Suspend -> Suspending
 //	Stopping        (waiting) -> Stopping
-//	Stopped         Run -> Starting,  Stop -> Stopped,  Delete -> Deleting
+//	Stopped         Start -> Starting,  Stop -> Stopped,  Delete -> Deleting
 //	Suspending      (waiting) -> Suspending
-//	Suspended       Run -> Starting,  Suspend -> Suspended,  Delete -> Deleting
+//	Suspended       Start -> Starting,  Suspend -> Suspended,  Delete -> Deleting
 //	Deleting        (waiting) -> Deleting
 //	Deleted         Clone -> Cloning
-//	State(10)       Delete -> Deleting
+//	ErrorUnknown    Delete -> Deleting
 package vms

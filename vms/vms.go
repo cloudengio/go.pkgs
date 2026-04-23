@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"cloudeng.io/errors"
 )
 
 // Properties represents the properties of a virtual machine instance.
@@ -28,12 +30,12 @@ type Properties struct {
 // Operations change the state of the instance as indicated below for
 // successful operations. Error returning operations will either leave the
 // state unchange, or transition to StateErrorUnknown if the state cannot
-// be determined. Intgermediate states (eg. Stopping, Starting) may
+// be determined. Intermediate states (eg. Stopping, Starting) may
 // be observed while the operation is in progress.
 type Instance interface {
 
 	// Clone prepares an instance for being stated. It should be
-	// a synchronouse operation and hwne it returns the state should be Stopped.
+	// a synchronous operation and when it returns the state should be Stopped.
 	// States: success: [Initial] -> Cloning -> Stopped
 	// States:   error: [Initial] -> Cloning -> Initial
 	Clone(ctx context.Context) error
@@ -46,20 +48,21 @@ type Instance interface {
 	// Stop stops the instance. It returns once the instance is stopped.
 	// The timeout parameter specifies how long to wait for a graceful shutdown
 	// before forcefully shutting down the vm instance.
-	// States: [Running, Stopped] -> Stopping -> Stopped
-	// States: error: [Running] -> Stopping -> Stopped or StateErrorUnknown
+	// States: success: [Running, Stopped] -> Stopping -> Stopped
+	// States:   error: [Running] -> Stopping -> Stopped or StateErrorUnknown
 	Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error)
 
 	// Suspendable returns true if the instance supports being suspended.
 	Suspendable() bool
 
 	// Suspend suspends the instance. It returns once the instance is suspended.
-	// States: [Running] -> Suspending -> Suspsended
-	// States: error: [Running] -> Suspending -> Suspended or StateErrorUnknown
+	// States: success: [Running] -> Suspending -> Suspended
+	// States:   error: [Running] -> Suspending -> Suspended or StateErrorUnknown
 	Suspend(ctx context.Context) error
 
 	// Delete deletes the instance.
-	// States: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted
+	// States: success: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted
+	// States:   error: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted or StateErrorUnknown
 	Delete(ctx context.Context) error
 
 	// State returns the current state of the instance, it may be
@@ -72,6 +75,7 @@ type Instance interface {
 	Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error
 
 	// Properties returns the properties of a running instance.
+	// Properties does not alter the state of an instance.
 	Properties(ctx context.Context) (Properties, error)
 }
 
@@ -110,6 +114,9 @@ var transitionTable = map[State]map[Action]State{
 	StateInitial: {
 		ActionClone: StateCloning,
 	},
+	StateCloning: {
+		ActionNone: StateCloning, // No-op to allow waiting for clone to complete
+	},
 	StateStarting: {
 		ActionNone: StateStarting, // No-op to allow waiting for start to complete
 	},
@@ -145,7 +152,7 @@ var transitionTable = map[State]map[Action]State{
 }
 
 // Transition returns the next State reached by applying action to from,
-// or an false if the transition is not valid.
+// or false if the transition is not valid.
 func (s State) Transition(action Action) (State, bool) {
 	if actions, ok := transitionTable[s]; ok {
 		if next, ok := actions[action]; ok {
@@ -192,6 +199,8 @@ func (s State) String() string {
 		return "Deleting"
 	case StateDeleted:
 		return "Deleted"
+	case StateErrorUnknown:
+		return "ErrorUnknown"
 	default:
 		return fmt.Sprintf("State(%d)", int(s))
 	}
@@ -204,7 +213,7 @@ func (a Action) String() string {
 	case ActionClone:
 		return "Clone"
 	case ActionStart:
-		return "Run"
+		return "Start"
 	case ActionStop:
 		return "Stop"
 	case ActionSuspend:
@@ -248,7 +257,7 @@ func PrintStates(out io.Writer) {
 	}
 }
 
-// WaitForStateermediate polls inst.State until it returns the requised final
+// WaitForState polls inst.State until it returns the requested final
 // state or the context is done. If intermediate states are provided, it also
 // checks that any intermediate states returned by inst.State are in the set of
 // allowed intermediate states on the way to the final state, returning an
@@ -259,8 +268,8 @@ func WaitForState(ctx context.Context, inst Instance, interval time.Duration, fi
 		if got == final {
 			return true, nil
 		}
-		if !slices.Contains(intermediate, got) {
-			return true, fmt.Errorf("unexpected intermdiate state %s, want %v on the way to %s", got, intermediate, final)
+		if len(intermediate) > 0 && !slices.Contains(intermediate, got) {
+			return true, fmt.Errorf("unexpected intermediate state %s, want %v on the way to %s", got, intermediate, final)
 		}
 		return false, nil
 	}
@@ -293,7 +302,10 @@ func CleanupVM(ctx context.Context, inst Instance) error {
 		return nil
 	case StateRunning:
 		if runErr, stopErr := inst.Stop(ctx, time.Second*30); runErr != nil || stopErr != nil {
-			return fmt.Errorf("cleanup: failed to stop VM: %w", runErr)
+			var errs errors.M
+			errs.Append(runErr)
+			errs.Append(stopErr)
+			return fmt.Errorf("cleanup: failed to stop VM: %w", errs.Err())
 		}
 		s = inst.State(ctx)
 		if s != StateStopped {

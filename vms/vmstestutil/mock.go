@@ -24,6 +24,7 @@ type Mock struct {
 	StartErr   error
 	StopRunErr error
 	StopErr    error
+	StopState  *vms.State
 	SuspendErr error
 	DeleteErr  error
 	ExecErr    error
@@ -37,7 +38,7 @@ func NewMock() *Mock {
 	}
 }
 
-func (m *Mock) Clone(ctx context.Context) error {
+func (m *Mock) Clone(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.CloneErr != nil {
@@ -47,7 +48,7 @@ func (m *Mock) Clone(ctx context.Context) error {
 	return nil
 }
 
-func (m *Mock) Start(ctx context.Context, stdout, stderr io.Writer) error {
+func (m *Mock) Start(_ context.Context, _, _ io.Writer) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.StartErr != nil {
@@ -58,14 +59,18 @@ func (m *Mock) Start(ctx context.Context, stdout, stderr io.Writer) error {
 	return nil
 }
 
-func (m *Mock) Stop(ctx context.Context, timeout time.Duration) (error, error) {
+func (m *Mock) Stop(_ context.Context, _ time.Duration) (error, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.StopRunErr != nil || m.StopErr != nil {
 		m.state = vms.StateErrorUnknown
 		return m.StopRunErr, m.StopErr
 	}
-	m.state = vms.StateStopped
+	if m.StopState != nil {
+		m.state = *m.StopState
+	} else {
+		m.state = vms.StateStopped
+	}
 	return nil, nil
 }
 
@@ -81,7 +86,7 @@ func (m *Mock) SetSuspendable(suspendable bool) {
 	m.isSuspend = suspendable
 }
 
-func (m *Mock) Suspend(ctx context.Context) error {
+func (m *Mock) Suspend(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.SuspendErr != nil {
@@ -92,7 +97,7 @@ func (m *Mock) Suspend(ctx context.Context) error {
 	return nil
 }
 
-func (m *Mock) Delete(ctx context.Context) error {
+func (m *Mock) Delete(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.DeleteErr != nil {
@@ -102,7 +107,7 @@ func (m *Mock) Delete(ctx context.Context) error {
 	return nil
 }
 
-func (m *Mock) State(ctx context.Context) vms.State {
+func (m *Mock) State(_ context.Context) vms.State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.state
@@ -114,14 +119,14 @@ func (m *Mock) SetState(state vms.State) {
 	m.state = state
 }
 
-func (m *Mock) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error {
+func (m *Mock) Exec(_ context.Context, _, _ io.Writer, _ string, _ ...string) error {
 	if m.ExecErr != nil {
 		return m.ExecErr
 	}
 	return nil
 }
 
-func (m *Mock) Properties(ctx context.Context) (vms.Properties, error) {
+func (m *Mock) Properties(_ context.Context) (vms.Properties, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.properties, nil

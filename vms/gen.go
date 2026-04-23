@@ -1,7 +1,7 @@
 //go:build ignore
 
-// gen.go generates transitions_gen.go, which contains a doc comment
-// describing all valid state machine transitions.
+// gen.go generates doc_gen.go, which contains a doc comment
+// describing the package and all valid state machine transitions.
 // Run via: go generate cloudeng.io/vms
 package main
 
