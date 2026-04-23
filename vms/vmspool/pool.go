@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"time"
 
 	"cloudeng.io/errors"
 	"cloudeng.io/logging/ctxlog"
@@ -37,12 +38,18 @@ type Pool struct {
 
 	bgCtx  context.Context
 	cancel context.CancelFunc
+
+	// mu guards closed and serialises wg.Add with Close's wg.Wait, preventing
+	// sync.WaitGroup misuse when Release/Acquire race with Close.
+	mu     sync.Mutex
+	closed bool
 	wg     sync.WaitGroup // tracks in-flight replenishment goroutines
 }
 
 type options struct {
-	size   int
-	logger *slog.Logger
+	size     int
+	logger   *slog.Logger
+	statusCh chan<- Event
 }
 
 const (
@@ -67,6 +74,15 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithStatus registers ch to receive pool lifecycle events. Sends are
+// non-blocking: events are dropped if ch is full. The caller is responsible
+// for sizing the channel appropriately and draining it promptly.
+func WithStatus(ch chan<- Event) Option {
+	return func(o *options) {
+		o.statusCh = ch
+	}
+}
+
 // New returns a Pool that will maintain size suspended VMs using constructor.
 // Call Start to fill the pool before calling Acquire.
 func New(ctx context.Context, constructor Constructor, opts ...Option) *Pool {
@@ -83,6 +99,16 @@ func New(ctx context.Context, constructor Constructor, opts ...Option) *Pool {
 		constructor: constructor,
 		ready:       make(chan vms.Instance, options.size),
 		done:        make(chan struct{}),
+	}
+}
+
+func (p *Pool) notify(kind EventKind, err error) {
+	if p.options.statusCh == nil {
+		return
+	}
+	select {
+	case p.options.statusCh <- Event{Time: time.Now(), Kind: kind, Err: err}:
+	default:
 	}
 }
 
@@ -137,32 +163,57 @@ func (p *Pool) createVM(ctx context.Context) error {
 	}
 }
 
+// scheduleReplenish launches a replenishment goroutine unless the pool is
+// already closed. wg.Add and the closed check are performed under mu so that
+// Close cannot call wg.Wait between the check and the Add.
+func (p *Pool) scheduleReplenish() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
+	p.wg.Add(1)
+	p.notify(EventReplenishStarted, nil)
+	go p.replenish()
+}
+
 // replenish creates one VM and adds it to the pool. Silently drops the VM if
 // the pool is shutting down. Intended to run as a goroutine.
 func (p *Pool) replenish() {
 	defer p.wg.Done()
-	_ = p.createVM(p.bgCtx)
+	if err := p.createVM(p.bgCtx); err != nil {
+		p.notify(EventReplenishFailed, err)
+	} else {
+		p.notify(EventReplenished, nil)
+	}
 }
 
 // Acquire waits for a suspended VM, starts it, and returns a handle. The
 // caller must call VM.Release when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
+	p.notify(EventAcquireWaiting, nil)
 	var inst vms.Instance
 	select {
 	case <-ctx.Done():
+		p.notify(EventAcquireFailed, ctx.Err())
 		return nil, ctx.Err()
 	case <-p.done:
-		return nil, fmt.Errorf("vmspool: pool is closed")
+		err := fmt.Errorf("vmspool: pool is closed")
+		p.notify(EventAcquireFailed, err)
+		return nil, err
 	case inst = <-p.ready:
 	}
+	p.notify(EventVMDequeued, nil)
 	if err := inst.Start(ctx, io.Discard, io.Discard); err != nil {
 		// Start failed; clean up the VM and replenish so the pool stays full.
 		_ = vms.CleanupVM(context.Background(), inst)
-		p.wg.Add(1)
-		go p.replenish()
-		return nil, fmt.Errorf("vmspool: acquire: %w", err)
+		p.scheduleReplenish()
+		err = fmt.Errorf("vmspool: acquire: %w", err)
+		p.notify(EventAcquireFailed, err)
+		return nil, err
 	}
+	p.notify(EventAcquired, nil)
 	return &VM{inst: inst, pool: p}, nil
 }
 
@@ -175,6 +226,11 @@ func (p *Pool) Close(ctx context.Context) error {
 		}
 		close(p.done)
 	})
+	// Mark closed under mu before waiting, so no concurrent scheduleReplenish
+	// can call wg.Add after wg.Wait begins.
+	p.mu.Lock()
+	p.closed = true
+	p.mu.Unlock()
 	p.wg.Wait()
 
 	var errs errors.M
@@ -203,10 +259,11 @@ func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, arg
 // Release deletes the VM and asynchronously replenishes the pool with a new
 // suspended instance. It must be called exactly once per acquired VM.
 func (v *VM) Release(ctx context.Context) error {
+	v.pool.notify(EventRelease, nil)
 	if err := vms.CleanupVM(ctx, v.inst); err != nil {
 		return fmt.Errorf("vmspool: release: %w", err)
 	}
-	v.pool.wg.Add(1)
-	go v.pool.replenish()
+	v.pool.scheduleReplenish()
+	v.pool.notify(EventReleased, nil)
 	return nil
 }

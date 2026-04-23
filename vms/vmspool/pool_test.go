@@ -282,3 +282,132 @@ func TestPool_CreateVM_PartialCleanup(t *testing.T) {
 		t.Errorf("partially-created VM state = %s, want Deleted", got)
 	}
 }
+
+// TestPool_Status verifies that the status channel receives the expected events
+// for a basic acquire → exec → release cycle.
+func TestPool_Status(t *testing.T) {
+	statusCh := make(chan vmspool.Event, 64)
+
+	factory := vmstestutil.NewMockFactory("status-test")
+	p := vmspool.New(t.Context(), factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	vm, err := p.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if err := vm.Exec(context.Background(), io.Discard, io.Discard, "true"); err != nil {
+		t.Fatalf("Exec: %v", err)
+	}
+	if err := vm.Release(context.Background()); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	// Block until the replenishment goroutine completes by acquiring the new VM.
+	// We do not release vm2: releasing it would launch a second replenishment
+	// goroutine that could race with p.Close cancelling the background context.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	vm2, err := p.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("second Acquire (wait for replenishment): %v", err)
+	}
+	_ = vm2 // held intentionally; p.Close cleans up the pool without affecting it.
+
+	if err := p.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var events []vmspool.EventKind
+	for {
+		select {
+		case e := <-statusCh:
+			events = append(events, e.Kind)
+		default:
+			goto done
+		}
+	}
+done:
+
+	// One acquire→release cycle emits each of these exactly once;
+	// the second Acquire (to confirm replenishment) contributes Waiting/Dequeued/Acquired.
+	wantCounts := map[vmspool.EventKind]int{
+		vmspool.EventAcquireWaiting:   2,
+		vmspool.EventVMDequeued:       2,
+		vmspool.EventAcquired:         2,
+		vmspool.EventRelease:          1,
+		vmspool.EventReleased:         1,
+		vmspool.EventReplenishStarted: 1,
+		vmspool.EventReplenished:      1,
+	}
+	counts := make(map[vmspool.EventKind]int)
+	for _, e := range events {
+		counts[e]++
+	}
+	for kind, want := range wantCounts {
+		if counts[kind] != want {
+			t.Errorf("event %s: got %d, want %d  (full sequence: %v)", kind, counts[kind], want, events)
+		}
+	}
+
+	// Within the same goroutine, Waiting → Dequeued → Acquired is guaranteed.
+	// Verify the two Waiting events each precede their paired Dequeued.
+	assertPrecedes(t, events, vmspool.EventAcquireWaiting, vmspool.EventVMDequeued)
+	assertPrecedes(t, events, vmspool.EventVMDequeued, vmspool.EventAcquired)
+	// Release → ReplenishStarted → Released happen in the same goroutine.
+	assertPrecedes(t, events, vmspool.EventRelease, vmspool.EventReplenishStarted)
+	assertPrecedes(t, events, vmspool.EventReplenishStarted, vmspool.EventReleased)
+	// ReplenishStarted always precedes Replenished.
+	assertPrecedes(t, events, vmspool.EventReplenishStarted, vmspool.EventReplenished)
+}
+
+// assertPrecedes checks that at least one occurrence of before appears earlier
+// in events than at least one occurrence of after.
+func assertPrecedes(t *testing.T, events []vmspool.EventKind, before, after vmspool.EventKind) {
+	t.Helper()
+	for i, e := range events {
+		if e != before {
+			continue
+		}
+		for _, e2 := range events[i+1:] {
+			if e2 == after {
+				return
+			}
+		}
+	}
+	t.Errorf("no occurrence of %s found before %s in %v", before, after, events)
+}
+
+// TestPool_ReleaseCloseRace verifies that Release and Close can run concurrently
+// without triggering sync.WaitGroup misuse (Add after Wait) or a data race.
+// Run with -race to validate.
+func TestPool_ReleaseCloseRace(t *testing.T) {
+	const iterations = 100
+	for range iterations {
+		factory := vmstestutil.NewMockFactory("release-close-race")
+		p := vmspool.New(t.Context(), factory, vmspool.WithSize(1))
+		if err := p.Start(context.Background()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		vm, err := p.Acquire(context.Background())
+		if err != nil {
+			t.Fatalf("Acquire: %v", err)
+		}
+
+		// Release and Close race: exactly the scenario that caused wg misuse.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_ = vm.Release(context.Background())
+		}()
+		go func() {
+			defer wg.Done()
+			_ = p.Close(context.Background())
+		}()
+		wg.Wait()
+	}
+}

@@ -171,7 +171,7 @@ type MockFactory struct {
 // NewMockFactory returns an empty MockFactory.
 func NewMockFactory(name string) *MockFactory { return &MockFactory{name: name} }
 
-// Inject queues m to be returned by the next Constructor call instead of
+// Inject queues m to be returned by the next New call instead of
 // a freshly allocated Mock. Useful for injecting pre-configured error states.
 func (f *MockFactory) Inject(m *Mock) {
 	f.mu.Lock()
