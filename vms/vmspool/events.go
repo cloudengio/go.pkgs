@@ -23,8 +23,12 @@ const (
 	EventAcquired
 
 	// EventAcquireFailed is emitted when Acquire returns an error (context
-	// cancelled, pool closed, or VM start failure). Err is set.
+	// cancelled or VM start failure). Err is set.
 	EventAcquireFailed
+
+	// EventAttemptToUseClosedPool is emitted when Acquire is called on a pool
+	// that is already closed or has been signalled to close. Err is set.
+	EventAttemptToUseClosedPool
 
 	// EventRelease is emitted when Release is called by the caller.
 	EventRelease
@@ -57,6 +61,8 @@ func (e EventKind) String() string {
 		return "Acquired"
 	case EventAcquireFailed:
 		return "AcquireFailed"
+	case EventAttemptToUseClosedPool:
+		return "AttemptToUseClosedPool"
 	case EventRelease:
 		return "Release"
 	case EventReleased:

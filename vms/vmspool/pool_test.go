@@ -17,9 +17,9 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func newPool(t *testing.T, size uint, factory *vmstestutil.MockFactory) *vmspool.Pool {
+func newPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
 	t.Helper()
-	p := vmspool.New(t.Context(), factory, vmspool.WithSize(size))
+	p := vmspool.New(factory, vmspool.WithSize(size))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("pool.Start: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestPool_Release(t *testing.T) {
 // TestPool_Close verifies that Close deletes all suspended VMs in the pool.
 func TestPool_Close(t *testing.T) {
 	factory := vmstestutil.NewMockFactory("close-test")
-	p := vmspool.New(t.Context(), factory, vmspool.WithSize(3))
+	p := vmspool.New(factory, vmspool.WithSize(3))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestPool_StartError(t *testing.T) {
 	bad.CloneErr = cloneErr
 	factory.Inject(bad)
 
-	p := vmspool.New(t.Context(), factory, vmspool.WithSize(1))
+	p := vmspool.New(factory, vmspool.WithSize(1))
 	err := p.Start(context.Background())
 	if err == nil {
 		t.Fatal("expected Start to fail")
@@ -264,7 +264,7 @@ func TestPool_CreateVM_PartialCleanup(t *testing.T) {
 	bad.SuspendErr = suspendErr
 	factory.Inject(bad)
 
-	p := vmspool.New(t.Context(), factory, vmspool.WithSize(1))
+	p := vmspool.New(factory, vmspool.WithSize(1))
 	err := p.Start(ctx)
 	if err == nil {
 		t.Fatal("expected Start to fail")
@@ -289,7 +289,7 @@ func TestPool_Status(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
 	factory := vmstestutil.NewMockFactory("status-test")
-	p := vmspool.New(t.Context(), factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestPool_ReleaseCloseRace(t *testing.T) {
 	const iterations = 100
 	for range iterations {
 		factory := vmstestutil.NewMockFactory("release-close-race")
-		p := vmspool.New(t.Context(), factory, vmspool.WithSize(1))
+		p := vmspool.New(factory, vmspool.WithSize(1))
 		if err := p.Start(context.Background()); err != nil {
 			t.Fatalf("Start: %v", err)
 		}

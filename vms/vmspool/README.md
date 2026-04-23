@@ -30,6 +30,70 @@ Constructor is a function that creates a new, uninitialized VM instance.
 Each call must return a distinct instance.
 
 
+### Type Event
+```go
+type Event struct {
+	Time time.Time
+	Kind EventKind
+	Err  error // non-nil for *Failed events
+}
+```
+Event describes a single pool lifecycle event.
+
+
+### Type EventKind
+```go
+type EventKind int
+```
+EventKind identifies the type of pool event sent to a status channel.
+
+### Constants
+### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventReplenishStarted, EventReplenished, EventReplenishFailed
+```go
+// EventAcquireWaiting is emitted when Acquire is called and blocks
+// waiting for a suspended VM to become available.
+EventAcquireWaiting EventKind = iota
+// EventVMDequeued is emitted when a suspended VM is taken from the pool
+// and is about to be started for the caller.
+EventVMDequeued
+// EventAcquired is emitted when the VM has been started and is returned
+// to the caller.
+EventAcquired
+// EventAcquireFailed is emitted when Acquire returns an error (context
+// cancelled or VM start failure). Err is set.
+EventAcquireFailed
+// EventAttemptToUseClosedPool is emitted when Acquire is called on a pool
+// that is already closed or has been signalled to close. Err is set.
+EventAttemptToUseClosedPool
+// EventRelease is emitted when Release is called by the caller.
+EventRelease
+// EventReleased is emitted after the VM has been deleted and
+// replenishment has been scheduled.
+EventReleased
+// EventReplenishStarted is emitted when a replenishment goroutine is
+// launched to restore the pool to its target size.
+EventReplenishStarted
+// EventReplenished is emitted when a new VM has been suspended and
+// placed in the pool, restoring one unit of capacity.
+EventReplenished
+// EventReplenishFailed is emitted when VM creation during replenishment
+// fails. The pool shrinks by one until a later replenishment succeeds.
+// Err is set.
+EventReplenishFailed
+
+```
+
+
+
+### Methods
+
+```go
+func (e EventKind) String() string
+```
+
+
+
+
 ### Type Option
 ```go
 type Option func(*options)
@@ -38,17 +102,18 @@ type Option func(*options)
 ### Functions
 
 ```go
-func WithLogger(logger *slog.Logger) Option
-```
-WithLogger sets the logger used to report pool events and errors. The
-default is the logger from the context at the time of Pool creation.
-
-
-```go
 func WithSize(size int) Option
 ```
 WithSize sets the number of VMs to maintain in the pool. The default is
-DefaultPoolSize.
+DefaultPoolSize. A 0 or negative value is treated as DefaultPoolSize.
+
+
+```go
+func WithStatus(ch chan<- Event) Option
+```
+WithStatus registers ch to receive pool lifecycle events. Sends are
+non-blocking: events are dropped if ch is full. The caller is responsible
+for sizing the channel appropriately and draining it promptly.
 
 
 
@@ -64,7 +129,7 @@ Pool manages a fixed-size set of suspended virtual machine instances.
 ### Functions
 
 ```go
-func New(ctx context.Context, constructor Constructor, opts ...Option) *Pool
+func New(constructor Constructor, opts ...Option) *Pool
 ```
 New returns a Pool that will maintain size suspended VMs using constructor.
 Call Start to fill the pool before calling Acquire.

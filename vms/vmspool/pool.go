@@ -12,12 +12,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"sync"
 	"time"
 
 	"cloudeng.io/errors"
-	"cloudeng.io/logging/ctxlog"
 	"cloudeng.io/vms"
 )
 
@@ -34,6 +32,7 @@ type Pool struct {
 	constructor Constructor
 	ready       chan vms.Instance // suspended VMs waiting to be acquired
 	done        chan struct{}     // closed by Close to signal pool shutdown
+	startOnce   sync.Once
 	closeOnce   sync.Once
 
 	bgCtx  context.Context
@@ -48,7 +47,6 @@ type Pool struct {
 
 type options struct {
 	size     int
-	logger   *slog.Logger
 	statusCh chan<- Event
 }
 
@@ -59,18 +57,13 @@ const (
 type Option func(*options)
 
 // WithSize sets the number of VMs to maintain in the pool. The default is
-// DefaultPoolSize.
-func WithSize(size uint) Option {
+// DefaultPoolSize. A 0 or negative value is treated as DefaultPoolSize.
+func WithSize(size int) Option {
 	return func(o *options) {
-		o.size = int(size)
-	}
-}
-
-// WithLogger sets the logger used to report pool events and errors. The default is
-// the logger from the context at the time of Pool creation.
-func WithLogger(logger *slog.Logger) Option {
-	return func(o *options) {
-		o.logger = logger
+		if size <= 0 {
+			size = DefaultPoolSize
+		}
+		o.size = size
 	}
 }
 
@@ -85,15 +78,12 @@ func WithStatus(ch chan<- Event) Option {
 
 // New returns a Pool that will maintain size suspended VMs using constructor.
 // Call Start to fill the pool before calling Acquire.
-func New(ctx context.Context, constructor Constructor, opts ...Option) *Pool {
+func New(constructor Constructor, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
-	options.logger = ctxlog.Logger(ctx)
 	for _, opt := range opts {
 		opt(&options)
 	}
-	options.logger = options.logger.With("vmpool", constructor.Name(), "size", options.size)
-	options.logger.Info("creating VM pool")
 	return &Pool{
 		options:     options,
 		constructor: constructor,
@@ -116,8 +106,15 @@ func (p *Pool) notify(kind EventKind, err error) {
 // ready or any creation step fails. The context governs both the initial fill
 // and background replenishment goroutines launched during the pool's lifetime.
 func (p *Pool) Start(ctx context.Context) error {
-	p.bgCtx, p.cancel = context.WithCancel(ctx) //nolint:gosec // G118 false positive
+	var err error
+	p.startOnce.Do(func() {
+		err = p.start(ctx)
+	})
+	return err
+}
 
+func (p *Pool) start(ctx context.Context) error {
+	p.bgCtx, p.cancel = context.WithCancel(ctx) //nolint:gosec // G118 false positive
 	type result struct{ err error }
 	results := make(chan result, p.options.size)
 	for range p.options.size {
@@ -131,6 +128,12 @@ func (p *Pool) Start(ctx context.Context) error {
 		errs.Append((<-results).err)
 	}
 	return errs.Err()
+}
+
+func (p *Pool) cleanupVM(inst vms.Instance) {
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	_ = vms.CleanupVM(cleanupCtx, inst)
+	cancel()
 }
 
 // createVM clones, starts, and suspends a new instance then places it in the
@@ -147,19 +150,19 @@ func (p *Pool) createVM() error {
 	}
 	if err := inst.Start(p.bgCtx, io.Discard, io.Discard); err != nil {
 		// Instance is Stopped after Clone; clean it up.
-		_ = vms.CleanupVM(context.Background(), inst)
+		p.cleanupVM(inst)
 		return fmt.Errorf("vmspool: start: %w", err)
 	}
 	if err := inst.Suspend(p.bgCtx); err != nil {
 		// Instance may be Running; stop and delete it.
-		_ = vms.CleanupVM(context.Background(), inst)
+		p.cleanupVM(inst)
 		return fmt.Errorf("vmspool: suspend: %w", err)
 	}
 	select {
 	case p.ready <- inst:
 		return nil
 	case <-p.bgCtx.Done():
-		_ = vms.CleanupVM(context.Background(), inst)
+		p.cleanupVM(inst)
 		return p.bgCtx.Err()
 	}
 }
@@ -193,6 +196,14 @@ func (p *Pool) replenish() {
 // caller must call VM.Release when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
+	p.mu.Lock()
+	closed := p.closed
+	p.mu.Unlock()
+	if closed {
+		err := fmt.Errorf("vmspool: pool is closed")
+		p.notify(EventAttemptToUseClosedPool, err)
+		return nil, err
+	}
 	p.notify(EventAcquireWaiting, nil)
 	var inst vms.Instance
 	select {
@@ -201,7 +212,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 		return nil, ctx.Err()
 	case <-p.done:
 		err := fmt.Errorf("vmspool: pool is closed")
-		p.notify(EventAcquireFailed, err)
+		p.notify(EventAttemptToUseClosedPool, err)
 		return nil, err
 	case inst = <-p.ready:
 	}
