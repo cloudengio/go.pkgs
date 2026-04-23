@@ -78,4 +78,3 @@ type Event struct {
 	Kind EventKind
 	Err  error // non-nil for *Failed events
 }
-

@@ -122,7 +122,7 @@ func (p *Pool) Start(ctx context.Context) error {
 	results := make(chan result, p.options.size)
 	for range p.options.size {
 		go func() {
-			results <- result{err: p.createVM(p.bgCtx)}
+			results <- result{err: p.createVM()}
 		}()
 	}
 
@@ -136,30 +136,31 @@ func (p *Pool) Start(ctx context.Context) error {
 // createVM clones, starts, and suspends a new instance then places it in the
 // ready channel. Returns an error if any step fails or the context is done.
 // Any partially-created instance is cleaned up before returning an error.
-func (p *Pool) createVM(ctx context.Context) error {
-	bgCtx := context.Background()
+func (p *Pool) createVM() error {
+	// uses p.bgCtx so that cancellation from Close can interrupt
+	// creation and clean up
 	inst := p.constructor.New()
-	if err := inst.Clone(ctx); err != nil {
+	if err := inst.Clone(p.bgCtx); err != nil {
 		// Clone transitions from Initial; nothing to clean up beyond the
 		// instance itself, which is already in Initial/Deleted state.
 		return fmt.Errorf("vmspool: clone: %w", err)
 	}
-	if err := inst.Start(ctx, io.Discard, io.Discard); err != nil {
+	if err := inst.Start(p.bgCtx, io.Discard, io.Discard); err != nil {
 		// Instance is Stopped after Clone; clean it up.
-		_ = vms.CleanupVM(bgCtx, inst)
+		_ = vms.CleanupVM(context.Background(), inst)
 		return fmt.Errorf("vmspool: start: %w", err)
 	}
-	if err := inst.Suspend(ctx); err != nil {
+	if err := inst.Suspend(p.bgCtx); err != nil {
 		// Instance may be Running; stop and delete it.
-		_ = vms.CleanupVM(bgCtx, inst)
+		_ = vms.CleanupVM(context.Background(), inst)
 		return fmt.Errorf("vmspool: suspend: %w", err)
 	}
 	select {
 	case p.ready <- inst:
 		return nil
-	case <-ctx.Done():
-		_ = vms.CleanupVM(bgCtx, inst)
-		return ctx.Err()
+	case <-p.bgCtx.Done():
+		_ = vms.CleanupVM(context.Background(), inst)
+		return p.bgCtx.Err()
 	}
 }
 
@@ -181,7 +182,7 @@ func (p *Pool) scheduleReplenish() {
 // the pool is shutting down. Intended to run as a goroutine.
 func (p *Pool) replenish() {
 	defer p.wg.Done()
-	if err := p.createVM(p.bgCtx); err != nil {
+	if err := p.createVM(); err != nil {
 		p.notify(EventReplenishFailed, err)
 	} else {
 		p.notify(EventReplenished, nil)
