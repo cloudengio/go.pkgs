@@ -9,6 +9,7 @@ import "runtime"
 type TestingT interface {
 	Helper()
 	Skipf(format string, args ...any)
+	Fatalf(format string, args ...any)
 	Name() string
 }
 

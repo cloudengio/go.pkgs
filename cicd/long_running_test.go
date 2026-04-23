@@ -59,7 +59,10 @@ func TestParseLongRunningTestsEnv(t *testing.T) {
 			// parseLongRunningTestsEnv reads the env directly on each call;
 			// the Once-cached wrapper is tested separately via LongRunnningTest.
 			t.Setenv(LongRunningTestsEnv, tc.value)
-			gotEnabled, gotLevel, gotRegex := parseLongRunningTestsEnv()
+			gotEnabled, gotLevel, gotRegex, err := parseLongRunningTestsEnv()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			if gotEnabled != tc.wantEnabled {
 				t.Errorf("enabled: got %v, want %v", gotEnabled, tc.wantEnabled)
@@ -139,7 +142,7 @@ func TestLongRunnningTest(t *testing.T) {
 			resetOnce()
 
 			m := &mockT{name: tc.testName}
-			LongRunnningTest(m, tc.level)
+			LongRunningTest(m, tc.level)
 			if m.skipped != tc.wantSkipped {
 				t.Errorf("skipped: got %v, want %v (skipMsg: %q)", m.skipped, tc.wantSkipped, m.skipMsg)
 			}

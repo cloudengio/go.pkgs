@@ -21,6 +21,9 @@ type mockT struct {
 func (m *mockT) Helper()                  { m.helpCalls++ }
 func (m *mockT) Skipf(f string, a ...any) { m.skipped = true; m.skipMsg = fmt.Sprintf(f, a...) }
 func (m *mockT) Name() string             { return m.name }
+func (m *mockT) Fatalf(format string, args ...any) {
+	panic(fmt.Sprintf(format, args...))
+}
 
 func TestSkipIf(t *testing.T) {
 	m := &mockT{name: "TestSkipIf"}
