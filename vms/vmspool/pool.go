@@ -19,11 +19,10 @@ import (
 	"cloudeng.io/vms"
 )
 
-// Constructor is a function that creates a new, uninitialized VM instance.
-// Each call must return a distinct instance.
+// Constructor is an interface used to create new, uninitialized VM instances.
+// Each call must return a distinct vms.Instance.
 type Constructor interface {
 	New() vms.Instance
-	Name() string
 }
 
 // Pool manages a fixed-size set of suspended virtual machine instances.
