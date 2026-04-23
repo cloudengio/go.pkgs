@@ -324,3 +324,8 @@ func CleanupVM(ctx context.Context, inst Instance) error {
 	}
 	return nil
 }
+
+var (
+	ErrVMNotFound   = errors.New("virtual machine not found")
+	ErrVMNotRunning = errors.New("virtual machine not running")
+)

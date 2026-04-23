@@ -9,20 +9,18 @@ package awstestutil
 import (
 	"os"
 	"testing"
+
+	"cloudeng.io/cicd"
 )
 
-func isOnGitHubActions() bool {
-	return os.Getenv("GITHUB_ACTIONS") != ""
-}
-
 func SkipAWSTests(t *testing.T) {
-	if isOnGitHubActions() {
-		t.Skip("skipping test on github actions")
+	if cicd.IsGitHubActions() {
+		t.Skip("skipping test on GitHub actions")
 	}
 }
 
 func AWSTestMain(m *testing.M, service **AWS, opts ...Option) {
-	if isOnGitHubActions() {
+	if cicd.IsGitHubActions() {
 		os.Exit(m.Run())
 	}
 	withGnomock(m, service, opts)
