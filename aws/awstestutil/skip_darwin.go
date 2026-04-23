@@ -15,7 +15,7 @@ import (
 
 func SkipAWSTests(t *testing.T) {
 	if cicd.IsGitHubActions() {
-		t.Skip("skipping test on github actions")
+		t.Skip("skipping test on GitHub actions")
 	}
 }
 
