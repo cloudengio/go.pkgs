@@ -6,6 +6,16 @@ import cloudeng.io/vms/vmstestutil
 
 
 ## Types
+### Type ExecCall
+```go
+type ExecCall struct {
+	Cmd  string
+	Args []string
+}
+```
+ExecCall records a single invocation of Mock.Exec.
+
+
 ### Type Mock
 ```go
 type Mock struct {
@@ -44,8 +54,14 @@ func (m *Mock) Delete(_ context.Context) error
 
 
 ```go
-func (m *Mock) Exec(_ context.Context, _, _ io.Writer, _ string, _ ...string) error
+func (m *Mock) Exec(_ context.Context, _, _ io.Writer, cmd string, args ...string) error
 ```
+
+
+```go
+func (m *Mock) ExecCalls() []ExecCall
+```
+ExecCalls returns all recorded Exec invocations.
 
 
 ```go
@@ -90,6 +106,52 @@ func (m *Mock) Suspend(_ context.Context) error
 
 ```go
 func (m *Mock) Suspendable() bool
+```
+
+
+
+
+### Type MockFactory
+```go
+type MockFactory struct {
+	// contains filtered or unexported fields
+}
+```
+MockFactory creates and tracks Mock instances for pool and integration
+tests. Use Inject to pre-supply configured mocks; otherwise Constructor
+creates plain NewMock instances on demand.
+
+### Functions
+
+```go
+func NewMockFactory(name string) *MockFactory
+```
+NewMockFactory returns an empty MockFactory.
+
+
+
+### Methods
+
+```go
+func (f *MockFactory) Inject(m *Mock)
+```
+Inject queues m to be returned by the next Constructor call instead of a
+freshly allocated Mock. Useful for injecting pre-configured error states.
+
+
+```go
+func (f *MockFactory) Mocks() []*Mock
+```
+Mocks returns a snapshot of all Mock instances produced so far.
+
+
+```go
+func (f *MockFactory) Name() string
+```
+
+
+```go
+func (f *MockFactory) New() vms.Instance
 ```
 
 

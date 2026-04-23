@@ -22,6 +22,16 @@ operation completes.
     Deleted         Clone -> Cloning
     ErrorUnknown    Delete -> Deleting
 
+## Variables
+### ErrVMNotFound, ErrVMNotRunning
+```go
+ErrVMNotFound = errors.New("virtual machine not found")
+ErrVMNotRunning = errors.New("virtual machine not running")
+
+```
+
+
+
 ## Functions
 ### Func CleanupVM
 ```go
