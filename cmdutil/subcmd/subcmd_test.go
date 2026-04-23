@@ -227,61 +227,83 @@ func TestCommandOptions(t *testing.T) {
 	expectedNArgs(3)
 }
 
-func TestCommandSetFromContext(t *testing.T) {
+func TestFlagSetFromContext(t *testing.T) {
 	ctx := context.Background()
 
-	var capturedCmdSet *subcmd.CommandSet
+	type globalFlags struct {
+		Verbose bool `subcmd:"v,false,enable verbose output"`
+	}
+	var globalValues globalFlags
+
+	var capturedFS *subcmd.FlagSet
 	runner := func(ctx context.Context, _ any, _ []string) error {
-		capturedCmdSet = subcmd.CommandSetFromContext(ctx)
+		capturedFS = subcmd.FlagSetFromContext(ctx)
 		return nil
 	}
 
-	fs := subcmd.NewFlagSet()
-	if err := fs.RegisterFlagStruct(&flagsA{}, nil, nil); err != nil {
+	cmdFS := subcmd.NewFlagSet()
+	if err := cmdFS.RegisterFlagStruct(&flagsA{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	cmd := subcmd.NewCommand("cmd-a", fs, runner)
+	cmd := subcmd.NewCommand("cmd-a", cmdFS, runner)
+
+	globals := subcmd.NewFlagSet()
+	if err := globals.RegisterFlagStruct(&globalValues, nil, nil); err != nil {
+		t.Fatal(err)
+	}
 	cmdset := subcmd.NewCommandSet(cmd)
+	cmdset.WithGlobalFlags(globals)
 
 	if err := cmdset.DispatchWithArgs(ctx, "test", "cmd-a"); err != nil {
 		t.Fatal(err)
 	}
-	if capturedCmdSet == nil {
-		t.Fatal("expected CommandSet in context, got nil")
+	if capturedFS == nil {
+		t.Fatal("expected FlagSet in context, got nil")
 	}
-	if capturedCmdSet != cmdset {
-		t.Error("CommandSet from context is not the expected CommandSet")
+	if capturedFS != globals {
+		t.Error("FlagSet from context is not the expected global FlagSet")
 	}
 
-	// CommandSetFromContext returns nil when there is no CommandSet in the context.
-	if got := subcmd.CommandSetFromContext(ctx); got != nil {
+	// FlagSetFromContext returns nil when there is no FlagSet in the context.
+	if got := subcmd.FlagSetFromContext(ctx); got != nil {
 		t.Errorf("expected nil, got %v", got)
 	}
 }
 
-func ExampleCommandSetFromContext() {
+func ExampleFlagSetFromContext() {
 	ctx := context.Background()
+
+	type globalFlags struct {
+		Verbosity int `subcmd:"v,,debugging verbosity"`
+	}
+	var globalValues globalFlags
 
 	type rangeFlags struct {
 		From int `subcmd:"from,1,start value for a range"`
 		To   int `subcmd:"to,2,end value for a range"`
 	}
 
-	// A helper function that retrieves the CommandSet from the context
-	// and uses it to produce usage text.
-	printUsage := func(ctx context.Context, name string) {
-		cmdset := subcmd.CommandSetFromContext(ctx)
-		if cmdset == nil {
-			fmt.Println("no CommandSet in context")
-			return
+	// isVerbose can be called from any helper that only has a context,
+	// without needing a closure over globalValues.
+	isVerbose := func(ctx context.Context) bool {
+		fs := subcmd.FlagSetFromContext(ctx)
+		if fs == nil {
+			return false
 		}
-		fmt.Print(cmdset.Usage(name))
+		// flag.FlagSet.Visit visits only flags explicitly set on the command line.
+		found := false
+		fs.FlagSet().Visit(func(f *flag.Flag) {
+			if f.Name == "v" {
+				found = true
+			}
+		})
+		return found
 	}
 
 	runner := func(ctx context.Context, values any, _ []string) error {
+		_ = globalValues // accessed via package-level variable as usual
 		r := values.(*rangeFlags)
-		fmt.Printf("%v..%v\n", r.From, r.To)
-		printUsage(ctx, "example-command")
+		fmt.Printf("verbose=%v %v..%v\n", isVerbose(ctx), r.From, r.To)
 		return nil
 	}
 
@@ -289,16 +311,20 @@ func ExampleCommandSetFromContext() {
 	cmd := subcmd.NewCommand("ranger", fs, runner, subcmd.WithoutArguments())
 	cmd.Document("print an integer range")
 	cmdset := subcmd.NewCommandSet(cmd)
+	globals := subcmd.NewFlagSet()
+	globals.MustRegisterFlagStruct(&globalValues, nil, nil)
+	cmdset.WithGlobalFlags(globals)
 
 	if err := cmdset.DispatchWithArgs(ctx, "example-command", "ranger"); err != nil {
 		panic(err)
 	}
+	if err := cmdset.DispatchWithArgs(ctx, "example-command", "-v=1", "ranger"); err != nil {
+		panic(err)
+	}
 
 	// Output:
-	// 1..2
-	// Usage of example-command
-	//
-	//  ranger - print an integer range
+	// verbose=false 1..2
+	// verbose=true 1..2
 }
 
 func TestMultiLevel(t *testing.T) {
