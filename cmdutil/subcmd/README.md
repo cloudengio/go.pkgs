@@ -631,8 +631,8 @@ FlagSet returns the underlying flag.FlagSet.
 ```go
 func (cf *FlagSet) IsExplicitlySet(field string) bool
 ```
-IsExplicitlySet returns true if the supplied flag variable's value has been
-set via the command line, that is, it is not just a default value.
+IsExplicitlySet returns true if the supplied flag was explicitly provided on
+the command line.
 
 
 ```go

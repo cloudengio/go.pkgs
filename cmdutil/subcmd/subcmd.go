@@ -258,8 +258,8 @@ func (cf *FlagSet) FlagSet() *flag.FlagSet {
 	return cf.flagSet
 }
 
-// IsExplicitlySet returns true if the supplied flag variable's value has been
-// set via the command line, that is, it is not just a default value.
+// IsExplicitlySet returns true if the supplied flag was explicitly provided
+// on the command line.
 func (cf *FlagSet) IsExplicitlySet(field string) bool {
 	return cmdutil.IsExplicitlySet(cf.flagSet, field)
 }
@@ -782,7 +782,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		if err != nil {
 			return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
 		}
-		ctx = WithFlagSet(ctx, cmds.global) // Make the global FlagSet available to the Runner and any functions it calls.
+		ctx = WithFlagSet(ctx, cmd.flags) // Make the command's FlagSet available to the Runner and any functions it calls.
 		err = cmd.runner(ctx, cmd.flags.flagValues, args)
 		errs.Append(err)
 		return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
