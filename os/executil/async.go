@@ -58,3 +58,8 @@ func (aw *AsyncWait) Wait() error {
 	defer aw.mu.Unlock()
 	return aw.err
 }
+
+// Cmd returns the exec.Cmd being waited on.
+func (aw *AsyncWait) Cmd() *exec.Cmd {
+	return aw.cmd
+}
