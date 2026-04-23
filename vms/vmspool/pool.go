@@ -41,9 +41,8 @@ type Pool struct {
 }
 
 type options struct {
-	size        int
-	logger      *slog.Logger
-	constructor Constructor
+	size   int
+	logger *slog.Logger
 }
 
 const (
@@ -54,9 +53,9 @@ type Option func(*options)
 
 // WithSize sets the number of VMs to maintain in the pool. The default is
 // DefaultPoolSize.
-func WithSize(size int) Option {
+func WithSize(size uint) Option {
 	return func(o *options) {
-		o.size = size
+		o.size = int(size)
 	}
 }
 
@@ -110,22 +109,30 @@ func (p *Pool) Start(ctx context.Context) error {
 
 // createVM clones, starts, and suspends a new instance then places it in the
 // ready channel. Returns an error if any step fails or the context is done.
+// Any partially-created instance is cleaned up before returning an error.
 func (p *Pool) createVM(ctx context.Context) error {
+	bgCtx := context.Background()
 	inst := p.constructor.New()
 	if err := inst.Clone(ctx); err != nil {
+		// Clone transitions from Initial; nothing to clean up beyond the
+		// instance itself, which is already in Initial/Deleted state.
 		return fmt.Errorf("vmspool: clone: %w", err)
 	}
 	if err := inst.Start(ctx, io.Discard, io.Discard); err != nil {
-		return fmt.Errorf("vmspool: start for suspend: %w", err)
+		// Instance is Stopped after Clone; clean it up.
+		_ = vms.CleanupVM(bgCtx, inst)
+		return fmt.Errorf("vmspool: start: %w", err)
 	}
 	if err := inst.Suspend(ctx); err != nil {
+		// Instance may be Running; stop and delete it.
+		_ = vms.CleanupVM(bgCtx, inst)
 		return fmt.Errorf("vmspool: suspend: %w", err)
 	}
 	select {
 	case p.ready <- inst:
 		return nil
 	case <-ctx.Done():
-		_ = inst.Delete(context.Background())
+		_ = vms.CleanupVM(bgCtx, inst)
 		return ctx.Err()
 	}
 }
@@ -163,7 +170,9 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 // to finish, then deletes every suspended VM remaining in the pool.
 func (p *Pool) Close(ctx context.Context) error {
 	p.closeOnce.Do(func() {
-		p.cancel()
+		if p.cancel != nil {
+			p.cancel()
+		}
 		close(p.done)
 	})
 	p.wg.Wait()

@@ -17,7 +17,7 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func newPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
+func newPool(t *testing.T, size uint, factory *vmstestutil.MockFactory) *vmspool.Pool {
 	t.Helper()
 	p := vmspool.New(t.Context(), factory, vmspool.WithSize(size))
 	if err := p.Start(context.Background()); err != nil {
@@ -248,5 +248,37 @@ func TestPool_StartError(t *testing.T) {
 	}
 	if !errors.Is(err, cloneErr) {
 		t.Errorf("expected clone error, got %v", err)
+	}
+}
+
+// TestPool_CreateVM_PartialCleanup verifies that a VM is cleaned up when Start
+// or Suspend fails after Clone, preventing resource leaks.
+func TestPool_CreateVM_PartialCleanup(t *testing.T) {
+	ctx := context.Background()
+	suspendErr := errors.New("suspend failed")
+
+	// Inject a mock that succeeds Clone+Start but fails Suspend.
+	// After Suspend fails the instance is Running; createVM must delete it.
+	factory := vmstestutil.NewMockFactory("partial-cleanup-test")
+	bad := vmstestutil.NewMock()
+	bad.SuspendErr = suspendErr
+	factory.Inject(bad)
+
+	p := vmspool.New(t.Context(), factory, vmspool.WithSize(1))
+	err := p.Start(ctx)
+	if err == nil {
+		t.Fatal("expected Start to fail")
+	}
+	if !errors.Is(err, suspendErr) {
+		t.Errorf("expected suspend error, got %v", err)
+	}
+
+	// The VM that failed Suspend was Running; createVM must have cleaned it up.
+	mocks := factory.Mocks()
+	if len(mocks) != 1 {
+		t.Fatalf("expected 1 mock, got %d", len(mocks))
+	}
+	if got := mocks[0].State(ctx); got != vms.StateDeleted {
+		t.Errorf("partially-created VM state = %s, want Deleted", got)
 	}
 }
