@@ -776,6 +776,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		if err != nil {
 			return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
 		}
+		ctx = WithCommandSet(ctx, cmds) // Make the CommandSet available to the Runner and any functions it calls.
 		err = cmd.runner(ctx, cmd.flags.flagValues, args)
 		errs.Append(err)
 		return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
@@ -837,4 +838,22 @@ func (cmds *CommandSet) SetPreHooks(preHooks ...PreHook) {
 			cmd.opts.subcmds.SetPreHooks(preHooks...)
 		}
 	}
+}
+
+type cmdsetContextKey struct{}
+
+// WithCommandSet returns a copy of the parent context with the command set added.
+// It is used by subcmd to make the parent CommandSet available to a
+// command's Runner and any functions it calls.
+func WithCommandSet(ctx context.Context, cmdset *CommandSet) context.Context {
+	return context.WithValue(ctx, cmdsetContextKey{}, cmdset)
+}
+
+// CommandSetFromContext returns the CommandSet from the context if it exists.
+func CommandSetFromContext(ctx context.Context) *CommandSet {
+	cmdset, ok := ctx.Value(cmdsetContextKey{}).(*CommandSet)
+	if !ok {
+		return nil
+	}
+	return cmdset
 }

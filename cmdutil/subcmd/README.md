@@ -145,6 +145,14 @@ SanitizeYAML replaces tabs with two spaces to make it easier to write YAML
 in go string literals (where most editors will always use tabs). This does
 not guarantee correct alignment when spaces and tabs are mixed arbitrarily.
 
+### Func WithCommandSet
+```go
+func WithCommandSet(ctx context.Context, cmdset *CommandSet) context.Context
+```
+WithCommandSet returns a copy of the parent context with the command set
+added. It is used by subcmd to make the parent CommandSet available to a
+command's Runner and any functions it calls.
+
 
 
 ## Types
@@ -250,6 +258,12 @@ CommandSet represents a set of commands that are peers to each other,
 that is, the command line must specificy one of them.
 
 ### Functions
+
+```go
+func CommandSetFromContext(ctx context.Context) *CommandSet
+```
+CommandSetFromContext returns the CommandSet from the context if it exists.
+
 
 ```go
 func NewCommandSet(cmds ...*Command) *CommandSet

@@ -227,6 +227,80 @@ func TestCommandOptions(t *testing.T) {
 	expectedNArgs(3)
 }
 
+func TestCommandSetFromContext(t *testing.T) {
+	ctx := context.Background()
+
+	var capturedCmdSet *subcmd.CommandSet
+	runner := func(ctx context.Context, _ any, _ []string) error {
+		capturedCmdSet = subcmd.CommandSetFromContext(ctx)
+		return nil
+	}
+
+	fs := subcmd.NewFlagSet()
+	if err := fs.RegisterFlagStruct(&flagsA{}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	cmd := subcmd.NewCommand("cmd-a", fs, runner)
+	cmdset := subcmd.NewCommandSet(cmd)
+
+	if err := cmdset.DispatchWithArgs(ctx, "test", "cmd-a"); err != nil {
+		t.Fatal(err)
+	}
+	if capturedCmdSet == nil {
+		t.Fatal("expected CommandSet in context, got nil")
+	}
+	if capturedCmdSet != cmdset {
+		t.Error("CommandSet from context is not the expected CommandSet")
+	}
+
+	// CommandSetFromContext returns nil when there is no CommandSet in the context.
+	if got := subcmd.CommandSetFromContext(ctx); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func ExampleCommandSetFromContext() {
+	ctx := context.Background()
+
+	type rangeFlags struct {
+		From int `subcmd:"from,1,start value for a range"`
+		To   int `subcmd:"to,2,end value for a range"`
+	}
+
+	// A helper function that retrieves the CommandSet from the context
+	// and uses it to produce usage text.
+	printUsage := func(ctx context.Context, name string) {
+		cmdset := subcmd.CommandSetFromContext(ctx)
+		if cmdset == nil {
+			fmt.Println("no CommandSet in context")
+			return
+		}
+		fmt.Print(cmdset.Usage(name))
+	}
+
+	runner := func(ctx context.Context, values any, _ []string) error {
+		r := values.(*rangeFlags)
+		fmt.Printf("%v..%v\n", r.From, r.To)
+		printUsage(ctx, "example-command")
+		return nil
+	}
+
+	fs := subcmd.MustRegisterFlagStruct(&rangeFlags{}, nil, nil)
+	cmd := subcmd.NewCommand("ranger", fs, runner, subcmd.WithoutArguments())
+	cmd.Document("print an integer range")
+	cmdset := subcmd.NewCommandSet(cmd)
+
+	if err := cmdset.DispatchWithArgs(ctx, "example-command", "ranger"); err != nil {
+		panic(err)
+	}
+
+	// Output:
+	// 1..2
+	// Usage of example-command
+	//
+	//  ranger - print an integer range
+}
+
 func TestMultiLevel(t *testing.T) {
 	ctx := context.Background()
 
