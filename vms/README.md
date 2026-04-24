@@ -60,7 +60,7 @@ error if an unexpected intermediate state is observed.
 
 ### Func WaitForStateFunc
 ```go
-func WaitForStateFunc(inst Instance, interval time.Duration, final State, intermediate []State) func(context.Context) (bool, error)
+func WaitForStateFunc(inst Instance, final State, intermediate []State) func(context.Context) (bool, error)
 ```
 WaitForStateFunc returns a function that can be used with
 executil.WaitForSomething to wait for an instance to reach a final state,

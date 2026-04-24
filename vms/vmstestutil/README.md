@@ -19,6 +19,12 @@ ExecCall records a single invocation of Mock.Exec.
 ### Type Mock
 ```go
 type Mock struct {
+
+	// CloneBlock, if non-nil, causes Clone to block until the channel is
+	// closed or the context is cancelled. Used by tests to pause a VM
+	// mid-creation so the test can manipulate pool state before proceeding.
+	CloneBlock chan struct{}
+
 	CloneErr   error
 	StartErr   error
 	StopRunErr error
@@ -44,7 +50,7 @@ NewMock creates a new Mock VM instance.
 ### Methods
 
 ```go
-func (m *Mock) Clone(_ context.Context) error
+func (m *Mock) Clone(ctx context.Context) error
 ```
 
 

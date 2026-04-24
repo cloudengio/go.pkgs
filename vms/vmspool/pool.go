@@ -244,17 +244,17 @@ func (p *Pool) requestReplenish() {
 		p.closedMu.Unlock()
 		return
 	}
-	p.wg.Add(1)
+	p.wg.Go(func() {
+		p.replenishLoop(p.replenishCtx)
+	})
 	p.closedMu.Unlock()
 	p.notify(EventReplenishStarted, nil)
-	go p.replenishLoop(p.replenishCtx)
+
 }
 
 // replenishLoop runs a loop that tries to create a new VM and add it to the pool
 // until the pool is closed or the context is done.
 func (p *Pool) replenishLoop(ctx context.Context) {
-	defer p.wg.Done()
-
 	ctx, cancel := context.WithTimeout(ctx, p.options.replenishTimeout)
 	defer cancel()
 
@@ -263,7 +263,7 @@ func (p *Pool) replenishLoop(ctx context.Context) {
 	}
 
 	// Keep retyring to replenish the pool.
-	ticker := time.NewTimer(p.options.replenishInterval)
+	ticker := time.NewTicker(p.options.replenishInterval)
 	defer ticker.Stop()
 	for {
 		select {
