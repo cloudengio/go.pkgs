@@ -15,7 +15,7 @@ const (
 	EventAcquireWaiting EventKind = iota
 
 	// EventVMDequeued is emitted when a suspended or running VM is taken from
-	// the pool and is about to be started the caller, or if running
+	// the pool and is about to be started by the caller, or if running
 	// returned as-is to the caller.
 	EventVMDequeued
 
@@ -60,6 +60,10 @@ const (
 	// fails. The pool shrinks by one until a later replenishment succeeds.
 	// Err is set.
 	EventReplenishFailed
+
+	// EventStartPoolFull is emitted when the asynchronous process to
+	// fill the pool initiated by Start is completed.
+	EventStartPoolFull
 )
 
 func (e EventKind) String() string {
@@ -90,6 +94,8 @@ func (e EventKind) String() string {
 		return "Replenished"
 	case EventReplenishFailed:
 		return "ReplenishFailed"
+	case EventStartPoolFull:
+		return "StartPoolFull"
 	default:
 		return "Unknown"
 	}

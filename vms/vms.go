@@ -299,6 +299,9 @@ var (
 // allowed intermediate states on the way to the final state, returning an
 // error if an unexpected intermediate state is observed.
 func WaitForState(ctx context.Context, inst Instance, interval time.Duration, final State, intermediate ...State) error {
+	if interval <= 0 {
+		return fmt.Errorf("vms: WaitForState: interval must be positive: %v", interval)
+	}
 	found := WaitForStateFunc(inst, final, intermediate)
 	return executil.WaitFor(ctx, interval, found)
 }

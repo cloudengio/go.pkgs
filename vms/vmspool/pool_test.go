@@ -26,9 +26,7 @@ func newPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.
 		t.Fatalf("pool.Start: %v", err)
 	}
 	// Start returns once the first VM is ready; wait for the full pool to fill.
-	for range size {
-		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
-	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
 			t.Errorf("pool.Close: %v", err)
@@ -165,9 +163,7 @@ func TestPool_Close(t *testing.T) {
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	for range size {
-		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
-	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -377,19 +373,19 @@ func TestPool_Status(t *testing.T) {
 		t.Fatalf("Release: %v", err)
 	}
 
-	// Block until the replenishment goroutine completes by acquiring the new VM.
-	// We do not release vm2: releasing it would launch a second replenishment
-	// goroutine that could race with p.Close cancelling the background context.
+	// Close the pool before releasing vm2 so that any replenish request made by
+	// Release becomes a no-op against the closed pool.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	vm2, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("second Acquire (wait for replenishment): %v", err)
 	}
-	_ = vm2 // held intentionally; p.Close cleans up the pool without affecting it.
-
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+	if err := vm2.Release(context.Background()); err != nil {
+		t.Fatalf("Release after Close: %v", err)
 	}
 
 	var events []vmspool.EventKind
@@ -403,14 +399,14 @@ func TestPool_Status(t *testing.T) {
 	}
 done:
 
-	// One acquire→release cycle emits each of these exactly once;
-	// the second Acquire (to confirm replenishment) contributes Waiting/Dequeued/Acquired.
+	// vm.Release triggers replenishment; vm2.Release (after Close) does not.
+	// Both releases emit Release+Released, so counts are 2.
 	wantCounts := map[vmspool.EventKind]int{
 		vmspool.EventAcquireWaiting:   2,
 		vmspool.EventVMDequeued:       2,
 		vmspool.EventAcquired:         2,
-		vmspool.EventRelease:          1,
-		vmspool.EventReleased:         1,
+		vmspool.EventRelease:          2,
+		vmspool.EventReleased:         2,
 		vmspool.EventReplenishStarted: 1,
 		vmspool.EventReplenished:      1,
 	}
@@ -499,8 +495,8 @@ func TestPool_ReplenishBlockedOnReadySend(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	// Drain the EventVMCreated emitted during Start before we begin.
-	waitForEvent(t, statusCh, vmspool.EventVMCreated, timeout)
+	// Drain events emitted during Start before we begin.
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, timeout)
 
 	// Drain the pool so p.ready is empty.
 	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
@@ -673,9 +669,7 @@ func newRunningPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *v
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("pool.Start: %v", err)
 	}
-	for range size {
-		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
-	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
 			t.Errorf("pool.Close: %v", err)
@@ -764,9 +758,7 @@ func TestPool_NoSuspend_Close(t *testing.T) {
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	for range size {
-		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
-	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
 	}

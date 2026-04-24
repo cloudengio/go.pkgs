@@ -152,9 +152,8 @@ func (p *Pool) notify(kind EventKind, err error) {
 	}
 }
 
-// Start blocks until at at least one VM is ready to be acquired (or the context is
-// canceled), any other VMs required to fill the pool are created asynchronously
-// (unless the context is canceled).
+// Start blocks until at least one VM is ready to be acquired (or the context is
+// canceled), any other VMs required to fill the pool are created asynchronously.
 // Start can be called once only and will return an error if called more than once.
 // After Start returns, the pool is ready to accept Acquire calls.
 func (p *Pool) Start(ctx context.Context) error {
@@ -164,7 +163,7 @@ func (p *Pool) Start(ctx context.Context) error {
 		return fmt.Errorf("vmspool: pool already started")
 	}
 	p.replenishCtx = context.WithoutCancel(ctx) // detached context for replenishment goroutines;
-	// p.replinishCancel must be called by close.
+	// p.replenishCancel must be called by Close.
 	p.replenishCtx, p.replenishCancel = context.WithCancel(p.replenishCtx)
 	return p.fill(ctx, p.options.size)
 }
@@ -174,27 +173,20 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 	if err != nil {
 		return err
 	}
+
 	// at least one VM is ready; launch goroutine to fill the rest of the pool so
 	// Start can return and the pool can be used immediately.
-	go func(size int) {
+	go func(ctx context.Context, size int) {
 		var g errgroup.T
 		for range size {
 			g.GoContext(ctx, func() error {
-				inst, err := p.createVMAndNotify(ctx)
-				if err != nil {
-					return err
-				}
-				select {
-				case p.ready <- inst:
-					return nil
-				case <-ctx.Done():
-					p.cleanupVM(inst)
-					return ctx.Err()
-				}
+				return p.createVMLoop(ctx, p.options.createInterval, p.options.createTimeout)
 			})
 		}
-		g.Wait()
-	}(size - 1)
+		if g.Wait() == nil {
+			p.notify(EventStartPoolFull, nil)
+		}
+	}(p.replenishCtx, size-1)
 	return nil
 }
 
@@ -209,6 +201,9 @@ func (p *Pool) cleanupVM(inst vms.Instance) {
 // Any partially-created instance is cleaned up before returning an error.
 func (p *Pool) createVM(ctx context.Context) (vms.Instance, error) {
 	inst := p.constructor.New()
+	if inst == nil {
+		return nil, fmt.Errorf("vmspool: constructor returned nil instance")
+	}
 	if err := inst.Clone(ctx); err != nil {
 		// Clone transitions from Initial; nothing to clean up beyond the
 		// instance itself, which is already in Initial/Deleted state.
@@ -250,6 +245,7 @@ func (p *Pool) requestReplenish() {
 		p.closedMu.Unlock()
 		return
 	}
+	p.notify(EventReplenishStarted, nil)
 	p.wg.Go(func() {
 		err := p.createVMLoop(p.replenishCtx, p.options.createInterval, p.options.createTimeout)
 		if err != nil {
@@ -260,7 +256,6 @@ func (p *Pool) requestReplenish() {
 		p.notify(EventReplenished, nil)
 	})
 	p.closedMu.Unlock()
-	p.notify(EventReplenishStarted, nil)
 
 }
 
@@ -285,7 +280,7 @@ func (p *Pool) createVMLoop(ctx context.Context, interval, timeout time.Duration
 	}
 }
 
-// createVM creates a single VM and adds it to the pool.
+// attemptCreateVM creates a single VM and adds it to the pool.
 func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

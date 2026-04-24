@@ -50,13 +50,13 @@ type EventKind int
 EventKind identifies the type of pool event sent to a status channel.
 
 ### Constants
-### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventVMCreateStarted, EventVMCreated, EventVMCreateFailed, EventReplenishStarted, EventReplenished, EventReplenishFailed
+### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventVMCreateStarted, EventVMCreated, EventVMCreateFailed, EventReplenishStarted, EventReplenished, EventReplenishFailed, EventStartPoolFull
 ```go
 // EventAcquireWaiting is emitted when Acquire is called and blocks
 // waiting for a suspended VM to become available.
 EventAcquireWaiting EventKind = iota
 // EventVMDequeued is emitted when a suspended or running VM is taken from
-// the pool and is about to be started the caller, or if running
+// the pool and is about to be started by the caller, or if running
 // returned as-is to the caller.
 EventVMDequeued
 // EventAcquired is emitted when the VM has been started and is returned
@@ -90,6 +90,9 @@ EventReplenished
 // fails. The pool shrinks by one until a later replenishment succeeds.
 // Err is set.
 EventReplenishFailed
+// EventStartPoolFull is emitted when the asynchronous process to
+// fill the pool initiated by Start is completed.
+EventStartPoolFull
 
 ```
 
@@ -191,11 +194,11 @@ idempotent.
 ```go
 func (p *Pool) Start(ctx context.Context) error
 ```
-Start blocks until at at least one VM is ready to be acquired (or the
+Start blocks until at least one VM is ready to be acquired (or the
 context is canceled), any other VMs required to fill the pool are created
-asynchronously (unless the context is canceled). Start can be called once
-only and will return an error if called more than once. After Start returns,
-the pool is ready to accept Acquire calls.
+asynchronously. Start can be called once only and will return an error if
+called more than once. After Start returns, the pool is ready to accept
+Acquire calls.
 
 
 
