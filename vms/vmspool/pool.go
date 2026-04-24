@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cloudeng.io/errors"
+	"cloudeng.io/sync/ctxsync"
 	"cloudeng.io/vms"
 )
 
@@ -31,18 +32,22 @@ type Pool struct {
 	constructor Constructor
 	ready       chan vms.Instance // suspended VMs waiting to be acquired
 	done        chan struct{}     // closed by Close to signal pool shutdown
-	startOnce   sync.Once
-	startErr    error
-	closeOnce   sync.Once
+
+	// make start and close idempotent.
+	startOnce sync.Once
+	startErr  error
+	closeOnce sync.Once
 
 	bgCtx  context.Context
 	cancel context.CancelFunc
+
+	opMutex sync.Mutex // guards start, acquire and close operations
 
 	// mu guards closed and serialises wg.Add with Close's wg.Wait, preventing
 	// sync.WaitGroup misuse when Release/Acquire race with Close.
 	mu     sync.Mutex
 	closed bool
-	wg     sync.WaitGroup // tracks in-flight replenishment goroutines
+	wg     ctxsync.WaitGroup // tracks in-flight replenishment goroutines
 }
 
 type options struct {
@@ -136,6 +141,8 @@ func (p *Pool) notify(kind EventKind, err error) {
 // ready or any creation step fails. The context governs both the initial fill
 // and background replenishment goroutines launched during the pool's lifetime.
 func (p *Pool) Start(ctx context.Context) error {
+	p.opMutex.Lock()
+	defer p.opMutex.Unlock()
 	p.startOnce.Do(func() {
 		p.startErr = p.start(ctx)
 	})
@@ -225,6 +232,8 @@ func (p *Pool) replenish() {
 // caller must call VM.Release when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, error) {
+	p.opMutex.Lock()
+	defer p.opMutex.Unlock()
 	p.mu.Lock()
 	closed := p.closed
 	p.mu.Unlock()
@@ -261,6 +270,8 @@ func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, erro
 // Close stops accepting new acquires, waits for all replenishment goroutines
 // to finish, then deletes every suspended VM remaining in the pool.
 func (p *Pool) Close(ctx context.Context) error {
+	p.opMutex.Lock()
+	defer p.opMutex.Unlock()
 	p.closeOnce.Do(func() {
 		if p.cancel != nil {
 			p.cancel()
@@ -272,7 +283,7 @@ func (p *Pool) Close(ctx context.Context) error {
 	p.mu.Lock()
 	p.closed = true
 	p.mu.Unlock()
-	p.wg.Wait()
+	p.wg.Wait(ctx)
 
 	var errs errors.M
 	for {

@@ -162,14 +162,13 @@ var _ vms.Instance = (*Mock)(nil)
 // Use Inject to pre-supply configured mocks; otherwise MockFactory.New creates
 // plain NewMock instances on demand.
 type MockFactory struct {
-	name    string
 	mu      sync.Mutex
 	mocks   []*Mock
 	pending []*Mock // pre-configured mocks to hand out first
 }
 
 // NewMockFactory returns an empty MockFactory.
-func NewMockFactory(name string) *MockFactory { return &MockFactory{name: name} }
+func NewMockFactory() *MockFactory { return &MockFactory{} }
 
 // Inject queues m to be returned by the next New call instead of
 // a freshly allocated Mock. Useful for injecting pre-configured error states.
@@ -190,10 +189,6 @@ func (f *MockFactory) New() vms.Instance {
 	}
 	f.mocks = append(f.mocks, m)
 	return m
-}
-
-func (f *MockFactory) Name() string {
-	return f.name
 }
 
 // Mocks returns a snapshot of all Mock instances produced so far.

@@ -54,7 +54,7 @@ func countInState(mocks []*vmstestutil.Mock, want vms.State) int {
 
 // TestPool_Start verifies that the pool creates the right number of suspended VMs.
 func TestPool_Start(t *testing.T) {
-	factory := vmstestutil.NewMockFactory("start-test")
+	factory := vmstestutil.NewMockFactory()
 	newPool(t, 3, factory)
 
 	mocks := factory.Mocks()
@@ -67,7 +67,7 @@ func TestPool_Start(t *testing.T) {
 // TestPool_Acquire verifies that acquiring a VM starts it (Running state)
 // and leaves remaining pool VMs suspended.
 func TestPool_Acquire(t *testing.T) {
-	factory := vmstestutil.NewMockFactory("acquire-test")
+	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 2, factory)
 
 	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
@@ -87,7 +87,7 @@ func TestPool_Acquire(t *testing.T) {
 
 // TestPool_Exec verifies that Exec is forwarded to the underlying VM and recorded.
 func TestPool_Exec(t *testing.T) {
-	factory := vmstestutil.NewMockFactory("exec-test")
+	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 1, factory)
 
 	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
@@ -116,7 +116,7 @@ func TestPool_Exec(t *testing.T) {
 
 // TestPool_Release verifies that releasing a VM deletes it and replenishes the pool.
 func TestPool_Release(t *testing.T) {
-	factory := vmstestutil.NewMockFactory("release-test")
+	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 1, factory)
 
 	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
@@ -152,7 +152,7 @@ func TestPool_Release(t *testing.T) {
 
 // TestPool_Close verifies that Close deletes all suspended VMs in the pool.
 func TestPool_Close(t *testing.T) {
-	factory := vmstestutil.NewMockFactory("close-test")
+	factory := vmstestutil.NewMockFactory()
 	p := vmspool.New(factory, vmspool.WithSize(3))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -166,7 +166,7 @@ func TestPool_Close(t *testing.T) {
 
 // TestPool_AcquireCancelled verifies that a cancelled context causes Acquire to return.
 func TestPool_AcquireCancelled(t *testing.T) {
-	factory := vmstestutil.NewMockFactory("cancelled-test")
+	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 1, factory)
 
 	// Drain the pool so the next Acquire will block.
@@ -189,7 +189,7 @@ func TestPool_AcquireCancelled(t *testing.T) {
 // verifying that the pool replenishes and remains usable.
 func TestPool_Concurrency(t *testing.T) {
 	const size = 4
-	factory := vmstestutil.NewMockFactory("concurrency-test")
+	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, size, factory)
 
 	// Acquire all VMs concurrently.
@@ -235,7 +235,7 @@ func TestPool_Concurrency(t *testing.T) {
 // TestPool_StartError verifies that Start returns an error when VM creation fails.
 func TestPool_StartError(t *testing.T) {
 	cloneErr := errors.New("clone failed")
-	factory := vmstestutil.NewMockFactory("start-error-test")
+	factory := vmstestutil.NewMockFactory()
 
 	bad := vmstestutil.NewMock()
 	bad.CloneErr = cloneErr
@@ -259,7 +259,7 @@ func TestPool_CreateVM_PartialCleanup(t *testing.T) {
 
 	// Inject a mock that succeeds Clone+Start but fails Suspend.
 	// After Suspend fails the instance is Running; createVM must delete it.
-	factory := vmstestutil.NewMockFactory("partial-cleanup-test")
+	factory := vmstestutil.NewMockFactory()
 	bad := vmstestutil.NewMock()
 	bad.SuspendErr = suspendErr
 	factory.Inject(bad)
@@ -288,7 +288,7 @@ func TestPool_CreateVM_PartialCleanup(t *testing.T) {
 func TestPool_Status(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
-	factory := vmstestutil.NewMockFactory("status-test")
+	factory := vmstestutil.NewMockFactory()
 	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -386,7 +386,7 @@ func assertPrecedes(t *testing.T, events []vmspool.EventKind, before, after vmsp
 func TestPool_ReleaseCloseRace(t *testing.T) {
 	const iterations = 100
 	for range iterations {
-		factory := vmstestutil.NewMockFactory("release-close-race")
+		factory := vmstestutil.NewMockFactory()
 		p := vmspool.New(factory, vmspool.WithSize(1))
 		if err := p.Start(context.Background()); err != nil {
 			t.Fatalf("Start: %v", err)
