@@ -57,10 +57,10 @@ type options struct {
 }
 
 const (
-	DefaultPoolSize          = 2
-	DefaultCleanupTimeout    = time.Minute
-	DefaultReplenishTimeout  = 5 * time.Minute
-	DefaultReplenishInterval = 500 * time.Millisecond
+	DefaultPoolSize       = 2
+	DefaultCleanupTimeout = time.Minute
+	DefaultCreateTimeout  = 5 * time.Minute
+	DefaultCreateInterval = 500 * time.Millisecond
 )
 
 type Option func(*options)
@@ -88,26 +88,19 @@ func WithCleanupTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithReplenishTimeout sets the timeout for creating VMs during replenishment.
-// The default is DefaultReplenishTimeout.
-// A 0 or negative value is treated as DefaultReplenishTimeout.
-func WithReplenishTimeout(timeout time.Duration) Option {
+// WithCreateTimeoutAndInterval sets the timeout for creating a single
+// VM and the interval between creation attempts.
+// The default timeout and interval are DefaultCreateTimeout and DefaultCreateInterval.
+// A 0 or negative value is treated as DefaultCreateTimeout or DefaultCreateInterval.
+func WithCreateTimeoutAndInterval(timeout, interval time.Duration) Option {
 	return func(o *options) {
 		if timeout <= 0 {
-			timeout = DefaultReplenishTimeout
+			timeout = DefaultCreateTimeout
+		}
+		if interval <= 0 {
+			interval = DefaultCreateInterval
 		}
 		o.replenishTimeout = timeout
-	}
-}
-
-// WithReplenishInterval sets the interval between VM creation attempts during
-// replenishment. The default is DefaultReplenishInterval.
-// A 0 or negative value is treated as DefaultReplenishInterval.
-func WithReplenishInterval(interval time.Duration) Option {
-	return func(o *options) {
-		if interval <= 0 {
-			interval = DefaultReplenishInterval
-		}
 		o.replenishInterval = interval
 	}
 }
@@ -135,8 +128,8 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
 	options.cleanupTimeout = DefaultCleanupTimeout
-	options.replenishTimeout = DefaultReplenishTimeout
-	options.replenishInterval = DefaultReplenishInterval
+	options.replenishTimeout = DefaultCreateTimeout
+	options.replenishInterval = DefaultCreateInterval
 	options.suspendVMs = true
 	for _, opt := range opts {
 		opt(&options)
@@ -160,9 +153,9 @@ func (p *Pool) notify(kind EventKind, err error) {
 }
 
 // Start fills the pool with size suspended VMs. It blocks until all VMs are
-// ready or any creation step fails. The context governs the initial fill
-// of the pool. It should only be called once and will return after attempting
-// to fill the pool and will return any errors encountered during that process.
+// ready or the context is canceled.
+// Start can only be called once and will return an error if called more than once.
+// After Start returns, the pool is ready to accept Acquire calls.
 func (p *Pool) Start(ctx context.Context) error {
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
@@ -248,7 +241,7 @@ func (p *Pool) requestReplenish() {
 		return
 	}
 	p.wg.Go(func() {
-		p.replenishLoop(p.replenishCtx)
+		p.replenishLoop(p.replenishCtx, p.options.replenishInterval, p.options.replenishTimeout)
 	})
 	p.closedMu.Unlock()
 	p.notify(EventReplenishStarted, nil)
@@ -257,23 +250,19 @@ func (p *Pool) requestReplenish() {
 
 // replenishLoop runs a loop that tries to create a new VM and add it to the pool
 // until the pool is closed or the context is done.
-func (p *Pool) replenishLoop(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, p.options.replenishTimeout)
-	defer cancel()
-
-	if p.replenish(ctx) == nil {
+func (p *Pool) replenishLoop(ctx context.Context, interval, timeout time.Duration) {
+	if p.replenish(ctx, timeout) == nil {
 		return
 	}
-
 	// Keep retrying to replenish the pool.
-	ticker := time.NewTicker(p.options.replenishInterval)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if p.replenish(ctx) == nil {
+			if p.replenish(ctx, timeout) == nil {
 				return
 			}
 		}
@@ -281,7 +270,9 @@ func (p *Pool) replenishLoop(ctx context.Context) {
 }
 
 // replenish creates a single VM and adds it to the pool.
-func (p *Pool) replenish(ctx context.Context) error {
+func (p *Pool) replenish(ctx context.Context, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	inst, err := p.createVMAndNotify(ctx)
 	if err != nil {
 		p.notify(EventReplenishFailed, err)

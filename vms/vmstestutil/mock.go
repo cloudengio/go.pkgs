@@ -7,7 +7,6 @@ package vmstestutil
 import (
 	"context"
 	"io"
-	"slices"
 	"sync"
 	"time"
 
@@ -142,7 +141,7 @@ func (m *Mock) SetState(state vms.State) {
 func (m *Mock) Exec(_ context.Context, _, _ io.Writer, cmd string, args ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.execCalls = append(slices.Clone(m.execCalls), ExecCall{Cmd: cmd, Args: args})
+	m.execCalls = append(m.execCalls, ExecCall{Cmd: cmd, Args: args})
 	if m.ExecErr != nil {
 		return m.ExecErr
 	}
