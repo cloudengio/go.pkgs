@@ -118,13 +118,13 @@ type MockFactory struct {
 }
 ```
 MockFactory creates and tracks Mock instances for pool and integration
-tests. Use Inject to pre-supply configured mocks; otherwise Constructor
+tests. Use Inject to pre-supply configured mocks; otherwise MockFactory.New
 creates plain NewMock instances on demand.
 
 ### Functions
 
 ```go
-func NewMockFactory(name string) *MockFactory
+func NewMockFactory() *MockFactory
 ```
 NewMockFactory returns an empty MockFactory.
 
@@ -135,19 +135,14 @@ NewMockFactory returns an empty MockFactory.
 ```go
 func (f *MockFactory) Inject(m *Mock)
 ```
-Inject queues m to be returned by the next Constructor call instead of a
-freshly allocated Mock. Useful for injecting pre-configured error states.
+Inject queues m to be returned by the next New call instead of a freshly
+allocated Mock. Useful for injecting pre-configured error states.
 
 
 ```go
 func (f *MockFactory) Mocks() []*Mock
 ```
 Mocks returns a snapshot of all Mock instances produced so far.
-
-
-```go
-func (f *MockFactory) Name() string
-```
 
 
 ```go

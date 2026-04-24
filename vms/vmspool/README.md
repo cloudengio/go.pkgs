@@ -10,9 +10,11 @@ quickly when acquired. When a caller releases a VM it is deleted and a new
 one is created asynchronously to restore the pool to its target size.
 
 ## Constants
-### DefaultPoolSize
+### DefaultPoolSize, DefaultCleanupTimeout, DefaultReplenishTimeout
 ```go
 DefaultPoolSize = 2
+DefaultCleanupTimeout = time.Minute
+DefaultReplenishTimeout = 5 * time.Minute
 
 ```
 
@@ -23,11 +25,10 @@ DefaultPoolSize = 2
 ```go
 type Constructor interface {
 	New() vms.Instance
-	Name() string
 }
 ```
-Constructor is a function that creates a new, uninitialized VM instance.
-Each call must return a distinct instance.
+Constructor is an interface used to create new, uninitialized VM instances.
+Each call must return a distinct vms.Instance.
 
 
 ### Type Event
@@ -102,6 +103,22 @@ type Option func(*options)
 ### Functions
 
 ```go
+func WithCleanupTimeout(timeout time.Duration) Option
+```
+WithCleanupTimeout sets the timeout for cleaning up VMs during Acquire
+and Close. The default is DefaultCleanupTimeout. A 0 or negative value is
+treated as DefaultCleanupTimeout.
+
+
+```go
+func WithReplenishTimeout(timeout time.Duration) Option
+```
+WithReplenishTimeout sets the timeout for creating VMs during replenishment.
+The default is DefaultReplenishTimeout. A 0 or negative value is treated as
+DefaultReplenishTimeout.
+
+
+```go
 func WithSize(size int) Option
 ```
 WithSize sets the number of VMs to maintain in the pool. The default is
@@ -139,7 +156,7 @@ Call Start to fill the pool before calling Acquire.
 ### Methods
 
 ```go
-func (p *Pool) Acquire(ctx context.Context) (*VM, error)
+func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, error)
 ```
 Acquire waits for a suspended VM, starts it, and returns a handle. The
 caller must call VM.Release when finished with the VM. Acquire blocks until

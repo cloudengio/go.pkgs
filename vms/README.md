@@ -58,6 +58,14 @@ that any intermediate states returned by inst.State are in the set of
 allowed intermediate states on the way to the final state, returning an
 error if an unexpected intermediate state is observed.
 
+### Func WaitForStateFunc
+```go
+func WaitForStateFunc(inst Instance, interval time.Duration, final State, intermediate []State) func(context.Context) (bool, error)
+```
+WaitForStateFunc returns a function that can be used with
+executil.WaitForSomething to wait for an instance to reach a final state,
+optionally checking for allowed intermediate states along the way.
+
 
 
 ## Types
