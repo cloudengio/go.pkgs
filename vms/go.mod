@@ -9,5 +9,8 @@ require (
 
 require (
 	cloudeng.io/os v0.0.0-20260424002940-830ef619d827 // indirect
+	cloudeng.io/sync v0.0.8 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 )
+
+replace cloudeng.io/sync => ../../sync

@@ -44,8 +44,7 @@ type Pool struct {
 	closedMu sync.Mutex
 	closed   bool
 
-	replenishMu sync.Mutex        // guards replenishLoop to ensure only one runs at a time
-	wg          ctxsync.WaitGroup // tracks in-flight replenishment goroutines
+	wg ctxsync.WaitGroup // tracks in-flight replenishment goroutines
 }
 
 type options struct {
@@ -234,15 +233,16 @@ func (p *Pool) createVM(ctx context.Context) (vms.Instance, error) {
 }
 
 // requestReplenish launches a replenishment goroutine unless the pool is
-// already closed. wg.Add and the closed check are performed under mu so that
-// Close cannot call wg.Wait between the check and the Add.
+// already closed. The closed check and wg.Add are performed under closedMu so
+// that Close cannot call wg.Wait in the window between the check and the Add.
 func (p *Pool) requestReplenish() {
-	if p.isClosed() {
+	p.closedMu.Lock()
+	if p.closed {
+		p.closedMu.Unlock()
 		return
 	}
-	p.replenishMu.Lock()
-	defer p.replenishMu.Unlock()
 	p.wg.Add(1)
+	p.closedMu.Unlock()
 	p.notify(EventReplenishStarted, nil)
 	go p.replenishLoop(p.replenishCtx)
 }
@@ -350,6 +350,7 @@ func (p *Pool) Close(ctx context.Context) error {
 	if p.replenishCancel != nil {
 		p.replenishCancel() // signal replenishment goroutines to stop
 	}
+	close(p.done) // signal pool shutdown to unblock Acquire calls
 	p.wg.Wait(ctx)
 
 	var errs errors.M
