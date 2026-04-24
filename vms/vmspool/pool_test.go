@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -380,6 +381,24 @@ func assertPrecedes(t *testing.T, events []vmspool.EventKind, before, after vmsp
 	t.Errorf("no occurrence of %s found before %s in %v", before, after, events)
 }
 
+// waitForEvent drains statusCh until it receives an event of the given kind,
+// then returns. It fails the test if the event is not seen within timeout.
+func waitForEvent(t *testing.T, statusCh <-chan vmspool.Event, kind vmspool.EventKind, timeout time.Duration) {
+	t.Helper()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		select {
+		case e := <-statusCh:
+			if e.Kind == kind {
+				return
+			}
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for event %s", kind)
+		}
+	}
+}
+
 // TestPool_ReplenishBlockedOnReadySend tests that Close can unblock a
 // replenishment goroutine that is stuck trying to send to p.ready when the
 // channel is already at capacity. Without a select/ctx.Done() guard on that
@@ -397,16 +416,20 @@ func assertPrecedes(t *testing.T, events []vmspool.EventKind, before, after vmsp
 //     the goroutine exits, and Close completes. Without the fix, Close hangs.
 func TestPool_ReplenishBlockedOnReadySend(t *testing.T) {
 	const timeout = 5 * time.Second
+	statusCh := make(chan vmspool.Event, 64)
 
 	cloneBlock := make(chan struct{})
 	blockingMock := vmstestutil.NewMock()
 	blockingMock.CloneBlock = cloneBlock
 
 	factory := vmstestutil.NewMockFactory()
-	pool := vmspool.New(factory, vmspool.WithSize(1))
+	pool := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
 	if err := pool.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+
+	// Drain the EventVMCreated emitted during Start before we begin.
+	waitForEvent(t, statusCh, vmspool.EventVMCreated, timeout)
 
 	// Drain the pool so p.ready is empty.
 	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
@@ -421,18 +444,25 @@ func TestPool_ReplenishBlockedOnReadySend(t *testing.T) {
 		t.Fatalf("Release: %v", err)
 	}
 
+	// Wait until the replenishment goroutine has started running.
+	waitForEvent(t, statusCh, vmspool.EventReplenishStarted, timeout)
+
 	// Fill p.ready to capacity while the goroutine is paused in Clone.
 	// When Clone unblocks, the goroutine will try to send its newly-created
 	// VM and find the channel full.
-	injected := vmstestutil.NewMock()
-	pool.ReadyCh() <- injected
+	pool.ReadyCh() <- vmstestutil.NewMock()
 
 	// Unblock Clone. The goroutine races through Start+Suspend (both
-	// instantaneous in the mock) and arrives at p.ready <- inst.
+	// instantaneous in the mock) towards p.ready <- inst.
 	close(cloneBlock)
 
-	// Give the goroutine a moment to reach the blocking send.
-	time.Sleep(10 * time.Millisecond)
+	// EventVMCreated fires inside createVMAndNotifiy, one statement before the
+	// select that contains p.ready <- inst. Waiting for it means the goroutine
+	// is about to attempt the send. runtime.Gosched() then yields the scheduler
+	// so the goroutine can take that final step and block on the full channel
+	// before Close cancels the context.
+	waitForEvent(t, statusCh, vmspool.EventVMCreated, timeout)
+	runtime.Gosched()
 
 	// Close must cancel the goroutine's context and complete within timeout.
 	// Without the select/ctx.Done() guard on p.ready <- inst, the goroutine
@@ -556,5 +586,130 @@ func TestPool_ReleaseCloseRace(t *testing.T) {
 			_ = p.Close(context.Background())
 		}()
 		wg.Wait()
+	}
+}
+
+// --- WithSuspendVMs(false) tests ---
+//
+// When suspendVMs is false the pool keeps VMs in StateRunning rather than
+// StateSuspended. Acquire calls Start on an already-running instance (a no-op
+// for Mock), and Release/Close clean up running VMs.
+
+func newRunningPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
+	t.Helper()
+	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithSuspendVMs(false))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("pool.Start: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := p.Close(context.Background()); err != nil {
+			t.Errorf("pool.Close: %v", err)
+		}
+	})
+	return p
+}
+
+// TestPool_NoSuspend_Start verifies that Start places VMs in StateRunning
+// (not StateSuspended) when suspend is disabled.
+func TestPool_NoSuspend_Start(t *testing.T) {
+	factory := vmstestutil.NewMockFactory()
+	newRunningPool(t, 3, factory)
+
+	mocks := factory.Mocks()
+	if len(mocks) != 3 {
+		t.Fatalf("expected 3 mocks after Start, got %d", len(mocks))
+	}
+	allInState(t, mocks, vms.StateRunning)
+}
+
+// TestPool_NoSuspend_Acquire verifies that Acquire hands out a running VM.
+// All VMs remain in StateRunning because Start is idempotent on an already-
+// running instance.
+func TestPool_NoSuspend_Acquire(t *testing.T) {
+	factory := vmstestutil.NewMockFactory()
+	pool := newRunningPool(t, 2, factory)
+
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer vm.Release(context.Background()) //nolint
+
+	// Both the acquired VM and the one still in the pool are Running.
+	if n := countInState(factory.Mocks(), vms.StateRunning); n != 2 {
+		t.Errorf("running VMs after Acquire: got %d, want 2", n)
+	}
+}
+
+// TestPool_NoSuspend_Release verifies that releasing a VM deletes it and
+// replenishes the pool with a fresh running instance.
+func TestPool_NoSuspend_Release(t *testing.T) {
+	factory := vmstestutil.NewMockFactory()
+	pool := newRunningPool(t, 1, factory)
+
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if err := vm.Release(context.Background()); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	// Original VM must be deleted.
+	if got := factory.Mocks()[0].State(context.Background()); got != vms.StateDeleted {
+		t.Errorf("released VM state = %s, want Deleted", got)
+	}
+
+	// Acquire again: blocks until the replenishment goroutine provides a new
+	// running VM.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	vm2, err := pool.Acquire(ctx, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("Acquire after replenishment: %v", err)
+	}
+	defer vm2.Release(context.Background()) //nolint
+
+	// Replenishment must have created a second mock.
+	if n := len(factory.Mocks()); n != 2 {
+		t.Errorf("expected 2 total mocks after replenishment, got %d", n)
+	}
+	// The new VM is running.
+	if got := factory.Mocks()[1].State(context.Background()); got != vms.StateRunning {
+		t.Errorf("replenished VM state = %s, want Running", got)
+	}
+}
+
+// TestPool_NoSuspend_Close verifies that Close deletes all running VMs in the pool.
+func TestPool_NoSuspend_Close(t *testing.T) {
+	factory := vmstestutil.NewMockFactory()
+	p := vmspool.New(factory, vmspool.WithSize(3), vmspool.WithSuspendVMs(false))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	allInState(t, factory.Mocks(), vms.StateDeleted)
+}
+
+// TestPool_NoSuspend_StartError verifies that Start returns an error when VM
+// creation fails. With suspend disabled the only fallible steps are Clone and
+// Start; we inject a Start error here.
+func TestPool_NoSuspend_StartError(t *testing.T) {
+	startErr := errors.New("start failed")
+	factory := vmstestutil.NewMockFactory()
+
+	bad := vmstestutil.NewMock()
+	bad.StartErr = startErr
+	factory.Inject(bad)
+
+	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithSuspendVMs(false))
+	err := p.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected Start to fail")
+	}
+	if !errors.Is(err, startErr) {
+		t.Errorf("expected start error, got %v", err)
 	}
 }

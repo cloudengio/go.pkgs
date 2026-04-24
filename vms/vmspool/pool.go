@@ -161,13 +161,16 @@ func (p *Pool) notify(kind EventKind, err error) {
 
 // Start fills the pool with size suspended VMs. It blocks until all VMs are
 // ready or any creation step fails. The context governs the initial fill
-// of the pool. It should only be called be once and will return after attempting
+// of the pool. It should only be called once and will return after attempting
 // to fill the pool and will return any errors encountered during that process.
 func (p *Pool) Start(ctx context.Context) error {
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
+	if p.replenishCancel != nil {
+		return fmt.Errorf("vmspool: pool already started")
+	}
 	p.replenishCtx = context.WithoutCancel(ctx) // detached context for replenishment goroutines;
-	// p.repelinishCancel must be called by close.
+	// p.replinishCancel must be called by close.
 	p.replenishCtx, p.replenishCancel = context.WithCancel(p.replenishCtx)
 	return p.fill(ctx, p.options.size)
 }
@@ -262,7 +265,7 @@ func (p *Pool) replenishLoop(ctx context.Context) {
 		return
 	}
 
-	// Keep retyring to replenish the pool.
+	// Keep retrying to replenish the pool.
 	ticker := time.NewTicker(p.options.replenishInterval)
 	defer ticker.Stop()
 	for {
@@ -312,7 +315,7 @@ func (p *Pool) setClosed() bool {
 // caller must call VM.Release when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, error) {
-	if closed := p.isClosed(); closed {
+	if p.isClosed() {
 		err := fmt.Errorf("vmspool: pool is closed")
 		p.notify(EventAttemptToUseClosedPool, err)
 		return nil, err
@@ -331,18 +334,26 @@ func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, erro
 		p.notify(EventAttemptToUseClosedPool, err)
 		return nil, err
 	case inst = <-p.ready:
+		if p.isClosed() {
+			p.cleanupVM(inst)
+			err := fmt.Errorf("vmspool: pool is closed")
+			p.notify(EventAttemptToUseClosedPool, err)
+			return nil, err
+		}
 	}
 	p.notify(EventVMDequeued, nil)
 
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
-	if err := inst.Start(ctx, stdout, stderr); err != nil {
-		// Start failed; clean up the VM and replenish so the pool stays full.
-		p.cleanupVM(inst)
-		p.requestReplenish()
-		err = fmt.Errorf("vmspool: acquire: %w", err)
-		p.notify(EventAcquireFailed, err)
-		return nil, err
+	if p.options.suspendVMs {
+		if err := inst.Start(ctx, stdout, stderr); err != nil {
+			// Start failed; clean up the VM and replenish so the pool stays full.
+			p.cleanupVM(inst)
+			p.requestReplenish()
+			err = fmt.Errorf("vmspool: acquire: %w", err)
+			p.notify(EventAcquireFailed, err)
+			return nil, err
+		}
 	}
 	p.notify(EventAcquired, nil)
 	return &VM{inst: inst, pool: p}, nil
@@ -363,7 +374,11 @@ func (p *Pool) Close(ctx context.Context) error {
 	close(p.done) // signal pool shutdown to unblock Acquire calls
 	p.wg.Wait(ctx)
 
+	// capture error but continue to cleanup VMs.
 	var errs errors.M
+	if err := ctx.Err(); err != nil {
+		errs.Append(err)
+	}
 	for {
 		select {
 		case inst := <-p.ready:

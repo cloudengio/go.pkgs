@@ -14,8 +14,9 @@ const (
 	// waiting for a suspended VM to become available.
 	EventAcquireWaiting EventKind = iota
 
-	// EventVMDequeued is emitted when a suspended VM is taken from the pool
-	// and is about to be started for the caller.
+	// EventVMDequeued is emitted when a suspended or running VM is taken from
+	// the pool and is about to be started the caller, or if running
+	// returned as-is to the caller.
 	EventVMDequeued
 
 	// EventAcquired is emitted when the VM has been started and is returned
@@ -37,7 +38,7 @@ const (
 	// replenishment has been scheduled.
 	EventReleased
 
-	// EventCreateStarted is emitted when a goroutine is launched to create a new VM
+	// EventVMCreateStarted is emitted when a goroutine is launched to create a new VM
 	// to place in the pool.
 	EventVMCreateStarted
 
