@@ -16,7 +16,7 @@ import (
 // unless done=true, in which case it is returned immediately.
 func WaitFor(ctx context.Context, interval time.Duration, check func(ctx context.Context) (done bool, err error)) error {
 	if interval <= 0 {
-		return fmt.Errorf("executil: WaitForSomething: interval must be positive: %v", interval)
+		return fmt.Errorf("executil: WaitFor: interval must be positive: %v", interval)
 	}
 
 	if done, err := check(ctx); done {
