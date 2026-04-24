@@ -22,6 +22,16 @@ operation completes.
     Deleted         Clone -> Cloning
     ErrorUnknown    Delete -> Deleting
 
+## Variables
+### ErrVMNotFound, ErrVMNotRunning
+```go
+ErrVMNotFound = errors.New("virtual machine not found")
+ErrVMNotRunning = errors.New("virtual machine not running")
+
+```
+
+
+
 ## Functions
 ### Func CleanupVM
 ```go
@@ -47,6 +57,14 @@ or the context is done. If intermediate states are provided, it also checks
 that any intermediate states returned by inst.State are in the set of
 allowed intermediate states on the way to the final state, returning an
 error if an unexpected intermediate state is observed.
+
+### Func WaitForStateFunc
+```go
+func WaitForStateFunc(inst Instance, final State, intermediate []State) func(context.Context) (bool, error)
+```
+WaitForStateFunc returns a function that can be used with executil.
+WaitForS to wait for an instance to reach a final state, optionally checking
+for allowed intermediate states along the way.
 
 
 

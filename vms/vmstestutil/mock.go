@@ -7,11 +7,18 @@ package vmstestutil
 import (
 	"context"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
 	"cloudeng.io/vms"
 )
+
+// ExecCall records a single invocation of Mock.Exec.
+type ExecCall struct {
+	Cmd  string
+	Args []string
+}
 
 // Mock represents a mock virtual machine instance for testing.
 type Mock struct {
@@ -19,6 +26,12 @@ type Mock struct {
 	state      vms.State
 	properties vms.Properties
 	isSuspend  bool
+	execCalls  []ExecCall
+
+	// CloneBlock, if non-nil, causes Clone to block until the channel is
+	// closed or the context is cancelled. Used by tests to pause a VM
+	// mid-creation so the test can manipulate pool state before proceeding.
+	CloneBlock chan struct{}
 
 	CloneErr   error
 	StartErr   error
@@ -38,7 +51,14 @@ func NewMock() *Mock {
 	}
 }
 
-func (m *Mock) Clone(_ context.Context) error {
+func (m *Mock) Clone(ctx context.Context) error {
+	if m.CloneBlock != nil {
+		select {
+		case <-m.CloneBlock:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.CloneErr != nil {
@@ -119,11 +139,21 @@ func (m *Mock) SetState(state vms.State) {
 	m.state = state
 }
 
-func (m *Mock) Exec(_ context.Context, _, _ io.Writer, _ string, _ ...string) error {
+func (m *Mock) Exec(_ context.Context, _, _ io.Writer, cmd string, args ...string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.execCalls = append(m.execCalls, ExecCall{Cmd: cmd, Args: slices.Clone(args)})
 	if m.ExecErr != nil {
 		return m.ExecErr
 	}
 	return nil
+}
+
+// ExecCalls returns all recorded Exec invocations.
+func (m *Mock) ExecCalls() []ExecCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]ExecCall(nil), m.execCalls...)
 }
 
 func (m *Mock) Properties(_ context.Context) (vms.Properties, error) {
@@ -139,3 +169,43 @@ func (m *Mock) SetProperties(props vms.Properties) {
 }
 
 var _ vms.Instance = (*Mock)(nil)
+
+// MockFactory creates and tracks Mock instances for pool and integration tests.
+// Use Inject to pre-supply configured mocks; otherwise MockFactory.New creates
+// plain NewMock instances on demand.
+type MockFactory struct {
+	mu      sync.Mutex
+	mocks   []*Mock
+	pending []*Mock // pre-configured mocks to hand out first
+}
+
+// NewMockFactory returns an empty MockFactory.
+func NewMockFactory() *MockFactory { return &MockFactory{} }
+
+// Inject queues m to be returned by the next New call instead of
+// a freshly allocated Mock. Useful for injecting pre-configured error states.
+func (f *MockFactory) Inject(m *Mock) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pending = append(f.pending, m)
+}
+
+func (f *MockFactory) New() vms.Instance {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var m *Mock
+	if len(f.pending) > 0 {
+		m, f.pending = f.pending[0], f.pending[1:]
+	} else {
+		m = NewMock()
+	}
+	f.mocks = append(f.mocks, m)
+	return m
+}
+
+// Mocks returns a snapshot of all Mock instances produced so far.
+func (f *MockFactory) Mocks() []*Mock {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*Mock(nil), f.mocks...)
+}
