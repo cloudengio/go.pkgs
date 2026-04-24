@@ -28,6 +28,11 @@ type Mock struct {
 	isSuspend  bool
 	execCalls  []ExecCall
 
+	// CloneBlock, if non-nil, causes Clone to block until the channel is
+	// closed or the context is cancelled. Used by tests to pause a VM
+	// mid-creation so the test can manipulate pool state before proceeding.
+	CloneBlock chan struct{}
+
 	CloneErr   error
 	StartErr   error
 	StopRunErr error
@@ -46,7 +51,14 @@ func NewMock() *Mock {
 	}
 }
 
-func (m *Mock) Clone(_ context.Context) error {
+func (m *Mock) Clone(ctx context.Context) error {
+	if m.CloneBlock != nil {
+		select {
+		case <-m.CloneBlock:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.CloneErr != nil {

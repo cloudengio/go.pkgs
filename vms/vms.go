@@ -299,12 +299,12 @@ var (
 // allowed intermediate states on the way to the final state, returning an
 // error if an unexpected intermediate state is observed.
 func WaitForState(ctx context.Context, inst Instance, interval time.Duration, final State, intermediate ...State) error {
-	found := WaitForStateFunc(inst, interval, final, intermediate)
+	found := WaitForStateFunc(inst, final, intermediate)
 	return executil.WaitFor(ctx, interval, found)
 }
 
 // WaitForStateFunc returns a function that can be used with executil.WaitForSomething to wait for an instance to reach a final state, optionally checking for allowed intermediate states along the way.
-func WaitForStateFunc(inst Instance, interval time.Duration, final State, intermediate []State) func(context.Context) (bool, error) {
+func WaitForStateFunc(inst Instance, final State, intermediate []State) func(context.Context) (bool, error) {
 	return func(ctx context.Context) (bool, error) {
 		got := inst.State(ctx)
 		if got == final {

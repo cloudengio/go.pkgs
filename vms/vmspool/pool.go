@@ -136,6 +136,7 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	options.size = DefaultPoolSize
 	options.cleanupTimeout = DefaultCleanupTimeout
 	options.replenishTimeout = DefaultReplenishTimeout
+	options.replenishInterval = DefaultReplenishInterval
 	options.suspendVMs = true
 	for _, opt := range opts {
 		opt(&options)
@@ -183,6 +184,7 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 			case p.ready <- inst:
 				return nil
 			case <-ctx.Done():
+				p.cleanupVM(inst)
 				return ctx.Err()
 			}
 		})
@@ -197,6 +199,7 @@ func (p *Pool) cleanupVM(inst vms.Instance) {
 }
 
 func (p *Pool) createVMAndNotifiy(ctx context.Context) (vms.Instance, error) {
+	p.notify(EventVMCreateStarted, nil)
 	inst, err := p.createVM(ctx)
 	if err != nil {
 		p.notify(EventVMCreateFailed, err)
@@ -248,8 +251,7 @@ func (p *Pool) requestReplenish() {
 }
 
 // replenishLoop runs a loop that tries to create a new VM and add it to the pool
-// until the pool is closed or the context is done. It must only be run by one
-// goroutine at a time, guarded by replenishMu.
+// until the pool is closed or the context is done.
 func (p *Pool) replenishLoop(ctx context.Context) {
 	defer p.wg.Done()
 
@@ -282,9 +284,14 @@ func (p *Pool) replenish(ctx context.Context) error {
 		p.notify(EventReplenishFailed, err)
 		return err
 	}
-	p.ready <- inst
-	p.notify(EventReplenished, nil)
-	return nil
+	select {
+	case p.ready <- inst:
+		p.notify(EventReplenished, nil)
+		return nil
+	case <-ctx.Done():
+		p.cleanupVM(inst)
+		return ctx.Err()
+	}
 }
 
 func (p *Pool) isClosed() bool {
@@ -305,16 +312,16 @@ func (p *Pool) setClosed() bool {
 // caller must call VM.Release when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, error) {
-	p.opMutex.Lock()
-	defer p.opMutex.Unlock()
 	if closed := p.isClosed(); closed {
 		err := fmt.Errorf("vmspool: pool is closed")
 		p.notify(EventAttemptToUseClosedPool, err)
 		return nil, err
 	}
 	p.notify(EventAcquireWaiting, nil)
-	var inst vms.Instance
 
+	// Block without holding any lock so that Close can run concurrently and
+	// signal shutdown by closing p.done.
+	var inst vms.Instance
 	select {
 	case <-ctx.Done():
 		p.notify(EventAcquireFailed, ctx.Err())
@@ -326,6 +333,9 @@ func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, erro
 	case inst = <-p.ready:
 	}
 	p.notify(EventVMDequeued, nil)
+
+	p.opMutex.Lock()
+	defer p.opMutex.Unlock()
 	if err := inst.Start(ctx, stdout, stderr); err != nil {
 		// Start failed; clean up the VM and replenish so the pool stays full.
 		p.cleanupVM(inst)

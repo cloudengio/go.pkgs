@@ -1,9 +1,7 @@
-cloudeng.io/errors v0.0.13 h1:VNAhh/LMgXDzfSx/LxeYU+A6UUBP6K65yTyvQd2OJ5E=
-cloudeng.io/errors v0.0.13/go.mod h1:+IAMDlCNxHDxlWE9vjkPxED0d7Wzt7Nl3REebuCO4m8=
+cloudeng.io/debug v0.0.0-20230105021008-948d22470af5 h1:zsKXQfoCtN7whSQIdpArUNxKTtQG3+vpd1XJ8qzcWBA=
+cloudeng.io/debug v0.0.0-20230105021008-948d22470af5/go.mod h1:UDKUtuaCh0+iaDe5+i70G3l3liexOPeU3h0lyUeAt+o=
 cloudeng.io/errors v0.0.14-0.20260114020737-744f6c0f8e64 h1:3yVQzalGZvvASjLvLBV+B9s9wirITyfiSjJoZ8Tx52o=
 cloudeng.io/errors v0.0.14-0.20260114020737-744f6c0f8e64/go.mod h1:+IAMDlCNxHDxlWE9vjkPxED0d7Wzt7Nl3REebuCO4m8=
-cloudeng.io/logging v0.0.0-20260423190947-81385993b155 h1:O9csEqpGqwNxEWi6x0UPKh0tjrClo7SNLi5VkkKUMbw=
-cloudeng.io/logging v0.0.0-20260423190947-81385993b155/go.mod h1:1srNtLRpQsIoLck/p/JmvR/QfwfPbDO/65orqtdh1N0=
 cloudeng.io/os v0.0.0-20260424002940-830ef619d827 h1:D0OlUHv9ENoEZIeA1eiMDugtrWEVfoBU7W3sNcB5Td4=
 cloudeng.io/os v0.0.0-20260424002940-830ef619d827/go.mod h1:dZoonPQBJ1Us4CJmrJTnOnVNMI/ZGRPtkXSghw3kO4c=
 cloudeng.io/sync v0.0.8 h1:N8o5Qo5sjxwDktWIW/7rfK14O74jGS3pprefjF3EFKA=
