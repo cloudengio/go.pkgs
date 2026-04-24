@@ -20,9 +20,14 @@ import (
 
 func newPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
 	t.Helper()
-	p := vmspool.New(factory, vmspool.WithSize(size))
+	statusCh := make(chan vmspool.Event, size*4)
+	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("pool.Start: %v", err)
+	}
+	// Start returns once the first VM is ready; wait for the full pool to fill.
+	for range size {
+		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
 	}
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
@@ -153,10 +158,15 @@ func TestPool_Release(t *testing.T) {
 
 // TestPool_Close verifies that Close deletes all suspended VMs in the pool.
 func TestPool_Close(t *testing.T) {
+	const size = 3
+	statusCh := make(chan vmspool.Event, size*4)
 	factory := vmstestutil.NewMockFactory()
-	p := vmspool.New(factory, vmspool.WithSize(3))
+	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
+	}
+	for range size {
+		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
 	}
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -276,7 +286,8 @@ func TestPool_StartCancelled(t *testing.T) {
 	}
 }
 
-// TestPool_StartError verifies that Start returns an error when VM creation fails.
+// TestPool_StartError verifies that Start retries VM creation on failure and
+// eventually succeeds once a good VM can be created.
 func TestPool_StartError(t *testing.T) {
 	cloneErr := errors.New("clone failed")
 	factory := vmstestutil.NewMockFactory()
@@ -285,45 +296,62 @@ func TestPool_StartError(t *testing.T) {
 	bad.CloneErr = cloneErr
 	factory.Inject(bad)
 
-	p := vmspool.New(factory, vmspool.WithSize(1))
-	err := p.Start(context.Background())
-	if err == nil {
-		t.Fatal("expected Start to fail")
+	p := vmspool.New(factory, vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start should succeed via retry, got: %v", err)
 	}
-	if !errors.Is(err, cloneErr) {
-		t.Errorf("expected clone error, got %v", err)
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+	mocks := factory.Mocks()
+	if len(mocks) != 2 {
+		t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
+	}
+	// Clone failure leaves the mock in StateInitial (no state transition occurs).
+	if got := mocks[0].State(context.Background()); got != vms.StateInitial {
+		t.Errorf("failed mock state = %s, want Initial", got)
+	}
+	// Second mock was successfully created and deleted by Close.
+	if got := mocks[1].State(context.Background()); got != vms.StateDeleted {
+		t.Errorf("retry mock state = %s, want Deleted", got)
 	}
 }
 
-// TestPool_CreateVM_PartialCleanup verifies that a VM is cleaned up when Start
-// or Suspend fails after Clone, preventing resource leaks.
+// TestPool_CreateVM_PartialCleanup verifies that a VM is cleaned up when Suspend
+// fails after Clone+Start, and that Start retries and eventually succeeds.
 func TestPool_CreateVM_PartialCleanup(t *testing.T) {
 	ctx := context.Background()
 	suspendErr := errors.New("suspend failed")
 
 	// Inject a mock that succeeds Clone+Start but fails Suspend.
 	// After Suspend fails the instance is Running; createVM must delete it.
+	// Start then retries with a fresh mock and succeeds.
 	factory := vmstestutil.NewMockFactory()
 	bad := vmstestutil.NewMock()
 	bad.SuspendErr = suspendErr
 	factory.Inject(bad)
 
-	p := vmspool.New(factory, vmspool.WithSize(1))
-	err := p.Start(ctx)
-	if err == nil {
-		t.Fatal("expected Start to fail")
+	p := vmspool.New(factory, vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+	if err := p.Start(ctx); err != nil {
+		t.Fatalf("Start should succeed via retry, got: %v", err)
 	}
-	if !errors.Is(err, suspendErr) {
-		t.Errorf("expected suspend error, got %v", err)
+	if err := p.Close(ctx); err != nil {
+		t.Errorf("Close: %v", err)
 	}
 
-	// The VM that failed Suspend was Running; createVM must have cleaned it up.
 	mocks := factory.Mocks()
-	if len(mocks) != 1 {
-		t.Fatalf("expected 1 mock, got %d", len(mocks))
+	if len(mocks) != 2 {
+		t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
 	}
+	// The VM that failed Suspend was Running; createVM must have cleaned it up.
 	if got := mocks[0].State(ctx); got != vms.StateDeleted {
 		t.Errorf("partially-created VM state = %s, want Deleted", got)
+	}
+	// The retry VM was successfully created and deleted by Close.
+	if got := mocks[1].State(ctx); got != vms.StateDeleted {
+		t.Errorf("retry VM state = %s, want Deleted", got)
 	}
 }
 
@@ -640,9 +668,13 @@ func TestPool_ReleaseCloseRace(t *testing.T) {
 
 func newRunningPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
 	t.Helper()
-	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithSuspendVMs(false))
+	statusCh := make(chan vmspool.Event, size*4)
+	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithSuspendVMs(false), vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("pool.Start: %v", err)
+	}
+	for range size {
+		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
 	}
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
@@ -725,10 +757,15 @@ func TestPool_NoSuspend_Release(t *testing.T) {
 
 // TestPool_NoSuspend_Close verifies that Close deletes all running VMs in the pool.
 func TestPool_NoSuspend_Close(t *testing.T) {
+	const size = 3
+	statusCh := make(chan vmspool.Event, size*4)
 	factory := vmstestutil.NewMockFactory()
-	p := vmspool.New(factory, vmspool.WithSize(3), vmspool.WithSuspendVMs(false))
+	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithSuspendVMs(false), vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
+	}
+	for range size {
+		waitForEvent(t, statusCh, vmspool.EventVMCreated, 5*time.Second)
 	}
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -736,9 +773,8 @@ func TestPool_NoSuspend_Close(t *testing.T) {
 	allInState(t, factory.Mocks(), vms.StateDeleted)
 }
 
-// TestPool_NoSuspend_StartError verifies that Start returns an error when VM
-// creation fails. With suspend disabled the only fallible steps are Clone and
-// Start; we inject a Start error here.
+// TestPool_NoSuspend_StartError verifies that Start retries VM creation on failure
+// (Start error with suspend disabled) and eventually succeeds.
 func TestPool_NoSuspend_StartError(t *testing.T) {
 	startErr := errors.New("start failed")
 	factory := vmstestutil.NewMockFactory()
@@ -747,12 +783,24 @@ func TestPool_NoSuspend_StartError(t *testing.T) {
 	bad.StartErr = startErr
 	factory.Inject(bad)
 
-	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithSuspendVMs(false))
-	err := p.Start(context.Background())
-	if err == nil {
-		t.Fatal("expected Start to fail")
+	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithSuspendVMs(false),
+		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start should succeed via retry, got: %v", err)
 	}
-	if !errors.Is(err, startErr) {
-		t.Errorf("expected start error, got %v", err)
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+	mocks := factory.Mocks()
+	if len(mocks) != 2 {
+		t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
+	}
+	// The Start-failed VM was cleaned up by createVM.
+	if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
+		t.Errorf("failed mock state = %s, want Deleted", got)
+	}
+	// The retry VM was successfully created and deleted by Close.
+	if got := mocks[1].State(context.Background()); got != vms.StateDeleted {
+		t.Errorf("retry mock state = %s, want Deleted", got)
 	}
 }

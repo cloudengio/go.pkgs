@@ -191,10 +191,11 @@ idempotent.
 ```go
 func (p *Pool) Start(ctx context.Context) error
 ```
-Start fills the pool with size suspended VMs. It blocks until all VMs are
-ready or the context is canceled. Start can only be called once and will
-return an error if called more than once. After Start returns, the pool is
-ready to accept Acquire calls.
+Start blocks until at at least one VM is ready to be acquired (or the
+context is canceled), any other VMs required to fill the pool are created
+asynchronously (unless the context is canceled). Start can be called once
+only and will return an error if called more than once. After Start returns,
+the pool is ready to accept Acquire calls.
 
 
 
