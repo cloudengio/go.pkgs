@@ -796,3 +796,87 @@ func TestPool_NoSuspend_StartError(t *testing.T) {
 		t.Errorf("retry mock state = %s, want Deleted", got)
 	}
 }
+
+// TestPool_CloseBeforePoolFull verifies that calling Close while the async fill
+// goroutine (launched by Start for the remaining size-1 VMs) is still running
+// cancels those goroutines via p.replenishCtx and completes without deadlocking.
+func TestPool_CloseBeforePoolFull(t *testing.T) {
+	const timeout = 5 * time.Second
+
+	// Block the second VM's Clone so the async fill goroutine is stuck.
+	cloneBlock := make(chan struct{})
+	blockingMock := vmstestutil.NewMock()
+	blockingMock.CloneBlock = cloneBlock
+
+	statusCh := make(chan vmspool.Event, 16)
+	factory := vmstestutil.NewMockFactory()
+	// Inject in order: first New() → plain mock (used by synchronous fill),
+	// second New() → blocking mock (used by async fill goroutine).
+	factory.Inject(vmstestutil.NewMock())
+	factory.Inject(blockingMock)
+
+	pool := vmspool.New(factory, vmspool.WithSize(2), vmspool.WithStatus(statusCh))
+	if err := pool.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Wait until the first VM has been created (sync) and the async fill goroutine
+	// has started on the second VM (blocking in Clone).
+	waitForEvent(t, statusCh, vmspool.EventVMCreated, timeout)
+	waitForEvent(t, statusCh, vmspool.EventVMCreateStarted, timeout)
+	runtime.Gosched() // let the goroutine reach Clone's blocking select
+
+	// Close must cancel p.replenishCtx, which unblocks Clone and lets the async
+	// fill goroutine exit. Without this cancellation, Close would hang.
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- pool.Close(context.Background()) }()
+
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(timeout):
+		t.Fatal("Close deadlocked: async fill goroutine was not cancelled by replenish context")
+	}
+}
+
+// nilConstructor is a vmspool.Constructor that returns nil for its first New
+// call and delegates to a real factory for all subsequent calls.
+type nilConstructor struct {
+	hitNil  bool
+	factory *vmstestutil.MockFactory
+}
+
+func (c *nilConstructor) New() vms.Instance {
+	if !c.hitNil {
+		c.hitNil = true
+		return nil
+	}
+	return c.factory.New()
+}
+
+// TestPool_NilConstructor verifies that a nil return from the constructor is
+// handled gracefully: Start retries and succeeds once the constructor returns
+// a real instance.
+func TestPool_NilConstructor(t *testing.T) {
+	factory := vmstestutil.NewMockFactory()
+	ctor := &nilConstructor{factory: factory}
+
+	p := vmspool.New(ctor, vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start should succeed via retry after nil constructor, got: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+	// nilConstructor consumed one nil call, then the factory produced one real mock.
+	mocks := factory.Mocks()
+	if len(mocks) != 1 {
+		t.Fatalf("expected 1 mock from retry, got %d", len(mocks))
+	}
+	if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
+		t.Errorf("mock state = %s, want Deleted", got)
+	}
+}
