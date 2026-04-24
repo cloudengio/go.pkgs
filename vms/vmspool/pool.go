@@ -46,12 +46,16 @@ type Pool struct {
 }
 
 type options struct {
-	size     int
-	statusCh chan<- Event
+	size             int
+	statusCh         chan<- Event
+	cleanupTimeout   time.Duration
+	replenishTimeout time.Duration
 }
 
 const (
-	DefaultPoolSize = 2
+	DefaultPoolSize         = 2
+	DefaultCleanupTimeout   = time.Minute
+	DefaultReplenishTimeout = 5 * time.Minute
 )
 
 type Option func(*options)
@@ -64,6 +68,30 @@ func WithSize(size int) Option {
 			size = DefaultPoolSize
 		}
 		o.size = size
+	}
+}
+
+// WithCleanupTimeout sets the timeout for cleaning up VMs during Acquire and Close.
+// The default is DefaultCleanupTimeout.
+// A 0 or negative value is treated as DefaultCleanupTimeout.
+func WithCleanupTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		if timeout <= 0 {
+			timeout = DefaultCleanupTimeout
+		}
+		o.cleanupTimeout = timeout
+	}
+}
+
+// WithReplenishTimeout sets the timeout for creating VMs during replenishment.
+// The default is DefaultReplenishTimeout.
+// A 0 or negative value is treated as DefaultReplenishTimeout.
+func WithReplenishTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		if timeout <= 0 {
+			timeout = DefaultReplenishTimeout
+		}
+		o.replenishTimeout = timeout
 	}
 }
 
@@ -81,6 +109,8 @@ func WithStatus(ch chan<- Event) Option {
 func New(constructor Constructor, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
+	options.cleanupTimeout = DefaultCleanupTimeout
+	options.replenishTimeout = DefaultReplenishTimeout
 	for _, opt := range opts {
 		opt(&options)
 	}
@@ -130,7 +160,7 @@ func (p *Pool) start(ctx context.Context) error {
 }
 
 func (p *Pool) cleanupVM(inst vms.Instance) {
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
 	_ = vms.CleanupVM(cleanupCtx, inst)
 	cancel()
 }
