@@ -380,6 +380,153 @@ func assertPrecedes(t *testing.T, events []vmspool.EventKind, before, after vmsp
 	t.Errorf("no occurrence of %s found before %s in %v", before, after, events)
 }
 
+// TestPool_ReplenishBlockedOnReadySend tests that Close can unblock a
+// replenishment goroutine that is stuck trying to send to p.ready when the
+// channel is already at capacity. Without a select/ctx.Done() guard on that
+// send, the goroutine blocks indefinitely, preventing p.wg.Wait from returning
+// and deadlocking Close.
+//
+// Setup:
+//  1. Acquire the only pool VM so p.ready becomes empty.
+//  2. Inject a blocking mock (Clone waits for a signal) then Release, which
+//     triggers a replenishment goroutine that pauses inside Clone.
+//  3. While the goroutine is paused, fill p.ready to capacity via ReadyCh.
+//  4. Unblock Clone — the goroutine proceeds through Start+Suspend and
+//     arrives at p.ready <- inst, which now blocks (channel is full).
+//  5. Call Close. With the select/ctx.Done() fix, Close cancels the context,
+//     the goroutine exits, and Close completes. Without the fix, Close hangs.
+func TestPool_ReplenishBlockedOnReadySend(t *testing.T) {
+	const timeout = 5 * time.Second
+
+	cloneBlock := make(chan struct{})
+	blockingMock := vmstestutil.NewMock()
+	blockingMock.CloneBlock = cloneBlock
+
+	factory := vmstestutil.NewMockFactory()
+	pool := vmspool.New(factory, vmspool.WithSize(1))
+	if err := pool.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Drain the pool so p.ready is empty.
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+
+	// Queue the blocking mock for the next constructor call, then Release to
+	// trigger replenishment. The goroutine will block inside Clone immediately.
+	factory.Inject(blockingMock)
+	if err := vm.Release(context.Background()); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	// Fill p.ready to capacity while the goroutine is paused in Clone.
+	// When Clone unblocks, the goroutine will try to send its newly-created
+	// VM and find the channel full.
+	injected := vmstestutil.NewMock()
+	pool.ReadyCh() <- injected
+
+	// Unblock Clone. The goroutine races through Start+Suspend (both
+	// instantaneous in the mock) and arrives at p.ready <- inst.
+	close(cloneBlock)
+
+	// Give the goroutine a moment to reach the blocking send.
+	time.Sleep(10 * time.Millisecond)
+
+	// Close must cancel the goroutine's context and complete within timeout.
+	// Without the select/ctx.Done() guard on p.ready <- inst, the goroutine
+	// stays blocked and Close deadlocks.
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- pool.Close(context.Background())
+	}()
+
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(timeout):
+		t.Fatal("Close deadlocked: replenishment goroutine is blocked on p.ready <- inst")
+	}
+}
+
+// TestPool_CloseUnblocksAcquire verifies that Close can run and unblock a
+// goroutine that is blocked inside Acquire waiting for a VM. If Acquire holds
+// a lock across the blocking select, Close will deadlock because it needs the
+// same lock to signal pool shutdown.
+func TestPool_CloseUnblocksAcquire(t *testing.T) {
+	const timeout = 5 * time.Second
+	statusCh := make(chan vmspool.Event, 32)
+
+	factory := vmstestutil.NewMockFactory()
+	pool := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStatus(statusCh),
+	)
+	if err := pool.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Acquire and hold the only VM so the pool becomes empty.
+	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("first Acquire: %v", err)
+	}
+	defer vm.Release(context.Background()) //nolint
+
+	// Start a second Acquire that will block because the pool is empty.
+	acquireDone := make(chan error, 1)
+	go func() {
+		_, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+		acquireDone <- err
+	}()
+
+	// Wait until the blocked Acquire has sent EventAcquireWaiting (the first
+	// event was from the initial Acquire above; the second confirms the
+	// goroutine is now blocking on the ready channel).
+	seen := 0
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for seen < 2 {
+		select {
+		case e := <-statusCh:
+			if e.Kind == vmspool.EventAcquireWaiting {
+				seen++
+			}
+		case <-deadline.C:
+			t.Fatal("timed out waiting for second Acquire to start blocking")
+		}
+	}
+
+	// Close must succeed. If Acquire holds a lock while blocking on the ready
+	// channel, Close will deadlock trying to acquire that same lock.
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- pool.Close(context.Background())
+	}()
+
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(timeout):
+		t.Fatal("Close deadlocked: Acquire is holding a lock while blocking on the ready channel")
+	}
+
+	// The blocked Acquire must have been unblocked by Close and returned an error.
+	select {
+	case err := <-acquireDone:
+		if err == nil {
+			t.Error("expected Acquire to return an error after Close, got nil")
+		}
+	case <-time.After(time.Second):
+		t.Error("Acquire did not return after Close completed")
+	}
+}
+
 // TestPool_ReleaseCloseRace verifies that Release and Close can run concurrently
 // without triggering sync.WaitGroup misuse (Add after Wait) or a data race.
 // Run with -race to validate.
