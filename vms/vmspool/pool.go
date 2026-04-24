@@ -194,17 +194,6 @@ func (p *Pool) cleanupVM(inst vms.Instance) {
 	cancel()
 }
 
-func (p *Pool) createVMAndNotify(ctx context.Context) (vms.Instance, error) {
-	p.notify(EventVMCreateStarted, nil)
-	inst, err := p.createVM(ctx)
-	if err != nil {
-		p.notify(EventVMCreateFailed, err)
-		return nil, err
-	}
-	p.notify(EventVMCreated, nil)
-	return inst, nil
-}
-
 // createVM clones, starts, and suspends a new instance then places it in the
 // ready channel. Returns an error if any step fails or the context is done.
 // Any partially-created instance is cleaned up before returning an error.
@@ -231,6 +220,17 @@ func (p *Pool) createVM(ctx context.Context) (vms.Instance, error) {
 	return inst, nil
 }
 
+func (p *Pool) createVMAndNotify(ctx context.Context) (vms.Instance, error) {
+	p.notify(EventVMCreateStarted, nil)
+	inst, err := p.createVM(ctx)
+	if err != nil {
+		p.notify(EventVMCreateFailed, err)
+		return nil, err
+	}
+	p.notify(EventVMCreated, nil)
+	return inst, nil
+}
+
 // requestReplenish launches a replenishment goroutine unless the pool is
 // already closed. The closed check and wg.Add are performed under closedMu so
 // that Close cannot call wg.Wait in the window between the check and the Add.
@@ -241,18 +241,24 @@ func (p *Pool) requestReplenish() {
 		return
 	}
 	p.wg.Go(func() {
-		p.replenishLoop(p.replenishCtx, p.options.replenishInterval, p.options.replenishTimeout)
+		err := p.createVMLoop(p.replenishCtx, p.options.replenishInterval, p.options.replenishTimeout)
+		if err != nil {
+			// Log the error but keep the pool running; a later replenishment may succeed and restore capacity.
+			p.notify(EventReplenishFailed, err)
+			return
+		}
+		p.notify(EventReplenished, nil)
 	})
 	p.closedMu.Unlock()
 	p.notify(EventReplenishStarted, nil)
 
 }
 
-// replenishLoop runs a loop that tries to create a new VM and add it to the pool
+// createVMLoop runs a loop that tries to create a new VM and add it to the pool
 // until the pool is closed or the context is done.
-func (p *Pool) replenishLoop(ctx context.Context, interval, timeout time.Duration) {
-	if p.replenish(ctx, timeout) == nil {
-		return
+func (p *Pool) createVMLoop(ctx context.Context, interval, timeout time.Duration) error {
+	if p.attemptCreateVM(ctx, timeout) == nil {
+		return nil
 	}
 	// Keep retrying to replenish the pool.
 	ticker := time.NewTicker(interval)
@@ -260,27 +266,25 @@ func (p *Pool) replenishLoop(ctx context.Context, interval, timeout time.Duratio
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case <-ticker.C:
-			if p.replenish(ctx, timeout) == nil {
-				return
+			if p.attemptCreateVM(ctx, timeout) == nil {
+				return nil
 			}
 		}
 	}
 }
 
-// replenish creates a single VM and adds it to the pool.
-func (p *Pool) replenish(ctx context.Context, timeout time.Duration) error {
+// createVM creates a single VM and adds it to the pool.
+func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	inst, err := p.createVMAndNotify(ctx)
 	if err != nil {
-		p.notify(EventReplenishFailed, err)
 		return err
 	}
 	select {
 	case p.ready <- inst:
-		p.notify(EventReplenished, nil)
 		return nil
 	case <-ctx.Done():
 		p.cleanupVM(inst)

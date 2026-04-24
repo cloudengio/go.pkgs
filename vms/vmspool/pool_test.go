@@ -233,6 +233,49 @@ func TestPool_Concurrency(t *testing.T) {
 	}
 }
 
+// TestPool_StartCancelled verifies that cancelling the context passed to Start
+// causes Start to return context.Canceled and that the pool can be closed cleanly.
+func TestPool_StartCancelled(t *testing.T) {
+	const timeout = 5 * time.Second
+
+	cloneBlock := make(chan struct{})
+	blockingMock := vmstestutil.NewMock()
+	blockingMock.CloneBlock = cloneBlock
+
+	statusCh := make(chan vmspool.Event, 16)
+	factory := vmstestutil.NewMockFactory()
+	factory.Inject(blockingMock)
+
+	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- p.Start(ctx) }()
+
+	// Wait until createVMAndNotify has fired EventVMCreateStarted, confirming
+	// the goroutine is about to call Clone (which will block on cloneBlock).
+	waitForEvent(t, statusCh, vmspool.EventVMCreateStarted, timeout)
+	runtime.Gosched() // let the goroutine reach Clone's blocking select
+
+	cancel()
+
+	select {
+	case err := <-startDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Start: got %v, want context.Canceled", err)
+		}
+	case <-time.After(timeout):
+		t.Fatal("Start did not return after context cancellation")
+	}
+
+	// Pool was never fully started; Close must still complete cleanly.
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close after cancelled Start: %v", err)
+	}
+}
+
 // TestPool_StartError verifies that Start returns an error when VM creation fails.
 func TestPool_StartError(t *testing.T) {
 	cloneErr := errors.New("clone failed")

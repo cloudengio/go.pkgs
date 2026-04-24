@@ -10,12 +10,12 @@ quickly when acquired. When a caller releases a VM it is deleted and a new
 one is created asynchronously to restore the pool to its target size.
 
 ## Constants
-### DefaultPoolSize, DefaultCleanupTimeout, DefaultReplenishTimeout, DefaultReplenishInterval
+### DefaultPoolSize, DefaultCleanupTimeout, DefaultCreateTimeout, DefaultCreateInterval
 ```go
 DefaultPoolSize = 2
 DefaultCleanupTimeout = time.Minute
-DefaultReplenishTimeout = 5 * time.Minute
-DefaultReplenishInterval = 500 * time.Millisecond
+DefaultCreateTimeout = 5 * time.Minute
+DefaultCreateInterval = 500 * time.Millisecond
 
 ```
 
@@ -55,8 +55,9 @@ EventKind identifies the type of pool event sent to a status channel.
 // EventAcquireWaiting is emitted when Acquire is called and blocks
 // waiting for a suspended VM to become available.
 EventAcquireWaiting EventKind = iota
-// EventVMDequeued is emitted when a suspended VM is taken from the pool
-// and is about to be started for the caller.
+// EventVMDequeued is emitted when a suspended or running VM is taken from
+// the pool and is about to be started the caller, or if running
+// returned as-is to the caller.
 EventVMDequeued
 // EventAcquired is emitted when the VM has been started and is returned
 // to the caller.
@@ -72,7 +73,7 @@ EventRelease
 // EventReleased is emitted after the VM has been deleted and
 // replenishment has been scheduled.
 EventReleased
-// EventCreateStarted is emitted when a goroutine is launched to create a new VM
+// EventVMCreateStarted is emitted when a goroutine is launched to create a new VM
 // to place in the pool.
 EventVMCreateStarted
 // EventVMCreated is emitted when a new VM has been successfully created.
@@ -119,19 +120,12 @@ treated as DefaultCleanupTimeout.
 
 
 ```go
-func WithReplenishInterval(interval time.Duration) Option
+func WithCreateTimeoutAndInterval(timeout, interval time.Duration) Option
 ```
-WithReplenishInterval sets the interval between VM creation attempts during
-replenishment. The default is DefaultReplenishInterval. A 0 or negative
-value is treated as DefaultReplenishInterval.
-
-
-```go
-func WithReplenishTimeout(timeout time.Duration) Option
-```
-WithReplenishTimeout sets the timeout for creating VMs during replenishment.
-The default is DefaultReplenishTimeout. A 0 or negative value is treated as
-DefaultReplenishTimeout.
+WithCreateTimeoutAndInterval sets the timeout for creating a single VM and
+the interval between creation attempts. The default timeout and interval
+are DefaultCreateTimeout and DefaultCreateInterval. A 0 or negative value is
+treated as DefaultCreateTimeout or DefaultCreateInterval.
 
 
 ```go
@@ -198,9 +192,9 @@ idempotent.
 func (p *Pool) Start(ctx context.Context) error
 ```
 Start fills the pool with size suspended VMs. It blocks until all VMs are
-ready or any creation step fails. The context governs the initial fill of
-the pool. It should only be called be once and will return after attempting
-to fill the pool and will return any errors encountered during that process.
+ready or the context is canceled. Start can only be called once and will
+return an error if called more than once. After Start returns, the pool is
+ready to accept Acquire calls.
 
 
 
