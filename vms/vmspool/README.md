@@ -10,11 +10,12 @@ quickly when acquired. When a caller releases a VM it is deleted and a new
 one is created asynchronously to restore the pool to its target size.
 
 ## Constants
-### DefaultPoolSize, DefaultCleanupTimeout, DefaultReplenishTimeout
+### DefaultPoolSize, DefaultCleanupTimeout, DefaultReplenishTimeout, DefaultReplenishInterval
 ```go
 DefaultPoolSize = 2
 DefaultCleanupTimeout = time.Minute
 DefaultReplenishTimeout = 5 * time.Minute
+DefaultReplenishInterval = 500 * time.Millisecond
 
 ```
 
@@ -49,7 +50,7 @@ type EventKind int
 EventKind identifies the type of pool event sent to a status channel.
 
 ### Constants
-### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventReplenishStarted, EventReplenished, EventReplenishFailed
+### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventVMCreateStarted, EventVMCreated, EventVMCreateFailed, EventReplenishStarted, EventReplenished, EventReplenishFailed
 ```go
 // EventAcquireWaiting is emitted when Acquire is called and blocks
 // waiting for a suspended VM to become available.
@@ -71,6 +72,13 @@ EventRelease
 // EventReleased is emitted after the VM has been deleted and
 // replenishment has been scheduled.
 EventReleased
+// EventCreateStarted is emitted when a goroutine is launched to create a new VM
+// to place in the pool.
+EventVMCreateStarted
+// EventVMCreated is emitted when a new VM has been successfully created.
+EventVMCreated
+// EventVMCreateFailed is emitted when VM creation fails.
+EventVMCreateFailed
 // EventReplenishStarted is emitted when a replenishment goroutine is
 // launched to restore the pool to its target size.
 EventReplenishStarted
@@ -111,6 +119,14 @@ treated as DefaultCleanupTimeout.
 
 
 ```go
+func WithReplenishInterval(interval time.Duration) Option
+```
+WithReplenishInterval sets the interval between VM creation attempts during
+replenishment. The default is DefaultReplenishInterval. A 0 or negative
+value is treated as DefaultReplenishInterval.
+
+
+```go
 func WithReplenishTimeout(timeout time.Duration) Option
 ```
 WithReplenishTimeout sets the timeout for creating VMs during replenishment.
@@ -131,6 +147,13 @@ func WithStatus(ch chan<- Event) Option
 WithStatus registers ch to receive pool lifecycle events. Sends are
 non-blocking: events are dropped if ch is full. The caller is responsible
 for sizing the channel appropriately and draining it promptly.
+
+
+```go
+func WithSuspendVMs(suspend bool) Option
+```
+WithSuspendVMs configures the pool to suspend VMs after starting them during
+creation and replenishment. By default, VMs are suspended.
 
 
 
@@ -167,15 +190,17 @@ a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Close(ctx context.Context) error
 ```
 Close stops accepting new acquires, waits for all replenishment goroutines
-to finish, then deletes every suspended VM remaining in the pool.
+to finish, then deletes every suspended VM remaining in the pool. Close is
+idempotent.
 
 
 ```go
 func (p *Pool) Start(ctx context.Context) error
 ```
 Start fills the pool with size suspended VMs. It blocks until all VMs are
-ready or any creation step fails. The context governs both the initial fill
-and background replenishment goroutines launched during the pool's lifetime.
+ready or any creation step fails. The context governs the initial fill of
+the pool. It should only be called be once and will return after attempting
+to fill the pool and will return any errors encountered during that process.
 
 
 

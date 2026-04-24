@@ -176,7 +176,7 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 	var g errgroup.T
 	for range size {
 		g.GoContext(ctx, func() error {
-			inst, err := p.createVMAndNotifiy(ctx)
+			inst, err := p.createVMAndNotify(ctx)
 			if err != nil {
 				return err
 			}
@@ -198,7 +198,7 @@ func (p *Pool) cleanupVM(inst vms.Instance) {
 	cancel()
 }
 
-func (p *Pool) createVMAndNotifiy(ctx context.Context) (vms.Instance, error) {
+func (p *Pool) createVMAndNotify(ctx context.Context) (vms.Instance, error) {
 	p.notify(EventVMCreateStarted, nil)
 	inst, err := p.createVM(ctx)
 	if err != nil {
@@ -279,7 +279,7 @@ func (p *Pool) replenishLoop(ctx context.Context) {
 
 // replenish creates a single VM and adds it to the pool.
 func (p *Pool) replenish(ctx context.Context) error {
-	inst, err := p.createVMAndNotifiy(ctx)
+	inst, err := p.createVMAndNotify(ctx)
 	if err != nil {
 		p.notify(EventReplenishFailed, err)
 		return err
