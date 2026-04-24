@@ -217,6 +217,8 @@ func (p *Pool) scheduleReplenish() {
 	go p.replenish()
 }
 
+xxxxx - should replenish start over
+
 // replenish creates one VM and adds it to the pool. Silently drops the VM if
 // the pool is shutting down. Intended to run as a goroutine.
 func (p *Pool) replenish() {
