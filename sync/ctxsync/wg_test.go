@@ -31,7 +31,7 @@ func ExampleWaitGroup() {
 func TestWaitGroupInline(t *testing.T) {
 	var wg ctxsync.WaitGroup
 	wg.Add(1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	wg.Wait(ctx)
 	if got, want := ctx.Err().Error(), "context canceled"; got != want {
@@ -40,7 +40,7 @@ func TestWaitGroupInline(t *testing.T) {
 }
 
 func TestWaitGroup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	var wg ctxsync.WaitGroup
 	wg.Add(1)
 	var out string
@@ -58,16 +58,30 @@ func TestWaitGroup(t *testing.T) {
 	// The test will timeout if we never get here.
 }
 
-// TestWaitGroup_ConcurrentAddDone races many goroutines calling Done against
-// a blocking Wait. Run with -race.
+// TestWaitGroup_ConcurrentAddDone races many goroutines calling Done while
+// Wait is blocked on the same WaitGroup. Run with -race.
 func TestWaitGroup_ConcurrentAddDone(t *testing.T) {
 	const n = 100
 	var wg ctxsync.WaitGroup
-	wg.Add(n)
+	wg.Add(n + 1)
+	releaseDone := make(chan struct{})
+	waitStarted := make(chan struct{})
+	waitReturned := make(chan struct{})
 	for range n {
-		go wg.Done()
+		go func() {
+			<-releaseDone
+			wg.Done()
+		}()
 	}
-	wg.Wait(context.Background())
+	go func() {
+		close(waitStarted)
+		wg.Wait(t.Context())
+		close(waitReturned)
+	}()
+	<-waitStarted
+	close(releaseDone)
+	wg.Done()
+	<-waitReturned
 }
 
 // TestWaitGroup_CancelRacesWithCompletion races context cancellation against
@@ -76,14 +90,11 @@ func TestWaitGroup_CancelRacesWithCompletion(t *testing.T) {
 	const iterations = 500
 	for range iterations {
 		var wg ctxsync.WaitGroup
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		wg.Add(1)
 		go cancel()
 		go wg.Done()
 		wg.Wait(ctx)
-		// Ensure the background goroutine spawned inside Wait can exit: by the
-		// time we reach here either Done was already called (counter=0) or it
-		// will be called imminently. Either way the goroutine unblocks quickly.
 		cancel() // no-op if already cancelled; satisfies gosec G118
 	}
 }
@@ -100,7 +111,7 @@ func TestWaitGroup_MultipleConcurrentWaiters(t *testing.T) {
 	for range waiters {
 		go func() {
 			defer stdWG.Done()
-			wg.Wait(context.Background())
+			wg.Wait(t.Context())
 		}()
 	}
 	wg.Done()
@@ -108,21 +119,22 @@ func TestWaitGroup_MultipleConcurrentWaiters(t *testing.T) {
 }
 
 // TestWaitGroup_CancelledWaitDoneCleanup verifies that after Wait returns due
-// to context cancellation, calling Done brings the internal goroutine to zero
-// without a race. Callers must not call Add again until they can guarantee the
-// internal goroutine from the cancelled Wait has exited (i.e. the counter
-// reached zero and sync.WaitGroup.Wait fully returned). Run with -race.
+// to context cancellation, Done does not race and Add can be called immediately
+// to reuse the WaitGroup. Run with -race.
 func TestWaitGroup_CancelledWaitDoneCleanup(t *testing.T) {
 	var wg ctxsync.WaitGroup
 	wg.Add(1)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // pre-cancel so Wait returns immediately
 	wg.Wait(ctx)
 
-	// The goroutine spawned inside Wait is still blocked on sync.WaitGroup.Wait.
-	// Calling Done releases it; this must not race.
-	wg.Done()
+	wg.Done() // must not race with a concurrent Add or a subsequent Wait
+
+	// Immediate reuse must work correctly.
+	wg.Add(1)
+	go wg.Done()
+	wg.Wait(t.Context())
 }
 
 // TestWaitGroup_CancelWhileManyGoroutinesRunning cancels the context while n
@@ -131,29 +143,50 @@ func TestWaitGroup_CancelledWaitDoneCleanup(t *testing.T) {
 func TestWaitGroup_CancelWhileManyGoroutinesRunning(t *testing.T) {
 	const n = 50
 	var wg ctxsync.WaitGroup
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	var barrier, tracker sync.WaitGroup
 	barrier.Add(n)
 	tracker.Add(n)
 	wg.Add(n)
-	for range n {
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
 		go func() {
 			barrier.Done() // signal that this goroutine has started
 			defer tracker.Done()
-			time.Sleep(5 * time.Millisecond)
+			<-start
 			wg.Done()
 		}()
 	}
 	barrier.Wait() // all goroutines are running
-	cancel()       // cancel while they are still sleeping
+	cancel()       // cancel while they are still waiting
+	close(start)   // release goroutines
 	wg.Wait(ctx)   // returns due to cancellation, not completion
+	if ctx.Err() == nil {
+		t.Fatal("Wait should have returned due to context cancellation")
+	}
+}
 
-	// Wait for all goroutines to finish so the test does not leak them.
-	// After tracker.Wait() the counter is 0 and the goroutine spawned inside
-	// wg.Wait(ctx) above has already exited (or will imminently).
-	tracker.Wait()
+// TestWaitGroup_Go verifies that Go starts the function in a goroutine and
+// that Wait unblocks once all goroutines have returned. Run with -race.
+func TestWaitGroup_Go(t *testing.T) {
+	const n = 50
+	var wg ctxsync.WaitGroup
+	var mu sync.Mutex
+	results := make([]int, 0, n)
+	for i := range n {
+		i := i
+		wg.Go(func() {
+			mu.Lock()
+			results = append(results, i)
+			mu.Unlock()
+		})
+	}
+	wg.Wait(t.Context())
+	if got, want := len(results), n; got != want {
+		t.Errorf("got %d results, want %d", got, want)
+	}
 }
 
 // TestWaitGroup_RapidCycles stresses Add/Done/Wait reuse across many iterations.
@@ -164,6 +197,6 @@ func TestWaitGroup_RapidCycles(t *testing.T) {
 	for range iterations {
 		wg.Add(1)
 		go wg.Done()
-		wg.Wait(context.Background())
+		wg.Wait(t.Context())
 	}
 }
