@@ -11,11 +11,12 @@ import (
 )
 
 // WaitFor repeatedly calls the provided check function until it returns
-// done=true or the context is done. It waits for the specified interval between
-// calls. If check returns an error, it is returned immediately.
+// done=true, or the context is done. It waits for the specified
+// interval between calls. If check returns an error, it is ignored
+// unless done=true, in which case it is returned immediately.
 func WaitFor(ctx context.Context, interval time.Duration, check func(ctx context.Context) (done bool, err error)) error {
 	if interval <= 0 {
-		return fmt.Errorf("vms: WaitForSomething: interval must be positive: %v", interval)
+		return fmt.Errorf("executil: WaitForSomething: interval must be positive: %v", interval)
 	}
 
 	if done, err := check(ctx); done {

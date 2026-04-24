@@ -67,6 +67,15 @@ signal, hence the total time spent waiting may be up to len(sigs)+1 times
 perSignalOrWait. If the process stops after any signal, SignalAndWait
 returns immediately.
 
+### Func WaitFor
+```go
+func WaitFor(ctx context.Context, interval time.Duration, check func(ctx context.Context) (done bool, err error)) error
+```
+WaitFor repeatedly calls the provided check function until it returns
+done=true, or the context is done. It waits for the specified interval
+between calls. If check returns an error, it is ignored unless done=true,
+in which case it is returned immediately.
+
 ### Func WaitForStopped
 ```go
 func WaitForStopped(ctx context.Context, pid int, waitFor time.Duration) error
@@ -96,6 +105,12 @@ starts a goroutine to wait for the cmd to complete.
 
 
 ### Methods
+
+```go
+func (aw *AsyncWait) Cmd() *exec.Cmd
+```
+Cmd returns the exec.Cmd being waited on.
+
 
 ```go
 func (aw *AsyncWait) Wait() error
