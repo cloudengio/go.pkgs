@@ -5,6 +5,22 @@ import cloudeng.io/vms/vmstestutil
 ```
 
 
+## Functions
+### Func RunPoolTests
+```go
+func RunPoolTests(t TestingT, cfg PoolTestConfig)
+```
+RunPoolTests runs a suite of integration tests that verify a
+vmspool.Constructor creates instances that work correctly with vmspool.Pool.
+Each scenario runs as a t.Run subtest so results appear individually and
+failures are isolated.
+
+Callers must provide a Constructor whose instances are real (or sufficiently
+realistic) implementations of vms.Instance. The tests exercise the full
+acquire → exec → release → replenish lifecycle.
+
+
+
 ## Types
 ### Type ExecCall
 ```go
@@ -156,6 +172,46 @@ func (f *MockFactory) New() vms.Instance
 ```
 
 
+
+
+### Type PoolTestConfig
+```go
+type PoolTestConfig struct {
+	// Constructor creates new VM instances. Required.
+	Constructor vmspool.Constructor
+
+	// PoolSize is the pool size to use across all tests. Defaults to 2.
+	PoolSize int
+
+	// ExecCmd is a command that should succeed inside an acquired VM. If empty
+	// the Exec subtest is skipped.
+	ExecCmd  string
+	ExecArgs []string
+
+	// Timeout caps individual pool operations. Defaults to 30 s.
+	Timeout time.Duration
+
+	// SupportsSuspend enables the suspend-mode subtests (WithSuspendVMs(true)).
+	// Set this when the constructor produces instances that support Suspend.
+	SupportsSuspend bool
+}
+```
+PoolTestConfig configures the pool integration test suite run by
+RunPoolTests.
+
+
+### Type TestingT
+```go
+type TestingT interface {
+	Helper()
+	Run(name string, f func(*testing.T)) bool
+	Fatalf(format string, args ...any)
+	Errorf(format string, args ...any)
+	Cleanup(f func())
+}
+```
+TestingT is the subset of *testing.T used by RunPoolTests. *testing.T
+satisfies this interface directly.
 
 
 
