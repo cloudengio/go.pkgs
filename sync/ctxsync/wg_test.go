@@ -151,7 +151,7 @@ func TestWaitGroup_CancelWhileManyGoroutinesRunning(t *testing.T) {
 	tracker.Add(n)
 	wg.Add(n)
 	start := make(chan struct{})
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			barrier.Done() // signal that this goroutine has started
 			defer tracker.Done()
@@ -161,11 +161,13 @@ func TestWaitGroup_CancelWhileManyGoroutinesRunning(t *testing.T) {
 	}
 	barrier.Wait() // all goroutines are running
 	cancel()       // cancel while they are still waiting
-	close(start)   // release goroutines
 	wg.Wait(ctx)   // returns due to cancellation, not completion
 	if ctx.Err() == nil {
 		t.Fatal("Wait should have returned due to context cancellation")
 	}
+	close(start)   // release goroutines
+	tracker.Wait() // all goroutines should finish cleanly
+	wg.Wait(t.Context())
 }
 
 // TestWaitGroup_Go verifies that Go starts the function in a goroutine and
@@ -176,7 +178,6 @@ func TestWaitGroup_Go(t *testing.T) {
 	var mu sync.Mutex
 	results := make([]int, 0, n)
 	for i := range n {
-		i := i
 		wg.Go(func() {
 			mu.Lock()
 			results = append(results, i)

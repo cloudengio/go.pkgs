@@ -43,7 +43,8 @@ func (wg *WaitGroup) Add(delta int) {
 func (wg *WaitGroup) Done() { wg.Add(-1) }
 
 // Go calls f in a new goroutine and adds that task to the WaitGroup. When f
-// returns, the task is removed from the WaitGroup. f must not panic.
+// returns, the task is removed from the WaitGroup. If f panics, the task is
+// not removed to ensure the panic remains fatal.
 func (wg *WaitGroup) Go(f func()) {
 	wg.Add(1)
 	go func() {
