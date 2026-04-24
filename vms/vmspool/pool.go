@@ -48,12 +48,12 @@ type Pool struct {
 }
 
 type options struct {
-	size              int
-	statusCh          chan<- Event
-	suspendVMs        bool
-	cleanupTimeout    time.Duration
-	replenishTimeout  time.Duration
-	replenishInterval time.Duration
+	size           int
+	statusCh       chan<- Event
+	suspendVMs     bool
+	cleanupTimeout time.Duration
+	createTimeout  time.Duration
+	createInterval time.Duration
 }
 
 const (
@@ -100,8 +100,8 @@ func WithCreateTimeoutAndInterval(timeout, interval time.Duration) Option {
 		if interval <= 0 {
 			interval = DefaultCreateInterval
 		}
-		o.replenishTimeout = timeout
-		o.replenishInterval = interval
+		o.createTimeout = timeout
+		o.createInterval = interval
 	}
 }
 
@@ -128,8 +128,8 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
 	options.cleanupTimeout = DefaultCleanupTimeout
-	options.replenishTimeout = DefaultCreateTimeout
-	options.replenishInterval = DefaultCreateInterval
+	options.createTimeout = DefaultCreateTimeout
+	options.createInterval = DefaultCreateInterval
 	options.suspendVMs = true
 	for _, opt := range opts {
 		opt(&options)
@@ -152,9 +152,10 @@ func (p *Pool) notify(kind EventKind, err error) {
 	}
 }
 
-// Start fills the pool with size suspended VMs. It blocks until all VMs are
-// ready or the context is canceled.
-// Start can only be called once and will return an error if called more than once.
+// Start blocks until at at least one VM is ready to be acquired (or the context is
+// canceled), any other VMs required to fill the pool are created asynchronously
+// (unless the context is canceled).
+// Start can be called once only and will return an error if called more than once.
 // After Start returns, the pool is ready to accept Acquire calls.
 func (p *Pool) Start(ctx context.Context) error {
 	p.opMutex.Lock()
@@ -169,23 +170,32 @@ func (p *Pool) Start(ctx context.Context) error {
 }
 
 func (p *Pool) fill(ctx context.Context, size int) error {
-	var g errgroup.T
-	for range size {
-		g.GoContext(ctx, func() error {
-			inst, err := p.createVMAndNotify(ctx)
-			if err != nil {
-				return err
-			}
-			select {
-			case p.ready <- inst:
-				return nil
-			case <-ctx.Done():
-				p.cleanupVM(inst)
-				return ctx.Err()
-			}
-		})
+	err := p.createVMLoop(ctx, p.options.createInterval, p.options.createTimeout)
+	if err != nil {
+		return err
 	}
-	return g.Wait()
+	// at least one VM is ready; launch goroutine to fill the rest of the pool so
+	// Start can return and the pool can be used immediately.
+	go func(size int) {
+		var g errgroup.T
+		for range size {
+			g.GoContext(ctx, func() error {
+				inst, err := p.createVMAndNotify(ctx)
+				if err != nil {
+					return err
+				}
+				select {
+				case p.ready <- inst:
+					return nil
+				case <-ctx.Done():
+					p.cleanupVM(inst)
+					return ctx.Err()
+				}
+			})
+		}
+		g.Wait()
+	}(size - 1)
+	return nil
 }
 
 func (p *Pool) cleanupVM(inst vms.Instance) {
@@ -241,7 +251,7 @@ func (p *Pool) requestReplenish() {
 		return
 	}
 	p.wg.Go(func() {
-		err := p.createVMLoop(p.replenishCtx, p.options.replenishInterval, p.options.replenishTimeout)
+		err := p.createVMLoop(p.replenishCtx, p.options.createInterval, p.options.createTimeout)
 		if err != nil {
 			// Log the error but keep the pool running; a later replenishment may succeed and restore capacity.
 			p.notify(EventReplenishFailed, err)
