@@ -180,7 +180,8 @@ type PoolTestConfig struct {
 	// Constructor creates new VM instances. Required.
 	Constructor vmspool.Constructor
 
-	// PoolSize is the pool size to use across all tests. Defaults to 2.
+	// PoolSize is the default pool size used across all tests. Defaults to 2.
+	// Some subtests intentionally use a size-1 pool for deterministic behavior.
 	PoolSize int
 
 	// ExecCmd is a command that should succeed inside an acquired VM. If empty

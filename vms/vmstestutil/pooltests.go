@@ -19,7 +19,8 @@ type PoolTestConfig struct {
 	// Constructor creates new VM instances. Required.
 	Constructor vmspool.Constructor
 
-	// PoolSize is the pool size to use across all tests. Defaults to 2.
+	// PoolSize is the default pool size used across all tests. Defaults to 2.
+	// Some subtests intentionally use a size-1 pool for deterministic behavior.
 	PoolSize int
 
 	// ExecCmd is a command that should succeed inside an acquired VM. If empty
@@ -149,17 +150,17 @@ func startPool(t *testing.T, cfg PoolTestConfig, suspend bool) *vmspool.Pool {
 		vmspool.WithSuspendVMs(suspend),
 	}
 	p := vmspool.New(cfg.Constructor, opts...)
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
-	defer cancel()
-	if err := p.Start(ctx); err != nil {
-		t.Fatalf("pool.Start: %v", err)
-	}
 	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
 			t.Errorf("pool.Close: %v", err)
 		}
 	})
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	defer cancel()
+	if err := p.Start(ctx); err != nil {
+		t.Fatalf("pool.Start: %v", err)
+	}
 	return p
 }
 
@@ -216,12 +217,12 @@ func testAcquireAndRelease(t *testing.T, cfg PoolTestConfig, suspend bool) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
+	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
 
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
-	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
 
 	vm, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
@@ -279,12 +280,12 @@ func testContextCancellation(t *testing.T, cfg PoolTestConfig, suspend bool) {
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
+	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
 
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
-	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
 
 	// Drain the pool.
 	vm, err := p.Acquire(ctx, io.Discard, io.Discard)
@@ -317,7 +318,11 @@ func testClose(t *testing.T, cfg PoolTestConfig, suspend bool) {
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
-
+	t.Cleanup(func() {
+		if err := p.Close(context.Background()); err != nil {
+			t.Errorf("pool.Close: %v", err)
+		}
+	})
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -370,7 +375,7 @@ func testConcurrentAcquire(t *testing.T, cfg PoolTestConfig, suspend bool) {
 		if r.vm == nil {
 			continue
 		}
-		if err := r.vm.Release(ctx); err != nil {
+		if err := r.vm.Release(context.Background()); err != nil {
 			t.Errorf("Release[%d]: %v", i, err)
 		}
 	}
