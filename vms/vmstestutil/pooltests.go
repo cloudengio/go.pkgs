@@ -150,17 +150,17 @@ func startPool(t *testing.T, cfg PoolTestConfig, suspend bool) *vmspool.Pool {
 		vmspool.WithSuspendVMs(suspend),
 	}
 	p := vmspool.New(cfg.Constructor, opts...)
-	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	defer cancel()
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
 			t.Errorf("pool.Close: %v", err)
 		}
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
-	defer cancel()
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("pool.Start: %v", err)
 	}
+	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
 	return p
 }
 
