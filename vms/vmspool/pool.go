@@ -54,6 +54,7 @@ type options struct {
 	cleanupTimeout time.Duration
 	createTimeout  time.Duration
 	createInterval time.Duration
+	stopTimeout    time.Duration
 }
 
 const (
@@ -61,6 +62,7 @@ const (
 	DefaultCleanupTimeout = time.Minute
 	DefaultCreateTimeout  = 5 * time.Minute
 	DefaultCreateInterval = 500 * time.Millisecond
+	DefaultStopTimeout    = time.Minute
 )
 
 type Option func(*options)
@@ -105,6 +107,18 @@ func WithCreateTimeoutAndInterval(timeout, interval time.Duration) Option {
 	}
 }
 
+// WithStopTimeout sets the timeout for stopping VMs.
+// The default is DefaultStopTimeout.
+// A 0 or negative value is treated as DefaultStopTimeout.
+func WithStopTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		if timeout <= 0 {
+			timeout = DefaultStopTimeout
+		}
+		o.cleanupTimeout = timeout
+	}
+}
+
 // WithStatus registers ch to receive pool lifecycle events. Sends are
 // non-blocking: events are dropped if ch is full. The caller is responsible
 // for sizing the channel appropriately and draining it promptly.
@@ -130,6 +144,7 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	options.cleanupTimeout = DefaultCleanupTimeout
 	options.createTimeout = DefaultCreateTimeout
 	options.createInterval = DefaultCreateInterval
+	options.stopTimeout = DefaultStopTimeout
 	options.suspendVMs = true
 	for _, opt := range opts {
 		opt(&options)
@@ -193,7 +208,7 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 
 func (p *Pool) cleanupVM(inst vms.Instance) {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
-	_ = vms.CleanupVM(cleanupCtx, inst)
+	_ = vms.CleanupVM(cleanupCtx, inst, p.options.stopTimeout)
 	cancel()
 }
 
@@ -384,7 +399,7 @@ func (p *Pool) Close(ctx context.Context) error {
 		select {
 		case inst := <-p.ready:
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
-			errs.Append(vms.CleanupVM(cleanupCtx, inst))
+			errs.Append(vms.CleanupVM(cleanupCtx, inst, p.options.stopTimeout))
 			cancel()
 		default:
 			return errs.Err()
@@ -408,7 +423,7 @@ func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, arg
 // suspended instance. It must be called exactly once per acquired VM.
 func (v *VM) Release(ctx context.Context) error {
 	v.pool.notify(EventRelease, nil)
-	cleanupErr := vms.CleanupVM(ctx, v.inst)
+	cleanupErr := vms.CleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
 	if cleanupErr != nil {
 		cleanupErr = fmt.Errorf("vmspool: release: %w", cleanupErr)
 	}

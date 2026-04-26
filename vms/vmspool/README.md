@@ -10,12 +10,13 @@ quickly when acquired. When a caller releases a VM it is deleted and a new
 one is created asynchronously to restore the pool to its target size.
 
 ## Constants
-### DefaultPoolSize, DefaultCleanupTimeout, DefaultCreateTimeout, DefaultCreateInterval
+### DefaultPoolSize, DefaultCleanupTimeout, DefaultCreateTimeout, DefaultCreateInterval, DefaultStopTimeout
 ```go
 DefaultPoolSize = 2
 DefaultCleanupTimeout = time.Minute
 DefaultCreateTimeout = 5 * time.Minute
 DefaultCreateInterval = 500 * time.Millisecond
+DefaultStopTimeout = time.Minute
 
 ```
 
@@ -144,6 +145,13 @@ func WithStatus(ch chan<- Event) Option
 WithStatus registers ch to receive pool lifecycle events. Sends are
 non-blocking: events are dropped if ch is full. The caller is responsible
 for sizing the channel appropriately and draining it promptly.
+
+
+```go
+func WithStopTimeout(timeout time.Duration) Option
+```
+WithStopTimeout sets the timeout for stopping VMs. The default is
+DefaultStopTimeout. A 0 or negative value is treated as DefaultStopTimeout.
 
 
 ```go
