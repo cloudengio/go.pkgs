@@ -25,10 +25,11 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	stderr := &bytes.Buffer{}
 	enc := json.NewEncoder(in)
 	if err := enc.Encode(req); err != nil {
-		return Response{Error: &Error{
+		rerr := &Error{
 			Message: "failed to create request",
 			Detail:  err.Error(),
-		}}, fmt.Errorf("failed to create request: %w", err)
+		}
+		return Response{Error: rerr}, rerr
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -43,7 +44,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 			Detail:  err.Error(),
 			Stderr:  stderr.String(),
 		}
-		return Response{Error: rerr}, fmt.Errorf("failed to run plugin:  %w", rerr)
+		return Response{Error: rerr}, rerr
 	}
 	if err := json.NewDecoder(stdout).Decode(&resp); err != nil {
 		rerr := &Error{
@@ -51,8 +52,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 			Detail:  err.Error(),
 			Stderr:  stderr.String(),
 		}
-		return Response{Error: rerr},
-			fmt.Errorf("failed to decode plugin response: %v: %w", err, rerr)
+		return Response{Error: rerr}, rerr
 	}
 	if resp.ID != req.ID {
 		rerr := &Error{
@@ -60,7 +60,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 			Detail:  fmt.Sprintf("response ID %d does not match request ID %d", resp.ID, req.ID),
 			Stderr:  stderr.String(),
 		}
-		return Response{Error: rerr}, fmt.Errorf("response ID %d does not match request ID %d: %w", resp.ID, req.ID, rerr)
+		return Response{Error: rerr}, rerr
 	}
 	if resp.Error != nil {
 		resp.Error.Stderr = stderr.String()

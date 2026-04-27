@@ -40,7 +40,7 @@ func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 	}
 	resp, err := RunExtPlugin(ctx, f.binary, req, f.args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run plugin: %w", err)
+		return nil, err
 	}
 	if resp.Error != nil {
 		if errors.Is(resp.Error, ErrKeyNotFound) {
@@ -62,7 +62,7 @@ func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.Fil
 	}
 	resp, err := RunExtPlugin(ctx, f.binary, req, f.args...)
 	if err != nil {
-		return fmt.Errorf("failed to run plugin: %w", err)
+		return err
 	}
 	if resp.Error != nil {
 		return fmt.Errorf("error reported by plugin: %w", resp.Error)
