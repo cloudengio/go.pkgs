@@ -5,26 +5,28 @@
 package executil_test
 
 import (
+	"bytes"
 	"io"
+	"strings"
 	"testing"
 
 	"cloudeng.io/os/executil"
 )
 
-// asyncWrite writes p to rw in a goroutine and returns a channel that receives
-// the write error (or nil) when the write completes. Because PrefixReader uses
-// an unbuffered pipe, Write blocks until the data is consumed by a Read.
 func asyncWrite(rw io.ReadWriteCloser, p []byte) <-chan error {
 	ch := make(chan error, 1)
 	go func() {
-		_, err := rw.Write(p)
+		var err error
+		if len(p) > 0 {
+			_, err = rw.Write(p)
+		}
 		ch <- err
 	}()
 	return ch
 }
 
 func TestPrefixReader_EmptyReadBuffer(t *testing.T) {
-	pr := executil.NewPrefixReader([]byte(">> "))
+	pr := executil.NewPrefixReader([]byte(">> "), '\n')
 	defer pr.Close()
 
 	n, err := pr.Read([]byte{})
@@ -33,29 +35,9 @@ func TestPrefixReader_EmptyReadBuffer(t *testing.T) {
 	}
 }
 
-func TestPrefixReader_BasicRead(t *testing.T) {
-	pr := executil.NewPrefixReader([]byte(">> "))
-	defer pr.Close()
-
-	werr := asyncWrite(pr, []byte("hello"))
-
-	buf := make([]byte, 20)
-	n, err := pr.Read(buf)
-	if err != nil {
-		t.Fatalf("Read: %v", err)
-	}
-	if got, want := string(buf[:n]), ">> hello"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	if err := <-werr; err != nil {
-		t.Errorf("Write: %v", err)
-	}
-}
-
 func TestPrefixReader_EmptyTag(t *testing.T) {
-	pr := executil.NewPrefixReader(nil)
+	pr := executil.NewPrefixReader(nil, '\n')
 	defer pr.Close()
-
 	werr := asyncWrite(pr, []byte("hello"))
 
 	buf := make([]byte, 20)
@@ -71,101 +53,83 @@ func TestPrefixReader_EmptyTag(t *testing.T) {
 	}
 }
 
-// TestPrefixReader_BufferSmallerThanTag verifies that when the read buffer is
-// too small to hold the tag, Read returns a partial tag without consuming any
-// data from the pipe. The subsequent Read restarts with the full tag.
-func TestPrefixReader_BufferSmallerThanTag(t *testing.T) {
-	tag := ">> " // 3 bytes
-	pr := executil.NewPrefixReader([]byte(tag))
+func TestPrefixReader_NewlineInsertion(t *testing.T) {
+	tag := ">> "
+	pr := executil.NewPrefixReader([]byte(tag), '\n')
 	defer pr.Close()
 
-	werr := asyncWrite(pr, []byte("hello"))
-
-	// Buffer holds only 2 bytes — smaller than the 3-byte tag.
-	// Read must return the partial tag without touching the pipe.
-	buf := make([]byte, 2)
-	n, err := pr.Read(buf)
-	if err != nil {
-		t.Fatalf("first Read (small buffer): %v", err)
-	}
-	if got, want := string(buf[:n]), ">>"; got != want {
-		t.Errorf("partial tag: got %q, want %q", got, want)
-	}
-
-	// The write goroutine is still blocked: the pipe data was not consumed.
-	// A subsequent Read with a large-enough buffer gets the full tag + data.
-	buf2 := make([]byte, 20)
-	n2, err := pr.Read(buf2)
-	if err != nil {
-		t.Fatalf("second Read (large buffer): %v", err)
-	}
-	if got, want := string(buf2[:n2]), ">> hello"; got != want {
-		t.Errorf("full read: got %q, want %q", got, want)
-	}
-	if err := <-werr; err != nil {
-		t.Errorf("Write: %v", err)
-	}
-}
-
-// TestPrefixReader_BufferExactlyTagSize verifies that when the buffer holds
-// exactly the tag, Read fills it with the tag and returns without consuming
-// pipe data (because the remaining slice has zero length).
-func TestPrefixReader_BufferExactlyTagSize(t *testing.T) {
-	tag := ">> " // 3 bytes
-	pr := executil.NewPrefixReader([]byte(tag))
-	defer pr.Close()
-
-	werr := asyncWrite(pr, []byte("hello"))
-
-	buf := make([]byte, len(tag))
-	n, err := pr.Read(buf)
-	if err != nil {
-		t.Fatalf("Read (tag-sized buffer): %v", err)
-	}
-	if got := string(buf[:n]); got != tag {
-		t.Errorf("got %q, want %q", got, tag)
-	}
-
-	// Write goroutine is still blocked; consume its data now.
-	buf2 := make([]byte, 20)
-	n2, err := pr.Read(buf2)
-	if err != nil {
-		t.Fatalf("second Read: %v", err)
-	}
-	if got, want := string(buf2[:n2]), ">> hello"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	if err := <-werr; err != nil {
-		t.Errorf("Write: %v", err)
-	}
-}
-
-// TestPrefixReader_TagPrependedOnEachRead verifies that every call to Read
-// prepends the tag, regardless of how many reads have occurred.
-func TestPrefixReader_TagPrependedOnEachRead(t *testing.T) {
-	tag := "[TAG] "
-	pr := executil.NewPrefixReader([]byte(tag))
-	defer pr.Close()
-
-	writes := []string{"first line", "second line"}
-	// Writes are sequential because each Write blocks until its data is read.
+	reads := make(chan string)
 	go func() {
-		for _, s := range writes {
-			pr.Write([]byte(s)) //nolint:errcheck
+		var buf bytes.Buffer
+		// reads everything until EOF (pipe closed)
+		_, err := io.Copy(&buf, pr)
+		if err != nil && !strings.Contains(err.Error(), "read/write on closed pipe") {
+			t.Errorf("Copy error: %v", err)
 		}
+		reads <- buf.String()
 	}()
 
-	buf := make([]byte, 64)
-	for i, want := range []string{
-		tag + "first line",
-		tag + "second line",
-	} {
-		n, err := pr.Read(buf)
-		if err != nil {
-			t.Fatalf("Read[%d]: %v", i, err)
+	// Write pieces of string
+	pr.Write([]byte("line 1\n"))
+	pr.Write([]byte("line "))
+	pr.Write([]byte("2\nlin"))
+	pr.Write([]byte("e 3"))
+	pr.Write([]byte("\n"))
+	pr.Close()
+
+	got := <-reads
+	want := ">> line 1\n>> line 2\n>> line 3\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestPrefixReader_NoTrailingNewline(t *testing.T) {
+	tag := ">> "
+	pr := executil.NewPrefixReader([]byte(tag), '\n')
+	defer pr.Close()
+
+	reads := make(chan string)
+	go func() {
+		out, err := io.ReadAll(pr)
+		if err != nil && !strings.Contains(err.Error(), "read/write on closed pipe") {
+			t.Errorf("ReadAll error: %v", err)
 		}
-		if got := string(buf[:n]); got != want {
-			t.Errorf("Read[%d]: got %q, want %q", i, got, want)
+		reads <- string(out)
+	}()
+
+	pr.Write([]byte("line 1\nline 2"))
+	pr.Close()
+
+	got := <-reads
+	want := ">> line 1\n>> line 2"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestPrefixReader_TabSeparator(t *testing.T) {
+	tag := "-> "
+	pr := executil.NewPrefixReader([]byte(tag), '\t')
+	defer pr.Close()
+
+	reads := make(chan string)
+	go func() {
+		out, err := io.ReadAll(pr)
+		if err != nil && !strings.Contains(err.Error(), "read/write on closed pipe") {
+			t.Errorf("ReadAll error: %v", err)
 		}
+		reads <- string(out)
+	}()
+
+	pr.Write([]byte("col A\tcol "))
+	pr.Write([]byte("B\tco"))
+	pr.Write([]byte("l C"))
+	pr.Close()
+
+	got := <-reads
+	want := "-> col A\t-> col B\t-> col C"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

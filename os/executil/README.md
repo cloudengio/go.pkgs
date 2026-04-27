@@ -49,7 +49,7 @@ ensure that all resources are reclaimed.
 
 ### Func NewPrefixReader
 ```go
-func NewPrefixReader(prefix []byte) io.ReadWriteCloser
+func NewPrefixReader(prefix []byte, separator rune) io.ReadWriteCloser
 ```
 
 ### Func ReplaceEnvVar
@@ -140,25 +140,26 @@ type PrefixReader struct {
 	// contains filtered or unexported fields
 }
 ```
-PrefixReader is an io.ReadWriteCloser that prepends prefix to the data
-read from the underlying reader. It is useful for prepending data to the
-output of an exec.Cmd without modifying the command itself when working with
-multiple outstanding commands.
+PrefixReader is an io.ReadWriteCloser that prepends prefix to the data read
+from the underlying reader. It prepends the prefix to the beginning of the
+stream and after every separator character (defaults to newline). It is
+useful for prepending data to the output of an exec.Cmd without modifying
+the command itself when working with multiple outstanding commands.
 
 ### Methods
 
 ```go
-func (r *PrefixReader) Close() error
+func (pr *PrefixReader) Close() error
 ```
 
 
 ```go
-func (r *PrefixReader) Read(p []byte) (n int, err error)
+func (pr *PrefixReader) Read(p []byte) (n int, err error)
 ```
 
 
 ```go
-func (r *PrefixReader) Write(p []byte) (n int, err error)
+func (pr *PrefixReader) Write(p []byte) (n int, err error)
 ```
 
 
