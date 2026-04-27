@@ -2,13 +2,14 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:generate astest . pooltests_test.go
 package vmstestutil
 
 import (
 	"context"
 	"errors"
 	"io"
-	"testing"
+	"sync"
 	"time"
 
 	"cloudeng.io/vms/vmspool"
@@ -36,118 +37,64 @@ type PoolTestConfig struct {
 	SupportsSuspend bool
 }
 
-func (c *PoolTestConfig) poolSize() int {
+func (c PoolTestConfig) poolSize() int {
 	if c.PoolSize > 0 {
 		return c.PoolSize
 	}
 	return 2
 }
 
-func (c *PoolTestConfig) timeout() time.Duration {
+func (c PoolTestConfig) timeout() time.Duration {
 	if c.Timeout > 0 {
 		return c.Timeout
 	}
 	return 30 * time.Second
 }
 
+var (
+	configOnce sync.Once
+	globalCfg  PoolTestConfig
+)
+
+func SetTestConfig(cfg PoolTestConfig) {
+	configOnce.Do(func() {
+		globalCfg = cfg
+	})
+}
+
 // TestingT is the subset of *testing.T used by RunPoolTests.
-// *testing.T satisfies this interface directly.
+// *testing.T does not satisfy this interface directly because Run's callback
+// takes TestingT rather than *testing.T; callers should wrap *testing.T with a
+// thin adapter (see pooltests_test.go for an example).
 type TestingT interface {
 	Helper()
-	Run(name string, f func(*testing.T)) bool
 	Fatalf(format string, args ...any)
 	Errorf(format string, args ...any)
 	Cleanup(f func())
 }
 
-// RunPoolTests runs a suite of integration tests that verify a
-// vmspool.Constructor creates instances that work correctly with vmspool.Pool.
-// Each scenario runs as a t.Run subtest so results appear individually and
-// failures are isolated.
-//
-// Callers must provide a Constructor whose instances are real (or sufficiently
-// realistic) implementations of vms.Instance. The tests exercise the full
-// acquire → exec → release → replenish lifecycle.
-func RunPoolTests(t TestingT, cfg PoolTestConfig) {
+// TestLifecycle runs the full pool lifecycle test suite using the global config
+// set by SetTestConfig.
+func TestLifecycle(t TestingT) { //cicd:astest
 	t.Helper()
-	if cfg.SupportsSuspend {
-		t.Run("SuspendMode", func(t *testing.T) {
-			runSuspendModeTests(t, cfg)
-		})
-	}
-	t.Run("RunningMode", func(t *testing.T) {
-		runRunningModeTests(t, cfg)
-	})
-}
-
-// runSuspendModeTests exercises pool behaviour with WithSuspendVMs(true):
-// VMs are cloned, started, then suspended before being placed in the ready
-// queue. Acquire re-starts each VM before handing it to the caller.
-func runSuspendModeTests(t *testing.T, cfg PoolTestConfig) {
-	t.Helper()
-	t.Run("StartAndAcquire", func(t *testing.T) {
-		testStartAndAcquire(t, cfg, true)
-	})
-	t.Run("AcquireAndRelease", func(t *testing.T) {
-		testAcquireAndRelease(t, cfg, true)
-	})
-	if cfg.ExecCmd != "" {
-		t.Run("Exec", func(t *testing.T) {
-			testExec(t, cfg, true)
-		})
-	}
-	t.Run("ContextCancellation", func(t *testing.T) {
-		testContextCancellation(t, cfg, true)
-	})
-	t.Run("Close", func(t *testing.T) {
-		testClose(t, cfg, true)
-	})
-	if cfg.poolSize() > 1 {
-		t.Run("ConcurrentAcquire", func(t *testing.T) {
-			testConcurrentAcquire(t, cfg, true)
-		})
-	}
-}
-
-// runRunningModeTests exercises pool behaviour with WithSuspendVMs(false):
-// VMs are cloned and started (but not suspended) before being placed in the
-// ready queue. Acquire hands the running VM directly to the caller.
-func runRunningModeTests(t *testing.T, cfg PoolTestConfig) {
-	t.Helper()
-	t.Run("StartAndAcquire", func(t *testing.T) {
-		testStartAndAcquire(t, cfg, false)
-	})
-	t.Run("AcquireAndRelease", func(t *testing.T) {
-		testAcquireAndRelease(t, cfg, false)
-	})
-	if cfg.ExecCmd != "" {
-		t.Run("Exec", func(t *testing.T) {
-			testExec(t, cfg, false)
-		})
-	}
-	t.Run("ContextCancellation", func(t *testing.T) {
-		testContextCancellation(t, cfg, false)
-	})
-	t.Run("Close", func(t *testing.T) {
-		testClose(t, cfg, false)
-	})
-	if cfg.poolSize() > 1 {
-		t.Run("ConcurrentAcquire", func(t *testing.T) {
-			testConcurrentAcquire(t, cfg, false)
-		})
-	}
+	TestStartAndAcquire(t)
+	TestAcquireAndRelease(t)
+	TestExec(t)
+	TestContextCancellation(t)
+	TestClose(t)
+	TestConcurrentAcquire(t)
 }
 
 // startPool creates and starts a pool, waits for all VMs to be ready, and
 // registers a Close cleanup. It fails the test immediately on any error.
-func startPool(t *testing.T, cfg PoolTestConfig, suspend bool) *vmspool.Pool {
+func startPool(t TestingT, cfg PoolTestConfig) *vmspool.Pool {
 	t.Helper()
 	size := cfg.poolSize()
 	statusCh := make(chan vmspool.Event, size*16)
 	opts := []vmspool.Option{
 		vmspool.WithSize(size),
 		vmspool.WithStatus(statusCh),
-		vmspool.WithSuspendVMs(suspend),
+		vmspool.WithSuspendVMs(cfg.SupportsSuspend),
 	}
 	p := vmspool.New(cfg.Constructor, opts...)
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
@@ -166,7 +113,7 @@ func startPool(t *testing.T, cfg PoolTestConfig, suspend bool) *vmspool.Pool {
 
 // waitForPoolEvent blocks until an event of the given kind is received on
 // statusCh or the timeout elapses.
-func waitForPoolEvent(t *testing.T, statusCh <-chan vmspool.Event, kind vmspool.EventKind, timeout time.Duration) {
+func waitForPoolEvent(t TestingT, statusCh <-chan vmspool.Event, kind vmspool.EventKind, timeout time.Duration) {
 	t.Helper()
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -182,13 +129,13 @@ func waitForPoolEvent(t *testing.T, statusCh <-chan vmspool.Event, kind vmspool.
 	}
 }
 
-// testStartAndAcquire verifies that starting the pool and acquiring a VM
+// TestStartAndAcquire verifies that starting the pool and acquiring a VM
 // produces a VM in the Running state.
-func testStartAndAcquire(t *testing.T, cfg PoolTestConfig, suspend bool) {
+func TestStartAndAcquire(t TestingT) { //cicd:astest
 	t.Helper()
-	p := startPool(t, cfg, suspend)
+	p := startPool(t, globalCfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
 	defer cancel()
 	vm, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
@@ -199,30 +146,32 @@ func testStartAndAcquire(t *testing.T, cfg PoolTestConfig, suspend bool) {
 			t.Errorf("Release: %v", err)
 		}
 	}()
-
+	if err := vm.Release(context.Background()); err != nil {
+		t.Errorf("Release: %v", err)
+	}
 }
 
-// testAcquireAndRelease verifies the full acquire → release → replenish cycle:
+// TestAcquireAndRelease verifies the full acquire → release → replenish cycle:
 // releasing a VM triggers replenishment so the pool can serve another Acquire.
-func testAcquireAndRelease(t *testing.T, cfg PoolTestConfig, suspend bool) {
+func TestAcquireAndRelease(t TestingT) { //cicd:astest
 	t.Helper()
-	size := cfg.poolSize()
+	size := globalCfg.poolSize()
 	statusCh := make(chan vmspool.Event, size*16)
 	opts := []vmspool.Option{
 		vmspool.WithSize(1),
 		vmspool.WithStatus(statusCh),
-		vmspool.WithSuspendVMs(suspend),
+		vmspool.WithSuspendVMs(globalCfg.SupportsSuspend),
 	}
-	p := vmspool.New(cfg.Constructor, opts...)
+	p := vmspool.New(globalCfg.Constructor, opts...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
 	defer cancel()
 	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
 
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
+	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, globalCfg.timeout())
 
 	vm, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
@@ -233,7 +182,7 @@ func testAcquireAndRelease(t *testing.T, cfg PoolTestConfig, suspend bool) {
 	}
 
 	// Wait for replenishment to complete before acquiring again.
-	waitForPoolEvent(t, statusCh, vmspool.EventReplenished, cfg.timeout())
+	waitForPoolEvent(t, statusCh, vmspool.EventReplenished, globalCfg.timeout())
 
 	vm2, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
@@ -244,13 +193,16 @@ func testAcquireAndRelease(t *testing.T, cfg PoolTestConfig, suspend bool) {
 	}
 }
 
-// testExec verifies that a command can be executed inside an acquired VM
+// TestExec verifies that a command can be executed inside an acquired VM
 // without error.
-func testExec(t *testing.T, cfg PoolTestConfig, suspend bool) {
+func TestExec(t TestingT) { //cicd:astest
 	t.Helper()
-	p := startPool(t, cfg, suspend)
+	if globalCfg.ExecCmd == "" {
+		return
+	}
+	p := startPool(t, globalCfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
 	defer cancel()
 	vm, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err != nil {
@@ -262,30 +214,30 @@ func testExec(t *testing.T, cfg PoolTestConfig, suspend bool) {
 		}
 	}()
 
-	if err := vm.Exec(ctx, io.Discard, io.Discard, cfg.ExecCmd, cfg.ExecArgs...); err != nil {
-		t.Errorf("Exec %q %v: %v", cfg.ExecCmd, cfg.ExecArgs, err)
+	if err := vm.Exec(ctx, io.Discard, io.Discard, globalCfg.ExecCmd, globalCfg.ExecArgs...); err != nil {
+		t.Errorf("Exec %q %v: %v", globalCfg.ExecCmd, globalCfg.ExecArgs, err)
 	}
 }
 
-// testContextCancellation verifies that Acquire returns context.Canceled when
+// TestContextCancellation verifies that Acquire returns context.Canceled when
 // the pool is empty and the context is cancelled.
-func testContextCancellation(t *testing.T, cfg PoolTestConfig, suspend bool) {
+func TestContextCancellation(t TestingT) { //cicd:astest
 	t.Helper()
 	// Use a size-1 pool so one Acquire drains it.
 	statusCh := make(chan vmspool.Event, 16)
-	p := vmspool.New(cfg.Constructor,
+	p := vmspool.New(globalCfg.Constructor,
 		vmspool.WithSize(1),
 		vmspool.WithStatus(statusCh),
-		vmspool.WithSuspendVMs(suspend),
+		vmspool.WithSuspendVMs(globalCfg.SupportsSuspend),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
 	defer cancel()
 	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
 
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
+	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, globalCfg.timeout())
 
 	// Drain the pool.
 	vm, err := p.Acquire(ctx, io.Discard, io.Discard)
@@ -307,26 +259,22 @@ func testContextCancellation(t *testing.T, cfg PoolTestConfig, suspend bool) {
 	}
 }
 
-// testClose verifies that Close prevents further Acquire calls.
-func testClose(t *testing.T, cfg PoolTestConfig, suspend bool) {
+// TestClose verifies that Close prevents further Acquire calls.
+func TestClose(t TestingT) { //cicd:astest
 	t.Helper()
 	statusCh := make(chan vmspool.Event, 16)
-	p := vmspool.New(cfg.Constructor,
+	p := vmspool.New(globalCfg.Constructor,
 		vmspool.WithSize(1),
 		vmspool.WithStatus(statusCh),
-		vmspool.WithSuspendVMs(suspend),
+		vmspool.WithSuspendVMs(globalCfg.SupportsSuspend),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
 	defer cancel()
-	t.Cleanup(func() {
-		if err := p.Close(context.Background()); err != nil {
-			t.Errorf("pool.Close: %v", err)
-		}
-	})
+
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
+	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, globalCfg.timeout())
 
 	if err := p.Close(ctx); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -334,19 +282,19 @@ func testClose(t *testing.T, cfg PoolTestConfig, suspend bool) {
 
 	_, err := p.Acquire(ctx, io.Discard, io.Discard)
 	if err == nil {
-		t.Error("Acquire after Close: expected error, got nil")
+		t.Errorf("Acquire after Close: expected error, got nil")
 	}
 }
 
-// testConcurrentAcquire verifies that poolSize goroutines can each acquire a
+// TestConcurrentAcquire verifies that poolSize goroutines can each acquire a
 // VM concurrently without error, and that the pool replenishes after all are
 // released.
-func testConcurrentAcquire(t *testing.T, cfg PoolTestConfig, suspend bool) {
+func TestConcurrentAcquire(t TestingT) { //cicd:astest
 	t.Helper()
-	p := startPool(t, cfg, suspend)
-	size := cfg.poolSize()
+	p := startPool(t, globalCfg)
+	size := globalCfg.poolSize()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
+	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
 	defer cancel()
 
 	type result struct {

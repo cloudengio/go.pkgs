@@ -6,18 +6,59 @@ import cloudeng.io/vms/vmstestutil
 
 
 ## Functions
-### Func RunPoolTests
+### Func SetTestConfig
 ```go
-func RunPoolTests(t TestingT, cfg PoolTestConfig)
+func SetTestConfig(cfg PoolTestConfig)
 ```
-RunPoolTests runs a suite of integration tests that verify a
-vmspool.Constructor creates instances that work correctly with vmspool.Pool.
-Each scenario runs as a t.Run subtest so results appear individually and
-failures are isolated.
 
-Callers must provide a Constructor whose instances are real (or sufficiently
-realistic) implementations of vms.Instance. The tests exercise the full
-acquire → exec → release → replenish lifecycle.
+### Func TestAcquireAndRelease
+```go
+func TestAcquireAndRelease(t TestingT)
+```
+TestAcquireAndRelease verifies the full acquire → release → replenish cycle:
+releasing a VM triggers replenishment so the pool can serve another Acquire.
+
+### Func TestClose
+```go
+func TestClose(t TestingT)
+```
+TestClose verifies that Close prevents further Acquire calls.
+
+### Func TestConcurrentAcquire
+```go
+func TestConcurrentAcquire(t TestingT)
+```
+TestConcurrentAcquire verifies that poolSize goroutines can each acquire a
+VM concurrently without error, and that the pool replenishes after all are
+released.
+
+### Func TestContextCancellation
+```go
+func TestContextCancellation(t TestingT)
+```
+TestContextCancellation verifies that Acquire returns context.Canceled when
+the pool is empty and the context is cancelled.
+
+### Func TestExec
+```go
+func TestExec(t TestingT)
+```
+TestExec verifies that a command can be executed inside an acquired VM
+without error.
+
+### Func TestLifecycle
+```go
+func TestLifecycle(t TestingT)
+```
+TestLifecycle runs the full pool lifecycle test suite using the global
+config set by SetTestConfig.
+
+### Func TestStartAndAcquire
+```go
+func TestStartAndAcquire(t TestingT)
+```
+TestStartAndAcquire verifies that starting the pool and acquiring a VM
+produces a VM in the Running state.
 
 
 
@@ -205,14 +246,15 @@ RunPoolTests.
 ```go
 type TestingT interface {
 	Helper()
-	Run(name string, f func(*testing.T)) bool
 	Fatalf(format string, args ...any)
 	Errorf(format string, args ...any)
 	Cleanup(f func())
 }
 ```
-TestingT is the subset of *testing.T used by RunPoolTests. *testing.T
-satisfies this interface directly.
+TestingT is the subset of *testing.T used by RunPoolTests. *testing.T does
+not satisfy this interface directly because Run's callback takes TestingT
+rather than *testing.T; callers should wrap *testing.T with a thin adapter
+(see pooltests_test.go for an example).
 
 
 

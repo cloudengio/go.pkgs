@@ -56,8 +56,8 @@ func countInState(mocks []*vmstestutil.Mock, want vms.State) int {
 	return n
 }
 
-// TestPool_Start verifies that the pool creates the right number of suspended VMs.
-func TestPool_Start(t *testing.T) {
+// TestPoolStart verifies that the pool creates the right number of suspended VMs.
+func TestPoolStart(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	newPool(t, 3, factory)
 
@@ -68,9 +68,9 @@ func TestPool_Start(t *testing.T) {
 	allInState(t, mocks, vms.StateSuspended)
 }
 
-// TestPool_Acquire verifies that acquiring a VM starts it (Running state)
+// TestPoolAcquire verifies that acquiring a VM starts it (Running state)
 // and leaves remaining pool VMs suspended.
-func TestPool_Acquire(t *testing.T) {
+func TestPoolAcquire(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 2, factory)
 
@@ -89,8 +89,8 @@ func TestPool_Acquire(t *testing.T) {
 	}
 }
 
-// TestPool_Exec verifies that Exec is forwarded to the underlying VM and recorded.
-func TestPool_Exec(t *testing.T) {
+// TestPoolExec verifies that Exec is forwarded to the underlying VM and recorded.
+func TestPoolExec(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 1, factory)
 
@@ -118,8 +118,8 @@ func TestPool_Exec(t *testing.T) {
 	t.Error("no mock recorded an Exec call")
 }
 
-// TestPool_Release verifies that releasing a VM deletes it and replenishes the pool.
-func TestPool_Release(t *testing.T) {
+// TestPoolRelease verifies that releasing a VM deletes it and replenishes the pool.
+func TestPoolRelease(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 1, factory)
 
@@ -154,8 +154,8 @@ func TestPool_Release(t *testing.T) {
 	}
 }
 
-// TestPool_Close verifies that Close deletes all suspended VMs in the pool.
-func TestPool_Close(t *testing.T) {
+// TestPoolClose verifies that Close deletes all suspended VMs in the pool.
+func TestPoolClose(t *testing.T) {
 	const size = 3
 	statusCh := make(chan vmspool.Event, size*4)
 	factory := vmstestutil.NewMockFactory()
@@ -171,8 +171,8 @@ func TestPool_Close(t *testing.T) {
 	allInState(t, factory.Mocks(), vms.StateDeleted)
 }
 
-// TestPool_AcquireCancelled verifies that a cancelled context causes Acquire to return.
-func TestPool_AcquireCancelled(t *testing.T) {
+// TestPoolAcquireCancelled verifies that a cancelled context causes Acquire to return.
+func TestPoolAcquireCancelled(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, 1, factory)
 
@@ -192,9 +192,9 @@ func TestPool_AcquireCancelled(t *testing.T) {
 	}
 }
 
-// TestPool_Concurrency acquires all pool VMs concurrently and releases them,
+// TestPoolConcurrency acquires all pool VMs concurrently and releases them,
 // verifying that the pool replenishes and remains usable.
-func TestPool_Concurrency(t *testing.T) {
+func TestPoolConcurrency(t *testing.T) {
 	const size = 4
 	factory := vmstestutil.NewMockFactory()
 	pool := newPool(t, size, factory)
@@ -239,9 +239,9 @@ func TestPool_Concurrency(t *testing.T) {
 	}
 }
 
-// TestPool_StartCancelled verifies that cancelling the context passed to Start
+// TestPoolStartCancelled verifies that cancelling the context passed to Start
 // causes Start to return context.Canceled and that the pool can be closed cleanly.
-func TestPool_StartCancelled(t *testing.T) {
+func TestPoolStartCancelled(t *testing.T) {
 	const timeout = 5 * time.Second
 
 	cloneBlock := make(chan struct{})
@@ -282,9 +282,9 @@ func TestPool_StartCancelled(t *testing.T) {
 	}
 }
 
-// TestPool_StartError verifies that Start retries VM creation on failure and
+// TestPoolStartError verifies that Start retries VM creation on failure and
 // eventually succeeds once a good VM can be created.
-func TestPool_StartError(t *testing.T) {
+func TestPoolStartError(t *testing.T) {
 	cloneErr := errors.New("clone failed")
 	factory := vmstestutil.NewMockFactory()
 
@@ -314,9 +314,9 @@ func TestPool_StartError(t *testing.T) {
 	}
 }
 
-// TestPool_CreateVM_PartialCleanup verifies that a VM is cleaned up when Suspend
+// TestPoolCreateVM_PartialCleanup verifies that a VM is cleaned up when Suspend
 // fails after Clone+Start, and that Start retries and eventually succeeds.
-func TestPool_CreateVM_PartialCleanup(t *testing.T) {
+func TestPoolCreateVM_PartialCleanup(t *testing.T) {
 	ctx := context.Background()
 	suspendErr := errors.New("suspend failed")
 
@@ -351,9 +351,9 @@ func TestPool_CreateVM_PartialCleanup(t *testing.T) {
 	}
 }
 
-// TestPool_Status verifies that the status channel receives the expected events
+// TestPoolStatus verifies that the status channel receives the expected events
 // for a basic acquire → exec → release cycle.
-func TestPool_Status(t *testing.T) {
+func TestPoolStatus(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
 	factory := vmstestutil.NewMockFactory()
@@ -466,7 +466,7 @@ func waitForEvent(t *testing.T, statusCh <-chan vmspool.Event, kind vmspool.Even
 	}
 }
 
-// TestPool_ReplenishBlockedOnReadySend tests that Close can unblock a
+// TestPoolReplenishBlockedOnReadySend tests that Close can unblock a
 // replenishment goroutine that is stuck trying to send to p.ready when the
 // channel is already at capacity. Without a select/ctx.Done() guard on that
 // send, the goroutine blocks indefinitely, preventing p.wg.Wait from returning
@@ -481,7 +481,7 @@ func waitForEvent(t *testing.T, statusCh <-chan vmspool.Event, kind vmspool.Even
 //     arrives at p.ready <- inst, which now blocks (channel is full).
 //  5. Call Close. With the select/ctx.Done() fix, Close cancels the context,
 //     the goroutine exits, and Close completes. Without the fix, Close hangs.
-func TestPool_ReplenishBlockedOnReadySend(t *testing.T) {
+func TestPoolReplenishBlockedOnReadySend(t *testing.T) {
 	const timeout = 5 * time.Second
 	statusCh := make(chan vmspool.Event, 64)
 
@@ -549,11 +549,11 @@ func TestPool_ReplenishBlockedOnReadySend(t *testing.T) {
 	}
 }
 
-// TestPool_CloseUnblocksAcquire verifies that Close can run and unblock a
+// TestPoolCloseUnblocksAcquire verifies that Close can run and unblock a
 // goroutine that is blocked inside Acquire waiting for a VM. If Acquire holds
 // a lock across the blocking select, Close will deadlock because it needs the
 // same lock to signal pool shutdown.
-func TestPool_CloseUnblocksAcquire(t *testing.T) {
+func TestPoolCloseUnblocksAcquire(t *testing.T) {
 	const timeout = 5 * time.Second
 	statusCh := make(chan vmspool.Event, 32)
 
@@ -624,10 +624,10 @@ func TestPool_CloseUnblocksAcquire(t *testing.T) {
 	}
 }
 
-// TestPool_ReleaseCloseRace verifies that Release and Close can run concurrently
+// TestPoolReleaseCloseRace verifies that Release and Close can run concurrently
 // without triggering sync.WaitGroup misuse (Add after Wait) or a data race.
 // Run with -race to validate.
-func TestPool_ReleaseCloseRace(t *testing.T) {
+func TestPoolReleaseCloseRace(t *testing.T) {
 	const iterations = 100
 	for range iterations {
 		factory := vmstestutil.NewMockFactory()
@@ -678,9 +678,9 @@ func newRunningPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *v
 	return p
 }
 
-// TestPool_NoSuspend_Start verifies that Start places VMs in StateRunning
+// TestPoolNoSuspend_Start verifies that Start places VMs in StateRunning
 // (not StateSuspended) when suspend is disabled.
-func TestPool_NoSuspend_Start(t *testing.T) {
+func TestPoolNoSuspend_Start(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	newRunningPool(t, 3, factory)
 
@@ -691,10 +691,10 @@ func TestPool_NoSuspend_Start(t *testing.T) {
 	allInState(t, mocks, vms.StateRunning)
 }
 
-// TestPool_NoSuspend_Acquire verifies that Acquire hands out a running VM.
+// TestPoolNoSuspend_Acquire verifies that Acquire hands out a running VM.
 // All VMs remain in StateRunning because Start is idempotent on an already-
 // running instance.
-func TestPool_NoSuspend_Acquire(t *testing.T) {
+func TestPoolNoSuspend_Acquire(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	pool := newRunningPool(t, 2, factory)
 
@@ -710,9 +710,9 @@ func TestPool_NoSuspend_Acquire(t *testing.T) {
 	}
 }
 
-// TestPool_NoSuspend_Release verifies that releasing a VM deletes it and
+// TestPoolNoSuspend_Release verifies that releasing a VM deletes it and
 // replenishes the pool with a fresh running instance.
-func TestPool_NoSuspend_Release(t *testing.T) {
+func TestPoolNoSuspend_Release(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	pool := newRunningPool(t, 1, factory)
 
@@ -749,8 +749,8 @@ func TestPool_NoSuspend_Release(t *testing.T) {
 	}
 }
 
-// TestPool_NoSuspend_Close verifies that Close deletes all running VMs in the pool.
-func TestPool_NoSuspend_Close(t *testing.T) {
+// TestPoolNoSuspend_Close verifies that Close deletes all running VMs in the pool.
+func TestPoolNoSuspend_Close(t *testing.T) {
 	const size = 3
 	statusCh := make(chan vmspool.Event, size*4)
 	factory := vmstestutil.NewMockFactory()
@@ -765,9 +765,9 @@ func TestPool_NoSuspend_Close(t *testing.T) {
 	allInState(t, factory.Mocks(), vms.StateDeleted)
 }
 
-// TestPool_NoSuspend_StartError verifies that Start retries VM creation on failure
+// TestPoolNoSuspend_StartError verifies that Start retries VM creation on failure
 // (Start error with suspend disabled) and eventually succeeds.
-func TestPool_NoSuspend_StartError(t *testing.T) {
+func TestPoolNoSuspend_StartError(t *testing.T) {
 	startErr := errors.New("start failed")
 	factory := vmstestutil.NewMockFactory()
 
@@ -797,10 +797,10 @@ func TestPool_NoSuspend_StartError(t *testing.T) {
 	}
 }
 
-// TestPool_CloseBeforePoolFull verifies that calling Close while the async fill
+// TestPoolCloseBeforePoolFull verifies that calling Close while the async fill
 // goroutine (launched by Start for the remaining size-1 VMs) is still running
 // cancels those goroutines via p.replenishCtx and completes without deadlocking.
-func TestPool_CloseBeforePoolFull(t *testing.T) {
+func TestPoolCloseBeforePoolFull(t *testing.T) {
 	const timeout = 5 * time.Second
 
 	// Block the second VM's Clone so the async fill goroutine is stuck.
@@ -856,10 +856,10 @@ func (c *nilConstructor) New() vms.Instance {
 	return c.factory.New()
 }
 
-// TestPool_NilConstructor verifies that a nil return from the constructor is
+// TestPoolNilConstructor verifies that a nil return from the constructor is
 // handled gracefully: Start retries and succeeds once the constructor returns
 // a real instance.
-func TestPool_NilConstructor(t *testing.T) {
+func TestPoolNilConstructor(t *testing.T) {
 	factory := vmstestutil.NewMockFactory()
 	ctor := &nilConstructor{factory: factory}
 

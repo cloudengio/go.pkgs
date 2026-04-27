@@ -261,13 +261,13 @@ func PrintStates(out io.Writer) {
 // CleanupVM attempts to clean up the given instance by stopping and deleting
 // it if necessary. Suspended VMs are stopped before deletion.
 // It returns an error if any of the operations fail.
-func CleanupVM(ctx context.Context, inst Instance) error {
+func CleanupVM(ctx context.Context, inst Instance, timeout time.Duration) error {
 	s := inst.State(ctx)
 	switch s {
 	case StateDeleted, StateInitial:
 		return nil
 	case StateRunning:
-		if runErr, stopErr := inst.Stop(ctx, time.Second*30); runErr != nil || stopErr != nil {
+		if runErr, stopErr := inst.Stop(ctx, timeout); runErr != nil || stopErr != nil {
 			var errs errors.M
 			errs.Append(runErr)
 			errs.Append(stopErr)
