@@ -35,7 +35,7 @@ ErrVMNotRunning = errors.New("virtual machine not running")
 ## Functions
 ### Func CleanupVM
 ```go
-func CleanupVM(ctx context.Context, inst Instance) error
+func CleanupVM(ctx context.Context, inst Instance, timeout time.Duration) error
 ```
 CleanupVM attempts to clean up the given instance by stopping and deleting
 it if necessary. Suspended VMs are stopped before deletion. It returns an
