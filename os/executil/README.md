@@ -47,6 +47,11 @@ exec package for example for specific output. If no regexps are supplied,
 all lines are sent. Close must be called on the returned io.WriteCloser to
 ensure that all resources are reclaimed.
 
+### Func NewPrefixReader
+```go
+func NewPrefixReader(prefix []byte) io.ReadWriteCloser
+```
+
 ### Func ReplaceEnvVar
 ```go
 func ReplaceEnvVar(env []string, key, value string) []string
@@ -125,6 +130,36 @@ func (aw *AsyncWait) WaitDone() (bool, error)
 ```
 WaitDone reports whether the cmd has already completed. If so, it returns
 true and the error from cmd.Wait(), otherwise it returns false and nil.
+
+
+
+
+### Type PrefixReader
+```go
+type PrefixReader struct {
+	// contains filtered or unexported fields
+}
+```
+PrefixReader is an io.ReadWriteCloser that prepends prefix to the data
+read from the underlying reader. It is useful for prepending data to the
+output of an exec.Cmd without modifying the command itself when working with
+multiple outstanding commands.
+
+### Methods
+
+```go
+func (r *PrefixReader) Close() error
+```
+
+
+```go
+func (r *PrefixReader) Read(p []byte) (n int, err error)
+```
+
+
+```go
+func (r *PrefixReader) Write(p []byte) (n int, err error)
+```
 
 
 
