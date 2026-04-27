@@ -70,11 +70,11 @@ func TestPrefixReader_NewlineInsertion(t *testing.T) {
 	}()
 
 	// Write pieces of string
-	pr.Write([]byte("line 1\n"))
-	pr.Write([]byte("line "))
-	pr.Write([]byte("2\nlin"))
-	pr.Write([]byte("e 3"))
-	pr.Write([]byte("\n"))
+	_, _ = pr.Write([]byte("line 1\n"))
+	_, _ = pr.Write([]byte("line "))
+	_, _ = pr.Write([]byte("2\nlin"))
+	_, _ = pr.Write([]byte("e 3"))
+	_, _ = pr.Write([]byte("\n"))
 	pr.Close()
 
 	got := <-reads
@@ -98,8 +98,8 @@ func TestPrefixReader_NoTrailingNewline(t *testing.T) {
 		reads <- string(out)
 	}()
 
-	pr.Write([]byte("line 1\nline 2"))
-	pr.Close()
+	_, _ = pr.Write([]byte("line 1\nline 2"))
+	_ = pr.Close()
 
 	got := <-reads
 	want := ">> line 1\n>> line 2"
@@ -122,10 +122,10 @@ func TestPrefixReader_TabSeparator(t *testing.T) {
 		reads <- string(out)
 	}()
 
-	pr.Write([]byte("col A\tcol "))
-	pr.Write([]byte("B\tco"))
-	pr.Write([]byte("l C"))
-	pr.Close()
+	_, _ = pr.Write([]byte("col A\tcol "))
+	_, _ = pr.Write([]byte("B\tco"))
+	_, _ = pr.Write([]byte("l C"))
+	_ = pr.Close()
 
 	got := <-reads
 	want := "-> col A\t-> col B\t-> col C"
