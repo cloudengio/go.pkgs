@@ -115,7 +115,7 @@ func WithStopTimeout(timeout time.Duration) Option {
 		if timeout <= 0 {
 			timeout = DefaultStopTimeout
 		}
-		o.cleanupTimeout = timeout
+		o.stopTimeout = timeout
 	}
 }
 

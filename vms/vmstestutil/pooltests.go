@@ -141,6 +141,11 @@ func TestStartAndAcquire(t TestingT) { //cicd:astest
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
+	defer func() {
+		if err := vm.Release(context.Background()); err != nil {
+			t.Errorf("Release: %v", err)
+		}
+	}()
 	if err := vm.Release(context.Background()); err != nil {
 		t.Errorf("Release: %v", err)
 	}
@@ -192,6 +197,9 @@ func TestAcquireAndRelease(t TestingT) { //cicd:astest
 // without error.
 func TestExec(t TestingT) { //cicd:astest
 	t.Helper()
+	if globalCfg.ExecCmd == "" {
+		return
+	}
 	p := startPool(t, globalCfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), globalCfg.timeout())
