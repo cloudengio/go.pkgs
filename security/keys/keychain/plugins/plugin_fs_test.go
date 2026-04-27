@@ -15,6 +15,31 @@ import (
 	"cloudeng.io/security/keys/keychain/plugins"
 )
 
+// checkNoDuplicateSegments verifies that no segment (split by ": ") appears
+// more than once in the error message. Returns the message for further checks.
+func checkNoDuplicateSegments(t *testing.T, err error) string {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+		return ""
+	}
+	msg := err.Error()
+	seen := map[string]int{}
+	for part := range strings.SplitSeq(msg, ": ") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" {
+			continue
+		}
+		seen[part]++
+	}
+	for part, count := range seen {
+		if count > 1 {
+			t.Errorf("segment %q repeated %d times in error message: %q", part, count, msg)
+		}
+	}
+	return msg
+}
+
 func TestFS(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -65,6 +90,46 @@ func TestFS(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "write-failed") {
 			t.Errorf("expected error to contain 'write-failed', got %v", err)
+		}
+	})
+}
+
+func TestFSErrorMessages(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("binary-not-found", func(t *testing.T) {
+		fs := plugins.NewFS("/nonexistent/plugin-binary", nil)
+		_, err := fs.ReadFileCtx(ctx, "key")
+		msg := checkNoDuplicateSegments(t, err)
+		if !strings.Contains(msg, "failed to run plugin") {
+			t.Errorf("expected 'failed to run plugin' in error: %q", msg)
+		}
+	})
+
+	t.Run("write-plugin-error", func(t *testing.T) {
+		fs := plugins.NewFS(pluginPath, nil, "--error=write-failed")
+		err := fs.WriteFileCtx(ctx, "key", []byte("data"), 0600)
+		msg := checkNoDuplicateSegments(t, err)
+		if !strings.Contains(msg, "write-failed") {
+			t.Errorf("expected 'write-failed' in error: %q", msg)
+		}
+	})
+
+	t.Run("read-plugin-error", func(t *testing.T) {
+		fs := plugins.NewFS(pluginPath, nil, "--error=read-failed")
+		_, err := fs.ReadFileCtx(ctx, "key")
+		msg := checkNoDuplicateSegments(t, err)
+		if !strings.Contains(msg, "read-failed") {
+			t.Errorf("expected 'read-failed' in error: %q", msg)
+		}
+	})
+
+	t.Run("binary-not-found-write", func(t *testing.T) {
+		fs := plugins.NewFS("/nonexistent/plugin-binary", nil)
+		err := fs.WriteFileCtx(ctx, "key", []byte("data"), 0600)
+		msg := checkNoDuplicateSegments(t, err)
+		if !strings.Contains(msg, "failed to run plugin") {
+			t.Errorf("expected 'failed to run plugin' in error: %q", msg)
 		}
 	})
 }
