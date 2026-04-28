@@ -93,6 +93,47 @@ SkipWindows skips t if running on Windows.
 
 
 ## Types
+### Type ConfigManager
+```go
+type ConfigManager[T any] struct {
+	// contains filtered or unexported fields
+}
+```
+ConfigManager provides a means to manage configurations based on regex
+patterns that can be matched against test names. It is useful for
+centralizing the configuration of tests, especially those that are
+externalized by a one package for use by multiple others. For example, when
+an interface has multiple implementations for which tests can be shared.
+
+### Methods
+
+```go
+func (c *ConfigManager[T]) Get(s string) T
+```
+Get returns the configuration associated with the first regex that matches
+the input string. The regexes are evaluated in the order they were added via
+Set. If no regex matches, the default configuration is returned, hence there
+is no need to use a regex that matches all strings as the default case.
+
+
+```go
+func (c *ConfigManager[T]) Set(re *regexp.Regexp, config T)
+```
+Set associates a regex pattern with a specific configuration. It panics if
+a nil regex is provided. The regexes are evaluated in the order they were
+added via Set, so the first matching regex will determine the configuration
+returned by Get.
+
+
+```go
+func (c *ConfigManager[T]) SetDefault(config T)
+```
+SetDefault sets the default configuration to be returned when no regex
+matches.
+
+
+
+
 ### Type TestingT
 ```go
 type TestingT interface {
@@ -103,6 +144,15 @@ type TestingT interface {
 }
 ```
 
+
+
+
+## Examples
+### [ExampleConfigManager](https://pkg.go.dev/cloudeng.io/cicd?tab=doc#example-ConfigManager)
+ExampleConfigManager demonstrates centralizing per-implementation test
+configuration. A shared test suite calls Get with the running test name to
+obtain the parameters that match that implementation; names that match no
+regex fall back to the default.
 
 
 
