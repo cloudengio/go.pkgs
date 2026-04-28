@@ -4,7 +4,10 @@
 
 package cicd
 
-import "regexp"
+import (
+	"regexp"
+	"sync"
+)
 
 // ConfigManager provides a means to manage configurations based on regex
 // patterns that can be matched against test names. It is useful
@@ -13,6 +16,7 @@ import "regexp"
 // example, when an interface has multiple implementations for which
 // tests can be shared.
 type ConfigManager[T any] struct {
+	mu         sync.RWMutex
 	entries    []configManagerEntry[T]
 	defaultCfg T
 }
@@ -24,6 +28,8 @@ type configManagerEntry[T any] struct {
 
 // SetDefault sets the default configuration to be returned when no regex matches.
 func (c *ConfigManager[T]) SetDefault(config T) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.defaultCfg = config
 }
 
@@ -35,6 +41,8 @@ func (c *ConfigManager[T]) Set(re *regexp.Regexp, config T) {
 	if re == nil {
 		panic("regex cannot be nil")
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.entries = append(c.entries, configManagerEntry[T]{cfg: config, re: re})
 }
 
@@ -43,6 +51,8 @@ func (c *ConfigManager[T]) Set(re *regexp.Regexp, config T) {
 // If no regex matches, the default configuration is returned, hence there is
 // no need to use a regex that matches all strings as the default case.
 func (c *ConfigManager[T]) Get(s string) T {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, entry := range c.entries {
 		if entry.re.MatchString(s) {
 			return entry.cfg
