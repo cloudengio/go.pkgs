@@ -8,99 +8,30 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-<<<<<<< New base: .
 func TestPoolAcquireAndRelease(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
 	vmstestutil.TestPoolAcquireAndRelease(t, cfg)
-||||||| Common ancestor
-func TestAcquireAndRelease(t *testing.T) {
-	vmstestutil.TestAcquireAndRelease(t)
-=======
-func TestLifecycle(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestLifecycle(t, cfg)
->>>>>>> Current commit: .
 }
 
-<<<<<<< New base: .
 func TestPoolClose(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
 	vmstestutil.TestPoolClose(t, cfg)
-||||||| Common ancestor
-func TestClose(t *testing.T) {
-	vmstestutil.TestClose(t)
-=======
-func TestPoolAcquireAndRelease(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolAcquireAndRelease(t, cfg)
->>>>>>> Current commit: .
 }
 
-<<<<<<< New base: .
 func TestPoolConcurrentAcquire(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
 	vmstestutil.TestPoolConcurrentAcquire(t, cfg)
-||||||| Common ancestor
-func TestConcurrentAcquire(t *testing.T) {
-	vmstestutil.TestConcurrentAcquire(t)
-=======
-func TestPoolClose(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolClose(t, cfg)
->>>>>>> Current commit: .
 }
 
-<<<<<<< New base: .
 func TestPoolContextCancellation(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
 	vmstestutil.TestPoolContextCancellation(t, cfg)
-||||||| Common ancestor
-func TestContextCancellation(t *testing.T) {
-	vmstestutil.TestContextCancellation(t)
-=======
-func TestPoolConcurrentAcquire(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolConcurrentAcquire(t, cfg)
->>>>>>> Current commit: .
 }
 
-<<<<<<< New base: .
-func TestPoolExec(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolExec(t, cfg)
-||||||| Common ancestor
-func TestExec(t *testing.T) {
-	vmstestutil.TestExec(t)
-=======
-func TestPoolContextCancellation(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolContextCancellation(t, cfg)
->>>>>>> Current commit: .
-}
-
-<<<<<<< New base: .
-func TestPoolStartAndAcquire(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolStartAndAcquire(t, cfg)
-||||||| Common ancestor
-func TestLifecycle(t *testing.T) {
-	vmstestutil.TestLifecycle(t)
-}
-
-func TestStartAndAcquire(t *testing.T) {
-	vmstestutil.TestStartAndAcquire(t)
-=======
 func TestPoolExec(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
@@ -111,5 +42,4 @@ func TestPoolStartAndAcquire(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
 	vmstestutil.TestPoolStartAndAcquire(t, cfg)
->>>>>>> Current commit: .
 }
