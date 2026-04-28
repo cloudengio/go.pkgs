@@ -55,8 +55,8 @@ func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 	originalLen := len(p)
 	for len(p) > 0 {
 		if pr.atLineStart {
-			if _, err := pr.w.Write(pr.prefix); err != nil {
-				return originalLen - len(p), err
+			if n, err := pr.w.Write(pr.prefix); err != nil {
+				return originalLen - len(p) + n, err
 			}
 			pr.atLineStart = false
 		}
@@ -64,8 +64,8 @@ func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 		idx := bytes.IndexRune(p, pr.separator)
 		if idx == -1 {
 			// No separator, write the rest of the buffer.
-			if _, err := pr.w.Write(p); err != nil {
-				return originalLen - len(p), err
+			if n, err := pr.w.Write(p); err != nil {
+				return originalLen - len(p) + n, err
 			}
 			break
 		}
