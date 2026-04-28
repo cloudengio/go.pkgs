@@ -7,9 +7,20 @@ package vmstestutil_test
 import (
 	"time"
 
+	"cloudeng.io/vms/vmspool"
 	"cloudeng.io/vms/vmstestutil"
 )
 
+<<<<<<< ours
+<<<<<<< New base: .
+//go:generate astest --match='^TestPool' --preamble=cfg=testConfig . pooltests_test.go
+
+var testConfig = vmstestutil.PoolTestConfig{
+	Constructor:      vmstestutil.NewMockFactory(true),
+	PoolSize:         2,
+	StagingBehaviour: vmspool.StagingBehaviourSuspended,
+	Timeout:          10 * time.Second,
+||||||| Common ancestor
 func init() {
 	vmstestutil.SetTestConfig(vmstestutil.PoolTestConfig{
 		Constructor:     vmstestutil.NewMockFactory(),
@@ -17,4 +28,33 @@ func init() {
 		SupportsSuspend: true,
 		Timeout:         10 * time.Second,
 	})
+=======
+//go:generate astest --preamble=cfg=testConfig . pooltests_test.go
+||||||| ancestor
+func init() {
+	vmstestutil.SetTestConfig(vmstestutil.PoolTestConfig{
+		Constructor:     vmstestutil.NewMockFactory(),
+		PoolSize:        2,
+		SupportsSuspend: true,
+		Timeout:         10 * time.Second,
+	})
+||||||| Common ancestor
+func init() {
+	vmstestutil.SetTestConfig(vmstestutil.PoolTestConfig{
+		Constructor:     vmstestutil.NewMockFactory(),
+		PoolSize:        2,
+		SupportsSuspend: true,
+		Timeout:         10 * time.Second,
+	})
+=======
+//go:generate astest --preamble=cfg=testConfig . pooltests_test.go
+=======
+//go:generate astest --match='^TestPool' --preamble=cfg=testConfig . pooltests_test.go
+>>>>>>> theirs
+
+var testConfig = vmstestutil.PoolTestConfig{
+	Constructor:      vmstestutil.NewMockFactory(true),
+	PoolSize:         2,
+	StagingBehaviour: vmspool.StagingBehaviourSuspended,
+	Timeout:          10 * time.Second,
 }
