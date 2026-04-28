@@ -5,12 +5,10 @@ import cloudeng.io/vms/vmspool
 ```
 
 Package vmspool manages a fixed-size pool of suspended or stopped virtual
-machine instances. The pool pre-creates and suspends VMs so they can be
-started quickly when acquired. When a caller releases a VM it is deleted
-and a new one is created asynchronously to restore the pool to its target
-size. Note that if the underlying VM implementation does not support
-suspend/resume, the pool will create the VM and leave it stopped until
-acquired.
+machine instances. The pool pre-creates and mantains VMs according to the
+requested StagingBehaviour so they can be started quickly when acquired.
+When a caller releases a VM, it is deleted and a new one is created
+asynchronously to restore the pool to its target size.
 
 ## Constants
 ### DefaultPoolSize, DefaultCleanupTimeout, DefaultCreateTimeout, DefaultCreateInterval, DefaultStopTimeout
@@ -158,7 +156,7 @@ for sizing the channel appropriately and draining it promptly.
 
 
 ```go
-func WithStdoutStderr(stdout, stderr func(id string) (io.ReadWriteCloser, error)) Option
+func WithStdoutStderr(stdout, stderr func(id string) io.ReadWriteCloser) Option
 ```
 WithStdoutStderr configures the pool to use the provided functions to
 create stdout and stderr pipes for VMs during creation and replenishment.

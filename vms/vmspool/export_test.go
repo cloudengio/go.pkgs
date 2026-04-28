@@ -10,5 +10,5 @@ import "cloudeng.io/vms"
 // into the pool's ready channel. Used in tests that need to fill the channel
 // to capacity in order to provoke a blocking send from a replenishment goroutine.
 func (p *Pool) InjectVM(inst vms.Instance) {
-	p.ready <- vmsInstance{Instance: inst, stdout: discardReadWriteCloser{}, stderr: discardReadWriteCloser{}}
+	p.ready <- &vmsInstance{Instance: inst, stdout: discardReadWriteCloser{}, stderr: discardReadWriteCloser{}}
 }

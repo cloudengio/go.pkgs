@@ -795,12 +795,12 @@ type closerTracker struct {
 	closers []*trackingCloser
 }
 
-func (ct *closerTracker) factory(id string) (io.ReadWriteCloser, error) {
+func (ct *closerTracker) factory(id string) io.ReadWriteCloser {
 	ct.mu.Lock()
 	defer ct.mu.Unlock()
 	tc := &trackingCloser{id: id}
 	ct.closers = append(ct.closers, tc)
-	return tc, nil
+	return tc
 }
 
 func (ct *closerTracker) snapshot() []*trackingCloser {
@@ -942,13 +942,13 @@ func TestStdoutClosedWhenStderrFactoryFails(t *testing.T) {
 	var outTracker closerTracker
 	var stderrCallCount int32
 
-	stderrFactory := func(id string) (io.ReadWriteCloser, error) {
+	stderrFactory := func(id string) io.ReadWriteCloser {
 		n := atomic.AddInt32(&stderrCallCount, 1)
 		if n == 1 {
-			return nil, errors.New("stderr factory error")
+			return nil
 		}
 		// Succeed on retries with a plain discard.
-		return executil.NewLabelingPipe([]byte("test-"), '\n'), nil
+		return executil.NewLabelingPipe([]byte("test-"), '\n')
 	}
 
 	factory := vmstestutil.NewMockFactory(true)
@@ -1090,61 +1090,40 @@ func TestAcquireStartFails(t *testing.T) {
 }
 
 // TestCreateStdoutFails verifies that if creating stdout for a VM fails,
-// the pool logs the error and retries.
-func TestCreateStdoutFails(t *testing.T) {
-	factory := vmstestutil.NewMockFactory(true)
-	stdoutErr := errors.New("stdout creation failed")
-
-	var attempt int32
-	outFactory := func(id string) (io.ReadWriteCloser, error) {
-		if atomic.AddInt32(&attempt, 1) == 1 {
-			return nil, stdoutErr
-		}
-		return executil.NewLabelingPipe([]byte("test-"), '\n'), nil
-	}
-
-	p := vmspool.New(factory,
-		vmspool.WithSize(1),
-		vmspool.WithStdoutStderr(outFactory, nil),
-	)
-
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer p.Close(context.Background()) //nolint:errcheck
-
-	if atomic.LoadInt32(&attempt) < 2 {
-		t.Errorf("expected at least 2 attempts, got %d", attempt)
-	}
-}
 
 type errorCloser struct {
 	io.ReadWriteCloser
 	err error
 }
 
-func (e errorCloser) Close() error { return e.err }
+func (e errorCloser) Close() error {
+	e.ReadWriteCloser.Close()
+	return e.err
+}
 
 // TestReleaseAndCloseErrors verifies that if closing a VM's stdout/stderr returns an error,
 // it is propagated by Release and Close.
 func TestReleaseAndCloseErrors(t *testing.T) {
 	factory := vmstestutil.NewMockFactory(true)
 	closeErr := errors.New("close error")
-	outFactory := func(id string) (io.ReadWriteCloser, error) {
+	outFactory := func(id string) io.ReadWriteCloser {
 		return errorCloser{
 			ReadWriteCloser: executil.NewLabelingPipe([]byte("test-"), '\n'),
 			err:             closeErr,
-		}, nil
+		}
 	}
 
+	statusCh := make(chan vmspool.Event, 32)
 	p := vmspool.New(factory,
 		vmspool.WithSize(2),
 		vmspool.WithStdoutStderr(outFactory, outFactory),
+		vmspool.WithStatus(statusCh),
 	)
 
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 
 	vm, err := p.Acquire(context.Background())
 	if err != nil {
@@ -1170,11 +1149,7 @@ func TestAcquireOnClosedPoolEvent(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	// Give some time for async events to be sent to channel
-	time.Sleep(100 * time.Millisecond)
-	for len(statusCh) > 0 {
-		<-statusCh
-	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -1185,17 +1160,7 @@ func TestAcquireOnClosedPoolEvent(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	var found bool
-	for len(statusCh) > 0 {
-		e := <-statusCh
-		if e.Kind == vmspool.EventAttemptToUseClosedPool {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected EventAttemptToUseClosedPool")
-	}
+	waitForEvent(t, statusCh, vmspool.EventAttemptToUseClosedPool, 5*time.Second)
 }
 
 // TestAttemptCreateVMTimeout verifies that if VM creation times out, it is handled and retried.

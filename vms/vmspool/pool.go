@@ -34,12 +34,25 @@ type vmsInstance struct {
 	stopped        bool
 }
 
+func (v *vmsInstance) close() error {
+	var errs errors.M
+	if v.stdout != nil {
+		errs.Append(v.stdout.Close())
+		v.stdout = nil
+	}
+	if v.stderr != nil {
+		errs.Append(v.stderr.Close())
+		v.stderr = nil
+	}
+	return errs.Err()
+}
+
 // Pool manages a fixed-size set of suspended virtual machine instances.
 type Pool struct {
 	options     options
 	constructor Constructor
-	ready       chan vmsInstance // suspended VMs waiting to be acquired
-	done        chan struct{}    // closed by Close to signal pool shutdown
+	ready       chan *vmsInstance // suspended VMs waiting to be acquired
+	done        chan struct{}     // closed by Close to signal pool shutdown
 
 	opMutex sync.Mutex // guards acquire and close operations
 
@@ -62,8 +75,8 @@ type options struct {
 	createTimeout    time.Duration
 	createInterval   time.Duration
 	stopTimeout      time.Duration
-	createStdout     func(id string) (io.ReadWriteCloser, error)
-	createStderr     func(id string) (io.ReadWriteCloser, error)
+	createStdout     func(id string) io.ReadWriteCloser
+	createStderr     func(id string) io.ReadWriteCloser
 }
 
 const (
@@ -188,16 +201,16 @@ func (discardReadWriteCloser) Read(p []byte) (n int, err error) {
 // value of vms.Instance.ID() is passed to the stdout function and can be used to create
 // uniquely identifiable pipes. If either function is nil, a no-op ReadWriteCloser is used
 // that discards all writes and returns EOF on reads.
-func WithStdoutStderr(stdout, stderr func(id string) (io.ReadWriteCloser, error)) Option {
+func WithStdoutStderr(stdout, stderr func(id string) io.ReadWriteCloser) Option {
 	return func(o *options) {
 		if stdout == nil {
-			stdout = func(string) (io.ReadWriteCloser, error) {
-				return discardReadWriteCloser{}, nil
+			stdout = func(string) io.ReadWriteCloser {
+				return discardReadWriteCloser{}
 			}
 		}
 		if stderr == nil {
-			stderr = func(string) (io.ReadWriteCloser, error) {
-				return discardReadWriteCloser{}, nil
+			stderr = func(string) io.ReadWriteCloser {
+				return discardReadWriteCloser{}
 			}
 		}
 		o.createStdout = stdout
@@ -215,15 +228,19 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	options.createInterval = DefaultCreateInterval
 	options.stopTimeout = DefaultStopTimeout
 	options.stagingBehaviour = StagingBehaviourRunning
-	options.createStdout = func(string) (io.ReadWriteCloser, error) { return discardReadWriteCloser{}, nil }
-	options.createStderr = func(string) (io.ReadWriteCloser, error) { return discardReadWriteCloser{}, nil }
+	options.createStdout = func(string) io.ReadWriteCloser {
+		return discardReadWriteCloser{}
+	}
+	options.createStderr = func(string) io.ReadWriteCloser {
+		return discardReadWriteCloser{}
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}
 	return &Pool{
 		options:     options,
 		constructor: constructor,
-		ready:       make(chan vmsInstance, options.size),
+		ready:       make(chan *vmsInstance, options.size),
 		done:        make(chan struct{}),
 	}
 }
@@ -277,46 +294,45 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 	return nil
 }
 
-func (p *Pool) cleanupVM(inst vmsInstance) {
-	if inst.Instance == nil {
+// cleanupVMOnError can be called from any code path.
+func cleanupVMOnError(inst *vmsInstance, timeout time.Duration) {
+	if inst == nil || inst.Instance == nil {
 		return
 	}
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
-	_ = vms.CleanupVM(cleanupCtx, inst.Instance, p.options.stopTimeout)
-	if inst.stdout != nil {
-		_ = inst.stdout.Close()
+	_ = vms.CleanupVM(context.Background(), inst.Instance, timeout)
+	_ = inst.close()
+}
+
+func cleanupVMOnClose(inst *vmsInstance, timeout time.Duration) error {
+	if inst == nil || inst.Instance == nil {
+		return nil
 	}
-	if inst.stderr != nil {
-		_ = inst.stderr.Close()
-	}
-	cancel()
+	var errs errors.M
+	err := vms.CleanupVM(context.Background(), inst.Instance, timeout)
+	errs.Append(err)
+	errs.Append(inst.close())
+	return errs.Err()
 }
 
 // createVM clones, starts, and suspends a new instance then places it in the
 // ready channel. Returns an error if any step fails or the context is done.
 // Any partially-created instance is cleaned up before returning an error.
-func (p *Pool) createVM(ctx context.Context) (vmsInstance, error) {
+func (p *Pool) createVM(ctx context.Context) (*vmsInstance, error) {
 	inst := p.constructor.New()
 	if inst == nil {
-		return vmsInstance{}, fmt.Errorf("vmspool: constructor returned nil instance")
+		return nil, fmt.Errorf("vmspool: constructor returned nil instance")
 	}
 
 	if err := inst.Clone(ctx); err != nil {
 		// Clone transitions from Initial; nothing to clean up beyond the
 		// instance itself, which is already in Initial/Deleted state.
-		return vmsInstance{}, fmt.Errorf("vmspool: clone: %w", err)
+		return nil, fmt.Errorf("vmspool: clone: %w", err)
 	}
 
-	stdout, err := p.options.createStdout(inst.ID())
-	if err != nil {
-		return vmsInstance{}, fmt.Errorf("vmspool: create stdout: %w", err)
-	}
-	stderr, err := p.options.createStderr(inst.ID())
-	if err != nil {
-		stdout.Close()
-		return vmsInstance{}, fmt.Errorf("vmspool: create stderr: %w", err)
-	}
-	vmsInst := vmsInstance{Instance: inst, stdout: stdout, stderr: stderr}
+	stdout := p.options.createStdout(inst.ID())
+	stderr := p.options.createStderr(inst.ID())
+
+	vmsInst := &vmsInstance{Instance: inst, stdout: stdout, stderr: stderr}
 
 	// leave VM in stopped state.
 	if p.options.stagingBehaviour == StagingBehaviourStopped ||
@@ -327,8 +343,8 @@ func (p *Pool) createVM(ctx context.Context) (vmsInstance, error) {
 
 	if err := vmsInst.Start(ctx, stdout, stderr); err != nil {
 		// Instance is Stopped after Clone; clean it up.
-		p.cleanupVM(vmsInst)
-		return vmsInstance{}, fmt.Errorf("vmspool: start: %w", err)
+		cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
+		return nil, fmt.Errorf("vmspool: start: %w", err)
 	}
 
 	if p.options.stagingBehaviour == StagingBehaviourRunning || !inst.Suspendable() {
@@ -338,18 +354,18 @@ func (p *Pool) createVM(ctx context.Context) (vmsInstance, error) {
 	vmsInst.stopped = true
 	if err := inst.Suspend(ctx); err != nil {
 		// Instance may be Running; stop and delete it.
-		p.cleanupVM(vmsInst)
-		return vmsInstance{}, fmt.Errorf("vmspool: suspend: %w", err)
+		cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
+		return nil, fmt.Errorf("vmspool: suspend: %w", err)
 	}
 	return vmsInst, nil
 }
 
-func (p *Pool) createVMAndNotify(ctx context.Context) (vmsInstance, error) {
+func (p *Pool) createVMAndNotify(ctx context.Context) (*vmsInstance, error) {
 	p.notify(EventVMCreateStarted, nil)
 	inst, err := p.createVM(ctx)
 	if err != nil {
 		p.notify(EventVMCreateFailed, err)
-		return vmsInstance{}, err
+		return nil, err
 	}
 	p.notify(EventVMCreated, nil)
 	return inst, nil
@@ -401,14 +417,11 @@ func (p *Pool) createVMWithRetry(ctx context.Context, interval, timeout time.Dur
 
 // attemptCreateVM creates a single VM and adds it to the pool.
 func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error {
-	var mu sync.Mutex
-	var inst vmsInstance
+	var inst *vmsInstance
 	var err error
 	doneCh := make(chan struct{})
 
 	p.wg.Go(func() {
-		mu.Lock()
-		defer mu.Unlock()
 		inst, err = p.createVMAndNotify(ctx)
 		close(doneCh)
 	})
@@ -416,18 +429,22 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 	select {
 	case <-doneCh:
 		if err != nil {
-			p.cleanupVM(inst)
+			cleanupVMOnError(inst, p.options.cleanupTimeout)
 			return err
 		}
 	case <-ctx.Done():
-		mu.Lock()
-		defer mu.Unlock()
-		p.cleanupVM(inst)
+		select {
+		case <-doneCh:
+			cleanupVMOnError(inst, p.options.cleanupTimeout)
+		default:
+		}
 		return ctx.Err()
 	case <-time.After(timeout):
-		mu.Lock()
-		defer mu.Unlock()
-		p.cleanupVM(inst)
+		select {
+		case <-doneCh:
+			cleanupVMOnError(inst, p.options.cleanupTimeout)
+		default:
+		}
 		return fmt.Errorf("vmspool: create VM timed out after %s", timeout)
 	}
 
@@ -439,7 +456,7 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 	case p.ready <- inst:
 		return nil
 	case <-ctx.Done():
-		p.cleanupVM(inst)
+		cleanupVMOnError(inst, p.options.cleanupTimeout)
 		return ctx.Err()
 	}
 }
@@ -471,7 +488,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 
 	// Block without holding any lock so that Close can run concurrently and
 	// signal shutdown by closing p.done.
-	var inst vmsInstance
+	var inst *vmsInstance
 	select {
 	case <-ctx.Done():
 		p.notify(EventAcquireFailed, ctx.Err())
@@ -482,10 +499,12 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 		return nil, err
 	case inst = <-p.ready:
 		if p.isClosed() {
-			p.cleanupVM(inst)
+			var errs errors.M
+			errs.Append(cleanupVMOnClose(inst, p.options.cleanupTimeout))
 			err := fmt.Errorf("vmspool: pool is closed")
+			errs.Append(err)
 			p.notify(EventAttemptToUseClosedPool, err)
-			return nil, err
+			return nil, errs.Err()
 		}
 	}
 	p.notify(EventVMDequeued, nil)
@@ -495,7 +514,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	if inst.stopped {
 		if err := inst.Start(ctx, inst.stdout, inst.stderr); err != nil {
 			// Start failed; clean up the VM and replenish so the pool stays full.
-			p.cleanupVM(inst)
+			cleanupVMOnError(inst, p.options.cleanupTimeout)
 			p.requestReplenish()
 			err = fmt.Errorf("vmspool: acquire: %w", err)
 			p.notify(EventAcquireFailed, err)
@@ -529,15 +548,7 @@ func (p *Pool) Close(ctx context.Context) error {
 	for {
 		select {
 		case inst := <-p.ready:
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
-			errs.Append(vms.CleanupVM(cleanupCtx, inst, p.options.stopTimeout))
-			if inst.stdout != nil {
-				errs.Append(inst.stdout.Close())
-			}
-			if inst.stderr != nil {
-				errs.Append(inst.stderr.Close())
-			}
-			cancel()
+			errs.Append(cleanupVMOnClose(inst, p.options.stopTimeout))
 		default:
 			return errs.Err()
 		}
@@ -547,12 +558,15 @@ func (p *Pool) Close(ctx context.Context) error {
 // VM is a running virtual machine instance acquired from a Pool.
 // Use Exec to run commands and Release when done.
 type VM struct {
-	inst vmsInstance
+	inst *vmsInstance
 	pool *Pool
 }
 
 // Exec runs cmd with args inside the VM, writing output to stdout and stderr.
 func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error {
+	if v.inst == nil || v.inst.Instance == nil {
+		return fmt.Errorf("vmspool: invalid VM instance")
+	}
 	return v.inst.Exec(ctx, stdout, stderr, cmd, args...)
 }
 
