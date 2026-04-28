@@ -8,15 +8,17 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sync"
 	"unicode/utf8"
 )
 
-// PrefixReader is an io.ReadWriteCloser that prepends prefix to the data read
+// LabelingPipe is an io.ReadWriteCloser that prepends prefix to the data read
 // from the underlying reader. It prepends the prefix to the beginning of the
-// stream and after every separator character (defaults to newline). It is useful for prepending data
-// to the output of an exec.Cmd without modifying the command itself when working
-// with multiple outstanding commands.
-type PrefixReader struct {
+// stream and after every separator character. For example, it can be useed
+// to insert labels in the output of an exec.Cmd without modifying the command
+// itself when working with multiple outstanding commands.
+type LabelingPipe struct {
+	mu          sync.Mutex
 	prefix      []byte
 	separator   rune
 	r           *io.PipeReader
@@ -24,9 +26,9 @@ type PrefixReader struct {
 	atLineStart bool
 }
 
-func NewPrefixReader(prefix []byte, separator rune) io.ReadWriteCloser {
+func NewLabelingPipe(prefix []byte, separator rune) io.ReadWriteCloser {
 	r, w := io.Pipe()
-	return &PrefixReader{
+	return &LabelingPipe{
 		prefix:      prefix,
 		separator:   separator,
 		r:           r,
@@ -35,14 +37,17 @@ func NewPrefixReader(prefix []byte, separator rune) io.ReadWriteCloser {
 	}
 }
 
-func (pr *PrefixReader) Read(p []byte) (n int, err error) {
+func (pr *LabelingPipe) Read(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
 	return pr.r.Read(p)
 }
 
-func (pr *PrefixReader) Write(p []byte) (n int, err error) {
+func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	if len(pr.prefix) == 0 {
 		return pr.w.Write(p)
 	}
@@ -77,7 +82,7 @@ func (pr *PrefixReader) Write(p []byte) (n int, err error) {
 	return originalLen, nil
 }
 
-func (pr *PrefixReader) Close() error {
+func (pr *LabelingPipe) Close() error {
 	if err := pr.r.Close(); err != nil {
 		return fmt.Errorf("failed to close read pipe: %w", err)
 	}

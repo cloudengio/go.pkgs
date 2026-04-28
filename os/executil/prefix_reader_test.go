@@ -26,7 +26,7 @@ func asyncWrite(rw io.ReadWriteCloser, p []byte) <-chan error {
 }
 
 func TestPrefixReader_EmptyReadBuffer(t *testing.T) {
-	pr := executil.NewPrefixReader([]byte(">> "), '\n')
+	pr := executil.NewLabelingPipe([]byte(">> "), '\n')
 	defer pr.Close()
 
 	n, err := pr.Read([]byte{})
@@ -36,7 +36,7 @@ func TestPrefixReader_EmptyReadBuffer(t *testing.T) {
 }
 
 func TestPrefixReader_EmptyTag(t *testing.T) {
-	pr := executil.NewPrefixReader(nil, '\n')
+	pr := executil.NewLabelingPipe(nil, '\n')
 	defer pr.Close()
 	werr := asyncWrite(pr, []byte("hello"))
 
@@ -55,7 +55,7 @@ func TestPrefixReader_EmptyTag(t *testing.T) {
 
 func TestPrefixReader_NewlineInsertion(t *testing.T) {
 	tag := ">> "
-	pr := executil.NewPrefixReader([]byte(tag), '\n')
+	pr := executil.NewLabelingPipe([]byte(tag), '\n')
 	defer pr.Close()
 
 	reads := make(chan string)
@@ -86,7 +86,7 @@ func TestPrefixReader_NewlineInsertion(t *testing.T) {
 
 func TestPrefixReader_NoTrailingNewline(t *testing.T) {
 	tag := ">> "
-	pr := executil.NewPrefixReader([]byte(tag), '\n')
+	pr := executil.NewLabelingPipe([]byte(tag), '\n')
 	defer pr.Close()
 
 	reads := make(chan string)
@@ -110,7 +110,7 @@ func TestPrefixReader_NoTrailingNewline(t *testing.T) {
 
 func TestPrefixReader_TabSeparator(t *testing.T) {
 	tag := "-> "
-	pr := executil.NewPrefixReader([]byte(tag), '\t')
+	pr := executil.NewLabelingPipe([]byte(tag), '\t')
 	defer pr.Close()
 
 	reads := make(chan string)

@@ -36,6 +36,11 @@ or does not exist. Wait must have been called on the process otherwise this
 function will return true on some systems since the process may still exist
 as a defunct process.
 
+### Func NewLabelingPipe
+```go
+func NewLabelingPipe(prefix []byte, separator rune) io.ReadWriteCloser
+```
+
 ### Func NewLineFilter
 ```go
 func NewLineFilter(forward io.Writer, ch chan<- []byte, res ...*regexp.Regexp) io.WriteCloser
@@ -46,11 +51,6 @@ channel. It can be used to filter the output of a command started by the
 exec package for example for specific output. If no regexps are supplied,
 all lines are sent. Close must be called on the returned io.WriteCloser to
 ensure that all resources are reclaimed.
-
-### Func NewPrefixReader
-```go
-func NewPrefixReader(prefix []byte, separator rune) io.ReadWriteCloser
-```
 
 ### Func ReplaceEnvVar
 ```go
@@ -134,32 +134,32 @@ true and the error from cmd.Wait(), otherwise it returns false and nil.
 
 
 
-### Type PrefixReader
+### Type LabelingPipe
 ```go
-type PrefixReader struct {
+type LabelingPipe struct {
 	// contains filtered or unexported fields
 }
 ```
-PrefixReader is an io.ReadWriteCloser that prepends prefix to the data read
+LabelingPipe is an io.ReadWriteCloser that prepends prefix to the data read
 from the underlying reader. It prepends the prefix to the beginning of the
-stream and after every separator character (defaults to newline). It is
-useful for prepending data to the output of an exec.Cmd without modifying
-the command itself when working with multiple outstanding commands.
+stream and after every separator character. For example, it can be useed to
+insert labels in the output of an exec.Cmd without modifying the command
+itself when working with multiple outstanding commands.
 
 ### Methods
 
 ```go
-func (pr *PrefixReader) Close() error
+func (pr *LabelingPipe) Close() error
 ```
 
 
 ```go
-func (pr *PrefixReader) Read(p []byte) (n int, err error)
+func (pr *LabelingPipe) Read(p []byte) (n int, err error)
 ```
 
 
 ```go
-func (pr *PrefixReader) Write(p []byte) (n int, err error)
+func (pr *LabelingPipe) Write(p []byte) (n int, err error)
 ```
 
 
