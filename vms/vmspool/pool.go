@@ -152,6 +152,18 @@ func WithStagingBehaviour(behaviour StagingBehaviour) Option {
 //   - StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller.
 type StagingBehaviour int
 
+func (s StagingBehaviour) String() string {
+	switch s {
+	case StagingBehaviourSuspended:
+		return "Suspended"
+	case StagingBehaviourRunning:
+		return "Running"
+	case StagingBehaviourStopped:
+		return "Stopped"
+	}
+	return "Unknown"
+}
+
 const (
 	StagingBehaviourRunning StagingBehaviour = iota
 	StagingBehaviourSuspended
@@ -267,6 +279,9 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 }
 
 func (p *Pool) cleanupVM(inst vmsInstance) {
+	if inst.Instance == nil {
+		return
+	}
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
 	_ = vms.CleanupVM(cleanupCtx, inst.Instance, p.options.stopTimeout)
 	if inst.stdout != nil {
@@ -387,13 +402,17 @@ func (p *Pool) createVMWithRetry(ctx context.Context, interval, timeout time.Dur
 
 // attemptCreateVM creates a single VM and adds it to the pool.
 func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error {
+	var mu sync.Mutex
 	var inst vmsInstance
 	var err error
 	doneCh := make(chan struct{})
-	go func() {
+
+	p.wg.Go(func() {
+		mu.Lock()
+		defer mu.Unlock()
 		inst, err = p.createVMAndNotify(ctx)
 		close(doneCh)
-	}()
+	})
 
 	select {
 	case <-doneCh:
@@ -402,9 +421,13 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 			return err
 		}
 	case <-ctx.Done():
+		mu.Lock()
+		defer mu.Unlock()
 		p.cleanupVM(inst)
 		return ctx.Err()
 	case <-time.After(timeout):
+		mu.Lock()
+		defer mu.Unlock()
 		p.cleanupVM(inst)
 		return fmt.Errorf("vmspool: create VM timed out after %s", timeout)
 	}
