@@ -4,10 +4,13 @@
 import cloudeng.io/vms/vmspool
 ```
 
-Package vmspool manages a fixed-size pool of suspended virtual machine
-instances. The pool pre-creates and suspends VMs so they can be started
-quickly when acquired. When a caller releases a VM it is deleted and a new
-one is created asynchronously to restore the pool to its target size.
+Package vmspool manages a fixed-size pool of suspended or stopped virtual
+machine instances. The pool pre-creates and suspends VMs so they can be
+started quickly when acquired. When a caller releases a VM it is deleted
+and a new one is created asynchronously to restore the pool to its target
+size. Note that if the underlying VM implementation does not support
+suspend/resume, the pool will create the VM and leave it stopped until
+acquired.
 
 ## Constants
 ### DefaultPoolSize, DefaultCleanupTimeout, DefaultCreateTimeout, DefaultCreateInterval, DefaultStopTimeout
@@ -140,6 +143,13 @@ DefaultPoolSize. A 0 or negative value is treated as DefaultPoolSize.
 
 
 ```go
+func WithStagingBehaviour(behaviour StagingBehaviour) Option
+```
+WithStagingBehaviour sets the staging behaviour for VMs in the pool.
+The default is StagingBehaviourRunning.
+
+
+```go
 func WithStatus(ch chan<- Event) Option
 ```
 WithStatus registers ch to receive pool lifecycle events. Sends are
@@ -148,17 +158,21 @@ for sizing the channel appropriately and draining it promptly.
 
 
 ```go
+func WithStdoutStderr(stdout, stderr func(id string) (io.ReadWriteCloser, error)) Option
+```
+WithStdoutStderr configures the pool to use the provided functions to
+create stdout and stderr pipes for VMs during creation and replenishment.
+The value of vms.Instance.ID() is passed to the stdout function and can
+be used to create uniquely identifiable pipes. If either function is nil,
+a no-op ReadWriteCloser is used that discards all writes and returns EOF on
+reads.
+
+
+```go
 func WithStopTimeout(timeout time.Duration) Option
 ```
 WithStopTimeout sets the timeout for stopping VMs. The default is
 DefaultStopTimeout. A 0 or negative value is treated as DefaultStopTimeout.
-
-
-```go
-func WithSuspendVMs(suspend bool) Option
-```
-WithSuspendVMs configures the pool to suspend VMs after starting them during
-creation and replenishment. By default, VMs are suspended.
 
 
 
@@ -184,7 +198,7 @@ Call Start to fill the pool before calling Acquire.
 ### Methods
 
 ```go
-func (p *Pool) Acquire(ctx context.Context, stdout, stderr io.Writer) (*VM, error)
+func (p *Pool) Acquire(ctx context.Context) (*VM, error)
 ```
 Acquire waits for a suspended VM, starts it, and returns a handle. The
 caller must call VM.Release when finished with the VM. Acquire blocks until
@@ -207,6 +221,42 @@ context is canceled), any other VMs required to fill the pool are created
 asynchronously. Start can be called once only and will return an error if
 called more than once. After Start returns, the pool is ready to accept
 Acquire calls.
+
+
+
+
+### Type StagingBehaviour
+```go
+type StagingBehaviour int
+```
+StagingBehaviour determines the state of VMs in the pool after creation but
+before acquisition. The default is StagingBehaviourRunning. The behaviours
+are:
+  - StagingBehaviourRunning: VMs are left running and Acquire will hand them
+    to the caller as-is.
+  - StagingBehaviourSuspended: VMs are suspended and Acquire will resume
+    them before handing them to the caller provided that the VM supports
+    suspend/resume; if not, the pool falls back to StagingBehaviourStopped
+    behaviour.
+  - StagingBehaviourStopped: VMs are stopped and Acquire will start them
+    before handing them to the caller.
+
+### Constants
+### StagingBehaviourRunning, StagingBehaviourSuspended, StagingBehaviourStopped
+```go
+StagingBehaviourRunning StagingBehaviour = iota
+StagingBehaviourSuspended
+StagingBehaviourStopped
+
+```
+
+
+
+### Methods
+
+```go
+func (s StagingBehaviour) String() string
+```
 
 
 
