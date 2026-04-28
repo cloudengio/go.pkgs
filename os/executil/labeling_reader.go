@@ -83,11 +83,11 @@ func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 }
 
 func (pr *LabelingPipe) Close() error {
-	if err := pr.r.Close(); err != nil {
-		return fmt.Errorf("failed to close read pipe: %w", err)
-	}
 	if err := pr.w.Close(); err != nil {
 		return fmt.Errorf("failed to close write pipe: %w", err)
+	}
+	if err := pr.r.Close(); err != nil {
+		return fmt.Errorf("failed to close read pipe: %w", err)
 	}
 	return nil
 }
