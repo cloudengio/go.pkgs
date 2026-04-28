@@ -102,7 +102,7 @@ type ConfigManager[T any] struct {
 ConfigManager provides a means to manage configurations based on regex
 patterns that can be matched against test names. It is useful for
 centralizing the configuration of tests, especially those that are
-externalized by a one package for use by multiple others. For example when
+externalized by a one package for use by multiple others. For example, when
 an interface has multiple implementations for which tests can be shared.
 
 ### Methods
@@ -119,7 +119,10 @@ is no need to use a regex that matches all strings as the default case.
 ```go
 func (c *ConfigManager[T]) Set(re *regexp.Regexp, config T)
 ```
-Set associates a regex pattern with a specific configuration.
+Set associates a regex pattern with a specific configuration. It panics if
+a nil regex is provided. The regexes are evaluated in the order they were
+added via Set, so the first matching regex will determine the configuration
+returned by Get.
 
 
 ```go

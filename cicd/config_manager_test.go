@@ -7,6 +7,7 @@ package cicd_test
 import (
 	"fmt"
 	"regexp"
+	"testing"
 	"time"
 
 	"cloudeng.io/cicd"
@@ -39,4 +40,29 @@ func ExampleConfigManager() {
 	// TestProvisionMacOS         image=macos:latest       timeout=15m0s
 	// TestProvisionWindows       image=windows:latest     timeout=20m0s
 	// TestProvisionLinux         image=linux:latest       timeout=5m0s
+}
+
+func TestConfigManager_FirstMatch(t *testing.T) {
+	var mgr cicd.ConfigManager[int]
+	mgr.SetDefault(-1)
+
+	mgr.Set(regexp.MustCompile(`foo.*`), 1)
+	mgr.Set(regexp.MustCompile(`foo_bar`), 2)
+	mgr.Set(regexp.MustCompile(`.*bar`), 3)
+
+	// Matches both foo.* and foo_bar, and .*bar, but foo.* is added first.
+	if got := mgr.Get("foo_bar"); got != 1 {
+		t.Errorf("got %v, want 1", got)
+	}
+
+	// Now check if a new manager resolves .*bar first when order is changed.
+	var mgr2 cicd.ConfigManager[int]
+	mgr2.SetDefault(-1)
+	mgr2.Set(regexp.MustCompile(`.*bar`), 3)
+	mgr2.Set(regexp.MustCompile(`foo.*`), 1)
+	mgr2.Set(regexp.MustCompile(`foo_bar`), 2)
+
+	if got := mgr2.Get("foo_bar"); got != 3 {
+		t.Errorf("got %v, want 3", got)
+	}
 }
