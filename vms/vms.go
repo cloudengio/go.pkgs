@@ -34,6 +34,8 @@ type Properties struct {
 // be determined. Intermediate states (eg. Stopping, Starting) may
 // be observed while the operation is in progress.
 type Instance interface {
+	// ID returns a unique identifier for the instance.
+	ID() string
 
 	// Clone prepares an instance for being stated. It should be
 	// a synchronous operation and when it returns the state should be Stopped.
@@ -262,6 +264,9 @@ func PrintStates(out io.Writer) {
 // it if necessary. Suspended VMs are stopped before deletion.
 // It returns an error if any of the operations fail.
 func CleanupVM(ctx context.Context, inst Instance, timeout time.Duration) error {
+	if inst == nil {
+		return nil
+	}
 	s := inst.State(ctx)
 	switch s {
 	case StateDeleted, StateInitial:

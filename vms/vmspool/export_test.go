@@ -6,7 +6,9 @@ package vmspool
 
 import "cloudeng.io/vms"
 
-// ReadyCh exposes the ready channel for use in tests that need to
-// manipulate pool state directly (e.g. to fill the channel to capacity
-// in order to provoke a blocking send from a replenishment goroutine).
-func (p *Pool) ReadyCh() chan vms.Instance { return p.ready }
+// InjectVM wraps inst in a vmsInstance with discard stdout/stderr and sends it
+// into the pool's ready channel. Used in tests that need to fill the channel
+// to capacity in order to provoke a blocking send from a replenishment goroutine.
+func (p *Pool) InjectVM(inst vms.Instance) {
+	p.ready <- vmsInstance{Instance: inst, stdout: discardReadWriteCloser{}, stderr: discardReadWriteCloser{}}
+}
