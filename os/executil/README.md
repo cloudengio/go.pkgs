@@ -36,6 +36,11 @@ or does not exist. Wait must have been called on the process otherwise this
 function will return true on some systems since the process may still exist
 as a defunct process.
 
+### Func NewLabelingPipe
+```go
+func NewLabelingPipe(prefix []byte, separator rune) io.ReadWriteCloser
+```
+
 ### Func NewLineFilter
 ```go
 func NewLineFilter(forward io.Writer, ch chan<- []byte, res ...*regexp.Regexp) io.WriteCloser
@@ -125,6 +130,37 @@ func (aw *AsyncWait) WaitDone() (bool, error)
 ```
 WaitDone reports whether the cmd has already completed. If so, it returns
 true and the error from cmd.Wait(), otherwise it returns false and nil.
+
+
+
+
+### Type LabelingPipe
+```go
+type LabelingPipe struct {
+	// contains filtered or unexported fields
+}
+```
+LabelingPipe is an io.ReadWriteCloser that prepends prefix to the data read
+from the underlying reader. It prepends the prefix to the beginning of the
+stream and after every separator character. For example, it can be useed to
+insert labels in the output of an exec.Cmd without modifying the command
+itself when working with multiple outstanding commands.
+
+### Methods
+
+```go
+func (pr *LabelingPipe) Close() error
+```
+
+
+```go
+func (pr *LabelingPipe) Read(p []byte) (n int, err error)
+```
+
+
+```go
+func (pr *LabelingPipe) Write(p []byte) (n int, err error)
+```
 
 
 
