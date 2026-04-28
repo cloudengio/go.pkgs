@@ -3,11 +3,10 @@
 // license that can be found in the LICENSE file.
 
 // Package vmspool manages a fixed-size pool of suspended or stopped virtual
-// machine instances. The pool pre-creates and suspends VMs so they can be
-// started quickly when acquired. When a caller releases a VM it is deleted and a
-// new one is created asynchronously to restore the pool to its target size.
-// Note that if the underlying VM implementation does not support suspend/resume,
-// the pool will create the VM and leave it stopped until acquired.
+// machine instances. The pool pre-creates and mantains VMs according to the
+// requested StagingBehaviour so they can be  started quickly when acquired.
+// When a caller releases a VM, it is deleted and a new one is created asynchronously
+// to restore the pool to its target size.
 package vmspool
 
 import (
@@ -51,7 +50,7 @@ type Pool struct {
 	closed          bool
 	replenishCtx    context.Context
 	replenishCancel context.CancelFunc
-	// tracks in-flight replenishment and vm creationg goroutines
+	// tracks in-flight replenishment and vm creation goroutines
 	wg ctxsync.WaitGroup
 }
 
