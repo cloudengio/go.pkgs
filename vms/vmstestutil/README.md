@@ -6,7 +6,41 @@ import cloudeng.io/vms/vmstestutil
 
 
 ## Functions
-### Func SetTestConfig
+### Func TestInstanceCloneStartStopDelete
+```go
+func TestInstanceCloneStartStopDelete(t TestingT, cfg InstanceTestConfig)
+```
+TestInstanceCloneStartStopDelete verifies the standard Clone -> Start ->
+Stop -> Delete state transitions.
+
+### Func TestInstanceDeleteFromSuspended
+```go
+func TestInstanceDeleteFromSuspended(t TestingT, cfg InstanceTestConfig)
+```
+TestInstanceDeleteFromSuspended verifies that an instance can be deleted
+directly from the Suspended state.
+
+### Func TestInstanceExec
+```go
+func TestInstanceExec(t TestingT, cfg InstanceTestConfig)
+```
+TestInstanceExec verifies that a command can be executed inside a running
+VM.
+
+### Func TestInstanceLifecycle
+```go
+func TestInstanceLifecycle(t TestingT, cfg InstanceTestConfig)
+```
+TestInstanceLifecycle runs the full vms.Instance lifecycle test suite.
+
+### Func TestInstanceSuspendResume
+```go
+func TestInstanceSuspendResume(t TestingT, cfg InstanceTestConfig)
+```
+TestInstanceSuspendResume verifies the Suspend and Resume (Start)
+transitions for suspendable VMs.
+
+### Func TestLifecycle
 ```go
 func SetTestConfig(cfg PoolTestConfig)
 ```
@@ -71,6 +105,27 @@ type ExecCall struct {
 }
 ```
 ExecCall records a single invocation of Mock.Exec.
+
+
+### Type InstanceTestConfig
+```go
+type InstanceTestConfig struct {
+	// Constructor creates a new uninitialized vms.Instance for each test.
+	Constructor func() vms.Instance
+
+	// Timeout caps individual operations. Defaults to 30 s.
+	Timeout time.Duration
+
+	// ExecCmd is a command that should succeed inside a running VM. If empty,
+	// the Exec subtest is skipped.
+	ExecCmd    string
+	ExecArgs   []string
+	ExecStdout string // Expected output from the exec.
+	ExecStderr string // Expected stderr output from the exec.
+}
+```
+InstanceTestConfig configures the test suite for an implementation of
+vms.Instance.
 
 
 ### Type Mock
