@@ -11,7 +11,7 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-//go:generate astest --preamble=cfg=testConfig . pooltests_test.go
+//go:generate astest --match='^TestPool' --preamble=cfg=testConfig . pooltests_test.go
 
 var testConfig = vmstestutil.PoolTestConfig{
 	Constructor:      vmstestutil.NewMockFactory(true),

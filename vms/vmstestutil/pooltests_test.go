@@ -8,12 +8,6 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func TestLifecycle(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestLifecycle(t, cfg)
-}
-
 func TestPoolAcquireAndRelease(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
