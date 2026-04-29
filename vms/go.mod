@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	cloudeng.io/errors v0.0.14-0.20260114020737-744f6c0f8e64
-	cloudeng.io/os v0.0.0-20260428203904-e0c35e8d92dd
+	cloudeng.io/os v0.0.0-20260429214230-b6e2bf13d023
 	cloudeng.io/sync v0.0.9
 )
 
