@@ -30,8 +30,8 @@ type PoolTestConfig struct {
 	ExecStdoutOutput string // Expected output from the exec.
 	ExecStderrOutput string // Expected stderr output from the exec.
 
-	StdoutRWC func(string) (io.ReadWriteCloser, error) // Optional factory
-	StderrRWC func(string) (io.ReadWriteCloser, error) // Optional factory for stderr RWC used by Exec; defaults to bytes.Buffer-based implementation.
+	StdoutRWC func(string) io.Writer // Optional factory
+	StderrRWC func(string) io.Writer // Optional factory for stderr RWC used by Exec; defaults to bytes.Buffer-based implementation.
 
 	// Timeout caps individual pool operations. Defaults to 30 s.
 	Timeout time.Duration
@@ -63,19 +63,8 @@ type TestingT interface {
 	Helper()
 	Fatalf(format string, args ...any)
 	Errorf(format string, args ...any)
+	Logf(format string, args ...any)
 	Cleanup(f func())
-}
-
-// TestLifecycle runs the full pool lifecycle test suite using the global config
-// set by SetTestConfig.
-func TestLifecycle(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
-	TestPoolStartAndAcquire(t, cfg)
-	TestPoolAcquireAndRelease(t, cfg)
-	TestPoolExec(t, cfg)
-	TestPoolContextCancellation(t, cfg)
-	TestPoolClose(t, cfg)
-	TestPoolConcurrentAcquire(t, cfg)
 }
 
 // startPool creates and starts a pool, waits for all VMs to be ready, and
@@ -123,32 +112,9 @@ func waitForPoolEvent(t TestingT, statusCh <-chan vmspool.Event, kind vmspool.Ev
 	}
 }
 
-// TestPoolStartAndAcquire verifies that starting the pool and acquiring a VM
-// produces a VM in the Running state.
-func TestPoolStartAndAcquire(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
-	p := startPool(t, cfg)
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
-	defer cancel()
-	vm, err := p.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	defer func() {
-		if err := vm.Release(context.Background()); err != nil {
-			t.Errorf("Release: %v", err)
-		}
-	}()
-	if err := vm.Release(context.Background()); err != nil {
-		t.Errorf("Release: %v", err)
-	}
-}
-
-// TestPoolAcquireAndRelease verifies the full acquire → release → replenish cycle:
+// TestPoolAcquireExecRelease verifies the full acquire → exec → release → replenish cycle:
 // releasing a VM triggers replenishment so the pool can serve another Acquire.
-func TestPoolAcquireAndRelease(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
+func TestPoolAcquireExecRelease(t TestingT, cfg PoolTestConfig) { //cicd:astest
 	size := cfg.poolSize()
 	statusCh := make(chan vmspool.Event, size*16)
 	opts := []vmspool.Option{
@@ -171,42 +137,6 @@ func TestPoolAcquireAndRelease(t TestingT, cfg PoolTestConfig) { //cicd:astest
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	if err := vm.Release(ctx); err != nil {
-		t.Fatalf("Release: %v", err)
-	}
-
-	// Wait for replenishment to complete before acquiring again.
-	waitForPoolEvent(t, statusCh, vmspool.EventReplenished, cfg.timeout())
-
-	vm2, err := p.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("second Acquire after replenishment: %v", err)
-	}
-	if err := vm2.Release(ctx); err != nil {
-		t.Errorf("Release vm2: %v", err)
-	}
-}
-
-// TestPoolExec verifies that a command can be executed inside an acquired VM
-// without error.
-func TestPoolExec(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
-	if cfg.ExecCmd == "" {
-		return
-	}
-	p := startPool(t, cfg)
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
-	defer cancel()
-	vm, err := p.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	defer func() {
-		if err := vm.Release(context.Background()); err != nil {
-			t.Errorf("Release: %v", err)
-		}
-	}()
 
 	stdout := bytes.NewBuffer(make([]byte, 0, 1024))
 	stderr := bytes.NewBuffer(make([]byte, 0, 1024))
@@ -219,12 +149,43 @@ func TestPoolExec(t TestingT, cfg PoolTestConfig) { //cicd:astest
 	if got, want := stderr.String(), cfg.ExecStderrOutput; got != want {
 		t.Errorf("Exec stderr: got %q, want %q", got, want)
 	}
+
+	if err := vm.Release(ctx); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	if err := vm.Exec(ctx, stdout, stderr, cfg.ExecCmd, cfg.ExecArgs...); err == nil {
+		t.Errorf("Exec %q %v: expected error, got nil", cfg.ExecCmd, cfg.ExecArgs)
+	}
+
+	// Wait for replenishment to complete before acquiring again.
+	waitForPoolEvent(t, statusCh, vmspool.EventReplenished, cfg.timeout())
+
+	vm2, err := p.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("second Acquire after replenishment: %v", err)
+	}
+
+	stdout = bytes.NewBuffer(make([]byte, 0, 1024))
+	stderr = bytes.NewBuffer(make([]byte, 0, 1024))
+	if err := vm2.Exec(ctx, stdout, stderr, cfg.ExecCmd, cfg.ExecArgs...); err != nil {
+		t.Errorf("Exec %q %v: %v", cfg.ExecCmd, cfg.ExecArgs, err)
+	}
+	if got, want := stdout.String(), cfg.ExecStdoutOutput; got != want {
+		t.Errorf("Exec stdout: got %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), cfg.ExecStderrOutput; got != want {
+		t.Errorf("Exec stderr: got %q, want %q", got, want)
+	}
+
+	if err := vm2.Release(ctx); err != nil {
+		t.Errorf("Release vm2: %v", err)
+	}
 }
 
 // TestPoolContextCancellation verifies that Acquire returns context.Canceled when
 // the pool is empty and the context is cancelled.
 func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
 	// Use a size-1 pool so one Acquire drains it.
 	statusCh := make(chan vmspool.Event, 16)
 	p := vmspool.New(cfg.Constructor,
@@ -263,7 +224,6 @@ func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig) { //cicd:astest
 
 // TestPoolClose verifies that Close prevents further Acquire calls.
 func TestPoolClose(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
 	statusCh := make(chan vmspool.Event, 16)
 	p := vmspool.New(cfg.Constructor,
 		vmspool.WithSize(1),
@@ -292,7 +252,6 @@ func TestPoolClose(t TestingT, cfg PoolTestConfig) { //cicd:astest
 // VM concurrently without error, and that the pool replenishes after all are
 // released.
 func TestPoolConcurrentAcquire(t TestingT, cfg PoolTestConfig) { //cicd:astest
-	t.Helper()
 	p := startPool(t, cfg)
 	size := cfg.poolSize()
 

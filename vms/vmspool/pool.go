@@ -30,21 +30,8 @@ type Constructor interface {
 
 type vmsInstance struct {
 	vms.Instance
-	stdout, stderr io.ReadWriteCloser
+	stdout, stderr io.Writer
 	stopped        bool
-}
-
-func (v *vmsInstance) close() error {
-	var errs errors.M
-	if v.stdout != nil {
-		errs.Append(v.stdout.Close())
-		v.stdout = nil
-	}
-	if v.stderr != nil {
-		errs.Append(v.stderr.Close())
-		v.stderr = nil
-	}
-	return errs.Err()
 }
 
 // Pool manages a fixed-size set of suspended virtual machine instances.
@@ -75,8 +62,8 @@ type options struct {
 	createTimeout    time.Duration
 	createInterval   time.Duration
 	stopTimeout      time.Duration
-	createStdout     func(id string) io.ReadWriteCloser
-	createStderr     func(id string) io.ReadWriteCloser
+	createStdout     func(id string) io.Writer
+	createStderr     func(id string) io.Writer
 }
 
 const (
@@ -182,35 +169,21 @@ const (
 	StagingBehaviourStopped
 )
 
-type discardReadWriteCloser struct{}
-
-func (discardReadWriteCloser) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
-
-func (discardReadWriteCloser) Close() error {
-	return nil
-}
-
-func (discardReadWriteCloser) Read(_ []byte) (n int, err error) {
-	return 0, io.EOF
-}
-
 // WithStdoutStderr configures the pool to use the provided functions to create
-// stdout and stderr pipes for VMs during creation and replenishment. The
+// stdout and stderr io.Writers for VMs during creation and replenishment. The
 // value of vms.Instance.ID() is passed to the stdout function and can be used to create
-// uniquely identifiable pipes. If either function is nil, a no-op ReadWriteCloser is used
-// that discards all writes and returns EOF on reads.
-func WithStdoutStderr(stdout, stderr func(id string) io.ReadWriteCloser) Option {
+// uniquely identifiable pipes. If either function is nil, a no-op Writer is used
+// that discards all writes.
+func WithStdoutStderr(stdout, stderr func(id string) io.Writer) Option {
 	return func(o *options) {
 		if stdout == nil {
-			stdout = func(string) io.ReadWriteCloser {
-				return discardReadWriteCloser{}
+			stdout = func(string) io.Writer {
+				return io.Discard
 			}
 		}
 		if stderr == nil {
-			stderr = func(string) io.ReadWriteCloser {
-				return discardReadWriteCloser{}
+			stderr = func(string) io.Writer {
+				return io.Discard
 			}
 		}
 		o.createStdout = stdout
@@ -228,11 +201,11 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	options.createInterval = DefaultCreateInterval
 	options.stopTimeout = DefaultStopTimeout
 	options.stagingBehaviour = StagingBehaviourRunning
-	options.createStdout = func(string) io.ReadWriteCloser {
-		return discardReadWriteCloser{}
+	options.createStdout = func(string) io.Writer {
+		return io.Discard
 	}
-	options.createStderr = func(string) io.ReadWriteCloser {
-		return discardReadWriteCloser{}
+	options.createStderr = func(string) io.Writer {
+		return io.Discard
 	}
 	for _, opt := range opts {
 		opt(&options)
@@ -300,18 +273,13 @@ func cleanupVMOnError(inst *vmsInstance, timeout time.Duration) {
 		return
 	}
 	_ = vms.CleanupVM(context.Background(), inst.Instance, timeout)
-	_ = inst.close()
 }
 
 func cleanupVMOnClose(inst *vmsInstance, timeout time.Duration) error {
 	if inst == nil || inst.Instance == nil {
 		return nil
 	}
-	var errs errors.M
-	err := vms.CleanupVM(context.Background(), inst.Instance, timeout)
-	errs.Append(err)
-	errs.Append(inst.close())
-	return errs.Err()
+	return vms.CleanupVM(context.Background(), inst.Instance, timeout)
 }
 
 // createVM clones, starts, and suspends a new instance then places it in the
@@ -578,15 +546,7 @@ func (v *VM) Release(ctx context.Context) error {
 	if cleanupErr != nil {
 		cleanupErr = fmt.Errorf("vmspool: release: %w", cleanupErr)
 	}
-	var errs errors.M
-	errs.Append(cleanupErr)
-	if v.inst.stdout != nil {
-		errs.Append(v.inst.stdout.Close())
-	}
-	if v.inst.stderr != nil {
-		errs.Append(v.inst.stderr.Close())
-	}
 	v.pool.requestReplenish()
 	v.pool.notify(EventReleased, nil)
-	return errs.Err()
+	return cleanupErr
 }

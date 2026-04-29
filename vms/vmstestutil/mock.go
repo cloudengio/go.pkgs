@@ -52,6 +52,7 @@ func NewMock(id string) *Mock {
 		state:       vms.StateInitial,
 		suspendable: true,
 		id:          id,
+		properties:  vms.Properties{},
 	}
 }
 
@@ -98,6 +99,12 @@ func (m *Mock) Start(ctx context.Context, _, _ io.Writer) error {
 func (m *Mock) Stop(_ context.Context, _ time.Duration) (error, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.state == vms.StateStopped {
+		return nil, nil
+	}
+	if m.state != vms.StateRunning {
+		return nil, fmt.Errorf("cannot stop VM in state %v", m.state)
+	}
 	if m.StopRunErr != nil || m.StopErr != nil {
 		m.state = vms.StateErrorUnknown
 		return m.StopRunErr, m.StopErr
@@ -136,6 +143,9 @@ func (m *Mock) Suspend(_ context.Context) error {
 func (m *Mock) Delete(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.state != vms.StateStopped && m.state != vms.StateSuspended && m.state != vms.StateErrorUnknown {
+		return fmt.Errorf("cannot delete VM in state %v", m.state)
+	}
 	if m.DeleteErr != nil {
 		return m.DeleteErr
 	}
@@ -158,6 +168,9 @@ func (m *Mock) SetState(state vms.State) {
 func (m *Mock) Exec(_ context.Context, _, _ io.Writer, cmd string, args ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.state != vms.StateRunning {
+		return fmt.Errorf("cannot exec command on VM in state %v", m.state)
+	}
 	m.execCalls = append(m.execCalls, ExecCall{Cmd: cmd, Args: slices.Clone(args)})
 	if m.ExecErr != nil {
 		return m.ExecErr

@@ -31,7 +31,15 @@ VM.
 ```go
 func TestInstanceLifecycle(t TestingT, cfg InstanceTestConfig)
 ```
-TestInstanceLifecycle runs the full vms.Instance lifecycle test suite.
+TestInstanceLifecycle is a detailed lifecycle test that walks a VM through
+its state machine. Initial → Clone → Stopped → Start → Running → Stop →
+Stopped → Stop (idempotent) → Start → Running → [Suspend → Suspended →
+Suspend (idempotent) → Start → Running →] Stop → Stopped → Delete → Deleted
+
+### Func TestInstanceStateErrors
+```go
+func TestInstanceStateErrors(t TestingT, cfg InstanceTestConfig)
+```
 
 ### Func TestInstanceSuspendResume
 ```go
@@ -40,20 +48,13 @@ func TestInstanceSuspendResume(t TestingT, cfg InstanceTestConfig)
 TestInstanceSuspendResume verifies the Suspend and Resume (Start)
 transitions for suspendable VMs.
 
-### Func TestLifecycle
+### Func TestPoolAcquireExecRelease
 ```go
-func TestLifecycle(t TestingT, cfg PoolTestConfig)
+func TestPoolAcquireExecRelease(t TestingT, cfg PoolTestConfig)
 ```
-TestLifecycle runs the full pool lifecycle test suite using the global
-config set by SetTestConfig.
-
-### Func TestPoolAcquireAndRelease
-```go
-func TestPoolAcquireAndRelease(t TestingT, cfg PoolTestConfig)
-```
-TestPoolAcquireAndRelease verifies the full acquire → release → replenish
-cycle: releasing a VM triggers replenishment so the pool can serve another
-Acquire.
+TestPoolAcquireExecRelease verifies the full acquire → exec → release →
+replenish cycle: releasing a VM triggers replenishment so the pool can serve
+another Acquire.
 
 ### Func TestPoolClose
 ```go
@@ -76,20 +77,6 @@ func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig)
 TestPoolContextCancellation verifies that Acquire returns context.Canceled
 when the pool is empty and the context is cancelled.
 
-### Func TestPoolExec
-```go
-func TestPoolExec(t TestingT, cfg PoolTestConfig)
-```
-TestPoolExec verifies that a command can be executed inside an acquired VM
-without error.
-
-### Func TestPoolStartAndAcquire
-```go
-func TestPoolStartAndAcquire(t TestingT, cfg PoolTestConfig)
-```
-TestPoolStartAndAcquire verifies that starting the pool and acquiring a VM
-produces a VM in the Running state.
-
 
 
 ## Types
@@ -107,7 +94,7 @@ ExecCall records a single invocation of Mock.Exec.
 ```go
 type InstanceTestConfig struct {
 	// Constructor creates a new uninitialized vms.Instance for each test.
-	Constructor func() vms.Instance
+	Constructor vmspool.Constructor
 
 	// Timeout caps individual operations. Defaults to 30 s.
 	Timeout time.Duration
@@ -118,6 +105,12 @@ type InstanceTestConfig struct {
 	ExecArgs   []string
 	ExecStdout string // Expected output from the exec.
 	ExecStderr string // Expected stderr output from the exec.
+
+	// RequireUnderlyingState is an optional helper for tests that need to verify
+	// the underlying state of the instance, e.g. by querying a cloud provider API.
+	// The function is expected to wait for the instance to reach a stable state
+	RequireUnderlyingState func(
+		ctx context.Context, inst vms.Instance, msg string, final vms.State, intermediate ...vms.State) error
 }
 ```
 InstanceTestConfig configures the test suite for an implementation of
@@ -288,8 +281,8 @@ type PoolTestConfig struct {
 	ExecStdoutOutput string // Expected output from the exec.
 	ExecStderrOutput string // Expected stderr output from the exec.
 
-	StdoutRWC func(string) (io.ReadWriteCloser, error) // Optional factory
-	StderrRWC func(string) (io.ReadWriteCloser, error) // Optional factory for stderr RWC used by Exec; defaults to bytes.Buffer-based implementation.
+	StdoutRWC func(string) io.Writer // Optional factory
+	StderrRWC func(string) io.Writer // Optional factory for stderr RWC used by Exec; defaults to bytes.Buffer-based implementation.
 
 	// Timeout caps individual pool operations. Defaults to 30 s.
 	Timeout time.Duration
@@ -309,6 +302,7 @@ type TestingT interface {
 	Helper()
 	Fatalf(format string, args ...any)
 	Errorf(format string, args ...any)
+	Logf(format string, args ...any)
 	Cleanup(f func())
 }
 ```

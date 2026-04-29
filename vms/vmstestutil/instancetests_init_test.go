@@ -5,6 +5,7 @@
 package vmstestutil_test
 
 import (
+	"context"
 	"time"
 
 	"cloudeng.io/vms"
@@ -14,8 +15,12 @@ import (
 //go:generate astest --match='^TestInstance' -preamble=cfg=instanceTestConfig . instancetests_test.go
 
 var instanceTestConfig = vmstestutil.InstanceTestConfig{
-	Constructor: func() vms.Instance { return vmstestutil.NewMock("test-instance") },
+	Constructor: vmstestutil.NewMockFactory(true),
 	Timeout:     10 * time.Second,
 	ExecCmd:     "echo",
 	ExecArgs:    []string{"hello"},
+	RequireUnderlyingState: func(ctx context.Context, inst vms.Instance, _ string, final vms.State, intermediate ...vms.State) error {
+		// no point in testing the underlying state of the mock.
+		return vms.WaitForState(ctx, inst, time.Millisecond, final, intermediate...)
+	},
 }

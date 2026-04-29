@@ -156,14 +156,13 @@ for sizing the channel appropriately and draining it promptly.
 
 
 ```go
-func WithStdoutStderr(stdout, stderr func(id string) io.ReadWriteCloser) Option
+func WithStdoutStderr(stdout, stderr func(id string) io.Writer) Option
 ```
-WithStdoutStderr configures the pool to use the provided functions to
-create stdout and stderr pipes for VMs during creation and replenishment.
+WithStdoutStderr configures the pool to use the provided functions to create
+stdout and stderr io.Writers for VMs during creation and replenishment.
 The value of vms.Instance.ID() is passed to the stdout function and can
 be used to create uniquely identifiable pipes. If either function is nil,
-a no-op ReadWriteCloser is used that discards all writes and returns EOF on
-reads.
+a no-op Writer is used that discards all writes.
 
 
 ```go
