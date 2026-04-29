@@ -192,7 +192,7 @@ func (discardReadWriteCloser) Close() error {
 	return nil
 }
 
-func (discardReadWriteCloser) Read(p []byte) (n int, err error) {
+func (discardReadWriteCloser) Read(_ []byte) (n int, err error) {
 	return 0, io.EOF
 }
 

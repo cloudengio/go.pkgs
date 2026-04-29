@@ -102,7 +102,10 @@ func TestPoolStartAndAquire(t *testing.T) {
 				t.Errorf("running VMs after Acquire: got %d, want %d", got, want)
 			}
 
-			vm.Release(context.Background())
+			if err := vm.Release(context.Background()); err != nil {
+				t.Fatalf("Release: %v", err)
+			}
+
 			if got, want := countInState(mocks, vms.StateDeleted), 1; got != want {
 				t.Errorf("deleted VMs after Release: got %d, want %d", got, want)
 			}
@@ -775,7 +778,7 @@ type trackingCloser struct {
 }
 
 func (tc *trackingCloser) Write(p []byte) (n int, err error) { return len(p), nil }
-func (tc *trackingCloser) Read(p []byte) (n int, err error)  { return 0, io.EOF }
+func (tc *trackingCloser) Read([]byte) (n int, err error)    { return 0, io.EOF }
 func (tc *trackingCloser) Close() error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -948,7 +951,7 @@ func TestStdoutClosedWhenStderrFactoryFails(t *testing.T) {
 			return nil
 		}
 		// Succeed on retries with a plain discard.
-		return executil.NewLabelingPipe([]byte("test-"), '\n')
+		return executil.NewLabelingPipe([]byte("test-"+id), '\n')
 	}
 
 	factory := vmstestutil.NewMockFactory(true)
@@ -1108,7 +1111,7 @@ func TestReleaseAndCloseErrors(t *testing.T) {
 	closeErr := errors.New("close error")
 	outFactory := func(id string) io.ReadWriteCloser {
 		return errorCloser{
-			ReadWriteCloser: executil.NewLabelingPipe([]byte("test-"), '\n'),
+			ReadWriteCloser: executil.NewLabelingPipe([]byte("test-"+id), '\n'),
 			err:             closeErr,
 		}
 	}
