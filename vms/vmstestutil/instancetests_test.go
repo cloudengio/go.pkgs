@@ -32,6 +32,12 @@ func TestInstanceLifecycle(t *testing.T) {
 	vmstestutil.TestInstanceLifecycle(t, cfg)
 }
 
+func TestInstanceStateErrors(t *testing.T) {
+	var cfg vmstestutil.InstanceTestConfig
+	cfg = instanceTestConfig
+	vmstestutil.TestInstanceStateErrors(t, cfg)
+}
+
 func TestInstanceSuspendResume(t *testing.T) {
 	var cfg vmstestutil.InstanceTestConfig
 	cfg = instanceTestConfig

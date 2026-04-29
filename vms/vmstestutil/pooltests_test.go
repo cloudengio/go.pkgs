@@ -8,10 +8,10 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func TestPoolAcquireAndRelease(t *testing.T) {
+func TestPoolAcquireExecRelease(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
-	vmstestutil.TestPoolAcquireAndRelease(t, cfg)
+	vmstestutil.TestPoolAcquireExecRelease(t, cfg)
 }
 
 func TestPoolClose(t *testing.T) {
@@ -30,16 +30,4 @@ func TestPoolContextCancellation(t *testing.T) {
 	var cfg vmstestutil.PoolTestConfig
 	cfg = testConfig
 	vmstestutil.TestPoolContextCancellation(t, cfg)
-}
-
-func TestPoolExec(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolExec(t, cfg)
-}
-
-func TestPoolStartAndAcquire(t *testing.T) {
-	var cfg vmstestutil.PoolTestConfig
-	cfg = testConfig
-	vmstestutil.TestPoolStartAndAcquire(t, cfg)
 }

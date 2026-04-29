@@ -21,9 +21,10 @@ import (
 type Properties struct {
 	IP string // The IP address of the instance, if available.
 
-	// Suspendable bool // Whether the instance supports being suspended.
-
-	// SSHArgs     []string // SSH command line arguments to connect to the instance, e.g. user, host, port etc.
+	// CloneInfo is any additional information about the clone operation that
+	// may be useful for testing or debugging, such as the source the VM
+	// was cloned from.
+	CloneInfo any
 }
 
 // Instance represents a virtual machine instance that can be managed through a
@@ -77,7 +78,7 @@ type Instance interface {
 	// Exec does not alter the state of the instance.
 	Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error
 
-	// Properties returns the properties of a running instance.
+	// Properties returns the properties of an instance.
 	// Properties does not alter the state of an instance.
 	Properties(ctx context.Context) (Properties, error)
 }

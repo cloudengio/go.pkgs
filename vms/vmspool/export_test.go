@@ -4,11 +4,15 @@
 
 package vmspool
 
-import "cloudeng.io/vms"
+import (
+	"io"
+
+	"cloudeng.io/vms"
+)
 
 // InjectVM wraps inst in a vmsInstance with discard stdout/stderr and sends it
 // into the pool's ready channel. Used in tests that need to fill the channel
 // to capacity in order to provoke a blocking send from a replenishment goroutine.
 func (p *Pool) InjectVM(inst vms.Instance) {
-	p.ready <- &vmsInstance{Instance: inst, stdout: discardReadWriteCloser{}, stderr: discardReadWriteCloser{}}
+	p.ready <- &vmsInstance{Instance: inst, stdout: io.Discard, stderr: io.Discard}
 }

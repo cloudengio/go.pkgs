@@ -144,7 +144,7 @@ type Instance interface {
 	// Exec does not alter the state of the instance.
 	Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error
 
-	// Properties returns the properties of a running instance.
+	// Properties returns the properties of an instance.
 	// Properties does not alter the state of an instance.
 	Properties(ctx context.Context) (Properties, error)
 }
@@ -162,6 +162,10 @@ be observed while the operation is in progress.
 type Properties struct {
 	IP string // The IP address of the instance, if available.
 
+	// CloneInfo is any additional information about the clone operation that
+	// may be useful for testing or debugging, such as the source the VM
+	// was cloned from.
+	CloneInfo any
 }
 ```
 Properties represents the properties of a virtual machine instance.
