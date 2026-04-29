@@ -6,9 +6,11 @@ package vmstestutil
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloudeng.io/vms"
@@ -22,11 +24,12 @@ type ExecCall struct {
 
 // Mock represents a mock virtual machine instance for testing.
 type Mock struct {
-	mu         sync.Mutex
-	state      vms.State
-	properties vms.Properties
-	isSuspend  bool
-	execCalls  []ExecCall
+	id          string
+	mu          sync.Mutex
+	state       vms.State
+	properties  vms.Properties
+	suspendable bool
+	execCalls   []ExecCall
 
 	// CloneBlock, if non-nil, causes Clone to block until the channel is
 	// closed or the context is cancelled. Used by tests to pause a VM
@@ -44,11 +47,16 @@ type Mock struct {
 }
 
 // NewMock creates a new Mock VM instance.
-func NewMock() *Mock {
+func NewMock(id string) *Mock {
 	return &Mock{
-		state:     vms.StateInitial,
-		isSuspend: true,
+		state:       vms.StateInitial,
+		suspendable: true,
+		id:          id,
 	}
+}
+
+func (m *Mock) ID() string {
+	return m.id
 }
 
 func (m *Mock) Clone(ctx context.Context) error {
@@ -68,7 +76,7 @@ func (m *Mock) Clone(ctx context.Context) error {
 	return nil
 }
 
-func (m *Mock) Start(_ context.Context, _, _ io.Writer) error {
+func (m *Mock) Start(ctx context.Context, _, _ io.Writer) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.StartErr != nil {
@@ -76,6 +84,14 @@ func (m *Mock) Start(_ context.Context, _, _ io.Writer) error {
 		return m.StartErr
 	}
 	m.state = vms.StateRunning
+	go func() {
+		<-ctx.Done()
+		m.mu.Lock()
+		if m.state == vms.StateRunning {
+			m.state = vms.StateStopped
+		}
+		m.mu.Unlock()
+	}()
 	return nil
 }
 
@@ -97,13 +113,13 @@ func (m *Mock) Stop(_ context.Context, _ time.Duration) (error, error) {
 func (m *Mock) Suspendable() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.isSuspend
+	return m.suspendable
 }
 
 func (m *Mock) SetSuspendable(suspendable bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.isSuspend = suspendable
+	m.suspendable = suspendable
 }
 
 func (m *Mock) Suspend(_ context.Context) error {
@@ -174,13 +190,18 @@ var _ vms.Instance = (*Mock)(nil)
 // Use Inject to pre-supply configured mocks; otherwise MockFactory.New creates
 // plain NewMock instances on demand.
 type MockFactory struct {
-	mu      sync.Mutex
-	mocks   []*Mock
-	pending []*Mock // pre-configured mocks to hand out first
+	suspendable bool
+	mu          sync.Mutex
+	mocks       []*Mock
+	pending     []*Mock // pre-configured mocks to hand out first
 }
 
 // NewMockFactory returns an empty MockFactory.
-func NewMockFactory() *MockFactory { return &MockFactory{} }
+func NewMockFactory(suspendable bool) *MockFactory {
+	return &MockFactory{suspendable: suspendable}
+}
+
+var mockIDCounter atomic.Int32
 
 // Inject queues m to be returned by the next New call instead of
 // a freshly allocated Mock. Useful for injecting pre-configured error states.
@@ -197,8 +218,9 @@ func (f *MockFactory) New() vms.Instance {
 	if len(f.pending) > 0 {
 		m, f.pending = f.pending[0], f.pending[1:]
 	} else {
-		m = NewMock()
+		m = NewMock(fmt.Sprintf("mock-%d", mockIDCounter.Add(1)))
 	}
+	m.SetSuspendable(f.suspendable)
 	f.mocks = append(f.mocks, m)
 	return m
 }

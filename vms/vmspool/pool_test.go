@@ -9,23 +9,29 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"cloudeng.io/os/executil"
 	"cloudeng.io/vms"
 	"cloudeng.io/vms/vmspool"
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func newPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
+// newPool creates a pool and waits for it be full.
+func newPool(t *testing.T, size int, stagingBehaviour vmspool.StagingBehaviour, factory *vmstestutil.MockFactory) *vmspool.Pool {
 	t.Helper()
 	statusCh := make(chan vmspool.Event, size*4)
-	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithStatus(statusCh))
+	p := vmspool.New(factory,
+		vmspool.WithSize(size),
+		vmspool.WithStagingBehaviour(stagingBehaviour),
+		vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("pool.Start: %v", err)
 	}
-	// Start returns once the first VM is ready; wait for the full pool to fill.
 	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
@@ -56,45 +62,67 @@ func countInState(mocks []*vmstestutil.Mock, want vms.State) int {
 	return n
 }
 
-// TestPoolStart verifies that the pool creates the right number of suspended VMs.
-func TestPoolStart(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	newPool(t, 3, factory)
-
-	mocks := factory.Mocks()
-	if len(mocks) != 3 {
-		t.Fatalf("expected 3 mocks after Start, got %d", len(mocks))
+// TestPoolStart verifies that the pool creates the right number of VMs in the correct staging state.
+func TestPoolStartAndAquire(t *testing.T) {
+	cases := []struct {
+		name        string
+		suspendable bool
+		behaviour   vmspool.StagingBehaviour
+		wantState   vms.State
+	}{
+		{"suspended", true, vmspool.StagingBehaviourSuspended, vms.StateSuspended},
+		{"running", true, vmspool.StagingBehaviourRunning, vms.StateRunning},
+		{"stopped", true, vmspool.StagingBehaviourStopped, vms.StateStopped},
+		{"suspended", false, vmspool.StagingBehaviourSuspended, vms.StateStopped},
+		{"running", false, vmspool.StagingBehaviourRunning, vms.StateRunning},
+		{"stopped", false, vmspool.StagingBehaviourStopped, vms.StateStopped},
 	}
-	allInState(t, mocks, vms.StateSuspended)
-}
 
-// TestPoolAcquire verifies that acquiring a VM starts it (Running state)
-// and leaves remaining pool VMs suspended.
-func TestPoolAcquire(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	pool := newPool(t, 2, factory)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			factory := vmstestutil.NewMockFactory(tc.suspendable)
+			pool := newPool(t, 3, tc.behaviour, factory)
 
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	defer vm.Release(context.Background()) //nolint
+			mocks := factory.Mocks()
+			if len(mocks) != 3 {
+				t.Fatalf("expected 3 mocks after Start, got %d", len(mocks))
+			}
+			allInState(t, mocks, tc.wantState)
 
-	mocks := factory.Mocks()
-	if n := countInState(mocks, vms.StateRunning); n != 1 {
-		t.Errorf("running VMs after Acquire: got %d, want 1", n)
-	}
-	if n := countInState(mocks, vms.StateSuspended); n != 1 {
-		t.Errorf("suspended VMs after Acquire: got %d, want 1", n)
+			vm, err := pool.Acquire(context.Background())
+			if err != nil {
+				t.Fatalf("Acquire: %v", err)
+			}
+
+			running := 1
+			if tc.behaviour == vmspool.StagingBehaviourRunning {
+				running = 3
+			}
+			if got, want := countInState(mocks, vms.StateRunning), running; got != want {
+				t.Errorf("running VMs after Acquire: got %d, want %d", got, want)
+			}
+
+			if err := vm.Release(context.Background()); err != nil {
+				t.Fatalf("Release: %v", err)
+			}
+
+			if got, want := countInState(mocks, vms.StateDeleted), 1; got != want {
+				t.Errorf("deleted VMs after Release: got %d, want %d", got, want)
+			}
+
+			if got, want := countInState(mocks, tc.wantState), 2; got != want {
+				t.Errorf("running VMs after Acquire: got %d, want %d", got, want)
+			}
+		})
 	}
 }
 
 // TestPoolExec verifies that Exec is forwarded to the underlying VM and recorded.
 func TestPoolExec(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	pool := newPool(t, 1, factory)
+	factory := vmstestutil.NewMockFactory(true)
+	pool := newPool(t, 1, vmspool.StagingBehaviourSuspended, factory)
 
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	vm, err := pool.Acquire(context.Background())
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -120,64 +148,83 @@ func TestPoolExec(t *testing.T) {
 
 // TestPoolRelease verifies that releasing a VM deletes it and replenishes the pool.
 func TestPoolRelease(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	pool := newPool(t, 1, factory)
+	for _, behaviour := range []vmspool.StagingBehaviour{
+		vmspool.StagingBehaviourSuspended,
+		vmspool.StagingBehaviourRunning,
+		vmspool.StagingBehaviourStopped,
+	} {
+		t.Run(behaviour.String(), func(t *testing.T) {
+			factory := vmstestutil.NewMockFactory(true)
+			pool := newPool(t, 1, behaviour, factory)
 
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	if err := vm.Release(context.Background()); err != nil {
-		t.Fatalf("Release: %v", err)
-	}
+			vm, err := pool.Acquire(context.Background())
+			if err != nil {
+				t.Fatalf("Acquire: %v", err)
+			}
+			if err := vm.Release(context.Background()); err != nil {
+				t.Fatalf("Release: %v", err)
+			}
 
-	// The original VM should now be deleted.
-	firstMocks := factory.Mocks()
-	if got := firstMocks[0].State(context.Background()); got != vms.StateDeleted {
-		t.Errorf("released VM state = %s, want Deleted", got)
-	}
+			// The original VM should now be deleted.
+			firstMocks := factory.Mocks()
+			if got := firstMocks[0].State(context.Background()); got != vms.StateDeleted {
+				t.Errorf("released VM state = %s, want Deleted", got)
+			}
 
-	// Acquire again: this blocks until the replenishment goroutine delivers a
-	// new suspended VM and the pool starts it.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+			// Acquire again: this blocks until the replenishment goroutine delivers a
+			// new suspended VM and the pool starts it.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 
-	vm2, err := pool.Acquire(ctx, io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("Acquire after replenishment: %v", err)
-	}
-	defer vm2.Release(context.Background()) //nolint
+			vm2, err := pool.Acquire(ctx)
+			if err != nil {
+				t.Fatalf("Acquire after replenishment: %v", err)
+			}
+			defer vm2.Release(context.Background()) //nolint
 
-	// Factory must have created a second mock for the replenishment.
-	if n := len(factory.Mocks()); n != 2 {
-		t.Errorf("expected 2 total mocks after replenishment, got %d", n)
+			// Factory must have created a second mock for the replenishment.
+			if n := len(factory.Mocks()); n != 2 {
+				t.Errorf("expected 2 total mocks after replenishment, got %d", n)
+			}
+		})
 	}
 }
 
 // TestPoolClose verifies that Close deletes all suspended VMs in the pool.
 func TestPoolClose(t *testing.T) {
 	const size = 3
-	statusCh := make(chan vmspool.Event, size*4)
-	factory := vmstestutil.NewMockFactory()
-	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithStatus(statusCh))
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
-	if err := p.Close(context.Background()); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	for _, behaviour := range []vmspool.StagingBehaviour{
+		vmspool.StagingBehaviourSuspended,
+		vmspool.StagingBehaviourRunning,
+		vmspool.StagingBehaviourStopped,
+	} {
+		t.Run(behaviour.String(), func(t *testing.T) {
+			statusCh := make(chan vmspool.Event, size*4)
+			factory := vmstestutil.NewMockFactory(true)
+			p := vmspool.New(factory,
+				vmspool.WithSize(size),
+				vmspool.WithStagingBehaviour(behaviour),
+				vmspool.WithStatus(statusCh))
+			if err := p.Start(context.Background()); err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+			if err := p.Close(context.Background()); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
 
-	allInState(t, factory.Mocks(), vms.StateDeleted)
+			allInState(t, factory.Mocks(), vms.StateDeleted)
+		})
+	}
 }
 
 // TestPoolAcquireCancelled verifies that a cancelled context causes Acquire to return.
 func TestPoolAcquireCancelled(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	pool := newPool(t, 1, factory)
+	factory := vmstestutil.NewMockFactory(true)
+	pool := newPool(t, 1, vmspool.StagingBehaviourSuspended, factory)
 
 	// Drain the pool so the next Acquire will block.
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	vm, err := pool.Acquire(context.Background())
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -186,7 +233,7 @@ func TestPoolAcquireCancelled(t *testing.T) {
 	// Now try to acquire with a pre-cancelled context.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = pool.Acquire(ctx, io.Discard, io.Discard)
+	_, err = pool.Acquire(ctx)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
@@ -196,8 +243,8 @@ func TestPoolAcquireCancelled(t *testing.T) {
 // verifying that the pool replenishes and remains usable.
 func TestPoolConcurrency(t *testing.T) {
 	const size = 4
-	factory := vmstestutil.NewMockFactory()
-	pool := newPool(t, size, factory)
+	factory := vmstestutil.NewMockFactory(true)
+	pool := newPool(t, size, vmspool.StagingBehaviourSuspended, factory)
 
 	// Acquire all VMs concurrently.
 	vmsAcquired := make([]*vmspool.VM, size)
@@ -207,7 +254,7 @@ func TestPoolConcurrency(t *testing.T) {
 	for i := range size {
 		go func(i int) {
 			defer wg.Done()
-			vmsAcquired[i], errs[i] = pool.Acquire(context.Background(), io.Discard, io.Discard)
+			vmsAcquired[i], errs[i] = pool.Acquire(context.Background())
 		}(i)
 	}
 	wg.Wait()
@@ -231,7 +278,7 @@ func TestPoolConcurrency(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for i := range size {
-		vm, err := pool.Acquire(ctx, io.Discard, io.Discard)
+		vm, err := pool.Acquire(ctx)
 		if err != nil {
 			t.Fatalf("re-Acquire[%d] after replenishment: %v", i, err)
 		}
@@ -245,14 +292,16 @@ func TestPoolStartCancelled(t *testing.T) {
 	const timeout = 5 * time.Second
 
 	cloneBlock := make(chan struct{})
-	blockingMock := vmstestutil.NewMock()
+	blockingMock := vmstestutil.NewMock("")
 	blockingMock.CloneBlock = cloneBlock
 
 	statusCh := make(chan vmspool.Event, 16)
-	factory := vmstestutil.NewMockFactory()
+	factory := vmstestutil.NewMockFactory(true)
 	factory.Inject(blockingMock)
 
-	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStatus(statusCh))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -285,32 +334,49 @@ func TestPoolStartCancelled(t *testing.T) {
 // TestPoolStartError verifies that Start retries VM creation on failure and
 // eventually succeeds once a good VM can be created.
 func TestPoolStartError(t *testing.T) {
-	cloneErr := errors.New("clone failed")
-	factory := vmstestutil.NewMockFactory()
+	for _, tc := range []struct {
+		name      string
+		behaviour vmspool.StagingBehaviour
+		inject    func(*vmstestutil.Mock)
+	}{
+		{"suspended", vmspool.StagingBehaviourSuspended, func(m *vmstestutil.Mock) { m.CloneErr = errors.New("clone failed") }},
+		{"running", vmspool.StagingBehaviourRunning, func(m *vmstestutil.Mock) { m.StartErr = errors.New("start failed") }},
+		{"stopped", vmspool.StagingBehaviourStopped, func(m *vmstestutil.Mock) { m.CloneErr = errors.New("clone failed") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			factory := vmstestutil.NewMockFactory(true)
 
-	bad := vmstestutil.NewMock()
-	bad.CloneErr = cloneErr
-	factory.Inject(bad)
+			bad := vmstestutil.NewMock("")
+			tc.inject(bad)
+			factory.Inject(bad)
 
-	p := vmspool.New(factory, vmspool.WithSize(1),
-		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start should succeed via retry, got: %v", err)
-	}
-	if err := p.Close(context.Background()); err != nil {
-		t.Errorf("Close: %v", err)
-	}
-	mocks := factory.Mocks()
-	if len(mocks) != 2 {
-		t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
-	}
-	// Clone failure leaves the mock in StateInitial (no state transition occurs).
-	if got := mocks[0].State(context.Background()); got != vms.StateInitial {
-		t.Errorf("failed mock state = %s, want Initial", got)
-	}
-	// Second mock was successfully created and deleted by Close.
-	if got := mocks[1].State(context.Background()); got != vms.StateDeleted {
-		t.Errorf("retry mock state = %s, want Deleted", got)
+			p := vmspool.New(factory,
+				vmspool.WithSize(1),
+				vmspool.WithStagingBehaviour(tc.behaviour),
+				vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+			if err := p.Start(context.Background()); err != nil {
+				t.Fatalf("Start should succeed via retry, got: %v", err)
+			}
+			if err := p.Close(context.Background()); err != nil {
+				t.Errorf("Close: %v", err)
+			}
+			mocks := factory.Mocks()
+			if len(mocks) != 2 {
+				t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
+			}
+			// In case of start error, the state is Deleted (since it's cleaned up), while clone error leaves it Initial.
+			wantState := vms.StateInitial
+			if tc.behaviour == vmspool.StagingBehaviourRunning {
+				wantState = vms.StateDeleted
+			}
+			if got := mocks[0].State(context.Background()); got != wantState {
+				t.Errorf("failed mock state = %s, want %s", got, wantState)
+			}
+			// Second mock was successfully created and deleted by Close.
+			if got := mocks[1].State(context.Background()); got != vms.StateDeleted {
+				t.Errorf("retry mock state = %s, want Deleted", got)
+			}
+		})
 	}
 }
 
@@ -323,12 +389,14 @@ func TestPoolCreateVM_PartialCleanup(t *testing.T) {
 	// Inject a mock that succeeds Clone+Start but fails Suspend.
 	// After Suspend fails the instance is Running; createVM must delete it.
 	// Start then retries with a fresh mock and succeeds.
-	factory := vmstestutil.NewMockFactory()
-	bad := vmstestutil.NewMock()
+	factory := vmstestutil.NewMockFactory(true)
+	bad := vmstestutil.NewMock("")
 	bad.SuspendErr = suspendErr
 	factory.Inject(bad)
 
-	p := vmspool.New(factory, vmspool.WithSize(1),
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourSuspended),
 		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start should succeed via retry, got: %v", err)
@@ -356,13 +424,15 @@ func TestPoolCreateVM_PartialCleanup(t *testing.T) {
 func TestPoolStatus(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
-	factory := vmstestutil.NewMockFactory()
-	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStatus(statusCh))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	vm, err := p.Acquire(context.Background(), io.Discard, io.Discard)
+	vm, err := p.Acquire(context.Background())
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -377,7 +447,7 @@ func TestPoolStatus(t *testing.T) {
 	// Release becomes a no-op against the closed pool.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	vm2, err := p.Acquire(ctx, io.Discard, io.Discard)
+	vm2, err := p.Acquire(ctx)
 	if err != nil {
 		t.Fatalf("second Acquire (wait for replenishment): %v", err)
 	}
@@ -486,10 +556,10 @@ func TestPoolReplenishBlockedOnReadySend(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
 	cloneBlock := make(chan struct{})
-	blockingMock := vmstestutil.NewMock()
+	blockingMock := vmstestutil.NewMock("")
 	blockingMock.CloneBlock = cloneBlock
 
-	factory := vmstestutil.NewMockFactory()
+	factory := vmstestutil.NewMockFactory(true)
 	pool := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
 	if err := pool.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -499,7 +569,7 @@ func TestPoolReplenishBlockedOnReadySend(t *testing.T) {
 	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, timeout)
 
 	// Drain the pool so p.ready is empty.
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	vm, err := pool.Acquire(context.Background())
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -517,7 +587,7 @@ func TestPoolReplenishBlockedOnReadySend(t *testing.T) {
 	// Fill p.ready to capacity while the goroutine is paused in Clone.
 	// When Clone unblocks, the goroutine will try to send its newly-created
 	// VM and find the channel full.
-	pool.ReadyCh() <- vmstestutil.NewMock()
+	pool.InjectVM(vmstestutil.NewMock("injected"))
 
 	// Unblock Clone. The goroutine races through Start+Suspend (both
 	// instantaneous in the mock) towards p.ready <- inst.
@@ -557,7 +627,7 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 	const timeout = 5 * time.Second
 	statusCh := make(chan vmspool.Event, 32)
 
-	factory := vmstestutil.NewMockFactory()
+	factory := vmstestutil.NewMockFactory(true)
 	pool := vmspool.New(factory,
 		vmspool.WithSize(1),
 		vmspool.WithStatus(statusCh),
@@ -567,7 +637,7 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 	}
 
 	// Acquire and hold the only VM so the pool becomes empty.
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+	vm, err := pool.Acquire(context.Background())
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -576,7 +646,7 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 	// Start a second Acquire that will block because the pool is empty.
 	acquireDone := make(chan error, 1)
 	go func() {
-		_, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
+		_, err := pool.Acquire(context.Background())
 		acquireDone <- err
 	}()
 
@@ -630,13 +700,13 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 func TestPoolReleaseCloseRace(t *testing.T) {
 	const iterations = 100
 	for range iterations {
-		factory := vmstestutil.NewMockFactory()
+		factory := vmstestutil.NewMockFactory(true)
 		p := vmspool.New(factory, vmspool.WithSize(1))
 		if err := p.Start(context.Background()); err != nil {
 			t.Fatalf("Start: %v", err)
 		}
 
-		vm, err := p.Acquire(context.Background(), io.Discard, io.Discard)
+		vm, err := p.Acquire(context.Background())
 		if err != nil {
 			t.Fatalf("Acquire: %v", err)
 		}
@@ -656,147 +726,6 @@ func TestPoolReleaseCloseRace(t *testing.T) {
 	}
 }
 
-// --- WithSuspendVMs(false) tests ---
-//
-// When suspendVMs is false the pool keeps VMs in StateRunning rather than
-// StateSuspended. Acquire calls Start on an already-running instance (a no-op
-// for Mock), and Release/Close clean up running VMs.
-
-func newRunningPool(t *testing.T, size int, factory *vmstestutil.MockFactory) *vmspool.Pool {
-	t.Helper()
-	statusCh := make(chan vmspool.Event, size*4)
-	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithSuspendVMs(false), vmspool.WithStatus(statusCh))
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("pool.Start: %v", err)
-	}
-	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
-	t.Cleanup(func() {
-		if err := p.Close(context.Background()); err != nil {
-			t.Errorf("pool.Close: %v", err)
-		}
-	})
-	return p
-}
-
-// TestPoolNoSuspend_Start verifies that Start places VMs in StateRunning
-// (not StateSuspended) when suspend is disabled.
-func TestPoolNoSuspend_Start(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	newRunningPool(t, 3, factory)
-
-	mocks := factory.Mocks()
-	if len(mocks) != 3 {
-		t.Fatalf("expected 3 mocks after Start, got %d", len(mocks))
-	}
-	allInState(t, mocks, vms.StateRunning)
-}
-
-// TestPoolNoSuspend_Acquire verifies that Acquire hands out a running VM.
-// All VMs remain in StateRunning because Start is idempotent on an already-
-// running instance.
-func TestPoolNoSuspend_Acquire(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	pool := newRunningPool(t, 2, factory)
-
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	defer vm.Release(context.Background()) //nolint
-
-	// Both the acquired VM and the one still in the pool are Running.
-	if n := countInState(factory.Mocks(), vms.StateRunning); n != 2 {
-		t.Errorf("running VMs after Acquire: got %d, want 2", n)
-	}
-}
-
-// TestPoolNoSuspend_Release verifies that releasing a VM deletes it and
-// replenishes the pool with a fresh running instance.
-func TestPoolNoSuspend_Release(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
-	pool := newRunningPool(t, 1, factory)
-
-	vm, err := pool.Acquire(context.Background(), io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	if err := vm.Release(context.Background()); err != nil {
-		t.Fatalf("Release: %v", err)
-	}
-
-	// Original VM must be deleted.
-	if got := factory.Mocks()[0].State(context.Background()); got != vms.StateDeleted {
-		t.Errorf("released VM state = %s, want Deleted", got)
-	}
-
-	// Acquire again: blocks until the replenishment goroutine provides a new
-	// running VM.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	vm2, err := pool.Acquire(ctx, io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("Acquire after replenishment: %v", err)
-	}
-	defer vm2.Release(context.Background()) //nolint
-
-	// Replenishment must have created a second mock.
-	if n := len(factory.Mocks()); n != 2 {
-		t.Errorf("expected 2 total mocks after replenishment, got %d", n)
-	}
-	// The new VM is running.
-	if got := factory.Mocks()[1].State(context.Background()); got != vms.StateRunning {
-		t.Errorf("replenished VM state = %s, want Running", got)
-	}
-}
-
-// TestPoolNoSuspend_Close verifies that Close deletes all running VMs in the pool.
-func TestPoolNoSuspend_Close(t *testing.T) {
-	const size = 3
-	statusCh := make(chan vmspool.Event, size*4)
-	factory := vmstestutil.NewMockFactory()
-	p := vmspool.New(factory, vmspool.WithSize(size), vmspool.WithSuspendVMs(false), vmspool.WithStatus(statusCh))
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
-	if err := p.Close(context.Background()); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	allInState(t, factory.Mocks(), vms.StateDeleted)
-}
-
-// TestPoolNoSuspend_StartError verifies that Start retries VM creation on failure
-// (Start error with suspend disabled) and eventually succeeds.
-func TestPoolNoSuspend_StartError(t *testing.T) {
-	startErr := errors.New("start failed")
-	factory := vmstestutil.NewMockFactory()
-
-	bad := vmstestutil.NewMock()
-	bad.StartErr = startErr
-	factory.Inject(bad)
-
-	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithSuspendVMs(false),
-		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start should succeed via retry, got: %v", err)
-	}
-	if err := p.Close(context.Background()); err != nil {
-		t.Errorf("Close: %v", err)
-	}
-	mocks := factory.Mocks()
-	if len(mocks) != 2 {
-		t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
-	}
-	// The Start-failed VM was cleaned up by createVM.
-	if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
-		t.Errorf("failed mock state = %s, want Deleted", got)
-	}
-	// The retry VM was successfully created and deleted by Close.
-	if got := mocks[1].State(context.Background()); got != vms.StateDeleted {
-		t.Errorf("retry mock state = %s, want Deleted", got)
-	}
-}
-
 // TestPoolCloseBeforePoolFull verifies that calling Close while the async fill
 // goroutine (launched by Start for the remaining size-1 VMs) is still running
 // cancels those goroutines via p.replenishCtx and completes without deadlocking.
@@ -805,14 +734,14 @@ func TestPoolCloseBeforePoolFull(t *testing.T) {
 
 	// Block the second VM's Clone so the async fill goroutine is stuck.
 	cloneBlock := make(chan struct{})
-	blockingMock := vmstestutil.NewMock()
+	blockingMock := vmstestutil.NewMock("")
 	blockingMock.CloneBlock = cloneBlock
 
 	statusCh := make(chan vmspool.Event, 16)
-	factory := vmstestutil.NewMockFactory()
+	factory := vmstestutil.NewMockFactory(true)
 	// Inject in order: first New() → plain mock (used by synchronous fill),
 	// second New() → blocking mock (used by async fill goroutine).
-	factory.Inject(vmstestutil.NewMock())
+	factory.Inject(vmstestutil.NewMock(""))
 	factory.Inject(blockingMock)
 
 	pool := vmspool.New(factory, vmspool.WithSize(2), vmspool.WithStatus(statusCh))
@@ -841,6 +770,211 @@ func TestPoolCloseBeforePoolFull(t *testing.T) {
 	}
 }
 
+// trackingCloser is an io.ReadWriteCloser that records whether Close was called.
+type trackingCloser struct {
+	id     string
+	mu     sync.Mutex
+	closed bool
+}
+
+func (tc *trackingCloser) Write(p []byte) (n int, err error) { return len(p), nil }
+func (tc *trackingCloser) Read([]byte) (n int, err error)    { return 0, io.EOF }
+func (tc *trackingCloser) Close() error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.closed = true
+	return nil
+}
+func (tc *trackingCloser) isClosed() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.closed
+}
+
+// closerTracker creates and tracks trackingCloser instances via a factory
+// function compatible with WithStdoutStderr.
+type closerTracker struct {
+	mu      sync.Mutex
+	closers []*trackingCloser
+}
+
+func (ct *closerTracker) factory(id string) io.ReadWriteCloser {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	tc := &trackingCloser{id: id}
+	ct.closers = append(ct.closers, tc)
+	return tc
+}
+
+func (ct *closerTracker) snapshot() []*trackingCloser {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	return append([]*trackingCloser(nil), ct.closers...)
+}
+
+// TestStdoutStderrClosedOnPoolClose verifies that Close calls Close() on
+// the stdout and stderr ReadWriteClosers of every VM remaining in the ready
+// queue when the pool is closed without any Acquires.
+func TestStdoutStderrClosedOnPoolClose(t *testing.T) {
+	const size = 2
+	var outTracker, errTracker closerTracker
+
+	statusCh := make(chan vmspool.Event, size*4)
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory,
+		vmspool.WithSize(size),
+		vmspool.WithStatus(statusCh),
+		vmspool.WithStdoutStderr(outTracker.factory, errTracker.factory),
+	)
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+
+	if err := p.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	outs := outTracker.snapshot()
+	if len(outs) != size {
+		t.Errorf("expected %d stdout closers, got %d", size, len(outs))
+	}
+	for i, c := range outs {
+		if !c.isClosed() {
+			t.Errorf("stdout[%d] (id=%q) not closed after pool.Close", i, c.id)
+		}
+	}
+	errs := errTracker.snapshot()
+	if len(errs) != size {
+		t.Errorf("expected %d stderr closers, got %d", size, len(errs))
+	}
+	for i, c := range errs {
+		if !c.isClosed() {
+			t.Errorf("stderr[%d] (id=%q) not closed after pool.Close", i, c.id)
+		}
+	}
+}
+
+// TestStdoutStderrClosedOnRelease verifies that vm.Release calls Close() on
+// the stdout and stderr ReadWriteClosers that were assigned to the VM at
+// creation time.
+func TestStdoutStderrClosedOnRelease(t *testing.T) {
+	var outTracker, errTracker closerTracker
+
+	statusCh := make(chan vmspool.Event, 16)
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStatus(statusCh),
+		vmspool.WithStdoutStderr(outTracker.factory, errTracker.factory),
+	)
+	t.Cleanup(func() { p.Close(context.Background()) }) //nolint
+
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+
+	vm, err := p.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+
+	// Snapshot the closers that belong to this VM before releasing it.
+	outsBefore := outTracker.snapshot()
+	errsBefore := errTracker.snapshot()
+
+	if err := vm.Release(context.Background()); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	for i, c := range outsBefore {
+		if !c.isClosed() {
+			t.Errorf("stdout[%d] (id=%q) not closed after vm.Release", i, c.id)
+		}
+	}
+	for i, c := range errsBefore {
+		if !c.isClosed() {
+			t.Errorf("stderr[%d] (id=%q) not closed after vm.Release", i, c.id)
+		}
+	}
+}
+
+// TestStdoutStderrClosedOnCreateFailure verifies that when createVM fails
+// (Start error), the stdout and stderr closers already allocated for that VM
+// are closed by the cleanupVM path before retrying.
+func TestStdoutStderrClosedOnCreateFailure(t *testing.T) {
+	var outTracker, errTracker closerTracker
+
+	startErr := errors.New("start failed")
+	factory := vmstestutil.NewMockFactory(true)
+	bad := vmstestutil.NewMock("")
+	bad.StartErr = startErr
+	factory.Inject(bad)
+
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond),
+		vmspool.WithStdoutStderr(outTracker.factory, errTracker.factory),
+	)
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+
+	// Every closer that was ever allocated — including the failed VM's — must
+	// have been closed.
+	for i, c := range outTracker.snapshot() {
+		if !c.isClosed() {
+			t.Errorf("stdout[%d] (id=%q) not closed after create failure", i, c.id)
+		}
+	}
+	for i, c := range errTracker.snapshot() {
+		if !c.isClosed() {
+			t.Errorf("stderr[%d] (id=%q) not closed after create failure", i, c.id)
+		}
+	}
+}
+
+// TestStdoutClosedWhenStderrFactoryFails verifies that when the stderr factory
+// returns an error, the stdout ReadWriteCloser that was already created is
+// closed immediately so it is not leaked.
+func TestStdoutClosedWhenStderrFactoryFails(t *testing.T) {
+	var outTracker closerTracker
+	var stderrCallCount int32
+
+	stderrFactory := func(id string) io.ReadWriteCloser {
+		n := atomic.AddInt32(&stderrCallCount, 1)
+		if n == 1 {
+			return nil
+		}
+		// Succeed on retries with a plain discard.
+		return executil.NewLabelingPipe([]byte("test-"+id), '\n')
+	}
+
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond),
+		vmspool.WithStdoutStderr(outTracker.factory, stderrFactory),
+	)
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+
+	// The stdout closer for the failed attempt must have been closed.
+	for i, c := range outTracker.snapshot() {
+		if !c.isClosed() {
+			t.Errorf("stdout[%d] (id=%q) not closed after stderr factory failure", i, c.id)
+		}
+	}
+}
+
 // nilConstructor is a vmspool.Constructor that returns nil for its first New
 // call and delegates to a real factory for all subsequent calls.
 type nilConstructor struct {
@@ -860,7 +994,7 @@ func (c *nilConstructor) New() vms.Instance {
 // handled gracefully: Start retries and succeeds once the constructor returns
 // a real instance.
 func TestPoolNilConstructor(t *testing.T) {
-	factory := vmstestutil.NewMockFactory()
+	factory := vmstestutil.NewMockFactory(true)
 	ctor := &nilConstructor{factory: factory}
 
 	p := vmspool.New(ctor, vmspool.WithSize(1),
@@ -878,5 +1012,185 @@ func TestPoolNilConstructor(t *testing.T) {
 	}
 	if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
 		t.Errorf("mock state = %s, want Deleted", got)
+	}
+}
+
+// TestPoolOptionsDefaults verifies that the pool handles invalid and default options gracefully.
+func TestPoolOptionsDefaults(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory,
+		vmspool.WithSize(-1),
+		vmspool.WithCleanupTimeout(-1),
+		vmspool.WithCreateTimeoutAndInterval(-1, -1),
+		vmspool.WithStopTimeout(-1),
+		vmspool.WithStdoutStderr(nil, nil),
+	)
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer p.Close(context.Background()) //nolint:errcheck
+
+	// DefaultPoolSize is 2, so acquiring 2 VMs should be possible.
+	vm1, err := p.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("Acquire 1: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	vm2, err := p.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire 2: %v", err)
+	}
+
+	vm1.Release(context.Background()) //nolint:errcheck
+	vm2.Release(context.Background()) //nolint:errcheck
+}
+
+// TestPoolStartTwice verifies that calling Start multiple times returns an error.
+func TestPoolStartTwice(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory, vmspool.WithSize(1))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	defer p.Close(context.Background()) //nolint:errcheck
+
+	err := p.Start(context.Background())
+	if err == nil || err.Error() != "vmspool: pool already started" {
+		t.Errorf("expected 'vmspool: pool already started', got %v", err)
+	}
+}
+
+// TestStagingBehaviourString verifies the string representation of StagingBehaviour.
+func TestStagingBehaviourString(t *testing.T) {
+	if got, want := vmspool.StagingBehaviour(99).String(), "Unknown"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestAcquireStartFails verifies that if a VM fails to start during Acquire
+// (when using StagingBehaviourStopped), the error is returned and the pool recovers.
+func TestAcquireStartFails(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+	bad := vmstestutil.NewMock("")
+	bad.StartErr = errors.New("start failed")
+	factory.Inject(bad)
+
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourStopped),
+	)
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer p.Close(context.Background()) //nolint:errcheck
+
+	_, err := p.Acquire(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "start failed") {
+		t.Errorf("expected start failure, got %v", err)
+	}
+}
+
+// TestCreateStdoutFails verifies that if creating stdout for a VM fails,
+
+type errorCloser struct {
+	io.ReadWriteCloser
+	err error
+}
+
+func (e errorCloser) Close() error {
+	e.ReadWriteCloser.Close()
+	return e.err
+}
+
+// TestReleaseAndCloseErrors verifies that if closing a VM's stdout/stderr returns an error,
+// it is propagated by Release and Close.
+func TestReleaseAndCloseErrors(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+	closeErr := errors.New("close error")
+	outFactory := func(id string) io.ReadWriteCloser {
+		return errorCloser{
+			ReadWriteCloser: executil.NewLabelingPipe([]byte("test-"+id), '\n'),
+			err:             closeErr,
+		}
+	}
+
+	statusCh := make(chan vmspool.Event, 32)
+	p := vmspool.New(factory,
+		vmspool.WithSize(2),
+		vmspool.WithStdoutStderr(outFactory, outFactory),
+		vmspool.WithStatus(statusCh),
+	)
+
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+
+	vm, err := p.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+
+	if err := vm.Release(context.Background()); err == nil || !strings.Contains(err.Error(), "close error") {
+		t.Errorf("Release expected to contain close error, got %v", err)
+	}
+
+	if err := p.Close(context.Background()); err == nil || !strings.Contains(err.Error(), "close error") {
+		t.Errorf("Close expected to contain close error, got %v", err)
+	}
+}
+
+// TestAcquireOnClosedPoolEvent verifies the EventAttemptToUseClosedPool event is emitted
+// when acquiring from a closed pool.
+func TestAcquireOnClosedPoolEvent(t *testing.T) {
+	statusCh := make(chan vmspool.Event, 32)
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+
+	if err := p.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	_, err := p.Acquire(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	waitForEvent(t, statusCh, vmspool.EventAttemptToUseClosedPool, 5*time.Second)
+}
+
+// TestAttemptCreateVMTimeout verifies that if VM creation times out, it is handled and retried.
+func TestAttemptCreateVMTimeout(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+
+	blockingMock := vmstestutil.NewMock("")
+	cloneBlock := make(chan struct{})
+	blockingMock.CloneBlock = cloneBlock
+	factory.Inject(blockingMock)
+	factory.Inject(vmstestutil.NewMock("")) // Second mock succeeds
+
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(50*time.Millisecond, time.Millisecond),
+	)
+
+	go func() {
+		// Wait for the timeout to elapse and trigger retry, then unblock the first mock
+		time.Sleep(100 * time.Millisecond)
+		close(cloneBlock)
+	}()
+
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
 	}
 }

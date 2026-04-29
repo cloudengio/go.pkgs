@@ -6,58 +6,88 @@ import cloudeng.io/vms/vmstestutil
 
 
 ## Functions
-### Func SetTestConfig
+### Func TestInstanceCloneStartStopDelete
 ```go
-func SetTestConfig(cfg PoolTestConfig)
+func TestInstanceCloneStartStopDelete(t TestingT, cfg InstanceTestConfig)
 ```
+TestInstanceCloneStartStopDelete verifies the standard Clone -> Start ->
+Stop -> Delete state transitions.
 
-### Func TestAcquireAndRelease
+### Func TestInstanceDeleteFromSuspended
 ```go
-func TestAcquireAndRelease(t TestingT)
+func TestInstanceDeleteFromSuspended(t TestingT, cfg InstanceTestConfig)
 ```
-TestAcquireAndRelease verifies the full acquire → release → replenish cycle:
-releasing a VM triggers replenishment so the pool can serve another Acquire.
+TestInstanceDeleteFromSuspended verifies that an instance can be deleted
+directly from the Suspended state.
 
-### Func TestClose
+### Func TestInstanceExec
 ```go
-func TestClose(t TestingT)
+func TestInstanceExec(t TestingT, cfg InstanceTestConfig)
 ```
-TestClose verifies that Close prevents further Acquire calls.
+TestInstanceExec verifies that a command can be executed inside a running
+VM.
 
-### Func TestConcurrentAcquire
+### Func TestInstanceLifecycle
 ```go
-func TestConcurrentAcquire(t TestingT)
+func TestInstanceLifecycle(t TestingT, cfg InstanceTestConfig)
 ```
-TestConcurrentAcquire verifies that poolSize goroutines can each acquire a
-VM concurrently without error, and that the pool replenishes after all are
-released.
+TestInstanceLifecycle runs the full vms.Instance lifecycle test suite.
 
-### Func TestContextCancellation
+### Func TestInstanceSuspendResume
 ```go
-func TestContextCancellation(t TestingT)
+func TestInstanceSuspendResume(t TestingT, cfg InstanceTestConfig)
 ```
-TestContextCancellation verifies that Acquire returns context.Canceled when
-the pool is empty and the context is cancelled.
-
-### Func TestExec
-```go
-func TestExec(t TestingT)
-```
-TestExec verifies that a command can be executed inside an acquired VM
-without error.
+TestInstanceSuspendResume verifies the Suspend and Resume (Start)
+transitions for suspendable VMs.
 
 ### Func TestLifecycle
 ```go
-func TestLifecycle(t TestingT)
+func TestLifecycle(t TestingT, cfg PoolTestConfig)
 ```
 TestLifecycle runs the full pool lifecycle test suite using the global
 config set by SetTestConfig.
 
-### Func TestStartAndAcquire
+### Func TestPoolAcquireAndRelease
 ```go
-func TestStartAndAcquire(t TestingT)
+func TestPoolAcquireAndRelease(t TestingT, cfg PoolTestConfig)
 ```
-TestStartAndAcquire verifies that starting the pool and acquiring a VM
+TestPoolAcquireAndRelease verifies the full acquire → release → replenish
+cycle: releasing a VM triggers replenishment so the pool can serve another
+Acquire.
+
+### Func TestPoolClose
+```go
+func TestPoolClose(t TestingT, cfg PoolTestConfig)
+```
+TestPoolClose verifies that Close prevents further Acquire calls.
+
+### Func TestPoolConcurrentAcquire
+```go
+func TestPoolConcurrentAcquire(t TestingT, cfg PoolTestConfig)
+```
+TestPoolConcurrentAcquire verifies that poolSize goroutines can each acquire
+a VM concurrently without error, and that the pool replenishes after all are
+released.
+
+### Func TestPoolContextCancellation
+```go
+func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig)
+```
+TestPoolContextCancellation verifies that Acquire returns context.Canceled
+when the pool is empty and the context is cancelled.
+
+### Func TestPoolExec
+```go
+func TestPoolExec(t TestingT, cfg PoolTestConfig)
+```
+TestPoolExec verifies that a command can be executed inside an acquired VM
+without error.
+
+### Func TestPoolStartAndAcquire
+```go
+func TestPoolStartAndAcquire(t TestingT, cfg PoolTestConfig)
+```
+TestPoolStartAndAcquire verifies that starting the pool and acquiring a VM
 produces a VM in the Running state.
 
 
@@ -71,6 +101,27 @@ type ExecCall struct {
 }
 ```
 ExecCall records a single invocation of Mock.Exec.
+
+
+### Type InstanceTestConfig
+```go
+type InstanceTestConfig struct {
+	// Constructor creates a new uninitialized vms.Instance for each test.
+	Constructor func() vms.Instance
+
+	// Timeout caps individual operations. Defaults to 30 s.
+	Timeout time.Duration
+
+	// ExecCmd is a command that should succeed inside a running VM. If empty,
+	// the Exec subtest is skipped.
+	ExecCmd    string
+	ExecArgs   []string
+	ExecStdout string // Expected output from the exec.
+	ExecStderr string // Expected stderr output from the exec.
+}
+```
+InstanceTestConfig configures the test suite for an implementation of
+vms.Instance.
 
 
 ### Type Mock
@@ -98,7 +149,7 @@ Mock represents a mock virtual machine instance for testing.
 ### Functions
 
 ```go
-func NewMock() *Mock
+func NewMock(id string) *Mock
 ```
 NewMock creates a new Mock VM instance.
 
@@ -128,6 +179,11 @@ ExecCalls returns all recorded Exec invocations.
 
 
 ```go
+func (m *Mock) ID() string
+```
+
+
+```go
 func (m *Mock) Properties(_ context.Context) (vms.Properties, error)
 ```
 
@@ -148,7 +204,7 @@ func (m *Mock) SetSuspendable(suspendable bool)
 
 
 ```go
-func (m *Mock) Start(_ context.Context, _, _ io.Writer) error
+func (m *Mock) Start(ctx context.Context, _, _ io.Writer) error
 ```
 
 
@@ -187,7 +243,7 @@ creates plain NewMock instances on demand.
 ### Functions
 
 ```go
-func NewMockFactory() *MockFactory
+func NewMockFactory(suspendable bool) *MockFactory
 ```
 NewMockFactory returns an empty MockFactory.
 
@@ -227,15 +283,20 @@ type PoolTestConfig struct {
 
 	// ExecCmd is a command that should succeed inside an acquired VM. If empty
 	// the Exec subtest is skipped.
-	ExecCmd  string
-	ExecArgs []string
+	ExecCmd          string
+	ExecArgs         []string
+	ExecStdoutOutput string // Expected output from the exec.
+	ExecStderrOutput string // Expected stderr output from the exec.
+
+	StdoutRWC func(string) (io.ReadWriteCloser, error) // Optional factory
+	StderrRWC func(string) (io.ReadWriteCloser, error) // Optional factory for stderr RWC used by Exec; defaults to bytes.Buffer-based implementation.
 
 	// Timeout caps individual pool operations. Defaults to 30 s.
 	Timeout time.Duration
 
-	// SupportsSuspend enables the suspend-mode subtests (WithSuspendVMs(true)).
-	// Set this when the constructor produces instances that support Suspend.
-	SupportsSuspend bool
+	// StagingBehaviour determines the pool's staging behaviour. Defaults to
+	// StagingBehaviourRunning.
+	StagingBehaviour vmspool.StagingBehaviour
 }
 ```
 PoolTestConfig configures the pool integration test suite run by

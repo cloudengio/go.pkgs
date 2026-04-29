@@ -18,7 +18,7 @@ import (
 func TestCleanupVMInitialOrDeleted(t *testing.T) {
 	ctx := context.Background()
 	for _, state := range []vms.State{vms.StateInitial, vms.StateDeleted} {
-		m := vmstestutil.NewMock()
+		m := vmstestutil.NewMock("")
 		m.SetState(state)
 		if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
 			t.Errorf("state %v: expected no error, got %v", state, err)
@@ -32,7 +32,7 @@ func TestCleanupVMInitialOrDeleted(t *testing.T) {
 
 func TestCleanupVMRunningSuccess(t *testing.T) {
 	ctx := context.Background()
-	m := vmstestutil.NewMock()
+	m := vmstestutil.NewMock("")
 	m.SetState(vms.StateRunning)
 	if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -44,7 +44,7 @@ func TestCleanupVMRunningSuccess(t *testing.T) {
 
 func TestCleanupVMRunningStopFailure(t *testing.T) {
 	ctx := context.Background()
-	m := vmstestutil.NewMock()
+	m := vmstestutil.NewMock("")
 	m.SetState(vms.StateRunning)
 	m.StopErr = errors.New("stop failed")
 	err := vms.CleanupVM(ctx, m, time.Second)
@@ -55,7 +55,7 @@ func TestCleanupVMRunningStopFailure(t *testing.T) {
 
 func TestCleanupVMRunningStopWrongState(t *testing.T) {
 	ctx := context.Background()
-	m := vmstestutil.NewMock()
+	m := vmstestutil.NewMock("")
 	m.SetState(vms.StateRunning)
 	badState := vms.StateErrorUnknown
 	m.StopState = &badState
@@ -68,7 +68,7 @@ func TestCleanupVMRunningStopWrongState(t *testing.T) {
 func TestCleanupVMStoppedSuspendedErrorUnknown(t *testing.T) {
 	ctx := context.Background()
 	for _, state := range []vms.State{vms.StateStopped, vms.StateSuspended, vms.StateErrorUnknown} {
-		m := vmstestutil.NewMock()
+		m := vmstestutil.NewMock("")
 		m.SetState(state)
 		if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
 			t.Errorf("state %v: expected no error, got %v", state, err)
@@ -81,7 +81,7 @@ func TestCleanupVMStoppedSuspendedErrorUnknown(t *testing.T) {
 
 func TestCleanupVMStoppedDeleteFailure(t *testing.T) {
 	ctx := context.Background()
-	m := vmstestutil.NewMock()
+	m := vmstestutil.NewMock("")
 	m.SetState(vms.StateStopped)
 	m.DeleteErr = errors.New("delete failed")
 	err := vms.CleanupVM(ctx, m, time.Second)
@@ -93,7 +93,7 @@ func TestCleanupVMStoppedDeleteFailure(t *testing.T) {
 func TestCleanupVMUnexpectedState(t *testing.T) {
 	ctx := context.Background()
 	for _, state := range []vms.State{vms.StateCloning, vms.StateStarting, vms.StateStopping, vms.StateSuspending, vms.StateDeleting} {
-		m := vmstestutil.NewMock()
+		m := vmstestutil.NewMock("")
 		m.SetState(state)
 		err := vms.CleanupVM(ctx, m, time.Second)
 		if err == nil || !strings.Contains(err.Error(), "cleanup: unexpected VM state") {

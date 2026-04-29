@@ -8,30 +8,38 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func TestAcquireAndRelease(t *testing.T) {
-	vmstestutil.TestAcquireAndRelease(t)
+func TestPoolAcquireAndRelease(t *testing.T) {
+	var cfg vmstestutil.PoolTestConfig
+	cfg = testConfig
+	vmstestutil.TestPoolAcquireAndRelease(t, cfg)
 }
 
-func TestClose(t *testing.T) {
-	vmstestutil.TestClose(t)
+func TestPoolClose(t *testing.T) {
+	var cfg vmstestutil.PoolTestConfig
+	cfg = testConfig
+	vmstestutil.TestPoolClose(t, cfg)
 }
 
-func TestConcurrentAcquire(t *testing.T) {
-	vmstestutil.TestConcurrentAcquire(t)
+func TestPoolConcurrentAcquire(t *testing.T) {
+	var cfg vmstestutil.PoolTestConfig
+	cfg = testConfig
+	vmstestutil.TestPoolConcurrentAcquire(t, cfg)
 }
 
-func TestContextCancellation(t *testing.T) {
-	vmstestutil.TestContextCancellation(t)
+func TestPoolContextCancellation(t *testing.T) {
+	var cfg vmstestutil.PoolTestConfig
+	cfg = testConfig
+	vmstestutil.TestPoolContextCancellation(t, cfg)
 }
 
-func TestExec(t *testing.T) {
-	vmstestutil.TestExec(t)
+func TestPoolExec(t *testing.T) {
+	var cfg vmstestutil.PoolTestConfig
+	cfg = testConfig
+	vmstestutil.TestPoolExec(t, cfg)
 }
 
-func TestLifecycle(t *testing.T) {
-	vmstestutil.TestLifecycle(t)
-}
-
-func TestStartAndAcquire(t *testing.T) {
-	vmstestutil.TestStartAndAcquire(t)
+func TestPoolStartAndAcquire(t *testing.T) {
+	var cfg vmstestutil.PoolTestConfig
+	cfg = testConfig
+	vmstestutil.TestPoolStartAndAcquire(t, cfg)
 }
