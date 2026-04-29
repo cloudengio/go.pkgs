@@ -258,6 +258,7 @@ func TestInstanceLifecycle(t TestingT, cfg InstanceTestConfig) { //cicd:astest
 	}
 	done := logStep(t, "clone %s → %s", props.CloneInfo, inst.ID())
 	checkErr := func(action string, err error) {
+		t.Helper()
 		if err != nil {
 			t.Fatalf("%s: %v", action, err)
 		}

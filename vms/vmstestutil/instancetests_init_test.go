@@ -19,7 +19,7 @@ var instanceTestConfig = vmstestutil.InstanceTestConfig{
 	Timeout:     10 * time.Second,
 	ExecCmd:     "echo",
 	ExecArgs:    []string{"hello"},
-	RequireUnderlyingState: func(ctx context.Context, inst vms.Instance, msg string, final vms.State, intermediate ...vms.State) error {
+	RequireUnderlyingState: func(ctx context.Context, inst vms.Instance, _ string, final vms.State, intermediate ...vms.State) error {
 		// no point in testing the underlying state of the mock.
 		return vms.WaitForState(ctx, inst, time.Millisecond, final, intermediate...)
 	},
