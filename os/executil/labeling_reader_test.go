@@ -25,7 +25,7 @@ func asyncWrite(rw io.ReadWriteCloser, p []byte) <-chan error {
 	return ch
 }
 
-func TestPrefixReader_EmptyReadBuffer(t *testing.T) {
+func TestLabelingPipe_EmptyReadBuffer(t *testing.T) {
 	pr := executil.NewLabelingPipe([]byte(">> "), '\n')
 	defer pr.Close()
 
@@ -35,7 +35,7 @@ func TestPrefixReader_EmptyReadBuffer(t *testing.T) {
 	}
 }
 
-func TestPrefixReader_EmptyTag(t *testing.T) {
+func TestLabelingPipe_EmptyTag(t *testing.T) {
 	pr := executil.NewLabelingPipe(nil, '\n')
 	defer pr.Close()
 	werr := asyncWrite(pr, []byte("hello"))
@@ -53,7 +53,7 @@ func TestPrefixReader_EmptyTag(t *testing.T) {
 	}
 }
 
-func TestPrefixReader_NewlineInsertion(t *testing.T) {
+func TestLabelingPipe_NewlineInsertion(t *testing.T) {
 	tag := ">> "
 	pr := executil.NewLabelingPipe([]byte(tag), '\n')
 	defer pr.Close()
@@ -84,7 +84,7 @@ func TestPrefixReader_NewlineInsertion(t *testing.T) {
 	}
 }
 
-func TestPrefixReader_NoTrailingNewline(t *testing.T) {
+func TestLabelingPipe_NoTrailingNewline(t *testing.T) {
 	tag := ">> "
 	pr := executil.NewLabelingPipe([]byte(tag), '\n')
 	defer pr.Close()
@@ -108,7 +108,7 @@ func TestPrefixReader_NoTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestPrefixReader_TabSeparator(t *testing.T) {
+func TestLabelingPipe_TabSeparator(t *testing.T) {
 	tag := "-> "
 	pr := executil.NewLabelingPipe([]byte(tag), '\t')
 	defer pr.Close()
@@ -129,6 +129,45 @@ func TestPrefixReader_TabSeparator(t *testing.T) {
 
 	got := <-reads
 	want := "-> col A\t-> col B\t-> col C"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestLabelingPipe_WriteCounts(t *testing.T) {
+	tag := ">> "
+	pr := executil.NewLabelingPipe([]byte(tag), '\n')
+	defer pr.Close()
+
+	reads := make(chan string)
+	go func() {
+		out, err := io.ReadAll(pr)
+		if err != nil && !strings.Contains(err.Error(), "read/write on closed pipe") {
+			t.Errorf("ReadAll error: %v", err)
+		}
+		reads <- string(out)
+	}()
+
+	writes := []string{
+		"line 1\n",
+		"line 2",
+		"\nline 3\n",
+		"line 4",
+	}
+
+	for _, w := range writes {
+		n, err := pr.Write([]byte(w))
+		if err != nil {
+			t.Fatalf("Write(%q) failed: %v", w, err)
+		}
+		if n != len(w) {
+			t.Errorf("Write(%q) returned %d bytes, want %d", w, n, len(w))
+		}
+	}
+	_ = pr.Close()
+
+	got := <-reads
+	want := ">> line 1\n>> line 2\n>> line 3\n>> line 4"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

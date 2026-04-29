@@ -44,6 +44,10 @@ func (pr *LabelingPipe) Read(p []byte) (n int, err error) {
 	return pr.r.Read(p)
 }
 
+// Write implements io.Writer. It writes the data to the underlying writer,
+// inserting the prefix at the beginning of the stream and after every separator
+// character. It returns the number of bytes from p that were written
+// rather than the total number of bytes including the label.
 func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
@@ -55,8 +59,8 @@ func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 	originalLen := len(p)
 	for len(p) > 0 {
 		if pr.atLineStart {
-			if n, err := pr.w.Write(pr.prefix); err != nil {
-				return originalLen - len(p) + n, err
+			if _, err := pr.w.Write(pr.prefix); err != nil {
+				return originalLen - len(p), err
 			}
 			pr.atLineStart = false
 		}
@@ -72,8 +76,8 @@ func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 
 		// Write up to and including the separator.
 		nextIdx := idx + utf8.RuneLen(pr.separator)
-		if _, err := pr.w.Write(p[:nextIdx]); err != nil {
-			return originalLen - len(p), err
+		if n, err := pr.w.Write(p[:nextIdx]); err != nil {
+			return originalLen - len(p) + n, err
 		}
 		pr.atLineStart = true
 		p = p[nextIdx:]
@@ -83,6 +87,8 @@ func (pr *LabelingPipe) Write(p []byte) (n int, err error) {
 }
 
 func (pr *LabelingPipe) Close() error {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
 	if err := pr.w.Close(); err != nil {
 		return fmt.Errorf("failed to close write pipe: %w", err)
 	}

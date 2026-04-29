@@ -161,6 +161,10 @@ func (pr *LabelingPipe) Read(p []byte) (n int, err error)
 ```go
 func (pr *LabelingPipe) Write(p []byte) (n int, err error)
 ```
+Write implements io.Writer. It writes the data to the underlying writer,
+inserting the prefix at the beginning of the stream and after every
+separator character. It returns the number of bytes from p that were written
+rather than the total number of bytes including the label.
 
 
 
