@@ -549,3 +549,108 @@ func TestReadFiles(t *testing.T) {
 		t.Error("expected error for missing file")
 	}
 }
+
+func TestAppendUnmarshal(t *testing.T) {
+	testCases := []struct {
+		name   string
+		data   []string
+		isYAML bool
+	}{
+		{"JSON list", []string{jsonList, jsonListExtra}, false},
+		{"JSON map", []string{jsonMap, jsonMapExtra}, false},
+		{"JSON mixed", []string{jsonList, jsonMapExtra}, false},
+		{"YAML list", []string{yamlList, yamlListExtra}, true},
+		{"YAML map", []string{yamlMap, yamlMapExtra}, true},
+		{"YAML mixed", []string{yamlList, yamlMapExtra}, true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ks := keys.NewInMemoryKeyStore()
+			ks.Add(keys.NewInfo("id0", "user0", []byte("t0")))
+
+			for _, data := range tc.data {
+				var err error
+				if tc.isYAML {
+					err = yaml.Unmarshal([]byte(data), ks)
+				} else {
+					err = ks.UnmarshalJSON([]byte(data))
+				}
+				if err != nil {
+					t.Fatalf("Unmarshal: %v", err)
+				}
+			}
+
+			expectedLen := 1 + len(tc.data)*2 // 1 initial + 2 items per data payload
+			if got, want := ks.Len(), expectedLen; got != want {
+				t.Fatalf("got len %v, want %v", got, want)
+			}
+			if _, ok := ks.Get("id0"); !ok {
+				t.Error("key id0 not found after append")
+			}
+			if _, ok := ks.Get("key1"); !ok {
+				t.Error("key key1 not found after append")
+			}
+			if _, ok := ks.Get("key2"); !ok {
+				t.Error("key key2 not found after append")
+			}
+		})
+	}
+}
+
+func TestAppendRead(t *testing.T) {
+	ctx := context.Background()
+	testCases := []struct {
+		name     string
+		data     []string
+		filename []string
+		isYAML   bool
+	}{
+		{"JSON list", []string{jsonList, jsonListExtra}, []string{"keys1.json", "keys2.json"}, false},
+		{"JSON map", []string{jsonMap, jsonMapExtra}, []string{"keys1.json", "keys2.json"}, false},
+		{"JSON mixed", []string{jsonList, jsonMapExtra}, []string{"keys1.json", "keys2.json"}, false},
+		{"YAML list", []string{yamlList, yamlListExtra}, []string{"keys1.yaml", "keys2.yaml"}, true},
+		{"YAML map", []string{yamlMap, yamlMapExtra}, []string{"keys1.yaml", "keys2.yaml"}, true},
+		{"YAML mixed", []string{yamlList, yamlMapExtra}, []string{"keys1.yaml", "keys2.yaml"}, true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ks := keys.NewInMemoryKeyStore()
+			ks.Add(keys.NewInfo("id0", "user0", []byte("t0")))
+
+			mfs := &mockFS{
+				data: make(map[string][]byte),
+			}
+			for i, data := range tc.data {
+				mfs.data[tc.filename[i]] = []byte(data)
+			}
+
+			for _, fname := range tc.filename {
+				var err error
+				if tc.isYAML {
+					err = ks.ReadYAML(ctx, mfs, fname)
+				} else {
+					err = ks.ReadJSON(ctx, mfs, fname)
+				}
+				if err != nil {
+					t.Fatalf("Read failed: %v", err)
+				}
+			}
+
+			expectedLen := 1 + len(tc.data)*2 // 1 initial + 2 items per data payload
+			if got, want := ks.Len(), expectedLen; got != want {
+				t.Fatalf("got len %v, want %v", got, want)
+			}
+			if _, ok := ks.Get("id0"); !ok {
+				t.Error("key id0 not found after append")
+			}
+			if _, ok := ks.Get("key1"); !ok {
+				t.Error("key key1 not found after append")
+			}
+			if _, ok := ks.Get("key2"); !ok {
+				t.Error("key key2 not found after append")
+			}
+		})
+	}
+}

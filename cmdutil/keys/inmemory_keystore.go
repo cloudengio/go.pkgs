@@ -33,22 +33,26 @@ func NewInMemoryKeyStore() *InMemoryKeyStore {
 	return &InMemoryKeyStore{}
 }
 
-func copyInfoList(src []keyInfo) []Info {
-	dest := make([]Info, len(src))
+func appendCopyInfoList(existing []Info, src []keyInfo) []Info {
+	copied := make([]Info, len(existing)+len(src))
+	copy(copied, existing)
 	for i, ki := range src {
-		dest[i] = copyInfo(ki)
+		copied[len(existing)+i] = copyInfo(ki)
 	}
-	return dest
+	return copied
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
+// The unmarshaled keys are appended to any existing keys in the store.
 // textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	var asList []keyInfo
 	err := node.Decode(&asList)
 	if err == nil {
-		ims.keys = copyInfoList(asList)
+		ims.mu.Lock()
+		defer ims.mu.Unlock()
+		ims.keys = appendCopyInfoList(ims.keys, asList)
 		return nil
 	}
 	var asMap map[string]keyInfo
@@ -56,6 +60,8 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode input as either a list or a map of keys: %w", err)
 	}
+	ims.mu.Lock()
+	defer ims.mu.Unlock()
 	for id, info := range asMap {
 		info.ID = id
 		ims.keys = append(ims.keys, copyInfo(info))
@@ -65,12 +71,15 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 
 // UnmarshalJSON implements the json.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
+// The unmarshaled keys are appended to any existing keys in the store.
 // textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	var asList []keyInfo
 	err := json.Unmarshal(data, &asList)
 	if err == nil {
-		ims.keys = copyInfoList(asList)
+		ims.mu.Lock()
+		defer ims.mu.Unlock()
+		ims.keys = appendCopyInfoList(ims.keys, asList)
 		return nil
 	}
 	var asMap map[string]keyInfo
@@ -78,6 +87,8 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode input as either a list or a map of keys: %w", err)
 	}
+	ims.mu.Lock()
+	defer ims.mu.Unlock()
 	for id, info := range asMap {
 		info.ID = id
 		ims.keys = append(ims.keys, copyInfo(info))
