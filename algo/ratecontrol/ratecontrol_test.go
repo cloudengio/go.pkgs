@@ -263,3 +263,32 @@ func TestCustomBackoff(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestStop(t *testing.T) {
+	// Test with tickers initialized
+	c := ratecontrol.New(
+		ratecontrol.WithRequestsPerTick(time.Millisecond*10, 1),
+		ratecontrol.WithBytesPerTick(time.Millisecond*10, 10),
+	)
+	c.Stop()
+	c.Stop() // Test idempotency
+
+	// Test concurrent Stop
+	c2 := ratecontrol.New(
+		ratecontrol.WithRequestsPerTick(time.Millisecond*10, 1),
+		ratecontrol.WithBytesPerTick(time.Millisecond*10, 10),
+	)
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c2.Stop()
+		}()
+	}
+	wg.Wait()
+
+	// Test with no tickers initialized
+	c3 := ratecontrol.New()
+	c3.Stop()
+}
