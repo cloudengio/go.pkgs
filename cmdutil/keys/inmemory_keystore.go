@@ -44,15 +44,7 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	var asList []keyInfo
 	err := node.Decode(&asList)
 	if err == nil {
-		ims.mu.Lock()
-		defer ims.mu.Unlock()
-		if ims.keys == nil {
-			ims.keys = make(map[KeyOwner]Info)
-		}
-		for _, ki := range asList {
-			info := copyInfo(ki)
-			ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
-		}
+		ims.unmarshalList(asList)
 		return nil
 	}
 	var asMap map[string]keyInfo
@@ -60,6 +52,23 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode input as either a list or a map of keys: %w", err)
 	}
+	ims.unmarshalMap(asMap)
+	return nil
+}
+
+func (ims *InMemoryKeyStore) unmarshalList(asList []keyInfo) {
+	ims.mu.Lock()
+	defer ims.mu.Unlock()
+	if ims.keys == nil {
+		ims.keys = make(map[KeyOwner]Info)
+	}
+	for _, ki := range asList {
+		info := copyInfo(ki)
+		ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
+	}
+}
+
+func (ims *InMemoryKeyStore) unmarshalMap(asMap map[string]keyInfo) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
@@ -70,7 +79,6 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 		ki := copyInfo(info)
 		ims.keys[KeyOwner{ID: ki.ID, User: ki.User}] = ki
 	}
-	return nil
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface to allow
@@ -81,15 +89,7 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	var asList []keyInfo
 	err := json.Unmarshal(data, &asList)
 	if err == nil {
-		ims.mu.Lock()
-		defer ims.mu.Unlock()
-		if ims.keys == nil {
-			ims.keys = make(map[KeyOwner]Info)
-		}
-		for _, ki := range asList {
-			info := copyInfo(ki)
-			ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
-		}
+		ims.unmarshalList(asList)
 		return nil
 	}
 	var asMap map[string]keyInfo
@@ -97,16 +97,7 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode input as either a list or a map of keys: %w", err)
 	}
-	ims.mu.Lock()
-	defer ims.mu.Unlock()
-	if ims.keys == nil {
-		ims.keys = make(map[KeyOwner]Info)
-	}
-	for k, info := range asMap {
-		info.ID = k
-		ki := copyInfo(info)
-		ims.keys[KeyOwner{ID: ki.ID, User: ki.User}] = ki
-	}
+	ims.unmarshalMap(asMap)
 	return nil
 }
 
@@ -163,10 +154,9 @@ func (ims *InMemoryKeyStore) Add(key Info) {
 func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
-	for _, key := range ims.keys {
-		if key.User == user && key.ID == id {
-			return key, true
-		}
+	ko := KeyOwner{ID: id, User: user}
+	if key, ok := ims.keys[ko]; ok {
+		return key, true
 	}
 	return Info{}, false
 }
