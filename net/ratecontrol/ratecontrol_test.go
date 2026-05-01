@@ -56,7 +56,8 @@ func TestRequestRate(t *testing.T) {
 	tick := time.Millisecond * 500
 	c := ratecontrol.New(ratecontrol.WithRequestsPerTick(tick, 1))
 	took := waitForRequests(ctx, t, c, 2, 0)
-	lower, upper := bounds(2*tick, 50*time.Millisecond)
+	// burst=1 makes the first Wait immediate; only the second blocks for one tick.
+	lower, upper := bounds(tick, 50*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
@@ -77,7 +78,9 @@ func TestRequestRateConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	took := time.Since(then)
-	lower, upper := bounds(tick*2, 200*time.Millisecond)
+	// burst=2 makes the first 2 Waits immediate; the remaining 6 each block for 250ms (tick/2),
+	// so total ≈ 6*(tick/2) = 3*tick.
+	lower, upper := bounds(tick*3, 200*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
@@ -98,8 +101,8 @@ func TestDataRateConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	took := time.Since(then)
-	// 10 concurrent iterations requires 40 ticks to send 400 bytes.
-	lower, upper := bounds(40*tick, 100*time.Millisecond)
+	// All 4 goroutines wake on each tick broadcast, so 10 ticks suffice for 10 iterations each.
+	lower, upper := bounds(10*tick, 100*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
@@ -138,7 +141,8 @@ func TestDataAndReqRate(t *testing.T) {
 	)
 	tookLonger := waitForRequests(ctx, t, c, 10, 10)
 
-	lower, upper = bounds(10*reqTick, 50*time.Millisecond)
+	// burst=1 makes the first Wait immediate; the remaining 9 each block for reqTick.
+	lower, upper = bounds(9*reqTick, 200*time.Millisecond)
 	if got := tookLonger; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
@@ -194,6 +198,9 @@ func TestCancel(t *testing.T) {
 		ratecontrol.WithBytesPerTick(time.Second, 10),
 		ratecontrol.WithRequestsPerTick(time.Second, 1),
 	)
+	// Exceed the byte limit so waitBytesPerTick blocks; the request burst would
+	// otherwise return immediately, giving go cancel() no window to fire.
+	c.BytesTransferred(100)
 	go cancel()
 	err := c.Wait(ctx)
 	if err == nil || err != context.Canceled {

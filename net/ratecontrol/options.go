@@ -5,19 +5,22 @@
 // Package ratecontrol provides mechanisms for controlling the rate
 // at which requests are made and for backing off when the remote
 // service is unwilling to process requests.
+// DEPRECATED: This package has been moved to cloudeng.io/algo/ratecontrol;
+// use that instead.
 package ratecontrol
 
-import "time"
+import (
+	"time"
+
+	"cloudeng.io/algo/ratecontrol"
+)
 
 // Option represents an option for configuring a ratecontrol Controller.
-type Option func(c *options)
+type Option ratecontrol.Option
 
 // WithRequestsPerTick sets the rate for requests in requests per tick.
 func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option {
-	return func(o *options) {
-		o.reqsInterval = tickInterval
-		o.reqsPerTick = rpt
-	}
+	return Option(ratecontrol.Option(ratecontrol.WithRequestsPerTick(tickInterval, rpt)))
 }
 
 // WithBytesPerTick sets the approximate rate in bytes per tick
@@ -28,10 +31,7 @@ func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option {
 // it's a simple start/stop model). The bytes to be accounted for are
 // reported to the Controller via its BytesTransferred method.
 func WithBytesPerTick(tickInterval time.Duration, bpt int) Option {
-	return func(o *options) {
-		o.bytesInterval = tickInterval
-		o.bytesPerTick = bpt
-	}
+	return Option(ratecontrol.Option(ratecontrol.WithBytesPerTick(tickInterval, bpt)))
 }
 
 // WithExponentialBackoff enables an exponential backoff algorithm.
@@ -39,35 +39,19 @@ func WithBytesPerTick(tickInterval time.Duration, bpt int) Option {
 // consecutive retry until the download either succeeds or the specified
 // number of steps (attempted requests) is exceeded.
 func WithExponentialBackoff(first time.Duration, steps int) Option {
-	return func(o *options) {
-		o.backoffStart = first
-		o.backoffSteps = steps
-	}
+	return Option(ratecontrol.Option(ratecontrol.WithExponentialBackoff(first, steps, false)))
 }
 
 // WithCustomBackoff allows the use of a custom backoff function.
 func WithCustomBackoff(backoff func() Backoff) Option {
-	return func(o *options) {
-		o.customBackoff = backoff
-	}
+	return Option(ratecontrol.Option(ratecontrol.WithBackoff(func() ratecontrol.Backoff {
+		return ratecontrol.Backoff(backoff())
+	})))
 }
 
 // WithNoRateControl creates a Controller that returns immediately
 // and offers no backoff. It can be used as a default when no
 // rate control is desired.
 func WithNoRateControl() Option {
-	return func(o *options) {
-		o.noRateControl = true
-	}
-}
-
-type options struct {
-	noRateControl bool // if true, no rate control is applied
-	reqsInterval  time.Duration
-	reqsPerTick   int
-	bytesInterval time.Duration
-	bytesPerTick  int
-	backoffStart  time.Duration
-	backoffSteps  int
-	customBackoff func() Backoff
+	return Option(ratecontrol.Option(ratecontrol.WithNoRateControl()))
 }
