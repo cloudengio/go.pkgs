@@ -1,0 +1,224 @@
+# Package [cloudeng.io/algo/ratecontrol](https://pkg.go.dev/cloudeng.io/algo/ratecontrol?tab=doc)
+
+```go
+import cloudeng.io/algo/ratecontrol
+```
+
+Package ratecontrol provides mechanisms for controlling the rate at which
+requests are made and for backing off when the remote service is unwilling
+to process requests.
+
+Package ratecontrol provides mechanisms for controlling the rate at which
+requests are made and for implementing backoff mechanisms.
+
+## Types
+### Type Backoff
+```go
+type Backoff interface {
+	// Wait implements a backoff algorithm. It returns true if the backoff
+	// should be terminated, i.e. no more requests should be attempted.
+	// The error returned is nil when the backoff algorithm has reached
+	// its limit and will generally only be non-nil for an internal error
+	// such as the context being canceled.
+	// The second argument is a placeholder for any additional data that
+	// the backoff algorithm may need to process, such as an HTTP response
+	// or a retry response. It can be nil if no such data is needed.
+	Wait(context.Context, any) (bool, error)
+
+	// Retries returns the number of retries that the backoff aglorithm
+	// has recorded, ie. the number of times that Backoff was called and
+	// returned false.
+	Retries() int
+}
+```
+Backoff represents the interface to a backoff algorithm.
+
+### Functions
+
+```go
+func NewExponentialBackoffOffset(initial time.Duration, steps int) Backoff
+```
+
+
+```go
+func NewExpontentialBackoff(initial time.Duration, steps int) Backoff
+```
+
+
+
+
+### Type Controller
+```go
+type Controller struct {
+	// contains filtered or unexported fields
+}
+```
+Controller implements Limiter and is used to control the rate at which
+requests are made and to implement backoff when the remote server is
+unwilling to process a request. Controller is safe to use concurrently.
+
+### Functions
+
+```go
+func New(opts ...Option) *Controller
+```
+New returns a new Controller configuring using the specified options.
+
+
+
+### Methods
+
+```go
+func (c *Controller) Backoff() Backoff
+```
+
+
+```go
+func (c *Controller) BytesTransferred(nBytes int)
+```
+BytesTransferred notifies the controller that the specified number of bytes
+have been transferred and is used when byte based rate control is configured
+via WithBytesPerTick.
+
+
+```go
+func (c *Controller) Wait(ctx context.Context) error
+```
+Wait returns when a request can be made. Rate limiting of requests takes
+priority over rate limiting of bytes. That is, bytes are only considered
+when a new request can be made.
+
+
+
+
+### Type ExponentialBackoff
+```go
+type ExponentialBackoff struct {
+	// contains filtered or unexported fields
+}
+```
+ExponentialBackoff implements an exponential backoff algorithm. It starts
+with the specified initial delay and doubles the delay for each retry up to
+the specified number of steps.
+
+### Methods
+
+```go
+func (eb *ExponentialBackoff) Retries() int
+```
+Retries implements Backoff.
+
+
+```go
+func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error)
+```
+Wait implements Backoff.
+
+
+
+
+### Type ExponentialBackoffOffset
+```go
+type ExponentialBackoffOffset struct {
+	ExponentialBackoff
+}
+```
+ExponentialBackoffOffset implements an exponential backoff algorithm with a
+random offset used for the first delay, all subsequent delays are calculated
+as in ExponentialBackoff. The first delay is a random value between 0 and
+the initial delay.
+
+### Methods
+
+```go
+func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, _ any) (bool, error)
+```
+
+
+
+
+### Type Limiter
+```go
+type Limiter interface {
+	Wait(context.Context) error
+	BytesTransferred(int)
+	Backoff() Backoff
+}
+```
+Limiter is an interface that defines a generic rate limiter.
+
+
+### Type NoBackoff
+```go
+type NoBackoff struct{}
+```
+NoBackoff implements a Backoff that does not perform any backoff and always
+returns false for Wait and 0 for Retries.
+
+### Methods
+
+```go
+func (nb NoBackoff) Retries() int
+```
+
+
+```go
+func (nb NoBackoff) Wait(_ context.Context, _ any) (bool, error)
+```
+
+
+
+
+### Type Option
+```go
+type Option func(c *options)
+```
+Option represents an option for configuring a ratecontrol Controller.
+
+### Functions
+
+```go
+func WithBytesPerTick(tickInterval time.Duration, bpt int) Option
+```
+WithBytesPerTick sets the approximate rate in bytes per tick The algorithm
+used is very simple and will simply stop sending data wait for a single tick
+if the limit is reached without taking into account how long the tick is,
+nor how much excess data was sent over the previous tick (ie. no attempt is
+made to smooth out the rate and for now it's a simple start/stop model).
+The bytes to be accounted for are reported to the Controller via its
+BytesTransferred method.
+
+
+```go
+func WithCustomBackoff(backoff func() Backoff) Option
+```
+WithCustomBackoff allows the use of a custom backoff function.
+
+
+```go
+func WithExponentialBackoff(first time.Duration, steps int) Option
+```
+WithExponentialBackoff enables an exponential backoff algorithm. First
+defines the first backoff delay, which is then doubled for every consecutive
+retry until the download either succeeds or the specified number of steps
+(attempted requests) is exceeded.
+
+
+```go
+func WithNoRateControl() Option
+```
+WithNoRateControl creates a Controller that returns immediately and offers
+no backoff. It can be used as a default when no rate control is desired.
+
+
+```go
+func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option
+```
+WithRequestsPerTick sets the rate for requests in requests per tick.
+
+
+
+
+
+
+
