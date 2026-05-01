@@ -37,7 +37,7 @@ type ExponentialBackoff struct {
 	nextDelay time.Duration
 }
 
-// NewExpontentialBackoff returns a instance of ExponentialBackoff.
+// NewExponentialBackoff returns a instance of ExponentialBackoff.
 // If initial is less than or equal to zero, DefaultBackoffInterval is used.
 // If steps is less than or equal to zero, DefaultBackoffSteps is used.
 func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff {
@@ -92,7 +92,16 @@ type ExponentialBackoffOffset struct {
 	ExponentialBackoff
 }
 
+// NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset.
+// If initial is less than or equal to zero, DefaultBackoffInterval is used.
+// If steps is less than or equal to zero, DefaultBackoffSteps is used.
 func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialBackoffOffset {
+	if initial <= 0 {
+		initial = DefaultBackoffInterval
+	}
+	if steps <= 0 {
+		steps = DefaultBackoffSteps
+	}
 	return &ExponentialBackoffOffset{
 		ExponentialBackoff: ExponentialBackoff{nextDelay: initial, steps: steps},
 	}

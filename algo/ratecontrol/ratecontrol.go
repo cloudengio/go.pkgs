@@ -22,7 +22,7 @@ type Limiter interface {
 // requests are made and to implement backoff when the remote server is
 // unwilling to process a request. Controller is safe to use concurrently.
 // Call Stop to free up resources when the Controller is no longer needed.
-// The controller attempts to implement a smooth rate of requests and bytes\
+// The controller attempts to implement a smooth rate of requests and bytes
 // over the specified tick intervals.
 type Controller struct {
 	opts         options
@@ -40,7 +40,9 @@ type Controller struct {
 
 // New returns a new Controller configured using the specified options.
 func New(opts ...Option) *Controller {
-	c := &Controller{}
+	c := &Controller{
+		stopCh: make(chan struct{}),
+	}
 	for _, fn := range opts {
 		fn(&c.opts)
 	}

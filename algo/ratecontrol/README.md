@@ -54,7 +54,7 @@ Controller implements Limiter and is used to control the rate at which
 requests are made and to implement backoff when the remote server is
 unwilling to process a request. Controller is safe to use concurrently.
 Call Stop to free up resources when the Controller is no longer needed.
-The controller attempts to implement a smooth rate of requests and bytes\
+The controller attempts to implement a smooth rate of requests and bytes
 over the specified tick intervals.
 
 ### Functions
@@ -115,7 +115,7 @@ the specified number of steps.
 ```go
 func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff
 ```
-NewExpontentialBackoff returns a instance of ExponentialBackoff. If initial
+NewExponentialBackoff returns a instance of ExponentialBackoff. If initial
 is less than or equal to zero, DefaultBackoffInterval is used. If steps is
 less than or equal to zero, DefaultBackoffSteps is used.
 
@@ -153,6 +153,9 @@ the initial delay.
 ```go
 func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialBackoffOffset
 ```
+NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset.
+If initial is less than or equal to zero, DefaultBackoffInterval is used.
+If steps is less than or equal to zero, DefaultBackoffSteps is used.
 
 
 
