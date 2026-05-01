@@ -93,7 +93,7 @@ func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, _ any) (bool, erro
 	}
 	if eb.retries == 0 && eb.nextDelay > 0 {
 		src := rand.NewSource(time.Now().UnixNano())
-		eb.nextDelay = time.Duration(rand.New(src).Int63n(int64(eb.nextDelay)))
+		eb.nextDelay = time.Duration(rand.New(src).Int63n(int64(eb.nextDelay))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
 	}
 	return eb.ExponentialBackoff.Wait(ctx, nil)
 }
