@@ -6,6 +6,7 @@ package ratecontrol
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -25,6 +26,9 @@ type Controller struct {
 	reqsTicker   *time.Ticker
 	bytesTicker  *time.Ticker
 	bytesPerTick atomic.Int64
+
+	bytesMu    sync.Mutex
+	bytesReset chan struct{} // closed and replaced on each interval reset to broadcast to all waiters
 }
 
 // New returns a new Controller configured using the specified options.
@@ -42,6 +46,7 @@ func New(opts ...Option) *Controller {
 	}
 	if c.opts.bytesPerTick > 0 {
 		c.bytesTicker = time.NewTicker(c.opts.bytesInterval)
+		c.bytesReset = make(chan struct{})
 	}
 	return c
 }
@@ -57,12 +62,25 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 	if c.remaining(&c.bytesPerTick, c.opts.bytesPerTick) {
 		return nil
 	}
+	// Snapshot the current broadcast channel before blocking so we wake
+	// on the very next reset even if it happens between this read and the select.
+	c.bytesMu.Lock()
+	ch := c.bytesReset
+	c.bytesMu.Unlock()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-c.bytesTicker.C:
-		// reset the bytesPerTick counter.
+		// This goroutine won the tick: reset the counter and broadcast
+		// to all other waiters by closing the current reset channel.
 		c.bytesPerTick.Store(0)
+		c.bytesMu.Lock()
+		old := c.bytesReset
+		c.bytesReset = make(chan struct{})
+		c.bytesMu.Unlock()
+		close(old)
+	case <-ch:
+		// Another goroutine already handled the tick and reset the counter.
 	}
 	return nil
 }

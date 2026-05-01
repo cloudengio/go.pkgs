@@ -38,10 +38,17 @@ func WithBytesPerTick(tickInterval time.Duration, bpt int) Option {
 // First defines the first backoff delay, which is then doubled for every
 // consecutive retry until the download either succeeds or the specified
 // number of steps (attempted requests) is exceeded.
-func WithExponentialBackoff(first time.Duration, steps int) Option {
+// If randomized is true, a random in the range of [0..first] is added to
+// the first backoff delay.
+func WithExponentialBackoff(first time.Duration, steps int, randomized bool) Option {
 	return func(o *options) {
-		o.backoffStart = first
-		o.backoffSteps = steps
+		if randomized {
+			o.customBackoff = func() Backoff {
+				return NewExponentialBackoffOffset(first, steps)
+			}
+			return
+		}
+		o.customBackoff = func() Backoff { return NewExponentialBackoff(first, steps) }
 	}
 }
 

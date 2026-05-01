@@ -99,8 +99,8 @@ func TestDataRateConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	took := time.Since(then)
-	// 10 concurrent iterations requires 40 ticks to send 400 bytes.
-	lower, upper := bounds(40*tick, 100*time.Millisecond)
+	// All 4 goroutines wake on each tick broadcast, so 10 ticks suffice for 10 iterations each.
+	lower, upper := bounds(10*tick, 100*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
@@ -178,7 +178,7 @@ func backoff(ctx context.Context, t *testing.T, c *ratecontrol.Controller) int {
 func TestBackoff(t *testing.T) {
 	ctx := context.Background()
 	numRetries := 10
-	c := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Millisecond, numRetries))
+	c := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Millisecond, numRetries, false))
 	for range 3 {
 		retries := backoff(ctx, t, c)
 		if got, want := retries, numRetries; got != want {
@@ -191,7 +191,7 @@ func TestCancel(t *testing.T) {
 	rootCtx := context.Background()
 	ctx, cancel := context.WithCancel(rootCtx)
 	c := ratecontrol.New(
-		ratecontrol.WithExponentialBackoff(time.Hour, 10),
+		ratecontrol.WithExponentialBackoff(time.Hour, 10, false),
 		ratecontrol.WithBytesPerTick(time.Second, 10),
 		ratecontrol.WithRequestsPerTick(time.Second, 1),
 	)
