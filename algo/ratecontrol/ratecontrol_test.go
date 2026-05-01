@@ -266,7 +266,7 @@ func TestCustomBackoff(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	// Test with tickers initialized
 	c := ratecontrol.New(
