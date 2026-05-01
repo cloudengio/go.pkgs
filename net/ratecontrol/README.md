@@ -4,39 +4,15 @@
 import cloudeng.io/net/ratecontrol
 ```
 
-Package ratecontrol provides mechanisms for controlling the rate at which
-requests are made and for backing off when the remote service is unwilling
-to process requests.
+Package ratecontrol provides mechanisms for controlling the rate at
+which requests are made and for backing off when the remote service is
+unwilling to process requests. DEPRECATED: This package has been moved to
+cloudeng.io/algo/ratecontrol; use that instead.
 
-Package ratecontrol provides mechanisms for controlling the rate at which
-requests are made and for implementing backoff mechanisms.
-
-## Types
-### Type Backoff
+## Functions
+### Func NewExpontentialBackoff
 ```go
-type Backoff interface {
-	// Wait implements a backoff algorithm. It returns true if the backoff
-	// should be terminated, i.e. no more requests should be attempted.
-	// The error returned is nil when the backoff algorithm has reached
-	// its limit and will generally only be non-nil for an internal error
-	// such as the context being canceled.
-	// The second argument is a placeholder for any additional data that
-	// the backoff algorithm may need to process, such as an HTTP response
-	// or a retry response. It can be nil if no such data is needed.
-	Wait(context.Context, any) (bool, error)
-
-	// Retries returns the number of retries that the backoff aglorithm
-	// has recorded, ie. the number of times that Backoff was called and
-	// returned false.
-	Retries() int
-}
-```
-Backoff represents the interface to a backoff algorithm.
-
-### Functions
-
-```go
-func NewExpontentialBackoff(initial time.Duration, steps int) Backoff
+func NewExpontentialBackoff(initial time.Duration, steps int) ratecontrol.Backoff
 ```
 NewExpontentialBackoff returns a instance of Backoff that implements an
 exponential backoff algorithm starting with the specified initial delay and
@@ -44,11 +20,17 @@ continuing for the specified number of steps.
 
 
 
+## Types
+### Type Backoff
+```go
+type Backoff ratecontrol.Backoff
+```
+
 
 ### Type Controller
 ```go
 type Controller struct {
-	// contains filtered or unexported fields
+	*ratecontrol.Controller
 }
 ```
 Controller implements Limiter and is used to control the rate at which
@@ -64,68 +46,16 @@ New returns a new Controller configuring using the specified options.
 
 
 
-### Methods
-
-```go
-func (c *Controller) Backoff() Backoff
-```
-
-
-```go
-func (c *Controller) BytesTransferred(nBytes int)
-```
-BytesTransferred notifies the controller that the specified number of bytes
-have been transferred and is used when byte based rate control is configured
-via WithBytesPerTick.
-
-
-```go
-func (c *Controller) Wait(ctx context.Context) error
-```
-Wait returns when a request can be made. Rate limiting of requests takes
-priority over rate limiting of bytes. That is, bytes are only considered
-when a new request can be made.
-
-
-
-
-### Type ExponentialBackoff
-```go
-type ExponentialBackoff struct {
-	// contains filtered or unexported fields
-}
-```
-
-### Methods
-
-```go
-func (eb *ExponentialBackoff) Retries() int
-```
-Retries implements Backoff.
-
-
-```go
-func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error)
-```
-Wait implements Backoff.
-
-
-
 
 ### Type Limiter
 ```go
-type Limiter interface {
-	Wait(context.Context) error
-	BytesTransferred(int)
-	Backoff() Backoff
-}
+type Limiter ratecontrol.Limiter
 ```
-Limiter is an interface that defines a generic rate limiter.
 
 
 ### Type Option
 ```go
-type Option func(c *options)
+type Option ratecontrol.Option
 ```
 Option represents an option for configuring a ratecontrol Controller.
 
