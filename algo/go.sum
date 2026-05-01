@@ -1,2 +1,6 @@
 cloudeng.io/errors v0.0.9 h1:gHv7vqtI8pvhjJFsu4d60bYwOaT9sM6tn0ykoaw11WA=
 cloudeng.io/errors v0.0.9/go.mod h1:xWamLL6tn3roKI6MRRFkw1jUkJL9s7CJzFYfaxuhHZk=
+cloudeng.io/errors v0.0.13 h1:VNAhh/LMgXDzfSx/LxeYU+A6UUBP6K65yTyvQd2OJ5E=
+cloudeng.io/errors v0.0.13/go.mod h1:+IAMDlCNxHDxlWE9vjkPxED0d7Wzt7Nl3REebuCO4m8=
+cloudeng.io/sync v0.0.9 h1:mm45cx0jur0bI2MCBuaBl4zmtgtyjkVz113yz6QvFVU=
+cloudeng.io/sync v0.0.9/go.mod h1:sBfahAnbmCV88i0qCuafk2xobIHVthR82n3jEOMYIXs=
