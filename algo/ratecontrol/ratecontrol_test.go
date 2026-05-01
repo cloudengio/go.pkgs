@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cloudeng.io/algo/ratecontrol"
+	"cloudeng.io/sync/ctxsync"
 )
 
 func TestNoop(t *testing.T) {
@@ -265,6 +266,8 @@ func TestCustomBackoff(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 	// Test with tickers initialized
 	c := ratecontrol.New(
 		ratecontrol.WithRequestsPerTick(time.Millisecond*10, 1),
@@ -278,15 +281,13 @@ func TestStop(t *testing.T) {
 		ratecontrol.WithRequestsPerTick(time.Millisecond*10, 1),
 		ratecontrol.WithBytesPerTick(time.Millisecond*10, 10),
 	)
-	var wg sync.WaitGroup
+	var wg ctxsync.WaitGroup
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			c2.Stop()
-		}()
+		})
 	}
-	wg.Wait()
+	wg.Wait(ctx)
 
 	// Test with no tickers initialized
 	c3 := ratecontrol.New()
