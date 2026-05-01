@@ -242,7 +242,7 @@ func TestCustomBackoff(t *testing.T) {
 	resp := &http.Response{}
 
 	c := ratecontrol.New(
-		ratecontrol.WithCustomBackoff(func() ratecontrol.Backoff {
+		ratecontrol.WithBackoff(func() ratecontrol.Backoff {
 			return backoff
 		}),
 	)

@@ -35,27 +35,24 @@ func WithBytesPerTick(tickInterval time.Duration, bpt int) Option {
 }
 
 // WithExponentialBackoff enables an exponential backoff algorithm.
-// First defines the first backoff delay, which is then doubled for every
-// consecutive retry until the download either succeeds or the specified
-// number of steps (attempted requests) is exceeded.
-// If randomized is true, a random in the range of [0..first] is added to
-// the first backoff delay.
-func WithExponentialBackoff(first time.Duration, steps int, randomized bool) Option {
+// If randomizedOffset is false NewExponentialBackoff is used, otherwise
+// NewExponentialBackoffOffset is used.
+func WithExponentialBackoff(first time.Duration, steps int, randomizedOffset bool) Option {
 	return func(o *options) {
-		if randomized {
-			o.customBackoff = func() Backoff {
+		if randomizedOffset {
+			o.backoff = func() Backoff {
 				return NewExponentialBackoffOffset(first, steps)
 			}
 			return
 		}
-		o.customBackoff = func() Backoff { return NewExponentialBackoff(first, steps) }
+		o.backoff = func() Backoff { return NewExponentialBackoff(first, steps) }
 	}
 }
 
-// WithCustomBackoff allows the use of a custom backoff function.
-func WithCustomBackoff(backoff func() Backoff) Option {
+// WithBackoff allows the use of a custom backoff function.
+func WithBackoff(backoff func() Backoff) Option {
 	return func(o *options) {
-		o.customBackoff = backoff
+		o.backoff = backoff
 	}
 }
 
@@ -74,7 +71,5 @@ type options struct {
 	reqsPerTick   int
 	bytesInterval time.Duration
 	bytesPerTick  int
-	backoffStart  time.Duration
-	backoffSteps  int
-	customBackoff func() Backoff
+	backoff       func() Backoff
 }

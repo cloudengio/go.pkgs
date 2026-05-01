@@ -62,8 +62,9 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 	if c.remaining(&c.bytesPerTick, c.opts.bytesPerTick) {
 		return nil
 	}
-	// Snapshot the current broadcast channel before blocking so we wake
-	// on the very next reset even if it happens between this read and the select.
+	// Snapshot the broadcast channel before blocking. If the reset fires
+	// between here and the select, ch will already be closed and the select
+	// returns immediately.
 	c.bytesMu.Lock()
 	ch := c.bytesReset
 	c.bytesMu.Unlock()
@@ -71,8 +72,7 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-c.bytesTicker.C:
-		// This goroutine won the tick: reset the counter and broadcast
-		// to all other waiters by closing the current reset channel.
+		// Won the tick: reset the counter and wake all other waiters.
 		c.bytesPerTick.Store(0)
 		c.bytesMu.Lock()
 		old := c.bytesReset
@@ -80,8 +80,11 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 		c.bytesMu.Unlock()
 		close(old)
 	case <-ch:
-		// Another goroutine already handled the tick and reset the counter.
+		// Woken by broadcast from the goroutine that won the tick.
 	}
+	// Proceed regardless of the current counter value. Re-checking here would
+	// re-serialize goroutines: the winner's BytesTransferred call can push the
+	// counter back to the limit before other waiters get a chance to check.
 	return nil
 }
 
@@ -112,15 +115,24 @@ func (c *Controller) BytesTransferred(nBytes int) {
 	c.bytesPerTick.Add(int64(nBytes))
 }
 
+// Backoff returns an instance of the configured backoff algorithm. If no backoff algorithm is configured NoBackoff is returned.
 func (c *Controller) Backoff() Backoff {
 	if c.opts.noRateControl {
 		return NoBackoff{}
 	}
-	if c.opts.customBackoff != nil {
-		return c.opts.customBackoff()
+	if c.opts.backoff != nil {
+		return c.opts.backoff()
 	}
-	if c.opts.backoffStart == 0 {
-		return NoBackoff{}
+	return NoBackoff{}
+}
+
+// Stop stops the Controller's tickers. It should be called when the Controller
+// is no longer needed to release resources.
+func (c *Controller) Stop() {
+	if c.reqsTicker != nil {
+		c.reqsTicker.Stop()
 	}
-	return NewExponentialBackoff(c.opts.backoffStart, c.opts.backoffSteps)
+	if c.bytesTicker != nil {
+		c.bytesTicker.Stop()
+	}
 }

@@ -55,6 +55,8 @@ New returns a new Controller configured using the specified options.
 ```go
 func (c *Controller) Backoff() Backoff
 ```
+Backoff returns an instance of the configured backoff algorithm. If no
+backoff algorithm is configured NoBackoff is returned.
 
 
 ```go
@@ -63,6 +65,13 @@ func (c *Controller) BytesTransferred(nBytes int)
 BytesTransferred notifies the controller that the specified number of bytes
 have been transferred and is used when byte based rate control is configured
 via WithBytesPerTick.
+
+
+```go
+func (c *Controller) Stop()
+```
+Stop stops the Controller's tickers. It should be called when the Controller
+is no longer needed to release resources.
 
 
 ```go
@@ -178,6 +187,12 @@ Option represents an option for configuring a ratecontrol Controller.
 ### Functions
 
 ```go
+func WithBackoff(backoff func() Backoff) Option
+```
+WithBackoff allows the use of a custom backoff function.
+
+
+```go
 func WithBytesPerTick(tickInterval time.Duration, bpt int) Option
 ```
 WithBytesPerTick sets the approximate rate in bytes per tick The algorithm
@@ -190,18 +205,11 @@ BytesTransferred method.
 
 
 ```go
-func WithCustomBackoff(backoff func() Backoff) Option
+func WithExponentialBackoff(first time.Duration, steps int, randomizedOffset bool) Option
 ```
-WithCustomBackoff allows the use of a custom backoff function.
-
-
-```go
-func WithExponentialBackoff(first time.Duration, steps int) Option
-```
-WithExponentialBackoff enables an exponential backoff algorithm. First
-defines the first backoff delay, which is then doubled for every consecutive
-retry until the download either succeeds or the specified number of steps
-(attempted requests) is exceeded.
+WithExponentialBackoff enables an exponential backoff algorithm.
+If randomizedOffset is false NewExponentialBackoff is used, otherwise
+NewExponentialBackoffOffset is used.
 
 
 ```go
