@@ -23,7 +23,6 @@ type Limiter interface {
 type Controller struct {
 	opts         options
 	reqsTicker   *time.Ticker
-	reqsPerTick  atomic.Int64
 	bytesTicker  *time.Ticker
 	bytesPerTick atomic.Int64
 }
@@ -35,7 +34,11 @@ func New(opts ...Option) *Controller {
 		fn(&c.opts)
 	}
 	if c.opts.reqsPerTick > 0 {
-		c.reqsTicker = time.NewTicker(c.opts.reqsInterval / time.Duration(c.opts.reqsPerTick))
+		interval := c.opts.reqsInterval / time.Duration(c.opts.reqsPerTick)
+		if interval <= 0 {
+			interval = time.Millisecond
+		}
+		c.reqsTicker = time.NewTicker(interval)
 	}
 	if c.opts.bytesPerTick > 0 {
 		c.bytesTicker = time.NewTicker(c.opts.bytesInterval)
@@ -71,17 +74,14 @@ func (c *Controller) Wait(ctx context.Context) error {
 	if c.opts.noRateControl {
 		return nil
 	}
-	c.reqsPerTick.Add(1)
-	if c.remaining(&c.reqsPerTick, c.opts.reqsPerTick) {
-		return c.waitBytesPerTick(ctx)
+	if c.opts.reqsPerTick > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.reqsTicker.C:
+		}
 	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-c.reqsTicker.C:
-		c.reqsPerTick.Store(0)
-		return c.waitBytesPerTick(ctx)
-	}
+	return c.waitBytesPerTick(ctx)
 }
 
 // BytesTransferred notifies the controller that the specified number of bytes

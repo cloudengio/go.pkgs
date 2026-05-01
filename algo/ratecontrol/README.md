@@ -131,7 +131,7 @@ func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialB
 ### Methods
 
 ```go
-func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, _ any) (bool, error)
+func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error)
 ```
 
 

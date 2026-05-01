@@ -51,10 +51,12 @@ func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error) {
 	if eb.retries >= eb.steps {
 		return true, nil
 	}
+	timer := time.NewTimer(eb.nextDelay)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()
-	case <-time.After(eb.nextDelay):
+	case <-timer.C:
 	}
 	eb.nextDelay *= 2
 	eb.retries++
@@ -87,13 +89,12 @@ func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialB
 	}
 }
 
-func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, _ any) (bool, error) {
+func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error) {
 	if eb.retries >= eb.steps {
 		return true, nil
 	}
 	if eb.retries == 0 && eb.nextDelay > 0 {
-		src := rand.NewSource(time.Now().UnixNano())
-		eb.nextDelay = time.Duration(rand.New(src).Int63n(int64(eb.nextDelay))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
+		eb.nextDelay = time.Duration(rand.Int63n(int64(eb.nextDelay))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
 	}
-	return eb.ExponentialBackoff.Wait(ctx, nil)
+	return eb.ExponentialBackoff.Wait(ctx, v)
 }

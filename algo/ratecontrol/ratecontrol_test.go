@@ -77,7 +77,8 @@ func TestRequestRateConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	took := time.Since(then)
-	lower, upper := bounds(tick*2, 200*time.Millisecond)
+	// 8 requests at 1 request every 250ms (500ms / 2) takes 2000ms (tick * 4).
+	lower, upper := bounds(tick*4, 200*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
