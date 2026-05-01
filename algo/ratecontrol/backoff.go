@@ -108,13 +108,15 @@ func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, erro
 			offset = time.Nanosecond
 		}
 		timer := time.NewTimer(offset)
+		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return true, ctx.Err()
 		case <-timer.C:
 		}
-		timer.Stop()
+		eb.nextDelay *= 2
+		eb.retries++
+		return false, nil
 	}
 	return eb.ExponentialBackoff.Wait(ctx, v)
 }

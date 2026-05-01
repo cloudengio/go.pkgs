@@ -27,12 +27,15 @@ type Limiter interface {
 type Controller struct {
 	opts         options
 	reqsTicker   *time.Ticker
-	reqsBurst    atomic.Int64 // remaining burst tokens; allows first reqsPerTick requests to skip the ticker
+	reqsTokens   chan struct{} // token bucket for request bursts
 	bytesTicker  *time.Ticker
 	bytesPerTick atomic.Int64
 
 	bytesMu    sync.Mutex
 	bytesReset chan struct{} // closed and replaced on each interval reset to broadcast to all waiters
+
+	stopOnce sync.Once
+	stopCh   chan struct{}
 }
 
 // New returns a new Controller configured using the specified options.
@@ -46,8 +49,24 @@ func New(opts ...Option) *Controller {
 		if interval <= 0 {
 			interval = time.Nanosecond
 		}
-		c.reqsBurst.Store(int64(c.opts.reqsPerTick))
+		c.reqsTokens = make(chan struct{}, c.opts.reqsPerTick)
+		for range c.opts.reqsPerTick {
+			c.reqsTokens <- struct{}{}
+		}
 		c.reqsTicker = time.NewTicker(interval)
+		go func() {
+			for {
+				select {
+				case <-c.reqsTicker.C:
+					select {
+					case c.reqsTokens <- struct{}{}:
+					default:
+					}
+				case <-c.stopCh:
+					return
+				}
+			}
+		}()
 	}
 	if c.opts.bytesPerTick > 0 {
 		c.bytesTicker = time.NewTicker(c.opts.bytesInterval)
@@ -101,12 +120,10 @@ func (c *Controller) Wait(ctx context.Context) error {
 		return nil
 	}
 	if c.opts.reqsPerTick > 0 {
-		if c.reqsBurst.Add(-1) < 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-c.reqsTicker.C:
-			}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.reqsTokens:
 		}
 	}
 	return c.waitBytesPerTick(ctx)
@@ -136,10 +153,13 @@ func (c *Controller) Backoff() Backoff {
 // Stop stops the Controller's tickers. It should be called when the Controller
 // is no longer needed to release resources.
 func (c *Controller) Stop() {
-	if c.reqsTicker != nil {
-		c.reqsTicker.Stop()
-	}
-	if c.bytesTicker != nil {
-		c.bytesTicker.Stop()
-	}
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+		if c.reqsTicker != nil {
+			c.reqsTicker.Stop()
+		}
+		if c.bytesTicker != nil {
+			c.bytesTicker.Stop()
+		}
+	})
 }
