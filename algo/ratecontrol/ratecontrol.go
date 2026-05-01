@@ -132,7 +132,14 @@ func (c *Controller) Wait(ctx context.Context) error {
 		case <-c.reqsTokens:
 		}
 	}
-	return c.waitBytesPerTick(ctx)
+	err := c.waitBytesPerTick(ctx)
+	if err != nil && c.opts.reqsPerTick > 0 {
+		select {
+		case c.reqsTokens <- struct{}{}:
+		default:
+		}
+	}
+	return err
 }
 
 // BytesTransferred notifies the controller that the specified number of bytes
