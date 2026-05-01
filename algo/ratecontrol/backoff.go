@@ -22,7 +22,7 @@ type Backoff interface {
 	// or a retry response. It can be nil if no such data is needed.
 	Wait(context.Context, any) (bool, error)
 
-	// Retries returns the number of retries that the backoff aglorithm
+	// Retries returns the number of retries that the backoff algorithm
 	// has recorded, ie. the number of times that Backoff was called and
 	// returned false.
 	Retries() int
@@ -37,7 +37,7 @@ type ExponentialBackoff struct {
 	nextDelay time.Duration
 }
 
-func NewExpontentialBackoff(initial time.Duration, steps int) Backoff {
+func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff {
 	return &ExponentialBackoff{nextDelay: initial, steps: steps}
 }
 
@@ -81,7 +81,7 @@ type ExponentialBackoffOffset struct {
 	ExponentialBackoff
 }
 
-func NewExponentialBackoffOffset(initial time.Duration, steps int) Backoff {
+func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialBackoffOffset {
 	return &ExponentialBackoffOffset{
 		ExponentialBackoff: ExponentialBackoff{nextDelay: initial, steps: steps},
 	}
@@ -91,7 +91,9 @@ func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, _ any) (bool, erro
 	if eb.retries >= eb.steps {
 		return true, nil
 	}
-	src := rand.NewSource(time.Now().UnixNano())
-	eb.nextDelay = time.Duration(rand.New(src).Int63n(int64(eb.nextDelay)))
+	if eb.retries == 0 && eb.nextDelay > 0 {
+		src := rand.NewSource(time.Now().UnixNano())
+		eb.nextDelay = time.Duration(rand.New(src).Int63n(int64(eb.nextDelay)))
+	}
 	return eb.ExponentialBackoff.Wait(ctx, nil)
 }

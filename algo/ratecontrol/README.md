@@ -8,9 +8,6 @@ Package ratecontrol provides mechanisms for controlling the rate at which
 requests are made and for backing off when the remote service is unwilling
 to process requests.
 
-Package ratecontrol provides mechanisms for controlling the rate at which
-requests are made and for implementing backoff mechanisms.
-
 ## Types
 ### Type Backoff
 ```go
@@ -25,26 +22,13 @@ type Backoff interface {
 	// or a retry response. It can be nil if no such data is needed.
 	Wait(context.Context, any) (bool, error)
 
-	// Retries returns the number of retries that the backoff aglorithm
+	// Retries returns the number of retries that the backoff algorithm
 	// has recorded, ie. the number of times that Backoff was called and
 	// returned false.
 	Retries() int
 }
 ```
 Backoff represents the interface to a backoff algorithm.
-
-### Functions
-
-```go
-func NewExponentialBackoffOffset(initial time.Duration, steps int) Backoff
-```
-
-
-```go
-func NewExpontentialBackoff(initial time.Duration, steps int) Backoff
-```
-
-
 
 
 ### Type Controller
@@ -62,7 +46,7 @@ unwilling to process a request. Controller is safe to use concurrently.
 ```go
 func New(opts ...Option) *Controller
 ```
-New returns a new Controller configuring using the specified options.
+New returns a new Controller configured using the specified options.
 
 
 
@@ -101,6 +85,14 @@ ExponentialBackoff implements an exponential backoff algorithm. It starts
 with the specified initial delay and doubles the delay for each retry up to
 the specified number of steps.
 
+### Functions
+
+```go
+func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff
+```
+
+
+
 ### Methods
 
 ```go
@@ -127,6 +119,14 @@ ExponentialBackoffOffset implements an exponential backoff algorithm with a
 random offset used for the first delay, all subsequent delays are calculated
 as in ExponentialBackoff. The first delay is a random value between 0 and
 the initial delay.
+
+### Functions
+
+```go
+func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialBackoffOffset
+```
+
+
 
 ### Methods
 

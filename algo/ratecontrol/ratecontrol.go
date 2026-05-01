@@ -2,8 +2,6 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package ratecontrol provides mechanisms for controlling the rate
-// at which requests are made and for implementing backoff mechanisms.
 package ratecontrol
 
 import (
@@ -30,7 +28,7 @@ type Controller struct {
 	bytesPerTick atomic.Int64
 }
 
-// New returns a new Controller configuring using the specified options.
+// New returns a new Controller configured using the specified options.
 func New(opts ...Option) *Controller {
 	c := &Controller{}
 	for _, fn := range opts {
@@ -106,5 +104,5 @@ func (c *Controller) Backoff() Backoff {
 	if c.opts.backoffStart == 0 {
 		return NoBackoff{}
 	}
-	return NewExpontentialBackoff(c.opts.backoffStart, c.opts.backoffSteps)
+	return NewExponentialBackoff(c.opts.backoffStart, c.opts.backoffSteps)
 }

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"cloudeng.io/net/ratecontrol"
+	"cloudeng.io/algo/ratecontrol"
 )
 
 func TestNoop(t *testing.T) {
@@ -245,7 +245,13 @@ func TestCustomBackoff(t *testing.T) {
 			return backoff
 		}),
 	)
-	_, _ = c.Backoff().Wait(ctx, resp)
+	done, err := c.Backoff().Wait(ctx, resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := done, false; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 	if got, want := backoff.resp, resp; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
