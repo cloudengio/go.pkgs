@@ -1,0 +1,295 @@
+// Copyright 2023 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+package ratecontrol_test
+
+import (
+	"context"
+	"net/http"
+	"sync"
+	"testing"
+	"time"
+
+	"cloudeng.io/algo/ratecontrol"
+	"cloudeng.io/sync/ctxsync"
+)
+
+func TestNoop(t *testing.T) {
+	ctx := context.Background()
+	c := ratecontrol.New()
+	for range 100 {
+		backoff := c.Backoff()
+		if err := c.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		done, err := backoff.Wait(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := done, false; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func waitForRequests(ctx context.Context, t *testing.T, c *ratecontrol.Controller, n, b int) time.Duration {
+	c.BytesTransferred(b)
+	then := time.Now()
+	for range n {
+		if err := c.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		c.BytesTransferred(b)
+	}
+	return time.Since(then)
+}
+
+// tighter lower bound than upper bound since the former
+// will be due to clock granularity issues and the latter to
+// a slow machine which is common on CI systems.
+func bounds(d, b time.Duration) (lower, upper time.Duration) {
+	return d - b, d + (2 * b)
+}
+
+func TestRequestRate(t *testing.T) {
+	ctx := context.Background()
+	tick := time.Millisecond * 500
+	c := ratecontrol.New(ratecontrol.WithRequestsPerTick(tick, 1))
+	took := waitForRequests(ctx, t, c, 2, 0)
+	// burst=1 makes the first Wait immediate; only the second blocks for one tick.
+	lower, upper := bounds(tick, 50*time.Millisecond)
+	if got := took; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+}
+
+func TestRequestRateConcurrent(t *testing.T) {
+	ctx := context.Background()
+	tick := time.Millisecond * 500
+	c := ratecontrol.New(ratecontrol.WithRequestsPerTick(tick, 2))
+	var wg sync.WaitGroup
+	wg.Add(4)
+	then := time.Now()
+	for range 4 {
+		go func() {
+			waitForRequests(ctx, t, c, 2, 0)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	took := time.Since(then)
+	// burst=2 makes the first 2 Waits immediate; the remaining 6 each block for 250ms (tick/2),
+	// so total ≈ 6*(tick/2) = 3*tick.
+	lower, upper := bounds(tick*3, 200*time.Millisecond)
+	if got := took; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+}
+
+func TestDataRateConcurrent(t *testing.T) {
+	ctx := context.Background()
+	tick := time.Millisecond * 100
+	c := ratecontrol.New(ratecontrol.WithBytesPerTick(tick, 10))
+	var wg sync.WaitGroup
+	wg.Add(4)
+	then := time.Now()
+	for range 4 {
+		go func() {
+			waitForRequests(ctx, t, c, 10, 10)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	took := time.Since(then)
+	// All 4 goroutines wake on each tick broadcast, so 10 ticks suffice for 10 iterations each.
+	lower, upper := bounds(10*tick, 100*time.Millisecond)
+	if got := took; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+}
+
+func TestDataRate(t *testing.T) {
+	ctx := context.Background()
+	tick := time.Millisecond * 100
+	c := ratecontrol.New(ratecontrol.WithBytesPerTick(tick, 10))
+	took := waitForRequests(ctx, t, c, 10, 10)
+	// 10 iterations requires 10 ticks to send 100 bytes.
+	lower, upper := bounds(10*tick, 50*time.Millisecond)
+	if got := took; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+}
+
+func TestDataAndReqRate(t *testing.T) {
+	ctx := context.Background()
+	reqTick := time.Millisecond * 1000
+	dataTick := time.Millisecond * 100
+	c := ratecontrol.New(
+		ratecontrol.WithBytesPerTick(dataTick, 10),
+	)
+	took := waitForRequests(ctx, t, c, 10, 10)
+	// 10 iterations requires 10 ticks to send 100 bytes.
+	lower, upper := bounds(10*dataTick, 50*time.Millisecond)
+	if got := took; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+
+	// A low request rate will lower the data rate.
+	c = ratecontrol.New(
+		ratecontrol.WithBytesPerTick(dataTick, 10),
+		ratecontrol.WithRequestsPerTick(reqTick, 1),
+	)
+	tookLonger := waitForRequests(ctx, t, c, 10, 10)
+
+	// burst=1 makes the first Wait immediate; the remaining 9 each block for reqTick.
+	lower, upper = bounds(9*reqTick, 200*time.Millisecond)
+	if got := tookLonger; got < lower || got > upper {
+		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+
+	// Data rate when only request rate is in effect:
+	dr := 100.0 / float64(took)
+	drExpected := 100.0 / float64(reqTick)
+	drLower, drUpper := drExpected*.9, dr*1.2
+	if got := dr; got < drLower || drExpected > drUpper {
+		t.Errorf("datarate: %v not in range %v..%v", got, drLower, drUpper)
+	}
+
+	// Data rate when limited by both the request and data rates.
+	drSlower := 100.0 / float64(tookLonger)
+	drExpected = 100.0 / float64(10*reqTick)
+	drLower, drUpper = drExpected*.9, dr*1.2
+	if got := drSlower; got < drLower || drExpected > drUpper {
+		t.Errorf("datarate: %v not in range %v..%v", got, drLower, drUpper)
+	}
+
+}
+
+func backoff(ctx context.Context, t *testing.T, c *ratecontrol.Controller) int {
+	backoff := c.Backoff()
+	for {
+		done, err := backoff.Wait(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			return backoff.Retries()
+		}
+	}
+}
+
+func TestBackoff(t *testing.T) {
+	ctx := context.Background()
+	numRetries := 10
+	c := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Millisecond, numRetries, false))
+	for range 3 {
+		retries := backoff(ctx, t, c)
+		if got, want := retries, numRetries; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestCancel(t *testing.T) {
+	rootCtx := context.Background()
+	ctx, cancel := context.WithCancel(rootCtx)
+	c := ratecontrol.New(
+		ratecontrol.WithExponentialBackoff(time.Hour, 10, false),
+		ratecontrol.WithBytesPerTick(time.Second, 10),
+		ratecontrol.WithRequestsPerTick(time.Second, 1),
+	)
+	// Exceed the byte limit so waitBytesPerTick blocks; the request burst would
+	// otherwise return immediately, giving go cancel() no window to fire.
+	c.BytesTransferred(100)
+	go cancel()
+	err := c.Wait(ctx)
+	if err == nil || err != context.Canceled {
+		t.Errorf("got %v, want %v", err, context.Canceled)
+	}
+
+	ctx, cancel = context.WithCancel(rootCtx)
+	go cancel()
+	last, err := c.Backoff().Wait(ctx, nil)
+
+	if got, want := last, true; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if err == nil || err != context.Canceled {
+		t.Errorf("got %v, want %v", err, context.Canceled)
+	}
+
+	c = ratecontrol.New(ratecontrol.WithBytesPerTick(time.Second, 10))
+	ctx, cancel = context.WithCancel(rootCtx)
+	c.BytesTransferred(1000)
+	go cancel()
+
+	err = c.Wait(ctx)
+	if err == nil || err != context.Canceled {
+		t.Errorf("got %v, want %v", err, context.Canceled)
+	}
+}
+
+type customBackoff struct {
+	resp *http.Response
+}
+
+func (b *customBackoff) Wait(_ context.Context, resp any) (bool, error) {
+	b.resp = resp.(*http.Response)
+	return false, nil
+}
+
+func (b *customBackoff) Retries() int {
+	return 33
+}
+
+func TestCustomBackoff(t *testing.T) {
+	ctx := context.Background()
+	backoff := &customBackoff{}
+	resp := &http.Response{}
+
+	c := ratecontrol.New(
+		ratecontrol.WithBackoff(func() ratecontrol.Backoff {
+			return backoff
+		}),
+	)
+	done, err := c.Backoff().Wait(ctx, resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := done, false; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := backoff.resp, resp; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestStop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	// Test with tickers initialized
+	c := ratecontrol.New(
+		ratecontrol.WithRequestsPerTick(time.Millisecond*10, 1),
+		ratecontrol.WithBytesPerTick(time.Millisecond*10, 10),
+	)
+	c.Stop()
+	c.Stop() // Test idempotency
+
+	// Test concurrent Stop
+	c2 := ratecontrol.New(
+		ratecontrol.WithRequestsPerTick(time.Millisecond*10, 1),
+		ratecontrol.WithBytesPerTick(time.Millisecond*10, 10),
+	)
+	var wg ctxsync.WaitGroup
+	for range 10 {
+		wg.Go(func() {
+			c2.Stop()
+		})
+	}
+	wg.Wait(ctx)
+
+	// Test with no tickers initialized
+	c3 := ratecontrol.New()
+	c3.Stop()
+}
