@@ -67,7 +67,9 @@ func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error) {
 		return true, ctx.Err()
 	case <-timer.C:
 	}
-	eb.nextDelay *= 2
+	if eb.nextDelay < time.Duration(1<<62) {
+		eb.nextDelay *= 2
+	}
 	eb.retries++
 	return false, nil
 }
@@ -123,7 +125,9 @@ func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, erro
 			return true, ctx.Err()
 		case <-timer.C:
 		}
-		eb.nextDelay *= 2
+		if eb.nextDelay < time.Duration(1<<62) {
+			eb.nextDelay *= 2
+		}
 		eb.retries++
 		return false, nil
 	}

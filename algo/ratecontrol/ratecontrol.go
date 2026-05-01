@@ -97,6 +97,8 @@ func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-c.stopCh:
+		return context.Canceled
 	case <-c.bytesTicker.C:
 		// Won the tick: reset the counter and wake all other waiters.
 		c.bytesPerTick.Store(0)
@@ -125,6 +127,8 @@ func (c *Controller) Wait(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-c.stopCh:
+			return context.Canceled
 		case <-c.reqsTokens:
 		}
 	}
