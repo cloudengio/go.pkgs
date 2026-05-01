@@ -460,7 +460,7 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	if got, want := len(owners), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	// Order is preserved from append
+	// Order is sorted by ID and User
 	if got, want := owners[0].ID, "id1"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -490,7 +490,7 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 		t.Fatalf("unmarshaled store has %v keys, want %v", got, want)
 	}
 
-	// Assuming order is preserved (which it should be for a slice)
+	// Assuming order is sorted by ID and User
 	if got, want := owners2[0].ID, "id1"; got != want {
 		t.Errorf("unmarshaled key 1 ID: got %v, want %v", got, want)
 	}
@@ -581,7 +581,7 @@ func TestAppendUnmarshal(t *testing.T) {
 				}
 			}
 
-			expectedLen := 1 + len(tc.data)*2 // 1 initial + 2 items per data payload
+			expectedLen := 3 // 1 initial + 2 unique keys (which get updated)
 			if got, want := ks.Len(), expectedLen; got != want {
 				t.Fatalf("got len %v, want %v", got, want)
 			}
@@ -593,6 +593,9 @@ func TestAppendUnmarshal(t *testing.T) {
 			}
 			if _, ok := ks.Get("key2"); !ok {
 				t.Error("key key2 not found after append")
+			}
+			if len(tc.data) > 1 {
+				verifyKeysExtra(t, ks)
 			}
 		})
 	}
@@ -638,7 +641,7 @@ func TestAppendRead(t *testing.T) {
 				}
 			}
 
-			expectedLen := 1 + len(tc.data)*2 // 1 initial + 2 items per data payload
+			expectedLen := 3 // 1 initial + 2 unique keys (which get updated)
 			if got, want := ks.Len(), expectedLen; got != want {
 				t.Fatalf("got len %v, want %v", got, want)
 			}
@@ -650,6 +653,9 @@ func TestAppendRead(t *testing.T) {
 			}
 			if _, ok := ks.Get("key2"); !ok {
 				t.Error("key key2 not found after append")
+			}
+			if len(tc.data) > 1 {
+				verifyKeysExtra(t, ks)
 			}
 		})
 	}

@@ -71,13 +71,14 @@ func (ims *InMemoryKeyStore) Add(key Info)
 func (ims *InMemoryKeyStore) Get(id string) (Info, bool)
 ```
 Get retrieves a key by its ID. It returns the key and a boolean indicating
-whether the key was found.
+whether the key was found. If multiple keys have the same ID but different
+users, it returns the first one found.
 
 
 ```go
 func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner
 ```
-KeyOwners returns the owners of keys in the store.
+KeyOwners returns the owners of keys in the store, sorted by ID and User.
 
 
 ```go
@@ -117,18 +118,18 @@ file.ReadFileFS and unmarshals it into the InMemoryKeyStore.
 func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error
 ```
 UnmarshalJSON implements the json.Unmarshaler interface to allow
-unmarshaling from both a list and a map of keys. The unmarshaled keys are
-appended to any existing keys in the store. textutil.TrimUnicodeQuotes is
-used on the ID, User, and Token fields.
+unmarshaling from both a list and a map of keys. The unmarshaled
+keys update any existing keys in the store, using User+ID as the key.
+textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 
 
 ```go
 func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error
 ```
 UnmarshalYAML implements the yaml.Unmarshaler interface to allow
-unmarshaling from both a list and a map of keys. The unmarshaled keys are
-appended to any existing keys in the store. textutil.TrimUnicodeQuotes is
-used on the ID, User, and Token fields.
+unmarshaling from both a list and a map of keys. The unmarshaled
+keys update any existing keys in the store, using User+ID as the key.
+textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 
 
 
