@@ -341,6 +341,26 @@ func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
 	verifyExtra(t, k2, extraType{Scope: "write"})
 }
 
+func verifyAppendedKeys(t *testing.T, ks *keys.InMemoryKeyStore, checkExtra bool) {
+	t.Helper()
+	expectedLen := 3 // 1 initial + 2 unique keys (which get updated)
+	if got, want := ks.Len(), expectedLen; got != want {
+		t.Fatalf("got len %v, want %v", got, want)
+	}
+	if _, ok := ks.Get("user0", "id0"); !ok {
+		t.Error("key id0 not found after append")
+	}
+	if _, ok := ks.Get("user1", "key1"); !ok {
+		t.Error("key key1 not found after append")
+	}
+	if _, ok := ks.Get("user2", "key2"); !ok {
+		t.Error("key key2 not found after append")
+	}
+	if checkExtra {
+		verifyKeysExtra(t, ks)
+	}
+}
+
 func TestExtraWithPrivateFields(t *testing.T) {
 	ki := keys.NewInfo("key1", "user1", []byte("value1"))
 	type extraTypeWithPrivate struct {
@@ -581,22 +601,7 @@ func TestAppendUnmarshal(t *testing.T) {
 				}
 			}
 
-			expectedLen := 3 // 1 initial + 2 unique keys (which get updated)
-			if got, want := ks.Len(), expectedLen; got != want {
-				t.Fatalf("got len %v, want %v", got, want)
-			}
-			if _, ok := ks.Get("user0", "id0"); !ok {
-				t.Error("key id0 not found after append")
-			}
-			if _, ok := ks.Get("user1", "key1"); !ok {
-				t.Error("key key1 not found after append")
-			}
-			if _, ok := ks.Get("user2", "key2"); !ok {
-				t.Error("key key2 not found after append")
-			}
-			if len(tc.data) > 1 {
-				verifyKeysExtra(t, ks)
-			}
+			verifyAppendedKeys(t, ks, len(tc.data) > 1)
 		})
 	}
 }
@@ -641,22 +646,7 @@ func TestAppendRead(t *testing.T) {
 				}
 			}
 
-			expectedLen := 3 // 1 initial + 2 unique keys (which get updated)
-			if got, want := ks.Len(), expectedLen; got != want {
-				t.Fatalf("got len %v, want %v", got, want)
-			}
-			if _, ok := ks.Get("user0", "id0"); !ok {
-				t.Error("key id0 not found after append")
-			}
-			if _, ok := ks.Get("user1", "key1"); !ok {
-				t.Error("key key1 not found after append")
-			}
-			if _, ok := ks.Get("user2", "key2"); !ok {
-				t.Error("key key2 not found after append")
-			}
-			if len(tc.data) > 1 {
-				verifyKeysExtra(t, ks)
-			}
+			verifyAppendedKeys(t, ks, len(tc.data) > 1)
 		})
 	}
 }
