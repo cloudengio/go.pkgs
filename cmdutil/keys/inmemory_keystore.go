@@ -26,13 +26,13 @@ import (
 // API boundaries.
 type InMemoryKeyStore struct {
 	mu   sync.RWMutex
-	keys map[string]Info
+	keys map[KeyOwner]Info
 }
 
 // NewInMemoryKeyStore creates a new InMemoryKeyStore instance.
 func NewInMemoryKeyStore() *InMemoryKeyStore {
 	return &InMemoryKeyStore{
-		keys: make(map[string]Info),
+		keys: make(map[KeyOwner]Info),
 	}
 }
 
@@ -47,11 +47,11 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 		ims.mu.Lock()
 		defer ims.mu.Unlock()
 		if ims.keys == nil {
-			ims.keys = make(map[string]Info)
+			ims.keys = make(map[KeyOwner]Info)
 		}
 		for _, ki := range asList {
 			info := copyInfo(ki)
-			ims.keys[info.User+info.ID] = info
+			ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
 		}
 		return nil
 	}
@@ -63,12 +63,12 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
-		ims.keys = make(map[string]Info)
+		ims.keys = make(map[KeyOwner]Info)
 	}
-	for id, info := range asMap {
-		info.ID = id
+	for k, info := range asMap {
+		info.ID = k
 		ki := copyInfo(info)
-		ims.keys[ki.User+ki.ID] = ki
+		ims.keys[KeyOwner{ID: ki.ID, User: ki.User}] = ki
 	}
 	return nil
 }
@@ -84,11 +84,11 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 		ims.mu.Lock()
 		defer ims.mu.Unlock()
 		if ims.keys == nil {
-			ims.keys = make(map[string]Info)
+			ims.keys = make(map[KeyOwner]Info)
 		}
 		for _, ki := range asList {
 			info := copyInfo(ki)
-			ims.keys[info.User+info.ID] = info
+			ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
 		}
 		return nil
 	}
@@ -100,12 +100,12 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
-		ims.keys = make(map[string]Info)
+		ims.keys = make(map[KeyOwner]Info)
 	}
-	for id, info := range asMap {
-		info.ID = id
+	for k, info := range asMap {
+		info.ID = k
 		ki := copyInfo(info)
-		ims.keys[ki.User+ki.ID] = ki
+		ims.keys[KeyOwner{ID: ki.ID, User: ki.User}] = ki
 	}
 	return nil
 }
@@ -153,19 +153,18 @@ func (ims *InMemoryKeyStore) Add(key Info) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
-		ims.keys = make(map[string]Info)
+		ims.keys = make(map[KeyOwner]Info)
 	}
-	ims.keys[key.User+key.ID] = key
+	ims.keys[KeyOwner{ID: key.ID, User: key.User}] = key
 }
 
-// Get retrieves a key by its ID. It returns the key and a boolean
-// indicating whether the key was found. If multiple keys have the same
-// ID but different users, it returns the first one found.
-func (ims *InMemoryKeyStore) Get(id string) (Info, bool) {
+// Get retrieves a key by its user and ID. It returns the key and a boolean
+// indicating whether the key was found.
+func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
 	for _, key := range ims.keys {
-		if key.ID == id {
+		if key.User == user && key.ID == id {
 			return key, true
 		}
 	}

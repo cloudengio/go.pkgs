@@ -68,11 +68,10 @@ func (ims *InMemoryKeyStore) Add(key Info)
 
 
 ```go
-func (ims *InMemoryKeyStore) Get(id string) (Info, bool)
+func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool)
 ```
-Get retrieves a key by its ID. It returns the key and a boolean indicating
-whether the key was found. If multiple keys have the same ID but different
-users, it returns the first one found.
+Get retrieves a key by its user and ID. It returns the key and a boolean
+indicating whether the key was found.
 
 
 ```go
@@ -162,7 +161,7 @@ from json or yaml.
 ### Functions
 
 ```go
-func KeyInfoFromContextForID(ctx context.Context, id string) (Info, bool)
+func KeyInfoFromContextForID(ctx context.Context, user, id string) (Info, bool)
 ```
 KeyInfoFromContextForID retrieves the KeyInfo for the specified ID from the
 context.
@@ -248,8 +247,8 @@ json or yaml.
 ### Type KeyOwner
 ```go
 type KeyOwner struct {
-	ID   string
-	User string
+	ID   string `yaml:"key_id" json:"key_id"`
+	User string `yaml:"user" json:"user"`
 }
 ```
 KeyOwner represents the owner of a key, identified by an ID and an optional
@@ -286,7 +285,7 @@ zeroing the input slice.
 
 
 ```go
-func TokenFromContextForID(ctx context.Context, id string) (*Token, bool)
+func TokenFromContextForID(ctx context.Context, user, id string) (*Token, bool)
 ```
 TokenFromContextForID retrieves the Token for the specified ID from the
 context.

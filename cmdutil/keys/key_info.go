@@ -16,8 +16,8 @@ import (
 
 // KeyOwner represents the owner of a key, identified by an ID and an optional user.
 type KeyOwner struct {
-	ID   string
-	User string
+	ID   string `yaml:"key_id" json:"key_id"`
+	User string `yaml:"user" json:"user"`
 }
 
 func (ko KeyOwner) String() string {

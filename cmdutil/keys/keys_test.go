@@ -243,12 +243,12 @@ func verifyKey(t *testing.T, k keys.Info, i int) {
 
 func verifyKeys(t *testing.T, ks *keys.InMemoryKeyStore) {
 	t.Helper()
-	k1, ok := ks.Get("key1")
+	k1, ok := ks.Get("user1", "key1")
 	if !ok {
 		t.Fatalf("key1 not found")
 	}
 	verifyKey(t, k1, 1)
-	k2, ok := ks.Get("key2")
+	k2, ok := ks.Get("user2", "key2")
 	if !ok {
 		t.Fatalf("key2 not found")
 	}
@@ -327,14 +327,14 @@ func verifyExtra[T any](t *testing.T, k keys.Info, e T) {
 
 func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
 	t.Helper()
-	k1, ok := ks.Get("key1")
+	k1, ok := ks.Get("user1", "key1")
 	if !ok {
 		t.Fatalf("key1 not found")
 	}
 
 	verifyExtra(t, k1, extraType{Scope: "read"})
 
-	k2, ok := ks.Get("key2")
+	k2, ok := ks.Get("user2", "key2")
 	if !ok {
 		t.Fatalf("key2 not found")
 	}
@@ -505,11 +505,11 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	}
 
 	// Also verify that the token values are preserved (lazy loaded)
-	k1Unmarshaled, _ := ks2.Get("id1")
+	k1Unmarshaled, _ := ks2.Get("user1", "id1")
 	if got, want := string(k1Unmarshaled.Token().Value()), "t1"; got != want {
 		t.Errorf("unmarshaled key 1 token: got %v, want %v", got, want)
 	}
-	k2Unmarshaled, _ := ks2.Get("id2")
+	k2Unmarshaled, _ := ks2.Get("user2", "id2")
 	if got, want := string(k2Unmarshaled.Token().Value()), "t2"; got != want {
 		t.Errorf("unmarshaled key 2 token: got %v, want %v", got, want)
 	}
@@ -585,13 +585,13 @@ func TestAppendUnmarshal(t *testing.T) {
 			if got, want := ks.Len(), expectedLen; got != want {
 				t.Fatalf("got len %v, want %v", got, want)
 			}
-			if _, ok := ks.Get("id0"); !ok {
+			if _, ok := ks.Get("user0", "id0"); !ok {
 				t.Error("key id0 not found after append")
 			}
-			if _, ok := ks.Get("key1"); !ok {
+			if _, ok := ks.Get("user1", "key1"); !ok {
 				t.Error("key key1 not found after append")
 			}
-			if _, ok := ks.Get("key2"); !ok {
+			if _, ok := ks.Get("user2", "key2"); !ok {
 				t.Error("key key2 not found after append")
 			}
 			if len(tc.data) > 1 {
@@ -645,13 +645,13 @@ func TestAppendRead(t *testing.T) {
 			if got, want := ks.Len(), expectedLen; got != want {
 				t.Fatalf("got len %v, want %v", got, want)
 			}
-			if _, ok := ks.Get("id0"); !ok {
+			if _, ok := ks.Get("user0", "id0"); !ok {
 				t.Error("key id0 not found after append")
 			}
-			if _, ok := ks.Get("key1"); !ok {
+			if _, ok := ks.Get("user1", "key1"); !ok {
 				t.Error("key key1 not found after append")
 			}
-			if _, ok := ks.Get("key2"); !ok {
+			if _, ok := ks.Get("user2", "key2"); !ok {
 				t.Error("key key2 not found after append")
 			}
 			if len(tc.data) > 1 {
