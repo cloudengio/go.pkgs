@@ -8,6 +8,19 @@ Package ratecontrol provides mechanisms for controlling the rate at which
 requests are made and for backing off when the remote service is unwilling
 to process requests.
 
+## Constants
+### DefaultTickInterval, DefaultRequestsPerTick, DefaultBytesPerTick, DefaultBackoffInterval, DefaultBackoffSteps
+```go
+DefaultTickInterval = time.Second
+DefaultRequestsPerTick = 1
+DefaultBytesPerTick = 1024 * 1024
+DefaultBackoffInterval = time.Second
+DefaultBackoffSteps = 10
+
+```
+
+
+
 ## Types
 ### Type Backoff
 ```go
@@ -40,6 +53,9 @@ type Controller struct {
 Controller implements Limiter and is used to control the rate at which
 requests are made and to implement backoff when the remote server is
 unwilling to process a request. Controller is safe to use concurrently.
+Call Stop to free up resources when the Controller is no longer needed.
+The controller attempts to implement a smooth rate of requests and bytes\
+over the specified tick intervals.
 
 ### Functions
 
@@ -99,6 +115,9 @@ the specified number of steps.
 ```go
 func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff
 ```
+NewExpontentialBackoff returns a instance of ExponentialBackoff. If initial
+is less than or equal to zero, DefaultBackoffInterval is used. If steps is
+less than or equal to zero, DefaultBackoffSteps is used.
 
 
 
@@ -201,7 +220,9 @@ if the limit is reached without taking into account how long the tick is,
 nor how much excess data was sent over the previous tick (ie. no attempt is
 made to smooth out the rate and for now it's a simple start/stop model).
 The bytes to be accounted for are reported to the Controller via its
-BytesTransferred method.
+BytesTransferred method. If tickInterval is less than or equal to zero,
+DefaultTickInterval is used. If bpt is less than or equal to zero,
+DefaultBytesPerTick is used.
 
 
 ```go
@@ -209,7 +230,9 @@ func WithExponentialBackoff(first time.Duration, steps int, randomizedOffset boo
 ```
 WithExponentialBackoff enables an exponential backoff algorithm.
 If randomizedOffset is false NewExponentialBackoff is used, otherwise
-NewExponentialBackoffOffset is used.
+NewExponentialBackoffOffset is used. If first is less than or equal to zero,
+DefaultBackoffInterval is used. If steps is less than or equal to zero,
+DefaultBackoffSteps is used.
 
 
 ```go
@@ -223,6 +246,8 @@ no backoff. It can be used as a default when no rate control is desired.
 func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option
 ```
 WithRequestsPerTick sets the rate for requests in requests per tick.
+If tickInterval is less than or equal to zero, DefaultTickInterval is used.
+If rpt is less than or equal to zero, DefaultRequestsPerTick is used.
 
 
 

@@ -21,9 +21,13 @@ type Limiter interface {
 // Controller implements Limiter and is used to control the rate at which
 // requests are made and to implement backoff when the remote server is
 // unwilling to process a request. Controller is safe to use concurrently.
+// Call Stop to free up resources when the Controller is no longer needed.
+// The controller attempts to implement a smooth rate of requests and bytes\
+// over the specified tick intervals.
 type Controller struct {
 	opts         options
 	reqsTicker   *time.Ticker
+	reqsBurst    atomic.Int64 // remaining burst tokens; allows first reqsPerTick requests to skip the ticker
 	bytesTicker  *time.Ticker
 	bytesPerTick atomic.Int64
 
@@ -40,8 +44,9 @@ func New(opts ...Option) *Controller {
 	if c.opts.reqsPerTick > 0 {
 		interval := c.opts.reqsInterval / time.Duration(c.opts.reqsPerTick)
 		if interval <= 0 {
-			interval = time.Millisecond
+			interval = time.Nanosecond
 		}
+		c.reqsBurst.Store(int64(c.opts.reqsPerTick))
 		c.reqsTicker = time.NewTicker(interval)
 	}
 	if c.opts.bytesPerTick > 0 {
@@ -96,10 +101,12 @@ func (c *Controller) Wait(ctx context.Context) error {
 		return nil
 	}
 	if c.opts.reqsPerTick > 0 {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-c.reqsTicker.C:
+		if c.reqsBurst.Add(-1) < 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-c.reqsTicker.C:
+			}
 		}
 	}
 	return c.waitBytesPerTick(ctx)

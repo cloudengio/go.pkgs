@@ -37,7 +37,16 @@ type ExponentialBackoff struct {
 	nextDelay time.Duration
 }
 
+// NewExpontentialBackoff returns a instance of ExponentialBackoff.
+// If initial is less than or equal to zero, DefaultBackoffInterval is used.
+// If steps is less than or equal to zero, DefaultBackoffSteps is used.
 func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff {
+	if initial <= 0 {
+		initial = DefaultBackoffInterval
+	}
+	if steps <= 0 {
+		steps = DefaultBackoffSteps
+	}
 	return &ExponentialBackoff{nextDelay: initial, steps: steps}
 }
 
@@ -94,7 +103,18 @@ func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, erro
 		return true, nil
 	}
 	if eb.retries == 0 && eb.nextDelay > 0 {
-		eb.nextDelay = time.Duration(rand.Int63n(int64(eb.nextDelay))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
+		offset := time.Duration(rand.Int63n(int64(eb.nextDelay))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
+		if offset == 0 {
+			offset = time.Nanosecond
+		}
+		timer := time.NewTimer(offset)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return true, ctx.Err()
+		case <-timer.C:
+		}
+		timer.Stop()
 	}
 	return eb.ExponentialBackoff.Wait(ctx, v)
 }
