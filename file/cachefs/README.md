@@ -17,20 +17,20 @@ DefaultCleanupInterval = 1 * time.Hour
 
 
 ## Types
-### Type CachingReadfileFS
+### Type CachingReadFileFS
 ```go
-type CachingReadfileFS struct {
+type CachingReadFileFS struct {
 	// contains filtered or unexported fields
 }
 ```
-CachingReadfileFS implements a caching layer over a ReadFileFS.
+CachingReadFileFS implements a caching layer over a ReadFileFS.
 
 ### Functions
 
 ```go
-func NewCachingReadFileFS(fs file.ReadFileFS, opts ...Option) *CachingReadfileFS
+func NewCachingReadFileFS(fs file.ReadFileFS, opts ...Option) *CachingReadFileFS
 ```
-NewCachingReadFileFS creates a new CachingReadfileFS with the specified TTL
+NewCachingReadFileFS creates a new CachingReadFileFS with the specified TTL
 and cleanup interval. It starts a background goroutine to periodically clear
 out expired cache entries. Call Close to stop the background goroutine.
 
@@ -39,25 +39,25 @@ out expired cache entries. Call Close to stop the background goroutine.
 ### Methods
 
 ```go
-func (c *CachingReadfileFS) Close() error
+func (c *CachingReadFileFS) Close() error
 ```
 Close stops the background cleanup goroutine.
 
 
 ```go
-func (c *CachingReadfileFS) Invalidate(name string)
+func (c *CachingReadFileFS) Invalidate(name string)
 ```
 Invalidate removes the named file from the cache.
 
 
 ```go
-func (c *CachingReadfileFS) ReadFile(name string) ([]byte, error)
+func (c *CachingReadFileFS) ReadFile(name string) ([]byte, error)
 ```
 ReadFile reads the named file, utilizing the cache if the entry is fresh.
 
 
 ```go
-func (c *CachingReadfileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+func (c *CachingReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 ```
 ReadFileCtx reads the named file using the provided context, utilizing the
 cache if fresh.
@@ -76,14 +76,14 @@ type Option func(*options)
 func WithCleanupInterval(d time.Duration) Option
 ```
 WithCleanupInterval specifies the interval for periodic cleanup of expired
-cache entries. The default is 1 minute.
+cache entries. The default is DefaultCleanupInterval.
 
 
 ```go
 func WithTTL(d time.Duration) Option
 ```
-WithTTL specifies the time-to-live for cache entries. The default is 5
-minutes.
+WithTTL specifies the time-to-live for cache entries. The default is
+DefaultTTL.
 
 
 

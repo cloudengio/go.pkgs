@@ -13,9 +13,10 @@ import (
 )
 
 type mockFS struct {
-	mu   sync.Mutex
-	data map[string][]byte
-	hits map[string]int
+	mu    sync.Mutex
+	data  map[string][]byte
+	hits  map[string]int
+	delay time.Duration
 }
 
 func newMockFS() *mockFS {
@@ -30,6 +31,9 @@ func (m *mockFS) ReadFile(name string) ([]byte, error) {
 }
 
 func (m *mockFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
+	if m.delay > 0 {
+		time.Sleep(m.delay)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.hits[name]++
@@ -108,15 +112,19 @@ func TestCacheTTL(t *testing.T) {
 		t.Errorf("got %d hits, want %d", got, want)
 	}
 
-	// Wait for TTL to expire
-	time.Sleep(40 * time.Millisecond)
-
-	// Second read, should fetch from FS again
-	if _, err := c.ReadFileCtx(ctx, "ttlfile"); err != nil {
-		t.Fatalf("ReadFileCtx failed: %v", err)
-	}
-	if got, want := fs.getHits("ttlfile"), 2; got != want {
-		t.Errorf("got %d hits, want %d", got, want)
+	// Poll until the cached entry expires and the backing FS is hit again.
+	deadline := time.Now().Add(time.Second)
+	for {
+		if _, err := c.ReadFileCtx(ctx, "ttlfile"); err != nil {
+			t.Fatalf("ReadFileCtx failed: %v", err)
+		}
+		if got := fs.getHits("ttlfile"); got == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for TTL expiry; got %d hits, want 2", fs.getHits("ttlfile"))
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -169,5 +177,50 @@ func TestCacheErrors(t *testing.T) {
 	c.mu.RUnlock()
 	if ok {
 		t.Error("expected failed read to not be cached")
+	}
+}
+
+func TestCacheConcurrency(t *testing.T) {
+	ctx := context.Background()
+	fs := newMockFS()
+	fs.data["concurrency_file"] = []byte("concurrent_data")
+	// Add an artificial delay to ensure goroutines overlap and trigger singleflight
+	fs.delay = 50 * time.Millisecond
+
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(0))
+	t.Cleanup(func() { _ = c.Close() })
+
+	var wg sync.WaitGroup
+	numRoutines := 50
+	for range numRoutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			data, err := c.ReadFileCtx(ctx, "concurrency_file")
+			if err != nil {
+				t.Errorf("ReadFileCtx failed: %v", err)
+			}
+			if string(data) != "concurrent_data" {
+				t.Errorf("got %q, want %q", data, "concurrent_data")
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Due to singleflight, the underlying FS should only be hit exactly once
+	if got, want := fs.getHits("concurrency_file"), 1; got != want {
+		t.Errorf("expected %d hits due to singleflight, got %d", want, got)
+	}
+}
+
+func TestCacheCloseIdempotency(t *testing.T) {
+	fs := newMockFS()
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(10*time.Millisecond))
+
+	// Sequential closes after concurrent ones
+	for i := range 3 {
+		if err := c.Close(); err != nil {
+			t.Errorf("Sequential Close %d failed: %v", i, err)
+		}
 	}
 }
