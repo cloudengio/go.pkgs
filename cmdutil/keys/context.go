@@ -28,17 +28,17 @@ func ContextWithoutKeyStore(ctx context.Context) context.Context {
 }
 
 // KeyInfoFromContextForID retrieves the KeyInfo for the specified ID from the context.
-func KeyInfoFromContextForID(ctx context.Context, id string) (Info, bool) {
+func KeyInfoFromContextForID(ctx context.Context, user, id string) (Info, bool) {
 	am, ok := ctx.Value(ctxKey{}).(*InMemoryKeyStore)
 	if !ok {
 		return Info{}, false
 	}
-	return am.Get(id)
+	return am.Get(user, id)
 }
 
 // TokenFromContextForID retrieves the Token for the specified ID from the context.
-func TokenFromContextForID(ctx context.Context, id string) (*Token, bool) {
-	ki, ok := KeyInfoFromContextForID(ctx, id)
+func TokenFromContextForID(ctx context.Context, user, id string) (*Token, bool) {
+	ki, ok := KeyInfoFromContextForID(ctx, user, id)
 	if !ok {
 		return nil, false
 	}

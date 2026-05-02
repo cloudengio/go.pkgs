@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 
 	"cloudeng.io/file"
@@ -25,34 +26,25 @@ import (
 // API boundaries.
 type InMemoryKeyStore struct {
 	mu   sync.RWMutex
-	keys []Info
+	keys map[KeyOwner]Info
 }
 
 // NewInMemoryKeyStore creates a new InMemoryKeyStore instance.
 func NewInMemoryKeyStore() *InMemoryKeyStore {
-	return &InMemoryKeyStore{}
-}
-
-func appendCopyInfoList(existing []Info, src []keyInfo) []Info {
-	copied := make([]Info, len(existing)+len(src))
-	copy(copied, existing)
-	for i, ki := range src {
-		copied[len(existing)+i] = copyInfo(ki)
+	return &InMemoryKeyStore{
+		keys: make(map[KeyOwner]Info),
 	}
-	return copied
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
-// The unmarshaled keys are appended to any existing keys in the store.
+// The unmarshaled keys update any existing keys in the store, using User+ID as the key.
 // textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	var asList []keyInfo
 	err := node.Decode(&asList)
 	if err == nil {
-		ims.mu.Lock()
-		defer ims.mu.Unlock()
-		ims.keys = appendCopyInfoList(ims.keys, asList)
+		ims.unmarshalList(asList)
 		return nil
 	}
 	var asMap map[string]keyInfo
@@ -60,26 +52,44 @@ func (ims *InMemoryKeyStore) UnmarshalYAML(node *yaml.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode input as either a list or a map of keys: %w", err)
 	}
+	ims.unmarshalMap(asMap)
+	return nil
+}
+
+func (ims *InMemoryKeyStore) unmarshalList(asList []keyInfo) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
-	for id, info := range asMap {
-		info.ID = id
-		ims.keys = append(ims.keys, copyInfo(info))
+	if ims.keys == nil {
+		ims.keys = make(map[KeyOwner]Info)
 	}
-	return nil
+	for _, ki := range asList {
+		info := copyInfo(ki)
+		ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
+	}
+}
+
+func (ims *InMemoryKeyStore) unmarshalMap(asMap map[string]keyInfo) {
+	ims.mu.Lock()
+	defer ims.mu.Unlock()
+	if ims.keys == nil {
+		ims.keys = make(map[KeyOwner]Info)
+	}
+	for k, info := range asMap {
+		info.ID = k
+		ki := copyInfo(info)
+		ims.keys[KeyOwner{ID: ki.ID, User: ki.User}] = ki
+	}
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface to allow
 // unmarshaling from both a list and a map of keys.
-// The unmarshaled keys are appended to any existing keys in the store.
+// The unmarshaled keys update any existing keys in the store, using User+ID as the key.
 // textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
 func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	var asList []keyInfo
 	err := json.Unmarshal(data, &asList)
 	if err == nil {
-		ims.mu.Lock()
-		defer ims.mu.Unlock()
-		ims.keys = appendCopyInfoList(ims.keys, asList)
+		ims.unmarshalList(asList)
 		return nil
 	}
 	var asMap map[string]keyInfo
@@ -87,37 +97,44 @@ func (ims *InMemoryKeyStore) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode input as either a list or a map of keys: %w", err)
 	}
-	ims.mu.Lock()
-	defer ims.mu.Unlock()
-	for id, info := range asMap {
-		info.ID = id
-		ims.keys = append(ims.keys, copyInfo(info))
-	}
+	ims.unmarshalMap(asMap)
 	return nil
+}
+
+// getSortedKeys returns a deterministic list of Info objects sorted by ID and User.
+func (ims *InMemoryKeyStore) getSortedKeys() []Info {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	vals := make([]Info, 0, len(ims.keys))
+	for _, v := range ims.keys {
+		vals = append(vals, v)
+	}
+	sort.Slice(vals, func(i, j int) bool {
+		if vals[i].ID == vals[j].ID {
+			return vals[i].User < vals[j].User
+		}
+		return vals[i].ID < vals[j].ID
+	})
+	return vals
 }
 
 // MarshalJSON implements the json.Marshaler interface to allow
 // marshaling the InMemoryKeyStore to JSON.
 func (ims *InMemoryKeyStore) MarshalJSON() ([]byte, error) {
-	ims.mu.RLock()
-	defer ims.mu.RUnlock()
-	return json.Marshal(ims.keys)
+	return json.Marshal(ims.getSortedKeys())
 }
 
 // MarshalYAML implements the yaml.Marshaler interface to allow
 // marshaling the InMemoryKeyStore to YAML.
 func (ims *InMemoryKeyStore) MarshalYAML() (any, error) {
-	ims.mu.RLock()
-	defer ims.mu.RUnlock()
-	return ims.keys, nil
+	return ims.getSortedKeys(), nil
 }
 
-// KeyOwners returns the owners of keys in the store.
+// KeyOwners returns the owners of keys in the store, sorted by ID and User.
 func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner {
-	ims.mu.RLock()
-	defer ims.mu.RUnlock()
-	owners := make([]KeyOwner, len(ims.keys))
-	for i, key := range ims.keys {
+	keys := ims.getSortedKeys()
+	owners := make([]KeyOwner, len(keys))
+	for i, key := range keys {
 		owners[i] = KeyOwner{ID: key.ID, User: key.User}
 	}
 	return owners
@@ -126,18 +143,20 @@ func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner {
 func (ims *InMemoryKeyStore) Add(key Info) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
-	ims.keys = append(ims.keys, key)
+	if ims.keys == nil {
+		ims.keys = make(map[KeyOwner]Info)
+	}
+	ims.keys[KeyOwner{ID: key.ID, User: key.User}] = key
 }
 
-// Get retrieves a key by its ID. It returns the key and a boolean
+// Get retrieves a key by its user and ID. It returns the key and a boolean
 // indicating whether the key was found.
-func (ims *InMemoryKeyStore) Get(id string) (Info, bool) {
+func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
-	for _, key := range ims.keys {
-		if key.ID == id {
-			return key, true
-		}
+	ko := KeyOwner{ID: id, User: user}
+	if key, ok := ims.keys[ko]; ok {
+		return key, true
 	}
 	return Info{}, false
 }

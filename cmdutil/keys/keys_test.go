@@ -243,12 +243,12 @@ func verifyKey(t *testing.T, k keys.Info, i int) {
 
 func verifyKeys(t *testing.T, ks *keys.InMemoryKeyStore) {
 	t.Helper()
-	k1, ok := ks.Get("key1")
+	k1, ok := ks.Get("user1", "key1")
 	if !ok {
 		t.Fatalf("key1 not found")
 	}
 	verifyKey(t, k1, 1)
-	k2, ok := ks.Get("key2")
+	k2, ok := ks.Get("user2", "key2")
 	if !ok {
 		t.Fatalf("key2 not found")
 	}
@@ -327,18 +327,38 @@ func verifyExtra[T any](t *testing.T, k keys.Info, e T) {
 
 func verifyKeysExtra(t *testing.T, ks *keys.InMemoryKeyStore) {
 	t.Helper()
-	k1, ok := ks.Get("key1")
+	k1, ok := ks.Get("user1", "key1")
 	if !ok {
 		t.Fatalf("key1 not found")
 	}
 
 	verifyExtra(t, k1, extraType{Scope: "read"})
 
-	k2, ok := ks.Get("key2")
+	k2, ok := ks.Get("user2", "key2")
 	if !ok {
 		t.Fatalf("key2 not found")
 	}
 	verifyExtra(t, k2, extraType{Scope: "write"})
+}
+
+func verifyAppendedKeys(t *testing.T, ks *keys.InMemoryKeyStore, checkExtra bool) {
+	t.Helper()
+	expectedLen := 3 // 1 initial + 2 unique keys (which get updated)
+	if got, want := ks.Len(), expectedLen; got != want {
+		t.Fatalf("got len %v, want %v", got, want)
+	}
+	if _, ok := ks.Get("user0", "id0"); !ok {
+		t.Error("key id0 not found after append")
+	}
+	if _, ok := ks.Get("user1", "key1"); !ok {
+		t.Error("key key1 not found after append")
+	}
+	if _, ok := ks.Get("user2", "key2"); !ok {
+		t.Error("key key2 not found after append")
+	}
+	if checkExtra {
+		verifyKeysExtra(t, ks)
+	}
 }
 
 func TestExtraWithPrivateFields(t *testing.T) {
@@ -460,7 +480,7 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	if got, want := len(owners), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	// Order is preserved from append
+	// Order is sorted by ID and User
 	if got, want := owners[0].ID, "id1"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -490,7 +510,7 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 		t.Fatalf("unmarshaled store has %v keys, want %v", got, want)
 	}
 
-	// Assuming order is preserved (which it should be for a slice)
+	// Assuming order is sorted by ID and User
 	if got, want := owners2[0].ID, "id1"; got != want {
 		t.Errorf("unmarshaled key 1 ID: got %v, want %v", got, want)
 	}
@@ -505,11 +525,11 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	}
 
 	// Also verify that the token values are preserved (lazy loaded)
-	k1Unmarshaled, _ := ks2.Get("id1")
+	k1Unmarshaled, _ := ks2.Get("user1", "id1")
 	if got, want := string(k1Unmarshaled.Token().Value()), "t1"; got != want {
 		t.Errorf("unmarshaled key 1 token: got %v, want %v", got, want)
 	}
-	k2Unmarshaled, _ := ks2.Get("id2")
+	k2Unmarshaled, _ := ks2.Get("user2", "id2")
 	if got, want := string(k2Unmarshaled.Token().Value()), "t2"; got != want {
 		t.Errorf("unmarshaled key 2 token: got %v, want %v", got, want)
 	}
@@ -581,19 +601,7 @@ func TestAppendUnmarshal(t *testing.T) {
 				}
 			}
 
-			expectedLen := 1 + len(tc.data)*2 // 1 initial + 2 items per data payload
-			if got, want := ks.Len(), expectedLen; got != want {
-				t.Fatalf("got len %v, want %v", got, want)
-			}
-			if _, ok := ks.Get("id0"); !ok {
-				t.Error("key id0 not found after append")
-			}
-			if _, ok := ks.Get("key1"); !ok {
-				t.Error("key key1 not found after append")
-			}
-			if _, ok := ks.Get("key2"); !ok {
-				t.Error("key key2 not found after append")
-			}
+			verifyAppendedKeys(t, ks, len(tc.data) > 1)
 		})
 	}
 }
@@ -638,19 +646,7 @@ func TestAppendRead(t *testing.T) {
 				}
 			}
 
-			expectedLen := 1 + len(tc.data)*2 // 1 initial + 2 items per data payload
-			if got, want := ks.Len(), expectedLen; got != want {
-				t.Fatalf("got len %v, want %v", got, want)
-			}
-			if _, ok := ks.Get("id0"); !ok {
-				t.Error("key id0 not found after append")
-			}
-			if _, ok := ks.Get("key1"); !ok {
-				t.Error("key key1 not found after append")
-			}
-			if _, ok := ks.Get("key2"); !ok {
-				t.Error("key key2 not found after append")
-			}
+			verifyAppendedKeys(t, ks, len(tc.data) > 1)
 		})
 	}
 }
