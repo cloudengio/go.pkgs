@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"cloudeng.io/algo/digests"
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/errors"
 	"cloudeng.io/file/diskusage"
 	"cloudeng.io/file/largefile"
-	"cloudeng.io/net/ratecontrol"
 )
 
 type mockLargeFile struct {

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"cloudeng.io/algo/digests"
-	"cloudeng.io/net/ratecontrol"
+	"cloudeng.io/algo/ratecontrol"
 )
 
 // RetryResponse allows the caller to determine whether an operation
@@ -43,7 +43,7 @@ type backoff struct {
 // that no more retries should be attempted.
 func NewBackoff(initial time.Duration, steps int) ratecontrol.Backoff {
 	return &backoff{
-		exponential: ratecontrol.NewExpontentialBackoff(initial, steps),
+		exponential: ratecontrol.NewExponentialBackoff(initial, steps),
 		steps:       steps,
 		retries:     0,
 	}

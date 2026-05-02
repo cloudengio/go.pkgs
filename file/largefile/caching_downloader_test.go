@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"cloudeng.io/algo/digests"
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/file/largefile"
-	"cloudeng.io/net/ratecontrol"
 )
 
 type noRetryResponse struct{}

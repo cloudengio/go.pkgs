@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"cloudeng.io/algo/digests"
-	"cloudeng.io/net/ratecontrol"
+	"cloudeng.io/algo/ratecontrol"
 )
 
 type downloaderOptions struct {
