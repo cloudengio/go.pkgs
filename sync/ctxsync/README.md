@@ -15,7 +15,7 @@ type SingleFlight struct {
 ```
 SingleFlight mirrors golang.org/x/sync/singleflight.Group but with different
 handling of context cancelation. In particular, if a shared invocation
-returns with with a canceled context, but the caller's context is not
+returns with a canceled or timedout context, but the caller's context is not
 canceled, the group will reissue the invocation.
 
 ### Functions
@@ -23,10 +23,7 @@ canceled, the group will reissue the invocation.
 ```go
 func New() *SingleFlight
 ```
-New creates a new Group with the provided backoff strategy. The backoff
-will be used to determine whether to retry an operation that failed with
-a retryable error, and how long to wait before retrying the operation.
-If the backoff returns true, no more retries will be attempted.
+New creates a new SingleFlight instance.
 
 
 
@@ -37,8 +34,8 @@ func (g *SingleFlight) Do(ctx context.Context, key string, fn func() (any, error
 ```
 Do is like singleflight.Group.Do but with different handling of context
 cancellation. In particular, if a shared invocation returns with a canceled
-context, but the caller's context is not canceled, the group will reissue
-the invocation.
+or timed out context, but the caller's context is not canceled, the group
+will reissue the invocation.
 
 
 ```go
@@ -46,8 +43,8 @@ func (g *SingleFlight) DoChan(ctx context.Context, key string, fn func() (any, e
 ```
 DocChan is like singleflight.Group.DoChan but with different handling of
 context cancellation. In particular, if a shared invocation returns with a
-canceled context, but the caller's context is not canceled, the group will
-reissue the invocation.
+canceled or timeedout context, but the caller's context is not canceled,
+the group will reissue the invocation.
 
 
 ```go
