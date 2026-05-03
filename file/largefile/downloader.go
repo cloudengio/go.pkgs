@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/errors"
-	"cloudeng.io/net/ratecontrol"
 )
 
 // DownloadStats statistics on the download process and is used for progress

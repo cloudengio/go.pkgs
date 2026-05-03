@@ -18,10 +18,10 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/file"
 	"cloudeng.io/file/download"
 	"cloudeng.io/file/filetestutil"
-	"cloudeng.io/net/ratecontrol"
 )
 
 func runDownloader(ctx context.Context, downloader download.T, reader file.FS, input chan download.Request, output chan download.Downloaded) ([]download.Downloaded, error) {
@@ -158,7 +158,7 @@ func TestDownloadRetries(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
+	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10, false))
 	downloader := download.New(download.WithRateController(rc, &retryError{}))
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestDownloadErrors(t *testing.T) {
 	input := make(chan download.Request, 10)
 	output := make(chan download.Downloaded, 10)
 
-	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10))
+	rc := ratecontrol.New(ratecontrol.WithExponentialBackoff(time.Microsecond, 10, true))
 	downloader := download.New(download.WithRateController(rc, &retryError{}))
 
 	downloaded, err := runDownloader(ctx, downloader, readFS, input, output)

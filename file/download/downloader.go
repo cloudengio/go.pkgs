@@ -21,8 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/file"
-	"cloudeng.io/net/ratecontrol"
 	"cloudeng.io/sync/errgroup"
 )
 

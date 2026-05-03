@@ -13,12 +13,12 @@ import (
 	"os"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/file/checkpoint"
 	"cloudeng.io/file/content"
 	"cloudeng.io/file/crawl"
 	"cloudeng.io/file/crawl/outlinks"
 	"cloudeng.io/file/download"
-	"cloudeng.io/net/ratecontrol"
 	"cloudeng.io/path/cloudpath"
 	"gopkg.in/yaml.v3"
 )
@@ -26,9 +26,10 @@ import (
 // ExponentialBackoffConfig is the configuration for an exponential backoff
 // retry strategy for downloads.
 type ExponentialBackoff struct {
-	InitialDelay time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
-	Steps        int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
-	StatusCodes  []int         `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
+	InitialDelay   time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
+	Steps          int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
+	RandomizeStart bool          `yaml:"randomize_start" doc:"if true, a random offset of up to initial_delay will be used to randomize the start of the backoff period to avoid thundering herd issues when many retries are attempted at the same time."`
+	StatusCodes    []int         `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
 }
 
 // Rate specifies a rate in one of several forms, only one should
@@ -220,7 +221,7 @@ func (c RateControl) NewRateController() (*ratecontrol.Controller, error) {
 		opts = append(opts, ratecontrol.WithRequestsPerTick(c.Rate.Tick, c.Rate.RequestsPerTick))
 	}
 	if c.ExponentialBackoff.InitialDelay > 0 {
-		opts = append(opts, ratecontrol.WithExponentialBackoff(c.ExponentialBackoff.InitialDelay, c.ExponentialBackoff.Steps))
+		opts = append(opts, ratecontrol.WithExponentialBackoff(c.ExponentialBackoff.InitialDelay, c.ExponentialBackoff.Steps, c.ExponentialBackoff.RandomizeStart))
 	}
 	return ratecontrol.New(opts...), nil
 }
