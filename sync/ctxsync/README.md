@@ -7,6 +7,56 @@ import cloudeng.io/sync/ctxsync
 Package ctxsync provides context aware synchronisation primitives.
 
 ## Types
+### Type SingleFlight
+```go
+type SingleFlight struct {
+	// contains filtered or unexported fields
+}
+```
+SingleFlight mirrors golang.org/x/sync/singleflight.Group but with different
+handling of context cancelation. In particular, if a shared invocation
+returns with with a canceled context, but the caller's context is not
+canceled, the group will reissue the invocation.
+
+### Functions
+
+```go
+func New() *SingleFlight
+```
+New creates a new Group with the provided backoff strategy. The backoff
+will be used to determine whether to retry an operation that failed with
+a retryable error, and how long to wait before retrying the operation.
+If the backoff returns true, no more retries will be attempted.
+
+
+
+### Methods
+
+```go
+func (g *SingleFlight) Do(ctx context.Context, key string, fn func() (any, error)) (v any, err error, shared bool)
+```
+Do is like singleflight.Group.Do but with different handling of context
+cancellation. In particular, if a shared invocation returns with a canceled
+context, but the caller's context is not canceled, the group will reissue
+the invocation.
+
+
+```go
+func (g *SingleFlight) DoChan(ctx context.Context, key string, fn func() (any, error)) <-chan singleflight.Result
+```
+DocChan is like singleflight.Group.DoChan but with different handling of
+context cancellation. In particular, if a shared invocation returns with a
+canceled context, but the caller's context is not canceled, the group will
+reissue the invocation.
+
+
+```go
+func (g *SingleFlight) Forget(key string)
+```
+
+
+
+
 ### Type WaitGroup
 ```go
 type WaitGroup struct {
