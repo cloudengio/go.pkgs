@@ -15,8 +15,10 @@ type SingleFlight struct {
 ```
 SingleFlight mirrors golang.org/x/sync/singleflight.Group but with different
 handling of context cancelation. In particular, if a shared invocation
-returns with a canceled or timedout context, but the caller's context is not
-canceled, the group will reissue the invocation.
+returns with a canceled or timed out context, but the caller's context is
+not canceled, SingleFlight will reissue the invocation. This handles the
+case where one invocation has its context canceled, but others have not and
+hence could potentially succeed if reissued.
 
 ### Functions
 
@@ -34,17 +36,17 @@ func (g *SingleFlight) Do(ctx context.Context, key string, fn func() (any, error
 ```
 Do is like singleflight.Group.Do but with different handling of context
 cancellation. In particular, if a shared invocation returns with a canceled
-or timed out context, but the caller's context is not canceled, the group
+or timed out context, but the caller's context is not canceled, SingleFlight
 will reissue the invocation.
 
 
 ```go
 func (g *SingleFlight) DoChan(ctx context.Context, key string, fn func() (any, error)) <-chan singleflight.Result
 ```
-DocChan is like singleflight.Group.DoChan but with different handling of
+DoChan is like singleflight.Group.DoChan but with different handling of
 context cancellation. In particular, if a shared invocation returns with a
-canceled or timeedout context, but the caller's context is not canceled,
-the group will reissue the invocation.
+canceled or timed out context, but the caller's context is not canceled,
+SingleFlight will reissue the invocation.
 
 
 ```go

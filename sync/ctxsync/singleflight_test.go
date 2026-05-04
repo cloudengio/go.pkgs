@@ -140,6 +140,30 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 	}
 }
 
+func TestSingleFlight_DoChan_Basic(t *testing.T) {
+	sf := ctxsync.New()
+
+	var calls int32
+	ch := sf.DoChan(context.Background(), "key-chan-basic", func() (any, error) {
+		atomic.AddInt32(&calls, 1)
+		return "success", nil
+	})
+
+	res := <-ch
+	if res.Err != nil {
+		t.Fatalf("unexpected error: %v", res.Err)
+	}
+	if res.Val != "success" {
+		t.Errorf("got %v, want 'success'", res.Val)
+	}
+	if res.Shared {
+		t.Errorf("expected shared=false")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("expected 1 call, got %d", got)
+	}
+}
+
 func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 	sf := ctxsync.New()
 
@@ -188,6 +212,79 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 	<-fn2Done
 	if got := atomic.LoadInt32(&calls); got != 2 {
 		t.Errorf("expected 2 calls due to retry, got %d", got)
+	}
+}
+
+func TestSingleFlight_DoChan_ContextCanceled(t *testing.T) {
+	sf := ctxsync.New()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	started := make(chan struct{})
+	finished := make(chan struct{})
+
+	ch := sf.DoChan(ctx, "key-chan-cancel", func() (any, error) {
+		close(started)
+		<-finished
+		return "success", nil
+	})
+
+	<-started
+	cancel()
+
+	res := <-ch
+	if !errors.Is(res.Err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", res.Err)
+	}
+
+	close(finished) // cleanup underlying goroutine
+}
+
+func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
+	sf := ctxsync.New()
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	ctx2, cancel2 := context.WithCancel(context.Background())
+
+	var calls int32
+	fn1Started := make(chan struct{})
+	fn2Done := make(chan struct{})
+
+	go func() {
+		<-fn1Started
+
+		go func() {
+			ch := sf.DoChan(ctx2, "key-both-cancel-chan", func() (any, error) {
+				t.Error("should not be retried")
+				return nil, nil
+			})
+			res := <-ch
+			if !errors.Is(res.Err, context.Canceled) {
+				t.Errorf("ctx2 expected context.Canceled, got: %v", res.Err)
+			}
+			close(fn2Done)
+		}()
+
+		time.Sleep(50 * time.Millisecond)
+		cancel2() // Cancel the second caller as well
+		cancel1() // Cause the original caller to fail
+	}()
+
+	ch := sf.DoChan(ctx1, "key-both-cancel-chan", func() (any, error) {
+		atomic.AddInt32(&calls, 1)
+		close(fn1Started)
+		<-ctx1.Done()
+		return nil, ctx1.Err()
+	})
+
+	res := <-ch
+	if !errors.Is(res.Err, context.Canceled) {
+		t.Errorf("ctx1 expected context.Canceled, got %v", res.Err)
+	}
+
+	<-fn2Done
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("expected exactly 1 call without retry, got %d", got)
 	}
 }
 
