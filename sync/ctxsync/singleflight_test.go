@@ -52,7 +52,9 @@ func TestSingleFlight_Do_SharedCancel(t *testing.T) {
 	go func() {
 		<-fn1Started // wait for the first request to enter the func
 
+		ctx2Ready := make(chan struct{})
 		go func() {
+			close(ctx2Ready)
 			v, err, _ := sf.Do(ctx2, "key-do-cancel", func() (any, error) {
 				atomic.AddInt32(&calls, 1)
 				return "success2", nil
@@ -66,8 +68,9 @@ func TestSingleFlight_Do_SharedCancel(t *testing.T) {
 			close(fn2Done)
 		}()
 
+		<-ctx2Ready
 		// Give ctx2 a moment to enter sf.Do and join the shared flight
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		cancel1() // Cancel the first caller to trigger shared failure
 	}()
 
@@ -107,7 +110,9 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 	go func() {
 		<-fn1Started
 
+		ctx2Ready := make(chan struct{})
 		go func() {
+			close(ctx2Ready)
 			_, err, _ := sf.Do(ctx2, "key-both-cancel", func() (any, error) {
 				t.Error("should not be retried")
 				return nil, nil
@@ -118,7 +123,8 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 			close(fn2Done)
 		}()
 
-		time.Sleep(50 * time.Millisecond)
+		<-ctx2Ready
+		time.Sleep(20 * time.Millisecond)
 		cancel2() // Cancel the second caller as well
 		cancel1() // Cause the original caller to fail
 	}()
@@ -178,11 +184,13 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 	go func() {
 		<-fn1Started
 
+		ctx2Ready := make(chan struct{})
 		go func() {
 			ch := sf.DoChan(ctx2, "key-chan", func() (any, error) {
 				atomic.AddInt32(&calls, 1)
 				return "success2", nil
 			})
+			close(ctx2Ready)
 			res := <-ch
 			if res.Err != nil {
 				t.Errorf("ctx2 expected success, got error: %v", res.Err)
@@ -193,7 +201,8 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 			close(fn2Done)
 		}()
 
-		time.Sleep(50 * time.Millisecond)
+		<-ctx2Ready
+		time.Sleep(20 * time.Millisecond)
 		cancel1()
 	}()
 
@@ -253,11 +262,13 @@ func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
 	go func() {
 		<-fn1Started
 
+		ctx2Ready := make(chan struct{})
 		go func() {
 			ch := sf.DoChan(ctx2, "key-both-cancel-chan", func() (any, error) {
 				t.Error("should not be retried")
 				return nil, nil
 			})
+			close(ctx2Ready)
 			res := <-ch
 			if !errors.Is(res.Err, context.Canceled) {
 				t.Errorf("ctx2 expected context.Canceled, got: %v", res.Err)
@@ -265,7 +276,8 @@ func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
 			close(fn2Done)
 		}()
 
-		time.Sleep(50 * time.Millisecond)
+		<-ctx2Ready
+		time.Sleep(20 * time.Millisecond)
 		cancel2() // Cancel the second caller as well
 		cancel1() // Cause the original caller to fail
 	}()
@@ -293,6 +305,7 @@ func TestSingleFlight_Forget(t *testing.T) {
 
 	var calls int32
 	ch := make(chan struct{})
+	fn1Started := make(chan struct{})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -300,24 +313,27 @@ func TestSingleFlight_Forget(t *testing.T) {
 		defer wg.Done()
 		sf.Do(context.Background(), "key-forget", func() (any, error) {
 			atomic.AddInt32(&calls, 1)
+			close(fn1Started)
 			<-ch
 			return nil, nil
 		})
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	<-fn1Started
 	sf.Forget("key-forget")
 
+	fn2Started := make(chan struct{})
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		sf.Do(context.Background(), "key-forget", func() (any, error) {
 			atomic.AddInt32(&calls, 1)
+			close(fn2Started)
 			return nil, nil
 		})
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	<-fn2Started
 	close(ch)
 	wg.Wait()
 

@@ -34,7 +34,6 @@ func (g *SingleFlight) Do(ctx context.Context, key string, fn func() (any, error
 	for {
 		v, err, shared = g.g.Do(key, fn)
 		if shared && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) && ctx.Err() == nil {
-			//
 			continue
 		}
 		return
