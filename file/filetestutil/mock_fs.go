@@ -182,6 +182,7 @@ func (mfs *randFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	return io.ReadAll(f)
 }
 
@@ -268,7 +269,15 @@ func (mfs *constantFS) ReadFileCtx(ctx context.Context, name string) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	return io.ReadAll(f)
+	data, err := io.ReadAll(f)
+	closeErr := f.Close()
+	if err != nil {
+		return nil, err
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return data, nil
 }
 
 type writeFSEntry struct {
