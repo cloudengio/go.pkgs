@@ -138,6 +138,16 @@ func (wfs *WriteFS) OpenCtx(_ context.Context, name string) (fs.File, error)
 
 
 ```go
+func (wfs *WriteFS) ReadFile(name string) ([]byte, error)
+```
+
+
+```go
+func (wfs *WriteFS) ReadFileCtx(_ context.Context, name string) ([]byte, error)
+```
+
+
+```go
 func (mfs *WriteFS) Scheme() string
 ```
 
