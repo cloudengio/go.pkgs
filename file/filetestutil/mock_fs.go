@@ -173,6 +173,19 @@ func (mfs *randFS) OpenCtx(ctx context.Context, name string) (fs.File, error) {
 	return f, nil
 }
 
+func (mfs *randFS) ReadFile(name string) ([]byte, error) {
+	return mfs.ReadFileCtx(context.Background(), name)
+}
+
+func (mfs *randFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	f, err := mfs.OpenCtx(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
 type randAfteRetryFS struct {
 	randFS
 	retries map[string]int
@@ -190,6 +203,18 @@ func (mfs *randAfteRetryFS) OpenCtx(ctx context.Context, name string) (fs.File, 
 	return mfs.randFS.OpenCtx(ctx, name)
 }
 
+func (mfs *randAfteRetryFS) ReadFile(name string) ([]byte, error) {
+	return mfs.ReadFileCtx(context.Background(), name)
+}
+
+func (mfs *randAfteRetryFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	f, err := mfs.OpenCtx(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(f)
+}
+
 type errorFs struct {
 	local
 	err error
@@ -201,6 +226,14 @@ func (mfs *errorFs) Open(name string) (fs.File, error) {
 }
 
 func (mfs *errorFs) OpenCtx(_ context.Context, _ string) (fs.File, error) {
+	return nil, mfs.err
+}
+
+func (mfs *errorFs) ReadFile(_ string) ([]byte, error) {
+	return nil, mfs.err
+}
+
+func (mfs *errorFs) ReadFileCtx(_ context.Context, _ string) ([]byte, error) {
 	return nil, mfs.err
 }
 
@@ -225,7 +258,26 @@ func (mfs *constantFS) OpenCtx(_ context.Context, name string) (fs.File, error) 
 	info := file.NewInfo(name, int64(len(contents)), 0666, time.Now().Round(0),
 		nil)
 	return NewFile(&BufferCloser{bytes.NewBuffer(contents)}, info), nil
+}
 
+func (mfs *constantFS) ReadFile(name string) ([]byte, error) {
+	return mfs.ReadFileCtx(context.Background(), name)
+}
+
+func (mfs *constantFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	f, err := mfs.OpenCtx(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(f)
+	closeErr := f.Close()
+	if err != nil {
+		return nil, err
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return data, nil
 }
 
 type writeFSEntry struct {
@@ -275,6 +327,22 @@ func (wfs *WriteFS) OpenCtx(_ context.Context, name string) (fs.File, error) {
 	copy(cpy, contents)
 	info := file.NewInfo(name, int64(len(cpy)), entry.mode, entry.update, nil)
 	return NewFile(&BufferCloser{bytes.NewBuffer(cpy)}, info), nil
+}
+
+func (wfs *WriteFS) ReadFile(name string) ([]byte, error) {
+	return wfs.ReadFileCtx(context.Background(), name)
+}
+
+func (wfs *WriteFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
+	wfs.Lock()
+	defer wfs.Unlock()
+	contents, ok := wfs.contents[name]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	cpy := make([]byte, len(contents))
+	copy(cpy, contents)
+	return cpy, nil
 }
 
 func (wfs *WriteFS) append(file string, buf []byte) {
