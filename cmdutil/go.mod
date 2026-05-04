@@ -4,16 +4,17 @@ go 1.25.5
 
 require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260501233832-da4735ce283d
+	cloudeng.io/file v0.0.0-20260504191609-5b9eb845c065
 	cloudeng.io/text v0.0.15
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260430185136-e3cc0c23e7ba // indirect
-	cloudeng.io/net v0.0.0-20260430185136-e3cc0c23e7ba // indirect
-	cloudeng.io/sync v0.0.9 // indirect
-	cloudeng.io/sys v0.0.0-20260430185136-e3cc0c23e7ba // indirect
-	github.com/kr/text v0.2.0 // indirect
+	cloudeng.io/algo v0.0.0-20260504201444-26b15b034402 // indirect
+	cloudeng.io/sync v0.0.10 // indirect
+	cloudeng.io/sys v0.0.0-20260504191609-5b9eb845c065 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	golang.org/x/sys v0.43.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )

@@ -7,7 +7,7 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20260504191609-5b9eb845c065
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260504191609-5b9eb845c065
-	cloudeng.io/logging v0.0.0-20260504191609-5b9eb845c065
+	cloudeng.io/logging v0.0.0-20260504201444-26b15b034402
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.15
 	github.com/alexbacchin/ssm-session-client v1.0.0
@@ -23,7 +23,6 @@ require (
 	github.com/aws/smithy-go v1.25.1
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/orlangure/gnomock v0.32.0
-	golang.org/x/sync v0.20.0
 )
 
 require (
@@ -44,8 +43,7 @@ require (
 
 require (
 	cloudeng.io/algo v0.0.0-20260502001312-40693f6b2e4a // indirect
-	cloudeng.io/net v0.0.0-20260430185136-e3cc0c23e7ba // indirect
-	cloudeng.io/os v0.0.0-20260504191609-5b9eb845c065 // indirect
+	cloudeng.io/os v0.0.0-20260504201444-26b15b034402 // indirect
 	cloudeng.io/sync v0.0.10 // indirect
 	cloudeng.io/sys v0.0.0-20260501233832-da4735ce283d // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
@@ -89,16 +87,17 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.25.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
+	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
-	google.golang.org/grpc v1.80.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
+	google.golang.org/grpc v1.81.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
