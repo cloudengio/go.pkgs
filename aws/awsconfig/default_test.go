@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"cloudeng.io/aws/awsconfig"
+	"cloudeng.io/cmdutil/keys"
 )
 
 func TestLoad(t *testing.T) {
@@ -75,5 +76,51 @@ func TestLoadFromKeys(t *testing.T) {
 	}
 	if got, want := creds.SecretAccessKey, "1234"; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestLoadFromKeysContext(t *testing.T) {
+	ctx := context.Background()
+	k := awsconfig.NewKeyInfo("test-id", "test-owner", []byte("1234"), awsconfig.KeyInfoExtra{
+		AccessKeyID: "access-key",
+		Region:      "us-west-233",
+	})
+	ctx = keys.ContextWithKey(ctx, k)
+
+	cl := awsconfig.AWSFlags{
+		AWS:          true,
+		AWSKeyOwner:  "test-owner",
+		AWSKeyInfoID: "test-id",
+	}
+
+	cfg, err := awsconfig.LoadUsingFlags(ctx, cl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.Region, "us-west-233"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	creds, err := cfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := creds.AccessKeyID, "access-key"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := creds.SecretAccessKey, "1234"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	cl.AWSKeyInfoID = "missing-id"
+	_, err = awsconfig.LoadUsingFlags(ctx, cl)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected missing key error, got %v", err)
+	}
+
+	cl.AWSKeyInfoID = "test-id"
+	cl.AWSKeyOwner = "wrong-owner"
+	_, err = awsconfig.LoadUsingFlags(ctx, cl)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected missing key error, got %v", err)
 	}
 }

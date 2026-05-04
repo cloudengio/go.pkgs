@@ -99,6 +99,7 @@ type AWSConfig struct {
 	AWSProfile     string   `yaml:"aws_profile"`
 	AWSRegion      string   `yaml:"aws_region"`
 	AWSConfigFiles []string `yaml:"aws_config_files"`
+	AWSKeyOwner    string   `yaml:"aws_key_owner"`
 	AWSKeyInfoID   string   `yaml:"aws_key_info_id"`
 }
 ```
@@ -130,6 +131,7 @@ type AWSFlags struct {
 	AWSProfile     string `subcmd:"aws-profile,,aws profile to use for config/authentication" yaml:"aws_profile" doc:"aws profile to use for config/authentication"`
 	AWSRegion      string `subcmd:"aws-region,,'aws region to use for API calls, overrides the region set in the profile'" yaml:"aws_region" doc:"aws region to use, overrides the region set in the profile"`
 	AWSConfigFiles string `subcmd:"aws-config-files,,comma separated list of config files to use in place of those commonly found in $HOME/.aws" yaml:"aws_config_files,flow" doc:"comma separated list of config files to use in place of those commonly found in $HOME/.aws"`
+	AWSKeyOwner    string `subcmd:"aws-key-owner,,key owner of the key to use for authentication" yaml:"aws_key_owner" doc:"key owner of the key to use for authentication"`
 	AWSKeyInfoID   string `subcmd:"aws-key-info-id,,key info ID to use for authentication" yaml:"aws_key_info_id" doc:"key info ID to use for authentication"`
 }
 ```
