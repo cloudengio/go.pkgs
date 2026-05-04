@@ -30,13 +30,20 @@ func (m *mockFS) ReadFile(name string) ([]byte, error) {
 	return m.ReadFileCtx(context.Background(), name)
 }
 
-func (m *mockFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
+func (m *mockFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	m.mu.Lock()
+	m.hits[name]++
+	m.mu.Unlock()
+
 	if m.delay > 0 {
-		time.Sleep(m.delay)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(m.delay):
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.hits[name]++
 	if d, ok := m.data[name]; ok {
 		return d, nil
 	}
@@ -187,7 +194,7 @@ func TestCacheConcurrency(t *testing.T) {
 	// Add an artificial delay to ensure goroutines overlap and trigger singleflight
 	fs.delay = 50 * time.Millisecond
 
-	c := NewCachingReadFileFS(fs, WithCleanupInterval(0))
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
 	t.Cleanup(func() { _ = c.Close() })
 
 	var wg sync.WaitGroup
@@ -222,5 +229,222 @@ func TestCacheCloseIdempotency(t *testing.T) {
 		if err := c.Close(); err != nil {
 			t.Errorf("Sequential Close %d failed: %v", i, err)
 		}
+	}
+}
+
+func TestCacheSingleflightRetry_Timeout(t *testing.T) {
+	ctx := context.Background()
+	fs := newMockFS()
+	fs.data["file_retry"] = []byte("retry_data")
+
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
+	t.Cleanup(func() { _ = c.Close() })
+
+	fs.delay = 100 * time.Millisecond
+
+	ctx1, cancel1 := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel1()
+
+	ctx2, cancel2 := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel2()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+	var data2 []byte
+
+	go func() {
+		defer wg.Done()
+		_, err1 = c.ReadFileCtx(ctx1, "file_retry")
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	go func() {
+		defer wg.Done()
+		data2, err2 = c.ReadFileCtx(ctx2, "file_retry")
+	}()
+
+	wg.Wait()
+
+	if err1 == nil {
+		t.Error("expected caller 1 to fail with timeout")
+	}
+
+	if err2 != nil {
+		t.Errorf("expected caller 2 to succeed, got: %v", err2)
+	}
+
+	if string(data2) != "retry_data" {
+		t.Errorf("got %q, want %q", data2, "retry_data")
+	}
+
+	if got, want := fs.getHits("file_retry"), 2; got != want {
+		t.Errorf("expected %d hits (1 failed, 1 retry), got %d", want, got)
+	}
+}
+
+func TestCacheSingleflightRetry_Canceled(t *testing.T) {
+	ctx := context.Background()
+	fs := newMockFS()
+	fs.data["file_retry_cancel"] = []byte("retry_data")
+
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
+	t.Cleanup(func() { _ = c.Close() })
+
+	fs.delay = 100 * time.Millisecond
+
+	ctx1, cancel1 := context.WithCancel(ctx)
+	ctx2, cancel2 := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel2()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+	var data2 []byte
+
+	go func() {
+		defer wg.Done()
+		_, err1 = c.ReadFileCtx(ctx1, "file_retry_cancel")
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	go func() {
+		defer wg.Done()
+		data2, err2 = c.ReadFileCtx(ctx2, "file_retry_cancel")
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	cancel1()
+
+	wg.Wait()
+
+	if err1 == nil {
+		t.Error("expected caller 1 to fail with canceled")
+	}
+
+	if err2 != nil {
+		t.Errorf("expected caller 2 to succeed, got: %v", err2)
+	}
+
+	if string(data2) != "retry_data" {
+		t.Errorf("got %q, want %q", data2, "retry_data")
+	}
+
+	if got, want := fs.getHits("file_retry_cancel"), 2; got != want {
+		t.Errorf("expected %d hits (1 failed, 1 retry), got %d", want, got)
+	}
+}
+
+func TestCacheSingleflightRetry_BothCanceled(t *testing.T) {
+	ctx := context.Background()
+	fs := newMockFS()
+	fs.data["file_both_cancel"] = []byte("retry_data")
+
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
+	t.Cleanup(func() { _ = c.Close() })
+
+	fs.delay = 100 * time.Millisecond
+
+	ctx1, cancel1 := context.WithCancel(ctx)
+	ctx2, cancel2 := context.WithCancel(ctx)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+
+	go func() {
+		defer wg.Done()
+		_, err1 = c.ReadFileCtx(ctx1, "file_both_cancel")
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	go func() {
+		defer wg.Done()
+		_, err2 = c.ReadFileCtx(ctx2, "file_both_cancel")
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	cancel1()
+	cancel2()
+
+	wg.Wait()
+
+	if err1 == nil {
+		t.Error("expected caller 1 to fail with canceled")
+	}
+
+	if err2 == nil {
+		t.Error("expected caller 2 to fail with canceled")
+	}
+}
+
+func TestCacheSingleflight_OtherError(t *testing.T) {
+	ctx := context.Background()
+	fs := newMockFS()
+
+	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
+	t.Cleanup(func() { _ = c.Close() })
+
+	fs.delay = 100 * time.Millisecond
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+
+	go func() {
+		defer wg.Done()
+		_, err1 = c.ReadFileCtx(ctx, "file_not_found")
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	go func() {
+		defer wg.Done()
+		_, err2 = c.ReadFileCtx(ctx, "file_not_found")
+	}()
+
+	wg.Wait()
+
+	if err1 == nil || err2 == nil {
+		t.Error("expected both callers to fail")
+	}
+}
+
+func TestSingleFlightReadFileFS(t *testing.T) {
+	ctx := context.Background()
+	fs := newMockFS()
+	fs.data["concurrency_file"] = []byte("concurrent_data")
+	// Add an artificial delay to ensure goroutines overlap and trigger singleflight
+	fs.delay = 50 * time.Millisecond
+
+	sfFS := NewSingleFlightReadFileFS(fs)
+
+	var wg sync.WaitGroup
+	numRoutines := 50
+	for range numRoutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			data, err := sfFS.ReadFileCtx(ctx, "concurrency_file")
+			if err != nil {
+				t.Errorf("ReadFileCtx failed: %v", err)
+			}
+			if string(data) != "concurrent_data" {
+				t.Errorf("got %q, want %q", data, "concurrent_data")
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Due to singleflight, the underlying FS should only be hit exactly once
+	if got, want := fs.getHits("concurrency_file"), 1; got != want {
+		t.Errorf("expected %d hits due to singleflight, got %d", want, got)
 	}
 }

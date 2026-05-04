@@ -4,13 +4,15 @@
 import cloudeng.io/file/cachefs
 ```
 
-Package cachefs provides a caching layer for ReadFileFS implementations.
+Package cachefs provides a caching and related wrappers for ReadFileFS
+implementations.
 
 ## Constants
-### DefaultTTL, DefaultCleanupInterval
+### DefaultTTL, DefaultCleanupInterval, DefaultSingleFlight
 ```go
 DefaultTTL = 24 * time.Hour
 DefaultCleanupInterval = 1 * time.Hour
+DefaultSingleFlight = false
 
 ```
 
@@ -23,7 +25,9 @@ type CachingReadFileFS struct {
 	// contains filtered or unexported fields
 }
 ```
-CachingReadFileFS implements a caching layer over a ReadFileFS.
+CachingReadFileFS implements a caching layer over a ReadFileFS that is
+suitable for a small numbers of small files that can be readily kept in
+memory.
 
 ### Functions
 
@@ -45,9 +49,9 @@ Close stops the background cleanup goroutine.
 
 
 ```go
-func (c *CachingReadFileFS) Invalidate(name string)
+func (c *CachingReadFileFS) Forget(name string)
 ```
-Invalidate removes the named file from the cache.
+Forget removes the named file from the cache.
 
 
 ```go
@@ -75,8 +79,16 @@ type Option func(*options)
 ```go
 func WithCleanupInterval(d time.Duration) Option
 ```
-WithCleanupInterval specifies the interval for periodic cleanup of expired
-cache entries. The default is DefaultCleanupInterval.
+WithCleanupInterval specifies the interval for periodic background cleanup
+of expired entries. The default is DefaultCleanupInterval. A value of 0
+disables periodic cleanup, with expired entries being overwritten on access.
+
+
+```go
+func WithSingleFlight(v bool) Option
+```
+WithSingleFlight enables single-flight behavior for concurrent calls to
+ReadFileCtx with the same name. The default is false.
 
 
 ```go
@@ -84,6 +96,39 @@ func WithTTL(d time.Duration) Option
 ```
 WithTTL specifies the time-to-live for cache entries. The default is
 DefaultTTL.
+
+
+
+
+### Type SingleFlightReadFileFS
+```go
+type SingleFlightReadFileFS struct {
+	// contains filtered or unexported fields
+}
+```
+SingleFlightReadFileFS is a wrapper around a ReadFileFS that provides
+single-flight behavior for concurrent calls to ReadFileCtx and ReadFile with
+the same name. This can be used in conjunction with CachingReadFileFS to
+prevent thundering herd issues on cache misses.
+
+### Functions
+
+```go
+func NewSingleFlightReadFileFS(fs file.ReadFileFS) *SingleFlightReadFileFS
+```
+
+
+
+### Methods
+
+```go
+func (s *SingleFlightReadFileFS) ReadFile(name string) ([]byte, error)
+```
+
+
+```go
+func (s *SingleFlightReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+```
 
 
 

@@ -44,7 +44,7 @@ func (m *mockInvalidateFS) getHits(name string) int {
 	return m.hits[name]
 }
 
-func TestCacheInvalidate(t *testing.T) {
+func TestCacheForget(t *testing.T) {
 	ctx := context.Background()
 	fs := newMockInvalidateFS()
 	fs.data["file1"] = []byte("content1")
@@ -68,8 +68,8 @@ func TestCacheInvalidate(t *testing.T) {
 		t.Errorf("got %d hits, want %d", got, want)
 	}
 
-	// Invalidate the cache entry
-	c.Invalidate("file1")
+	// Forget the cache entry
+	c.Forget("file1")
 
 	// Third read, should fetch from FS again
 	if _, err := c.ReadFileCtx(ctx, "file1"); err != nil {

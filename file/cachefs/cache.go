@@ -1,8 +1,8 @@
-// Copyright 2022 cloudeng llc. All rights reserved.
+// Copyright 2026 cloudeng llc. All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package cachefs provides a caching layer for ReadFileFS implementations.
+// Package cachefs provides a caching and related wrappers for ReadFileFS implementations.
 package cachefs
 
 import (
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"cloudeng.io/file"
-	"golang.org/x/sync/singleflight"
+	"cloudeng.io/sync/ctxsync"
 )
 
 type cacheEntry struct {
@@ -20,28 +20,33 @@ type cacheEntry struct {
 	expires time.Time
 }
 
-// CachingReadFileFS implements a caching layer over a ReadFileFS.
+// CachingReadFileFS implements a caching layer over a ReadFileFS that is
+// suitable for a small numbers of small files that can be readily kept in
+// memory.
 type CachingReadFileFS struct {
 	fs   file.ReadFileFS
-	ttl  time.Duration
 	stop chan struct{}
+	opts options
 
 	mu     sync.RWMutex
 	cache  map[string]cacheEntry
 	wg     sync.WaitGroup
 	closed bool
-	sf     singleflight.Group
+	sf     ctxsync.SingleFlight
 }
 
 type options struct {
 	ttl             time.Duration
 	cleanupInterval time.Duration
+	singleFlight    bool
 }
+
 type Option func(*options)
 
 const (
 	DefaultTTL             = 24 * time.Hour
 	DefaultCleanupInterval = 1 * time.Hour
+	DefaultSingleFlight    = false
 )
 
 // WithTTL specifies the time-to-live for cache entries. The default is DefaultTTL.
@@ -51,10 +56,20 @@ func WithTTL(d time.Duration) Option {
 	}
 }
 
-// WithCleanupInterval specifies the interval for periodic cleanup of expired cache entries. The default is DefaultCleanupInterval.
+// WithCleanupInterval specifies the interval for periodic background cleanup of
+// expired entries. The default is DefaultCleanupInterval. A value of 0 disables
+// periodic cleanup, with expired entries being overwritten on access.
 func WithCleanupInterval(d time.Duration) Option {
 	return func(o *options) {
 		o.cleanupInterval = d
+	}
+}
+
+// WithSingleFlight enables single-flight behavior for concurrent calls to
+// ReadFileCtx with the same name. The default is false.
+func WithSingleFlight(v bool) Option {
+	return func(o *options) {
+		o.singleFlight = v
 	}
 }
 
@@ -62,16 +77,17 @@ func WithCleanupInterval(d time.Duration) Option {
 // and cleanup interval. It starts a background goroutine to periodically clear
 // out expired cache entries. Call Close to stop the background goroutine.
 func NewCachingReadFileFS(fs file.ReadFileFS, opts ...Option) *CachingReadFileFS {
-	o := &options{
+	o := options{
 		ttl:             DefaultTTL,
 		cleanupInterval: DefaultCleanupInterval,
+		singleFlight:    DefaultSingleFlight,
 	}
 	for _, fn := range opts {
-		fn(o)
+		fn(&o)
 	}
 	c := &CachingReadFileFS{
 		fs:    fs,
-		ttl:   o.ttl,
+		opts:  o,
 		cache: make(map[string]cacheEntry),
 		stop:  make(chan struct{}),
 	}
@@ -136,6 +152,19 @@ func (c *CachingReadFileFS) ReadFile(name string) ([]byte, error) {
 	return c.ReadFileCtx(context.Background(), name)
 }
 
+func (c *CachingReadFileFS) readFileCtx(ctx context.Context, name string) ([]byte, error) {
+	if !c.opts.singleFlight {
+		return c.fs.ReadFileCtx(ctx, name)
+	}
+	v, err, _ := c.sf.Do(ctx, name, func() (any, error) {
+		return c.fs.ReadFileCtx(ctx, name)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
+}
+
 // ReadFileCtx reads the named file using the provided context, utilizing the cache if fresh.
 func (c *CachingReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 	c.mu.RLock()
@@ -143,41 +172,53 @@ func (c *CachingReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byt
 	c.mu.RUnlock()
 
 	if ok && time.Now().Before(entry.expires) {
-		return entry.data, nil
+		return bytes.Clone(entry.data), nil
 	}
 
-	v, err, _ := c.sf.Do(name, func() (any, error) {
-		c.mu.RLock()
-		entry, ok := c.cache[name]
-		c.mu.RUnlock()
-		if ok && time.Now().Before(entry.expires) {
-			return entry.data, nil
-		}
-
-		data, err := c.fs.ReadFileCtx(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.cache[name] = cacheEntry{
-			data:    data,
-			expires: time.Now().Add(c.ttl),
-		}
-		return bytes.Clone(data), nil
-	})
-
+	data, err := c.readFileCtx(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 
-	return v.([]byte), nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[name] = cacheEntry{
+		data:    data,
+		expires: time.Now().Add(c.opts.ttl),
+	}
+	return bytes.Clone(data), nil
 }
 
-// Invalidate removes the named file from the cache.
-func (c *CachingReadFileFS) Invalidate(name string) {
+// Forget removes the named file from the cache.
+func (c *CachingReadFileFS) Forget(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.cache, name)
+}
+
+// SingleFlightReadFileFS is a wrapper around a ReadFileFS that provides single-flight
+// behavior for concurrent calls to ReadFileCtx and ReadFile with the same name. This
+// can be used in conjunction with CachingReadFileFS to prevent thundering herd issues
+// on cache misses.
+type SingleFlightReadFileFS struct {
+	fs file.ReadFileFS
+	sf ctxsync.SingleFlight
+}
+
+func NewSingleFlightReadFileFS(fs file.ReadFileFS) *SingleFlightReadFileFS {
+	return &SingleFlightReadFileFS{fs: fs}
+}
+
+func (s *SingleFlightReadFileFS) ReadFile(name string) ([]byte, error) {
+	return s.ReadFileCtx(context.Background(), name)
+}
+
+func (s *SingleFlightReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	v, err, _ := s.sf.Do(ctx, name, func() (any, error) {
+		return s.fs.ReadFileCtx(ctx, name)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
 }
