@@ -14,7 +14,7 @@ type SingleFlight struct {
 }
 ```
 SingleFlight mirrors golang.org/x/sync/singleflight.Group but with different
-handling of context cancelation. In particular, if a shared invocation
+handling of context cancellation. In particular, if a shared invocation
 returns with a canceled or timed out context, but the caller's context is
 not canceled, SingleFlight will reissue the invocation. This handles the
 case where one invocation has its context canceled, but others have not and

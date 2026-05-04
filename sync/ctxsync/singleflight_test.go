@@ -311,7 +311,7 @@ func TestSingleFlight_Forget(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		sf.Do(context.Background(), "key-forget", func() (any, error) {
+		_, _, _ = sf.Do(context.Background(), "key-forget", func() (any, error) {
 			atomic.AddInt32(&calls, 1)
 			close(fn1Started)
 			<-ch
@@ -326,7 +326,7 @@ func TestSingleFlight_Forget(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		sf.Do(context.Background(), "key-forget", func() (any, error) {
+		_, _, _ = sf.Do(context.Background(), "key-forget", func() (any, error) {
 			atomic.AddInt32(&calls, 1)
 			close(fn2Started)
 			return nil, nil

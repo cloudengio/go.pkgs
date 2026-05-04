@@ -12,7 +12,7 @@ import (
 )
 
 // SingleFlight mirrors golang.org/x/sync/singleflight.Group but with different
-// handling of context cancelation. In particular, if a shared invocation returns
+// handling of context cancellation. In particular, if a shared invocation returns
 // with a canceled or timed out context, but the caller's context is not canceled,
 // SingleFlight will reissue the invocation. This handles the case where one
 // invocation has its context canceled, but others have not and hence could
@@ -30,7 +30,7 @@ func New() *SingleFlight {
 // cancellation. In particular, if a shared invocation returns with a canceled
 // or timed out context, but the caller's context is not canceled,
 // SingleFlight will reissue the invocation.
-func (g *SingleFlight) Do(ctx context.Context, key string, fn func() (any, error)) (v any, err error, shared bool) {
+func (g *SingleFlight) Do(ctx context.Context, key string, fn func() (any, error)) (v any, err error, shared bool) { //nolint:revive // ignore error should be last to mirror singleflight.Group.Do signature
 	for {
 		v, err, shared = g.g.Do(key, fn)
 		if shared && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) && ctx.Err() == nil {
