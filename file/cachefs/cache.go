@@ -75,7 +75,7 @@ func WithSingleFlight(v bool) Option {
 
 // NewCachingReadFileFS creates a new CachingReadFileFS with the specified TTL
 // and cleanup interval. It starts a background goroutine to periodically clear
-// out expired cache entries. Call Close to stop the background goroutine.
+// out expired cache entries. Call Stop to stop the background goroutine.
 func NewCachingReadFileFS(fs file.ReadFileFS, opts ...Option) *CachingReadFileFS {
 	o := options{
 		ttl:             DefaultTTL,
@@ -178,7 +178,11 @@ func (c *CachingReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byt
 	}
 
 	if !c.opts.singleFlight {
-		return c.readFileAndUpdateCache(ctx, name)
+		data, err := c.readFileAndUpdateCache(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.Clone(data), nil
 	}
 
 	data, err, _ := c.sf.Do(ctx, name, func() (any, error) {
@@ -222,5 +226,5 @@ func (s *SingleFlightReadFileFS) ReadFileCtx(ctx context.Context, name string) (
 	if err != nil {
 		return nil, err
 	}
-	return v.([]byte), nil
+	return bytes.Clone(v.([]byte)), nil
 }

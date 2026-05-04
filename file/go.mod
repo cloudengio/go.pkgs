@@ -9,7 +9,7 @@ require (
 	cloudeng.io/logging v0.0.0-20260501233832-da4735ce283d
 	cloudeng.io/os v0.0.0-20260501233832-da4735ce283d
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
-	cloudeng.io/sync v0.0.9
+	cloudeng.io/sync v0.0.10
 	cloudeng.io/sys v0.0.0-20260501233832-da4735ce283d
 	cloudeng.io/text v0.0.15
 	cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
@@ -19,4 +19,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require cloudeng.io/debug v0.0.0-20260423171305-626d3faa8103 // indirect
+require cloudeng.io/debug v0.0.0-20260503174501-797a90037504 // indirect

@@ -36,7 +36,7 @@ func NewCachingReadFileFS(fs file.ReadFileFS, opts ...Option) *CachingReadFileFS
 ```
 NewCachingReadFileFS creates a new CachingReadFileFS with the specified TTL
 and cleanup interval. It starts a background goroutine to periodically clear
-out expired cache entries. Call Close to stop the background goroutine.
+out expired cache entries. Call Stop to stop the background goroutine.
 
 
 
