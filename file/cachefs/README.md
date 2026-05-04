@@ -43,12 +43,6 @@ out expired cache entries. Call Close to stop the background goroutine.
 ### Methods
 
 ```go
-func (c *CachingReadFileFS) Close() error
-```
-Close stops the background cleanup goroutine.
-
-
-```go
 func (c *CachingReadFileFS) Forget(name string)
 ```
 Forget removes the named file from the cache.
@@ -65,6 +59,12 @@ func (c *CachingReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byt
 ```
 ReadFileCtx reads the named file using the provided context, utilizing the
 cache if fresh.
+
+
+```go
+func (c *CachingReadFileFS) Stop(ctx context.Context) error
+```
+Stop stops the background cleanup goroutine.
 
 
 

@@ -64,7 +64,7 @@ func TestCacheBasic(t *testing.T) {
 
 	// Disable cleanup loop for this test
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	// Read file1 for the first time
 	data, err := c.ReadFileCtx(ctx, "file1")
@@ -109,7 +109,7 @@ func TestCacheTTL(t *testing.T) {
 	fs.data["ttlfile"] = []byte("data")
 
 	c := NewCachingReadFileFS(fs, WithTTL(20*time.Millisecond), WithCleanupInterval(0))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	// First read
 	if _, err := c.ReadFileCtx(ctx, "ttlfile"); err != nil {
@@ -141,7 +141,7 @@ func TestCacheCleanup(t *testing.T) {
 	fs.data["cleanfile"] = []byte("data")
 
 	c := NewCachingReadFileFS(fs, WithTTL(20*time.Millisecond), WithCleanupInterval(30*time.Millisecond))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	if _, err := c.ReadFileCtx(ctx, "cleanfile"); err != nil {
 		t.Fatalf("ReadFileCtx failed: %v", err)
@@ -172,7 +172,7 @@ func TestCacheErrors(t *testing.T) {
 	fs := newMockFS()
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	if _, err := c.ReadFileCtx(ctx, "nonexistent"); err == nil {
 		t.Fatal("expected error, got nil")
@@ -195,7 +195,7 @@ func TestCacheConcurrency(t *testing.T) {
 	fs.delay = 50 * time.Millisecond
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	var wg sync.WaitGroup
 	numRoutines := 50
@@ -220,14 +220,15 @@ func TestCacheConcurrency(t *testing.T) {
 	}
 }
 
-func TestCacheCloseIdempotency(t *testing.T) {
+func TestCacheStopIdempotency(t *testing.T) {
+	ctx := context.Background()
 	fs := newMockFS()
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(10*time.Millisecond))
 
-	// Sequential closes after concurrent ones
+	// Sequential stops
 	for i := range 3 {
-		if err := c.Close(); err != nil {
-			t.Errorf("Sequential Close %d failed: %v", i, err)
+		if err := c.Stop(ctx); err != nil {
+			t.Errorf("Sequential Stop %d failed: %v", i, err)
 		}
 	}
 }
@@ -238,7 +239,7 @@ func TestCacheSingleflightRetry_Timeout(t *testing.T) {
 	fs.data["file_retry"] = []byte("retry_data")
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	fs.delay = 100 * time.Millisecond
 
@@ -291,7 +292,7 @@ func TestCacheSingleflightRetry_Canceled(t *testing.T) {
 	fs.data["file_retry_cancel"] = []byte("retry_data")
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	fs.delay = 100 * time.Millisecond
 
@@ -345,7 +346,7 @@ func TestCacheSingleflightRetry_BothCanceled(t *testing.T) {
 	fs.data["file_both_cancel"] = []byte("retry_data")
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	fs.delay = 100 * time.Millisecond
 
@@ -389,7 +390,7 @@ func TestCacheSingleflight_OtherError(t *testing.T) {
 	fs := newMockFS()
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0), WithSingleFlight(true))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	fs.delay = 100 * time.Millisecond
 

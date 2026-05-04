@@ -30,7 +30,7 @@ type CachingReadFileFS struct {
 
 	mu     sync.RWMutex
 	cache  map[string]cacheEntry
-	wg     sync.WaitGroup
+	wg     ctxsync.WaitGroup
 	closed bool
 	sf     ctxsync.SingleFlight
 }
@@ -99,8 +99,8 @@ func NewCachingReadFileFS(fs file.ReadFileFS, opts ...Option) *CachingReadFileFS
 	return c
 }
 
-// Close stops the background cleanup goroutine.
-func (c *CachingReadFileFS) Close() error {
+// Stop stops the background cleanup goroutine.
+func (c *CachingReadFileFS) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -109,7 +109,7 @@ func (c *CachingReadFileFS) Close() error {
 	c.closed = true
 	c.mu.Unlock()
 	close(c.stop)
-	c.wg.Wait()
+	c.wg.Wait(ctx)
 	return nil
 }
 
@@ -152,17 +152,19 @@ func (c *CachingReadFileFS) ReadFile(name string) ([]byte, error) {
 	return c.ReadFileCtx(context.Background(), name)
 }
 
-func (c *CachingReadFileFS) readFileCtx(ctx context.Context, name string) ([]byte, error) {
-	if !c.opts.singleFlight {
-		return c.fs.ReadFileCtx(ctx, name)
-	}
-	v, err, _ := c.sf.Do(ctx, name, func() (any, error) {
-		return c.fs.ReadFileCtx(ctx, name)
-	})
+func (c *CachingReadFileFS) readFileAndUpdateCache(ctx context.Context, name string) ([]byte, error) {
+	data, err := c.fs.ReadFileCtx(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return v.([]byte), nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[name] = cacheEntry{
+		data:    data,
+		expires: time.Now().Add(c.opts.ttl),
+	}
+	return data, nil
+
 }
 
 // ReadFileCtx reads the named file using the provided context, utilizing the cache if fresh.
@@ -175,18 +177,18 @@ func (c *CachingReadFileFS) ReadFileCtx(ctx context.Context, name string) ([]byt
 		return bytes.Clone(entry.data), nil
 	}
 
-	data, err := c.readFileCtx(ctx, name)
+	if !c.opts.singleFlight {
+		return c.readFileAndUpdateCache(ctx, name)
+	}
+
+	data, err, _ := c.sf.Do(ctx, name, func() (any, error) {
+		return c.readFileAndUpdateCache(ctx, name)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cache[name] = cacheEntry{
-		data:    data,
-		expires: time.Now().Add(c.opts.ttl),
-	}
-	return bytes.Clone(data), nil
+	return bytes.Clone(data.([]byte)), nil
 }
 
 // Forget removes the named file from the cache.

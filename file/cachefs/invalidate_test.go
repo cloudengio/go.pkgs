@@ -50,7 +50,7 @@ func TestCacheForget(t *testing.T) {
 	fs.data["file1"] = []byte("content1")
 
 	c := NewCachingReadFileFS(fs, WithCleanupInterval(0))
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Stop(ctx) })
 
 	// First read, should fetch from FS
 	if _, err := c.ReadFileCtx(ctx, "file1"); err != nil {
