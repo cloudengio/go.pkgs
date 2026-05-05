@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
@@ -179,6 +180,18 @@ func (a *AWS) KMS(cfg aws.Config) *kms.Client {
 	res := newHostOnlyResolver[kms.EndpointParameters](a.uri())
 	opt := kms.WithEndpointResolverV2(res)
 	return kms.NewFromConfig(cfg, opt)
+}
+
+func WithEC2() Option {
+	return func(o *Options) {
+		o.localStackServices = append(o.localStackServices, localstack.EC2)
+	}
+}
+
+func (a *AWS) EC2(cfg aws.Config) *ec2.Client {
+	res := newHostOnlyResolver[ec2.EndpointParameters](a.uri())
+	opt := ec2.WithEndpointResolverV2(res)
+	return ec2.NewFromConfig(cfg, opt)
 }
 
 func WithSES() Option {
