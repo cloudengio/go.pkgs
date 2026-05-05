@@ -18,9 +18,10 @@ GenerateToken creates a 15-minute SigV4 signed authentication token.
 ```go
 func PrivateLinkServiceName(ctx context.Context, clusterID string) (string, error)
 ```
-PrivateLinkServiceName is a helper function that retrieves the VPC endpoint
-service name for a given cluster ID using a DSQL client created from the
-provided AWS config.
+PrivateLinkServiceName is a helper function that retrieves the VPC
+endpoint service name for a given cluster ID using the aws.Config from
+the context to create a DSQL client. This is a convenient wrapper around
+Cluster.GetPrivateLinkServiceName.
 
 ### Func TokenGenerator
 ```go
@@ -33,8 +34,8 @@ authentication tokens.
 ```go
 func WithTokenExpiration(expiration time.Duration) func(o *auth.TokenOptions)
 ```
-WithTokenExpiration returns a function that can be passed to
-GenerateDSQLToken to set the expiration time of the generated token.
+WithTokenExpiration returns a function that can be passed to GenerateToken
+to set the expiration time of the generated token.
 
 
 

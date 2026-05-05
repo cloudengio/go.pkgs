@@ -18,9 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dsql"
 )
 
-// WithTokenExpiration returns a function that can be passed to
-// GenerateDSQLToken to set the expiration time of the generated
-// token.
+// WithTokenExpiration returns a function that can be passed to GenerateToken
+// to set the expiration time of the generated token.
 func WithTokenExpiration(expiration time.Duration) func(o *auth.TokenOptions) {
 	return func(o *auth.TokenOptions) {
 		o.ExpiresIn = expiration
@@ -117,8 +116,9 @@ func (c *Cluster) GetPrivateLinkServiceName(ctx context.Context) (string, error)
 }
 
 // PrivateLinkServiceName is a helper function that retrieves the VPC endpoint
-// service name for a given cluster ID using a DSQL client created from the
-// provided AWS config.
+// service name for a given cluster ID using the aws.Config from the context
+// to create a DSQL client. This is a convenient wrapper around
+// Cluster.GetPrivateLinkServiceName.
 func PrivateLinkServiceName(ctx context.Context, clusterID string) (string, error) {
 	cfg, ok := awsconfig.FromContext(ctx)
 	if !ok {

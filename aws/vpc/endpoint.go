@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 
+	"cloudeng.io/errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -15,6 +16,9 @@ import (
 
 // DeleteEndpoint deletes the VPC endpoint with the given ID.
 func (v *T) DeleteEndpoint(ctx context.Context, endpointIDs ...string) error {
+	if len(endpointIDs) == 0 {
+		return fmt.Errorf("vpc %s: no endpoint IDs provided for deletion", v.id)
+	}
 	out, err := v.client.DeleteVpcEndpoints(ctx, &ec2.DeleteVpcEndpointsInput{
 		VpcEndpointIds: endpointIDs,
 	})
@@ -22,18 +26,18 @@ func (v *T) DeleteEndpoint(ctx context.Context, endpointIDs ...string) error {
 		return fmt.Errorf("vpc %s: delete endpoint %v: %w", v.id, endpointIDs, err)
 	}
 	// The API returns per-item errors for endpoints it could not delete.
-	if len(out.Unsuccessful) > 0 {
-		u := out.Unsuccessful[0]
+	var errs errors.M
+	for _, u := range out.Unsuccessful {
+		id := aws.ToString(u.ResourceId)
 		code, msg := "", ""
 		if u.Error != nil {
-			if u.Error.Code != nil {
-				code = *u.Error.Code
-			}
-			if u.Error.Message != nil {
-				msg = *u.Error.Message
-			}
+			code = aws.ToString(u.Error.Code)
+			msg = aws.ToString(u.Error.Message)
 		}
-		return fmt.Errorf("vpc %s: delete endpoints %v: %s: %s", v.id, endpointIDs, code, msg)
+		errs.Append(fmt.Errorf("vpc %s: delete endpoint %s: %s: %s", v.id, id, code, msg))
+	}
+	if err := errs.Err(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -53,6 +57,9 @@ type EndpointParams struct {
 
 // CreateEndpoint creates a VPC endpoint in the VPC. It returns the new endpoint ID.
 func (v *T) CreateEndpoint(ctx context.Context, params EndpointParams) (string, error) {
+	if err := params.validate(); err != nil {
+		return "", fmt.Errorf("vpc %s: invalid endpoint params: %w", v.id, err)
+	}
 	input := &ec2.CreateVpcEndpointInput{
 		VpcId:           aws.String(v.id),
 		ServiceName:     aws.String(params.ServiceName),
@@ -77,4 +84,30 @@ func (v *T) CreateEndpoint(ctx context.Context, params EndpointParams) (string, 
 		return "", fmt.Errorf("vpc %s: create endpoint for %s: %w", v.id, params.ServiceName, err)
 	}
 	return aws.ToString(out.VpcEndpoint.VpcEndpointId), nil
+}
+
+func (p EndpointParams) validate() error {
+	if p.ServiceName == "" {
+		return fmt.Errorf("ServiceName is required")
+	}
+	switch p.Type {
+	case types.VpcEndpointTypeGateway:
+		if len(p.RouteTableIDs) == 0 {
+			return fmt.Errorf("RouteTableIDs is required for gateway endpoints")
+		}
+	case types.VpcEndpointTypeInterface:
+		if len(p.SubnetIDs) == 0 {
+			return fmt.Errorf("SubnetIDs is required for interface endpoints")
+		}
+		if len(p.SecurityGroupIDs) == 0 {
+			return fmt.Errorf("SecurityGroupIDs is required for interface endpoints")
+		}
+	case types.VpcEndpointTypeGatewayLoadBalancer,
+		types.VpcEndpointTypeResource,
+		types.VpcEndpointTypeServiceNetwork:
+		// accepted as-is; caller is responsible for any type-specific fields
+	default:
+		return fmt.Errorf("unsupported endpoint type %q", p.Type)
+	}
+	return nil
 }

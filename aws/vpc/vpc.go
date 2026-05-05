@@ -115,124 +115,78 @@ func (v *T) ReadConfig(ctx context.Context) error {
 
 func describeSubnets(ctx context.Context, client Client, filters []types.Filter) ([]SubnetInfo, error) {
 	var results []SubnetInfo
-	var nextToken *string
-	for {
-		out, err := client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{
-			Filters:   filters,
-			NextToken: nextToken,
-		})
+	paginator := ec2.NewDescribeSubnetsPaginator(client, &ec2.DescribeSubnetsInput{Filters: filters})
+	for paginator.HasMorePages() {
+		out, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for _, s := range out.Subnets {
-			info := SubnetInfo{}
-			if s.SubnetId != nil {
-				info.ID = *s.SubnetId
-			}
-			if s.AvailabilityZone != nil {
-				info.AvailabilityZone = *s.AvailabilityZone
-			}
-			if s.CidrBlock != nil {
-				info.CIDRBlock = *s.CidrBlock
-			}
-			results = append(results, info)
+			results = append(results, SubnetInfo{
+				ID:               aws.ToString(s.SubnetId),
+				AvailabilityZone: aws.ToString(s.AvailabilityZone),
+				CIDRBlock:        aws.ToString(s.CidrBlock),
+			})
 		}
-		if out.NextToken == nil {
-			break
-		}
-		nextToken = out.NextToken
 	}
 	return results, nil
 }
 
 func describeSecurityGroups(ctx context.Context, client Client, filters []types.Filter) ([]SecurityGroupInfo, error) {
 	var results []SecurityGroupInfo
-	var nextToken *string
-	for {
-		out, err := client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
-			Filters:   filters,
-			NextToken: nextToken,
-		})
+	paginator := ec2.NewDescribeSecurityGroupsPaginator(client, &ec2.DescribeSecurityGroupsInput{Filters: filters})
+	for paginator.HasMorePages() {
+		out, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for _, sg := range out.SecurityGroups {
-			info := SecurityGroupInfo{}
-			if sg.GroupId != nil {
-				info.ID = *sg.GroupId
-			}
-			if sg.GroupName != nil {
-				info.Name = *sg.GroupName
-			}
-			results = append(results, info)
+			results = append(results, SecurityGroupInfo{
+				ID:   aws.ToString(sg.GroupId),
+				Name: aws.ToString(sg.GroupName),
+			})
 		}
-		if out.NextToken == nil {
-			break
-		}
-		nextToken = out.NextToken
 	}
 	return results, nil
 }
 
 func describeRouteTables(ctx context.Context, client Client, filters []types.Filter) ([]string, error) {
 	var results []string
-	var nextToken *string
-	for {
-		out, err := client.DescribeRouteTables(ctx, &ec2.DescribeRouteTablesInput{
-			Filters:   filters,
-			NextToken: nextToken,
-		})
+	paginator := ec2.NewDescribeRouteTablesPaginator(client, &ec2.DescribeRouteTablesInput{Filters: filters})
+	for paginator.HasMorePages() {
+		out, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for _, rt := range out.RouteTables {
-			if rt.RouteTableId != nil {
-				results = append(results, *rt.RouteTableId)
-			}
+			results = append(results, aws.ToString(rt.RouteTableId))
 		}
-		if out.NextToken == nil {
-			break
-		}
-		nextToken = out.NextToken
 	}
 	return results, nil
 }
 
 func describeVpcEndpoints(ctx context.Context, client Client, filters []types.Filter) ([]Endpoint, error) {
 	var results []Endpoint
-	var nextToken *string
-	for {
-		out, err := client.DescribeVpcEndpoints(ctx, &ec2.DescribeVpcEndpointsInput{
-			Filters:   filters,
-			NextToken: nextToken,
-		})
+	paginator := ec2.NewDescribeVpcEndpointsPaginator(client, &ec2.DescribeVpcEndpointsInput{Filters: filters})
+	for paginator.HasMorePages() {
+		out, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for _, ep := range out.VpcEndpoints {
 			e := Endpoint{
+				ID:            aws.ToString(ep.VpcEndpointId),
+				ServiceName:   aws.ToString(ep.ServiceName),
 				Type:          ep.VpcEndpointType,
 				State:         ep.State,
 				SubnetIDs:     ep.SubnetIds,
 				RouteTableIDs: ep.RouteTableIds,
 			}
-			if ep.VpcEndpointId != nil {
-				e.ID = *ep.VpcEndpointId
-			}
-			if ep.ServiceName != nil {
-				e.ServiceName = *ep.ServiceName
-			}
 			for _, sg := range ep.Groups {
-				if sg.GroupId != nil {
-					e.SecurityGroupIDs = append(e.SecurityGroupIDs, *sg.GroupId)
-				}
+				e.SecurityGroupIDs = append(e.SecurityGroupIDs, aws.ToString(sg.GroupId))
 			}
 			results = append(results, e)
 		}
-		if out.NextToken == nil {
-			break
-		}
-		nextToken = out.NextToken
 	}
 	return results, nil
 }

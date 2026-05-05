@@ -7,6 +7,7 @@ package vpc_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"cloudeng.io/aws/awstestutil"
@@ -17,6 +18,44 @@ import (
 )
 
 var awsService *awstestutil.AWS
+
+func TestCreateEndpointValidation(t *testing.T) {
+	v := vpc.NewVPCWithClient("vpc-test", nil)
+	for _, tc := range []struct {
+		params vpc.EndpointParams
+		errMsg string
+	}{
+		{
+			vpc.EndpointParams{},
+			"ServiceName is required",
+		},
+		{
+			vpc.EndpointParams{ServiceName: "svc"},
+			`unsupported endpoint type ""`,
+		},
+		{
+			vpc.EndpointParams{ServiceName: "svc", Type: types.VpcEndpointTypeGateway},
+			"RouteTableIDs is required for gateway endpoints",
+		},
+		{
+			vpc.EndpointParams{ServiceName: "svc", Type: types.VpcEndpointTypeInterface},
+			"SubnetIDs is required for interface endpoints",
+		},
+		{
+			vpc.EndpointParams{ServiceName: "svc", Type: types.VpcEndpointTypeInterface, SubnetIDs: []string{"s-1"}},
+			"SecurityGroupIDs is required for interface endpoints",
+		},
+	} {
+		_, err := v.CreateEndpoint(context.Background(), tc.params)
+		if err == nil {
+			t.Errorf("params %+v: expected error %q, got nil", tc.params, tc.errMsg)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.errMsg) {
+			t.Errorf("params %+v: got error %q, want it to contain %q", tc.params, err.Error(), tc.errMsg)
+		}
+	}
+}
 
 func TestMain(m *testing.M) {
 	awstestutil.AWSTestMain(m, &awsService, awstestutil.WithEC2())
