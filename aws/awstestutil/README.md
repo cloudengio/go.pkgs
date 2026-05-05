@@ -43,6 +43,11 @@ func NewLocalAWS(opts ...Option) *AWS
 ### Methods
 
 ```go
+func (a *AWS) EC2(cfg aws.Config) *ec2.Client
+```
+
+
+```go
 func (a *AWS) KMS(cfg aws.Config) *kms.Client
 ```
 
@@ -88,6 +93,11 @@ type Option func(o *Options)
 
 ```go
 func WithDebug(log io.Writer) Option
+```
+
+
+```go
+func WithEC2() Option
 ```
 
 

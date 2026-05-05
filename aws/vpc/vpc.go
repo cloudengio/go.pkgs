@@ -1,0 +1,238 @@
+// Copyright 2026 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
+
+// Package vpc provides utilities for working with AWS VPCs.
+package vpc
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+)
+
+// Client defines the methods required to manage VPC endpoints.
+type Client interface {
+	CreateVpcEndpoint(ctx context.Context, params *ec2.CreateVpcEndpointInput, optFns ...func(*ec2.Options)) (*ec2.CreateVpcEndpointOutput, error)
+	DeleteVpcEndpoints(ctx context.Context, params *ec2.DeleteVpcEndpointsInput, optFns ...func(*ec2.Options)) (*ec2.DeleteVpcEndpointsOutput, error)
+	DescribeSubnets(ctx context.Context, params *ec2.DescribeSubnetsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error)
+	DescribeSecurityGroups(ctx context.Context, params *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error)
+	DescribeVpcEndpoints(ctx context.Context, params *ec2.DescribeVpcEndpointsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVpcEndpointsOutput, error)
+	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
+}
+
+// T represents a VPC whose configuration can be read via ReadConfig.
+type T struct {
+	id     string
+	client Client
+	Config *Config
+}
+
+// SubnetInfo holds the essential details of a VPC subnet.
+type SubnetInfo struct {
+	ID               string
+	AvailabilityZone string
+	CIDRBlock        string
+}
+
+// SecurityGroupInfo holds the essential details of a security group.
+type SecurityGroupInfo struct {
+	ID   string
+	Name string
+}
+
+// Endpoint describes an existing VPC endpoint.
+type Endpoint struct {
+	ID               string
+	ServiceName      string
+	Type             types.VpcEndpointType
+	State            types.State
+	SubnetIDs        []string
+	SecurityGroupIDs []string
+	RouteTableIDs    []string
+}
+
+// Config holds all VPC information required to create and delete endpoints.
+type Config struct {
+	VPCID          string
+	Subnets        []SubnetInfo
+	SecurityGroups []SecurityGroupInfo
+	RouteTableIDs  []string
+	Endpoints      []Endpoint
+}
+
+// NewVPC creates a new T instance for the given VPC ID.
+func NewVPC(cfg aws.Config, id string) *T {
+	return &T{
+		id:     id,
+		client: ec2.NewFromConfig(cfg),
+	}
+}
+
+// NewVPCWithClient creates a T using an already-configured Client.
+// Intended for tests that inject a localstack-pointed client.
+func NewVPCWithClient(id string, client Client) *T {
+	return &T{id: id, client: client}
+}
+
+// ReadConfig queries the AWS EC2 API to gather all information about the VPC
+// required to create and delete endpoints: subnets, security groups, route
+// tables, and any existing endpoints. The result is stored in T.Config.
+func (v *T) ReadConfig(ctx context.Context) error {
+	cfg := &Config{VPCID: v.id}
+	vpcFilter := []types.Filter{{Name: aws.String("vpc-id"), Values: []string{v.id}}}
+
+	subnets, err := describeSubnets(ctx, v.client, vpcFilter)
+	if err != nil {
+		return fmt.Errorf("vpc %s: describe subnets: %w", v.id, err)
+	}
+	cfg.Subnets = subnets
+
+	sgs, err := describeSecurityGroups(ctx, v.client, vpcFilter)
+	if err != nil {
+		return fmt.Errorf("vpc %s: describe security groups: %w", v.id, err)
+	}
+	cfg.SecurityGroups = sgs
+
+	rtIDs, err := describeRouteTables(ctx, v.client, vpcFilter)
+	if err != nil {
+		return fmt.Errorf("vpc %s: describe route tables: %w", v.id, err)
+	}
+	cfg.RouteTableIDs = rtIDs
+
+	endpoints, err := describeVpcEndpoints(ctx, v.client, vpcFilter)
+	if err != nil {
+		return fmt.Errorf("vpc %s: describe endpoints: %w", v.id, err)
+	}
+	cfg.Endpoints = endpoints
+
+	v.Config = cfg
+	return nil
+}
+
+func describeSubnets(ctx context.Context, client Client, filters []types.Filter) ([]SubnetInfo, error) {
+	var results []SubnetInfo
+	var nextToken *string
+	for {
+		out, err := client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{
+			Filters:   filters,
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range out.Subnets {
+			info := SubnetInfo{}
+			if s.SubnetId != nil {
+				info.ID = *s.SubnetId
+			}
+			if s.AvailabilityZone != nil {
+				info.AvailabilityZone = *s.AvailabilityZone
+			}
+			if s.CidrBlock != nil {
+				info.CIDRBlock = *s.CidrBlock
+			}
+			results = append(results, info)
+		}
+		if out.NextToken == nil {
+			break
+		}
+		nextToken = out.NextToken
+	}
+	return results, nil
+}
+
+func describeSecurityGroups(ctx context.Context, client Client, filters []types.Filter) ([]SecurityGroupInfo, error) {
+	var results []SecurityGroupInfo
+	var nextToken *string
+	for {
+		out, err := client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
+			Filters:   filters,
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, sg := range out.SecurityGroups {
+			info := SecurityGroupInfo{}
+			if sg.GroupId != nil {
+				info.ID = *sg.GroupId
+			}
+			if sg.GroupName != nil {
+				info.Name = *sg.GroupName
+			}
+			results = append(results, info)
+		}
+		if out.NextToken == nil {
+			break
+		}
+		nextToken = out.NextToken
+	}
+	return results, nil
+}
+
+func describeRouteTables(ctx context.Context, client Client, filters []types.Filter) ([]string, error) {
+	var results []string
+	var nextToken *string
+	for {
+		out, err := client.DescribeRouteTables(ctx, &ec2.DescribeRouteTablesInput{
+			Filters:   filters,
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, rt := range out.RouteTables {
+			if rt.RouteTableId != nil {
+				results = append(results, *rt.RouteTableId)
+			}
+		}
+		if out.NextToken == nil {
+			break
+		}
+		nextToken = out.NextToken
+	}
+	return results, nil
+}
+
+func describeVpcEndpoints(ctx context.Context, client Client, filters []types.Filter) ([]Endpoint, error) {
+	var results []Endpoint
+	var nextToken *string
+	for {
+		out, err := client.DescribeVpcEndpoints(ctx, &ec2.DescribeVpcEndpointsInput{
+			Filters:   filters,
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, ep := range out.VpcEndpoints {
+			e := Endpoint{
+				Type:          ep.VpcEndpointType,
+				State:         ep.State,
+				SubnetIDs:     ep.SubnetIds,
+				RouteTableIDs: ep.RouteTableIds,
+			}
+			if ep.VpcEndpointId != nil {
+				e.ID = *ep.VpcEndpointId
+			}
+			if ep.ServiceName != nil {
+				e.ServiceName = *ep.ServiceName
+			}
+			for _, sg := range ep.Groups {
+				if sg.GroupId != nil {
+					e.SecurityGroupIDs = append(e.SecurityGroupIDs, *sg.GroupId)
+				}
+			}
+			results = append(results, e)
+		}
+		if out.NextToken == nil {
+			break
+		}
+		nextToken = out.NextToken
+	}
+	return results, nil
+}
