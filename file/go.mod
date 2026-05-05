@@ -3,14 +3,14 @@ module cloudeng.io/file
 go 1.25.5
 
 require (
-	cloudeng.io/algo v0.0.0-20260504201444-26b15b034402
-	cloudeng.io/cmdutil v0.0.0-20260504191609-5b9eb845c065
+	cloudeng.io/algo v0.0.0-20260504210102-26960e803ff1
+	cloudeng.io/cmdutil v0.0.0-20260504210102-26960e803ff1
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/logging v0.0.0-20260504201444-26b15b034402
-	cloudeng.io/os v0.0.0-20260504201444-26b15b034402
+	cloudeng.io/logging v0.0.0-20260504210102-26960e803ff1
+	cloudeng.io/os v0.0.0-20260504210102-26960e803ff1
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/sync v0.0.10
-	cloudeng.io/sys v0.0.0-20260504191609-5b9eb845c065
+	cloudeng.io/sys v0.0.0-20260504210102-26960e803ff1
 	cloudeng.io/text v0.0.15
 	cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
 	golang.org/x/net v0.53.0
