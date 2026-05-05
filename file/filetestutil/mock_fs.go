@@ -241,7 +241,6 @@ type constantFS struct {
 	sync.Mutex
 	local
 	fsOptions
-	val      []byte
 	contents map[string][]byte
 }
 
