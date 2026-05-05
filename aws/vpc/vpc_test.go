@@ -105,10 +105,10 @@ func setupVPC(t *testing.T, client *ec2.Client) (vpcID, subnetID, sgID, rtID str
 
 	cleanup = func() {
 		ctx := context.Background()
-		client.DeleteRouteTable(ctx, &ec2.DeleteRouteTableInput{RouteTableId: aws.String(rtID)})           //nolint:errcheck
-		client.DeleteSecurityGroup(ctx, &ec2.DeleteSecurityGroupInput{GroupId: aws.String(sgID)})         //nolint:errcheck
-		client.DeleteSubnet(ctx, &ec2.DeleteSubnetInput{SubnetId: aws.String(subnetID)})                  //nolint:errcheck
-		client.DeleteVpc(ctx, &ec2.DeleteVpcInput{VpcId: aws.String(vpcID)})                              //nolint:errcheck
+		client.DeleteRouteTable(ctx, &ec2.DeleteRouteTableInput{RouteTableId: aws.String(rtID)})  //nolint:errcheck
+		client.DeleteSecurityGroup(ctx, &ec2.DeleteSecurityGroupInput{GroupId: aws.String(sgID)}) //nolint:errcheck
+		client.DeleteSubnet(ctx, &ec2.DeleteSubnetInput{SubnetId: aws.String(subnetID)})          //nolint:errcheck
+		client.DeleteVpc(ctx, &ec2.DeleteVpcInput{VpcId: aws.String(vpcID)})                      //nolint:errcheck
 	}
 	return
 }
