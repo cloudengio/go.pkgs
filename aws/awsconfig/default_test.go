@@ -81,16 +81,16 @@ func TestLoadFromKeys(t *testing.T) {
 
 func TestLoadFromKeysContext(t *testing.T) {
 	ctx := context.Background()
-	k := awsconfig.NewKeyInfo("test-id", "test-owner", []byte("1234"), awsconfig.KeyInfoExtra{
+	k := awsconfig.NewKeyInfo("test-id", "test-user", []byte("1234"), awsconfig.KeyInfoExtra{
 		AccessKeyID: "access-key",
 		Region:      "us-west-233",
 	})
 	ctx = keys.ContextWithKey(ctx, k)
 
 	cl := awsconfig.AWSFlags{
-		AWS:          true,
-		AWSKeyOwner:  "test-owner",
-		AWSKeyInfoID: "test-id",
+		AWS:            true,
+		AWSKeyInfoUser: "test-user",
+		AWSKeyInfoID:   "test-id",
 	}
 
 	cfg, err := awsconfig.LoadUsingFlags(ctx, cl)
@@ -118,7 +118,7 @@ func TestLoadFromKeysContext(t *testing.T) {
 	}
 
 	cl.AWSKeyInfoID = "test-id"
-	cl.AWSKeyOwner = "wrong-owner"
+	cl.AWSKeyInfoUser = "wrong-user"
 	_, err = awsconfig.LoadUsingFlags(ctx, cl)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected missing key error, got %v", err)
