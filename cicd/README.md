@@ -92,13 +92,12 @@ SkipWindows skips t if running on Windows.
 
 ### Func TestMain
 ```go
-func TestMain[T TestingT](name string, w io.Writer, tests []func(T))
+func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests []func(T)) error
 ```
 TestMain runs each test in tests with its own fresh *Testing. T must be
 compatible with *Testing (i.e. *Testing or an interface it implements,
 such as TestingT). Each test's name is derived from its function name via
 reflection. Tests run in slice order. Output goes to w (nil → os.Stderr).
-TestMain exits the process: 0 if all tests pass, 1 if any fail.
 
 
 
@@ -236,7 +235,8 @@ func (t *Testing) Run(name string, f func(*Testing)) bool
 ```
 Run mirrors testing.T.Run: it creates a child Testing named "parent/name",
 runs f in a new goroutine (so Fatal/Skip only exit the child), waits for
-completion, and returns true if the child did not fail.
+completion. If the child fails, the parent is also marked as failed,
+matching testing.T.Run semantics. Returns true if the child did not fail.
 
 
 ```go
@@ -271,7 +271,10 @@ Skipped reports whether the test has been marked as skipped.
 ### Type TestingT
 ```go
 type TestingT interface {
-	TestingTSkip
+	Helper()
+	Skipf(format string, args ...any)
+	Fatalf(format string, args ...any)
+	Name() string
 	Failed() bool
 	Skipped() bool
 	Log(args ...any)
@@ -281,8 +284,6 @@ type TestingT interface {
 	Fatal(args ...any)
 	Skip(args ...any)
 	Cleanup(f func())
-	RunCleanups()
-	Run(name string, f func(*Testing)) bool
 }
 ```
 TestingT mirrors testing.T and is implemented by cicd.Testing.

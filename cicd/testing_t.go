@@ -5,6 +5,7 @@
 package cicd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +17,10 @@ import (
 
 // TestingT mirrors testing.T and is implemented by cicd.Testing.
 type TestingT interface {
-	TestingTSkip
+	Helper()
+	Skipf(format string, args ...any)
+	Fatalf(format string, args ...any)
+	Name() string
 	Failed() bool
 	Skipped() bool
 	Log(args ...any)
@@ -26,8 +30,6 @@ type TestingT interface {
 	Fatal(args ...any)
 	Skip(args ...any)
 	Cleanup(f func())
-	RunCleanups()
-	Run(name string, f func(*Testing)) bool
 }
 
 // Testing is a concrete implementation of TestingT for use outside the test
@@ -39,8 +41,10 @@ type Testing struct {
 	name     string
 	failed   bool
 	skipped  bool
-	output   io.Writer
 	cleanups []func()
+
+	outputMu sync.Mutex
+	output   io.Writer
 }
 
 // NewTesting creates a Testing with the given name. Output goes to w;
@@ -136,7 +140,8 @@ func (t *Testing) Cleanup(f func()) {
 
 // Run mirrors testing.T.Run: it creates a child Testing named "parent/name",
 // runs f in a new goroutine (so Fatal/Skip only exit the child), waits for
-// completion, and returns true if the child did not fail.
+// completion. If the child fails, the parent is also marked as failed,
+// matching testing.T.Run semantics. Returns true if the child did not fail.
 func (t *Testing) Run(name string, f func(*Testing)) bool {
 	child := NewTesting(t.name+"/"+name, t.output)
 	done := make(chan struct{})
@@ -146,7 +151,11 @@ func (t *Testing) Run(name string, f func(*Testing)) bool {
 		f(child)
 	}()
 	<-done
-	return !child.Failed()
+	if child.Failed() {
+		t.markFailed()
+		return false
+	}
+	return true
 }
 
 // RunCleanups runs all registered cleanup functions in LIFO order and clears
@@ -162,8 +171,8 @@ func (t *Testing) RunCleanups() {
 }
 
 func (t *Testing) log(msg string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.outputMu.Lock()
+	defer t.outputMu.Unlock()
 	fmt.Fprintf(t.output, "%s: %s\n", t.name, msg)
 }
 
@@ -183,8 +192,7 @@ func (t *Testing) markSkipped() {
 // compatible with *Testing (i.e. *Testing or an interface it implements, such
 // as TestingT). Each test's name is derived from its function name via
 // reflection. Tests run in slice order. Output goes to w (nil → os.Stderr).
-// TestMain exits the process: 0 if all tests pass, 1 if any fail.
-func TestMain[T TestingT](name string, w io.Writer, tests []func(T)) {
+func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests []func(T)) error {
 	if w == nil {
 		w = os.Stderr
 	}
@@ -198,14 +206,19 @@ func TestMain[T TestingT](name string, w io.Writer, tests []func(T)) {
 			defer t.RunCleanups()
 			f(any(t).(T))
 		}()
-		<-done
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		if t.Failed() {
 			failed = true
 		}
 	}
 	if failed {
-		os.Exit(1)
+		return fmt.Errorf("some tests failed")
 	}
+	return nil
 }
 
 // funcBaseName returns the unqualified function name of f, stripping the

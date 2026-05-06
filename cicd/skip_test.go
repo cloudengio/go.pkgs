@@ -18,19 +18,19 @@ type mockT struct {
 	helpCalls int
 }
 
-func (m *mockT) Helper()                          { m.helpCalls++ }
-func (m *mockT) Skipf(f string, a ...any)         { m.skipped = true; m.skipMsg = fmt.Sprintf(f, a...) }
-func (m *mockT) Name() string                     { return m.name }
-func (m *mockT) Failed() bool                     { return false }
-func (m *mockT) Skipped() bool                    { return m.skipped }
-func (m *mockT) Log(args ...any)                  {}
-func (m *mockT) Logf(string, ...any)              {}
-func (m *mockT) Error(args ...any)                {}
-func (m *mockT) Errorf(string, ...any)            {}
-func (m *mockT) Fatal(args ...any)                {}
-func (m *mockT) Skip(args ...any)                 { m.skipped = true }
-func (m *mockT) Cleanup(f func())                 {}
-func (m *mockT) RunCleanups()                     {}
+func (m *mockT) Helper()                             { m.helpCalls++ }
+func (m *mockT) Skipf(f string, a ...any)            { m.skipped = true; m.skipMsg = fmt.Sprintf(f, a...) }
+func (m *mockT) Name() string                        { return m.name }
+func (m *mockT) Failed() bool                        { return false }
+func (m *mockT) Skipped() bool                       { return m.skipped }
+func (m *mockT) Log(...any)                          {}
+func (m *mockT) Logf(string, ...any)                 {}
+func (m *mockT) Error(...any)                        {}
+func (m *mockT) Errorf(string, ...any)               {}
+func (m *mockT) Fatal(...any)                        {}
+func (m *mockT) Skip(...any)                         { m.skipped = true }
+func (m *mockT) Cleanup(func())                      {}
+func (m *mockT) RunCleanups()                        {}
 func (m *mockT) Run(_ string, _ func(*Testing)) bool { return true }
 func (m *mockT) Fatalf(format string, args ...any) {
 	panic(fmt.Sprintf(format, args...))

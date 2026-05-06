@@ -6,9 +6,13 @@ package cicd
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 )
+
+var _ TestingT = (*testing.T)(nil) // compile-time interface check
 
 // runInGoroutine runs f in a fresh goroutine and blocks until it completes,
 // matching how *testing.T internally runs subtests so that runtime.Goexit
@@ -253,7 +257,8 @@ func TestTestingRunChildName(t *testing.T) {
 	}
 }
 
-// TestTestingRunReturnsFalseOnFailure matches testing.T.Run return value.
+// TestTestingRunReturnsFalseOnFailure matches testing.T.Run return value and
+// verifies that a failing child propagates failure to the parent.
 func TestTestingRunReturnsFalseOnFailure(t *testing.T) {
 	tt := NewTesting("parent", nil)
 	result := tt.Run("child", func(c *Testing) {
@@ -261,6 +266,9 @@ func TestTestingRunReturnsFalseOnFailure(t *testing.T) {
 	})
 	if result {
 		t.Error("Run must return false when child fails")
+	}
+	if !tt.Failed() {
+		t.Error("parent must be marked failed when child fails")
 	}
 }
 
@@ -287,8 +295,8 @@ func TestTestingRunFatalIsolated(t *testing.T) {
 	if result {
 		t.Error("Run must return false when child calls Fatal")
 	}
-	if tt.Failed() {
-		t.Error("parent must not be marked failed by child Fatal")
+	if !tt.Failed() {
+		t.Error("parent must be marked failed when child fails, matching testing.T.Run")
 	}
 }
 
@@ -307,7 +315,7 @@ func TestTestingRunCleanupRunsAfterF(t *testing.T) {
 
 // TestTestingHelperNoOp verifies Helper does not panic (it's a no-op outside
 // the test harness).
-func TestTestingHelperNoOp(t *testing.T) {
+func TestTestingHelperNoOp(*testing.T) {
 	tt := NewTesting("mytest", nil)
 	tt.Helper()
 }
@@ -321,5 +329,125 @@ func TestTestingFuncBaseName(t *testing.T) {
 	}
 	if strings.Contains(name, "/") || strings.Contains(name, ".") {
 		t.Errorf("funcBaseName %q should be unqualified (no slashes or dots)", name)
+	}
+}
+
+// testMainNamedHelper is a package-level function so its reflection name is
+// stable and predictable (no closure suffix). It logs so the tester name
+// (which includes the function name) appears in the output.
+func testMainNamedHelper(tt *Testing) { tt.Log("ok") }
+
+func TestTestingMainAllPass(t *testing.T) {
+	var buf bytes.Buffer
+	ran := 0
+	err := TestMain(context.Background(), "suite", &buf, []func(*Testing){
+		func(*Testing) { ran++ },
+		func(*Testing) { ran++ },
+	})
+	if err != nil {
+		t.Errorf("all-passing suite: unexpected error: %v", err)
+	}
+	if ran != 2 {
+		t.Errorf("expected 2 tests to run, got %d", ran)
+	}
+}
+
+func TestTestingMainSomeFail(t *testing.T) {
+	var buf bytes.Buffer
+	err := TestMain(context.Background(), "suite", &buf, []func(*Testing){
+		func(tt *Testing) { tt.Error("intentional") },
+	})
+	if err == nil {
+		t.Error("expected non-nil error when tests fail")
+	}
+}
+
+// TestTestingMainContinuesAfterFailure verifies that a failing test does not
+// stop subsequent tests from running, matching go test behaviour.
+func TestTestingMainContinuesAfterFailure(t *testing.T) {
+	var buf bytes.Buffer
+	ran := 0
+	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
+		func(tt *Testing) { tt.Error("first fails"); ran++ },
+		func(*Testing) { ran++ },
+	})
+	if ran != 2 {
+		t.Errorf("expected both tests to run, got %d", ran)
+	}
+}
+
+// TestTestingMainFailureIsolation verifies each test receives its own *Testing
+// so one test's failure does not bleed into the next.
+func TestTestingMainFailureIsolation(t *testing.T) {
+	var buf bytes.Buffer
+	var second *Testing
+	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
+		func(tt *Testing) { tt.Error("first fails") },
+		func(tt *Testing) { second = tt },
+	})
+	if second == nil {
+		t.Fatal("second test did not run")
+	}
+	if second.Failed() {
+		t.Error("second test must not inherit failure state from first test")
+	}
+}
+
+// TestTestingMainNamesFromReflection verifies that TestMain derives each test's
+// name from the function's reflection name and prefixes it with the suite name.
+func TestTestingMainNamesFromReflection(t *testing.T) {
+	var buf bytes.Buffer
+	var gotName string
+	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
+		func(tt *Testing) { gotName = tt.Name() },
+	})
+	// Anonymous closure: name is suite/<closure-name> (e.g. suite/func1).
+	if !strings.HasPrefix(gotName, "suite/") {
+		t.Errorf("test name %q must start with suite/", gotName)
+	}
+
+	// Named function: name must include the exact function identifier.
+	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
+		testMainNamedHelper,
+	})
+	if !strings.Contains(buf.String(), "testMainNamedHelper") {
+		t.Errorf("output %q should contain function name %q", buf.String(), "testMainNamedHelper")
+	}
+}
+
+// TestTestingMainContextCancelled verifies that cancelling the context while a
+// test is running causes TestMain to return context.Canceled without starting
+// any further tests.
+func TestTestingMainContextCancelled(t *testing.T) {
+	var buf bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	ran := 0
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- TestMain(ctx, "suite", &buf, []func(*Testing){
+			func(*Testing) {
+				ran++
+				close(started)
+				<-unblock // hold the goroutine so ctx.Done() fires first
+			},
+			func(*Testing) { ran++ }, // must not run
+		})
+	}()
+
+	<-started  // first test is running
+	cancel()   // trigger cancellation while test is blocked
+	err := <-errc
+	close(unblock) // let the blocked goroutine finish to avoid a leak
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+	if ran != 1 {
+		t.Errorf("expected 1 test to run before cancellation, got %d", ran)
 	}
 }
