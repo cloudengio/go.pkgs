@@ -439,8 +439,8 @@ func TestTestingMainContextCancelled(t *testing.T) {
 		})
 	}()
 
-	<-started  // first test is running
-	cancel()   // trigger cancellation while test is blocked
+	<-started // first test is running
+	cancel()  // trigger cancellation while test is blocked
 	err := <-errc
 	close(unblock) // let the blocked goroutine finish to avoid a leak
 

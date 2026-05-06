@@ -143,7 +143,7 @@ func (t *Testing) Cleanup(f func()) {
 // completion. If the child fails, the parent is also marked as failed,
 // matching testing.T.Run semantics. Returns true if the child did not fail.
 func (t *Testing) Run(name string, f func(*Testing)) bool {
-	child := NewTesting(t.name+"/"+name, t.output)
+	child := NewTesting(strings.TrimPrefix(t.name+"/"+name, "/"), t.output)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -199,12 +199,16 @@ func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests [
 	failed := false
 	for _, f := range tests {
 		testName := funcBaseName(f)
-		t := NewTesting(name+"/"+testName, w)
+		t := NewTesting(strings.TrimPrefix(name+"/"+testName, "/"), w)
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 			defer t.RunCleanups()
-			f(any(t).(T))
+			tt, ok := any(t).(T)
+			if !ok {
+				panic(fmt.Sprintf("cicd.TestMain: %T is not %T", t, tt))
+			}
+			f(tt)
 		}()
 		select {
 		case <-done:
@@ -224,7 +228,11 @@ func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests [
 // funcBaseName returns the unqualified function name of f, stripping the
 // package path and any "-fm" method-value suffix added by the runtime.
 func funcBaseName(f any) string {
-	full := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+	v := reflect.ValueOf(f)
+	if !v.IsValid() || v.IsNil() {
+		return "unknown"
+	}
+	full := runtime.FuncForPC(v.Pointer()).Name()
 	if i := strings.LastIndexByte(full, '.'); i >= 0 {
 		full = full[i+1:]
 	}
