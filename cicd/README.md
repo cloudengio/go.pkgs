@@ -92,7 +92,7 @@ SkipWindows skips t if running on Windows.
 
 ### Func TestMain
 ```go
-func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests []func(T)) error
+func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regexp, tests []func(T)) error
 ```
 TestMain runs each test in tests with its own fresh *Testing. T must be
 compatible with *Testing (i.e. *Testing or an interface it implements,
@@ -195,6 +195,21 @@ Errorf marks the test as failed and writes a formatted message.
 
 
 ```go
+func (t *Testing) Fail()
+```
+Fail marks the function as having failed but continues execution. It mirrors
+testing.T.Fail.
+
+
+```go
+func (t *Testing) FailNow()
+```
+FailNow marks the function as having failed and stops its execution by
+calling runtime.Goexit (which runs all deferred calls in the current
+goroutine). It mirrors testing.T.FailNow.
+
+
+```go
 func (t *Testing) Failed() bool
 ```
 Failed reports whether the test has been marked as failed.
@@ -217,8 +232,8 @@ the current goroutine via runtime.Goexit.
 ```go
 func (t *Testing) Helper()
 ```
-Helper is a no-op; call-stack marking is not available outside the test
-harness.
+Helper marks the calling function as a test helper function. When printing
+file and line information, that function will be skipped.
 
 
 ```go
@@ -263,6 +278,13 @@ current goroutine via runtime.Goexit.
 
 
 ```go
+func (t *Testing) SkipNow()
+```
+SkipNow marks the test as skipped and stops its execution by calling
+runtime.Goexit. It mirrors testing.T.SkipNow.
+
+
+```go
 func (t *Testing) Skipf(format string, args ...any)
 ```
 Skipf marks the test as skipped, writes a formatted message, then terminates
@@ -294,6 +316,9 @@ type TestingT interface {
 	Fatal(args ...any)
 	Skip(args ...any)
 	Cleanup(f func())
+	Fail()
+	FailNow()
+	SkipNow()
 }
 ```
 TestingT mirrors testing.T and is implemented by cicd.Testing.

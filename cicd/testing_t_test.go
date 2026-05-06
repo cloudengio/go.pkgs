@@ -8,6 +8,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,6 +29,17 @@ func runInGoroutine(f func()) {
 		f()
 	}()
 	<-done
+}
+
+func captureStdout(f func()) string {
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	f()
+	w.Close()
+	buf, _ := io.ReadAll(r)
+	os.Stdout = oldStdout
+	return string(buf)
 }
 
 // TestTestingName checks that Name returns what was passed to NewTesting.
@@ -50,8 +66,8 @@ func TestTestingOutputFormat(t *testing.T) {
 	var buf bytes.Buffer
 	tt := NewTesting(context.Background(), "mytest", &buf)
 	tt.Log("hello")
-	if got, want := buf.String(), "mytest: hello\n"; got != want {
-		t.Errorf("output: got %q, want %q", got, want)
+	if !regexp.MustCompile(`testing_t_test\.go:\d+: mytest: hello\n`).MatchString(buf.String()) {
+		t.Errorf("output: got %q, want matching testing_t_test.go:\\d+: mytest: hello\\n", buf.String())
 	}
 }
 
@@ -106,6 +122,36 @@ func TestTestingErrorf(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "bad value: 99") {
 		t.Errorf("Errorf output %q does not contain expected message", buf.String())
+	}
+}
+
+func TestTestingFail(t *testing.T) {
+	tt := NewTesting(context.Background(), "mytest", nil)
+	reached := false
+	runInGoroutine(func() {
+		tt.Fail()
+		reached = true
+	})
+	if !reached {
+		t.Error("code after Fail must execute")
+	}
+	if !tt.Failed() {
+		t.Error("Fail must mark test as failed")
+	}
+}
+
+func TestTestingFailNow(t *testing.T) {
+	tt := NewTesting(context.Background(), "mytest", nil)
+	reached := false
+	runInGoroutine(func() {
+		tt.FailNow()
+		reached = true //nolint:govet // intentionally unreachable
+	})
+	if reached {
+		t.Error("code after FailNow must not execute")
+	}
+	if !tt.Failed() {
+		t.Error("FailNow must mark test as failed")
 	}
 }
 
@@ -202,6 +248,24 @@ func TestTestingSkipfExitsGoroutine(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "reason=ci") {
 		t.Errorf("Skipf output %q does not contain expected message", buf.String())
+	}
+}
+
+func TestTestingSkipNow(t *testing.T) {
+	tt := NewTesting(context.Background(), "mytest", nil)
+	reached := false
+	runInGoroutine(func() {
+		tt.SkipNow()
+		reached = true //nolint:govet // intentionally unreachable
+	})
+	if reached {
+		t.Error("code after SkipNow must not execute")
+	}
+	if !tt.Skipped() {
+		t.Error("SkipNow must mark test as skipped")
+	}
+	if tt.Failed() {
+		t.Error("SkipNow must not mark test as failed")
 	}
 }
 
@@ -359,11 +423,27 @@ func TestTestingRunPanicMessageRecorded(t *testing.T) {
 	}
 }
 
-// TestTestingHelperNoOp verifies Helper does not panic (it's a no-op outside
-// the test harness).
-func TestTestingHelperNoOp(*testing.T) {
-	tt := NewTesting(context.Background(), "mytest", nil)
-	tt.Helper()
+// TestTestingHelper verifies Helper does not panic and skips frames.
+func TestTestingHelper(t *testing.T) {
+	var buf bytes.Buffer
+	tt := NewTesting(context.Background(), "mytest", &buf)
+
+	helperFunc := func(t *Testing) {
+		t.Helper()
+		t.Log("hello from helper")
+	}
+
+	_, _, line, _ := runtime.Caller(0)
+	callingFunc := func() {
+		helperFunc(tt)
+	}
+	callingFunc()
+
+	out := buf.String()
+	expected := fmt.Sprintf("testing_t_test.go:%d: mytest: hello from helper", line+2)
+	if !strings.Contains(out, expected) {
+		t.Errorf("expected output to contain %q, got %q", expected, out)
+	}
 }
 
 // TestTestingFuncBaseName checks reflection-based name extraction used by TestMain.
@@ -384,38 +464,77 @@ func TestTestingFuncBaseName(t *testing.T) {
 func testMainNamedHelper(tt *Testing) { tt.Log("ok") }
 
 func TestTestingMainAllPass(t *testing.T) {
-	var buf bytes.Buffer
 	ran := 0
-	err := TestMain(context.Background(), "suite", &buf, []func(*Testing){
-		func(*Testing) { ran++ },
-		func(*Testing) { ran++ },
+	out := captureStdout(func() {
+		err := TestMain(context.Background(), false, nil, []func(*Testing){
+			func(*Testing) { ran++ },
+			func(*Testing) { ran++ },
+		})
+		if err != nil {
+			t.Errorf("all-passing suite: unexpected error: %v", err)
+		}
 	})
-	if err != nil {
-		t.Errorf("all-passing suite: unexpected error: %v", err)
-	}
 	if ran != 2 {
 		t.Errorf("expected 2 tests to run, got %d", ran)
+	}
+	if !strings.Contains(out, "PASS\n") {
+		t.Errorf("expected PASS output, got %q", out)
 	}
 }
 
 func TestTestingMainSomeFail(t *testing.T) {
-	var buf bytes.Buffer
-	err := TestMain(context.Background(), "suite", &buf, []func(*Testing){
-		func(tt *Testing) { tt.Error("intentional") },
+	out := captureStdout(func() {
+		_ = TestMain(context.Background(), false, nil, []func(*Testing){
+			func(tt *Testing) { tt.Error("intentional") },
+		})
 	})
-	if err == nil {
-		t.Error("expected non-nil error when tests fail")
+	if !strings.Contains(out, "FAIL\n") {
+		t.Error("expected FAIL output when tests fail")
+	}
+}
+
+func TestTestingMainDeferredOutput(t *testing.T) {
+	tests := []struct {
+		name       string
+		verbose    bool
+		fail       bool
+		wantOutput bool
+	}{
+		{"pass_not_verbose", false, false, false},
+		{"fail_not_verbose", false, true, true},
+		{"pass_verbose", true, false, true},
+		{"fail_verbose", true, true, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := captureStdout(func() {
+				_ = TestMain(context.Background(), tc.verbose, nil, []func(*Testing){
+					func(tt *Testing) {
+						tt.Log("my expected log message")
+						if tc.fail {
+							tt.Fail()
+						}
+					},
+				})
+			})
+			hasLog := strings.Contains(out, "my expected log message")
+			if hasLog != tc.wantOutput {
+				t.Errorf("verbose=%v, fail=%v: got log=%v, want %v\nOutput was:\n%s", tc.verbose, tc.fail, hasLog, tc.wantOutput, out)
+			}
+		})
 	}
 }
 
 // TestTestingMainContinuesAfterFailure verifies that a failing test does not
 // stop subsequent tests from running, matching go test behaviour.
 func TestTestingMainContinuesAfterFailure(t *testing.T) {
-	var buf bytes.Buffer
 	ran := 0
-	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
-		func(tt *Testing) { tt.Error("first fails"); ran++ },
-		func(*Testing) { ran++ },
+	captureStdout(func() {
+		_ = TestMain(context.Background(), false, nil, []func(*Testing){
+			func(tt *Testing) { tt.Error("first fails"); ran++ },
+			func(*Testing) { ran++ },
+		})
 	})
 	if ran != 2 {
 		t.Errorf("expected both tests to run, got %d", ran)
@@ -425,11 +544,12 @@ func TestTestingMainContinuesAfterFailure(t *testing.T) {
 // TestTestingMainFailureIsolation verifies each test receives its own *Testing
 // so one test's failure does not bleed into the next.
 func TestTestingMainFailureIsolation(t *testing.T) {
-	var buf bytes.Buffer
 	var second *Testing
-	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
-		func(tt *Testing) { tt.Error("first fails") },
-		func(tt *Testing) { second = tt },
+	captureStdout(func() {
+		_ = TestMain(context.Background(), false, nil, []func(*Testing){
+			func(tt *Testing) { tt.Error("first fails") },
+			func(tt *Testing) { second = tt },
+		})
 	})
 	if second == nil {
 		t.Fatal("second test did not run")
@@ -440,24 +560,27 @@ func TestTestingMainFailureIsolation(t *testing.T) {
 }
 
 // TestTestingMainNamesFromReflection verifies that TestMain derives each test's
-// name from the function's reflection name and prefixes it with the suite name.
+// name from the function's reflection name.
 func TestTestingMainNamesFromReflection(t *testing.T) {
-	var buf bytes.Buffer
 	var gotName string
-	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
-		func(tt *Testing) { gotName = tt.Name() },
+	captureStdout(func() {
+		_ = TestMain(context.Background(), false, nil, []func(*Testing){
+			func(tt *Testing) { gotName = tt.Name() },
+		})
 	})
-	// Anonymous closure: name is suite/<closure-name> (e.g. suite/func1).
-	if !strings.HasPrefix(gotName, "suite/") {
-		t.Errorf("test name %q must start with suite/", gotName)
+	// Anonymous closure: name is func1 or similar.
+	if !strings.HasPrefix(gotName, "func") {
+		t.Errorf("test name %q must start with func", gotName)
 	}
 
 	// Named function: name must include the exact function identifier.
-	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
-		testMainNamedHelper,
+	out := captureStdout(func() {
+		_ = TestMain(context.Background(), true, nil, []func(*Testing){
+			testMainNamedHelper,
+		})
 	})
-	if !strings.Contains(buf.String(), "testMainNamedHelper") {
-		t.Errorf("output %q should contain function name %q", buf.String(), "testMainNamedHelper")
+	if !strings.Contains(out, "testMainNamedHelper") {
+		t.Errorf("output %q should contain function name %q", out, "testMainNamedHelper")
 	}
 }
 
@@ -549,26 +672,28 @@ func TestTestingContextDerivedFromParent(t *testing.T) {
 // TestTestingMainPanicMarksTestFailed verifies that a panic inside a TestMain
 // test function is caught, the test is marked failed, and TestMain returns an error.
 func TestTestingMainPanicMarksTestFailed(t *testing.T) {
-	var buf bytes.Buffer
-	err := TestMain(context.Background(), "suite", &buf, []func(*Testing){
-		func(*Testing) { panic("oops") },
+	out := captureStdout(func() {
+		_ = TestMain(context.Background(), true, nil, []func(*Testing){
+			func(*Testing) { panic("oops") },
+		})
 	})
-	if err == nil {
-		t.Error("TestMain must return an error when a test panics")
+	if !strings.Contains(out, "FAIL\n") {
+		t.Error("TestMain must print FAIL when a test panics")
 	}
-	if !strings.Contains(buf.String(), "oops") {
-		t.Errorf("output %q should contain panic value", buf.String())
+	if !strings.Contains(out, "oops") {
+		t.Errorf("output %q should contain panic value", out)
 	}
 }
 
 // TestTestingMainPanicContinues verifies that a panic in one test does not
 // prevent subsequent tests from running.
 func TestTestingMainPanicContinues(t *testing.T) {
-	var buf bytes.Buffer
 	ran := 0
-	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
-		func(*Testing) { panic("first panics") },
-		func(*Testing) { ran++ },
+	captureStdout(func() {
+		_ = TestMain(context.Background(), false, nil, []func(*Testing){
+			func(*Testing) { panic("first panics") },
+			func(*Testing) { ran++ },
+		})
 	})
 	if ran != 1 {
 		t.Errorf("expected second test to run after panic in first, got ran=%d", ran)
@@ -579,7 +704,6 @@ func TestTestingMainPanicContinues(t *testing.T) {
 // test is running causes TestMain to return context.Canceled without starting
 // any further tests.
 func TestTestingMainContextCancelled(t *testing.T) {
-	var buf bytes.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -589,13 +713,15 @@ func TestTestingMainContextCancelled(t *testing.T) {
 
 	errc := make(chan error, 1)
 	go func() {
-		errc <- TestMain(ctx, "suite", &buf, []func(*Testing){
-			func(*Testing) {
-				ran++
-				close(started)
-				<-unblock // hold the goroutine so ctx.Done() fires first
-			},
-			func(*Testing) { ran++ }, // must not run
+		captureStdout(func() {
+			errc <- TestMain(ctx, false, nil, []func(*Testing){
+				func(*Testing) {
+					ran++
+					close(started)
+					<-unblock // hold the goroutine so ctx.Done() fires first
+				},
+				func(*Testing) { ran++ }, // must not run
+			})
 		})
 	}()
 
