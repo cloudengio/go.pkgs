@@ -113,7 +113,7 @@ func (c AWSConfig) Options(ctx context.Context) ([]ConfigOption, error) {
 			}
 			opts = append(opts, co...)
 		} else {
-			return nil, fmt.Errorf("key info ID %q not found", c.AWSKeyInfoID)
+			return nil, fmt.Errorf("key info for user %q and ID %q not found", c.AWSKeyInfoUser, c.AWSKeyInfoID)
 		}
 	}
 	opts = append(opts, WithConfigOptions(
