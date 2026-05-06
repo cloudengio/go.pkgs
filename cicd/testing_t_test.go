@@ -335,7 +335,7 @@ func TestTestingRunCleanupRunsAfterF(t *testing.T) {
 // to the parent.
 func TestTestingRunPanicMarksChildFailed(t *testing.T) {
 	tt := NewTesting(context.Background(), "parent", nil)
-	result := tt.Run("child", func(c *Testing) {
+	result := tt.Run("child", func(*Testing) {
 		panic("unexpected condition")
 	})
 	if result {
@@ -351,7 +351,7 @@ func TestTestingRunPanicMarksChildFailed(t *testing.T) {
 func TestTestingRunPanicMessageRecorded(t *testing.T) {
 	var buf bytes.Buffer
 	tt := NewTesting(context.Background(), "parent", &buf)
-	tt.Run("child", func(c *Testing) {
+	tt.Run("child", func(*Testing) {
 		panic("boom")
 	})
 	if !strings.Contains(buf.String(), "boom") {
