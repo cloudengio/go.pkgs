@@ -6,7 +6,7 @@ package cicd
 
 import "runtime"
 
-type TestingT interface {
+type TestingTSkip interface {
 	Helper()
 	Skipf(format string, args ...any)
 	Fatalf(format string, args ...any)
@@ -14,7 +14,7 @@ type TestingT interface {
 }
 
 // SkipIf skips t if skipping is true, using msg as the skip message.
-func SkipIf(t TestingT, msg string, skipping bool) {
+func SkipIf(t TestingTSkip, msg string, skipping bool) {
 	t.Helper()
 	if skipping {
 		t.Skipf("%s", msg)
@@ -22,13 +22,13 @@ func SkipIf(t TestingT, msg string, skipping bool) {
 }
 
 // SkipMacOS skips t if running on macOS.
-func SkipMacOS(t TestingT) {
+func SkipMacOS(t TestingTSkip) {
 	t.Helper()
 	SkipIf(t, "skipping on macOS", runtime.GOOS == "darwin")
 }
 
 // SkipLinux skips t if running on Linux.
-func SkipLinux(t TestingT) {
+func SkipLinux(t TestingTSkip) {
 	t.Helper()
 	SkipIf(t, "skipping on Linux", runtime.GOOS == "linux")
 }

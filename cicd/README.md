@@ -68,19 +68,19 @@ The results are cached after the first call.
 
 ### Func SkipIf
 ```go
-func SkipIf(t TestingT, msg string, skipping bool)
+func SkipIf(t TestingTSkip, msg string, skipping bool)
 ```
 SkipIf skips t if skipping is true, using msg as the skip message.
 
 ### Func SkipLinux
 ```go
-func SkipLinux(t TestingT)
+func SkipLinux(t TestingTSkip)
 ```
 SkipLinux skips t if running on Linux.
 
 ### Func SkipMacOS
 ```go
-func SkipMacOS(t TestingT)
+func SkipMacOS(t TestingTSkip)
 ```
 SkipMacOS skips t if running on macOS.
 
@@ -89,6 +89,16 @@ SkipMacOS skips t if running on macOS.
 func SkipWindows(t TestingT)
 ```
 SkipWindows skips t if running on Windows.
+
+### Func TestMain
+```go
+func TestMain[T TestingT](name string, w io.Writer, tests []func(T))
+```
+TestMain runs each test in tests with its own fresh *Testing. T must be
+compatible with *Testing (i.e. *Testing or an interface it implements,
+such as TestingT). Each test's name is derived from its function name via
+reflection. Tests run in slice order. Output goes to w (nil → os.Stderr).
+TestMain exits the process: 0 if all tests pass, 1 if any fail.
 
 
 
@@ -134,9 +144,153 @@ matches.
 
 
 
+### Type Testing
+```go
+type Testing struct {
+	// contains filtered or unexported fields
+}
+```
+Testing is a concrete implementation of TestingT for use outside the
+test harness (e.g. integration tests run as binaries). Fatal/Fatalf and
+Skip/Skipf terminate the current goroutine via runtime.Goexit, which runs
+deferred functions before exiting — matching the behaviour of *testing.T.
+
+### Functions
+
+```go
+func NewTesting(name string, w io.Writer) *Testing
+```
+NewTesting creates a Testing with the given name. Output goes to w; pass nil
+to use os.Stderr.
+
+
+
+### Methods
+
+```go
+func (t *Testing) Cleanup(f func())
+```
+Cleanup registers a function to be called when RunCleanups is invoked.
+Functions are called in last-in-first-out order, matching *testing.T.
+
+
+```go
+func (t *Testing) Error(args ...any)
+```
+Error marks the test as failed and writes a message.
+
+
+```go
+func (t *Testing) Errorf(format string, args ...any)
+```
+Errorf marks the test as failed and writes a formatted message.
+
+
+```go
+func (t *Testing) Failed() bool
+```
+Failed reports whether the test has been marked as failed.
+
+
+```go
+func (t *Testing) Fatal(args ...any)
+```
+Fatal marks the test as failed, writes a message, then terminates the
+current goroutine via runtime.Goexit.
+
+
+```go
+func (t *Testing) Fatalf(format string, args ...any)
+```
+Fatalf marks the test as failed, writes a formatted message, then terminates
+the current goroutine via runtime.Goexit.
+
+
+```go
+func (t *Testing) Helper()
+```
+Helper is a no-op; call-stack marking is not available outside the test
+harness.
+
+
+```go
+func (t *Testing) Log(args ...any)
+```
+Log writes a message to the output writer.
+
+
+```go
+func (t *Testing) Logf(format string, args ...any)
+```
+Logf writes a formatted message to the output writer.
+
+
+```go
+func (t *Testing) Name() string
+```
+Name returns the name set at construction.
+
+
+```go
+func (t *Testing) Run(name string, f func(*Testing)) bool
+```
+Run mirrors testing.T.Run: it creates a child Testing named "parent/name",
+runs f in a new goroutine (so Fatal/Skip only exit the child), waits for
+completion, and returns true if the child did not fail.
+
+
+```go
+func (t *Testing) RunCleanups()
+```
+RunCleanups runs all registered cleanup functions in LIFO order and clears
+the cleanup list.
+
+
+```go
+func (t *Testing) Skip(args ...any)
+```
+Skip marks the test as skipped, writes a message, then terminates the
+current goroutine via runtime.Goexit.
+
+
+```go
+func (t *Testing) Skipf(format string, args ...any)
+```
+Skipf marks the test as skipped, writes a formatted message, then terminates
+the current goroutine via runtime.Goexit.
+
+
+```go
+func (t *Testing) Skipped() bool
+```
+Skipped reports whether the test has been marked as skipped.
+
+
+
+
 ### Type TestingT
 ```go
 type TestingT interface {
+	TestingTSkip
+	Failed() bool
+	Skipped() bool
+	Log(args ...any)
+	Logf(format string, args ...any)
+	Error(args ...any)
+	Errorf(format string, args ...any)
+	Fatal(args ...any)
+	Skip(args ...any)
+	Cleanup(f func())
+	RunCleanups()
+	Run(name string, f func(*Testing)) bool
+}
+```
+TestingT mirrors testing.T and is implemented by cicd.Testing.
+
+
+### Type TestingTSkip
+```go
+type TestingTSkip interface {
 	Helper()
 	Skipf(format string, args ...any)
 	Fatalf(format string, args ...any)
