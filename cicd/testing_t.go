@@ -159,6 +159,11 @@ func (t *Testing) Run(name string, f func(*Testing)) bool {
 	go func() {
 		defer close(done)
 		defer child.RunCleanups()
+		defer func() {
+			if r := recover(); r != nil {
+				child.Errorf("panic: %v", r)
+			}
+		}()
 		f(child)
 	}()
 	<-done
@@ -173,12 +178,16 @@ func (t *Testing) Run(name string, f func(*Testing)) bool {
 // the cleanup list.
 func (t *Testing) RunCleanups() {
 	t.cancel()
-	t.mu.Lock()
-	fns := t.cleanups
-	t.cleanups = nil
-	t.mu.Unlock()
-	for i := len(fns) - 1; i >= 0; i-- {
-		fns[i]()
+	for {
+		t.mu.Lock()
+		if len(t.cleanups) == 0 {
+			t.mu.Unlock()
+			break
+		}
+		fn := t.cleanups[len(t.cleanups)-1]
+		t.cleanups = t.cleanups[:len(t.cleanups)-1]
+		t.mu.Unlock()
+		fn()
 	}
 }
 
@@ -216,6 +225,11 @@ func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests [
 		go func() {
 			defer close(done)
 			defer t.RunCleanups()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("panic: %v", r)
+				}
+			}()
 			tt, ok := any(t).(T)
 			if !ok {
 				panic(fmt.Sprintf("cicd.TestMain: %T is not %T", t, tt))

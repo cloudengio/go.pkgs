@@ -34,7 +34,7 @@ func SkipLinux(t TestingTSkip) {
 }
 
 // SkipWindows skips t if running on Windows.
-func SkipWindows(t TestingT) {
+func SkipWindows(t TestingTSkip) {
 	t.Helper()
 	SkipIf(t, "skipping on Windows", runtime.GOOS == "windows")
 }

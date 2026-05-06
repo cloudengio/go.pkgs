@@ -245,6 +245,23 @@ func TestTestingRunCleanupsIdempotent(t *testing.T) {
 	}
 }
 
+// TestTestingRunCleanupsAllowsNewRegistrations verifies that a cleanup function
+// may call Cleanup to register additional cleanups, which are then executed
+// within the same RunCleanups call. This is possible because RunCleanups pops
+// entries one at a time rather than swapping the whole list up-front.
+func TestTestingRunCleanupsAllowsNewRegistrations(t *testing.T) {
+	tt := NewTesting(context.Background(), "mytest", nil)
+	var order []int
+	tt.Cleanup(func() {
+		order = append(order, 1)
+		tt.Cleanup(func() { order = append(order, 2) })
+	})
+	tt.RunCleanups()
+	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
+		t.Errorf("Cleanup with new registration: got %v, want [1 2]", order)
+	}
+}
+
 // TestTestingRunChildName matches testing.T.Run: subtest name is "parent/child".
 func TestTestingRunChildName(t *testing.T) {
 	tt := NewTesting(context.Background(), "parent", nil)
@@ -310,6 +327,35 @@ func TestTestingRunCleanupRunsAfterF(t *testing.T) {
 	})
 	if !cleanupRan {
 		t.Error("child Cleanup must run when Run returns")
+	}
+}
+
+// TestTestingRunPanicMarksChildFailed verifies that a panic inside a Run
+// subtest is caught, the child is marked failed, and the failure propagates
+// to the parent.
+func TestTestingRunPanicMarksChildFailed(t *testing.T) {
+	tt := NewTesting(context.Background(), "parent", nil)
+	result := tt.Run("child", func(c *Testing) {
+		panic("unexpected condition")
+	})
+	if result {
+		t.Error("Run must return false when child panics")
+	}
+	if !tt.Failed() {
+		t.Error("parent must be marked failed when child panics")
+	}
+}
+
+// TestTestingRunPanicMessageRecorded verifies that the panic value appears in
+// the test output so it is visible when the suite runs.
+func TestTestingRunPanicMessageRecorded(t *testing.T) {
+	var buf bytes.Buffer
+	tt := NewTesting(context.Background(), "parent", &buf)
+	tt.Run("child", func(c *Testing) {
+		panic("boom")
+	})
+	if !strings.Contains(buf.String(), "boom") {
+		t.Errorf("output %q should contain panic value", buf.String())
 	}
 }
 
@@ -497,6 +543,35 @@ func TestTestingContextDerivedFromParent(t *testing.T) {
 		// expected
 	default:
 		t.Error("context derived from a cancelled parent must itself be cancelled")
+	}
+}
+
+// TestTestingMainPanicMarksTestFailed verifies that a panic inside a TestMain
+// test function is caught, the test is marked failed, and TestMain returns an error.
+func TestTestingMainPanicMarksTestFailed(t *testing.T) {
+	var buf bytes.Buffer
+	err := TestMain(context.Background(), "suite", &buf, []func(*Testing){
+		func(*Testing) { panic("oops") },
+	})
+	if err == nil {
+		t.Error("TestMain must return an error when a test panics")
+	}
+	if !strings.Contains(buf.String(), "oops") {
+		t.Errorf("output %q should contain panic value", buf.String())
+	}
+}
+
+// TestTestingMainPanicContinues verifies that a panic in one test does not
+// prevent subsequent tests from running.
+func TestTestingMainPanicContinues(t *testing.T) {
+	var buf bytes.Buffer
+	ran := 0
+	TestMain(context.Background(), "suite", &buf, []func(*Testing){ //nolint:errcheck
+		func(*Testing) { panic("first panics") },
+		func(*Testing) { ran++ },
+	})
+	if ran != 1 {
+		t.Errorf("expected second test to run after panic in first, got ran=%d", ran)
 	}
 }
 

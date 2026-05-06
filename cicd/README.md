@@ -86,7 +86,7 @@ SkipMacOS skips t if running on macOS.
 
 ### Func SkipWindows
 ```go
-func SkipWindows(t TestingT)
+func SkipWindows(t TestingTSkip)
 ```
 SkipWindows skips t if running on Windows.
 
