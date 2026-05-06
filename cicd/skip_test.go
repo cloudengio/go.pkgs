@@ -5,6 +5,7 @@
 package cicd
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -19,6 +20,7 @@ type mockT struct {
 }
 
 func (m *mockT) Helper()                             { m.helpCalls++ }
+func (m *mockT) Context() context.Context            { return context.Background() }
 func (m *mockT) Skipf(f string, a ...any)            { m.skipped = true; m.skipMsg = fmt.Sprintf(f, a...) }
 func (m *mockT) Name() string                        { return m.name }
 func (m *mockT) Failed() bool                        { return false }

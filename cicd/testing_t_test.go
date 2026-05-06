@@ -28,7 +28,7 @@ func runInGoroutine(f func()) {
 
 // TestTestingName checks that Name returns what was passed to NewTesting.
 func TestTestingName(t *testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	if got := tt.Name(); got != "mytest" {
 		t.Errorf("Name: got %q, want %q", got, "mytest")
 	}
@@ -36,7 +36,7 @@ func TestTestingName(t *testing.T) {
 
 // TestTestingInitialState matches *testing.T: a fresh T is neither failed nor skipped.
 func TestTestingInitialState(t *testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	if tt.Failed() {
 		t.Error("Failed: want false for fresh Testing")
 	}
@@ -48,7 +48,7 @@ func TestTestingInitialState(t *testing.T) {
 // TestTestingOutputFormat verifies the "name: message\n" line format.
 func TestTestingOutputFormat(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	tt.Log("hello")
 	if got, want := buf.String(), "mytest: hello\n"; got != want {
 		t.Errorf("output: got %q, want %q", got, want)
@@ -57,7 +57,7 @@ func TestTestingOutputFormat(t *testing.T) {
 
 func TestTestingLog(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	tt.Log("hello", " world")
 	if !strings.Contains(buf.String(), "hello world") {
 		t.Errorf("Log output %q does not contain expected message", buf.String())
@@ -72,7 +72,7 @@ func TestTestingLog(t *testing.T) {
 
 func TestTestingLogf(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	tt.Logf("value=%d", 42)
 	if !strings.Contains(buf.String(), "value=42") {
 		t.Errorf("Logf output %q does not contain expected message", buf.String())
@@ -84,7 +84,7 @@ func TestTestingLogf(t *testing.T) {
 
 func TestTestingError(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	tt.Error("something went wrong")
 	if !tt.Failed() {
 		t.Error("Error must mark test as failed")
@@ -99,7 +99,7 @@ func TestTestingError(t *testing.T) {
 
 func TestTestingErrorf(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	tt.Errorf("bad value: %d", 99)
 	if !tt.Failed() {
 		t.Error("Errorf must mark test as failed")
@@ -113,7 +113,7 @@ func TestTestingErrorf(t *testing.T) {
 // goroutine (via runtime.Goexit) so code after it never runs.
 func TestTestingFatalExitsGoroutine(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	reached := false
 	runInGoroutine(func() {
 		tt.Fatal("stop here")
@@ -132,7 +132,7 @@ func TestTestingFatalExitsGoroutine(t *testing.T) {
 
 func TestTestingFatalfExitsGoroutine(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	reached := false
 	runInGoroutine(func() {
 		tt.Fatalf("value=%d", 7)
@@ -152,7 +152,7 @@ func TestTestingFatalfExitsGoroutine(t *testing.T) {
 // TestTestingFatalRunsDeferreds matches *testing.T: runtime.Goexit runs
 // deferred functions, so Cleanup callbacks registered before Fatal still fire.
 func TestTestingFatalRunsDeferreds(t *testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	cleanupRan := false
 	tt.Cleanup(func() { cleanupRan = true })
 	runInGoroutine(func() {
@@ -166,7 +166,7 @@ func TestTestingFatalRunsDeferreds(t *testing.T) {
 
 func TestTestingSkipExitsGoroutine(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	reached := false
 	runInGoroutine(func() {
 		tt.Skip("not applicable")
@@ -188,7 +188,7 @@ func TestTestingSkipExitsGoroutine(t *testing.T) {
 
 func TestTestingSkipfExitsGoroutine(t *testing.T) {
 	var buf bytes.Buffer
-	tt := NewTesting("mytest", &buf)
+	tt := NewTesting(context.Background(), "mytest", &buf)
 	reached := false
 	runInGoroutine(func() {
 		tt.Skipf("reason=%s", "ci")
@@ -207,7 +207,7 @@ func TestTestingSkipfExitsGoroutine(t *testing.T) {
 
 // TestTestingSkipRunsDeferreds matches Fatal: Skipf/Skip also use Goexit.
 func TestTestingSkipRunsDeferreds(t *testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	cleanupRan := false
 	tt.Cleanup(func() { cleanupRan = true })
 	runInGoroutine(func() {
@@ -221,7 +221,7 @@ func TestTestingSkipRunsDeferreds(t *testing.T) {
 
 // TestTestingCleanupLIFO matches *testing.T: cleanups run in reverse registration order.
 func TestTestingCleanupLIFO(t *testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	var order []int
 	tt.Cleanup(func() { order = append(order, 1) })
 	tt.Cleanup(func() { order = append(order, 2) })
@@ -235,7 +235,7 @@ func TestTestingCleanupLIFO(t *testing.T) {
 // TestTestingRunCleanupsIdempotent matches *testing.T: a second RunCleanups
 // call after the list is drained is a no-op.
 func TestTestingRunCleanupsIdempotent(t *testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	ran := 0
 	tt.Cleanup(func() { ran++ })
 	tt.RunCleanups()
@@ -247,7 +247,7 @@ func TestTestingRunCleanupsIdempotent(t *testing.T) {
 
 // TestTestingRunChildName matches testing.T.Run: subtest name is "parent/child".
 func TestTestingRunChildName(t *testing.T) {
-	tt := NewTesting("parent", nil)
+	tt := NewTesting(context.Background(), "parent", nil)
 	var childName string
 	tt.Run("child", func(c *Testing) {
 		childName = c.Name()
@@ -260,7 +260,7 @@ func TestTestingRunChildName(t *testing.T) {
 // TestTestingRunReturnsFalseOnFailure matches testing.T.Run return value and
 // verifies that a failing child propagates failure to the parent.
 func TestTestingRunReturnsFalseOnFailure(t *testing.T) {
-	tt := NewTesting("parent", nil)
+	tt := NewTesting(context.Background(), "parent", nil)
 	result := tt.Run("child", func(c *Testing) {
 		c.Errorf("child failed")
 	})
@@ -273,7 +273,7 @@ func TestTestingRunReturnsFalseOnFailure(t *testing.T) {
 }
 
 func TestTestingRunReturnsTrueOnSuccess(t *testing.T) {
-	tt := NewTesting("parent", nil)
+	tt := NewTesting(context.Background(), "parent", nil)
 	result := tt.Run("child", func(_ *Testing) {})
 	if !result {
 		t.Error("Run must return true when child passes")
@@ -283,7 +283,7 @@ func TestTestingRunReturnsTrueOnSuccess(t *testing.T) {
 // TestTestingRunFatalIsolated matches testing.T.Run: Fatal in child only exits
 // the child's goroutine, not the parent.
 func TestTestingRunFatalIsolated(t *testing.T) {
-	tt := NewTesting("parent", nil)
+	tt := NewTesting(context.Background(), "parent", nil)
 	reached := false
 	result := tt.Run("child", func(c *Testing) {
 		c.Fatal("child fatal")
@@ -303,7 +303,7 @@ func TestTestingRunFatalIsolated(t *testing.T) {
 // TestTestingRunCleanupRunsAfterF matches testing.T.Run: child cleanups run
 // after f returns (or exits via Goexit).
 func TestTestingRunCleanupRunsAfterF(t *testing.T) {
-	tt := NewTesting("parent", nil)
+	tt := NewTesting(context.Background(), "parent", nil)
 	cleanupRan := false
 	tt.Run("child", func(c *Testing) {
 		c.Cleanup(func() { cleanupRan = true })
@@ -316,7 +316,7 @@ func TestTestingRunCleanupRunsAfterF(t *testing.T) {
 // TestTestingHelperNoOp verifies Helper does not panic (it's a no-op outside
 // the test harness).
 func TestTestingHelperNoOp(*testing.T) {
-	tt := NewTesting("mytest", nil)
+	tt := NewTesting(context.Background(), "mytest", nil)
 	tt.Helper()
 }
 
@@ -412,6 +412,91 @@ func TestTestingMainNamesFromReflection(t *testing.T) {
 	})
 	if !strings.Contains(buf.String(), "testMainNamedHelper") {
 		t.Errorf("output %q should contain function name %q", buf.String(), "testMainNamedHelper")
+	}
+}
+
+// TestTestingContext verifies that Context() returns a non-nil context that
+// is cancelled by RunCleanups, matching testing.T.Context() semantics.
+func TestTestingContext(t *testing.T) {
+	tt := NewTesting(context.Background(), "mytest", nil)
+	ctx := tt.Context()
+	if ctx == nil {
+		t.Fatal("Context() must not return nil")
+	}
+	select {
+	case <-ctx.Done():
+		t.Fatal("context must not be cancelled before RunCleanups")
+	default:
+	}
+	tt.RunCleanups()
+	select {
+	case <-ctx.Done():
+		// expected
+	default:
+		t.Error("context must be cancelled after RunCleanups")
+	}
+}
+
+// TestTestingContextCancelledBeforeCleanups verifies that a Cleanup function
+// can observe the cancellation via <-t.Context().Done(), matching
+// testing.T.Context() semantics.
+func TestTestingContextCancelledBeforeCleanups(t *testing.T) {
+	tt := NewTesting(context.Background(), "mytest", nil)
+	ctx := tt.Context()
+	ctxCancelledDuringCleanup := false
+	tt.Cleanup(func() {
+		select {
+		case <-ctx.Done():
+			ctxCancelledDuringCleanup = true
+		default:
+		}
+	})
+	tt.RunCleanups()
+	if !ctxCancelledDuringCleanup {
+		t.Error("context must already be cancelled when Cleanup functions run")
+	}
+}
+
+// TestTestingContextChildInheritsParent verifies that a child created by Run
+// receives a context derived from the parent's context, so cancelling the
+// parent propagates to the child.
+func TestTestingContextChildInheritsParent(t *testing.T) {
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
+
+	parent := NewTesting(parentCtx, "parent", nil)
+	var childCtx context.Context
+	parent.Run("child", func(c *Testing) {
+		childCtx = c.Context()
+	})
+
+	if childCtx == nil {
+		t.Fatal("child Context() must not be nil")
+	}
+	// Child's context should still be live (RunCleanups cancelled the child's
+	// own cancel but not the parent's underlying context).
+	// Cancel the parent context and verify it propagates.
+	parentCancel()
+	select {
+	case <-childCtx.Done():
+		// expected: child context is derived from parent
+	default:
+		t.Error("cancelling parent context must cancel child context")
+	}
+}
+
+// TestTestingContextDerivedFromParent verifies that a Testing created with a
+// cancelled parent context starts with an already-cancelled context.
+func TestTestingContextDerivedFromParent(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	tt := NewTesting(parent, "mytest", nil)
+	select {
+	case <-tt.Context().Done():
+		// expected
+	default:
+		t.Error("context derived from a cancelled parent must itself be cancelled")
 	}
 }
 

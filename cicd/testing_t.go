@@ -18,6 +18,7 @@ import (
 // TestingT mirrors testing.T and is implemented by cicd.Testing.
 type TestingT interface {
 	Helper()
+	Context() context.Context
 	Skipf(format string, args ...any)
 	Fatalf(format string, args ...any)
 	Name() string
@@ -36,9 +37,14 @@ type TestingT interface {
 // harness (e.g. integration tests run as binaries). Fatal/Fatalf and
 // Skip/Skipf terminate the current goroutine via runtime.Goexit, which runs
 // deferred functions before exiting — matching the behaviour of *testing.T.
+// Note that RunCleanups must be called to run registered cleanup functions after
+// the test body completes, matching *testing.T semantics.
 type Testing struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	name   string
+
 	mu       sync.Mutex
-	name     string
 	failed   bool
 	skipped  bool
 	cleanups []func()
@@ -49,11 +55,12 @@ type Testing struct {
 
 // NewTesting creates a Testing with the given name. Output goes to w;
 // pass nil to use os.Stderr.
-func NewTesting(name string, w io.Writer) *Testing {
+func NewTesting(ctx context.Context, name string, w io.Writer) *Testing {
+	ctx, cancel := context.WithCancel(ctx)
 	if w == nil {
 		w = os.Stderr
 	}
-	return &Testing{name: name, output: w}
+	return &Testing{ctx: ctx, cancel: cancel, name: name, output: w}
 }
 
 // Helper is a no-op; call-stack marking is not available outside the test harness.
@@ -61,6 +68,10 @@ func (t *Testing) Helper() {}
 
 // Name returns the name set at construction.
 func (t *Testing) Name() string { return t.name }
+
+// Context returns the context for this test. The context is cancelled just
+// before RunCleanups is called, matching testing.T.Context() semantics.
+func (t *Testing) Context() context.Context { return t.ctx }
 
 // Failed reports whether the test has been marked as failed.
 func (t *Testing) Failed() bool {
@@ -143,7 +154,7 @@ func (t *Testing) Cleanup(f func()) {
 // completion. If the child fails, the parent is also marked as failed,
 // matching testing.T.Run semantics. Returns true if the child did not fail.
 func (t *Testing) Run(name string, f func(*Testing)) bool {
-	child := NewTesting(strings.TrimPrefix(t.name+"/"+name, "/"), t.output)
+	child := NewTesting(t.ctx, strings.TrimPrefix(t.name+"/"+name, "/"), t.output)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -161,6 +172,7 @@ func (t *Testing) Run(name string, f func(*Testing)) bool {
 // RunCleanups runs all registered cleanup functions in LIFO order and clears
 // the cleanup list.
 func (t *Testing) RunCleanups() {
+	t.cancel()
 	t.mu.Lock()
 	fns := t.cleanups
 	t.cleanups = nil
@@ -199,7 +211,7 @@ func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests [
 	failed := false
 	for _, f := range tests {
 		testName := funcBaseName(f)
-		t := NewTesting(strings.TrimPrefix(name+"/"+testName, "/"), w)
+		t := NewTesting(ctx, strings.TrimPrefix(name+"/"+testName, "/"), w)
 		done := make(chan struct{})
 		go func() {
 			defer close(done)

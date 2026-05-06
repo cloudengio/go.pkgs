@@ -153,11 +153,13 @@ Testing is a concrete implementation of TestingT for use outside the
 test harness (e.g. integration tests run as binaries). Fatal/Fatalf and
 Skip/Skipf terminate the current goroutine via runtime.Goexit, which runs
 deferred functions before exiting — matching the behaviour of *testing.T.
+Note that RunCleanups must be called to run registered cleanup functions
+after the test body completes, matching *testing.T semantics.
 
 ### Functions
 
 ```go
-func NewTesting(name string, w io.Writer) *Testing
+func NewTesting(ctx context.Context, name string, w io.Writer) *Testing
 ```
 NewTesting creates a Testing with the given name. Output goes to w; pass nil
 to use os.Stderr.
@@ -171,6 +173,13 @@ func (t *Testing) Cleanup(f func())
 ```
 Cleanup registers a function to be called when RunCleanups is invoked.
 Functions are called in last-in-first-out order, matching *testing.T.
+
+
+```go
+func (t *Testing) Context() context.Context
+```
+Context returns the context for this test. The context is cancelled just
+before RunCleanups is called, matching testing.T.Context() semantics.
 
 
 ```go
@@ -272,6 +281,7 @@ Skipped reports whether the test has been marked as skipped.
 ```go
 type TestingT interface {
 	Helper()
+	Context() context.Context
 	Skipf(format string, args ...any)
 	Fatalf(format string, args ...any)
 	Name() string
