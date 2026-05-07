@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"cloudeng.io/cicd"
 	"cloudeng.io/os/executil"
 	"cloudeng.io/vms"
 	"cloudeng.io/vms/vmspool"
@@ -47,7 +48,7 @@ func (c InstanceTestConfig) timeout() time.Duration {
 }
 
 // TestInstanceCloneStartStopDelete verifies the standard Clone -> Start -> Stop -> Delete state transitions.
-func TestInstanceCloneStartStopDelete(t TestingT, cfg InstanceTestConfig) { //cicd:astest
+func TestInstanceCloneStartStopDelete(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
@@ -97,7 +98,7 @@ func TestInstanceCloneStartStopDelete(t TestingT, cfg InstanceTestConfig) { //ci
 }
 
 // TestInstanceSuspendResume verifies the Suspend and Resume (Start) transitions for suspendable VMs.
-func TestInstanceSuspendResume(t TestingT, cfg InstanceTestConfig) { //cicd:astest
+func TestInstanceSuspendResume(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
@@ -134,7 +135,7 @@ func TestInstanceSuspendResume(t TestingT, cfg InstanceTestConfig) { //cicd:aste
 }
 
 // TestInstanceExec verifies that a command can be executed inside a running VM.
-func TestInstanceExec(t TestingT, cfg InstanceTestConfig) { //cicd:astest
+func TestInstanceExec(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	if cfg.ExecCmd == "" {
 		return
 	}
@@ -166,7 +167,7 @@ func TestInstanceExec(t TestingT, cfg InstanceTestConfig) { //cicd:astest
 }
 
 // TestInstanceDeleteFromSuspended verifies that an instance can be deleted directly from the Suspended state.
-func TestInstanceDeleteFromSuspended(t TestingT, cfg InstanceTestConfig) { //cicd:astest
+func TestInstanceDeleteFromSuspended(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
@@ -195,7 +196,7 @@ func TestInstanceDeleteFromSuspended(t TestingT, cfg InstanceTestConfig) { //cic
 	}
 }
 
-func TestInstanceStateErrors(t TestingT, cfg InstanceTestConfig) { //cicd:astest
+func TestInstanceStateErrors(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	t.Helper()
 
 	inst := cfg.Constructor.New()
@@ -212,7 +213,7 @@ func TestInstanceStateErrors(t TestingT, cfg InstanceTestConfig) { //cicd:astest
 	}
 }
 
-func logStep(t TestingT, format string, args ...any) func() {
+func logStep(t cicd.TestingT, format string, args ...any) func() {
 	t.Helper()
 	msg := fmt.Sprintf(format, args...)
 	t.Logf("→ %s", msg)
@@ -234,7 +235,7 @@ func newWriter(format string, args ...any) io.Writer { //cicd:ignore
 // Start → Running → Stop → Stopped → Stop (idempotent) →
 // Start → Running → [Suspend → Suspended → Suspend (idempotent) → Start → Running →]
 // Stop → Stopped → Delete → Deleted
-func TestInstanceLifecycle(t TestingT, cfg InstanceTestConfig) { //cicd:astest
+func TestInstanceLifecycle(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	if cfg.RequireUnderlyingState == nil {
 		t.Fatalf("RequireUnderlyingState function must be provided for lifecycle test")
 	}
