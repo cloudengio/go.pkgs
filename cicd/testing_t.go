@@ -291,7 +291,10 @@ func (t *Testing) markSkipped() {
 // compatible with *Testing (i.e. *Testing or an interface it implements, such
 // as TestingT). Each test's name is derived from its function name via
 // reflection. Tests run in slice order. Output goes to w (nil → os.Stderr).
-func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regexp, tests []func(T)) error {
+func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regexp, wr io.Writer, tests []func(T)) error {
+	if wr == nil {
+		wr = os.Stdout
+	}
 	failed := false
 	failures := []string{}
 	for _, f := range tests {
@@ -312,11 +315,11 @@ func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regex
 				}
 				took := time.Since(start)
 				if t.Failed() {
-					fmt.Printf("--- FAIL: %s (%v)\n", t.Name(), took)
-					out.WriteTo(os.Stdout)
+					fmt.Fprintf(wr, "--- FAIL: %s (%v)\n", t.Name(), took)
+					_, _ = out.WriteTo(wr)
 				} else if verbose {
-					fmt.Printf("--- PASS: %s (%v)\n", t.Name(), took)
-					out.WriteTo(os.Stdout)
+					fmt.Fprintf(wr, "--- PASS: %s (%v)\n", t.Name(), took)
+					_, _ = out.WriteTo(wr)
 				}
 			}()
 			tt, ok := any(t).(T)
@@ -324,7 +327,7 @@ func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regex
 				panic(fmt.Sprintf("cicd.TestMain: %T is not %T", t, tt))
 			}
 			if verbose {
-				fmt.Printf("=== RUN   %s\n", t.Name())
+				fmt.Fprintf(wr, "=== RUN   %s\n", t.Name())
 			}
 			f(tt)
 		}()
@@ -339,11 +342,11 @@ func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regex
 		}
 	}
 	if failed {
-		fmt.Printf("FAIL\n")
-		fmt.Printf("Failed tests: %s\n", strings.Join(failures, ", "))
-		return nil
+		fmt.Fprintf(wr, "FAIL\n")
+		fmt.Fprintf(wr, "Failed tests: %s\n", strings.Join(failures, ", "))
+		return fmt.Errorf("failed tests: %s", strings.Join(failures, ", "))
 	}
-	fmt.Printf("PASS\n")
+	fmt.Fprintf(wr, "PASS\n")
 	return nil
 }
 

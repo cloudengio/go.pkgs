@@ -92,7 +92,7 @@ SkipWindows skips t if running on Windows.
 
 ### Func TestMain
 ```go
-func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regexp, tests []func(T)) error
+func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regexp, wr io.Writer, tests []func(T)) error
 ```
 TestMain runs each test in tests with its own fresh *Testing. T must be
 compatible with *Testing (i.e. *Testing or an interface it implements,

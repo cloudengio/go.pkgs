@@ -9,8 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -29,17 +27,6 @@ func runInGoroutine(f func()) {
 		f()
 	}()
 	<-done
-}
-
-func captureStdout(f func()) string {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	f()
-	w.Close()
-	buf, _ := io.ReadAll(r)
-	os.Stdout = oldStdout
-	return string(buf)
 }
 
 // TestTestingName checks that Name returns what was passed to NewTesting.
@@ -465,29 +452,29 @@ func testMainNamedHelper(tt *Testing) { tt.Log("ok") }
 
 func TestTestingMainAllPass(t *testing.T) {
 	ran := 0
-	out := captureStdout(func() {
-		err := TestMain(context.Background(), false, nil, []func(*Testing){
-			func(*Testing) { ran++ },
-			func(*Testing) { ran++ },
-		})
-		if err != nil {
-			t.Errorf("all-passing suite: unexpected error: %v", err)
-		}
+	var buf bytes.Buffer
+	err := TestMain(context.Background(), false, nil, &buf, []func(*Testing){
+		func(*Testing) { ran++ },
+		func(*Testing) { ran++ },
 	})
+	if err != nil {
+		t.Errorf("all-passing suite: unexpected error: %v", err)
+	}
 	if ran != 2 {
 		t.Errorf("expected 2 tests to run, got %d", ran)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "PASS\n") {
 		t.Errorf("expected PASS output, got %q", out)
 	}
 }
 
 func TestTestingMainSomeFail(t *testing.T) {
-	out := captureStdout(func() {
-		_ = TestMain(context.Background(), false, nil, []func(*Testing){
-			func(tt *Testing) { tt.Error("intentional") },
-		})
+	var buf bytes.Buffer
+	_ = TestMain(context.Background(), false, nil, &buf, []func(*Testing){
+		func(tt *Testing) { tt.Error("intentional") },
 	})
+	out := buf.String()
 	if !strings.Contains(out, "FAIL\n") {
 		t.Error("expected FAIL output when tests fail")
 	}
@@ -508,16 +495,16 @@ func TestTestingMainDeferredOutput(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out := captureStdout(func() {
-				_ = TestMain(context.Background(), tc.verbose, nil, []func(*Testing){
-					func(tt *Testing) {
-						tt.Log("my expected log message")
-						if tc.fail {
-							tt.Fail()
-						}
-					},
-				})
+			var buf bytes.Buffer
+			_ = TestMain(context.Background(), tc.verbose, nil, &buf, []func(*Testing){
+				func(tt *Testing) {
+					tt.Log("my expected log message")
+					if tc.fail {
+						tt.Fail()
+					}
+				},
 			})
+			out := buf.String()
 			hasLog := strings.Contains(out, "my expected log message")
 			if hasLog != tc.wantOutput {
 				t.Errorf("verbose=%v, fail=%v: got log=%v, want %v\nOutput was:\n%s", tc.verbose, tc.fail, hasLog, tc.wantOutput, out)
@@ -530,11 +517,10 @@ func TestTestingMainDeferredOutput(t *testing.T) {
 // stop subsequent tests from running, matching go test behaviour.
 func TestTestingMainContinuesAfterFailure(t *testing.T) {
 	ran := 0
-	captureStdout(func() {
-		_ = TestMain(context.Background(), false, nil, []func(*Testing){
-			func(tt *Testing) { tt.Error("first fails"); ran++ },
-			func(*Testing) { ran++ },
-		})
+	var buf bytes.Buffer
+	_ = TestMain(context.Background(), false, nil, &buf, []func(*Testing){
+		func(tt *Testing) { tt.Error("first fails"); ran++ },
+		func(*Testing) { ran++ },
 	})
 	if ran != 2 {
 		t.Errorf("expected both tests to run, got %d", ran)
@@ -545,11 +531,10 @@ func TestTestingMainContinuesAfterFailure(t *testing.T) {
 // so one test's failure does not bleed into the next.
 func TestTestingMainFailureIsolation(t *testing.T) {
 	var second *Testing
-	captureStdout(func() {
-		_ = TestMain(context.Background(), false, nil, []func(*Testing){
-			func(tt *Testing) { tt.Error("first fails") },
-			func(tt *Testing) { second = tt },
-		})
+	var buf bytes.Buffer
+	_ = TestMain(context.Background(), false, nil, &buf, []func(*Testing){
+		func(tt *Testing) { tt.Error("first fails") },
+		func(tt *Testing) { second = tt },
 	})
 	if second == nil {
 		t.Fatal("second test did not run")
@@ -563,10 +548,9 @@ func TestTestingMainFailureIsolation(t *testing.T) {
 // name from the function's reflection name.
 func TestTestingMainNamesFromReflection(t *testing.T) {
 	var gotName string
-	captureStdout(func() {
-		_ = TestMain(context.Background(), false, nil, []func(*Testing){
-			func(tt *Testing) { gotName = tt.Name() },
-		})
+	var buf bytes.Buffer
+	_ = TestMain(context.Background(), false, nil, &buf, []func(*Testing){
+		func(tt *Testing) { gotName = tt.Name() },
 	})
 	// Anonymous closure: name is func1 or similar.
 	if !strings.HasPrefix(gotName, "func") {
@@ -574,11 +558,11 @@ func TestTestingMainNamesFromReflection(t *testing.T) {
 	}
 
 	// Named function: name must include the exact function identifier.
-	out := captureStdout(func() {
-		_ = TestMain(context.Background(), true, nil, []func(*Testing){
-			testMainNamedHelper,
-		})
+	buf.Reset()
+	_ = TestMain(context.Background(), true, nil, &buf, []func(*Testing){
+		testMainNamedHelper,
 	})
+	out := buf.String()
 	if !strings.Contains(out, "testMainNamedHelper") {
 		t.Errorf("output %q should contain function name %q", out, "testMainNamedHelper")
 	}
@@ -672,11 +656,11 @@ func TestTestingContextDerivedFromParent(t *testing.T) {
 // TestTestingMainPanicMarksTestFailed verifies that a panic inside a TestMain
 // test function is caught, the test is marked failed, and TestMain returns an error.
 func TestTestingMainPanicMarksTestFailed(t *testing.T) {
-	out := captureStdout(func() {
-		_ = TestMain(context.Background(), true, nil, []func(*Testing){
-			func(*Testing) { panic("oops") },
-		})
+	var buf bytes.Buffer
+	_ = TestMain(context.Background(), true, nil, &buf, []func(*Testing){
+		func(*Testing) { panic("oops") },
 	})
+	out := buf.String()
 	if !strings.Contains(out, "FAIL\n") {
 		t.Error("TestMain must print FAIL when a test panics")
 	}
@@ -689,11 +673,10 @@ func TestTestingMainPanicMarksTestFailed(t *testing.T) {
 // prevent subsequent tests from running.
 func TestTestingMainPanicContinues(t *testing.T) {
 	ran := 0
-	captureStdout(func() {
-		_ = TestMain(context.Background(), false, nil, []func(*Testing){
-			func(*Testing) { panic("first panics") },
-			func(*Testing) { ran++ },
-		})
+	var buf bytes.Buffer
+	_ = TestMain(context.Background(), false, nil, &buf, []func(*Testing){
+		func(*Testing) { panic("first panics") },
+		func(*Testing) { ran++ },
 	})
 	if ran != 1 {
 		t.Errorf("expected second test to run after panic in first, got ran=%d", ran)
@@ -713,15 +696,14 @@ func TestTestingMainContextCancelled(t *testing.T) {
 
 	errc := make(chan error, 1)
 	go func() {
-		captureStdout(func() {
-			errc <- TestMain(ctx, false, nil, []func(*Testing){
-				func(*Testing) {
-					ran++
-					close(started)
-					<-unblock // hold the goroutine so ctx.Done() fires first
-				},
-				func(*Testing) { ran++ }, // must not run
-			})
+		var buf bytes.Buffer
+		errc <- TestMain(ctx, false, nil, &buf, []func(*Testing){
+			func(*Testing) {
+				ran++
+				close(started)
+				<-unblock // hold the goroutine so ctx.Done() fires first
+			},
+			func(*Testing) { ran++ }, // must not run
 		})
 	}()
 
