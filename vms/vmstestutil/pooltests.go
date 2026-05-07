@@ -11,6 +11,7 @@ import (
 	"io"
 	"time"
 
+	"cloudeng.io/cicd"
 	"cloudeng.io/vms/vmspool"
 )
 
@@ -55,21 +56,9 @@ func (c PoolTestConfig) timeout() time.Duration {
 	return 30 * time.Second
 }
 
-// TestingT is the subset of *testing.T used by RunPoolTests.
-// *testing.T does not satisfy this interface directly because Run's callback
-// takes TestingT rather than *testing.T; callers should wrap *testing.T with a
-// thin adapter (see pooltests_test.go for an example).
-type TestingT interface {
-	Helper()
-	Fatalf(format string, args ...any)
-	Errorf(format string, args ...any)
-	Logf(format string, args ...any)
-	Cleanup(f func())
-}
-
 // startPool creates and starts a pool, waits for all VMs to be ready, and
 // registers a Close cleanup. It fails the test immediately on any error.
-func startPool(t TestingT, cfg PoolTestConfig) *vmspool.Pool {
+func startPool(t cicd.TestingT, cfg PoolTestConfig) *vmspool.Pool {
 	t.Helper()
 	size := cfg.poolSize()
 	statusCh := make(chan vmspool.Event, size*16)
@@ -96,7 +85,7 @@ func startPool(t TestingT, cfg PoolTestConfig) *vmspool.Pool {
 
 // waitForPoolEvent blocks until an event of the given kind is received on
 // statusCh or the timeout elapses.
-func waitForPoolEvent(t TestingT, statusCh <-chan vmspool.Event, kind vmspool.EventKind, timeout time.Duration) {
+func waitForPoolEvent(t cicd.TestingT, statusCh <-chan vmspool.Event, kind vmspool.EventKind, timeout time.Duration) {
 	t.Helper()
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -114,7 +103,7 @@ func waitForPoolEvent(t TestingT, statusCh <-chan vmspool.Event, kind vmspool.Ev
 
 // TestPoolAcquireExecRelease verifies the full acquire → exec → release → replenish cycle:
 // releasing a VM triggers replenishment so the pool can serve another Acquire.
-func TestPoolAcquireExecRelease(t TestingT, cfg PoolTestConfig) { //cicd:astest
+func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	size := cfg.poolSize()
 	statusCh := make(chan vmspool.Event, size*16)
 	opts := []vmspool.Option{
@@ -185,7 +174,7 @@ func TestPoolAcquireExecRelease(t TestingT, cfg PoolTestConfig) { //cicd:astest
 
 // TestPoolContextCancellation verifies that Acquire returns context.Canceled when
 // the pool is empty and the context is cancelled.
-func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig) { //cicd:astest
+func TestPoolContextCancellation(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	// Use a size-1 pool so one Acquire drains it.
 	statusCh := make(chan vmspool.Event, 16)
 	p := vmspool.New(cfg.Constructor,
@@ -223,7 +212,7 @@ func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig) { //cicd:astest
 }
 
 // TestPoolClose verifies that Close prevents further Acquire calls.
-func TestPoolClose(t TestingT, cfg PoolTestConfig) { //cicd:astest
+func TestPoolClose(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	statusCh := make(chan vmspool.Event, 16)
 	p := vmspool.New(cfg.Constructor,
 		vmspool.WithSize(1),
@@ -251,7 +240,7 @@ func TestPoolClose(t TestingT, cfg PoolTestConfig) { //cicd:astest
 // TestPoolConcurrentAcquire verifies that poolSize goroutines can each acquire a
 // VM concurrently without error, and that the pool replenishes after all are
 // released.
-func TestPoolConcurrentAcquire(t TestingT, cfg PoolTestConfig) { //cicd:astest
+func TestPoolConcurrentAcquire(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	p := startPool(t, cfg)
 	size := cfg.poolSize()
 

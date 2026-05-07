@@ -8,28 +8,28 @@ import cloudeng.io/vms/vmstestutil
 ## Functions
 ### Func TestInstanceCloneStartStopDelete
 ```go
-func TestInstanceCloneStartStopDelete(t TestingT, cfg InstanceTestConfig)
+func TestInstanceCloneStartStopDelete(t cicd.TestingT, cfg InstanceTestConfig)
 ```
 TestInstanceCloneStartStopDelete verifies the standard Clone -> Start ->
 Stop -> Delete state transitions.
 
 ### Func TestInstanceDeleteFromSuspended
 ```go
-func TestInstanceDeleteFromSuspended(t TestingT, cfg InstanceTestConfig)
+func TestInstanceDeleteFromSuspended(t cicd.TestingT, cfg InstanceTestConfig)
 ```
 TestInstanceDeleteFromSuspended verifies that an instance can be deleted
 directly from the Suspended state.
 
 ### Func TestInstanceExec
 ```go
-func TestInstanceExec(t TestingT, cfg InstanceTestConfig)
+func TestInstanceExec(t cicd.TestingT, cfg InstanceTestConfig)
 ```
 TestInstanceExec verifies that a command can be executed inside a running
 VM.
 
 ### Func TestInstanceLifecycle
 ```go
-func TestInstanceLifecycle(t TestingT, cfg InstanceTestConfig)
+func TestInstanceLifecycle(t cicd.TestingT, cfg InstanceTestConfig)
 ```
 TestInstanceLifecycle is a detailed lifecycle test that walks a VM through
 its state machine. Initial → Clone → Stopped → Start → Running → Stop →
@@ -38,19 +38,19 @@ Suspend (idempotent) → Start → Running →] Stop → Stopped → Delete → 
 
 ### Func TestInstanceStateErrors
 ```go
-func TestInstanceStateErrors(t TestingT, cfg InstanceTestConfig)
+func TestInstanceStateErrors(t cicd.TestingT, cfg InstanceTestConfig)
 ```
 
 ### Func TestInstanceSuspendResume
 ```go
-func TestInstanceSuspendResume(t TestingT, cfg InstanceTestConfig)
+func TestInstanceSuspendResume(t cicd.TestingT, cfg InstanceTestConfig)
 ```
 TestInstanceSuspendResume verifies the Suspend and Resume (Start)
 transitions for suspendable VMs.
 
 ### Func TestPoolAcquireExecRelease
 ```go
-func TestPoolAcquireExecRelease(t TestingT, cfg PoolTestConfig)
+func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig)
 ```
 TestPoolAcquireExecRelease verifies the full acquire → exec → release →
 replenish cycle: releasing a VM triggers replenishment so the pool can serve
@@ -58,13 +58,13 @@ another Acquire.
 
 ### Func TestPoolClose
 ```go
-func TestPoolClose(t TestingT, cfg PoolTestConfig)
+func TestPoolClose(t cicd.TestingT, cfg PoolTestConfig)
 ```
 TestPoolClose verifies that Close prevents further Acquire calls.
 
 ### Func TestPoolConcurrentAcquire
 ```go
-func TestPoolConcurrentAcquire(t TestingT, cfg PoolTestConfig)
+func TestPoolConcurrentAcquire(t cicd.TestingT, cfg PoolTestConfig)
 ```
 TestPoolConcurrentAcquire verifies that poolSize goroutines can each acquire
 a VM concurrently without error, and that the pool replenishes after all are
@@ -72,7 +72,7 @@ released.
 
 ### Func TestPoolContextCancellation
 ```go
-func TestPoolContextCancellation(t TestingT, cfg PoolTestConfig)
+func TestPoolContextCancellation(t cicd.TestingT, cfg PoolTestConfig)
 ```
 TestPoolContextCancellation verifies that Acquire returns context.Canceled
 when the pool is empty and the context is cancelled.
@@ -294,22 +294,6 @@ type PoolTestConfig struct {
 ```
 PoolTestConfig configures the pool integration test suite run by
 RunPoolTests.
-
-
-### Type TestingT
-```go
-type TestingT interface {
-	Helper()
-	Fatalf(format string, args ...any)
-	Errorf(format string, args ...any)
-	Logf(format string, args ...any)
-	Cleanup(f func())
-}
-```
-TestingT is the subset of *testing.T used by RunPoolTests. *testing.T does
-not satisfy this interface directly because Run's callback takes TestingT
-rather than *testing.T; callers should wrap *testing.T with a thin adapter
-(see pooltests_test.go for an example).
 
 
 
