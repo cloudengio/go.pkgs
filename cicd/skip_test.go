@@ -31,6 +31,9 @@ func (m *mockT) Error(...any)                        {}
 func (m *mockT) Errorf(string, ...any)               {}
 func (m *mockT) Fatal(...any)                        {}
 func (m *mockT) Skip(...any)                         { m.skipped = true }
+func (m *mockT) SkipNow()                            { m.skipped = true }
+func (m *mockT) Fail()                               {}
+func (m *mockT) FailNow()                            {}
 func (m *mockT) Cleanup(func())                      {}
 func (m *mockT) RunCleanups()                        {}
 func (m *mockT) Run(_ string, _ func(*Testing)) bool { return true }

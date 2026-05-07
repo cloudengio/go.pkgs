@@ -5,14 +5,17 @@
 package cicd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
 
 // TestingT mirrors testing.T and is implemented by cicd.Testing.
@@ -31,6 +34,9 @@ type TestingT interface {
 	Fatal(args ...any)
 	Skip(args ...any)
 	Cleanup(f func())
+	Fail()
+	FailNow()
+	SkipNow()
 }
 
 // Testing is a concrete implementation of TestingT for use outside the test
@@ -48,6 +54,7 @@ type Testing struct {
 	failed   bool
 	skipped  bool
 	cleanups []func()
+	helpers  map[string]struct{}
 
 	outputMu sync.Mutex
 	output   io.Writer
@@ -63,8 +70,21 @@ func NewTesting(ctx context.Context, name string, w io.Writer) *Testing {
 	return &Testing{ctx: ctx, cancel: cancel, name: name, output: w}
 }
 
-// Helper is a no-op; call-stack marking is not available outside the test harness.
-func (t *Testing) Helper() {}
+// Helper marks the calling function as a test helper function.
+// When printing file and line information, that function will be skipped.
+func (t *Testing) Helper() {
+	var pc [1]uintptr
+	if runtime.Callers(2, pc[:]) == 1 {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if t.helpers == nil {
+			t.helpers = make(map[string]struct{})
+		}
+		frames := runtime.CallersFrames(pc[:])
+		frame, _ := frames.Next()
+		t.helpers[frame.Function] = struct{}{}
+	}
+}
 
 // Name returns the name set at construction.
 func (t *Testing) Name() string { return t.name }
@@ -89,30 +109,44 @@ func (t *Testing) Skipped() bool {
 
 // Log writes a message to the output writer.
 func (t *Testing) Log(args ...any) {
-	t.log(fmt.Sprint(args...))
+	t.log(1, args...)
 }
 
 // Logf writes a formatted message to the output writer.
 func (t *Testing) Logf(format string, args ...any) {
-	t.log(fmt.Sprintf(format, args...))
+	t.logf(1, format, args...)
 }
 
 // Error marks the test as failed and writes a message.
 func (t *Testing) Error(args ...any) {
-	t.log(fmt.Sprint(args...))
+	t.log(1, args...)
 	t.markFailed()
 }
 
 // Errorf marks the test as failed and writes a formatted message.
 func (t *Testing) Errorf(format string, args ...any) {
-	t.log(fmt.Sprintf(format, args...))
+	t.logf(1, format, args...)
 	t.markFailed()
+}
+
+// Fail marks the function as having failed but continues execution.
+// It mirrors testing.T.Fail.
+func (t *Testing) Fail() {
+	t.markFailed()
+}
+
+// FailNow marks the function as having failed and stops its execution
+// by calling runtime.Goexit (which runs all deferred calls in the current goroutine).
+// It mirrors testing.T.FailNow.
+func (t *Testing) FailNow() {
+	t.markFailed()
+	runtime.Goexit()
 }
 
 // Fatal marks the test as failed, writes a message, then terminates the
 // current goroutine via runtime.Goexit.
 func (t *Testing) Fatal(args ...any) {
-	t.log(fmt.Sprint(args...))
+	t.log(1, args...)
 	t.markFailed()
 	runtime.Goexit()
 }
@@ -120,7 +154,7 @@ func (t *Testing) Fatal(args ...any) {
 // Fatalf marks the test as failed, writes a formatted message, then terminates
 // the current goroutine via runtime.Goexit.
 func (t *Testing) Fatalf(format string, args ...any) {
-	t.log(fmt.Sprintf(format, args...))
+	t.logf(1, format, args...)
 	t.markFailed()
 	runtime.Goexit()
 }
@@ -128,7 +162,7 @@ func (t *Testing) Fatalf(format string, args ...any) {
 // Skip marks the test as skipped, writes a message, then terminates the
 // current goroutine via runtime.Goexit.
 func (t *Testing) Skip(args ...any) {
-	t.log(fmt.Sprint(args...))
+	t.log(1, args...)
 	t.markSkipped()
 	runtime.Goexit()
 }
@@ -136,7 +170,15 @@ func (t *Testing) Skip(args ...any) {
 // Skipf marks the test as skipped, writes a formatted message, then terminates
 // the current goroutine via runtime.Goexit.
 func (t *Testing) Skipf(format string, args ...any) {
-	t.log(fmt.Sprintf(format, args...))
+	t.logf(1, format, args...)
+	t.markSkipped()
+	runtime.Goexit()
+}
+
+// SkipNow marks the test as skipped and stops its execution
+// by calling runtime.Goexit.
+// It mirrors testing.T.SkipNow.
+func (t *Testing) SkipNow() {
 	t.markSkipped()
 	runtime.Goexit()
 }
@@ -191,10 +233,46 @@ func (t *Testing) RunCleanups() {
 	}
 }
 
-func (t *Testing) log(msg string) {
+func (t *Testing) caller(skip int) string {
+	var pcs [16]uintptr
+	n := runtime.Callers(skip+2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	t.mu.Lock()
+	helpers := t.helpers
+	t.mu.Unlock()
+	for {
+		frame, more := frames.Next()
+		if helpers != nil {
+			if _, ok := helpers[frame.Function]; ok {
+				if !more {
+					break
+				}
+				continue
+			}
+		}
+		file := frame.File
+		if idx := strings.LastIndexByte(file, '/'); idx >= 0 {
+			file = file[idx+1:]
+		}
+		return fmt.Sprintf("%s:%d", file, frame.Line)
+	}
+	return "unknown:0"
+}
+
+func (t *Testing) logf(skip int, format string, args ...any) {
 	t.outputMu.Lock()
 	defer t.outputMu.Unlock()
-	fmt.Fprintf(t.output, "%s: %s\n", t.name, msg)
+	out := strings.Builder{}
+	fmt.Fprintf(&out, "%s: %s: %s\n", t.caller(skip+1), t.name, fmt.Sprintf(format, args...))
+	_, _ = t.output.Write([]byte(out.String()))
+}
+
+func (t *Testing) log(skip int, args ...any) {
+	t.outputMu.Lock()
+	defer t.outputMu.Unlock()
+	out := strings.Builder{}
+	fmt.Fprintf(&out, "%s: %s: %s\n", t.caller(skip+1), t.name, fmt.Sprint(args...))
+	_, _ = t.output.Write([]byte(out.String()))
 }
 
 func (t *Testing) markFailed() {
@@ -213,26 +291,43 @@ func (t *Testing) markSkipped() {
 // compatible with *Testing (i.e. *Testing or an interface it implements, such
 // as TestingT). Each test's name is derived from its function name via
 // reflection. Tests run in slice order. Output goes to w (nil → os.Stderr).
-func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests []func(T)) error {
-	if w == nil {
-		w = os.Stderr
+func TestMain[T TestingT](ctx context.Context, verbose bool, regex *regexp.Regexp, wr io.Writer, tests []func(T)) error {
+	if wr == nil {
+		wr = os.Stdout
 	}
 	failed := false
+	failures := []string{}
 	for _, f := range tests {
 		testName := funcBaseName(f)
-		t := NewTesting(ctx, strings.TrimPrefix(name+"/"+testName, "/"), w)
+		if regex != nil && !regex.MatchString(testName) {
+			continue
+		}
+		out := bytes.NewBuffer(make([]byte, 0, 16*1024))
+		t := NewTesting(ctx, testName, out)
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 			defer t.RunCleanups()
+			start := time.Now()
 			defer func() {
 				if r := recover(); r != nil {
 					t.Errorf("panic: %v", r)
+				}
+				took := time.Since(start)
+				if t.Failed() {
+					fmt.Fprintf(wr, "--- FAIL: %s (%v)\n", t.Name(), took)
+					_, _ = out.WriteTo(wr)
+				} else if verbose {
+					fmt.Fprintf(wr, "--- PASS: %s (%v)\n", t.Name(), took)
+					_, _ = out.WriteTo(wr)
 				}
 			}()
 			tt, ok := any(t).(T)
 			if !ok {
 				panic(fmt.Sprintf("cicd.TestMain: %T is not %T", t, tt))
+			}
+			if verbose {
+				fmt.Fprintf(wr, "=== RUN   %s\n", t.Name())
 			}
 			f(tt)
 		}()
@@ -243,13 +338,19 @@ func TestMain[T TestingT](ctx context.Context, name string, w io.Writer, tests [
 		}
 		if t.Failed() {
 			failed = true
+			failures = append(failures, t.Name())
 		}
 	}
 	if failed {
-		return fmt.Errorf("some tests failed")
+		fmt.Fprintf(wr, "FAIL\n")
+		fmt.Fprintf(wr, "Failed tests: %s\n", strings.Join(failures, ", "))
+		return fmt.Errorf("failed tests: %s", strings.Join(failures, ", "))
 	}
+	fmt.Fprintf(wr, "PASS\n")
 	return nil
 }
+
+var anonymousFuncRE = regexp.MustCompile(`\.(func\d+(?:\.\d+)*)$`)
 
 // funcBaseName returns the unqualified function name of f, stripping the
 // package path and any "-fm" method-value suffix added by the runtime.
@@ -259,8 +360,14 @@ func funcBaseName(f any) string {
 		return "unknown"
 	}
 	full := runtime.FuncForPC(v.Pointer()).Name()
+	full = strings.TrimSuffix(full, "-fm")
+
+	if match := anonymousFuncRE.FindStringSubmatch(full); match != nil {
+		return match[1]
+	}
+
 	if i := strings.LastIndexByte(full, '.'); i >= 0 {
 		full = full[i+1:]
 	}
-	return strings.TrimSuffix(full, "-fm")
+	return full
 }
