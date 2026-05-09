@@ -35,7 +35,7 @@ type options struct {
 // for testing). If not provided, a default client will be automatically
 // created from the aws.Config stored in the context (see awsconfig.ContextWith).
 // If a client is provided, the context does not need to carry an aws.Config.
-func WithClient(client Client) func(*options) {
+func WithClient(client Client) Option {
 	return func(o *options) {
 		o.client = client
 	}
@@ -76,12 +76,14 @@ type Endpoint struct {
 type Config struct {
 	VPCID          string              `yaml:"vpc_id"`
 	Subnets        []SubnetInfo        `yaml:"subnets"`
-	SecurityGroups []SecurityGroupInfo `yaml:"securityGroups"`
-	RouteTableIDs  []string            `yaml:"routeTableIDs"`
+	SecurityGroups []SecurityGroupInfo `yaml:"security_groups"`
+	RouteTableIDs  []string            `yaml:"route_table_ids"`
 	Endpoints      []Endpoint          `yaml:"endpoints"`
 }
 
-func handleOptions(cfg aws.Config, opts []Option) options {
+// NewVPC creates a new T instance for the given VPC ID using the provided
+// AWS config and options.
+func NewVPC(cfg aws.Config, id string, opts ...Option) *T {
 	var options options
 	for _, opt := range opts {
 		opt(&options)
@@ -89,13 +91,6 @@ func handleOptions(cfg aws.Config, opts []Option) options {
 	if options.client == nil {
 		options.client = ec2.NewFromConfig(cfg)
 	}
-	return options
-}
-
-// NewVPC creates a new T instance for the given VPC ID using the provided
-// AWS config and options.
-func NewVPC(cfg aws.Config, id string, opts ...Option) *T {
-	options := handleOptions(cfg, opts)
 	return &T{
 		id:     id,
 		client: options.client,

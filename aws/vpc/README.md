@@ -6,19 +6,6 @@ import cloudeng.io/aws/vpc
 
 Package vpc provides utilities for working with AWS VPCs.
 
-## Functions
-### Func WithClient
-```go
-func WithClient(client Client) func(*options)
-```
-WithClient allows callers to specify a custom Client implementation
-(e.g. for testing). If not provided, a default client will be
-automatically created from the aws.Config stored in the context (see
-awsconfig.ContextWith). If a client is provided, the context does not need
-to carry an aws.Config.
-
-
-
 ## Types
 ### Type Client
 ```go
@@ -39,8 +26,8 @@ Client defines the methods required to manage VPC endpoints.
 type Config struct {
 	VPCID          string              `yaml:"vpc_id"`
 	Subnets        []SubnetInfo        `yaml:"subnets"`
-	SecurityGroups []SecurityGroupInfo `yaml:"securityGroups"`
-	RouteTableIDs  []string            `yaml:"routeTableIDs"`
+	SecurityGroups []SecurityGroupInfo `yaml:"security_groups"`
+	RouteTableIDs  []string            `yaml:"route_table_ids"`
 	Endpoints      []Endpoint          `yaml:"endpoints"`
 }
 ```
@@ -98,6 +85,19 @@ RouteTableIDs applies to gateway endpoints.
 type Option func(*options)
 ```
 Option represents an option to multiple functions in this package.
+
+### Functions
+
+```go
+func WithClient(client Client) Option
+```
+WithClient allows callers to specify a custom Client implementation
+(e.g. for testing). If not provided, a default client will be
+automatically created from the aws.Config stored in the context (see
+awsconfig.ContextWith). If a client is provided, the context does not need
+to carry an aws.Config.
+
+
 
 
 ### Type SecurityGroupInfo

@@ -33,10 +33,6 @@ func (v *T) DescribeEndpoints(ctx context.Context, ids []string, filters ...type
 // Filters are ANDed together. The context must carry an aws.Config (see
 // awsconfig.ContextWith) unless a client is supplied via WithClient.
 func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) ([]Endpoint, error) {
-	cfg, ok := awsconfig.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("aws config not found in context")
-	}
 
 	var filters []types.Filter
 	var opts []Option
@@ -46,13 +42,23 @@ func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) 
 			filters = append(filters, v)
 		case *types.Filter:
 			filters = append(filters, *v)
-		case func(*options):
+		case Option:
 			opts = append(opts, v)
 		default:
 			return nil, fmt.Errorf("invalid option/filter type %T: expected either types.Filter or Option", opt)
 		}
 	}
-	options := handleOptions(*cfg, opts)
+	var options options
+	for _, opt := range opts {
+		opt(&options)
+	}
+	if options.client == nil {
+		cfg, ok := awsconfig.FromContext(ctx)
+		if !ok {
+			return nil, fmt.Errorf("aws config not found in context")
+		}
+		options.client = ec2.NewFromConfig(*cfg)
+	}
 
 	input := &ec2.DescribeVpcEndpointsInput{Filters: filters}
 	if len(ids) > 0 {
