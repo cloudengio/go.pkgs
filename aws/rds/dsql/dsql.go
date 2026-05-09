@@ -136,9 +136,10 @@ func (c *Cluster) GetPrivateLinkServiceName(ctx context.Context) (string, error)
 	return aws.ToString(output.ClusterVpcEndpoint), nil
 }
 
-// PrivateLinkServiceName is a helper function that retrieves the VPC endpoint
-// service name for a given cluster ID using the aws.Config from the context
-// to create a DSQL client. This is a convenient wrapper around
+// PrivateLinkServiceName is a helper function that retrieves the VPC public
+// endpoint and endpoint service name for a DSQL cluster given its cluster ID
+// or endpoint hostname. service name for a given cluster ID using the aws.Config
+// from the context to create a DSQL client. This is a convenient wrapper around
 // Cluster.GetPrivateLinkServiceName. clusterID may be either a bare 26-character
 // cluster ID or a full endpoint hostname (e.g. "<id>.dsql.us-east-1.on.aws").
 func PrivateLinkServiceName(ctx context.Context, clusterID string) (publicEndpoint, endpointServiceName string, err error) {
