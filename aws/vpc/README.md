@@ -6,6 +6,19 @@ import cloudeng.io/aws/vpc
 
 Package vpc provides utilities for working with AWS VPCs.
 
+## Functions
+### Func WithClient
+```go
+func WithClient(client Client) func(*options)
+```
+WithClient allows callers to specify a custom Client implementation
+(e.g. for testing). If not provided, a default client will be
+automatically created from the aws.Config stored in the context (see
+awsconfig.ContextWith). If a client is provided, the context does not need
+to carry an aws.Config.
+
+
+
 ## Types
 ### Type Client
 ```go
@@ -24,11 +37,11 @@ Client defines the methods required to manage VPC endpoints.
 ### Type Config
 ```go
 type Config struct {
-	VPCID          string
-	Subnets        []SubnetInfo
-	SecurityGroups []SecurityGroupInfo
-	RouteTableIDs  []string
-	Endpoints      []Endpoint
+	VPCID          string              `yaml:"vpc_id"`
+	Subnets        []SubnetInfo        `yaml:"subnets"`
+	SecurityGroups []SecurityGroupInfo `yaml:"securityGroups"`
+	RouteTableIDs  []string            `yaml:"routeTableIDs"`
+	Endpoints      []Endpoint          `yaml:"endpoints"`
 }
 ```
 Config holds all VPC information required to create and delete endpoints.
@@ -37,16 +50,30 @@ Config holds all VPC information required to create and delete endpoints.
 ### Type Endpoint
 ```go
 type Endpoint struct {
-	ID               string
-	ServiceName      string
-	Type             types.VpcEndpointType
-	State            types.State
-	SubnetIDs        []string
-	SecurityGroupIDs []string
-	RouteTableIDs    []string
+	ID               string                `yaml:"id"`
+	ServiceName      string                `yaml:"service_name"`
+	Type             types.VpcEndpointType `yaml:"type"`
+	State            types.State           `yaml:"state"`
+	SubnetIDs        []string              `yaml:"subnet_ids"`
+	SecurityGroupIDs []string              `yaml:"security_group_ids"`
+	RouteTableIDs    []string              `yaml:"route_table_ids"`
 }
 ```
 Endpoint describes an existing VPC endpoint.
+
+### Functions
+
+```go
+func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) ([]Endpoint, error)
+```
+DescribeEndpoints returns the VPC endpoints matching the given endpoint
+IDs and/or filters. optsOrFilters may be a mix of types.Filter and Option
+values (e.g. WithClient). ids narrows the results to specific endpoint IDs;
+pass nil to return all. Filters are ANDed together. The context must carry
+an aws.Config (see awsconfig.ContextWith) unless a client is supplied via
+WithClient.
+
+
 
 
 ### Type EndpointParams
@@ -64,6 +91,13 @@ type EndpointParams struct {
 EndpointParams holds the parameters required to create a VPC endpoint.
 SubnetIDs, SecurityGroupIDs and PrivateDNS apply to interface endpoints.
 RouteTableIDs applies to gateway endpoints.
+
+
+### Type Option
+```go
+type Option func(*options)
+```
+Option represents an option to multiple functions in this package.
 
 
 ### Type SecurityGroupInfo
@@ -99,16 +133,10 @@ T represents a VPC whose configuration can be read via ReadConfig.
 ### Functions
 
 ```go
-func NewVPC(cfg aws.Config, id string) *T
+func NewVPC(cfg aws.Config, id string, opts ...Option) *T
 ```
-NewVPC creates a new T instance for the given VPC ID.
-
-
-```go
-func NewVPCWithClient(id string, client Client) *T
-```
-NewVPCWithClient creates a T using an already-configured Client. Intended
-for tests that inject a localstack-pointed client.
+NewVPC creates a new T instance for the given VPC ID using the provided AWS
+config and options.
 
 
 
@@ -125,6 +153,13 @@ endpoint ID.
 func (v *T) DeleteEndpoint(ctx context.Context, endpointIDs ...string) error
 ```
 DeleteEndpoint deletes the VPC endpoint with the given ID.
+
+
+```go
+func (v *T) DescribeEndpoints(ctx context.Context, ids []string, filters ...types.Filter) ([]Endpoint, error)
+```
+DescribeEndpoints is like DescribeEndpoints but includes a filter to
+restrict results to endpoints in the VPC.
 
 
 ```go

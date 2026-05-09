@@ -8,11 +8,81 @@ import (
 	"context"
 	"fmt"
 
+	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
+
+// DescribeEndpoints is like DescribeEndpoints but includes a filter to
+// restrict results to endpoints in the VPC.
+func (v *T) DescribeEndpoints(ctx context.Context, ids []string, filters ...types.Filter) ([]Endpoint, error) {
+	optsOrFilters := make([]any, 0, len(filters)+2)
+	optsOrFilters = append(optsOrFilters, WithClient(v.client))
+	optsOrFilters = append(optsOrFilters, types.Filter{Name: aws.String("vpc-id"), Values: []string{v.id}})
+	for _, f := range filters {
+		optsOrFilters = append(optsOrFilters, f)
+	}
+	return DescribeEndpoints(ctx, ids, optsOrFilters...)
+}
+
+// DescribeEndpoints returns the VPC endpoints matching the given endpoint IDs and/or filters.
+// optsOrFilters may be a mix of types.Filter and Option values (e.g. WithClient).
+// ids narrows the results to specific endpoint IDs; pass nil to return all.
+// Filters are ANDed together. The context must carry an aws.Config (see
+// awsconfig.ContextWith) unless a client is supplied via WithClient.
+func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) ([]Endpoint, error) {
+	cfg, ok := awsconfig.FromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("aws config not found in context")
+	}
+
+	var filters []types.Filter
+	var opts []Option
+	for _, opt := range optsOrFilters {
+		switch v := opt.(type) {
+		case types.Filter:
+			filters = append(filters, v)
+		case *types.Filter:
+			filters = append(filters, *v)
+		case func(*options):
+			opts = append(opts, v)
+		default:
+			return nil, fmt.Errorf("invalid option/filter type %T: expected either types.Filter or Option", opt)
+		}
+	}
+	options := handleOptions(*cfg, opts)
+
+	input := &ec2.DescribeVpcEndpointsInput{Filters: filters}
+	if len(ids) > 0 {
+		input.VpcEndpointIds = ids
+	}
+
+	var results []Endpoint
+	paginator := ec2.NewDescribeVpcEndpointsPaginator(options.client, input)
+	for paginator.HasMorePages() {
+		out, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list endpoints: %w", err)
+		}
+		for _, ep := range out.VpcEndpoints {
+			e := Endpoint{
+				ID:            aws.ToString(ep.VpcEndpointId),
+				ServiceName:   aws.ToString(ep.ServiceName),
+				Type:          ep.VpcEndpointType,
+				State:         ep.State,
+				SubnetIDs:     ep.SubnetIds,
+				RouteTableIDs: ep.RouteTableIds,
+			}
+			for _, sg := range ep.Groups {
+				e.SecurityGroupIDs = append(e.SecurityGroupIDs, aws.ToString(sg.GroupId))
+			}
+			results = append(results, e)
+		}
+	}
+	return results, nil
+}
 
 // DeleteEndpoint deletes the VPC endpoint with the given ID.
 func (v *T) DeleteEndpoint(ctx context.Context, endpointIDs ...string) error {

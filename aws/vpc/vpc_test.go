@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/aws/awstestutil"
 	"cloudeng.io/aws/vpc"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -20,7 +21,7 @@ import (
 var awsService *awstestutil.AWS
 
 func TestCreateEndpointValidation(t *testing.T) {
-	v := vpc.NewVPCWithClient("vpc-test", nil)
+	v := vpc.NewVPC(aws.Config{}, "vpc-test")
 	for _, tc := range []struct {
 		params vpc.EndpointParams
 		errMsg string
@@ -115,14 +116,14 @@ func setupVPC(t *testing.T, client *ec2.Client) (vpcID, subnetID, sgID, rtID str
 
 func TestReadConfig(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
-	ctx := context.Background()
 	cfg := awstestutil.DefaultAWSConfig()
+	ctx := context.Background()
 	client := awsService.EC2(cfg)
 
 	vpcID, subnetID, sgID, rtID, cleanup := setupVPC(t, client)
 	defer cleanup()
 
-	v := vpc.NewVPCWithClient(vpcID, client)
+	v := vpc.NewVPC(cfg, vpcID, vpc.WithClient(client))
 	if err := v.ReadConfig(ctx); err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
@@ -158,14 +159,14 @@ func TestReadConfig(t *testing.T) {
 
 func TestCreateAndDeleteEndpoint(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
-	ctx := context.Background()
 	cfg := awstestutil.DefaultAWSConfig()
+	ctx := context.Background()
 	client := awsService.EC2(cfg)
 
 	vpcID, _, _, rtID, cleanup := setupVPC(t, client)
 	defer cleanup()
 
-	v := vpc.NewVPCWithClient(vpcID, client)
+	v := vpc.NewVPC(cfg, vpcID, vpc.WithClient(client))
 
 	endpointID, err := v.CreateEndpoint(ctx, vpc.EndpointParams{
 		ServiceName:   "com.amazonaws.us-east-1.s3",
@@ -196,19 +197,156 @@ func TestCreateAndDeleteEndpoint(t *testing.T) {
 	}
 }
 
+func TestDescribeEndpoints(t *testing.T) {
+	awstestutil.SkipAWSTests(t)
+	cfg := awstestutil.DefaultAWSConfig()
+	ctx := awsconfig.ContextWith(context.Background(), &cfg)
+	client := awsService.EC2(cfg)
+
+	vpcID, _, _, rtID, cleanup := setupVPC(t, client)
+	defer cleanup()
+
+	v := vpc.NewVPC(cfg, vpcID, vpc.WithClient(client))
+
+	// No endpoints yet — list should be empty.
+	eps, err := v.DescribeEndpoints(ctx, nil)
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (empty): %v", err)
+	}
+	if len(eps) != 0 {
+		t.Errorf("expected 0 endpoints before creation, got %d", len(eps))
+	}
+
+	// Create an endpoint.
+	endpointID, err := v.CreateEndpoint(ctx, vpc.EndpointParams{
+		ServiceName:   "com.amazonaws.us-east-1.s3",
+		Type:          types.VpcEndpointTypeGateway,
+		RouteTableIDs: []string{rtID},
+	})
+	if err != nil {
+		t.Fatalf("CreateEndpoint: %v", err)
+	}
+	defer v.DeleteEndpoint(ctx, endpointID) //nolint:errcheck
+
+	// List all — should contain the new endpoint.
+	eps, err = v.DescribeEndpoints(ctx, nil)
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (all): %v", err)
+	}
+	ids := make([]string, len(eps))
+	for i, ep := range eps {
+		ids[i] = ep.ID
+	}
+	if !slices.Contains(ids, endpointID) {
+		t.Errorf("DescribeEndpoints: %v does not contain %q", ids, endpointID)
+	}
+
+	// Query by ID — should return exactly that endpoint.
+	eps, err = v.DescribeEndpoints(ctx, []string{endpointID})
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (by ID): %v", err)
+	}
+	if len(eps) != 1 || eps[0].ID != endpointID {
+		t.Errorf("DescribeEndpoints by ID: got %v, want [%s]", eps, endpointID)
+	}
+
+	// Filter by service name — should match.
+	eps, err = v.DescribeEndpoints(ctx, nil,
+		types.Filter{Name: aws.String("service-name"), Values: []string{"com.amazonaws.us-east-1.s3"}},
+	)
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (service filter): %v", err)
+	}
+	if !slices.ContainsFunc(eps, func(ep vpc.Endpoint) bool { return ep.ID == endpointID }) {
+		t.Errorf("DescribeEndpoints with service filter: %v does not contain %q", eps, endpointID)
+	}
+
+	// Filter by non-matching service name — should return nothing.
+	eps, err = v.DescribeEndpoints(ctx, nil,
+		types.Filter{Name: aws.String("service-name"), Values: []string{"com.amazonaws.us-east-1.nonexistent"}},
+	)
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (no-match filter): %v", err)
+	}
+	if len(eps) != 0 {
+		t.Errorf("DescribeEndpoints with non-matching filter: expected 0, got %d", len(eps))
+	}
+}
+
+// TestDescribeEndpointsPackageLevel exercises the package-level DescribeEndpoints
+// function directly, bypassing the vpc-id scoping that the method adds.
+func TestDescribeEndpointsPackageLevel(t *testing.T) {
+	awstestutil.SkipAWSTests(t)
+	cfg := awstestutil.DefaultAWSConfig()
+	ctx := awsconfig.ContextWith(context.Background(), &cfg)
+	client := awsService.EC2(cfg)
+
+	vpcID, _, _, rtID, cleanup := setupVPC(t, client)
+	defer cleanup()
+
+	// Create an endpoint inside our VPC.
+	v := vpc.NewVPC(cfg, vpcID, vpc.WithClient(client))
+	endpointID, err := v.CreateEndpoint(ctx, vpc.EndpointParams{
+		ServiceName:   "com.amazonaws.us-east-1.s3",
+		Type:          types.VpcEndpointTypeGateway,
+		RouteTableIDs: []string{rtID},
+	})
+	if err != nil {
+		t.Fatalf("CreateEndpoint: %v", err)
+	}
+	defer v.DeleteEndpoint(ctx, endpointID) //nolint:errcheck
+
+	// Package-level call with explicit vpc-id filter should find the endpoint.
+	eps, err := vpc.DescribeEndpoints(ctx, nil,
+		vpc.WithClient(client),
+		types.Filter{Name: aws.String("vpc-id"), Values: []string{vpcID}},
+	)
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (vpc-id filter): %v", err)
+	}
+	ids := make([]string, len(eps))
+	for i, ep := range eps {
+		ids[i] = ep.ID
+	}
+	if !slices.Contains(ids, endpointID) {
+		t.Errorf("DescribeEndpoints: %v does not contain %q", ids, endpointID)
+	}
+
+	// Package-level call with a non-matching vpc-id should return nothing.
+	eps, err = vpc.DescribeEndpoints(ctx, nil,
+		vpc.WithClient(client),
+		types.Filter{Name: aws.String("vpc-id"), Values: []string{"vpc-000000000000abcd"}},
+	)
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (non-matching vpc-id): %v", err)
+	}
+	if len(eps) != 0 {
+		t.Errorf("expected 0 endpoints for non-matching vpc-id, got %d", len(eps))
+	}
+
+	// Package-level call with query by endpoint ID (no filters) should find it.
+	eps, err = vpc.DescribeEndpoints(ctx, []string{endpointID}, vpc.WithClient(client))
+	if err != nil {
+		t.Fatalf("DescribeEndpoints (query by ID): %v", err)
+	}
+	if len(eps) != 1 || eps[0].ID != endpointID {
+		t.Errorf("DescribeEndpoints by ID: got %v, want [%s]", eps, endpointID)
+	}
+}
+
 // TestDeleteEndpointNonexistent verifies that DeleteEndpoint does not return an
 // error for an endpoint ID that was never created. The AWS DeleteVpcEndpoints
 // API silently ignores unknown IDs rather than returning an Unsuccessful entry.
 func TestDeleteEndpointNonexistent(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
-	ctx := context.Background()
 	cfg := awstestutil.DefaultAWSConfig()
+	ctx := context.Background()
 	client := awsService.EC2(cfg)
 
 	vpcID, _, _, _, cleanup := setupVPC(t, client)
 	defer cleanup()
 
-	v := vpc.NewVPCWithClient(vpcID, client)
+	v := vpc.NewVPC(cfg, vpcID, vpc.WithClient(client))
 	if err := v.DeleteEndpoint(ctx, "vpce-000000000000abcd"); err != nil {
 		t.Errorf("unexpected error deleting nonexistent endpoint: %v", err)
 	}
