@@ -151,7 +151,7 @@ func PrivateLinkServiceName(ctx context.Context, clusterID string) (publicEndpoi
 	if !ok {
 		return "", "", fmt.Errorf("aws config not found in context")
 	}
-	client := dsql.NewFromConfig(*cfg)
+	client := dsql.NewFromConfig(cfg)
 	output, err := client.GetVpcEndpointServiceName(ctx, &dsql.GetVpcEndpointServiceNameInput{
 		Identifier: aws.String(id),
 	})

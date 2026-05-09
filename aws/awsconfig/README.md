@@ -26,7 +26,7 @@ Account ID (number).
 
 ### Func ContextWith
 ```go
-func ContextWith(ctx context.Context, cfg *aws.Config) context.Context
+func ContextWith(ctx context.Context, cfg aws.Config) context.Context
 ```
 ContextWith returns a new context with the aws.Config stored in it.
 
@@ -46,7 +46,7 @@ issues. It displays the types of the fields that can't be directly printed.
 
 ### Func FromContext
 ```go
-func FromContext(ctx context.Context) (*aws.Config, bool)
+func FromContext(ctx context.Context) (aws.Config, bool)
 ```
 FromContext returns the aws.Config stored in the context.
 

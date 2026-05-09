@@ -200,7 +200,7 @@ func TestCreateAndDeleteEndpoint(t *testing.T) {
 func TestDescribeEndpoints(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
 	cfg := awstestutil.DefaultAWSConfig()
-	ctx := awsconfig.ContextWith(context.Background(), &cfg)
+	ctx := awsconfig.ContextWith(context.Background(), cfg)
 	client := awsService.EC2(cfg)
 
 	vpcID, _, _, rtID, cleanup := setupVPC(t, client)
@@ -278,7 +278,7 @@ func TestDescribeEndpoints(t *testing.T) {
 func TestDescribeEndpointsPackageLevel(t *testing.T) {
 	awstestutil.SkipAWSTests(t)
 	cfg := awstestutil.DefaultAWSConfig()
-	ctx := awsconfig.ContextWith(context.Background(), &cfg)
+	ctx := awsconfig.ContextWith(context.Background(), cfg)
 	client := awsService.EC2(cfg)
 
 	vpcID, _, _, rtID, cleanup := setupVPC(t, client)
