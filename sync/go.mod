@@ -3,7 +3,7 @@ module cloudeng.io/sync
 go 1.25.5
 
 require (
-	cloudeng.io/debug v0.0.0-20260504191609-5b9eb845c065
+	cloudeng.io/debug v0.0.0-20260507011012-5e35122ac3e3
 	cloudeng.io/errors v0.0.13
 )
 
