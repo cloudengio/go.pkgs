@@ -37,7 +37,7 @@ func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingI
 	}
 
 	cfg, ok := awsconfig.FromContext(ctx)
-	if !ok || cfg == nil {
+	if !ok {
 		return nil, awsconfig.ErrConfigNotFound
 	}
 
@@ -56,7 +56,7 @@ func NewPortForwardingSession(ctx context.Context, pfi ssmclient.PortForwardingI
 	errCh := make(chan error, 1)
 	pfi.ReadyCh = make(chan struct{})
 	go func() {
-		if err := ssmclient.PortForwardingSessionWithContext(ctx, *cfg, &pfi); err != nil {
+		if err := ssmclient.PortForwardingSessionWithContext(ctx, cfg, &pfi); err != nil {
 			errCh <- err
 		}
 		close(errCh)

@@ -116,13 +116,13 @@ func LogAWSConfig(ctx context.Context, cfg *aws.Config) {
 type contextKey struct{}
 
 // ContextWith returns a new context with the aws.Config stored in it.
-func ContextWith(ctx context.Context, cfg *aws.Config) context.Context {
+func ContextWith(ctx context.Context, cfg aws.Config) context.Context {
 	return context.WithValue(ctx, contextKey{}, cfg)
 }
 
 // FromContext returns the aws.Config stored in the context.
-func FromContext(ctx context.Context) (*aws.Config, bool) {
-	cfg, ok := ctx.Value(contextKey{}).(*aws.Config)
+func FromContext(ctx context.Context) (aws.Config, bool) {
+	cfg, ok := ctx.Value(contextKey{}).(aws.Config)
 	return cfg, ok
 }
 

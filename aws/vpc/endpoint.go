@@ -57,7 +57,7 @@ func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) 
 		if !ok {
 			return nil, fmt.Errorf("aws config not found in context")
 		}
-		options.client = ec2.NewFromConfig(*cfg)
+		options.client = ec2.NewFromConfig(cfg)
 	}
 
 	input := &ec2.DescribeVpcEndpointsInput{Filters: filters}
