@@ -3,20 +3,21 @@ module cloudeng.io/aws
 go 1.26.2
 
 require (
-	cloudeng.io/cicd v0.0.0-20260504191609-5b9eb845c065
-	cloudeng.io/cmdutil v0.0.0-20260504191609-5b9eb845c065
+	cloudeng.io/cicd v0.0.0-20260507011012-5e35122ac3e3
+	cloudeng.io/cmdutil v0.0.0-20260507011012-5e35122ac3e3
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260504191609-5b9eb845c065
-	cloudeng.io/logging v0.0.0-20260504201444-26b15b034402
+	cloudeng.io/file v0.0.0-20260507011012-5e35122ac3e3
+	cloudeng.io/logging v0.0.0-20260507011012-5e35122ac3e3
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
-	cloudeng.io/text v0.0.15
+	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	github.com/alexbacchin/ssm-session-client v1.0.0
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.23
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.301.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.60.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
@@ -26,7 +27,6 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.300.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.6 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260423192734-dcff8da8cdec // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
@@ -42,10 +42,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260502001312-40693f6b2e4a // indirect
-	cloudeng.io/os v0.0.0-20260504201444-26b15b034402 // indirect
+	cloudeng.io/algo v0.0.0-20260507011012-5e35122ac3e3 // indirect
+	cloudeng.io/os v0.0.0-20260507011012-5e35122ac3e3 // indirect
 	cloudeng.io/sync v0.0.10 // indirect
-	cloudeng.io/sys v0.0.0-20260501233832-da4735ce283d // indirect
+	cloudeng.io/sys v0.0.0-20260507011012-5e35122ac3e3 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect

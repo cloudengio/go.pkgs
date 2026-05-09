@@ -9,6 +9,8 @@ package dsql
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"cloudeng.io/aws/awsconfig"
@@ -17,6 +19,21 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dsql/auth"
 	"github.com/aws/aws-sdk-go-v2/service/dsql"
 )
+
+var clusterIDRE = regexp.MustCompile(`^[a-z0-9]{26}$`)
+
+// clusterIDFromIdentifier returns the bare 26-character cluster ID from either
+// a raw ID or a full endpoint hostname (e.g. "<id>.dsql.us-east-1.on.aws").
+func clusterIDFromIdentifier(id string) (string, error) {
+	candidate := id
+	if strings.ContainsRune(id, '.') {
+		candidate = id[:strings.IndexByte(id, '.')]
+	}
+	if !clusterIDRE.MatchString(candidate) {
+		return "", fmt.Errorf("cannot extract a valid cluster ID from %q: expected 26 lowercase alphanumeric characters", id)
+	}
+	return candidate, nil
+}
 
 // WithTokenExpiration returns a function that can be passed to GenerateToken
 // to set the expiration time of the generated token.
@@ -106,8 +123,12 @@ func NewCluster(cfg aws.Config, id string, opts ...Option) (*Cluster, error) {
 
 // GetPrivateLinkServiceName retrieves the VPC endpoint service name for the cluster.
 func (c *Cluster) GetPrivateLinkServiceName(ctx context.Context) (string, error) {
+	id, err := clusterIDFromIdentifier(c.id)
+	if err != nil {
+		return "", fmt.Errorf("failed to get DSQL service name: %w", err)
+	}
 	output, err := c.opts.client.GetVpcEndpointServiceName(ctx, &dsql.GetVpcEndpointServiceNameInput{
-		Identifier: aws.String(c.id),
+		Identifier: aws.String(id),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get DSQL service name: %w", err)
@@ -115,21 +136,29 @@ func (c *Cluster) GetPrivateLinkServiceName(ctx context.Context) (string, error)
 	return aws.ToString(output.ClusterVpcEndpoint), nil
 }
 
-// PrivateLinkServiceName is a helper function that retrieves the VPC endpoint
-// service name for a given cluster ID using the aws.Config from the context
-// to create a DSQL client. This is a convenient wrapper around
-// Cluster.GetPrivateLinkServiceName.
-func PrivateLinkServiceName(ctx context.Context, clusterID string) (string, error) {
+// PrivateLinkServiceName is a helper function that retrieves the VPC public
+// endpoint and endpoint service name for a DSQL cluster given its cluster ID
+// or endpoint hostname. service name for a given cluster ID using the aws.Config
+// from the context to create a DSQL client. This is a convenient wrapper around
+// Cluster.GetPrivateLinkServiceName. clusterID may be either a bare 26-character
+// cluster ID or a full endpoint hostname (e.g. "<id>.dsql.us-east-1.on.aws").
+func PrivateLinkServiceName(ctx context.Context, clusterID string) (publicEndpoint, endpointServiceName string, err error) {
+	id, err := clusterIDFromIdentifier(clusterID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get DSQL service name: %w", err)
+	}
 	cfg, ok := awsconfig.FromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("aws config not found in context")
+		return "", "", fmt.Errorf("aws config not found in context")
 	}
 	client := dsql.NewFromConfig(*cfg)
 	output, err := client.GetVpcEndpointServiceName(ctx, &dsql.GetVpcEndpointServiceNameInput{
-		Identifier: aws.String(clusterID),
+		Identifier: aws.String(id),
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to get DSQL service name: %w", err)
+		return "", "", fmt.Errorf("failed to get DSQL service name: %w", err)
 	}
-	return aws.ToString(output.ClusterVpcEndpoint), nil
+	publicEndpoint = aws.ToString(output.ClusterVpcEndpoint)
+	endpointServiceName = aws.ToString(output.ServiceName)
+	return publicEndpoint, endpointServiceName, nil
 }

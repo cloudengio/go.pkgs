@@ -24,6 +24,23 @@ type Client interface {
 	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 }
 
+// Option represents an option to multiple functions in this package.
+type Option func(*options)
+
+type options struct {
+	client Client
+}
+
+// WithClient allows callers to specify a custom Client implementation (e.g.
+// for testing). If not provided, a default client will be automatically
+// created from the aws.Config stored in the context (see awsconfig.ContextWith).
+// If a client is provided, the context does not need to carry an aws.Config.
+func WithClient(client Client) Option {
+	return func(o *options) {
+		o.client = client
+	}
+}
+
 // T represents a VPC whose configuration can be read via ReadConfig.
 type T struct {
 	id     string
@@ -46,36 +63,38 @@ type SecurityGroupInfo struct {
 
 // Endpoint describes an existing VPC endpoint.
 type Endpoint struct {
-	ID               string
-	ServiceName      string
-	Type             types.VpcEndpointType
-	State            types.State
-	SubnetIDs        []string
-	SecurityGroupIDs []string
-	RouteTableIDs    []string
+	ID               string                `yaml:"id"`
+	ServiceName      string                `yaml:"service_name"`
+	Type             types.VpcEndpointType `yaml:"type"`
+	State            types.State           `yaml:"state"`
+	SubnetIDs        []string              `yaml:"subnet_ids"`
+	SecurityGroupIDs []string              `yaml:"security_group_ids"`
+	RouteTableIDs    []string              `yaml:"route_table_ids"`
 }
 
 // Config holds all VPC information required to create and delete endpoints.
 type Config struct {
-	VPCID          string
-	Subnets        []SubnetInfo
-	SecurityGroups []SecurityGroupInfo
-	RouteTableIDs  []string
-	Endpoints      []Endpoint
+	VPCID          string              `yaml:"vpc_id"`
+	Subnets        []SubnetInfo        `yaml:"subnets"`
+	SecurityGroups []SecurityGroupInfo `yaml:"security_groups"`
+	RouteTableIDs  []string            `yaml:"route_table_ids"`
+	Endpoints      []Endpoint          `yaml:"endpoints"`
 }
 
-// NewVPC creates a new T instance for the given VPC ID.
-func NewVPC(cfg aws.Config, id string) *T {
+// NewVPC creates a new T instance for the given VPC ID using the provided
+// AWS config and options.
+func NewVPC(cfg aws.Config, id string, opts ...Option) *T {
+	var options options
+	for _, opt := range opts {
+		opt(&options)
+	}
+	if options.client == nil {
+		options.client = ec2.NewFromConfig(cfg)
+	}
 	return &T{
 		id:     id,
-		client: ec2.NewFromConfig(cfg),
+		client: options.client,
 	}
-}
-
-// NewVPCWithClient creates a T using an already-configured Client.
-// Intended for tests that inject a localstack-pointed client.
-func NewVPCWithClient(id string, client Client) *T {
-	return &T{id: id, client: client}
 }
 
 // ReadConfig queries the AWS EC2 API to gather all information about the VPC

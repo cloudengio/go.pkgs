@@ -16,12 +16,15 @@ GenerateToken creates a 15-minute SigV4 signed authentication token.
 
 ### Func PrivateLinkServiceName
 ```go
-func PrivateLinkServiceName(ctx context.Context, clusterID string) (string, error)
+func PrivateLinkServiceName(ctx context.Context, clusterID string) (publicEndpoint, endpointServiceName string, err error)
 ```
-PrivateLinkServiceName is a helper function that retrieves the VPC
-endpoint service name for a given cluster ID using the aws.Config from
-the context to create a DSQL client. This is a convenient wrapper around
-Cluster.GetPrivateLinkServiceName.
+PrivateLinkServiceName is a helper function that retrieves the VPC public
+endpoint and endpoint service name for a DSQL cluster given its cluster
+ID or endpoint hostname. service name for a given cluster ID using the
+aws.Config from the context to create a DSQL client. This is a convenient
+wrapper around Cluster.GetPrivateLinkServiceName. clusterID may be
+either a bare 26-character cluster ID or a full endpoint hostname (e.g.
+"<id>.dsql.us-east-1.on.aws").
 
 ### Func TokenGenerator
 ```go
