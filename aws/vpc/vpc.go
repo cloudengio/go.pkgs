@@ -57,7 +57,7 @@ func WithConfig(cfg aws.Config) Option {
 	}
 }
 
-// T represents a VPC whose configuration can be read via ReadConfig.
+// T represents a VPC whose configuration can be read via Describe.
 type T struct {
 	id     string
 	client Client
@@ -183,8 +183,8 @@ func handleOptions(ctx context.Context, opts []Option) (options, error) {
 }
 
 // NewVPC creates a new T instance for the given VPC ID using the provided
-// AWS config and options. It will only fail if WithClient is not provided,
-// WithConfig is not provided, and the context does not carry an aws.Config.
+// AWS config and options. It will only fail if both WithClient and WithConfig
+// are not provided and the context does not carry an aws.Config.
 func NewVPC(ctx context.Context, id string, opts ...Option) (*T, error) {
 	options, err := handleOptions(ctx, opts)
 	if err != nil {

@@ -120,7 +120,7 @@ func setupVPC(t *testing.T, client *ec2.Client) (vpcID, subnetID, sgID, rtID str
 	return
 }
 
-func checkDnsOptions(t *testing.T, got *types.DnsOptionsSpecification, want *vpc.DNSOptions) {
+func checkDNSOptions(t *testing.T, got *types.DnsOptionsSpecification, want *vpc.DNSOptions) {
 	t.Helper()
 	if want == nil {
 		if got != nil {
@@ -243,8 +243,8 @@ func TestEndpointParams(t *testing.T) {
 		}
 	})
 
-	t.Run("DnsOptions", func(t *testing.T) {
-		checkDnsOptions(t, p.DnsOptions, ep.DNSOptions)
+	t.Run("DNSOptions", func(t *testing.T) {
+		checkDNSOptions(t, p.DnsOptions, ep.DNSOptions)
 	})
 
 	t.Run("Tags", func(t *testing.T) {
@@ -266,7 +266,7 @@ func TestEndpointParams(t *testing.T) {
 	t.Run("NilSafety", func(t *testing.T) {
 		nilDNS := vpc.Endpoint{ServiceName: "svc", Type: types.VpcEndpointTypeGateway, RouteTableIDs: []string{"rtb-1"}}
 		got := nilDNS.Params()
-		checkDnsOptions(t, got.DnsOptions, nilDNS.DNSOptions)
+		checkDNSOptions(t, got.DnsOptions, nilDNS.DNSOptions)
 		checkTagSpecs(t, got.TagSpecifications, nilDNS.Tags)
 	})
 }

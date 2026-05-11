@@ -210,16 +210,16 @@ type T struct {
 	// contains filtered or unexported fields
 }
 ```
-T represents a VPC whose configuration can be read via ReadConfig.
+T represents a VPC whose configuration can be read via Describe.
 
 ### Functions
 
 ```go
 func NewVPC(ctx context.Context, id string, opts ...Option) (*T, error)
 ```
-NewVPC creates a new T instance for the given VPC ID using the provided
-AWS config and options. It will only fail if WithClient is not provided,
-WithConfig is not provided, and the context does not carry an aws.Config.
+NewVPC creates a new T instance for the given VPC ID using the provided AWS
+config and options. It will only fail if both WithClient and WithConfig are
+not provided and the context does not carry an aws.Config.
 
 
 
