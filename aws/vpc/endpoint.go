@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 
-	"cloudeng.io/aws/awsconfig"
 	"cloudeng.io/errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -48,16 +47,9 @@ func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) 
 			return nil, fmt.Errorf("invalid option/filter type %T: expected either types.Filter or Option", opt)
 		}
 	}
-	var options options
-	for _, opt := range opts {
-		opt(&options)
-	}
-	if options.client == nil {
-		cfg, ok := awsconfig.FromContext(ctx)
-		if !ok {
-			return nil, fmt.Errorf("aws config not found in context")
-		}
-		options.client = ec2.NewFromConfig(cfg)
+	options, err := handleOptions(ctx, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	input := &ec2.DescribeVpcEndpointsInput{Filters: filters}
@@ -73,18 +65,7 @@ func DescribeEndpoints(ctx context.Context, ids []string, optsOrFilters ...any) 
 			return nil, fmt.Errorf("list endpoints: %w", err)
 		}
 		for _, ep := range out.VpcEndpoints {
-			e := Endpoint{
-				ID:            aws.ToString(ep.VpcEndpointId),
-				ServiceName:   aws.ToString(ep.ServiceName),
-				Type:          ep.VpcEndpointType,
-				State:         ep.State,
-				SubnetIDs:     ep.SubnetIds,
-				RouteTableIDs: ep.RouteTableIds,
-			}
-			for _, sg := range ep.Groups {
-				e.SecurityGroupIDs = append(e.SecurityGroupIDs, aws.ToString(sg.GroupId))
-			}
-			results = append(results, e)
+			results = append(results, endpointFromAPI(ep))
 		}
 	}
 	return results, nil
@@ -118,64 +99,84 @@ func (v *T) DeleteEndpoint(ctx context.Context, endpointIDs ...string) error {
 	return nil
 }
 
-// EndpointParams holds the parameters required to create a VPC endpoint.
-// SubnetIDs, SecurityGroupIDs and PrivateDNS apply to interface endpoints.
-// RouteTableIDs applies to gateway endpoints.
-type EndpointParams struct {
-	ServiceName      string                `yaml:"serviceName"`
-	Type             types.VpcEndpointType `yaml:"type"`
-	SubnetIDs        []string              `yaml:"subnetIDs"`
-	SecurityGroupIDs []string              `yaml:"securityGroupIDs"`
-	RouteTableIDs    []string              `yaml:"routeTableIDs"`
-	PrivateDNS       bool                  `yaml:"privateDNS"`
-	Tags             []types.Tag
+// Params returns an ec2.CreateVpcEndpointInput populated from the endpoint's fields.
+// Read-only fields returned by the AWS API (ID, VPCID, OwnerID, State,
+// NetworkInterfaceIDs, DNS entries, creation time, etc.) are not included —
+// only the fields that are meaningful inputs to CreateEndpoint.
+// VpcId is not set; it is supplied by CreateEndpoint from the VPC.
+// ClientToken, DryRun, and SubnetConfigurations are left at their zero values
+// and must be set by the caller if needed.
+func (e Endpoint) Params() ec2.CreateVpcEndpointInput {
+	input := ec2.CreateVpcEndpointInput{
+		ServiceName:       aws.String(e.ServiceName),
+		VpcEndpointType:   e.Type,
+		SubnetIds:         e.SubnetIDs,
+		SecurityGroupIds:  e.SecurityGroupIDs,
+		RouteTableIds:     e.RouteTableIDs,
+		PrivateDnsEnabled: aws.Bool(e.PrivateDNSEnabled),
+		IpAddressType:     e.IpAddressType,
+	}
+	if e.PolicyDocument != "" {
+		input.PolicyDocument = aws.String(e.PolicyDocument)
+	}
+	if e.ResourceConfigurationARN != "" {
+		input.ResourceConfigurationArn = aws.String(e.ResourceConfigurationARN)
+	}
+	if e.ServiceNetworkARN != "" {
+		input.ServiceNetworkArn = aws.String(e.ServiceNetworkARN)
+	}
+	if e.ServiceRegion != "" {
+		input.ServiceRegion = aws.String(e.ServiceRegion)
+	}
+	if e.DnsOptions != nil {
+		input.DnsOptions = &types.DnsOptionsSpecification{
+			DnsRecordIpType: e.DnsOptions.DNSRecordIPType,
+		}
+		if e.DnsOptions.PrivateDNSOnlyForInboundResolverEndpoint {
+			input.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint = aws.Bool(e.DnsOptions.PrivateDNSOnlyForInboundResolverEndpoint)
+		}
+		if len(e.DnsOptions.PrivateDNSPreference) > 0 {
+			input.DnsOptions.PrivateDnsPreference = aws.String(e.DnsOptions.PrivateDNSPreference)
+		}
+	}
+	for _, tg := range e.Tags {
+		if input.TagSpecifications == nil {
+			input.TagSpecifications = []types.TagSpecification{{ResourceType: types.ResourceTypeVpcEndpoint}}
+		}
+		input.TagSpecifications[0].Tags = append(input.TagSpecifications[0].Tags, types.Tag{Key: aws.String(tg.Name), Value: aws.String(tg.Value)})
+	}
+	return input
 }
 
 // CreateEndpoint creates a VPC endpoint in the VPC. It returns the new endpoint ID.
-func (v *T) CreateEndpoint(ctx context.Context, params EndpointParams) (string, error) {
-	if err := params.validate(); err != nil {
+// input.VpcId is overwritten with the VPC's ID.
+func (v *T) CreateEndpoint(ctx context.Context, ep Endpoint) (string, error) {
+	input := ep.Params()
+	if err := validateEndpointInput(input); err != nil {
 		return "", fmt.Errorf("vpc %s: invalid endpoint params: %w", v.id, err)
 	}
-	input := &ec2.CreateVpcEndpointInput{
-		VpcId:           aws.String(v.id),
-		ServiceName:     aws.String(params.ServiceName),
-		VpcEndpointType: params.Type,
-	}
-	switch params.Type {
-	case types.VpcEndpointTypeInterface:
-		input.SubnetIds = params.SubnetIDs
-		input.SecurityGroupIds = params.SecurityGroupIDs
-		input.PrivateDnsEnabled = aws.Bool(params.PrivateDNS)
-	case types.VpcEndpointTypeGateway:
-		input.RouteTableIds = params.RouteTableIDs
-	}
-	if len(params.Tags) > 0 {
-		input.TagSpecifications = []types.TagSpecification{{
-			ResourceType: types.ResourceTypeVpcEndpoint,
-			Tags:         params.Tags,
-		}}
-	}
-	out, err := v.client.CreateVpcEndpoint(ctx, input)
+	input.VpcId = aws.String(v.id)
+	out, err := v.client.CreateVpcEndpoint(ctx, &input)
 	if err != nil {
-		return "", fmt.Errorf("vpc %s: create endpoint for %s: %w", v.id, params.ServiceName, err)
+		return "", fmt.Errorf("vpc %s: create endpoint for %s: %w", v.id, aws.ToString(input.ServiceName), err)
 	}
 	return aws.ToString(out.VpcEndpoint.VpcEndpointId), nil
 }
 
-func (p EndpointParams) validate() error {
-	if p.ServiceName == "" {
+func validateEndpointInput(input ec2.CreateVpcEndpointInput) error {
+	if aws.ToString(input.ServiceName) == "" {
 		return fmt.Errorf("ServiceName is required")
 	}
-	switch p.Type {
+	switch input.VpcEndpointType {
 	case types.VpcEndpointTypeGateway:
-		if len(p.RouteTableIDs) == 0 {
+		if len(input.RouteTableIds) == 0 {
 			return fmt.Errorf("RouteTableIDs is required for gateway endpoints")
 		}
 	case types.VpcEndpointTypeInterface:
-		if len(p.SubnetIDs) == 0 {
+		if len(input.SubnetIds) == 0 {
 			return fmt.Errorf("SubnetIDs is required for interface endpoints")
 		}
-		if len(p.SecurityGroupIDs) == 0 {
+		if len(input.SecurityGroupIds) == 0 {
 			return fmt.Errorf("SecurityGroupIDs is required for interface endpoints")
 		}
 	case types.VpcEndpointTypeGatewayLoadBalancer,
@@ -183,7 +184,7 @@ func (p EndpointParams) validate() error {
 		types.VpcEndpointTypeServiceNetwork:
 		// accepted as-is; caller is responsible for any type-specific fields
 	default:
-		return fmt.Errorf("unsupported endpoint type %q", p.Type)
+		return fmt.Errorf("unsupported endpoint type %q", input.VpcEndpointType)
 	}
 	return nil
 }

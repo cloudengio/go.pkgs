@@ -8,7 +8,9 @@ package vpc
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"cloudeng.io/aws/awsconfig"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -28,7 +30,9 @@ type Client interface {
 type Option func(*options)
 
 type options struct {
-	client Client
+	client    Client
+	config    aws.Config
+	hasConfig bool
 }
 
 // WithClient allows callers to specify a custom Client implementation (e.g.
@@ -38,6 +42,18 @@ type options struct {
 func WithClient(client Client) Option {
 	return func(o *options) {
 		o.client = client
+	}
+}
+
+// WithConfig allows callers to specify an aws.Config directly, which will be
+// used to create a default client. If not provided, the aws.Config will be
+// retrieved from the context (see awsconfig.ContextWith) to create the default
+// client. If a config is provided, the context does not need to carry an
+// aws.Config.
+func WithConfig(cfg aws.Config) Option {
+	return func(o *options) {
+		o.config = cfg
+		o.hasConfig = true
 	}
 }
 
@@ -61,15 +77,81 @@ type SecurityGroupInfo struct {
 	Name string
 }
 
-// Endpoint describes an existing VPC endpoint.
+// DNSEntry holds the DNS name and hosted zone for a VPC endpoint DNS record.
+type DNSEntry struct {
+	DNSName      string `yaml:"dns_name"`
+	HostedZoneID string `yaml:"hosted_zone_id"`
+}
+
+// DNSOptions holds the DNS configuration for a VPC endpoint.
+type DNSOptions struct {
+	DNSRecordIPType                          types.DnsRecordIpType `yaml:"dns_record_ip_type"`
+	PrivateDNSOnlyForInboundResolverEndpoint bool                  `yaml:"private_dns_only_for_inbound_resolver_endpoint"`
+	PrivateDNSPreference                     string                `yaml:"private_dns_preference"`
+	PrivateDNSSpecifiedDomains               []string              `yaml:"private_dns_specified_domains"`
+}
+
+// SubnetIPPrefixes holds the IP prefix allocation for a subnet within an endpoint.
+type SubnetIPPrefixes struct {
+	SubnetID   string   `yaml:"subnet_id"`
+	IPPrefixes []string `yaml:"ip_prefixes"`
+}
+
+// EndpointError holds the last error recorded for a VPC endpoint.
+type EndpointError struct {
+	Code    string `yaml:"code"`
+	Message string `yaml:"message"`
+}
+
+// Endpoint describes an existing VPC endpoint, mirroring all fields of
+// types.VpcEndpoint with Go-idiomatic naming and value (not pointer) scalars.
 type Endpoint struct {
-	ID               string                `yaml:"id"`
-	ServiceName      string                `yaml:"service_name"`
-	Type             types.VpcEndpointType `yaml:"type"`
-	State            types.State           `yaml:"state"`
-	SubnetIDs        []string              `yaml:"subnet_ids"`
-	SecurityGroupIDs []string              `yaml:"security_group_ids"`
-	RouteTableIDs    []string              `yaml:"route_table_ids"`
+	// Core identity
+	ID          string                `yaml:"id"`
+	VPCID       string                `yaml:"vpc_id"`
+	OwnerID     string                `yaml:"owner_id"`
+	ServiceName string                `yaml:"service_name"`
+	Type        types.VpcEndpointType `yaml:"type"`
+	State       types.State           `yaml:"state"`
+
+	// Networking
+	SubnetIDs           []string            `yaml:"subnet_ids"`
+	SecurityGroupIDs    []string            `yaml:"security_group_ids"`
+	RouteTableIDs       []string            `yaml:"route_table_ids"`
+	NetworkInterfaceIDs []string            `yaml:"network_interface_ids"`
+	IpAddressType       types.IpAddressType `yaml:"ip_address_type"`
+	Ipv4Prefixes        []SubnetIPPrefixes  `yaml:"ipv4_prefixes"`
+	Ipv6Prefixes        []SubnetIPPrefixes  `yaml:"ipv6_prefixes"`
+
+	// DNS
+	DnsEntries        []DNSEntry  `yaml:"dns_entries"`
+	DnsOptions        *DNSOptions `yaml:"dns_options"`
+	PrivateDNSEnabled bool        `yaml:"private_dns_enabled"`
+
+	// Policy and routing
+	PolicyDocument string `yaml:"policy_document"`
+
+	// Service topology
+	ServiceNetworkARN        string `yaml:"service_network_arn"`
+	ServiceRegion            string `yaml:"service_region"`
+	ResourceConfigurationARN string `yaml:"resource_configuration_arn"`
+
+	// Management
+	CreatedAt        *time.Time     `yaml:"created_at"`
+	RequesterManaged bool           `yaml:"requester_managed"`
+	FailureReason    string         `yaml:"failure_reason"`
+	LastError        *EndpointError `yaml:"last_error"`
+
+	Tags []Tag `yaml:"tags"`
+}
+
+type Tag struct {
+	Name  string `yaml:"name"`
+	Value string `yaml:"value"`
+}
+
+func (t Tag) String() string {
+	return t.Name + "=" + t.Value
 }
 
 // Config holds all VPC information required to create and delete endpoints.
@@ -81,26 +163,43 @@ type Config struct {
 	Endpoints      []Endpoint          `yaml:"endpoints"`
 }
 
-// NewVPC creates a new T instance for the given VPC ID using the provided
-// AWS config and options.
-func NewVPC(cfg aws.Config, id string, opts ...Option) *T {
+func handleOptions(ctx context.Context, opts []Option) (options, error) {
 	var options options
 	for _, opt := range opts {
 		opt(&options)
 	}
-	if options.client == nil {
-		options.client = ec2.NewFromConfig(cfg)
+	if options.client != nil {
+		return options, nil
+	}
+	if !options.hasConfig {
+		cfg, ok := awsconfig.FromContext(ctx)
+		if !ok {
+			return options, fmt.Errorf("aws config not found in context")
+		}
+		options.config = cfg
+	}
+	options.client = ec2.NewFromConfig(options.config)
+	return options, nil
+}
+
+// NewVPC creates a new T instance for the given VPC ID using the provided
+// AWS config and options. It will only fail if WithClient is not provided,
+// WithConfig is not provided, and the context does not carry an aws.Config.
+func NewVPC(ctx context.Context, id string, opts ...Option) (*T, error) {
+	options, err := handleOptions(ctx, opts)
+	if err != nil {
+		return nil, err
 	}
 	return &T{
 		id:     id,
 		client: options.client,
-	}
+	}, nil
 }
 
-// ReadConfig queries the AWS EC2 API to gather all information about the VPC
+// Describe queries the AWS EC2 API to gather all information about the VPC
 // required to create and delete endpoints: subnets, security groups, route
 // tables, and any existing endpoints. The result is stored in T.Config.
-func (v *T) ReadConfig(ctx context.Context) error {
+func (v *T) Describe(ctx context.Context) error {
 	cfg := &Config{VPCID: v.id}
 	vpcFilter := []types.Filter{{Name: aws.String("vpc-id"), Values: []string{v.id}}}
 
@@ -193,19 +292,58 @@ func describeVpcEndpoints(ctx context.Context, client Client, filters []types.Fi
 			return nil, err
 		}
 		for _, ep := range out.VpcEndpoints {
-			e := Endpoint{
-				ID:            aws.ToString(ep.VpcEndpointId),
-				ServiceName:   aws.ToString(ep.ServiceName),
-				Type:          ep.VpcEndpointType,
-				State:         ep.State,
-				SubnetIDs:     ep.SubnetIds,
-				RouteTableIDs: ep.RouteTableIds,
-			}
-			for _, sg := range ep.Groups {
-				e.SecurityGroupIDs = append(e.SecurityGroupIDs, aws.ToString(sg.GroupId))
-			}
-			results = append(results, e)
+			results = append(results, endpointFromAPI(ep))
 		}
 	}
 	return results, nil
+}
+
+func endpointFromAPI(ep types.VpcEndpoint) Endpoint {
+	e := Endpoint{
+		ID:                       aws.ToString(ep.VpcEndpointId),
+		VPCID:                    aws.ToString(ep.VpcId),
+		OwnerID:                  aws.ToString(ep.OwnerId),
+		ServiceName:              aws.ToString(ep.ServiceName),
+		Type:                     ep.VpcEndpointType,
+		State:                    ep.State,
+		SubnetIDs:                ep.SubnetIds,
+		RouteTableIDs:            ep.RouteTableIds,
+		NetworkInterfaceIDs:      ep.NetworkInterfaceIds,
+		IpAddressType:            ep.IpAddressType,
+		PrivateDNSEnabled:        aws.ToBool(ep.PrivateDnsEnabled),
+		PolicyDocument:           aws.ToString(ep.PolicyDocument),
+		ServiceNetworkARN:        aws.ToString(ep.ServiceNetworkArn),
+		ServiceRegion:            aws.ToString(ep.ServiceRegion),
+		ResourceConfigurationARN: aws.ToString(ep.ResourceConfigurationArn),
+		CreatedAt:                ep.CreationTimestamp,
+		RequesterManaged:         aws.ToBool(ep.RequesterManaged),
+		FailureReason:            aws.ToString(ep.FailureReason),
+	}
+	for _, p := range ep.Ipv4Prefixes {
+		e.Ipv4Prefixes = append(e.Ipv4Prefixes, SubnetIPPrefixes{SubnetID: aws.ToString(p.SubnetId), IPPrefixes: p.IpPrefixes})
+	}
+	for _, p := range ep.Ipv6Prefixes {
+		e.Ipv6Prefixes = append(e.Ipv6Prefixes, SubnetIPPrefixes{SubnetID: aws.ToString(p.SubnetId), IPPrefixes: p.IpPrefixes})
+	}
+	for _, d := range ep.DnsEntries {
+		e.DnsEntries = append(e.DnsEntries, DNSEntry{DNSName: aws.ToString(d.DnsName), HostedZoneID: aws.ToString(d.HostedZoneId)})
+	}
+	if o := ep.DnsOptions; o != nil {
+		e.DnsOptions = &DNSOptions{
+			DNSRecordIPType:                          o.DnsRecordIpType,
+			PrivateDNSOnlyForInboundResolverEndpoint: aws.ToBool(o.PrivateDnsOnlyForInboundResolverEndpoint),
+			PrivateDNSPreference:                     aws.ToString(o.PrivateDnsPreference),
+			PrivateDNSSpecifiedDomains:               o.PrivateDnsSpecifiedDomains,
+		}
+	}
+	if le := ep.LastError; le != nil {
+		e.LastError = &EndpointError{Code: aws.ToString(le.Code), Message: aws.ToString(le.Message)}
+	}
+	for _, sg := range ep.Groups {
+		e.SecurityGroupIDs = append(e.SecurityGroupIDs, aws.ToString(sg.GroupId))
+	}
+	for _, tg := range ep.Tags {
+		e.Tags = append(e.Tags, Tag{Name: aws.ToString(tg.Key), Value: aws.ToString(tg.Value)})
+	}
+	return e
 }
