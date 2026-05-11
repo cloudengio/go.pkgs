@@ -108,13 +108,21 @@ func (v *T) DeleteEndpoint(ctx context.Context, endpointIDs ...string) error {
 // and must be set by the caller if needed.
 func (e Endpoint) Params() ec2.CreateVpcEndpointInput {
 	input := ec2.CreateVpcEndpointInput{
-		ServiceName:       aws.String(e.ServiceName),
-		VpcEndpointType:   e.Type,
-		SubnetIds:         e.SubnetIDs,
-		SecurityGroupIds:  e.SecurityGroupIDs,
-		RouteTableIds:     e.RouteTableIDs,
-		PrivateDnsEnabled: aws.Bool(e.PrivateDNSEnabled),
-		IpAddressType:     e.IpAddressType,
+		ServiceName:     aws.String(e.ServiceName),
+		VpcEndpointType: e.Type,
+		IpAddressType:   e.IPAddressType,
+	}
+	if len(e.SubnetIDs) > 0 {
+		input.SubnetIds = e.SubnetIDs
+	}
+	if len(e.SecurityGroupIDs) > 0 {
+		input.SecurityGroupIds = e.SecurityGroupIDs
+	}
+	if len(e.RouteTableIDs) > 0 {
+		input.RouteTableIds = e.RouteTableIDs
+	}
+	if e.PrivateDNSEnabled {
+		input.PrivateDnsEnabled = aws.Bool(e.PrivateDNSEnabled)
 	}
 	if e.PolicyDocument != "" {
 		input.PolicyDocument = aws.String(e.PolicyDocument)
@@ -128,22 +136,29 @@ func (e Endpoint) Params() ec2.CreateVpcEndpointInput {
 	if e.ServiceRegion != "" {
 		input.ServiceRegion = aws.String(e.ServiceRegion)
 	}
-	if e.DnsOptions != nil {
+	if e.DNSOptions != nil {
 		input.DnsOptions = &types.DnsOptionsSpecification{
-			DnsRecordIpType: e.DnsOptions.DNSRecordIPType,
+			DnsRecordIpType: e.DNSOptions.DNSRecordIPType,
 		}
-		if e.DnsOptions.PrivateDNSOnlyForInboundResolverEndpoint {
-			input.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint = aws.Bool(e.DnsOptions.PrivateDNSOnlyForInboundResolverEndpoint)
+		if e.DNSOptions.PrivateDNSOnlyForInboundResolverEndpoint {
+			input.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint = aws.Bool(e.DNSOptions.PrivateDNSOnlyForInboundResolverEndpoint)
 		}
-		if len(e.DnsOptions.PrivateDNSPreference) > 0 {
-			input.DnsOptions.PrivateDnsPreference = aws.String(e.DnsOptions.PrivateDNSPreference)
+		if len(e.DNSOptions.PrivateDNSPreference) > 0 {
+			input.DnsOptions.PrivateDnsPreference = aws.String(e.DNSOptions.PrivateDNSPreference)
+		}
+		if len(e.DNSOptions.PrivateDNSSpecifiedDomains) > 0 {
+			input.DnsOptions.PrivateDnsSpecifiedDomains = e.DNSOptions.PrivateDNSSpecifiedDomains
 		}
 	}
-	for _, tg := range e.Tags {
-		if input.TagSpecifications == nil {
-			input.TagSpecifications = []types.TagSpecification{{ResourceType: types.ResourceTypeVpcEndpoint}}
+	if len(e.Tags) > 0 {
+		ts := types.TagSpecification{
+			ResourceType: types.ResourceTypeVpcEndpoint,
+			Tags:         make([]types.Tag, 0, len(e.Tags)),
 		}
-		input.TagSpecifications[0].Tags = append(input.TagSpecifications[0].Tags, types.Tag{Key: aws.String(tg.Name), Value: aws.String(tg.Value)})
+		for _, tg := range e.Tags {
+			ts.Tags = append(ts.Tags, types.Tag{Key: aws.String(tg.Name), Value: aws.String(tg.Value)})
+		}
+		input.TagSpecifications = []types.TagSpecification{ts}
 	}
 	return input
 }

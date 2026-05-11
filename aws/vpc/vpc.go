@@ -119,13 +119,13 @@ type Endpoint struct {
 	SecurityGroupIDs    []string            `yaml:"security_group_ids"`
 	RouteTableIDs       []string            `yaml:"route_table_ids"`
 	NetworkInterfaceIDs []string            `yaml:"network_interface_ids"`
-	IpAddressType       types.IpAddressType `yaml:"ip_address_type"`
-	Ipv4Prefixes        []SubnetIPPrefixes  `yaml:"ipv4_prefixes"`
-	Ipv6Prefixes        []SubnetIPPrefixes  `yaml:"ipv6_prefixes"`
+	IPAddressType       types.IpAddressType `yaml:"ip_address_type"`
+	IPv4Prefixes        []SubnetIPPrefixes  `yaml:"ipv4_prefixes"`
+	IPv6Prefixes        []SubnetIPPrefixes  `yaml:"ipv6_prefixes"`
 
 	// DNS
-	DnsEntries        []DNSEntry  `yaml:"dns_entries"`
-	DnsOptions        *DNSOptions `yaml:"dns_options"`
+	DNSEntries        []DNSEntry  `yaml:"dns_entries"`
+	DNSOptions        *DNSOptions `yaml:"dns_options"`
 	PrivateDNSEnabled bool        `yaml:"private_dns_enabled"`
 
 	// Policy and routing
@@ -164,22 +164,22 @@ type Config struct {
 }
 
 func handleOptions(ctx context.Context, opts []Option) (options, error) {
-	var options options
+	var o options
 	for _, opt := range opts {
-		opt(&options)
+		opt(&o)
 	}
-	if options.client != nil {
-		return options, nil
+	if o.client != nil {
+		return o, nil
 	}
-	if !options.hasConfig {
+	if !o.hasConfig {
 		cfg, ok := awsconfig.FromContext(ctx)
 		if !ok {
-			return options, fmt.Errorf("aws config not found in context")
+			return o, fmt.Errorf("aws config not found in context")
 		}
-		options.config = cfg
+		o.config = cfg
 	}
-	options.client = ec2.NewFromConfig(options.config)
-	return options, nil
+	o.client = ec2.NewFromConfig(o.config)
+	return o, nil
 }
 
 // NewVPC creates a new T instance for the given VPC ID using the provided
@@ -309,9 +309,9 @@ func endpointFromAPI(ep types.VpcEndpoint) Endpoint {
 		SubnetIDs:                ep.SubnetIds,
 		RouteTableIDs:            ep.RouteTableIds,
 		NetworkInterfaceIDs:      ep.NetworkInterfaceIds,
-		IpAddressType:            ep.IpAddressType,
+		IPAddressType:            ep.IpAddressType,
 		PrivateDNSEnabled:        aws.ToBool(ep.PrivateDnsEnabled),
-		PolicyDocument:           aws.ToString(ep.PolicyDocument),
+		PolicyDocument:           aws.ToString(ep.PolicyDocument), // PolicyDocument is a string, not a pointer
 		ServiceNetworkARN:        aws.ToString(ep.ServiceNetworkArn),
 		ServiceRegion:            aws.ToString(ep.ServiceRegion),
 		ResourceConfigurationARN: aws.ToString(ep.ResourceConfigurationArn),
@@ -320,16 +320,16 @@ func endpointFromAPI(ep types.VpcEndpoint) Endpoint {
 		FailureReason:            aws.ToString(ep.FailureReason),
 	}
 	for _, p := range ep.Ipv4Prefixes {
-		e.Ipv4Prefixes = append(e.Ipv4Prefixes, SubnetIPPrefixes{SubnetID: aws.ToString(p.SubnetId), IPPrefixes: p.IpPrefixes})
+		e.IPv4Prefixes = append(e.IPv4Prefixes, SubnetIPPrefixes{SubnetID: aws.ToString(p.SubnetId), IPPrefixes: p.IpPrefixes})
 	}
 	for _, p := range ep.Ipv6Prefixes {
-		e.Ipv6Prefixes = append(e.Ipv6Prefixes, SubnetIPPrefixes{SubnetID: aws.ToString(p.SubnetId), IPPrefixes: p.IpPrefixes})
+		e.IPv6Prefixes = append(e.IPv6Prefixes, SubnetIPPrefixes{SubnetID: aws.ToString(p.SubnetId), IPPrefixes: p.IpPrefixes})
 	}
 	for _, d := range ep.DnsEntries {
-		e.DnsEntries = append(e.DnsEntries, DNSEntry{DNSName: aws.ToString(d.DnsName), HostedZoneID: aws.ToString(d.HostedZoneId)})
+		e.DNSEntries = append(e.DNSEntries, DNSEntry{DNSName: aws.ToString(d.DnsName), HostedZoneID: aws.ToString(d.HostedZoneId)})
 	}
 	if o := ep.DnsOptions; o != nil {
-		e.DnsOptions = &DNSOptions{
+		e.DNSOptions = &DNSOptions{
 			DNSRecordIPType:                          o.DnsRecordIpType,
 			PrivateDNSOnlyForInboundResolverEndpoint: aws.ToBool(o.PrivateDnsOnlyForInboundResolverEndpoint),
 			PrivateDNSPreference:                     aws.ToString(o.PrivateDnsPreference),

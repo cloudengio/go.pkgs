@@ -120,6 +120,58 @@ func setupVPC(t *testing.T, client *ec2.Client) (vpcID, subnetID, sgID, rtID str
 	return
 }
 
+func checkDnsOptions(t *testing.T, got *types.DnsOptionsSpecification, want *vpc.DNSOptions) {
+	t.Helper()
+	if want == nil {
+		if got != nil {
+			t.Errorf("DNSOptions: got %v, want nil", got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatal("DnsOptions should not be nil")
+		return
+	}
+	if got.DnsRecordIpType != want.DNSRecordIPType {
+		t.Errorf("DnsOptions.DnsRecordIpType: got %v, want %v", got.DnsRecordIpType, want.DNSRecordIPType)
+	}
+	if aws.ToBool(got.PrivateDnsOnlyForInboundResolverEndpoint) != want.PrivateDNSOnlyForInboundResolverEndpoint {
+		t.Errorf("DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint: got %v, want %v",
+			aws.ToBool(got.PrivateDnsOnlyForInboundResolverEndpoint), want.PrivateDNSOnlyForInboundResolverEndpoint)
+	}
+	if aws.ToString(got.PrivateDnsPreference) != want.PrivateDNSPreference {
+		t.Errorf("DnsOptions.PrivateDnsPreference: got %q, want %q",
+			aws.ToString(got.PrivateDnsPreference), want.PrivateDNSPreference)
+	}
+}
+
+func checkTagSpecs(t *testing.T, specs []types.TagSpecification, want []vpc.Tag) {
+	t.Helper()
+	if len(want) == 0 {
+		if specs != nil {
+			t.Errorf("TagSpecifications should be nil for endpoint with no tags, got %v", specs)
+		}
+		return
+	}
+	if len(specs) == 0 {
+		t.Fatal("TagSpecifications should not be empty")
+		return
+	}
+	tags := specs[0].Tags
+	if len(tags) != len(want) {
+		t.Fatalf("Tags len: got %d, want %d", len(tags), len(want))
+		return
+	}
+	for i, w := range want {
+		if aws.ToString(tags[i].Key) != w.Name {
+			t.Errorf("Tags[%d].Key: got %q, want %q", i, aws.ToString(tags[i].Key), w.Name)
+		}
+		if aws.ToString(tags[i].Value) != w.Value {
+			t.Errorf("Tags[%d].Value: got %q, want %q", i, aws.ToString(tags[i].Value), w.Value)
+		}
+	}
+}
+
 func TestEndpointParams(t *testing.T) {
 	ep := vpc.Endpoint{
 		// Create-time fields — should appear in Params().
@@ -133,8 +185,8 @@ func TestEndpointParams(t *testing.T) {
 		ResourceConfigurationARN: "arn:aws:vpc-lattice:us-east-1:123:resourceconfiguration/rcfg-x",
 		ServiceNetworkARN:        "arn:aws:vpc-lattice:us-east-1:123:servicenetwork/sn-x",
 		ServiceRegion:            "us-west-2",
-		IpAddressType:            types.IpAddressTypeIpv4,
-		DnsOptions: &vpc.DNSOptions{
+		IPAddressType:            types.IpAddressTypeIpv4,
+		DNSOptions: &vpc.DNSOptions{
 			DNSRecordIPType:                          types.DnsRecordIpTypeIpv4,
 			PrivateDNSOnlyForInboundResolverEndpoint: true,
 			PrivateDNSPreference:                     "ALL_DOMAINS",
@@ -150,96 +202,73 @@ func TestEndpointParams(t *testing.T) {
 		State:               types.StateAvailable,
 		NetworkInterfaceIDs: []string{"eni-1"},
 	}
-
 	p := ep.Params()
 
-	if aws.ToString(p.ServiceName) != ep.ServiceName {
-		t.Errorf("ServiceName: got %q, want %q", aws.ToString(p.ServiceName), ep.ServiceName)
-	}
-	if p.VpcEndpointType != ep.Type {
-		t.Errorf("Type: got %v, want %v", p.VpcEndpointType, ep.Type)
-	}
-	if !slices.Equal(p.SubnetIds, ep.SubnetIDs) {
-		t.Errorf("SubnetIDs: got %v, want %v", p.SubnetIds, ep.SubnetIDs)
-	}
-	if !slices.Equal(p.SecurityGroupIds, ep.SecurityGroupIDs) {
-		t.Errorf("SecurityGroupIDs: got %v, want %v", p.SecurityGroupIds, ep.SecurityGroupIDs)
-	}
-	if !slices.Equal(p.RouteTableIds, ep.RouteTableIDs) {
-		t.Errorf("RouteTableIDs: got %v, want %v", p.RouteTableIds, ep.RouteTableIDs)
-	}
-	if aws.ToBool(p.PrivateDnsEnabled) != ep.PrivateDNSEnabled {
-		t.Errorf("PrivateDnsEnabled: got %v, want %v", aws.ToBool(p.PrivateDnsEnabled), ep.PrivateDNSEnabled)
-	}
-	if aws.ToString(p.PolicyDocument) != ep.PolicyDocument {
-		t.Errorf("PolicyDocument: got %q, want %q", aws.ToString(p.PolicyDocument), ep.PolicyDocument)
-	}
-	if aws.ToString(p.ResourceConfigurationArn) != ep.ResourceConfigurationARN {
-		t.Errorf("ResourceConfigurationArn: got %q, want %q", aws.ToString(p.ResourceConfigurationArn), ep.ResourceConfigurationARN)
-	}
-	if aws.ToString(p.ServiceNetworkArn) != ep.ServiceNetworkARN {
-		t.Errorf("ServiceNetworkArn: got %q, want %q", aws.ToString(p.ServiceNetworkArn), ep.ServiceNetworkARN)
-	}
-	if aws.ToString(p.ServiceRegion) != ep.ServiceRegion {
-		t.Errorf("ServiceRegion: got %q, want %q", aws.ToString(p.ServiceRegion), ep.ServiceRegion)
-	}
-	if p.IpAddressType != ep.IpAddressType {
-		t.Errorf("IpAddressType: got %v, want %v", p.IpAddressType, ep.IpAddressType)
-	}
-
-	// DnsOptions conversion: vpc.DNSOptions → types.DnsOptionsSpecification.
-	if p.DnsOptions == nil {
-		t.Fatal("DnsOptions should not be nil")
-	}
-	if p.DnsOptions.DnsRecordIpType != ep.DnsOptions.DNSRecordIPType {
-		t.Errorf("DnsOptions.DnsRecordIpType: got %v, want %v", p.DnsOptions.DnsRecordIpType, ep.DnsOptions.DNSRecordIPType)
-	}
-	if aws.ToBool(p.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint) != ep.DnsOptions.PrivateDNSOnlyForInboundResolverEndpoint {
-		t.Errorf("DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint: got %v, want %v",
-			aws.ToBool(p.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint), ep.DnsOptions.PrivateDNSOnlyForInboundResolverEndpoint)
-	}
-	if aws.ToString(p.DnsOptions.PrivateDnsPreference) != ep.DnsOptions.PrivateDNSPreference {
-		t.Errorf("DnsOptions.PrivateDnsPreference: got %q, want %q",
-			aws.ToString(p.DnsOptions.PrivateDnsPreference), ep.DnsOptions.PrivateDNSPreference)
-	}
-
-	// Tags: []vpc.Tag → types.TagSpecification.
-	if len(p.TagSpecifications) == 0 {
-		t.Fatal("TagSpecifications should not be empty")
-	}
-	tags := p.TagSpecifications[0].Tags
-	if len(tags) != len(ep.Tags) {
-		t.Fatalf("Tags len: got %d, want %d", len(tags), len(ep.Tags))
-	}
-	for i, want := range ep.Tags {
-		if aws.ToString(tags[i].Key) != want.Name {
-			t.Errorf("Tags[%d].Key: got %q, want %q", i, aws.ToString(tags[i].Key), want.Name)
+	t.Run("StringFields", func(t *testing.T) {
+		if aws.ToString(p.ServiceName) != ep.ServiceName {
+			t.Errorf("ServiceName: got %q, want %q", aws.ToString(p.ServiceName), ep.ServiceName)
 		}
-		if aws.ToString(tags[i].Value) != want.Value {
-			t.Errorf("Tags[%d].Value: got %q, want %q", i, aws.ToString(tags[i].Value), want.Value)
+		if aws.ToString(p.PolicyDocument) != ep.PolicyDocument {
+			t.Errorf("PolicyDocument: got %q, want %q", aws.ToString(p.PolicyDocument), ep.PolicyDocument)
 		}
-	}
+		if aws.ToString(p.ResourceConfigurationArn) != ep.ResourceConfigurationARN {
+			t.Errorf("ResourceConfigurationArn: got %q, want %q", aws.ToString(p.ResourceConfigurationArn), ep.ResourceConfigurationARN)
+		}
+		if aws.ToString(p.ServiceNetworkArn) != ep.ServiceNetworkARN {
+			t.Errorf("ServiceNetworkArn: got %q, want %q", aws.ToString(p.ServiceNetworkArn), ep.ServiceNetworkARN)
+		}
+		if aws.ToString(p.ServiceRegion) != ep.ServiceRegion {
+			t.Errorf("ServiceRegion: got %q, want %q", aws.ToString(p.ServiceRegion), ep.ServiceRegion)
+		}
+	})
 
-	// Transient create-time fields must be zero — they have no read-back equivalent.
-	if aws.ToString(p.ClientToken) != "" {
-		t.Errorf("ClientToken should be empty, got %q", aws.ToString(p.ClientToken))
-	}
-	if aws.ToBool(p.DryRun) {
-		t.Error("DryRun should be false")
-	}
-	if p.SubnetConfigurations != nil {
-		t.Errorf("SubnetConfigurations should be nil, got %v", p.SubnetConfigurations)
-	}
+	t.Run("CollectionFields", func(t *testing.T) {
+		if p.VpcEndpointType != ep.Type {
+			t.Errorf("VpcEndpointType: got %v, want %v", p.VpcEndpointType, ep.Type)
+		}
+		if !slices.Equal(p.SubnetIds, ep.SubnetIDs) {
+			t.Errorf("SubnetIds: got %v, want %v", p.SubnetIds, ep.SubnetIDs)
+		}
+		if !slices.Equal(p.SecurityGroupIds, ep.SecurityGroupIDs) {
+			t.Errorf("SecurityGroupIds: got %v, want %v", p.SecurityGroupIds, ep.SecurityGroupIDs)
+		}
+		if !slices.Equal(p.RouteTableIds, ep.RouteTableIDs) {
+			t.Errorf("RouteTableIds: got %v, want %v", p.RouteTableIds, ep.RouteTableIDs)
+		}
+		if aws.ToBool(p.PrivateDnsEnabled) != ep.PrivateDNSEnabled {
+			t.Errorf("PrivateDnsEnabled: got %v, want %v", aws.ToBool(p.PrivateDnsEnabled), ep.PrivateDNSEnabled)
+		}
+		if p.IpAddressType != ep.IPAddressType {
+			t.Errorf("IPAddressType: got %v, want %v", p.IpAddressType, ep.IPAddressType)
+		}
+	})
 
-	// Nil DnsOptions must not panic and must produce nil in params.
-	nilDNS := vpc.Endpoint{ServiceName: "svc", Type: types.VpcEndpointTypeGateway, RouteTableIDs: []string{"rtb-1"}}
-	if nilDNS.Params().DnsOptions != nil {
-		t.Error("Params().DnsOptions should be nil when Endpoint.DnsOptions is nil")
-	}
-	// Empty Tags must produce nil TagSpecifications (not empty slice).
-	if nilDNS.Params().TagSpecifications != nil {
-		t.Errorf("Params().TagSpecifications should be nil for endpoint with no tags, got %v", nilDNS.Params().TagSpecifications)
-	}
+	t.Run("DnsOptions", func(t *testing.T) {
+		checkDnsOptions(t, p.DnsOptions, ep.DNSOptions)
+	})
+
+	t.Run("Tags", func(t *testing.T) {
+		checkTagSpecs(t, p.TagSpecifications, ep.Tags)
+	})
+
+	t.Run("TransientFields", func(t *testing.T) {
+		if aws.ToString(p.ClientToken) != "" {
+			t.Errorf("ClientToken should be empty, got %q", aws.ToString(p.ClientToken))
+		}
+		if aws.ToBool(p.DryRun) {
+			t.Error("DryRun should be false")
+		}
+		if p.SubnetConfigurations != nil {
+			t.Errorf("SubnetConfigurations should be nil, got %v", p.SubnetConfigurations)
+		}
+	})
+
+	t.Run("NilSafety", func(t *testing.T) {
+		nilDNS := vpc.Endpoint{ServiceName: "svc", Type: types.VpcEndpointTypeGateway, RouteTableIDs: []string{"rtb-1"}}
+		got := nilDNS.Params()
+		checkDnsOptions(t, got.DnsOptions, nilDNS.DNSOptions)
+		checkTagSpecs(t, got.TagSpecifications, nilDNS.Tags)
+	})
 }
 
 func TestEndpointYAMLRoundtrip(t *testing.T) {
@@ -256,11 +285,11 @@ func TestEndpointYAMLRoundtrip(t *testing.T) {
 		SecurityGroupIDs:         []string{"sg-1"},
 		RouteTableIDs:            []string{"rtb-1"},
 		NetworkInterfaceIDs:      []string{"eni-1"},
-		IpAddressType:            types.IpAddressTypeIpv4,
-		Ipv4Prefixes:             []vpc.SubnetIPPrefixes{{SubnetID: "subnet-1", IPPrefixes: []string{"10.0.0.0/24"}}},
-		Ipv6Prefixes:             []vpc.SubnetIPPrefixes{},
-		DnsEntries:               []vpc.DNSEntry{{DNSName: "vpce.example.com", HostedZoneID: "Z123"}},
-		DnsOptions:               &vpc.DNSOptions{DNSRecordIPType: types.DnsRecordIpTypeIpv4, PrivateDNSOnlyForInboundResolverEndpoint: true, PrivateDNSPreference: "ALL_DOMAINS", PrivateDNSSpecifiedDomains: []string{}},
+		IPAddressType:            types.IpAddressTypeIpv4,
+		IPv4Prefixes:             []vpc.SubnetIPPrefixes{{SubnetID: "subnet-1", IPPrefixes: []string{"10.0.0.0/24"}}},
+		IPv6Prefixes:             []vpc.SubnetIPPrefixes{},
+		DNSEntries:               []vpc.DNSEntry{{DNSName: "vpce.example.com", HostedZoneID: "Z123"}},
+		DNSOptions:               &vpc.DNSOptions{DNSRecordIPType: types.DnsRecordIpTypeIpv4, PrivateDNSOnlyForInboundResolverEndpoint: true, PrivateDNSPreference: "ALL_DOMAINS", PrivateDNSSpecifiedDomains: []string{}},
 		PrivateDNSEnabled:        true,
 		PolicyDocument:           `{"Version":"2012-10-17"}`,
 		ServiceNetworkARN:        "arn:aws:vpc-lattice:us-east-1:123:servicenetwork/sn-x",
