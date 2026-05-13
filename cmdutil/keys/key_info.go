@@ -35,11 +35,11 @@ type KeySpecValue string
 
 // ParseKeySpecValue parses a string value into a KeySpec. The expected format is either "id" or "id[user]".
 func ParseKeySpecValue(s string) KeySpec {
-	if open := strings.Index(s, "["); open >= 0 {
-		if close := strings.LastIndex(s, "]"); close > open {
+	if openBracket := strings.Index(s, "["); openBracket >= 0 {
+		if closeBracket := strings.LastIndex(s, "]"); closeBracket > openBracket {
 			return KeySpec{
-				ID:   s[:open],
-				User: s[open+1 : close],
+				ID:   s[:openBracket],
+				User: s[openBracket+1 : closeBracket],
 			}
 		}
 	}
