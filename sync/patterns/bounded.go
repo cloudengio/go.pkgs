@@ -13,23 +13,28 @@ import (
 )
 
 // FIFO is a goroutine-safe queue that drops the oldest item when the internal
-// buffer (size items) is full. b.out is unbuffered; items are only delivered
-// when a receiver is ready. The internal []T slice is accessed exclusively by
-// the run goroutine, so the drop-oldest step never races with external readers.
+// buffer (capacity items) is full. b.out is unbuffered; items are only
+// delivered when a receiver is ready.
+//
+// The internal state (buf, head, tail, count) is a ring buffer accessed
+// exclusively by the run goroutine, so drop-oldest is atomic with respect to
+// external readers and requires no allocations after the initial make.
 type FIFO[T any] struct {
 	in     chan T
 	out    chan T
 	doneCh chan struct{}
 	wg     ctxsync.WaitGroup
 	size   int
+	buf    []T // ring buffer backing array; len=cap=size; safe to read after Stop()
+	head   int // index of the oldest item
+	tail   int // index where the next item will be written
+	count  int // number of items currently buffered
 }
 
-const (
-	DefaultFIFOSize = 100
-)
+const DefaultFIFOSize = 100
 
 // NewFIFO creates a new FIFO with the specified buffer capacity.
-// If capacity is <= 0, it defaults to DefaultFIFSize.
+// If capacity is <= 0, it defaults to DefaultFIFOSize.
 func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T] {
 	if capacity <= 0 {
 		capacity = DefaultFIFOSize
@@ -39,6 +44,7 @@ func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T] {
 		out:    make(chan T),
 		doneCh: make(chan struct{}),
 		size:   capacity,
+		buf:    make([]T, capacity), // allocated once; never resized
 	}
 	bf.wg.Go(func() { bf.run(ctx) })
 	return bf
@@ -49,52 +55,69 @@ func (b *FIFO[T]) Stop(ctx context.Context) {
 	b.wg.Wait(ctx)
 }
 
-func (b *FIFO[T]) runBuffered(ctx context.Context, buf []T) ([]T, bool) {
-	// Items buffered: try to deliver the front or accept a new item.
+// push adds v at the tail. Caller must ensure count < size.
+func (b *FIFO[T]) push(v T) {
+	b.buf[b.tail] = v
+	b.tail = (b.tail + 1) % b.size
+	b.count++
+}
+
+// front returns the oldest item without removing it. Caller must ensure count > 0.
+func (b *FIFO[T]) front() T {
+	return b.buf[b.head]
+}
+
+// pop removes the oldest item. Caller must ensure count > 0.
+func (b *FIFO[T]) pop() {
+	var zero T
+	b.buf[b.head] = zero // clear slot so GC can collect pointer-typed items
+	b.head = (b.head + 1) % b.size
+	b.count--
+}
+
+func (b *FIFO[T]) runBuffered(ctx context.Context) bool {
 	select {
-	case b.out <- buf[0]:
-		buf = buf[1:]
-		return buf, false
+	case b.out <- b.front():
+		b.pop()
+		return false
 	case v, ok := <-b.in:
 		if !ok {
-			// Flush remaining items then signal EOF.
-			for _, item := range buf {
+			// b.in closed: flush buffered items in FIFO order then close b.out.
+			for b.count > 0 {
 				select {
-				case b.out <- item:
+				case b.out <- b.front():
+					b.pop()
 				case <-b.doneCh:
-					return buf, true
+					return true
 				case <-ctx.Done():
-					return buf, true
+					return true
 				}
 			}
 			close(b.out)
-			return buf, true
+			return true
 		}
-		if len(buf) >= b.size {
-			buf = buf[1:] // drop oldest
+		if b.count == b.size {
+			b.pop() // drop oldest to make room
 		}
-		buf = append(buf, v)
+		b.push(v)
+		return false
 	case <-b.doneCh:
-		return buf, true
+		return true
 	case <-ctx.Done():
-		return buf, true
+		return true
 	}
-	return buf, false
-
 }
 
 func (b *FIFO[T]) run(ctx context.Context) {
-	buf := make([]T, 0, b.size)
 	for {
-		if len(buf) == 0 {
-			// Nothing buffered: block until an item arrives or we're done.
+		if b.count == 0 {
 			select {
 			case v, ok := <-b.in:
 				if !ok {
 					close(b.out)
 					return
 				}
-				buf = append(buf, v)
+				b.push(v)
 			case <-b.doneCh:
 				return
 			case <-ctx.Done():
@@ -102,9 +125,7 @@ func (b *FIFO[T]) run(ctx context.Context) {
 			}
 			continue
 		}
-		var done bool
-		buf, done = b.runBuffered(ctx, buf)
-		if done {
+		if b.runBuffered(ctx) {
 			return
 		}
 	}

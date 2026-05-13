@@ -6,6 +6,7 @@ package patterns_test
 
 import (
 	"context"
+	"runtime"
 	"slices"
 	"sync"
 	"testing"
@@ -295,4 +296,129 @@ func TestBoundedFIFOSendNotBlockedBySlowConsumer(t *testing.T) {
 	for tmp := range f.Out() {
 		_ = tmp // drain remaining items, should not hang.
 	}
+}
+
+// TestBoundedFIFOBufferCapShrinksOnDeliver shows that the current slice-based
+// implementation loses its pre-allocated capacity on every delivery.
+//
+// Each delivery executes b.buf = b.buf[1:], which advances the slice header
+// without reclaiming the consumed prefix. After `size` deliveries the capacity
+// drops from size to 0; the next refill must allocate a fresh backing array.
+// A ring-buffer implementation would keep cap == size permanently.
+//
+// This test FAILS with the current implementation (BufCap() returns 0, not size).
+func TestBoundedFIFOBufferCapShrinksOnDeliver(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
+	const size = 8
+	f := patterns.NewFIFO[int](context.Background(), size)
+
+	// Fill without a consumer: no deliveries happen, so all items accumulate
+	// in b.buf. After the loop b.buf has len=size, cap=size.
+	for i := range size {
+		f.In() <- i
+	}
+
+	// Drain: each receive makes run call b.buf = b.buf[1:], reducing cap by 1.
+	consumed := make(chan struct{})
+	go func() {
+		defer close(consumed)
+		for range size {
+			<-f.Out()
+		}
+	}()
+	<-consumed
+
+	// Stop so it is safe to read b.buf via BufCap().
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	f.Stop(stopCtx)
+
+	got := f.BufCap()
+	t.Logf("BufCap after %d deliveries: %d (initial capacity was %d)", size, got, size)
+	// A correct implementation preserves the allocated capacity; buf[1:] loses it.
+	if got != size {
+		t.Errorf("BufCap = %d after %d deliveries; want %d (buf[1:] shrinks capacity to 0)", got, size, size)
+	}
+}
+
+// TestBoundedFIFOBufferCapCorruptsOnDrop shows that the drop-oldest path also
+// uses b.buf = b.buf[1:] before append, temporarily reducing capacity below
+// size. append must then allocate a larger backing array, leaving cap > size.
+//
+// This test FAILS with the current implementation (BufCap() != size after a drop).
+func TestBoundedFIFOBufferCapCorruptsOnDrop(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
+	const size = 4
+	f := patterns.NewFIFO[int](context.Background(), size)
+
+	// Fill to capacity without a consumer: b.buf = [0,1,2,3], cap = size.
+	for i := range size {
+		f.In() <- i
+	}
+
+	// One overflow: run executes b.buf = b.buf[1:] (cap → size-1) then
+	// append(b.buf, v) — but len==size and cap==size-1, so Go allocates a new
+	// backing array (typically cap doubles: size-1 → 2*(size-1)).
+	f.In() <- size
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	f.Stop(stopCtx)
+
+	got := f.BufCap()
+	t.Logf("BufCap after 1 overflow: %d (initial capacity was %d)", got, size)
+	// A correct ring-buffer implementation always keeps cap == size.
+	if got != size {
+		t.Errorf("BufCap = %d after 1 drop; want %d (buf[1:]+append corrupts the capacity)", got, size)
+	}
+}
+
+// TestBoundedFIFODropCausesAllocations confirms that repeated overflows cause
+// heap allocations inside the run goroutine because buf[1:] shrinks the
+// capacity below size, forcing append to grow the backing array.
+// A correct ring-buffer FIFO allocates the backing store once and has zero
+// steady-state allocations.
+//
+// This test FAILS with the current implementation (allocs > 0).
+func TestBoundedFIFODropCausesAllocations(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
+	const (
+		size = 8
+		ops  = 1_000
+	)
+	f := patterns.NewFIFO[int](context.Background(), size)
+
+	// Fill to capacity: every subsequent send is an overflow.
+	for i := range size {
+		f.In() <- i
+	}
+
+	// Let the runtime settle before capturing stats.
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	// Each send overflows the full buffer. run calls buf[1:] (shrinks cap),
+	// then append — which must re-allocate roughly every size-1 overflows.
+	for i := range ops {
+		f.In() <- size + i
+	}
+
+	runtime.GC()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+
+	allocs := int64(after.Mallocs) - int64(before.Mallocs)
+	t.Logf("heap allocations during %d drop-oldest ops: %d (want ~0 for a ring buffer)", ops, allocs)
+	// Allow a handful of background allocations (goroutine stack growth,
+	// ReadMemStats bookkeeping). The slice-based implementation produced ~144
+	// for these parameters; a ring buffer should produce none.
+	const maxBackground = 10
+	if allocs > maxBackground {
+		t.Errorf("got %d heap allocations during %d overflows; want ≤%d (ring buffer should alloc ~0)", allocs, ops, maxBackground)
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	f.Stop(stopCtx)
 }

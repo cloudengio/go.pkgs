@@ -146,6 +146,47 @@ func TestPubSubPublishAfterClose(t *testing.T) {
 	}
 }
 
+// TestPubSubPublishDeadlocksAfterSubscriberContextCancel demonstrates the
+// deadlock that arises when a subscriber's context is cancelled.
+//
+// When sub's context is cancelled, its FIFO run goroutine exits via
+// ctx.Done(). The subscriber remains in ps.subscribers. The next Publish call
+// sends to sub.ch.In() (unbuffered b.in) — but nobody reads from it, so
+// Publish blocks forever while holding ps.mu.RLock. That in turn prevents
+// Close/Unsubscribe from acquiring ps.mu.Lock, making the deadlock total.
+//
+// This test is expected to FAIL until the deadlock is fixed.
+func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, 2*time.Second)()
+
+	ps := patterns.New[int](4)
+
+	// Use a short-lived context so the run goroutine exits almost immediately.
+	subCtx, cancelSub := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancelSub()
+	_ = ps.Subscribe(subCtx)
+
+	// Wait long enough that the run goroutine has seen ctx.Done() and returned.
+	time.Sleep(50 * time.Millisecond)
+
+	// Publish must not block. Without a fix it deadlocks here.
+	done := make(chan struct{})
+	go func() {
+		ps.Publish(1)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		ps.Close()
+	case <-time.After(200 * time.Millisecond):
+		t.Error("Publish deadlocked: blocked forever after subscriber context was cancelled")
+		// ps.Close() would also deadlock here — Publish holds ps.mu.RLock
+		// and Close needs ps.mu.Lock. The goroutine leak is expected while
+		// the bug is unfixed.
+	}
+}
+
 func TestPubSubDropOldest(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 	ps := patterns.New[int](3)
