@@ -147,8 +147,8 @@ func (k Info) String() string {
 	return k.ID + "[" + k.User + "]"
 }
 
-func (k Info) Token() *Token {
-	return &Token{KeySpec: KeySpec{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
+func (k Info) Token() Token {
+	return Token{KeySpec: KeySpec{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
 }
 
 func (k Info) extraFromJSON(v any) error {

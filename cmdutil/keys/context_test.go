@@ -19,7 +19,7 @@ func TestContextFunctions(t *testing.T) {
 	ctx := keys.ContextWithKeyStore(context.Background(), store)
 
 	// Test successful retrieval
-	retrievedKey, ok := keys.KeyInfoFromContextForID(ctx, "ctx-user", "ctx-key")
+	retrievedKey, ok := keys.KeyInfoFromContext(ctx, "ctx-user", "ctx-key")
 	if !ok {
 		t.Fatal("expected to find key in context")
 	}
@@ -34,14 +34,14 @@ func TestContextFunctions(t *testing.T) {
 	}
 
 	// Test retrieval of non-existent key from context
-	_, ok = keys.KeyInfoFromContextForID(ctx, "ctx-user", "non-existent")
+	_, ok = keys.KeyInfoFromContext(ctx, "ctx-user", "non-existent")
 	if ok {
 		t.Error("did not expect to find non-existent key in context")
 	}
 
 	// Test retrieval from a context without the store
 	emptyCtx := context.Background()
-	_, ok = keys.KeyInfoFromContextForID(emptyCtx, "ctx-user", "ctx-key")
+	_, ok = keys.KeyInfoFromContext(emptyCtx, "ctx-user", "ctx-key")
 	if ok {
 		t.Error("did not expect to find key in empty context")
 	}
@@ -102,7 +102,7 @@ func TestTokenFromContext(t *testing.T) {
 	ks.Add(keys.NewInfo("k1", "u1", []byte("t1")))
 	ctx = keys.ContextWithKeyStore(ctx, ks)
 
-	tok, ok := keys.TokenFromContextForID(ctx, "u1", "k1")
+	tok, ok := keys.TokenFromContext(ctx, "u1", "k1")
 	if !ok {
 		t.Fatal("expected token")
 	}
@@ -110,13 +110,13 @@ func TestTokenFromContext(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	_, ok = keys.TokenFromContextForID(ctx, "u1", "missing")
+	_, ok = keys.TokenFromContext(ctx, "u1", "missing")
 	if ok {
 		t.Error("expected no token")
 	}
 
 	ctxNoStore := context.Background()
-	_, ok = keys.TokenFromContextForID(ctxNoStore, "u1", "k1")
+	_, ok = keys.TokenFromContext(ctxNoStore, "u1", "k1")
 	if ok {
 		t.Error("expected no token")
 	}
