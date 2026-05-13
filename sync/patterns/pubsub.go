@@ -11,7 +11,8 @@ import (
 
 // Subscriber represents a subscription to a PubSub instance.
 type Subscriber[T any] struct {
-	ch *FIFO[T]
+	ch    *FIFO[T]
+	alive chan struct{} // closed when ch's run goroutine exits for any reason
 }
 
 // C returns the underlying receive-only channel for use in select statements.
@@ -28,29 +29,30 @@ const (
 type PubSub[T any] struct {
 	mu          sync.RWMutex
 	subscribers map[*Subscriber[T]]struct{}
-	capacity    int
 	closed      bool
 }
 
-// New returns a new PubSub instance with the given buffer capacity for
-// each subscriber. If capacity is <=0, it defaults to DefaultPubSubCapacity.
-func New[T any](capacity int) *PubSub[T] {
-	if capacity <= 0 {
-		capacity = DefaultPubSubCapacity
-	}
+// New returns a new PubSub instance.
+func New[T any]() *PubSub[T] {
 	return &PubSub[T]{
 		subscribers: make(map[*Subscriber[T]]struct{}),
-		capacity:    capacity,
 	}
 }
 
-// Subscribe creates and returns a new Subscriber. ctx is passed to the underlying FIFO.
-func (ps *PubSub[T]) Subscribe(ctx context.Context) *Subscriber[T] {
+// Subscribe creates and returns a new Subscriber with the given buffer capacity.
+// If capacity is <=0, it defaults to DefaultPubSubCapacity.
+// ctx is passed to the underlying FIFO.
+func (ps *PubSub[T]) Subscribe(ctx context.Context, capacity int) *Subscriber[T] {
+	if capacity <= 0 {
+		capacity = DefaultPubSubCapacity
+	}
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
+	alive := make(chan struct{})
 	sub := &Subscriber[T]{
-		ch: NewFIFO[T](ctx, ps.capacity),
+		ch:    newFIFO[T](ctx, capacity, alive),
+		alive: alive,
 	}
 	if ps.closed {
 		close(sub.ch.In())
@@ -73,15 +75,29 @@ func (ps *PubSub[T]) Unsubscribe(sub *Subscriber[T]) {
 
 // Publish sends an item to all active subscribers. If a subscriber's buffer
 // is full, its oldest item is dropped to make room for the new one.
+// Subscribers whose run goroutine has exited (e.g. context cancelled) are
+// detected via their alive channel and pruned from the map without blocking.
 func (ps *PubSub[T]) Publish(item T) {
 	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-
 	if ps.closed {
+		ps.mu.RUnlock()
 		return
 	}
+	var dead []*Subscriber[T]
 	for sub := range ps.subscribers {
-		sub.ch.In() <- item
+		select {
+		case sub.ch.in <- item:
+		case <-sub.alive:
+			dead = append(dead, sub)
+		}
+	}
+	ps.mu.RUnlock()
+	if len(dead) > 0 {
+		ps.mu.Lock()
+		for _, sub := range dead {
+			delete(ps.subscribers, sub)
+		}
+		ps.mu.Unlock()
 	}
 }
 

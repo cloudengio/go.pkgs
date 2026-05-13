@@ -26,9 +26,9 @@ func drainSub[T any](sub *patterns.Subscriber[T]) []T {
 
 func TestPubSubSingleSubscriber(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 10)
 	ps.Publish(1)
 	ps.Publish(2)
 	ps.Publish(3)
@@ -42,11 +42,11 @@ func TestPubSubSingleSubscriber(t *testing.T) {
 
 func TestPubSubMultipleSubscribers(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
 	subs := make([]*patterns.Subscriber[int], 4)
 	for i := range subs {
-		subs[i] = ps.Subscribe(context.Background())
+		subs[i] = ps.Subscribe(context.Background(), 10)
 	}
 
 	ps.Publish(10)
@@ -63,9 +63,9 @@ func TestPubSubMultipleSubscribers(t *testing.T) {
 
 func TestPubSubUnsubscribe(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 10)
 	ps.Publish(1)
 	ps.Unsubscribe(sub) // closes sub's In(); run exits; Out() will close
 	ps.Publish(2)       // sub is gone from the map, so 2 is not sent to it
@@ -79,9 +79,9 @@ func TestPubSubUnsubscribe(t *testing.T) {
 
 func TestPubSubUnsubscribeIdempotent(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 10)
 	ps.Unsubscribe(sub)
 	ps.Unsubscribe(sub) // second call must not panic
 	ps.Close()
@@ -91,10 +91,10 @@ func TestPubSubUnsubscribeIdempotent(t *testing.T) {
 
 func TestPubSubUnsubscribePartial(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
-	sub1 := ps.Subscribe(context.Background())
-	sub2 := ps.Subscribe(context.Background())
+	sub1 := ps.Subscribe(context.Background(), 10)
+	sub2 := ps.Subscribe(context.Background(), 10)
 
 	ps.Publish(1)
 	ps.Unsubscribe(sub1)
@@ -111,9 +111,9 @@ func TestPubSubUnsubscribePartial(t *testing.T) {
 
 func TestPubSubCloseIdempotent(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 10)
 	ps.Close()
 	ps.Close() // must not panic
 
@@ -122,11 +122,11 @@ func TestPubSubCloseIdempotent(t *testing.T) {
 
 func TestPubSubSubscribeAfterClose(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 	ps.Close()
 
 	// Subscribe on a closed PubSub immediately closes the subscriber channel.
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 10)
 	_, ok := <-sub.C()
 	if ok {
 		t.Error("expected channel to be closed immediately after subscribing to a closed PubSub")
@@ -135,9 +135,9 @@ func TestPubSubSubscribeAfterClose(t *testing.T) {
 
 func TestPubSubPublishAfterClose(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](10)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 10)
 	ps.Close()
 	ps.Publish(42) // must not panic; silently dropped
 
@@ -159,12 +159,12 @@ func TestPubSubPublishAfterClose(t *testing.T) {
 func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, 2*time.Second)()
 
-	ps := patterns.New[int](4)
+	ps := patterns.New[int]()
 
 	// Use a short-lived context so the run goroutine exits almost immediately.
 	subCtx, cancelSub := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancelSub()
-	_ = ps.Subscribe(subCtx)
+	_ = ps.Subscribe(subCtx, 4)
 
 	// Wait long enough that the run goroutine has seen ctx.Done() and returned.
 	time.Sleep(50 * time.Millisecond)
@@ -189,9 +189,9 @@ func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
 
 func TestPubSubDropOldest(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
-	ps := patterns.New[int](3)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), 3)
 	// Sequential Publish calls are safe: each blocks until the FIFO's run
 	// goroutine reads the item, which means the prior item has already been
 	// forwarded to out before the next Publish can proceed.
@@ -218,10 +218,10 @@ func TestPubSubDropOldestPerSubscriber(t *testing.T) {
 		capacity  = 2
 		publishes = 8
 	)
-	ps := patterns.New[int](capacity)
+	ps := patterns.New[int]()
 
-	sub1 := ps.Subscribe(context.Background())
-	sub2 := ps.Subscribe(context.Background())
+	sub1 := ps.Subscribe(context.Background(), capacity)
+	sub2 := ps.Subscribe(context.Background(), capacity)
 
 	for i := range publishes {
 		ps.Publish(i + 1)
@@ -243,9 +243,9 @@ func TestPubSubConcurrentPublish(t *testing.T) {
 		perPub     = 20
 		capacity   = publishers * perPub
 	)
-	ps := patterns.New[int](capacity)
+	ps := patterns.New[int]()
 
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), capacity)
 
 	var wg sync.WaitGroup
 	for p := range publishers {
@@ -289,11 +289,11 @@ func TestPubSubPublishNotBlockedBySlowSubscriber(t *testing.T) {
 		capacity = 2
 		count    = 1000
 	)
-	ps := patterns.New[int](capacity)
+	ps := patterns.New[int]()
 
 	// Subscribe but deliberately do not read — simulates a completely stalled
 	// consumer.
-	sub := ps.Subscribe(context.Background())
+	sub := ps.Subscribe(context.Background(), capacity)
 
 	// All 1000 publishes must complete well within 5 seconds. If Publish
 	// blocked per consumer read even for 1 ms each, this would take 1 s.
@@ -319,7 +319,7 @@ func TestPubSubPublishNotBlockedBySlowSubscriber(t *testing.T) {
 
 func TestPubSubConcurrentSubscribeUnsubscribe(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int](8)
+	ps := patterns.New[int]()
 
 	var (
 		wg   sync.WaitGroup
@@ -332,7 +332,7 @@ func TestPubSubConcurrentSubscribeUnsubscribe(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sub := ps.Subscribe(context.Background())
+			sub := ps.Subscribe(context.Background(), 8)
 			mu.Lock()
 			subs = append(subs, sub)
 			mu.Unlock()

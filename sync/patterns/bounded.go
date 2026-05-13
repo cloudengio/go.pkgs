@@ -36,6 +36,13 @@ const DefaultFIFOSize = 100
 // NewFIFO creates a new FIFO with the specified buffer capacity.
 // If capacity is <= 0, it defaults to DefaultFIFOSize.
 func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T] {
+	return newFIFO[T](ctx, capacity, nil)
+}
+
+// newFIFO is the internal constructor. If notify is non-nil it is closed when
+// the run goroutine exits, allowing callers to observe liveness without
+// coupling that concept to FIFO itself.
+func newFIFO[T any](ctx context.Context, capacity int, notify chan struct{}) *FIFO[T] {
 	if capacity <= 0 {
 		capacity = DefaultFIFOSize
 	}
@@ -46,7 +53,12 @@ func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T] {
 		size:   capacity,
 		buf:    make([]T, capacity), // allocated once; never resized
 	}
-	bf.wg.Go(func() { bf.run(ctx) })
+	bf.wg.Go(func() {
+		if notify != nil {
+			defer close(notify)
+		}
+		bf.run(ctx)
+	})
 	return bf
 }
 
