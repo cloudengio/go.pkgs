@@ -3,11 +3,11 @@ module cloudeng.io/aws
 go 1.26.2
 
 require (
-	cloudeng.io/cicd v0.0.0-20260507011012-5e35122ac3e3
-	cloudeng.io/cmdutil v0.0.0-20260507011012-5e35122ac3e3
+	cloudeng.io/cicd v0.0.0-20260513030906-195852faa5d0
+	cloudeng.io/cmdutil v0.0.0-20260513030906-195852faa5d0
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260507011012-5e35122ac3e3
-	cloudeng.io/logging v0.0.0-20260509054409-fd4febcf71c0
+	cloudeng.io/file v0.0.0-20260513030906-195852faa5d0
+	cloudeng.io/logging v0.0.0-20260513030906-195852faa5d0
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	github.com/alexbacchin/ssm-session-client v1.0.0
@@ -42,10 +42,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260507011012-5e35122ac3e3 // indirect
-	cloudeng.io/os v0.0.0-20260507011012-5e35122ac3e3 // indirect
+	cloudeng.io/algo v0.0.0-20260511051612-3406526ae677 // indirect
+	cloudeng.io/os v0.0.0-20260513030906-195852faa5d0 // indirect
 	cloudeng.io/sync v0.0.10 // indirect
-	cloudeng.io/sys v0.0.0-20260507011012-5e35122ac3e3 // indirect
+	cloudeng.io/sys v0.0.0-20260511051612-3406526ae677 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
@@ -97,7 +97,7 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/grpc v1.81.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
