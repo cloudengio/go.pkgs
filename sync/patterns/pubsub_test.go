@@ -155,7 +155,8 @@ func TestPubSubPublishAfterClose(t *testing.T) {
 // Publish blocks forever while holding ps.mu.RLock. That in turn prevents
 // Close/Unsubscribe from acquiring ps.mu.Lock, making the deadlock total.
 //
-// This test is expected to FAIL until the deadlock is fixed.
+// TestPubSubPublishDeadlocksAfterSubscriberContextCancel verifies that Publish
+// does not deadlock when a subscriber's context is cancelled.
 func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, 2*time.Second)()
 

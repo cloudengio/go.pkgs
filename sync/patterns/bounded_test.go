@@ -306,7 +306,7 @@ func TestBoundedFIFOSendNotBlockedBySlowConsumer(t *testing.T) {
 // drops from size to 0; the next refill must allocate a fresh backing array.
 // A ring-buffer implementation would keep cap == size permanently.
 //
-// This test FAILS with the current implementation (BufCap() returns 0, not size).
+// This test verifies that the ring-buffer implementation preserves its capacity.
 func TestBoundedFIFOBufferCapShrinksOnDeliver(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 	const size = 8
@@ -345,7 +345,7 @@ func TestBoundedFIFOBufferCapShrinksOnDeliver(t *testing.T) {
 // uses b.buf = b.buf[1:] before append, temporarily reducing capacity below
 // size. append must then allocate a larger backing array, leaving cap > size.
 //
-// This test FAILS with the current implementation (BufCap() != size after a drop).
+// This test verifies that the ring-buffer implementation preserves its capacity after a drop.
 func TestBoundedFIFOBufferCapCorruptsOnDrop(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 	const size = 4
@@ -379,7 +379,7 @@ func TestBoundedFIFOBufferCapCorruptsOnDrop(t *testing.T) {
 // A correct ring-buffer FIFO allocates the backing store once and has zero
 // steady-state allocations.
 //
-// This test FAILS with the current implementation (allocs > 0).
+// This test verifies that the ring-buffer implementation has zero steady-state allocations.
 func TestBoundedFIFODropCausesAllocations(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 	const (

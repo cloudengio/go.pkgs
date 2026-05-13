@@ -30,10 +30,12 @@ type FIFO[T any] struct {
 }
 ```
 FIFO is a goroutine-safe queue that drops the oldest item when the internal
-buffer (size items) is full. b.out is unbuffered; items are only delivered
-when a receiver is ready. The internal []T slice is accessed exclusively
-by the run goroutine, so the drop-oldest step never races with external
-readers.
+buffer (capacity items) is full. b.out is unbuffered; items are only
+delivered when a receiver is ready.
+
+The internal state (buf, head, tail, count) is a ring buffer accessed
+exclusively by the run goroutine, so drop-oldest is atomic with respect to
+external readers and requires no allocations after the initial make.
 
 ### Functions
 
@@ -41,7 +43,7 @@ readers.
 func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T]
 ```
 NewFIFO creates a new FIFO with the specified buffer capacity. If capacity
-is <= 0, it defaults to DefaultFIFSize.
+is <= 0, it defaults to DefaultFIFOSize.
 
 
 
@@ -76,10 +78,9 @@ for slow subscribers when their buffer is full.
 ### Functions
 
 ```go
-func New[T any](capacity int) *PubSub[T]
+func New[T any]() *PubSub[T]
 ```
-New returns a new PubSub instance with the given buffer capacity for each
-subscriber. If capacity is <=0, it defaults to DefaultPubSubCapacity.
+New returns a new PubSub instance.
 
 
 
@@ -95,14 +96,17 @@ Close closes the PubSub instance and all of its active subscribers.
 func (ps *PubSub[T]) Publish(item T)
 ```
 Publish sends an item to all active subscribers. If a subscriber's buffer is
-full, its oldest item is dropped to make room for the new one.
+full, its oldest item is dropped to make room for the new one. Subscribers
+whose run goroutine has exited (e.g. context cancelled) are detected via
+their alive channel and pruned from the map without blocking.
 
 
 ```go
-func (ps *PubSub[T]) Subscribe(ctx context.Context) *Subscriber[T]
+func (ps *PubSub[T]) Subscribe(ctx context.Context, capacity int) *Subscriber[T]
 ```
-Subscribe creates and returns a new Subscriber. ctx is passed to the
-underlying FIFO.
+Subscribe creates and returns a new Subscriber with the given buffer
+capacity. If capacity is <=0, it defaults to DefaultPubSubCapacity. ctx is
+passed to the underlying FIFO.
 
 
 ```go
