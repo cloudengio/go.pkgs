@@ -176,8 +176,8 @@ from json or yaml.
 ```go
 func KeyInfoFromContext(ctx context.Context, user, id string) (Info, bool)
 ```
-KeyInfoFromContext retrieves the KeyInfo for the specified user and ID from
-the context.
+KeyInfoFromContext retrieves the KeyInfo for the specified user and key ID
+from the context.
 
 
 ```go
@@ -366,7 +366,7 @@ zeroing the input slice.
 ```go
 func TokenFromContext(ctx context.Context, user, id string) (Token, bool)
 ```
-TokenFromContextForID retrieves the Token for the specified user and ID from
+TokenFromContext retrieves the Token for the specified user and key ID from
 the context.
 
 
