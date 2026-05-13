@@ -63,6 +63,7 @@ func (e *extractor) Extract(_ context.Context, depth int, downloaded download.Do
 }
 
 func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
+	defer close(input)
 	for i := range nItems {
 		req := crawl.SimpleRequest{}
 		req.RequestedBy = "issueCrawlRequest"
@@ -71,10 +72,9 @@ func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.
 		select {
 		case input <- &req:
 		case <-ctx.Done():
-			break
+			return
 		}
 	}
-	close(input)
 }
 
 type dlFactory struct {
