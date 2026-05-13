@@ -72,6 +72,25 @@ func ParseByteSize(s string) (ByteSize, error) {
 		return 0, fmt.Errorf("invalid byte size %q: %w", s, err)
 	}
 
+	multiplier, err := getMultiplier(unitStr, s)
+	if err != nil {
+		return 0, err
+	}
+
+	result := math.Round(f * multiplier)
+	// 1<<63 is exactly representable as float64 (it is 2^63).
+	// Valid int64 range is [-2^63, 2^63-1], so reject result >= 2^63 or < -2^63.
+	const (
+		maxF = float64(1 << 63)
+		minF = -float64(1 << 63)
+	)
+	if result >= maxF || result < minF {
+		return 0, fmt.Errorf("byte size %q overflows int64", s)
+	}
+	return ByteSize(result), nil
+}
+
+func getMultiplier(unitStr, s string) (float64, error) {
 	var multiplier float64
 	switch strings.ToUpper(unitStr) {
 	case "", "B":
@@ -95,8 +114,7 @@ func ParseByteSize(s string) (ByteSize, error) {
 	default:
 		return 0, fmt.Errorf("unknown unit %q in byte size %q", unitStr, s)
 	}
-
-	return ByteSize(math.Round(f * multiplier)), nil
+	return multiplier, nil
 }
 
 // String returns a human-readable representation of b. It selects the largest
@@ -108,13 +126,13 @@ func (b ByteSize) String() string {
 		return "0B"
 	}
 	neg := b < 0
-	abs := b
+	uabs := uint64(b)
 	if neg {
-		abs = -b
+		uabs = -uint64(b)
 	}
 	for _, u := range sizeUnits {
-		if abs%u.v == 0 {
-			n := abs / u.v
+		if uabs%uint64(u.v) == 0 {
+			n := uabs / uint64(u.v)
 			if neg {
 				return fmt.Sprintf("-%d%s", n, u.s)
 			}
@@ -122,9 +140,9 @@ func (b ByteSize) String() string {
 		}
 	}
 	if neg {
-		return fmt.Sprintf("-%dB", abs)
+		return fmt.Sprintf("-%dB", uabs)
 	}
-	return fmt.Sprintf("%dB", abs)
+	return fmt.Sprintf("%dB", uabs)
 }
 
 func (b ByteSize) MarshalYAML() (any, error) {

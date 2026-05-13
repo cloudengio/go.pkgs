@@ -5,6 +5,7 @@
 package cmdyaml_test
 
 import (
+	"math"
 	"testing"
 
 	"cloudeng.io/cmdutil/cmdyaml"
@@ -60,10 +61,10 @@ func TestParseByteSizeValid(t *testing.T) {
 
 func TestParseByteSizeErrors(t *testing.T) {
 	for _, tc := range []string{
-		"",       // empty
-		"abc",    // no numeric part
-		"1XB",    // unknown unit
-		"1 ZiB",  // unknown binary-style unit
+		"",      // empty
+		"abc",   // no numeric part
+		"1XB",   // unknown unit
+		"1 ZiB", // unknown binary-style unit
 	} {
 		if _, err := cmdyaml.ParseByteSize(tc); err == nil {
 			t.Errorf("ParseByteSize(%q): expected error, got nil", tc)
@@ -130,6 +131,54 @@ func TestByteSizeRoundTrip(t *testing.T) {
 			t.Errorf("round-trip %q → parse → String: got %q", s, got)
 		}
 	}
+}
+
+func TestByteSizeEdgeCases(t *testing.T) {
+	t.Run("string", func(t *testing.T) {
+		for _, tc := range []struct {
+			v    cmdyaml.ByteSize
+			want string
+		}{
+			// MaxInt64 = 2^63-1 is odd, so no unit divides it evenly.
+			{math.MaxInt64, "9223372036854775807B"},
+			// MinInt64 = -2^63 = -8388608 TiB (2^63 / 2^40 = 2^23 = 8388608).
+			{math.MinInt64, "-8388608TiB"},
+		} {
+			got := tc.v.String()
+			if got != tc.want {
+				t.Errorf("ByteSize(%d).String(): got %q, want %q", tc.v, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("parse_minint64_roundtrip", func(t *testing.T) {
+		// The canonical string for MinInt64 must parse back exactly.
+		// 8388608 = 2^23 and TiB = 2^40, so the product is 2^63 which is
+		// exactly representable as float64 (a power of 2).
+		got, err := cmdyaml.ParseByteSize("-8388608TiB")
+		if err != nil {
+			t.Fatalf("ParseByteSize(\"-8388608TiB\"): unexpected error: %v", err)
+		}
+		if got != math.MinInt64 {
+			t.Errorf("got %d, want MinInt64 (%d)", int64(got), int64(math.MinInt64))
+		}
+	})
+
+	t.Run("parse_overflow", func(t *testing.T) {
+		// Values whose byte count exceeds int64 range must be rejected.
+		for _, s := range []string{
+			// 8388608 TiB = 2^63, exactly one TiB above MaxInt64.
+			"8388608TiB",
+			// One TiB below MinInt64 = -2^63.
+			"-8388609TiB",
+			// 9223372037 GB > MaxInt64 (9223372036854775807).
+			"9223372037GB",
+		} {
+			if _, err := cmdyaml.ParseByteSize(s); err == nil {
+				t.Errorf("ParseByteSize(%q): expected overflow error, got nil", s)
+			}
+		}
+	})
 }
 
 func TestByteSizeYAML(t *testing.T) {
