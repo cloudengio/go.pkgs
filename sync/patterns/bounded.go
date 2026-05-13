@@ -24,12 +24,21 @@ type FIFO[T any] struct {
 	size   int
 }
 
-func NewFIFO[T any](ctx context.Context, size int) *FIFO[T] {
+const (
+	DefaultFIFOSize = 100
+)
+
+// NewFIFO creates a new FIFO with the specified buffer capacity.
+// If capacity is <= 0, it defaults to DefaultFIFSize.
+func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T] {
+	if capacity <= 0 {
+		capacity = DefaultFIFOSize
+	}
 	bf := &FIFO[T]{
 		in:     make(chan T),
 		out:    make(chan T),
 		doneCh: make(chan struct{}),
-		size:   size,
+		size:   capacity,
 	}
 	bf.wg.Go(func() { bf.run(ctx) })
 	return bf
@@ -38,6 +47,40 @@ func NewFIFO[T any](ctx context.Context, size int) *FIFO[T] {
 func (b *FIFO[T]) Stop(ctx context.Context) {
 	close(b.doneCh)
 	b.wg.Wait(ctx)
+}
+
+func (b *FIFO[T]) runBuffered(ctx context.Context, buf []T) ([]T, bool) {
+	// Items buffered: try to deliver the front or accept a new item.
+	select {
+	case b.out <- buf[0]:
+		buf = buf[1:]
+		return buf, false
+	case v, ok := <-b.in:
+		if !ok {
+			// Flush remaining items then signal EOF.
+			for _, item := range buf {
+				select {
+				case b.out <- item:
+				case <-b.doneCh:
+					return buf, true
+				case <-ctx.Done():
+					return buf, true
+				}
+			}
+			close(b.out)
+			return buf, true
+		}
+		if len(buf) >= b.size {
+			buf = buf[1:] // drop oldest
+		}
+		buf = append(buf, v)
+	case <-b.doneCh:
+		return buf, true
+	case <-ctx.Done():
+		return buf, true
+	}
+	return buf, false
+
 }
 
 func (b *FIFO[T]) run(ctx context.Context) {
@@ -57,35 +100,12 @@ func (b *FIFO[T]) run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			}
-		} else {
-			// Items buffered: try to deliver the front or accept a new item.
-			select {
-			case b.out <- buf[0]:
-				buf = buf[1:]
-			case v, ok := <-b.in:
-				if !ok {
-					// Flush remaining items then signal EOF.
-					for _, item := range buf {
-						select {
-						case b.out <- item:
-						case <-b.doneCh:
-							return
-						case <-ctx.Done():
-							return
-						}
-					}
-					close(b.out)
-					return
-				}
-				if len(buf) >= b.size {
-					buf = buf[1:] // drop oldest
-				}
-				buf = append(buf, v)
-			case <-b.doneCh:
-				return
-			case <-ctx.Done():
-				return
-			}
+			continue
+		}
+		var done bool
+		buf, done = b.runBuffered(ctx, buf)
+		if done {
+			return
 		}
 	}
 }

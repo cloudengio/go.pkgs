@@ -7,6 +7,21 @@ import cloudeng.io/sync/patterns
 Package patterns provides common synchronization and communication patterns
 built using channels and other primitives.
 
+## Constants
+### DefaultFIFOSize
+```go
+DefaultFIFOSize = 100
+
+```
+
+### DefaultPubSubCapacity
+```go
+DefaultPubSubCapacity = 100
+
+```
+
+
+
 ## Types
 ### Type FIFO
 ```go
@@ -23,8 +38,10 @@ readers.
 ### Functions
 
 ```go
-func NewFIFO[T any](ctx context.Context, size int) *FIFO[T]
+func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T]
 ```
+NewFIFO creates a new FIFO with the specified buffer capacity. If capacity
+is <= 0, it defaults to DefaultFIFSize.
 
 
 
@@ -62,7 +79,7 @@ for slow subscribers when their buffer is full.
 func New[T any](capacity int) *PubSub[T]
 ```
 New returns a new PubSub instance with the given buffer capacity for each
-subscriber. capacity must be > 0.
+subscriber. If capacity is <=0, it defaults to DefaultPubSubCapacity.
 
 
 

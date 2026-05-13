@@ -232,6 +232,50 @@ func TestPubSubConcurrentPublish(t *testing.T) {
 	}
 }
 
+// TestPubSubPublishNotBlockedBySlowSubscriber verifies that Publish never
+// blocks due to a subscriber that is not reading from its output channel.
+//
+// Why this holds: each subscriber's FIFO.run goroutine always includes
+// `case v, ok := <-b.in` in its select — both when the internal buffer is
+// empty and when it is non-empty. So run immediately accepts every item from
+// Publish regardless of whether any consumer is reading from b.out. When the
+// internal buffer is full, run drops the oldest entry and accepts the new one;
+// the consumer's read pace has no influence on how quickly Publish returns.
+func TestPubSubPublishNotBlockedBySlowSubscriber(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
+	// Tiny capacity so the internal buffer fills after just 2 items.
+	const (
+		capacity = 2
+		count    = 1000
+	)
+	ps := patterns.New[int](capacity)
+
+	// Subscribe but deliberately do not read — simulates a completely stalled
+	// consumer.
+	sub := ps.Subscribe(context.Background())
+
+	// All 1000 publishes must complete well within 5 seconds. If Publish
+	// blocked per consumer read even for 1 ms each, this would take 1 s.
+	done := make(chan struct{})
+	go func() {
+		for i := range count {
+			ps.Publish(i)
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Publishes completed without blocking on the stalled subscriber.
+	case <-time.After(5 * time.Second):
+		t.Fatal("Publish blocked: did not complete within 5s; likely waiting on slow subscriber")
+	}
+
+	// Close and drain so the run goroutine can flush and exit cleanly.
+	ps.Close()
+	drainSub(sub)
+}
+
 func TestPubSubConcurrentSubscribeUnsubscribe(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int](8)

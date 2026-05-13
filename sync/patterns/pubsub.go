@@ -19,6 +19,10 @@ func (s *Subscriber[T]) C() <-chan T {
 	return s.ch.Out()
 }
 
+const (
+	DefaultPubSubCapacity = 100
+)
+
 // PubSub provides a concurrent pub-sub mechanism that drops the oldest
 // items for slow subscribers when their buffer is full.
 type PubSub[T any] struct {
@@ -29,8 +33,11 @@ type PubSub[T any] struct {
 }
 
 // New returns a new PubSub instance with the given buffer capacity for
-// each subscriber. capacity must be > 0.
+// each subscriber. If capacity is <=0, it defaults to DefaultPubSubCapacity.
 func New[T any](capacity int) *PubSub[T] {
+	if capacity <= 0 {
+		capacity = DefaultPubSubCapacity
+	}
 	return &PubSub[T]{
 		subscribers: make(map[*Subscriber[T]]struct{}),
 		capacity:    capacity,

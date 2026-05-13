@@ -256,3 +256,42 @@ func TestBoundedFIFOConcurrentSenders(t *testing.T) {
 		t.Error("expected some items in Out(), got none")
 	}
 }
+
+// TestBoundedFIFOSendNotBlockedBySlowConsumer verifies that sending to In()
+// never blocks due to a consumer that is not reading from Out().
+//
+// Why this holds: run's select always includes `case v, ok := <-b.in` in
+// both the empty-buffer and non-empty-buffer branches. When the internal
+// buffer is full, run drops the oldest entry and accepts the new one — all
+// without touching b.out. The consumer's read pace has no influence on how
+// quickly a send to In() returns.
+func TestBoundedFIFOSendNotBlockedBySlowConsumer(t *testing.T) {
+	defer synctestutil.AssertNoGoroutines(t)()
+	const (
+		capacity = 2
+		count    = 1000
+	)
+	f := patterns.NewFIFO[int](context.Background(), capacity)
+
+	// Send 1000 items with no consumer reading Out(). Each send must return
+	// as soon as run receives the item, regardless of consumer pace.
+	done := make(chan struct{})
+	go func() {
+		for i := range count {
+			f.In() <- i
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All sends completed without blocking on the stalled consumer.
+	case <-time.After(5 * time.Second):
+		t.Fatal("In() blocked: did not complete within 5s; likely waiting on slow consumer")
+	}
+
+	// Close In() and drain Out() so run can flush and exit cleanly.
+	close(f.In())
+	for range f.Out() {
+	}
+}
