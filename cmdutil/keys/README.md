@@ -174,10 +174,10 @@ from json or yaml.
 ### Functions
 
 ```go
-func KeyInfoFromContextForID(ctx context.Context, user, id string) (Info, bool)
+func KeyInfoFromContext(ctx context.Context, user, id string) (Info, bool)
 ```
-KeyInfoFromContextForID retrieves the KeyInfo for the specified ID from the
-context.
+KeyInfoFromContext retrieves the KeyInfo for the specified user and key ID
+from the context.
 
 
 ```go
@@ -215,7 +215,7 @@ Extra fields redacted.
 
 
 ```go
-func (k Info) Token() *Token
+func (k Info) Token() Token
 ```
 
 
@@ -364,10 +364,10 @@ zeroing the input slice.
 
 
 ```go
-func TokenFromContextForID(ctx context.Context, user, id string) (*Token, bool)
+func TokenFromContext(ctx context.Context, user, id string) (Token, bool)
 ```
-TokenFromContextForID retrieves the Token for the specified ID from the
-context.
+TokenFromContext retrieves the Token for the specified user and key ID from
+the context.
 
 
 
