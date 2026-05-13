@@ -9,22 +9,41 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	"cloudeng.io/text/textutil"
 	"gopkg.in/yaml.v3"
 )
 
-// KeyOwner represents the owner of a key, identified by an ID and an optional user.
-type KeyOwner struct {
+// KeySpec represents the id of a key and the user associated with the key, if any.
+// It is used as a key in the InMemoryKeyStore.
+type KeySpec struct {
 	ID   string `yaml:"key_id" json:"key_id"`
 	User string `yaml:"user" json:"user"`
 }
 
-func (ko KeyOwner) String() string {
+func (ko KeySpec) String() string {
 	if ko.User != "" {
 		return ko.ID + "[" + ko.User + "]"
 	}
 	return ko.ID
+}
+
+// KeySpecValue represents a string value that can be parsed into a KeySpec.
+// Its format is: "id" or "id[user]".
+type KeySpecValue string
+
+// ParseKeySpecValue parses a string value into a KeySpec. The expected format is either "id" or "id[user]".
+func ParseKeySpecValue(s string) KeySpec {
+	if openBracket := strings.Index(s, "["); openBracket >= 0 {
+		if closeBracket := strings.LastIndex(s, "]"); closeBracket > openBracket {
+			return KeySpec{
+				ID:   s[:openBracket],
+				User: s[openBracket+1 : closeBracket],
+			}
+		}
+	}
+	return KeySpec{ID: s}
 }
 
 // Token represents an API token. It is intended for temporary use
@@ -33,7 +52,7 @@ func (ko KeyOwner) String() string {
 // It consists of an ID and a token value with the ID purely for
 // identification purposes.
 type Token struct {
-	KeyOwner
+	KeySpec
 	token []byte
 }
 
@@ -44,20 +63,20 @@ func (t Token) Value() []byte {
 
 // Clear zeros the token value.
 func (t *Token) Clear() {
-	t.KeyOwner = KeyOwner{}
+	t.KeySpec = KeySpec{}
 	for i := range t.token {
 		t.token[i] = 0
 	}
 }
 
 func (t Token) String() string {
-	return t.KeyOwner.String() + ":****"
+	return t.KeySpec.String() + ":****"
 }
 
 // NewToken creates a new Token instance, cloning the provided value
 // and zeroing the input slice.
 func NewToken(id, user string, value []byte) Token {
-	t := Token{KeyOwner: KeyOwner{ID: id, User: user}, token: slices.Clone(value)}
+	t := Token{KeySpec: KeySpec{ID: id, User: user}, token: slices.Clone(value)}
 	for i := range value {
 		value[i] = 0
 	}
@@ -129,7 +148,7 @@ func (k Info) String() string {
 }
 
 func (k Info) Token() *Token {
-	return &Token{KeyOwner: KeyOwner{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
+	return &Token{KeySpec: KeySpec{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
 }
 
 func (k Info) extraFromJSON(v any) error {

@@ -26,13 +26,13 @@ import (
 // API boundaries.
 type InMemoryKeyStore struct {
 	mu   sync.RWMutex
-	keys map[KeyOwner]Info
+	keys map[KeySpec]Info
 }
 
 // NewInMemoryKeyStore creates a new InMemoryKeyStore instance.
 func NewInMemoryKeyStore() *InMemoryKeyStore {
 	return &InMemoryKeyStore{
-		keys: make(map[KeyOwner]Info),
+		keys: make(map[KeySpec]Info),
 	}
 }
 
@@ -60,11 +60,11 @@ func (ims *InMemoryKeyStore) unmarshalList(asList []keyInfo) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
-		ims.keys = make(map[KeyOwner]Info)
+		ims.keys = make(map[KeySpec]Info)
 	}
 	for _, ki := range asList {
 		info := copyInfo(ki)
-		ims.keys[KeyOwner{ID: info.ID, User: info.User}] = info
+		ims.keys[KeySpec{ID: info.ID, User: info.User}] = info
 	}
 }
 
@@ -72,12 +72,12 @@ func (ims *InMemoryKeyStore) unmarshalMap(asMap map[string]keyInfo) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
-		ims.keys = make(map[KeyOwner]Info)
+		ims.keys = make(map[KeySpec]Info)
 	}
 	for k, info := range asMap {
 		info.ID = k
 		ki := copyInfo(info)
-		ims.keys[KeyOwner{ID: ki.ID, User: ki.User}] = ki
+		ims.keys[KeySpec{ID: ki.ID, User: ki.User}] = ki
 	}
 }
 
@@ -130,12 +130,12 @@ func (ims *InMemoryKeyStore) MarshalYAML() (any, error) {
 	return ims.getSortedKeys(), nil
 }
 
-// KeyOwners returns the owners of keys in the store, sorted by ID and User.
-func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner {
+// KeySpecs returns the owners of keys in the store, sorted by ID and User.
+func (ims *InMemoryKeyStore) KeySpecs() []KeySpec {
 	keys := ims.getSortedKeys()
-	owners := make([]KeyOwner, len(keys))
+	owners := make([]KeySpec, len(keys))
 	for i, key := range keys {
-		owners[i] = KeyOwner{ID: key.ID, User: key.User}
+		owners[i] = KeySpec{ID: key.ID, User: key.User}
 	}
 	return owners
 }
@@ -144,9 +144,9 @@ func (ims *InMemoryKeyStore) Add(key Info) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
 	if ims.keys == nil {
-		ims.keys = make(map[KeyOwner]Info)
+		ims.keys = make(map[KeySpec]Info)
 	}
-	ims.keys[KeyOwner{ID: key.ID, User: key.User}] = key
+	ims.keys[KeySpec{ID: key.ID, User: key.User}] = key
 }
 
 // Get retrieves a key by its user and ID. It returns the key and a boolean
@@ -154,7 +154,7 @@ func (ims *InMemoryKeyStore) Add(key Info) {
 func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
-	ko := KeyOwner{ID: id, User: user}
+	ko := KeySpec{ID: id, User: user}
 	if key, ok := ims.keys[ko]; ok {
 		return key, true
 	}

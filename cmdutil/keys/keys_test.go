@@ -459,13 +459,13 @@ func (m *mockFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
 	return m.ReadFile(name)
 }
 
-func TestKeyOwnerString(t *testing.T) {
-	ko := keys.KeyOwner{ID: "id1"}
-	if got, want := ko.String(), "id1"; got != want {
+func TestKeySpecString(t *testing.T) {
+	ks := keys.KeySpec{ID: "id1"}
+	if got, want := ks.String(), "id1"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	ko.User = "user1"
-	if got, want := ko.String(), "id1[user1]"; got != want {
+	ks.User = "user1"
+	if got, want := ks.String(), "id1[user1]"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -475,13 +475,13 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	ks.Add(keys.NewInfo("id1", "user1", []byte("t1")))
 	ks.Add(keys.NewInfo("id2", "user2", []byte("t2")))
 
-	// KeyOwners
-	owners := ks.KeyOwners()
-	if got, want := len(owners), 2; got != want {
+	// KeySpecs
+	specs := ks.KeySpecs()
+	if got, want := len(specs), 2; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	// Order is sorted by ID and User
-	if got, want := owners[0].ID, "id1"; got != want {
+	if got, want := specs[0].ID, "id1"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
@@ -505,7 +505,7 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	}
 
 	// Verify the actual keys after unmarshalling
-	owners2 := ks2.KeyOwners()
+	owners2 := ks2.KeySpecs()
 	if got, want := len(owners2), 2; got != want {
 		t.Fatalf("unmarshaled store has %v keys, want %v", got, want)
 	}
