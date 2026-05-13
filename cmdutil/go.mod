@@ -10,9 +10,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260507011012-5e35122ac3e3 // indirect
+	cloudeng.io/algo v0.0.0-20260511051612-3406526ae677 // indirect
 	cloudeng.io/sync v0.0.10 // indirect
-	cloudeng.io/sys v0.0.0-20260507011012-5e35122ac3e3 // indirect
+	cloudeng.io/sys v0.0.0-20260511051612-3406526ae677 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 )
