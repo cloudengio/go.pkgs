@@ -106,7 +106,7 @@ func (c AWSConfig) Options(ctx context.Context) ([]ConfigOption, error) {
 			WithConfigOptions(config.WithRegion(c.AWSRegion)))
 	}
 	if len(c.AWSKeyInfoID) > 0 {
-		if ki, ok := keys.KeyInfoFromContextForID(ctx, c.AWSKeyInfoUser, c.AWSKeyInfoID); ok {
+		if ki, ok := keys.KeyInfoFromContext(ctx, c.AWSKeyInfoUser, c.AWSKeyInfoID); ok {
 			co, err := ConfigOptionsFromKeyInfo(ki)
 			if err != nil {
 				return nil, err
