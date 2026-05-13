@@ -71,7 +71,8 @@ func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.
 		select {
 		case input <- &req:
 		case <-ctx.Done():
-			break
+			close(input)
+			return
 		}
 	}
 	close(input)
