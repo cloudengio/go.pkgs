@@ -28,8 +28,10 @@ type KeyStoreUpdater struct {
 }
 
 const (
-	// DefaultRefreshInterval is the default interval at which the KeyStoreUpdater wil
-	// refresh keys from the underlying KeyStore.
+	// DefaultRefreshInterval is the default interval at which the
+	// KeyStoreUpdater will refresh keys from the underlying KeyStore if
+	// no interval is specified when calling ScheduleRefreshYAML or
+	// ScheduleRefreshJSON.
 	DefaultRefreshInterval = time.Minute
 )
 
@@ -72,8 +74,13 @@ func (u *KeyStoreUpdater) scheduleRefresh(ctx context.Context, yamlOrJSON bool, 
 	if interval <= 0 {
 		interval = DefaultRefreshInterval
 	}
-	ticker := time.NewTicker(interval)
 	logger := ctxlog.Logger(ctx).With("component", "KeyStoreUpdater", "files", strings.Join(files, ","))
+
+	if err := u.refresh(ctx, yamlOrJSON, fs, files...); err != nil {
+		logger.Error("error refreshing keys", "error", err)
+	}
+
+	ticker := time.NewTicker(interval)
 
 	u.wg.Go(func() {
 		defer ticker.Stop()

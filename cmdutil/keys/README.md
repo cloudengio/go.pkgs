@@ -10,6 +10,19 @@ optional extra information. The package includes an in-memory key store for
 storing and retrieving keys, as well as context utilities for passing key
 stores across API boundaries.
 
+## Constants
+### DefaultRefreshInterval
+```go
+// DefaultRefreshInterval is the default interval at which the
+// KeyStoreUpdater will refresh keys from the underlying KeyStore if
+// no interval is specified when calling ScheduleRefreshYAML or
+// ScheduleRefreshJSON.
+DefaultRefreshInterval = time.Minute
+
+```
+
+
+
 ## Functions
 ### Func ContextWithKey
 ```go
@@ -75,9 +88,9 @@ indicating whether the key was found.
 
 
 ```go
-func (ims *InMemoryKeyStore) KeyOwners() []KeyOwner
+func (ims *InMemoryKeyStore) KeySpecs() []KeySpec
 ```
-KeyOwners returns the owners of keys in the store, sorted by ID and User.
+KeySpecs returns the owners of keys in the store, sorted by ID and User.
 
 
 ```go
@@ -244,20 +257,86 @@ json or yaml.
 
 
 
-### Type KeyOwner
+### Type KeySpec
 ```go
-type KeyOwner struct {
+type KeySpec struct {
 	ID   string `yaml:"key_id" json:"key_id"`
 	User string `yaml:"user" json:"user"`
 }
 ```
-KeyOwner represents the owner of a key, identified by an ID and an optional
-user.
+KeySpec represents the id of a key and the user associated with the key,
+if any. It is used as a key in the InMemoryKeyStore.
+
+### Functions
+
+```go
+func ParseKeySpecValue(s string) KeySpec
+```
+ParseKeySpecValue parses a string value into a KeySpec. The expected format
+is either "id" or "id[user]".
+
+
 
 ### Methods
 
 ```go
-func (ko KeyOwner) String() string
+func (ko KeySpec) String() string
+```
+
+
+
+
+### Type KeySpecValue
+```go
+type KeySpecValue string
+```
+KeySpecValue represents a string value that can be parsed into a KeySpec.
+Its format is: "id" or "id[user]".
+
+
+### Type KeyStoreUpdater
+```go
+type KeyStoreUpdater struct {
+	// contains filtered or unexported fields
+}
+```
+KeyStoreUpdater provides methods to automatically refresh keys in an
+InMemoryKeyStore from YAML or JSON files.
+
+### Functions
+
+```go
+func NewKeyStoreUpdater(ims *InMemoryKeyStore) *KeyStoreUpdater
+```
+NewKeyStoreUpdater creates a new KeyStoreUpdater that will refresh
+keys in the provided InMemoryKeyStore. Call ScheduleRefreshYAML or
+ScheduleRefreshJSON to start the refresh process. Call Stop to stop the
+refresh process and wait for any in-flight refreshes to complete.
+
+
+
+### Methods
+
+```go
+func (u *KeyStoreUpdater) ScheduleRefreshJSON(ctx context.Context, fs file.ReadFileFS, files ...string)
+```
+ScheduleRefreshJSON starts a goroutine that will refresh keys in the
+underlying KeyStore from the specified JSON files at the configured refresh
+interval. The refresh process will continue until the context is canceled or
+Stop is called.
+
+
+```go
+func (u *KeyStoreUpdater) ScheduleRefreshYAML(ctx context.Context, fs file.ReadFileFS, files ...string)
+```
+ScheduleRefreshYAML starts a goroutine that will refresh keys in the
+underlying KeyStore from the specified YAML files at the configured refresh
+interval. The refresh process will continue until the context is canceled or
+Stop is called.
+
+
+```go
+func (u *KeyStoreUpdater) Stop(ctx context.Context)
 ```
 
 
@@ -266,7 +345,7 @@ func (ko KeyOwner) String() string
 ### Type Token
 ```go
 type Token struct {
-	KeyOwner
+	KeySpec
 	// contains filtered or unexported fields
 }
 ```

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	"cloudeng.io/text/textutil"
 	"gopkg.in/yaml.v3"
@@ -18,7 +19,7 @@ import (
 // It is used as a key in the InMemoryKeyStore.
 type KeySpec struct {
 	ID   string `yaml:"key_id" json:"key_id"`
-	User string `yaml:"key_user" json:"key_user"`
+	User string `yaml:"user" json:"user"`
 }
 
 func (ko KeySpec) String() string {
@@ -33,13 +34,16 @@ func (ko KeySpec) String() string {
 type KeySpecValue string
 
 // ParseKeySpecValue parses a string value into a KeySpec. The expected format is either "id" or "id[user]".
-func ParseKeySpecValue(s string) (KeySpec, error) {
-	var ks KeySpec
-	if _, err := fmt.Sscanf(s, "%s[%s]", &ks.ID, &ks.User); err == nil {
-		return ks, nil
+func ParseKeySpecValue(s string) KeySpec {
+	if open := strings.Index(s, "["); open >= 0 {
+		if close := strings.LastIndex(s, "]"); close > open {
+			return KeySpec{
+				ID:   s[:open],
+				User: s[open+1 : close],
+			}
+		}
 	}
-	ks.ID = s
-	return ks, nil
+	return KeySpec{ID: s}
 }
 
 // Token represents an API token. It is intended for temporary use
