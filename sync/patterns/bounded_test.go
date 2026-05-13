@@ -292,6 +292,7 @@ func TestBoundedFIFOSendNotBlockedBySlowConsumer(t *testing.T) {
 
 	// Close In() and drain Out() so run can flush and exit cleanly.
 	close(f.In())
-	for range f.Out() {
+	for tmp := range f.Out() {
+		_ = tmp // drain remaining items, should not hang.
 	}
 }
