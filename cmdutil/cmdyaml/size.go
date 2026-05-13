@@ -150,7 +150,11 @@ func (b ByteSize) MarshalYAML() (any, error) {
 }
 
 func (b *ByteSize) UnmarshalYAML(value *yaml.Node) error {
-	v, err := ParseByteSize(value.Value)
+	var s string
+	if err := value.Decode(&s); err != nil {
+		return err
+	}
+	v, err := ParseByteSize(s)
 	if err != nil {
 		return err
 	}
