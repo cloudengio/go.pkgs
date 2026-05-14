@@ -730,14 +730,14 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 
 	requested := args[0]
 	for _, cmd := range cmds.cmds {
-		if cmd.flags == nil {
-			return fmt.Errorf("no flags specified for %v", cmd.name)
-		}
-		fs := cmd.flags.flagSet
 		if requested == cmd.name {
 			if cmd.runner == nil && cmd.opts.subcmds == nil {
 				return fmt.Errorf("no runner registered for %v", requested)
 			}
+			if cmd.flags == nil {
+				return fmt.Errorf("no flags specified for %v", cmd.name)
+			}
+			fs := cmd.flags.flagSet
 			if err := cmds.parseArgs(fs, cmd, args[1:]); err != nil {
 				return err
 			}

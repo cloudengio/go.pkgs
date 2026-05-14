@@ -236,6 +236,9 @@ func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags any, va
 // initialized either with a literal in the struct tag or via the valueDefaults
 // argument.
 func RegisterFlagsInStructWithSetMap(fs *flag.FlagSet, tag string, structWithFlags any, valueDefaults map[string]any, usageDefaults map[string]string) (*SetMap, error) {
+	if structWithFlags == nil {
+		return nil, fmt.Errorf("flag struct argument can't be nil")
+	}
 	reg := &registrar{
 		fs:            fs,
 		tag:           tag,
