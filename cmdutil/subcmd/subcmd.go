@@ -734,7 +734,7 @@ func (cmds *CommandSet) dispatchWithArgs(ctx context.Context, usage string, args
 			if cmd.runner == nil && cmd.opts.subcmds == nil {
 				return fmt.Errorf("no runner registered for %v", requested)
 			}
-			if cmd.flags == nil {
+			if cmd.flags == nil || cmd.flags.flagSet == nil {
 				return fmt.Errorf("no flags specified for %v", cmd.name)
 			}
 			fs := cmd.flags.flagSet
