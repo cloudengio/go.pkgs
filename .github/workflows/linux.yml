@@ -16,11 +16,11 @@ jobs:
       runner: |
         [ "ubuntu-latest" ]
       go-versions: |
-        [ "1.25.x" ]
+        [ "1.26.x" ]
 
   lint:
     uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
     with:
       runner: |
         [ "ubuntu-latest" ]
-      go-version: "1.25.x"
+      go-version: "1.26.x"

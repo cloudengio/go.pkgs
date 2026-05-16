@@ -3,8 +3,8 @@ module cloudeng.io/google
 go 1.25.5
 
 require (
-	cloudeng.io/algo v0.0.0-20260513030906-195852faa5d0
-	cloudeng.io/file v0.0.0-20260513030906-195852faa5d0
+	cloudeng.io/algo v0.0.0-20260514201128-26a831c78d62
+	cloudeng.io/file v0.0.0-20260514201128-26a831c78d62
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.279.0
 )
@@ -14,8 +14,8 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278 // indirect
-	cloudeng.io/sync v0.0.10 // indirect
-	cloudeng.io/sys v0.0.0-20260513030906-195852faa5d0 // indirect
+	cloudeng.io/sync v0.0.11 // indirect
+	cloudeng.io/sys v0.0.0-20260514201128-26a831c78d62 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -36,6 +36,6 @@ require (
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
-	google.golang.org/grpc v1.81.0 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

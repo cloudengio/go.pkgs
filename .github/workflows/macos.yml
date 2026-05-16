@@ -18,4 +18,4 @@ jobs:
       runner: |
         [ "macos-latest" ]
       go-versions: |
-        [ "1.25.x" ]
+        [ "1.26.x" ]
