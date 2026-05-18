@@ -66,6 +66,22 @@ func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error
 ParseConfigFileStrict is like ParseConfigFile but reports an error if there
 are unknown fields in the yaml specification.
 
+### Func ParseConfigFiles
+```go
+func ParseConfigFiles(ctx context.Context, cfg any, filenames ...string) error
+```
+ParseConfigFiles reads and merges the YAML contents of each named file into
+cfg. Files are processed in order; a field present in a later file overrides
+the value set by an earlier one, while fields only in an earlier file are
+retained. At least one filename must be supplied.
+
+### Func ParseConfigFilesStrict
+```go
+func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) error
+```
+ParseConfigFilesStrict is like ParseConfigFiles but reports an error if any
+file contains unknown fields.
+
 ### Func ParseConfigStrict
 ```go
 func ParseConfigStrict(spec []byte, cfg any) error
