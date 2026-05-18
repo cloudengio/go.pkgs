@@ -37,6 +37,8 @@ func ParseConfigString(spec string, cfg any) error {
 // for the configuration file to be read from storage system, including
 // from embed.FS, instead of the local filesystem if an instance of fs.ReadFileFS
 // is stored in the context.
+//
+// Deprecated: Use ParseConfigFiles instead.
 func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
 	return parseConfigFile(ctx, filename, cfg, ParseConfig)
 }
@@ -60,6 +62,8 @@ func ParseConfigStringStrict(spec string, cfg any) error {
 
 // ParseConfigFileStrict is like ParseConfigFile but reports an error if there
 // are unknown fields in the yaml specification.
+//
+// Deprecated: Use ParseConfigFilesStrict instead.
 func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error {
 	return parseConfigFile(ctx, filename, cfg, ParseConfigStrict)
 }

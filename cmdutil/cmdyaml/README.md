@@ -59,12 +59,16 @@ configuration file to be read from storage system, including from embed.FS,
 instead of the local filesystem if an instance of fs.ReadFileFS is stored in
 the context.
 
+Deprecated: Use ParseConfigFiles instead.
+
 ### Func ParseConfigFileStrict
 ```go
 func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error
 ```
 ParseConfigFileStrict is like ParseConfigFile but reports an error if there
 are unknown fields in the yaml specification.
+
+Deprecated: Use ParseConfigFilesStrict instead.
 
 ### Func ParseConfigFiles
 ```go
