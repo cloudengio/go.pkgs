@@ -5,6 +5,9 @@
 package cmdyaml_test
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,6 +57,70 @@ list:
 		if err == nil || strings.TrimSpace(err.Error()) != tc.errMsg {
 			t.Errorf("%v: got %v, want %v", i, err, tc.errMsg)
 		}
+	}
+}
+
+type mergeStruct struct {
+	A string
+	B string
+	C string
+}
+
+func writeTempYAML(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte(content), 0600); err != nil {
+		t.Fatalf("write %s: %v", p, err)
+	}
+	return p
+}
+
+func TestParseConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	f1 := writeTempYAML(t, dir, "f1.yaml", "a: first\nb: from-f1\n")
+	f2 := writeTempYAML(t, dir, "f2.yaml", "b: from-f2\nc: second\n")
+
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigFiles(context.Background(), &cfg, f1, f2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// f1 sets A and B; f2 overrides B and adds C.
+	if cfg.A != "first" {
+		t.Errorf("A: got %q, want %q", cfg.A, "first")
+	}
+	if cfg.B != "from-f2" {
+		t.Errorf("B: got %q, want %q", cfg.B, "from-f2")
+	}
+	if cfg.C != "second" {
+		t.Errorf("C: got %q, want %q", cfg.C, "second")
+	}
+}
+
+func TestParseConfigFilesNoFiles(t *testing.T) {
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigFiles(context.Background(), &cfg); err == nil {
+		t.Fatal("expected error for no files, got nil")
+	}
+}
+
+func TestParseConfigFilesMissing(t *testing.T) {
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigFiles(context.Background(), &cfg, "/no/such/file.yaml"); err == nil {
+		t.Fatal("expected error for missing file, got nil")
+	}
+}
+
+func TestParseConfigFilesStrict(t *testing.T) {
+	dir := t.TempDir()
+	f1 := writeTempYAML(t, dir, "ok.yaml", "a: hello\n")
+	fBad := writeTempYAML(t, dir, "bad.yaml", "a: hello\nunknown: field\n")
+
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigFilesStrict(context.Background(), &cfg, f1); err != nil {
+		t.Fatalf("strict single file: unexpected error: %v", err)
+	}
+	if err := cmdyaml.ParseConfigFilesStrict(context.Background(), &cfg, fBad); err == nil {
+		t.Fatal("strict: expected error for unknown field, got nil")
 	}
 }
 
