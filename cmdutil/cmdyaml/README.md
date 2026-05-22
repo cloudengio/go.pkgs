@@ -106,6 +106,21 @@ func ParseConfigStringStrict(spec string, cfg any) error
 ParseConfigStringStrict is like ParseConfigString but reports an error if
 there are unknown fields in the yaml specification.
 
+### Func ParseConfigs
+```go
+func ParseConfigs(cfg any, specs ...[]byte) error
+```
+ParseConfigs merges the YAML content of each spec into cfg. Specs are
+processed in order; a field present in a later spec overrides the value set
+by an earlier one, while fields only in an earlier spec are retained.
+
+### Func ParseConfigsStrict
+```go
+func ParseConfigsStrict(cfg any, specs ...[]byte) error
+```
+ParseConfigsStrict is like ParseConfigs but reports an error if any spec
+contains unknown fields.
+
 ### Func ParseDeferred
 ```go
 func ParseDeferred[T any](d *Deferred) (T, error)

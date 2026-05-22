@@ -790,13 +790,16 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 }
 
 func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHooks []PreHook) (context.Context, []PostHook, error) {
-	var err error
 	var postHooks []PostHook
 	for _, pre := range preHooks {
-		var post PostHook
-		ctx, post, err = pre(ctx)
+		var (
+			id   string
+			post PostHook
+			err  error
+		)
+		ctx, id, post, err = pre(ctx)
 		if err != nil {
-			return ctx, postHooks, fmt.Errorf("%v: pre-hook failed: %w", cmdName, err)
+			return ctx, postHooks, fmt.Errorf("%v: pre-hook failed (%v): %w", cmdName, id, err)
 		}
 		if post != nil {
 			postHooks = append(postHooks, post)
@@ -805,12 +808,11 @@ func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHook
 	return ctx, postHooks, nil
 }
 
-// runPostHooks in LIFO order and append errors to the supplied errors.M.
+// runPostHooks in LIFO order and appends errors to the supplied errors.M.
 func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHooks []PostHook, errs *errors.M) error {
 	for i := len(postHooks) - 1; i >= 0; i-- {
-		post := postHooks[i]
-		if err := post(ctx); err != nil {
-			errs.Append(fmt.Errorf("%v: post-hook failed: %w", cmdName, err))
+		if id, err := postHooks[i](ctx); err != nil {
+			errs.Append(fmt.Errorf("%v: post-hook failed (%v): %w", cmdName, id, err))
 		}
 	}
 	return errs.Err()
