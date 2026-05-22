@@ -86,21 +86,37 @@ func ParseConfigsStrict(cfg any, specs ...[]byte) error {
 // the value set by an earlier one, while fields only in an earlier file are
 // retained. At least one filename must be supplied.
 func ParseConfigFiles(ctx context.Context, cfg any, filenames ...string) error {
-	specs, err := readConfigFiles(ctx, filenames)
-	if err != nil {
-		return err
-	}
-	return ParseConfigs(cfg, specs...)
+	return parseConfigFiles(ctx, cfg, false, filenames)
 }
 
 // ParseConfigFilesStrict is like ParseConfigFiles but reports an error if any
 // file contains unknown fields.
 func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) error {
-	specs, err := readConfigFiles(ctx, filenames)
-	if err != nil {
-		return err
+	return parseConfigFiles(ctx, cfg, true, filenames)
+}
+
+func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []string) error {
+	if len(filenames) == 0 {
+		return fmt.Errorf("no config files specified")
 	}
-	return ParseConfigsStrict(cfg, specs...)
+	for _, filename := range filenames {
+		if len(filename) == 0 {
+			return fmt.Errorf("one of the filenames in %v is empty", filenames)
+		}
+		data, err := file.FSReadFile(ctx, filename)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", filename, err)
+		}
+		if strict {
+			err = ParseConfigStrict(data, cfg)
+		} else {
+			err = ParseConfig(data, cfg)
+		}
+		if err != nil {
+			return fmt.Errorf("failed to parse: %q: %w", filename, err)
+		}
+	}
+	return nil
 }
 
 func parseConfigs(cfg any, parser func([]byte, any) error, specs [][]byte) error {
@@ -124,21 +140,6 @@ func parseConfigFile(ctx context.Context, filename string, cfg any, parser func(
 		return fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 	return nil
-}
-
-func readConfigFiles(ctx context.Context, filenames []string) ([][]byte, error) {
-	if len(filenames) == 0 {
-		return nil, fmt.Errorf("no config files specified")
-	}
-	specs := make([][]byte, 0, len(filenames))
-	for _, filename := range filenames {
-		spec, err := file.FSReadFile(ctx, filename)
-		if err != nil {
-			return nil, err
-		}
-		specs = append(specs, spec)
-	}
-	return specs, nil
 }
 
 // ErrorWithSource returns an error that includes the yaml source
