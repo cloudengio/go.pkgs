@@ -68,18 +68,48 @@ func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error 
 	return parseConfigFile(ctx, filename, cfg, ParseConfigStrict)
 }
 
+// ParseConfigs merges the YAML content of each spec into cfg. Specs are
+// processed in order; a field present in a later spec overrides the value set
+// by an earlier one, while fields only in an earlier spec are retained.
+func ParseConfigs(cfg any, specs ...[]byte) error {
+	return parseConfigs(cfg, ParseConfig, specs)
+}
+
+// ParseConfigsStrict is like ParseConfigs but reports an error if any spec
+// contains unknown fields.
+func ParseConfigsStrict(cfg any, specs ...[]byte) error {
+	return parseConfigs(cfg, ParseConfigStrict, specs)
+}
+
 // ParseConfigFiles reads and merges the YAML contents of each named file into
 // cfg. Files are processed in order; a field present in a later file overrides
 // the value set by an earlier one, while fields only in an earlier file are
 // retained. At least one filename must be supplied.
 func ParseConfigFiles(ctx context.Context, cfg any, filenames ...string) error {
-	return parseConfigFiles(ctx, cfg, ParseConfig, filenames)
+	specs, err := readConfigFiles(ctx, filenames)
+	if err != nil {
+		return err
+	}
+	return ParseConfigs(cfg, specs...)
 }
 
 // ParseConfigFilesStrict is like ParseConfigFiles but reports an error if any
 // file contains unknown fields.
 func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) error {
-	return parseConfigFiles(ctx, cfg, ParseConfigStrict, filenames)
+	specs, err := readConfigFiles(ctx, filenames)
+	if err != nil {
+		return err
+	}
+	return ParseConfigsStrict(cfg, specs...)
+}
+
+func parseConfigs(cfg any, parser func([]byte, any) error, specs [][]byte) error {
+	for _, spec := range specs {
+		if err := parser(spec, cfg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parseConfigFile(ctx context.Context, filename string, cfg any, parser func([]byte, any) error) error {
@@ -96,16 +126,19 @@ func parseConfigFile(ctx context.Context, filename string, cfg any, parser func(
 	return nil
 }
 
-func parseConfigFiles(ctx context.Context, cfg any, parser func([]byte, any) error, filenames []string) error {
+func readConfigFiles(ctx context.Context, filenames []string) ([][]byte, error) {
 	if len(filenames) == 0 {
-		return fmt.Errorf("no config files specified")
+		return nil, fmt.Errorf("no config files specified")
 	}
+	specs := make([][]byte, 0, len(filenames))
 	for _, filename := range filenames {
-		if err := parseConfigFile(ctx, filename, cfg, parser); err != nil {
-			return err
+		spec, err := file.FSReadFile(ctx, filename)
+		if err != nil {
+			return nil, err
 		}
+		specs = append(specs, spec)
 	}
-	return nil
+	return specs, nil
 }
 
 // ErrorWithSource returns an error that includes the yaml source

@@ -136,6 +136,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -789,6 +791,10 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 	})
 }
 
+func funcName(f any) string {
+	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+}
+
 func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHooks []PreHook) (context.Context, []PostHook, error) {
 	var err error
 	var postHooks []PostHook
@@ -796,7 +802,7 @@ func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHook
 		var post PostHook
 		ctx, post, err = pre(ctx)
 		if err != nil {
-			return ctx, postHooks, fmt.Errorf("%v: pre-hook failed: %w", cmdName, err)
+			return ctx, postHooks, fmt.Errorf("%v: pre-hook failed (%v): %w", cmdName, funcName(pre), err)
 		}
 		if post != nil {
 			postHooks = append(postHooks, post)
@@ -810,7 +816,7 @@ func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHo
 	for i := len(postHooks) - 1; i >= 0; i-- {
 		post := postHooks[i]
 		if err := post(ctx); err != nil {
-			errs.Append(fmt.Errorf("%v: post-hook failed: %w", cmdName, err))
+			errs.Append(fmt.Errorf("%v: post-hook failed (%v): %w", cmdName, funcName(post), err))
 		}
 	}
 	return errs.Err()

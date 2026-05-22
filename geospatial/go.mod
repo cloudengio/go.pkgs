@@ -3,7 +3,7 @@ module cloudeng.io/geospatial
 go 1.25.5
 
 require (
-	cloudeng.io/datetime v0.0.0-20260514201128-26a831c78d62
+	cloudeng.io/datetime v0.0.0-20260518190654-a057386f3a79
 	github.com/mooncaker816/learnmeeus/v3 v3.0.0-20180601123323-8217f4131761
 	github.com/nathan-osman/go-sunrise v1.1.0
 )

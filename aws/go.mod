@@ -3,23 +3,23 @@ module cloudeng.io/aws
 go 1.26.2
 
 require (
-	cloudeng.io/cicd v0.0.0-20260514201128-26a831c78d62
-	cloudeng.io/cmdutil v0.0.0-20260514201128-26a831c78d62
+	cloudeng.io/cicd v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/cmdutil v0.0.0-20260518190654-a057386f3a79
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260514201128-26a831c78d62
-	cloudeng.io/logging v0.0.0-20260514201128-26a831c78d62
+	cloudeng.io/file v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/logging v0.0.0-20260518190654-a057386f3a79
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
-	github.com/alexbacchin/ssm-session-client v1.0.0
+	github.com/alexbacchin/ssm-session-client v1.1.0
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.23
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.302.0
-	github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.303.0
+	github.com/aws/aws-sdk-go-v2/service/kms v1.52.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.60.4
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.60.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
 	github.com/aws/smithy-go v1.25.1
 	github.com/jackc/pgx/v5 v5.9.2
@@ -37,15 +37,15 @@ require (
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/xtaci/smux v1.5.57 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260513235126-b955eaa2c893 // indirect
-	cloudeng.io/os v0.0.0-20260514201128-26a831c78d62 // indirect
+	cloudeng.io/algo v0.0.0-20260518190654-a057386f3a79 // indirect
+	cloudeng.io/os v0.0.0-20260518190654-a057386f3a79 // indirect
 	cloudeng.io/sync v0.0.11 // indirect
-	cloudeng.io/sys v0.0.0-20260513235126-b955eaa2c893 // indirect
+	cloudeng.io/sys v0.0.0-20260518190654-a057386f3a79 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
@@ -91,13 +91,13 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260519071638-aa98bba5eb94 // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

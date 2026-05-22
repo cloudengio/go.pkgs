@@ -110,6 +110,79 @@ func TestParseConfigFilesMissing(t *testing.T) {
 	}
 }
 
+type EmbeddedBase struct {
+	X string
+	Y string
+}
+
+// yaml.v3 does NOT inline embedded struct fields automatically (unlike encoding/json).
+// Without a yaml:",inline" tag the embedded type's fields are nested under the
+// lowercased type name (e.g. "embeddedbase:").
+type embeddedMergeStruct struct {
+	Top          string
+	EmbeddedBase `yaml:",inline"`
+}
+
+func TestParseConfigFilesEmbeddedMerge(t *testing.T) {
+	dir := t.TempDir()
+	// Without yaml:",inline", the YAML key would be "embeddedbase:" not promoted.
+	// With yaml:",inline" (as declared above) X and Y appear at the top level.
+	// f1 sets Top, X, and Y; f2 overrides only X.
+	f1 := writeTempYAML(t, dir, "f1.yaml", "top: from-f1\nx: x-from-f1\ny: y-from-f1\n")
+	f2 := writeTempYAML(t, dir, "f2.yaml", "x: x-from-f2\n")
+
+	var cfg embeddedMergeStruct
+	if err := cmdyaml.ParseConfigFiles(context.Background(), &cfg, f1, f2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Top != "from-f1" {
+		t.Errorf("Top: got %q, want %q", cfg.Top, "from-f1")
+	}
+	if cfg.X != "x-from-f2" {
+		t.Errorf("X: got %q, want %q", cfg.X, "x-from-f2")
+	}
+	// Y is not mentioned in f2 and must survive from f1.
+	if cfg.Y != "y-from-f1" {
+		t.Errorf("Y: got %q, want %q", cfg.Y, "y-from-f1")
+	}
+}
+
+type nestedMergeStruct struct {
+	Top    string
+	Nested struct {
+		X string
+		Y string
+	}
+	Items []string
+}
+
+func TestParseConfigFilesDeepMerge(t *testing.T) {
+	dir := t.TempDir()
+	// f1 sets Top, Nested.X, Nested.Y, and Items.
+	f1 := writeTempYAML(t, dir, "f1.yaml", "top: from-f1\nnested:\n  x: x-from-f1\n  y: y-from-f1\nitems:\n  - a\n  - b\n")
+	// f2 overrides only Nested.X and Items; Top and Nested.Y should survive from f1.
+	f2 := writeTempYAML(t, dir, "f2.yaml", "nested:\n  x: x-from-f2\nitems:\n  - c\n")
+
+	var cfg nestedMergeStruct
+	if err := cmdyaml.ParseConfigFiles(context.Background(), &cfg, f1, f2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Top != "from-f1" {
+		t.Errorf("Top: got %q, want %q", cfg.Top, "from-f1")
+	}
+	if cfg.Nested.X != "x-from-f2" {
+		t.Errorf("Nested.X: got %q, want %q", cfg.Nested.X, "x-from-f2")
+	}
+	// Deep struct merge: Nested.Y is not mentioned in f2 and must survive from f1.
+	if cfg.Nested.Y != "y-from-f1" {
+		t.Errorf("Nested.Y: got %q, want %q", cfg.Nested.Y, "y-from-f1")
+	}
+	// Slices are replaced, not merged: f2's Items replaces f1's Items entirely.
+	if len(cfg.Items) != 1 || cfg.Items[0] != "c" {
+		t.Errorf("Items: got %v, want [c]", cfg.Items)
+	}
+}
+
 func TestParseConfigFilesStrict(t *testing.T) {
 	dir := t.TempDir()
 	f1 := writeTempYAML(t, dir, "ok.yaml", "a: hello\n")
@@ -120,6 +193,43 @@ func TestParseConfigFilesStrict(t *testing.T) {
 		t.Fatalf("strict single file: unexpected error: %v", err)
 	}
 	if err := cmdyaml.ParseConfigFilesStrict(context.Background(), &cfg, fBad); err == nil {
+		t.Fatal("strict: expected error for unknown field, got nil")
+	}
+}
+
+func TestParseConfigs(t *testing.T) {
+	s1 := []byte("a: first\nb: from-s1\n")
+	s2 := []byte("b: from-s2\nc: second\n")
+
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigs(&cfg, s1, s2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.A != "first" {
+		t.Errorf("A: got %q, want %q", cfg.A, "first")
+	}
+	if cfg.B != "from-s2" {
+		t.Errorf("B: got %q, want %q", cfg.B, "from-s2")
+	}
+	if cfg.C != "second" {
+		t.Errorf("C: got %q, want %q", cfg.C, "second")
+	}
+}
+
+func TestParseConfigsNoSpecs(t *testing.T) {
+	var cfg mergeStruct
+	// Zero specs is a no-op, not an error.
+	if err := cmdyaml.ParseConfigs(&cfg); err != nil {
+		t.Fatalf("unexpected error for zero specs: %v", err)
+	}
+}
+
+func TestParseConfigsStrict(t *testing.T) {
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigsStrict(&cfg, []byte("a: hello\n")); err != nil {
+		t.Fatalf("strict single spec: unexpected error: %v", err)
+	}
+	if err := cmdyaml.ParseConfigsStrict(&cfg, []byte("a: hello\nunknown: field\n")); err == nil {
 		t.Fatal("strict: expected error for unknown field, got nil")
 	}
 }
