@@ -362,9 +362,9 @@ func TestSetPreHooks(t *testing.T) {
 	hookCalled := map[string]int{}
 
 	makeHook := func(tag string) subcmd.PreHook {
-		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			hookCalled[tag]++
-			return ctx, nil, nil
+			return ctx, tag, nil, nil
 		}
 	}
 
@@ -457,13 +457,13 @@ func ExampleCurrentCommand_SetPreHooks() {
 	ctx := context.Background()
 	logged := []string{}
 
-	traceHook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	traceHook := subcmd.PreHook(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		logged = append(logged, "pre")
-		post := func(_ context.Context) error {
+		post := func(_ context.Context) (string, error) {
 			logged = append(logged, "post")
-			return nil
+			return "traceHook-post", nil
 		}
-		return ctx, post, nil
+		return ctx, "traceHook", post, nil
 	})
 
 	out := &strings.Builder{}
@@ -519,13 +519,13 @@ commands:
 	t.Run("appends to existing hooks", func(t *testing.T) {
 		cs := setup(t)
 		order := []string{}
-		hookFirst := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		hookFirst := subcmd.PreHook(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			order = append(order, "first")
-			return ctx, nil, nil
+			return ctx, "first", nil, nil
 		})
-		hookSecond := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		hookSecond := subcmd.PreHook(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			order = append(order, "second")
-			return ctx, nil, nil
+			return ctx, "second", nil, nil
 		})
 		cs.Set("a").MustSetPreHooks(hookFirst)
 		cs.Set("a").MustAppendPreHooks(hookSecond)
@@ -540,9 +540,9 @@ commands:
 	t.Run("appends to all descendants", func(t *testing.T) {
 		cs := setup(t)
 		callCount := 0
-		hook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		hook := subcmd.PreHook(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			callCount++
-			return ctx, nil, nil
+			return ctx, "", nil, nil
 		})
 		cs.Set("b").MustAppendPreHooks(hook)
 		if err := cs.DispatchWithArgs(ctx, "root", "b", "b1"); err != nil {
@@ -559,9 +559,9 @@ commands:
 	t.Run("does not affect siblings", func(t *testing.T) {
 		cs := setup(t)
 		callCount := 0
-		hook := subcmd.PreHook(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		hook := subcmd.PreHook(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			callCount++
-			return ctx, nil, nil
+			return ctx, "", nil, nil
 		})
 		cs.Set("b").MustAppendPreHooks(hook)
 		if err := cs.DispatchWithArgs(ctx, "root", "a"); err != nil {
@@ -594,9 +594,9 @@ summary: a single top-level command
 	out := &strings.Builder{}
 
 	makeHook := func(name string) subcmd.PreHook {
-		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			order = append(order, "pre-"+name)
-			return ctx, nil, nil
+			return ctx, name, nil, nil
 		}
 	}
 

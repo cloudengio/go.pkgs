@@ -29,16 +29,16 @@ func getTrace(ctx context.Context) []string {
 // newTracingHook returns a PreHook that appends preMsg to the trace before the
 // runner and postMsg after; a nil postMsg means no PostHook is returned.
 func newTracingHook(preMsg string, postMsg string) subcmd.PreHook {
-	return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		ctx = appendTrace(ctx, preMsg)
 		if postMsg == "" {
-			return ctx, nil, nil
+			return ctx, preMsg, nil, nil
 		}
-		post := func(ctx context.Context) error {
+		post := func(ctx context.Context) (string, error) {
 			_ = appendTrace(ctx, postMsg) // context returned here is discarded
-			return nil
+			return postMsg, nil
 		}
-		return ctx, post, nil
+		return ctx, preMsg, post, nil
 	}
 }
 
@@ -74,12 +74,12 @@ func TestPostHookRunsAfterRunner(t *testing.T) {
 	runner := func(_ context.Context, _ any, _ []string) error {
 		return nil
 	}
-	pre := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		post := func(_ context.Context) error {
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		post := func(_ context.Context) (string, error) {
 			postCalled = true
-			return nil
+			return "", nil
 		}
-		return ctx, post, nil
+		return ctx, "", post, nil
 	}
 
 	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
@@ -100,8 +100,8 @@ func TestNilPostHookIsIgnored(t *testing.T) {
 	ctx := context.Background()
 
 	runner := func(_ context.Context, _ any, _ []string) error { return nil }
-	pre := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		return ctx, nil, nil // no post-hook
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		return ctx, "", nil, nil // no post-hook
 	}
 
 	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
@@ -121,13 +121,13 @@ func TestMultiplePreHooksRunInOrder(t *testing.T) {
 	var order []string
 
 	makeHook := func(name string) subcmd.PreHook {
-		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			order = append(order, "pre-"+name)
-			post := func(_ context.Context) error {
+			post := func(_ context.Context) (string, error) {
 				order = append(order, "post-"+name)
-				return nil
+				return name, nil
 			}
-			return ctx, post, nil
+			return ctx, name, post, nil
 		}
 	}
 
@@ -162,8 +162,8 @@ func TestPreHookContextPropagation(t *testing.T) {
 	type ctxKey struct{}
 	ctx := context.Background()
 
-	pre := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		return context.WithValue(ctx, ctxKey{}, "injected"), nil, nil
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		return context.WithValue(ctx, ctxKey{}, "injected"), "", nil, nil
 	}
 
 	var gotValue string
@@ -190,8 +190,8 @@ func TestPreHookErrorPreventsRunner(t *testing.T) {
 	ctx := context.Background()
 	runnerCalled := false
 
-	pre := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		return ctx, nil, fmt.Errorf("hook error")
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		return ctx, "myPreHook", nil, fmt.Errorf("hook error")
 	}
 	runner := func(_ context.Context, _ any, _ []string) error {
 		runnerCalled = true
@@ -211,6 +211,9 @@ func TestPreHookErrorPreventsRunner(t *testing.T) {
 	if !strings.Contains(err.Error(), "pre-hook failed") {
 		t.Errorf("error should mention pre-hook failed: %v", err)
 	}
+	if !strings.Contains(err.Error(), "myPreHook") {
+		t.Errorf("error should contain the hook id: %v", err)
+	}
 	if !strings.Contains(err.Error(), "hook error") {
 		t.Errorf("error should contain original error: %v", err)
 	}
@@ -223,15 +226,15 @@ func TestPreHookErrorRunsAlreadyRegisteredPostHooks(t *testing.T) {
 	ctx := context.Background()
 	postACalled := false
 
-	hookA := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		post := func(_ context.Context) error {
+	hookA := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		post := func(_ context.Context) (string, error) {
 			postACalled = true
-			return nil
+			return "hookA-post", nil
 		}
-		return ctx, post, nil
+		return ctx, "hookA", post, nil
 	}
-	hookB := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		return ctx, nil, fmt.Errorf("hookB failed")
+	hookB := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		return ctx, "hookB", nil, fmt.Errorf("hookB failed")
 	}
 
 	runner := func(_ context.Context, _ any, _ []string) error { return nil }
@@ -254,11 +257,11 @@ func TestPreHookErrorRunsAlreadyRegisteredPostHooks(t *testing.T) {
 func TestPostHookErrorIsReported(t *testing.T) {
 	ctx := context.Background()
 
-	pre := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		post := func(_ context.Context) error {
-			return fmt.Errorf("post-hook error")
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		post := func(_ context.Context) (string, error) {
+			return "myPostHook", fmt.Errorf("post-hook error")
 		}
-		return ctx, post, nil
+		return ctx, "myPreHook", post, nil
 	}
 	runner := func(_ context.Context, _ any, _ []string) error { return nil }
 
@@ -274,6 +277,9 @@ func TestPostHookErrorIsReported(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "post-hook failed") {
 		t.Errorf("error should mention post-hook failed: %v", err)
+	}
+	if !strings.Contains(err.Error(), "myPostHook") {
+		t.Errorf("error should contain the post-hook id: %v", err)
 	}
 	if !strings.Contains(err.Error(), "post-hook error") {
 		t.Errorf("error should contain original error: %v", err)
@@ -291,13 +297,13 @@ func TestAppendPreHooksOnCommand(t *testing.T) {
 	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner, subcmd.WithoutArguments())
 	cmd.Document("test command")
 
-	cmd.AppendPreHooks(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	cmd.AppendPreHooks(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		order = append(order, "hook1")
-		return ctx, nil, nil
+		return ctx, "hook1", nil, nil
 	})
-	cmd.AppendPreHooks(func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	cmd.AppendPreHooks(func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		order = append(order, "hook2")
-		return ctx, nil, nil
+		return ctx, "hook2", nil, nil
 	})
 
 	cs := subcmd.NewCommandSet(cmd)
@@ -319,9 +325,9 @@ func TestAppendPreHooksOnCommandSet(t *testing.T) {
 	ctx := context.Background()
 	hookCallCount := 0
 
-	hook := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	hook := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		hookCallCount++
-		return ctx, nil, nil
+		return ctx, "", nil, nil
 	}
 
 	runner := func(_ context.Context, _ any, _ []string) error { return nil }
@@ -353,11 +359,11 @@ func TestAppendPreHooksOnCommandSet(t *testing.T) {
 func TestSetPreHooksOnCommandSet(t *testing.T) {
 	ctx := context.Background()
 
-	hookA := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		return appendTrace(ctx, "hookA"), nil, nil
+	hookA := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		return appendTrace(ctx, "hookA"), "hookA", nil, nil
 	}
-	hookB := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
-		return appendTrace(ctx, "hookB"), nil, nil
+	hookB := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		return appendTrace(ctx, "hookB"), "hookB", nil, nil
 	}
 
 	var capturedCtx context.Context
@@ -387,9 +393,9 @@ func TestPreHookWithSubcommands(t *testing.T) {
 	ctx := context.Background()
 	hookCallCount := 0
 
-	hook := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	hook := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		hookCallCount++
-		return ctx, nil, nil
+		return ctx, "", nil, nil
 	}
 
 	runner := func(_ context.Context, _ any, _ []string) error { return nil }
@@ -415,13 +421,13 @@ func TestPostHooksLIFOOrder(t *testing.T) {
 	var order []string
 
 	makeHook := func(name string) subcmd.PreHook {
-		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			order = append(order, "pre-"+name)
-			post := func(_ context.Context) error {
+			post := func(_ context.Context) (string, error) {
 				order = append(order, "post-"+name)
-				return nil
+				return name, nil
 			}
-			return ctx, post, nil
+			return ctx, name, post, nil
 		}
 	}
 
@@ -456,14 +462,14 @@ func ExampleWithPreHooks() {
 	type dbKey struct{}
 
 	// A PreHook that "opens" a resource and closes it via its PostHook.
-	dbHook := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	dbHook := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		fmt.Println("pre: opening db connection")
 		ctx = context.WithValue(ctx, dbKey{}, "db-handle")
-		post := func(context.Context) error {
+		post := func(context.Context) (string, error) {
 			fmt.Println("post: closing db connection")
-			return nil
+			return "dbHook-post", nil
 		}
-		return ctx, post, nil
+		return ctx, "dbHook", post, nil
 	}
 
 	runner := func(ctx context.Context, _ any, _ []string) error {
@@ -500,18 +506,18 @@ func TestMidChainPreHookFailure(t *testing.T) {
 	failErr := fmt.Errorf("hook-3 failed")
 
 	makeHook := func(name string) subcmd.PreHook {
-		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			order = append(order, "pre-"+name)
-			post := func(_ context.Context) error {
+			post := func(_ context.Context) (string, error) {
 				order = append(order, "post-"+name)
-				return nil
+				return name, nil
 			}
-			return ctx, post, nil
+			return ctx, name, post, nil
 		}
 	}
-	failingHook := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	failingHook := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		order = append(order, "pre-3")
-		return ctx, nil, failErr
+		return ctx, "hook-3", nil, failErr
 	}
 
 	runner := func(_ context.Context, _ any, _ []string) error {
@@ -542,6 +548,9 @@ func TestMidChainPreHookFailure(t *testing.T) {
 	if !strings.Contains(err.Error(), "pre-hook failed") {
 		t.Errorf("error should mention pre-hook failed: %v", err)
 	}
+	if !strings.Contains(err.Error(), "hook-3") {
+		t.Errorf("error should contain the hook id: %v", err)
+	}
 
 	// LIFO: post-2 runs before post-1; hooks 4 and 5 and runner never run.
 	want := []string{"pre-1", "pre-2", "pre-3", "post-2", "post-1"}
@@ -563,25 +572,25 @@ func TestMidChainPreHookFailureWithPostHookError(t *testing.T) {
 
 	var order []string
 
-	hook1 := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	hook1 := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		order = append(order, "pre-1")
-		post := func(_ context.Context) error {
+		post := func(_ context.Context) (string, error) {
 			order = append(order, "post-1")
-			return fmt.Errorf("post-1 error")
+			return "hook1-post", fmt.Errorf("post-1 error")
 		}
-		return ctx, post, nil
+		return ctx, "hook1", post, nil
 	}
-	hook2 := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	hook2 := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		order = append(order, "pre-2")
-		post := func(_ context.Context) error {
+		post := func(_ context.Context) (string, error) {
 			order = append(order, "post-2")
-			return nil
+			return "hook2-post", nil
 		}
-		return ctx, post, nil
+		return ctx, "hook2", post, nil
 	}
-	hook3 := func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+	hook3 := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 		order = append(order, "pre-3")
-		return ctx, nil, fmt.Errorf("pre-3 error")
+		return ctx, "hook3", nil, fmt.Errorf("pre-3 error")
 	}
 
 	runner := func(_ context.Context, _ any, _ []string) error {
@@ -624,13 +633,13 @@ func TestMidChainPreHookFailureWithPostHookError(t *testing.T) {
 // called. This ensures inner resources are released before outer ones.
 func ExamplePostHook_lifoOrder() {
 	makeHook := func(name string) subcmd.PreHook {
-		return func(ctx context.Context) (context.Context, subcmd.PostHook, error) {
+		return func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
 			fmt.Printf("open:  %s\n", name)
-			post := func(_ context.Context) error {
+			post := func(_ context.Context) (string, error) {
 				fmt.Printf("close: %s\n", name)
-				return nil
+				return name, nil
 			}
-			return ctx, post, nil
+			return ctx, name, post, nil
 		}
 	}
 
