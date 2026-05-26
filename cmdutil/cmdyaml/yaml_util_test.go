@@ -295,6 +295,71 @@ a: hello
 	}
 }
 
+// TestParseConfigStrictNestedAnchorAllowed verifies that an anchor-definition
+// field nested inside a struct field (not at the top level) is also permitted.
+func TestParseConfigStrictNestedAnchorAllowed(t *testing.T) {
+	// _sub_defaults is inside the "nested:" block, not at the top level.
+	// allAnchorFields must walk into nested mappings to find it.
+	const input = `
+top: hello
+nested:
+  _sub_defaults: &sub_defaults
+    y: from-nested-anchor
+  x: direct
+  <<: *sub_defaults
+`
+	var cfg nestedMergeStruct
+	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Top != "hello" {
+		t.Errorf("Top: got %q, want %q", cfg.Top, "hello")
+	}
+	if cfg.Nested.X != "direct" {
+		t.Errorf("Nested.X: got %q, want %q", cfg.Nested.X, "direct")
+	}
+	if cfg.Nested.Y != "from-nested-anchor" {
+		t.Errorf("Nested.Y: got %q, want %q", cfg.Nested.Y, "from-nested-anchor")
+	}
+}
+
+// TestParseConfigStrictAnchorInSequenceAllowed verifies that an anchor-definition
+// field inside a sequence element mapping is also permitted.
+func TestParseConfigStrictAnchorInSequenceAllowed(t *testing.T) {
+	// _base is inside a sequence item mapping.
+	type seqStruct struct {
+		Items []struct {
+			Name  string
+			Value string
+		}
+	}
+	const input = `
+items:
+  - _base: &base
+      value: shared
+    name: first
+    <<: *base
+  - name: second
+    value: direct
+`
+	var cfg seqStruct
+	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Items) != 2 {
+		t.Fatalf("Items: got %d, want 2", len(cfg.Items))
+	}
+	if cfg.Items[0].Name != "first" {
+		t.Errorf("Items[0].Name: got %q, want %q", cfg.Items[0].Name, "first")
+	}
+	if cfg.Items[0].Value != "shared" {
+		t.Errorf("Items[0].Value: got %q, want %q", cfg.Items[0].Value, "shared")
+	}
+	if cfg.Items[1].Value != "direct" {
+		t.Errorf("Items[1].Value: got %q, want %q", cfg.Items[1].Value, "direct")
+	}
+}
+
 // TestParseConfigStrictAnchorPlusUnknown verifies that a genuinely unknown
 // field is still rejected even when an anchor-definition field is also present.
 func TestParseConfigStrictAnchorPlusUnknown(t *testing.T) {

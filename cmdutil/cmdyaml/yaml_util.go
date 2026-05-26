@@ -51,12 +51,34 @@ func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
 	return parseConfigFile(ctx, filename, cfg, ParseConfig)
 }
 
+type parseState struct {
+	strict  bool
+	anchors map[string]anchorNode
+}
+
+func newParseState(strict bool) *parseState {
+	return &parseState{
+		strict:  strict,
+		anchors: map[string]anchorNode{},
+	}
+}
+
+func (p *parseState) parse(filename string, spec []byte, cfg any) error {
+	return nil
+}
+
+type anchorNode struct {
+	key   *yaml.Node
+	value *yaml.Node
+}
+
 // ParseConfigStrict is like ParseConfig but reports an error if there
-// are unknown fields in the yaml specification. Top-level mapping fields
+// are unknown fields in the yaml specification. Mapping fields at any level
 // whose values carry a YAML anchor (&name) are permitted: they exist only
 // to provide reusable values for alias references and are not struct fields.
 func ParseConfigStrict(spec []byte, cfg any) error {
-	anchors := topLevelAnchorFields(spec)
+	anchors := map[string]anchorNode{}
+	allAnchorFields(anchors, spec)
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	dec.KnownFields(true)
 	for {
@@ -83,7 +105,7 @@ func ParseConfigStrict(spec []byte, cfg any) error {
 			matches := unknownFieldRE.FindStringSubmatch(errStr)
 			if len(matches) == 2 {
 				fieldName := matches[1]
-				if anchors[fieldName] {
+				if _, ok := anchors[fieldName]; ok {
 					continue
 				}
 			}
@@ -98,33 +120,50 @@ func ParseConfigStrict(spec []byte, cfg any) error {
 	return nil
 }
 
-// topLevelAnchorFields returns the names of top-level mapping keys in spec
-// whose values carry a YAML anchor (&name). These fields exist solely to
-// define reusable anchors and are not themselves configuration struct fields.
-func topLevelAnchorFields(spec []byte) map[string]bool {
-	fields := map[string]bool{}
+// allAnchorFields returns the names of all mapping keys in spec, at any
+// nesting level, whose values carry a YAML anchor (&name). These fields exist
+// solely to define reusable anchors and are not themselves configuration
+// struct fields.
+func allAnchorFields(fields map[string]anchorNode, spec []byte) map[string]anchorNode {
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	for {
 		var doc yaml.Node
 		if err := dec.Decode(&doc); err != nil {
-			break // Catches io.EOF.
+			break // catches io.EOF
 		}
-		if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-			continue
-		}
-		mapping := doc.Content[0]
-		for i := 0; i+1 < len(mapping.Content); i += 2 {
-			keyNode := mapping.Content[i]
-			valNode := mapping.Content[i+1]
-			if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
-				fields[keyNode.Value] = true
-			}
-		}
+		collectAnchorFields(fields, &doc)
 	}
 	if len(fields) == 0 {
 		return nil
 	}
 	return fields
+}
+
+func collectAnchorFields(fields map[string]anchorNode, node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.DocumentNode:
+		for _, child := range node.Content {
+			collectAnchorFields(fields, child)
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valNode := node.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
+				fields[keyNode.Value] = anchorNode{key: keyNode, value: valNode}
+				fmt.Printf("found anchor %q for field %q\n", valNode.Anchor, keyNode.Value)
+			}
+			collectAnchorFields(fields, valNode)
+		}
+	case yaml.SequenceNode:
+		for _, child := range node.Content {
+			collectAnchorFields(fields, child)
+		}
+		// AliasNode: skip — the anchor is recorded at its definition site.
+	}
 }
 
 // ParseConfigStringStrict is like ParseConfigString but reports an error if there
