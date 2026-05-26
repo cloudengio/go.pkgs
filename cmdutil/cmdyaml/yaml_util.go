@@ -21,23 +21,10 @@ import (
 
 // ParseConfig will parse the yaml config in spec into the requested
 // type. It provides improved error reporting via ErrorWithSource.
+//
+// Deprecated: Use ParseConfigs instead.
 func ParseConfig(spec []byte, cfg any) error {
-	dec := yaml.NewDecoder(bytes.NewReader(spec))
-	for {
-		err := dec.Decode(cfg)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return ErrorWithSource(spec, err)
-		}
-	}
-	return nil
-}
-
-// ParseConfigString is like ParseConfig but for a string.
-func ParseConfigString(spec string, cfg any) error {
-	return ParseConfig([]byte(spec), cfg)
+	return parseConfigs(cfg, false, [][]byte{spec})
 }
 
 // ParseConfigFile reads a yaml config file as per ParseConfig
@@ -48,7 +35,41 @@ func ParseConfigString(spec string, cfg any) error {
 //
 // Deprecated: Use ParseConfigFiles instead.
 func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
-	return parseConfigFile(ctx, filename, cfg, ParseConfig)
+	return parseConfigFiles(ctx, cfg, false, []string{filename})
+}
+
+// ParseConfigFileStrict is like ParseConfigFile but reports an error if there
+// are unknown fields in the yaml specification.
+//
+// Deprecated: Use ParseConfigFilesStrict instead.
+func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error {
+	return parseConfigFiles(ctx, cfg, true, []string{filename})
+}
+
+// ParseConfigs merges the YAML content of each spec into cfg. Specs are
+// processed in order; a field present in a later spec overrides the value set
+// by an earlier one, while fields only in an earlier spec are retained.
+func ParseConfigs(cfg any, specs ...[]byte) error {
+	return parseConfigs(cfg, false, specs)
+}
+
+// ParseConfigsStrict is like ParseConfigs but reports an error if there are unknown fields in the yaml specification.
+func ParseConfigsStrict(cfg any, specs ...[]byte) error {
+	return parseConfigs(cfg, true, specs)
+}
+
+// ParseConfigFiles reads and merges the YAML contents of each named file into
+// cfg. Files are processed in order; a field present in a later file overrides
+// the value set by an earlier one, while fields only in an earlier file are
+// retained. At least one filename must be supplied.
+func ParseConfigFiles(ctx context.Context, cfg any, filenames ...string) error {
+	return parseConfigFiles(ctx, cfg, false, filenames)
+}
+
+// ParseConfigFilesStrict is like ParseConfigFiles but reports an error if any
+// file contains unknown fields.
+func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) error {
+	return parseConfigFiles(ctx, cfg, true, filenames)
 }
 
 type parseState struct {
@@ -63,7 +84,49 @@ func newParseState(strict bool) *parseState {
 	}
 }
 
+var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
+
 func (p *parseState) parse(filename string, spec []byte, cfg any) error {
+	allAnchorFields(p.anchors, spec)
+	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	if p.strict {
+		dec.KnownFields(true)
+	}
+	for {
+		err := dec.Decode(cfg)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err == nil {
+			continue
+		}
+
+		if len(p.anchors) == 0 {
+			return errorWithSource(filename, spec, err)
+		}
+
+		yerr, ok := err.(*yaml.TypeError)
+		if !ok {
+			return errorWithSource(filename, spec, err)
+		}
+
+		var filtered []string
+		for _, errStr := range yerr.Errors {
+			matches := unknownFieldRE.FindStringSubmatch(errStr)
+			if len(matches) == 2 {
+				fieldName := matches[1]
+				if _, ok := p.anchors[fieldName]; ok {
+					continue
+				}
+			}
+			filtered = append(filtered, errStr)
+		}
+
+		if len(filtered) > 0 {
+			yerr.Errors = filtered
+			return errorWithSource(filename, spec, yerr)
+		}
+	}
 	return nil
 }
 
@@ -77,47 +140,65 @@ type anchorNode struct {
 // whose values carry a YAML anchor (&name) are permitted: they exist only
 // to provide reusable values for alias references and are not struct fields.
 func ParseConfigStrict(spec []byte, cfg any) error {
-	anchors := map[string]anchorNode{}
-	allAnchorFields(anchors, spec)
-	dec := yaml.NewDecoder(bytes.NewReader(spec))
-	dec.KnownFields(true)
-	for {
-		err := dec.Decode(cfg)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err == nil {
-			continue
-		}
+	return parseConfigs(cfg, true, [][]byte{spec})
+	/*
+		anchors := map[string]anchorNode{}
 
-		if len(anchors) == 0 {
-			return ErrorWithSource(spec, err)
-		}
+		return nil*/
+}
 
-		yerr, ok := err.(*yaml.TypeError)
-		if !ok {
-			return ErrorWithSource(spec, err)
+func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []string) error {
+	if len(filenames) == 0 {
+		return fmt.Errorf("no config files specified")
+	}
+	ps := newParseState(strict)
+	for _, filename := range filenames {
+		if len(filename) == 0 {
+			return fmt.Errorf("one of the filenames in %v is empty", filenames)
 		}
-
-		unknownFieldRE := regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
-		var filtered []string
-		for _, errStr := range yerr.Errors {
-			matches := unknownFieldRE.FindStringSubmatch(errStr)
-			if len(matches) == 2 {
-				fieldName := matches[1]
-				if _, ok := anchors[fieldName]; ok {
-					continue
-				}
-			}
-			filtered = append(filtered, errStr)
+		spec, err := file.FSReadFile(ctx, filename)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", filename, err)
 		}
-
-		if len(filtered) > 0 {
-			yerr.Errors = filtered
-			return ErrorWithSource(spec, yerr)
+		if err := ps.parse(filename, spec, cfg); err != nil {
+			return rewriteYAMLError(err, filenames, [][]byte{spec})
 		}
 	}
 	return nil
+	/*
+		var err error
+		if strict {
+			err = ParseConfigsStrict(cfg, specs...)
+		} else {
+			err = ParseConfigs(cfg, specs...)
+		}
+		if err != nil {
+			return rewriteYAMLError(err, filenames, specs)
+		}
+		return nil*/
+}
+
+func parseConfigs(cfg any, strict bool, specs [][]byte) error {
+	if len(specs) == 0 {
+		return fmt.Errorf("no config specs provided")
+	}
+	ps := newParseState(strict)
+	for _, spec := range specs {
+		if err := ps.parse("", spec, cfg); err != nil {
+			return rewriteYAMLError(err, nil, specs)
+		}
+	}
+	return nil
+	/*
+		var combined bytes.Buffer
+		for i, spec := range specs {
+			if i > 0 {
+				combined.WriteString("\n---\n")
+			}
+			combined.Write(spec)
+		}
+		return parser(combined.Bytes(), cfg)*/
+
 }
 
 // allAnchorFields returns the names of all mapping keys in spec, at any
@@ -164,75 +245,6 @@ func collectAnchorFields(fields map[string]anchorNode, node *yaml.Node) {
 		}
 		// AliasNode: skip — the anchor is recorded at its definition site.
 	}
-}
-
-// ParseConfigStringStrict is like ParseConfigString but reports an error if there
-// are unknown fields in the yaml specification.
-func ParseConfigStringStrict(spec string, cfg any) error {
-	return ParseConfigStrict([]byte(spec), cfg)
-}
-
-// ParseConfigFileStrict is like ParseConfigFile but reports an error if there
-// are unknown fields in the yaml specification.
-//
-// Deprecated: Use ParseConfigFilesStrict instead.
-func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error {
-	return parseConfigFile(ctx, filename, cfg, ParseConfigStrict)
-}
-
-// ParseConfigs merges the YAML content of each spec into cfg. Specs are
-// processed in order; a field present in a later spec overrides the value set
-// by an earlier one, while fields only in an earlier spec are retained.
-func ParseConfigs(cfg any, specs ...[]byte) error {
-	return parseConfigs(cfg, ParseConfig, specs)
-}
-
-// ParseConfigsStrict is like ParseConfigs but reports an error if any spec
-// contains unknown fields.
-func ParseConfigsStrict(cfg any, specs ...[]byte) error {
-	return parseConfigs(cfg, ParseConfigStrict, specs)
-}
-
-// ParseConfigFiles reads and merges the YAML contents of each named file into
-// cfg. Files are processed in order; a field present in a later file overrides
-// the value set by an earlier one, while fields only in an earlier file are
-// retained. At least one filename must be supplied.
-func ParseConfigFiles(ctx context.Context, cfg any, filenames ...string) error {
-	return parseConfigFiles(ctx, cfg, false, filenames)
-}
-
-// ParseConfigFilesStrict is like ParseConfigFiles but reports an error if any
-// file contains unknown fields.
-func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) error {
-	return parseConfigFiles(ctx, cfg, true, filenames)
-}
-
-func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []string) error {
-	if len(filenames) == 0 {
-		return fmt.Errorf("no config files specified")
-	}
-	specs := make([][]byte, len(filenames))
-	for i, filename := range filenames {
-		if len(filename) == 0 {
-			return fmt.Errorf("one of the filenames in %v is empty", filenames)
-		}
-		data, err := file.FSReadFile(ctx, filename)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", filename, err)
-		}
-		specs[i] = data
-	}
-
-	var err error
-	if strict {
-		err = ParseConfigsStrict(cfg, specs...)
-	} else {
-		err = ParseConfigs(cfg, specs...)
-	}
-	if err != nil {
-		return rewriteYAMLError(err, filenames, specs)
-	}
-	return nil
 }
 
 func rewriteYAMLError(err error, filenames []string, specs [][]byte) error {
@@ -286,20 +298,7 @@ func rewriteYAMLError(err error, filenames []string, specs [][]byte) error {
 	return fmt.Errorf("failed to parse config files: %w", err)
 }
 
-func parseConfigs(cfg any, parser func([]byte, any) error, specs [][]byte) error {
-	if len(specs) == 0 {
-		return nil
-	}
-	var combined bytes.Buffer
-	for i, spec := range specs {
-		if i > 0 {
-			combined.WriteString("\n---\n")
-		}
-		combined.Write(spec)
-	}
-	return parser(combined.Bytes(), cfg)
-}
-
+/*
 func parseConfigFile(ctx context.Context, filename string, cfg any, parser func([]byte, any) error) error {
 	if len(filename) == 0 {
 		return fmt.Errorf("no config file specified")
@@ -312,19 +311,19 @@ func parseConfigFile(ctx context.Context, filename string, cfg any, parser func(
 		return fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 	return nil
-}
+}*/
 
-// ErrorWithSource returns an error that includes the yaml source
+// errorWithSource returns an error that includes the yaml source
 // code that was the cause of the error to help with debugging YAML
 // errors.
 // Note that the errors reported for the yaml parser may be inaccurate
 // in terms of the lines the error is reported on. This seems to be particularly
 // true for lists where errors with use of tabs to indent are often reported
 // against the previous line rather than the offending one.
-func ErrorWithSource(spec []byte, err error) error {
+func errorWithSource(filename string, spec []byte, err error) error {
 	specLines := bytes.Split(spec, []byte{'\n'})
 	if yerr, ok := err.(*yaml.TypeError); ok {
-		return yamlTypeErrorWithSource(specLines, yerr)
+		return yamlTypeErrorWithSource(filename, specLines, yerr)
 	}
 	return yamlPanicErrorWithSource(specLines, err)
 }
@@ -355,7 +354,7 @@ func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
 
 var yamlTypeErrsRE = regexp.MustCompile(`\s*line (\d+):\s*(.*)`)
 
-func yamlTypeErrorWithSource(specLines [][]byte, err *yaml.TypeError) error {
+func yamlTypeErrorWithSource(filename string, specLines [][]byte, err *yaml.TypeError) error {
 	newErrors := make([]string, 0, len(err.Errors))
 	for _, errLine := range err.Errors {
 		matches := yamlTypeErrsRE.FindStringSubmatch(errLine)
@@ -368,7 +367,11 @@ func yamlTypeErrorWithSource(specLines [][]byte, err *yaml.TypeError) error {
 			newErrors = append(newErrors, errLine)
 			continue
 		}
-		newErrors = append(newErrors, fmt.Sprintf("line %d: %q: %v", l, specLines[l-1], matches[2]))
+		if filename != "" {
+			newErrors = append(newErrors, fmt.Sprintf("%s: line %d: %q: %v", filename, l, specLines[l-1], matches[2]))
+		} else {
+			newErrors = append(newErrors, fmt.Sprintf("line %d: %q: %v", l, specLines[l-1], matches[2]))
+		}
 	}
 	return &yaml.TypeError{Errors: newErrors}
 }

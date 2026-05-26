@@ -54,7 +54,7 @@ list:
 	  - b
 `, `yaml: line 3: "  - a": found a tab character that violates indentation`},
 	} {
-		err := cmdyaml.ParseConfigString(tc.input, &ts)
+		err := cmdyaml.ParseConfig([]byte(tc.input), &ts)
 		if err == nil || strings.TrimSpace(err.Error()) != tc.errMsg {
 			t.Errorf("%v: got %v, want %v", i, err, tc.errMsg)
 		}
@@ -284,7 +284,7 @@ a: hello
 <<: *defaults
 `
 	var cfg mergeStruct
-	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err != nil {
+	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.A != "hello" {
@@ -309,7 +309,7 @@ nested:
   <<: *sub_defaults
 `
 	var cfg nestedMergeStruct
-	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err != nil {
+	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Top != "hello" {
@@ -343,7 +343,7 @@ items:
     value: direct
 `
 	var cfg seqStruct
-	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err != nil {
+	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(cfg.Items) != 2 {
@@ -371,7 +371,7 @@ unknown_field: bad
 a: hello
 `
 	var cfg mergeStruct
-	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err == nil {
+	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err == nil {
 		t.Fatal("expected error for unknown_field, got nil")
 	}
 }
@@ -395,7 +395,7 @@ a: hello
 unknown: bad
 `
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
@@ -436,7 +436,7 @@ func TestErrorLineNumber_StrictUnknownField(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var cfg mergeStruct
-			err := cmdyaml.ParseConfigStringStrict(tc.input, &cfg)
+			err := cmdyaml.ParseConfigStrict([]byte(tc.input), &cfg)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -458,7 +458,7 @@ func TestErrorLineNumber_StrictUnknownField(t *testing.T) {
 func TestErrorLineNumber_MultipleUnknownFields(t *testing.T) {
 	const input = "a: hello\nunknown1: bad\nb: world\nunknown2: also-bad\n"
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -479,7 +479,7 @@ func TestErrorLineNumber_TypeMismatch(t *testing.T) {
 	// testStruct.Field expects []int; a map value triggers a TypeError.
 	const input = "field:\n  sub: not-an-int\n"
 	var ts testStruct
-	err := cmdyaml.ParseConfigString(input, &ts)
+	err := cmdyaml.ParseConfig([]byte(input), &ts)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -509,7 +509,7 @@ _d: &d
 a: hello
 `
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
@@ -543,7 +543,7 @@ b: {p: 6, q: 7, v: 1, w: 2, x: 3, y: 4, z: 5}
 unknown: bad
 `
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
@@ -561,12 +561,12 @@ func TestStrictParse(t *testing.T) {
 field: [1,2]
 unknown: [3,4]
 `
-	err := cmdyaml.ParseConfigString(input, &ts)
+	err := cmdyaml.ParseConfigStrict([]byte(input), &ts)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
 
-	err = cmdyaml.ParseConfigStringStrict(input, &ts)
+	err = cmdyaml.ParseConfigStrict([]byte(input), &ts)
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
