@@ -88,6 +88,19 @@ reusable values for alias references and are not struct fields.
 
 Deprecated: Use ParseConfigsStrict instead.
 
+### Func ParseConfigString
+```go
+func ParseConfigString(spec string, cfg any) error
+```
+ParseConfigString parses the yaml config in spec (as a string) into cfg.
+
+### Func ParseConfigStringStrict
+```go
+func ParseConfigStringStrict(spec string, cfg any) error
+```
+ParseConfigStringStrict is like ParseConfigString but reports an error if
+there are unknown fields in the yaml specification.
+
 ### Func ParseConfigs
 ```go
 func ParseConfigs(cfg any, specs ...[]byte) error

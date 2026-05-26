@@ -71,6 +71,17 @@ func ParseConfigsStrict(cfg any, specs ...[]byte) error {
 	return parseConfigs(cfg, true, specs)
 }
 
+// ParseConfigString parses the yaml config in spec (as a string) into cfg.
+func ParseConfigString(spec string, cfg any) error {
+	return parseConfigs(cfg, false, [][]byte{[]byte(spec)})
+}
+
+// ParseConfigStringStrict is like ParseConfigString but reports an error if
+// there are unknown fields in the yaml specification.
+func ParseConfigStringStrict(spec string, cfg any) error {
+	return parseConfigs(cfg, true, [][]byte{[]byte(spec)})
+}
+
 // ParseConfigFiles reads and merges the YAML contents of each named file into
 // cfg. Files are processed in order; a field present in a later file overrides
 // the value set by an earlier one, while fields only in an earlier file are
@@ -114,18 +125,37 @@ func (p *parseState) buildPreamble() []byte {
 }
 
 var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
+var preambleSep = []byte("\n---\n")
 
 func (p *parseState) parse(filename string, spec []byte, cfg any) error {
-	anchorSpec := p.buildPreamble()
-	var lineAdjustment int
-	if len(anchorSpec) > 0 {
-		anchorSpec = append(anchorSpec, []byte("\n---\n")...)
-		lineAdjustment = bytes.Count(anchorSpec, []byte{'\n'})
-		spec = append(anchorSpec, spec...)
-	}
+	// Build the preamble from anchors accumulated by previous specs, then
+	// register this spec's own anchors (for use by future specs and for
+	// error filtering below).
+	preamble := p.buildPreamble()
 	p.allAnchorFields(spec)
 
-	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	// Create a single decoder over a two-document stream:
+	//   document 1 – preamble (anchor definitions from prior specs)
+	//   document 2 – the actual spec
+	// Decoding the preamble into a dummy yaml.Node registers its anchors in
+	// the decoder's internal state so that alias references in the spec can
+	// resolve, without touching cfg or triggering KnownFields errors.
+	// The separator "\n---\n" contributes to line-number offsets reported by
+	// the decoder; lineAdjustment corrects those back to spec-local line numbers.
+	var dec *yaml.Decoder
+	var lineAdjustment int
+	if len(preamble) > 0 {
+		combined := append(append(preamble, preambleSep...), spec...)
+		lineAdjustment = bytes.Count(preamble, []byte{'\n'}) + bytes.Count(preambleSep, []byte{'\n'})
+		dec = yaml.NewDecoder(bytes.NewReader(combined))
+		var dummy yaml.Node
+		if err := dec.Decode(&dummy); err != nil && !errors.Is(err, io.EOF) {
+			return errorWithSource(filename, 0, spec, err)
+		}
+	} else {
+		dec = yaml.NewDecoder(bytes.NewReader(spec))
+	}
+
 	if p.strict {
 		dec.KnownFields(true)
 	}
@@ -186,7 +216,7 @@ func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []str
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
 		if err := ps.parse(filename, spec, cfg); err != nil {
-			return err //rewriteYAMLError(err, filenames, [][]byte{spec})
+			return err
 		}
 	}
 	return nil
@@ -199,7 +229,7 @@ func parseConfigs(cfg any, strict bool, specs [][]byte) error {
 	ps := newParseState(strict)
 	for _, spec := range specs {
 		if err := ps.parse("", spec, cfg); err != nil {
-			return err // rewriteYAMLError(err, nil, specs)
+			return err
 		}
 	}
 	return nil
@@ -209,7 +239,7 @@ func parseConfigs(cfg any, strict bool, specs [][]byte) error {
 // nesting level, whose values carry a YAML anchor (&name). These fields exist
 // solely to define reusable anchors and are not themselves configuration
 // struct fields.
-func (p *parseState) allAnchorFields(spec []byte) map[string]anchorNode {
+func (p *parseState) allAnchorFields(spec []byte) {
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	for {
 		var doc yaml.Node
@@ -218,10 +248,6 @@ func (p *parseState) allAnchorFields(spec []byte) map[string]anchorNode {
 		}
 		p.collectAnchorFields(&doc)
 	}
-	if len(p.anchors) == 0 {
-		return nil
-	}
-	return p.anchors
 }
 
 func (p *parseState) collectAnchorFields(node *yaml.Node) {
@@ -307,15 +333,19 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 			continue
 		}
 		l, err := strconv.ParseInt(matches[1], 10, 32)
-		if err != nil || l < 1 || int(l) > len(specLines) {
+		if err != nil {
 			newErrors = append(newErrors, errLine)
 			continue
 		}
 		errLineNum := l - int64(lineAdjustment)
+		if errLineNum < 1 || int(errLineNum) > len(specLines) {
+			newErrors = append(newErrors, errLine)
+			continue
+		}
 		if filename != "" {
-			newErrors = append(newErrors, fmt.Sprintf("%s: line %d: %q: %v", filename, errLineNum, specLines[l-1], matches[2]))
+			newErrors = append(newErrors, fmt.Sprintf("%s: line %d: %q: %v", filename, errLineNum, specLines[errLineNum-1], matches[2]))
 		} else {
-			newErrors = append(newErrors, fmt.Sprintf("line %d: %q: %v", errLineNum, specLines[l-1], matches[2]))
+			newErrors = append(newErrors, fmt.Sprintf("line %d: %q: %v", errLineNum, specLines[errLineNum-1], matches[2]))
 		}
 	}
 	return &yaml.TypeError{Errors: newErrors}
