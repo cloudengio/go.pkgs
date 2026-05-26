@@ -271,6 +271,40 @@ func TestParseConfigsStrict(t *testing.T) {
 	}
 }
 
+// TestCrossSpecAnchorOrdering verifies that when one anchor's value references
+// another anchor via *alias, the preamble injected for later specs emits
+// anchor definitions in dependency order regardless of map-iteration ordering.
+// spec1 defines _base and _ext where _ext merges *base; spec2 references *ext.
+// The preamble for spec2 must emit _base before _ext so that *base inside
+// _ext's serialised value resolves correctly. Running 100 iterations exposes
+// non-determinism, because Go randomises map iteration on every pass.
+func TestCrossSpecAnchorOrdering(t *testing.T) {
+	type result struct {
+		X int
+		Y int
+	}
+	spec1 := []byte(`
+_base: &base
+  x: 1
+_ext: &ext
+  <<: *base
+  y: 2
+`)
+	spec2 := []byte(`<<: *ext`)
+	for range 100 {
+		var cfg result
+		if err := cmdyaml.ParseConfigs(&cfg, spec1, spec2); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.X != 1 {
+			t.Errorf("X: got %d, want 1", cfg.X)
+		}
+		if cfg.Y != 2 {
+			t.Errorf("Y: got %d, want 2", cfg.Y)
+		}
+	}
+}
+
 // TestParseConfigStrictAnchorAllowed verifies that a top-level field whose
 // value carries a YAML anchor does not trigger a strict-mode unknown-field
 // error. The anchor is consumed via a merge key (<<) so its content appears

@@ -88,28 +88,32 @@ func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) e
 type parseState struct {
 	strict  bool
 	anchors map[string]anchorNode
+	order   []string
 }
 
 func newParseState(strict bool) *parseState {
 	return &parseState{
 		strict:  strict,
 		anchors: map[string]anchorNode{},
+		order:   []string{},
 	}
 }
-
-var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
 
 func (p *parseState) buildPreamble() []byte {
 	if len(p.anchors) == 0 {
 		return nil
 	}
 	content := make([]*yaml.Node, 0, 2*len(p.anchors))
-	for _, an := range p.anchors {
-		content = append(content, an.key, an.value)
+	for _, name := range p.order {
+		if an, ok := p.anchors[name]; ok {
+			content = append(content, an.key, an.value)
+		}
 	}
 	data, _ := yaml.Marshal(&yaml.Node{Kind: yaml.MappingNode, Content: content})
 	return data
 }
+
+var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
 
 func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 	anchorSpec := p.buildPreamble()
@@ -119,7 +123,7 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 		lineAdjustment = bytes.Count(anchorSpec, []byte{'\n'})
 		spec = append(anchorSpec, spec...)
 	}
-	allAnchorFields(p.anchors, spec)
+	p.allAnchorFields(spec)
 
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	if p.strict {
@@ -205,42 +209,44 @@ func parseConfigs(cfg any, strict bool, specs [][]byte) error {
 // nesting level, whose values carry a YAML anchor (&name). These fields exist
 // solely to define reusable anchors and are not themselves configuration
 // struct fields.
-func allAnchorFields(fields map[string]anchorNode, spec []byte) map[string]anchorNode {
+func (p *parseState) allAnchorFields(spec []byte) map[string]anchorNode {
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	for {
 		var doc yaml.Node
 		if err := dec.Decode(&doc); err != nil {
 			break // catches io.EOF
 		}
-		collectAnchorFields(fields, &doc)
+		p.collectAnchorFields(&doc)
 	}
-	if len(fields) == 0 {
+	if len(p.anchors) == 0 {
 		return nil
 	}
-	return fields
+	return p.anchors
 }
 
-func collectAnchorFields(fields map[string]anchorNode, node *yaml.Node) {
+func (p *parseState) collectAnchorFields(node *yaml.Node) {
 	if node == nil {
 		return
 	}
 	switch node.Kind {
 	case yaml.DocumentNode:
 		for _, child := range node.Content {
-			collectAnchorFields(fields, child)
+			p.collectAnchorFields(child)
 		}
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
 			if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
-				fields[keyNode.Value] = anchorNode{key: keyNode, value: valNode}
+				p.anchors[keyNode.Value] = anchorNode{key: keyNode, value: valNode}
+				p.order = append(p.order, keyNode.Value)
+				continue
 			}
-			collectAnchorFields(fields, valNode)
+			p.collectAnchorFields(valNode)
 		}
 	case yaml.SequenceNode:
 		for _, child := range node.Content {
-			collectAnchorFields(fields, child)
+			p.collectAnchorFields(child)
 		}
 		// AliasNode: skip — the anchor is recorded at its definition site.
 	}
