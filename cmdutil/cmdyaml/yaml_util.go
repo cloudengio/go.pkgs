@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,8 +58,8 @@ func ParseConfigStrict(spec []byte, cfg any) error {
 		}
 		return nil
 	}
-	// Expand all alias references by parsing into a generic map, strip the
-	// anchor-definition fields, then re-marshal for strict decoding.
+	// Build cleaned YAML: expand all alias references into a generic map,
+	// remove anchor-definition fields, re-marshal.
 	var raw map[string]any
 	if err := yaml.Unmarshal(spec, &raw); err != nil {
 		return ErrorWithSource(spec, err)
@@ -70,13 +71,20 @@ func ParseConfigStrict(spec []byte, cfg any) error {
 	if err != nil {
 		return err
 	}
+	// Strict field-name check first: decode cleaned into a zero-value dummy of
+	// the same type so unknown fields are caught before cfg is touched.
+	// Error line numbers reference cleaned (not spec) because the marshal
+	// round-trip may reorder or expand flow nodes.
+	dummy := reflect.New(reflect.TypeOf(cfg).Elem()).Interface()
 	dec := yaml.NewDecoder(bytes.NewReader(cleaned))
 	dec.KnownFields(true)
-	if err := dec.Decode(cfg); err != nil {
-		// Error line numbers are from 'cleaned', not 'spec': the marshal/unmarshal
-		// round-trip reorders keys and expands flow nodes, so we must annotate
-		// against 'cleaned' to avoid an out-of-bounds panic or misleading context.
+	if err := dec.Decode(dummy); err != nil {
 		return ErrorWithSource(cleaned, err)
+	}
+	// Strict check passed: decode spec faithfully into cfg, preserving all
+	// custom types (Deferred, ByteSize, …) via their UnmarshalYAML methods.
+	if err := yaml.Unmarshal(spec, cfg); err != nil {
+		return ErrorWithSource(spec, err)
 	}
 	return nil
 }
