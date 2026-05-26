@@ -73,7 +73,10 @@ func ParseConfigStrict(spec []byte, cfg any) error {
 	dec := yaml.NewDecoder(bytes.NewReader(cleaned))
 	dec.KnownFields(true)
 	if err := dec.Decode(cfg); err != nil {
-		return ErrorWithSource(spec, err)
+		// Error line numbers are from 'cleaned', not 'spec': the marshal/unmarshal
+		// round-trip reorders keys and expands flow nodes, so we must annotate
+		// against 'cleaned' to avoid an out-of-bounds panic or misleading context.
+		return ErrorWithSource(cleaned, err)
 	}
 	return nil
 }
@@ -221,7 +224,7 @@ func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
 			continue
 		}
 		l, err := strconv.ParseInt(matches[2], 10, 32)
-		if err != nil {
+		if err != nil || l < 1 || int(l) > len(specLines) {
 			newError.WriteString(errLine)
 			newError.WriteRune('\n')
 			continue
@@ -242,7 +245,7 @@ func yamlTypeErrorWithSource(specLines [][]byte, err *yaml.TypeError) error {
 			continue
 		}
 		l, err := strconv.ParseInt(matches[1], 10, 32)
-		if err != nil {
+		if err != nil || l < 1 || int(l) > len(specLines) {
 			newErrors = append(newErrors, errLine)
 			continue
 		}

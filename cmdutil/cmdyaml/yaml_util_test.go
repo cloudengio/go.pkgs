@@ -6,6 +6,7 @@ package cmdyaml_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,6 +272,185 @@ a: hello
 	var cfg mergeStruct
 	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err == nil {
 		t.Fatal("expected error for unknown_field, got nil")
+	}
+}
+
+// TestParseConfigStrictAnchorUnknownNoPanic verifies that an unknown field
+// error in the anchor-expansion path does not panic. Before the fix,
+// ErrorWithSource was called with spec but error line numbers referred to the
+// re-marshalled cleaned form, which can have more lines than spec (keys are
+// sorted alphabetically and flow-style values are expanded), causing an
+// out-of-bounds index into specLines.
+func TestParseConfigStrictAnchorUnknownNoPanic(t *testing.T) {
+	// The anchor definition field (_d) is stripped before strict decoding.
+	// cleaned = yaml.Marshal({"a":"hello","unknown":"bad"}) which sorts keys
+	// and may differ in line count from the original spec.
+	// An unknown field in cleaned must not panic ErrorWithSource.
+	const input = `
+_d: &d
+  b: from-anchor
+
+a: hello
+unknown: bad
+`
+	var cfg mergeStruct
+	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	// Confirm it did not panic and the error is non-empty.
+	if err.Error() == "" {
+		t.Error("expected non-empty error message")
+	}
+}
+
+// TestErrorLineNumber_StrictUnknownField verifies that the line number and
+// source content in a strict-mode unknown-field error accurately reflect the
+// position and text of the offending field in the original spec.
+func TestErrorLineNumber_StrictUnknownField(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		input       string
+		wantLine    int
+		wantContent string
+	}{
+		{
+			name:        "unknown field on line 1",
+			input:       "unknown: bad\na: hello\n",
+			wantLine:    1,
+			wantContent: "unknown: bad",
+		},
+		{
+			name:        "unknown field on line 2",
+			input:       "a: hello\nunknown: bad\n",
+			wantLine:    2,
+			wantContent: "unknown: bad",
+		},
+		{
+			name:        "unknown field after blank line",
+			input:       "a: hello\n\nunknown: bad\n",
+			wantLine:    3,
+			wantContent: "unknown: bad",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg mergeStruct
+			err := cmdyaml.ParseConfigStringStrict(tc.input, &cfg)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			msg := err.Error()
+			wantPrefix := fmt.Sprintf("line %d:", tc.wantLine)
+			if !strings.Contains(msg, wantPrefix) {
+				t.Errorf("error %q does not contain %q", msg, wantPrefix)
+			}
+			if !strings.Contains(msg, tc.wantContent) {
+				t.Errorf("error %q does not contain source content %q", msg, tc.wantContent)
+			}
+		})
+	}
+}
+
+// TestErrorLineNumber_MultipleUnknownFields verifies that each unknown-field
+// error carries an accurate line number and source content when multiple
+// unknown fields are present in a single spec.
+func TestErrorLineNumber_MultipleUnknownFields(t *testing.T) {
+	const input = "a: hello\nunknown1: bad\nb: world\nunknown2: also-bad\n"
+	var cfg mergeStruct
+	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		`line 2:`, `unknown1: bad`,
+		`line 4:`, `unknown2: also-bad`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q does not contain %q", msg, want)
+		}
+	}
+}
+
+// TestErrorLineNumber_TypeMismatch verifies that a type-mismatch error
+// reports the correct line and shows the offending source content.
+func TestErrorLineNumber_TypeMismatch(t *testing.T) {
+	// testStruct.Field expects []int; a map value triggers a TypeError.
+	const input = "field:\n  sub: not-an-int\n"
+	var ts testStruct
+	err := cmdyaml.ParseConfigString(input, &ts)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "line 2:") {
+		t.Errorf("error %q does not contain \"line 2:\"", msg)
+	}
+	if !strings.Contains(msg, "sub: not-an-int") {
+		t.Errorf("error %q does not contain the offending source line", msg)
+	}
+}
+
+// TestErrorLineNumber_AnchorPathAccuracy verifies error-source accuracy when
+// the anchor-expansion path is taken. Because cleaned is re-marshalled (keys
+// sorted, flow nodes expanded) its line numbers differ from spec. The error
+// must reference content from cleaned (not spec), must name the unknown field,
+// and must not panic.
+func TestErrorLineNumber_AnchorPathAccuracy(t *testing.T) {
+	// 'unknown' appears on line 3 of spec (after the anchor block) but on
+	// line 1 of cleaned (keys are sorted: 'a' < 'unknown' is false here —
+	// 'a' sorts before 'u', so cleaned = "a: hello\nunknown: bad\n").
+	// Either way, ErrorWithSource uses cleaned, so the source context shown
+	// in the error must come from cleaned, not spec.
+	const input = `unknown: bad
+_d: &d
+  b: from-anchor
+a: hello
+`
+	var cfg mergeStruct
+	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	msg := err.Error()
+	// The unknown field name must appear in the error.
+	if !strings.Contains(msg, "unknown") {
+		t.Errorf("error %q should name the unknown field", msg)
+	}
+	// The source content in the error comes from cleaned, where the line text
+	// for the unknown field is always "unknown: bad".
+	if !strings.Contains(msg, "unknown: bad") {
+		t.Errorf("error %q should include offending field text from cleaned form", msg)
+	}
+}
+
+// TestErrorLineNumber_FlowExpansionNoPanic verifies that when a non-anchor
+// field contains a flow-style map that gets expanded to multiple block lines
+// in cleaned, ErrorWithSource does not panic even though cleaned may have
+// more lines than spec.
+func TestErrorLineNumber_FlowExpansionNoPanic(t *testing.T) {
+	// After stripping _d, cleaned = yaml.Marshal({"a":"hello",
+	// "b":{"p":6,"q":7,"v":1,"w":2,"x":3,"y":4,"z":5}, "unknown":"bad"}).
+	// That expands b's flow map into 7 sub-lines, pushing 'unknown' to a
+	// line beyond the total line count of spec. Before the fix this caused
+	// a panic; after the fix ErrorWithSource uses cleaned, so lines always
+	// stay in range.
+	const input = `_d: &d
+  ignored: value
+a: hello
+b: {p: 6, q: 7, v: 1, w: 2, x: 3, y: 4, z: 5}
+unknown: bad
+`
+	var cfg mergeStruct
+	err := cmdyaml.ParseConfigStringStrict(input, &cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	if err.Error() == "" {
+		t.Error("expected non-empty error message")
+	}
+	if !strings.Contains(err.Error(), "unknown") {
+		t.Errorf("error %q should mention the unknown field", err.Error())
 	}
 }
 
