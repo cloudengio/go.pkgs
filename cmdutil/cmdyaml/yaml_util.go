@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,8 +22,15 @@ import (
 // ParseConfig will parse the yaml config in spec into the requested
 // type. It provides improved error reporting via ErrorWithSource.
 func ParseConfig(spec []byte, cfg any) error {
-	if err := yaml.Unmarshal(spec, cfg); err != nil {
-		return ErrorWithSource(spec, err)
+	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	for {
+		err := dec.Decode(cfg)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return ErrorWithSource(spec, err)
+		}
 	}
 	return nil
 }
@@ -49,66 +57,68 @@ func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
 // to provide reusable values for alias references and are not struct fields.
 func ParseConfigStrict(spec []byte, cfg any) error {
 	anchors := topLevelAnchorFields(spec)
-	if len(anchors) == 0 {
-		dec := yaml.NewDecoder(bytes.NewReader(spec))
-		dec.KnownFields(true)
-		if err := dec.Decode(cfg); err != nil {
-			return ErrorWithSource(spec, err)
-		}
-		return nil
-	}
-
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	dec.KnownFields(true)
-	err := dec.Decode(cfg)
-	if err == nil {
-		return nil
-	}
-
-	yerr, ok := err.(*yaml.TypeError)
-	if !ok {
-		return ErrorWithSource(spec, err)
-	}
-
-	unknownFieldRE := regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
-	var filtered []string
-	for _, errStr := range yerr.Errors {
-		matches := unknownFieldRE.FindStringSubmatch(errStr)
-		if len(matches) == 2 {
-			fieldName := matches[1]
-			if anchors[fieldName] {
-				continue
-			}
+	for {
+		err := dec.Decode(cfg)
+		if errors.Is(err, io.EOF) {
+			break
 		}
-		filtered = append(filtered, errStr)
-	}
+		if err == nil {
+			continue
+		}
 
-	if len(filtered) == 0 {
-		return nil
-	}
+		if len(anchors) == 0 {
+			return ErrorWithSource(spec, err)
+		}
 
-	yerr.Errors = filtered
-	return ErrorWithSource(spec, yerr)
+		yerr, ok := err.(*yaml.TypeError)
+		if !ok {
+			return ErrorWithSource(spec, err)
+		}
+
+		unknownFieldRE := regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
+		var filtered []string
+		for _, errStr := range yerr.Errors {
+			matches := unknownFieldRE.FindStringSubmatch(errStr)
+			if len(matches) == 2 {
+				fieldName := matches[1]
+				if anchors[fieldName] {
+					continue
+				}
+			}
+			filtered = append(filtered, errStr)
+		}
+
+		if len(filtered) > 0 {
+			yerr.Errors = filtered
+			return ErrorWithSource(spec, yerr)
+		}
+	}
+	return nil
 }
 
 // topLevelAnchorFields returns the names of top-level mapping keys in spec
 // whose values carry a YAML anchor (&name). These fields exist solely to
 // define reusable anchors and are not themselves configuration struct fields.
 func topLevelAnchorFields(spec []byte) map[string]bool {
-	var doc yaml.Node
-	if err := yaml.Unmarshal(spec, &doc); err != nil {
-		return nil
-	}
-	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		return nil
-	}
 	fields := map[string]bool{}
-	mapping := doc.Content[0]
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		keyNode := mapping.Content[i]
-		valNode := mapping.Content[i+1]
-		if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
-			fields[keyNode.Value] = true
+	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	for {
+		var doc yaml.Node
+		if err := dec.Decode(&doc); err != nil {
+			break // Catches io.EOF.
+		}
+		if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+			continue
+		}
+		mapping := doc.Content[0]
+		for i := 0; i+1 < len(mapping.Content); i += 2 {
+			keyNode := mapping.Content[i]
+			valNode := mapping.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
+				fields[keyNode.Value] = true
+			}
 		}
 	}
 	if len(fields) == 0 {
@@ -162,7 +172,8 @@ func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []str
 	if len(filenames) == 0 {
 		return fmt.Errorf("no config files specified")
 	}
-	for _, filename := range filenames {
+	specs := make([][]byte, len(filenames))
+	for i, filename := range filenames {
 		if len(filename) == 0 {
 			return fmt.Errorf("one of the filenames in %v is empty", filenames)
 		}
@@ -170,25 +181,84 @@ func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []str
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
-		if strict {
-			err = ParseConfigStrict(data, cfg)
-		} else {
-			err = ParseConfig(data, cfg)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to parse: %q: %w", filename, err)
-		}
+		specs[i] = data
+	}
+
+	var err error
+	if strict {
+		err = ParseConfigsStrict(cfg, specs...)
+	} else {
+		err = ParseConfigs(cfg, specs...)
+	}
+	if err != nil {
+		return rewriteYAMLError(err, filenames, specs)
 	}
 	return nil
 }
 
-func parseConfigs(cfg any, parser func([]byte, any) error, specs [][]byte) error {
-	for _, spec := range specs {
-		if err := parser(spec, cfg); err != nil {
-			return err
+func rewriteYAMLError(err error, filenames []string, specs [][]byte) error {
+	lineOffsets := make([]int, len(specs))
+	cumulativeLines := 0
+	for i, spec := range specs {
+		lineOffsets[i] = cumulativeLines
+		if i > 0 {
+			// separator is \n---\n
+			cumulativeLines += 2
 		}
+		linesInSpec := bytes.Count(spec, []byte{'\n'})
+		cumulativeLines += linesInSpec
 	}
-	return nil
+
+	findFile := func(globalLine int) (filename string, localLine int) {
+		for i := len(lineOffsets) - 1; i >= 0; i-- {
+			offset := lineOffsets[i]
+			if i > 0 {
+				offset += 2
+			}
+			if globalLine > offset {
+				return filenames[i], globalLine - offset
+			}
+		}
+		if len(filenames) > 0 {
+			return filenames[0], globalLine
+		}
+		return "", globalLine
+	}
+
+	var yerr *yaml.TypeError
+	if errors.As(err, &yerr) {
+		re := regexp.MustCompile(`line (\d+): (.*)`)
+		newErrors := make([]string, len(yerr.Errors))
+		for i, errStr := range yerr.Errors {
+			matches := re.FindStringSubmatch(errStr)
+			if len(matches) != 3 {
+				newErrors[i] = errStr
+				continue
+			}
+			globalLine, _ := strconv.Atoi(matches[1])
+			filename, localLine := findFile(globalLine)
+			newErrors[i] = fmt.Sprintf("%s: line %d: %s", filename, localLine, matches[2])
+		}
+		yerr.Errors = newErrors
+		return fmt.Errorf("failed to parse config files: %w", yerr)
+	}
+	// TODO(cnicolaou): handle non-TypeError errors which are returned as generic
+	// errors and would require string matching on err.Error().
+	return fmt.Errorf("failed to parse config files: %w", err)
+}
+
+func parseConfigs(cfg any, parser func([]byte, any) error, specs [][]byte) error {
+	if len(specs) == 0 {
+		return nil
+	}
+	var combined bytes.Buffer
+	for i, spec := range specs {
+		if i > 0 {
+			combined.WriteString("\n---\n")
+		}
+		combined.Write(spec)
+	}
+	return parser(combined.Bytes(), cfg)
 }
 
 func parseConfigFile(ctx context.Context, filename string, cfg any, parser func([]byte, any) error) error {

@@ -184,6 +184,42 @@ func TestParseConfigFilesDeepMerge(t *testing.T) {
 	}
 }
 
+func TestParseConfigFilesWithAnchors(t *testing.T) {
+	dir := t.TempDir()
+	f1 := writeTempYAML(t, dir, "f1.yaml", "_defaults: &defaults\n  b: from-anchor\n")
+	f2 := writeTempYAML(t, dir, "f2.yaml", "a: hello\n<<: *defaults\n")
+
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigFiles(context.Background(), &cfg, f1, f2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.A != "hello" {
+		t.Errorf("A: got %q, want %q", cfg.A, "hello")
+	}
+	if cfg.B != "from-anchor" {
+		t.Errorf("B: got %q, want %q", cfg.B, "from-anchor")
+	}
+}
+
+func TestParseConfigFilesWithAnchorAndError(t *testing.T) {
+	dir := t.TempDir()
+	f1 := writeTempYAML(t, dir, "f1.yaml", "_defaults: &defaults\n  b: from-anchor\n")
+	// f2 has an invalid field 'd' which should cause a strict parsing error.
+	f2 := writeTempYAML(t, dir, "f2.yaml", "a: hello\n<<: *defaults\nd: error\n")
+
+	var cfg mergeStruct
+	err := cmdyaml.ParseConfigFilesStrict(context.Background(), &cfg, f1, f2)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// The error should point to line 3 of f2.yaml.
+	want := fmt.Sprintf("%s: line 3:", f2)
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error message %q does not contain %q", err.Error(), want)
+	}
+}
+
 func TestParseConfigFilesStrict(t *testing.T) {
 	dir := t.TempDir()
 	f1 := writeTempYAML(t, dir, "ok.yaml", "a: hello\n")
