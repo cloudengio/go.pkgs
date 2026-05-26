@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -58,35 +57,38 @@ func ParseConfigStrict(spec []byte, cfg any) error {
 		}
 		return nil
 	}
-	// Build cleaned YAML: expand all alias references into a generic map,
-	// remove anchor-definition fields, re-marshal.
-	var raw map[string]any
-	if err := yaml.Unmarshal(spec, &raw); err != nil {
-		return ErrorWithSource(spec, err)
-	}
-	for field := range anchors {
-		delete(raw, field)
-	}
-	cleaned, err := yaml.Marshal(raw)
-	if err != nil {
-		return err
-	}
-	// Strict field-name check first: decode cleaned into a zero-value dummy of
-	// the same type so unknown fields are caught before cfg is touched.
-	// Error line numbers reference cleaned (not spec) because the marshal
-	// round-trip may reorder or expand flow nodes.
-	dummy := reflect.New(reflect.TypeOf(cfg).Elem()).Interface()
-	dec := yaml.NewDecoder(bytes.NewReader(cleaned))
+
+	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	dec.KnownFields(true)
-	if err := dec.Decode(dummy); err != nil {
-		return ErrorWithSource(cleaned, err)
+	err := dec.Decode(cfg)
+	if err == nil {
+		return nil
 	}
-	// Strict check passed: decode spec faithfully into cfg, preserving all
-	// custom types (Deferred, ByteSize, …) via their UnmarshalYAML methods.
-	if err := yaml.Unmarshal(spec, cfg); err != nil {
+
+	yerr, ok := err.(*yaml.TypeError)
+	if !ok {
 		return ErrorWithSource(spec, err)
 	}
-	return nil
+
+	unknownFieldRE := regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
+	var filtered []string
+	for _, errStr := range yerr.Errors {
+		matches := unknownFieldRE.FindStringSubmatch(errStr)
+		if len(matches) == 2 {
+			fieldName := matches[1]
+			if anchors[fieldName] {
+				continue
+			}
+		}
+		filtered = append(filtered, errStr)
+	}
+
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	yerr.Errors = filtered
+	return ErrorWithSource(spec, yerr)
 }
 
 // topLevelAnchorFields returns the names of top-level mapping keys in spec
