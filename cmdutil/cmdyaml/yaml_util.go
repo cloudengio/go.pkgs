@@ -44,14 +44,64 @@ func ParseConfigFile(ctx context.Context, filename string, cfg any) error {
 }
 
 // ParseConfigStrict is like ParseConfig but reports an error if there
-// are unknown fields in the yaml specification.
+// are unknown fields in the yaml specification. Top-level mapping fields
+// whose values carry a YAML anchor (&name) are permitted: they exist only
+// to provide reusable values for alias references and are not struct fields.
 func ParseConfigStrict(spec []byte, cfg any) error {
-	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	anchors := topLevelAnchorFields(spec)
+	if len(anchors) == 0 {
+		dec := yaml.NewDecoder(bytes.NewReader(spec))
+		dec.KnownFields(true)
+		if err := dec.Decode(cfg); err != nil {
+			return ErrorWithSource(spec, err)
+		}
+		return nil
+	}
+	// Expand all alias references by parsing into a generic map, strip the
+	// anchor-definition fields, then re-marshal for strict decoding.
+	var raw map[string]any
+	if err := yaml.Unmarshal(spec, &raw); err != nil {
+		return ErrorWithSource(spec, err)
+	}
+	for field := range anchors {
+		delete(raw, field)
+	}
+	cleaned, err := yaml.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(cleaned))
 	dec.KnownFields(true)
 	if err := dec.Decode(cfg); err != nil {
 		return ErrorWithSource(spec, err)
 	}
 	return nil
+}
+
+// topLevelAnchorFields returns the names of top-level mapping keys in spec
+// whose values carry a YAML anchor (&name). These fields exist solely to
+// define reusable anchors and are not themselves configuration struct fields.
+func topLevelAnchorFields(spec []byte) map[string]bool {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(spec, &doc); err != nil {
+		return nil
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	fields := map[string]bool{}
+	mapping := doc.Content[0]
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		valNode := mapping.Content[i+1]
+		if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
+			fields[keyNode.Value] = true
+		}
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return fields
 }
 
 // ParseConfigStringStrict is like ParseConfigString but reports an error if there

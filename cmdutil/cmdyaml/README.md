@@ -91,7 +91,9 @@ file contains unknown fields.
 func ParseConfigStrict(spec []byte, cfg any) error
 ```
 ParseConfigStrict is like ParseConfig but reports an error if there are
-unknown fields in the yaml specification.
+unknown fields in the yaml specification. Top-level mapping fields whose
+values carry a YAML anchor (&name) are permitted: they exist only to provide
+reusable values for alias references and are not struct fields.
 
 ### Func ParseConfigString
 ```go

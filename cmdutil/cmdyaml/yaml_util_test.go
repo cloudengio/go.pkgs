@@ -234,6 +234,46 @@ func TestParseConfigsStrict(t *testing.T) {
 	}
 }
 
+// TestParseConfigStrictAnchorAllowed verifies that a top-level field whose
+// value carries a YAML anchor does not trigger a strict-mode unknown-field
+// error. The anchor is consumed via a merge key (<<) so its content appears
+// in the decoded struct.
+func TestParseConfigStrictAnchorAllowed(t *testing.T) {
+	const input = `
+_defaults: &defaults
+  b: from-anchor
+
+a: hello
+<<: *defaults
+`
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.A != "hello" {
+		t.Errorf("A: got %q, want %q", cfg.A, "hello")
+	}
+	if cfg.B != "from-anchor" {
+		t.Errorf("B: got %q, want %q", cfg.B, "from-anchor")
+	}
+}
+
+// TestParseConfigStrictAnchorPlusUnknown verifies that a genuinely unknown
+// field is still rejected even when an anchor-definition field is also present.
+func TestParseConfigStrictAnchorPlusUnknown(t *testing.T) {
+	const input = `
+_defaults: &defaults
+  b: from-anchor
+
+unknown_field: bad
+a: hello
+`
+	var cfg mergeStruct
+	if err := cmdyaml.ParseConfigStringStrict(input, &cfg); err == nil {
+		t.Fatal("expected error for unknown_field, got nil")
+	}
+}
+
 func TestStrictParse(t *testing.T) {
 	var ts testStruct
 	input := `

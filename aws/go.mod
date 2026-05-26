@@ -12,10 +12,10 @@ require (
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	github.com/alexbacchin/ssm-session-client v1.1.0
 	github.com/aws/aws-sdk-go-v2 v1.41.7
-	github.com/aws/aws-sdk-go-v2/config v1.32.17
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
+	github.com/aws/aws-sdk-go-v2/config v1.32.18
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.17
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.23
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.303.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.304.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.52.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7
@@ -27,6 +27,7 @@ require (
 )
 
 require (
+	cloudeng.io/debug v0.0.0-20260518190654-a057386f3a79 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.6 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260423192734-dcff8da8cdec // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
@@ -42,10 +43,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260518190654-a057386f3a79 // indirect
-	cloudeng.io/os v0.0.0-20260518190654-a057386f3a79 // indirect
+	cloudeng.io/algo v0.0.0-20260522180900-2a0ba73f37a3 // indirect
+	cloudeng.io/os v0.0.0-20260522180900-2a0ba73f37a3 // indirect
 	cloudeng.io/sync v0.0.11 // indirect
-	cloudeng.io/sys v0.0.0-20260518190654-a057386f3a79 // indirect
+	cloudeng.io/sys v0.0.0-20260522180900-2a0ba73f37a3 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
@@ -53,14 +54,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.24 // indirect
-	github.com/aws/aws-sdk-go-v2/service/dsql v1.13.0
+	github.com/aws/aws-sdk-go-v2/service/dsql v1.14.0
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.23 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.23 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.21 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
