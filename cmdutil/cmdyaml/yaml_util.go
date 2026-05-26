@@ -27,6 +27,16 @@ func ParseConfig(spec []byte, cfg any) error {
 	return parseConfigs(cfg, false, [][]byte{spec})
 }
 
+// ParseConfigStrict is like ParseConfig but reports an error if there
+// are unknown fields in the yaml specification. Mapping fields at any level
+// whose values carry a YAML anchor (&name) are permitted: they exist only
+// to provide reusable values for alias references and are not struct fields.
+//
+// Deprecated: Use ParseConfigsStrict instead.
+func ParseConfigStrict(spec []byte, cfg any) error {
+	return parseConfigs(cfg, true, [][]byte{spec})
+}
+
 // ParseConfigFile reads a yaml config file as per ParseConfig
 // using file.FSReadFile to read the file. The use of FSReadFile allows
 // for the configuration file to be read from storage system, including
@@ -53,7 +63,10 @@ func ParseConfigs(cfg any, specs ...[]byte) error {
 	return parseConfigs(cfg, false, specs)
 }
 
-// ParseConfigsStrict is like ParseConfigs but reports an error if there are unknown fields in the yaml specification.
+// ParseConfigsStrict is like ParseConfigs but reports an error if there are
+// unknown fields in the yaml specification.  Mapping fields at any level
+// whose values carry a YAML anchor (&name) are permitted: they exist only
+// to provide reusable values for alias references and are not struct fields.
 func ParseConfigsStrict(cfg any, specs ...[]byte) error {
 	return parseConfigs(cfg, true, specs)
 }
@@ -86,8 +99,28 @@ func newParseState(strict bool) *parseState {
 
 var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
 
+func (p *parseState) buildPreamble() []byte {
+	if len(p.anchors) == 0 {
+		return nil
+	}
+	content := make([]*yaml.Node, 0, 2*len(p.anchors))
+	for _, an := range p.anchors {
+		content = append(content, an.key, an.value)
+	}
+	data, _ := yaml.Marshal(&yaml.Node{Kind: yaml.MappingNode, Content: content})
+	return data
+}
+
 func (p *parseState) parse(filename string, spec []byte, cfg any) error {
+	anchorSpec := p.buildPreamble()
+	var lineAdjustment int
+	if len(anchorSpec) > 0 {
+		anchorSpec = append(anchorSpec, []byte("\n---\n")...)
+		lineAdjustment = bytes.Count(anchorSpec, []byte{'\n'})
+		spec = append(anchorSpec, spec...)
+	}
 	allAnchorFields(p.anchors, spec)
+
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	if p.strict {
 		dec.KnownFields(true)
@@ -102,12 +135,12 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 		}
 
 		if len(p.anchors) == 0 {
-			return errorWithSource(filename, spec, err)
+			return errorWithSource(filename, lineAdjustment, spec, err)
 		}
 
-		yerr, ok := err.(*yaml.TypeError)
-		if !ok {
-			return errorWithSource(filename, spec, err)
+		var yerr *yaml.TypeError
+		if !errors.As(err, &yerr) {
+			return errorWithSource(filename, lineAdjustment, spec, err)
 		}
 
 		var filtered []string
@@ -124,7 +157,7 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 
 		if len(filtered) > 0 {
 			yerr.Errors = filtered
-			return errorWithSource(filename, spec, yerr)
+			return errorWithSource(filename, lineAdjustment, spec, yerr)
 		}
 	}
 	return nil
@@ -133,18 +166,6 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 type anchorNode struct {
 	key   *yaml.Node
 	value *yaml.Node
-}
-
-// ParseConfigStrict is like ParseConfig but reports an error if there
-// are unknown fields in the yaml specification. Mapping fields at any level
-// whose values carry a YAML anchor (&name) are permitted: they exist only
-// to provide reusable values for alias references and are not struct fields.
-func ParseConfigStrict(spec []byte, cfg any) error {
-	return parseConfigs(cfg, true, [][]byte{spec})
-	/*
-		anchors := map[string]anchorNode{}
-
-		return nil*/
 }
 
 func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []string) error {
@@ -161,21 +182,10 @@ func parseConfigFiles(ctx context.Context, cfg any, strict bool, filenames []str
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
 		if err := ps.parse(filename, spec, cfg); err != nil {
-			return rewriteYAMLError(err, filenames, [][]byte{spec})
+			return err //rewriteYAMLError(err, filenames, [][]byte{spec})
 		}
 	}
 	return nil
-	/*
-		var err error
-		if strict {
-			err = ParseConfigsStrict(cfg, specs...)
-		} else {
-			err = ParseConfigs(cfg, specs...)
-		}
-		if err != nil {
-			return rewriteYAMLError(err, filenames, specs)
-		}
-		return nil*/
 }
 
 func parseConfigs(cfg any, strict bool, specs [][]byte) error {
@@ -185,20 +195,10 @@ func parseConfigs(cfg any, strict bool, specs [][]byte) error {
 	ps := newParseState(strict)
 	for _, spec := range specs {
 		if err := ps.parse("", spec, cfg); err != nil {
-			return rewriteYAMLError(err, nil, specs)
+			return err // rewriteYAMLError(err, nil, specs)
 		}
 	}
 	return nil
-	/*
-		var combined bytes.Buffer
-		for i, spec := range specs {
-			if i > 0 {
-				combined.WriteString("\n---\n")
-			}
-			combined.Write(spec)
-		}
-		return parser(combined.Bytes(), cfg)*/
-
 }
 
 // allAnchorFields returns the names of all mapping keys in spec, at any
@@ -235,7 +235,6 @@ func collectAnchorFields(fields map[string]anchorNode, node *yaml.Node) {
 			valNode := node.Content[i+1]
 			if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
 				fields[keyNode.Value] = anchorNode{key: keyNode, value: valNode}
-				fmt.Printf("found anchor %q for field %q\n", valNode.Anchor, keyNode.Value)
 			}
 			collectAnchorFields(fields, valNode)
 		}
@@ -247,72 +246,6 @@ func collectAnchorFields(fields map[string]anchorNode, node *yaml.Node) {
 	}
 }
 
-func rewriteYAMLError(err error, filenames []string, specs [][]byte) error {
-	lineOffsets := make([]int, len(specs))
-	cumulativeLines := 0
-	for i, spec := range specs {
-		lineOffsets[i] = cumulativeLines
-		if i > 0 {
-			// separator is \n---\n
-			cumulativeLines += 2
-		}
-		linesInSpec := bytes.Count(spec, []byte{'\n'})
-		cumulativeLines += linesInSpec
-	}
-
-	findFile := func(globalLine int) (filename string, localLine int) {
-		for i := len(lineOffsets) - 1; i >= 0; i-- {
-			offset := lineOffsets[i]
-			if i > 0 {
-				offset += 2
-			}
-			if globalLine > offset {
-				return filenames[i], globalLine - offset
-			}
-		}
-		if len(filenames) > 0 {
-			return filenames[0], globalLine
-		}
-		return "", globalLine
-	}
-
-	var yerr *yaml.TypeError
-	if errors.As(err, &yerr) {
-		re := regexp.MustCompile(`line (\d+): (.*)`)
-		newErrors := make([]string, len(yerr.Errors))
-		for i, errStr := range yerr.Errors {
-			matches := re.FindStringSubmatch(errStr)
-			if len(matches) != 3 {
-				newErrors[i] = errStr
-				continue
-			}
-			globalLine, _ := strconv.Atoi(matches[1])
-			filename, localLine := findFile(globalLine)
-			newErrors[i] = fmt.Sprintf("%s: line %d: %s", filename, localLine, matches[2])
-		}
-		yerr.Errors = newErrors
-		return fmt.Errorf("failed to parse config files: %w", yerr)
-	}
-	// TODO(cnicolaou): handle non-TypeError errors which are returned as generic
-	// errors and would require string matching on err.Error().
-	return fmt.Errorf("failed to parse config files: %w", err)
-}
-
-/*
-func parseConfigFile(ctx context.Context, filename string, cfg any, parser func([]byte, any) error) error {
-	if len(filename) == 0 {
-		return fmt.Errorf("no config file specified")
-	}
-	spec, err := file.FSReadFile(ctx, filename)
-	if err != nil {
-		return err
-	}
-	if err := parser(spec, cfg); err != nil {
-		return fmt.Errorf("failed to parse %s: %w", filename, err)
-	}
-	return nil
-}*/
-
 // errorWithSource returns an error that includes the yaml source
 // code that was the cause of the error to help with debugging YAML
 // errors.
@@ -320,17 +253,17 @@ func parseConfigFile(ctx context.Context, filename string, cfg any, parser func(
 // in terms of the lines the error is reported on. This seems to be particularly
 // true for lists where errors with use of tabs to indent are often reported
 // against the previous line rather than the offending one.
-func errorWithSource(filename string, spec []byte, err error) error {
+func errorWithSource(filename string, lineAdjustment int, spec []byte, err error) error {
 	specLines := bytes.Split(spec, []byte{'\n'})
 	if yerr, ok := err.(*yaml.TypeError); ok {
-		return yamlTypeErrorWithSource(filename, specLines, yerr)
+		return yamlTypeErrorWithSource(filename, lineAdjustment, specLines, yerr)
 	}
-	return yamlPanicErrorWithSource(specLines, err)
+	return yamlOtherErrorWithSource(filename, lineAdjustment, specLines, err)
 }
 
 var yamlPanicErrsRE = regexp.MustCompile(`(.*)line (\d+):\s*(.*)`)
 
-func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
+func yamlOtherErrorWithSource(filename string, lineAdjustment int, specLines [][]byte, err error) error {
 	sc := bufio.NewScanner(bytes.NewReader([]byte(err.Error())))
 	var newError strings.Builder
 	for sc.Scan() {
@@ -342,19 +275,24 @@ func yamlPanicErrorWithSource(specLines [][]byte, err error) error {
 			continue
 		}
 		l, err := strconv.ParseInt(matches[2], 10, 32)
+		l -= int64(lineAdjustment)
 		if err != nil || l < 1 || int(l) > len(specLines) {
 			newError.WriteString(errLine)
 			newError.WriteRune('\n')
 			continue
 		}
-		fmt.Fprintf(&newError, "%vline %d: %q: %v", matches[1], l, specLines[l-1], matches[3]) //nolint:gosec // G705: XSS via taint analysis not relevant here.
+		if filename != "" {
+			fmt.Fprintf(&newError, "%s: line %d: %q: %v", filename, l, specLines[l-1], matches[3]) //nolint:gosec // G705: XSS via taint analysis not relevant here.
+		} else {
+			fmt.Fprintf(&newError, "%vline %d: %q: %v", matches[1], l, specLines[l-1], matches[3]) //nolint:gosec // G705: XSS via taint analysis not relevant here.
+		}
 	}
 	return errors.New(newError.String())
 }
 
 var yamlTypeErrsRE = regexp.MustCompile(`\s*line (\d+):\s*(.*)`)
 
-func yamlTypeErrorWithSource(filename string, specLines [][]byte, err *yaml.TypeError) error {
+func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]byte, err *yaml.TypeError) error {
 	newErrors := make([]string, 0, len(err.Errors))
 	for _, errLine := range err.Errors {
 		matches := yamlTypeErrsRE.FindStringSubmatch(errLine)
@@ -367,10 +305,11 @@ func yamlTypeErrorWithSource(filename string, specLines [][]byte, err *yaml.Type
 			newErrors = append(newErrors, errLine)
 			continue
 		}
+		errLineNum := l - int64(lineAdjustment)
 		if filename != "" {
-			newErrors = append(newErrors, fmt.Sprintf("%s: line %d: %q: %v", filename, l, specLines[l-1], matches[2]))
+			newErrors = append(newErrors, fmt.Sprintf("%s: line %d: %q: %v", filename, errLineNum, specLines[l-1], matches[2]))
 		} else {
-			newErrors = append(newErrors, fmt.Sprintf("line %d: %q: %v", l, specLines[l-1], matches[2]))
+			newErrors = append(newErrors, fmt.Sprintf("line %d: %q: %v", errLineNum, specLines[l-1], matches[2]))
 		}
 	}
 	return &yaml.TypeError{Errors: newErrors}

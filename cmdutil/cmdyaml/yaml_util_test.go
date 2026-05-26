@@ -255,9 +255,9 @@ func TestParseConfigs(t *testing.T) {
 
 func TestParseConfigsNoSpecs(t *testing.T) {
 	var cfg mergeStruct
-	// Zero specs is a no-op, not an error.
-	if err := cmdyaml.ParseConfigs(&cfg); err != nil {
-		t.Fatalf("unexpected error for zero specs: %v", err)
+	// Zero specs is an error.
+	if err := cmdyaml.ParseConfigs(&cfg); err == nil {
+		t.Fatalf("expected error for zero specs, got nil")
 	}
 }
 
@@ -561,7 +561,7 @@ func TestStrictParse(t *testing.T) {
 field: [1,2]
 unknown: [3,4]
 `
-	err := cmdyaml.ParseConfigStrict([]byte(input), &ts)
+	err := cmdyaml.ParseConfig([]byte(input), &ts)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
