@@ -264,8 +264,10 @@ func (p *parseState) collectAnchorFields(node *yaml.Node) {
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
 			if keyNode.Kind == yaml.ScalarNode && valNode.Anchor != "" {
+				if _, ok := p.anchors[keyNode.Value]; !ok {
+					p.order = append(p.order, keyNode.Value)
+				}
 				p.anchors[keyNode.Value] = anchorNode{key: keyNode, value: valNode}
-				p.order = append(p.order, keyNode.Value)
 			}
 			p.collectAnchorFields(valNode)
 		}
