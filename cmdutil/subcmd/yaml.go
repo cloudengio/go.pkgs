@@ -211,7 +211,7 @@ func SanitizeYAML(spec string) string {
 func FromYAML(spec []byte) (*CommandSetYAML, error) {
 	sep := " - "
 	var yamlCmd commandDef
-	if err := cmdyaml.ParseConfig(spec, &yamlCmd); err != nil {
+	if err := cmdyaml.ParseConfigs(&yamlCmd, spec); err != nil {
 		return nil, err
 	}
 	cmdSet := &CommandSetYAML{
