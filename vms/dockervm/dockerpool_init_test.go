@@ -40,7 +40,7 @@ func newDockerConstructor() *dockerConstructor {
 	return &dockerConstructor{image: testImage}
 }
 
-func rwc(id string) io.Writer {
+func rwc(_ string) io.Writer {
 	return os.Stderr
 }
 

@@ -25,9 +25,9 @@ import (
 // image is the Docker image to create containers from;
 // name is the Docker container name.
 type Instance struct {
-	image string
-	name  string
-	opts  options
+	image  string
+	name   string
+	opts   options
 	logger *slog.Logger
 
 	stateMu sync.Mutex
@@ -42,11 +42,11 @@ type Instance struct {
 type Option func(o *options)
 
 type options struct {
-	pollingInterval  time.Duration
-	stopTimeout      time.Duration // graceful shutdown timeout passed to docker stop --timeout
-	createArgs       []string      // extra args to "docker create"
-	containerCmd     []string      // the command run inside the container
-	logger           *slog.Logger
+	pollingInterval time.Duration
+	stopTimeout     time.Duration // graceful shutdown timeout passed to docker stop --timeout
+	createArgs      []string      // extra args to "docker create"
+	containerCmd    []string      // the command run inside the container
+	logger          *slog.Logger
 }
 
 const (
@@ -229,14 +229,14 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	}
 
 	if err := inst.waitForDockerStatus(ctx, "running"); err != nil {
-		_ = exec.CommandContext(context.Background(), "docker", "stop", inst.name).Run()
+		_ = exec.CommandContext(context.Background(), "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: waiting for running state: %w", inst.name, err)
 	}
 
 	ip, err := inst.fetchContainerIP(ctx)
 	if err != nil {
-		_ = exec.CommandContext(context.Background(), "docker", "stop", inst.name).Run()
+		_ = exec.CommandContext(context.Background(), "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: fetching IP: %w", inst.name, err)
 	}
