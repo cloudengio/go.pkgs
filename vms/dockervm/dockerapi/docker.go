@@ -249,7 +249,7 @@ func (inst *Instance) Start(ctx context.Context, _, _ io.Writer) error {
 	ip, err := inst.fetchContainerIP(ctx, cid)
 	if err != nil {
 		timeoutSecs := int(inst.opts.forceStopTimeout.Seconds())
-		ctx, cancel := context.WithTimeout(ctx, inst.opts.forceStopTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), inst.opts.forceStopTimeout)
 		defer cancel()
 		_, _ = inst.cli.ContainerStop(ctx, cid, mobyclient.ContainerStopOptions{
 			Timeout: &timeoutSecs,
@@ -357,6 +357,17 @@ func (inst *Instance) Exec(ctx context.Context, stdout, stderr io.Writer, cmdStr
 		return fmt.Errorf("docker exec attach %s: %w", inst.name, err)
 	}
 	defer hijack.Close()
+
+	// Prevent deadlock if the context is cancelled while copying output by closing the hijack connection.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			hijack.Close()
+		case <-done:
+		}
+	}()
 
 	if _, err := stdcopy.StdCopy(stdout, stderr, hijack.Reader); err != nil {
 		return fmt.Errorf("docker exec read %s: %w", inst.name, err)

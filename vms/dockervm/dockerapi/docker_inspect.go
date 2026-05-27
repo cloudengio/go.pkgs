@@ -54,14 +54,11 @@ func (c ContainerInfo) VMSState() vms.State {
 	}
 }
 
-// InspectContainer queries the Docker daemon for the named container using the Docker API.
+// InspectContainerClient queries the Docker daemon using the supplied client for the named container using the Docker API.
 // Returns (zero, false, nil) if the container does not exist.
-func InspectContainer(ctx context.Context, name string) (ContainerInfo, bool, error) {
-	cli, err := sdkclient.New(ctx)
-	if err != nil {
-		return ContainerInfo{}, false, fmt.Errorf("docker client: %w", err)
-	}
-	result, err := cli.ContainerInspect(ctx, name, mobyclient.ContainerInspectOptions{})
+func InspectContainerClient(ctx context.Context, client sdkclient.SDKClient, name string) (ContainerInfo, bool, error) {
+
+	result, err := client.ContainerInspect(ctx, name, mobyclient.ContainerInspectOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			return ContainerInfo{}, false, nil
@@ -97,4 +94,14 @@ func InspectContainer(ctx context.Context, name string) (ContainerInfo, bool, er
 		State:           state,
 		NetworkSettings: ContainerNetworkInfo{IPAddress: ip},
 	}, true, nil
+}
+
+// InspectContainer queries the Docker daemon for the named container using the Docker API.
+// Returns (zero, false, nil) if the container does not exist.
+func InspectContainer(ctx context.Context, name string) (ContainerInfo, bool, error) {
+	client, err := sdkclient.New(ctx)
+	if err != nil {
+		return ContainerInfo{}, false, fmt.Errorf("docker client: %w", err)
+	}
+	return InspectContainerClient(ctx, client, name)
 }

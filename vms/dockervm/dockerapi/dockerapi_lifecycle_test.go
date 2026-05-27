@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"cloudeng.io/vms/dockervm/dockerapi"
+	sdkclient "github.com/docker/go-sdk/client"
 )
 
 const testImage = "alpine:latest"
@@ -42,14 +43,20 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
+	client, err := sdkclient.New(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "docker client: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Clean up any leftover test containers.
-	cleanupTestContainers(ctx)
+	cleanupTestContainers(ctx, client)
 
 	os.Exit(code)
 }
 
 // cleanupTestContainers removes any containers whose names begin with "vmstest-".
-func cleanupTestContainers(ctx context.Context) {
+func cleanupTestContainers(ctx context.Context, client sdkclient.SDKClient) {
 	out, err := exec.CommandContext(ctx, "docker", "ps", "-a", "--filter", "name=vmstest-", "--format", "{{.Names}}").Output()
 	if err != nil {
 		return
@@ -59,7 +66,7 @@ func cleanupTestContainers(ctx context.Context) {
 		if name == "" || !strings.HasPrefix(name, "vmstest-") {
 			continue
 		}
-		if info, found, err := dockerapi.InspectContainer(ctx, name); err == nil && found {
+		if info, found, err := dockerapi.InspectContainerClient(ctx, client, name); err == nil && found {
 			if info.State.Running {
 				exec.CommandContext(ctx, "docker", "stop", name).Run() //nolint:errcheck
 			}

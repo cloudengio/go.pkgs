@@ -264,8 +264,6 @@ func (inst *Instance) Stop(ctx context.Context, timeout time.Duration) (runErr, 
 		return nil, nil
 	}
 
-	// Use the instance's configured stop timeout (not the caller's timeout, which
-
 	args := []string{"stop"}
 	if timeout > 0 {
 		args = append(args, "--timeout", strconv.Itoa(int(timeout.Seconds())))
