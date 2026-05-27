@@ -7,13 +7,10 @@ import cloudeng.io/vms/dockervm
 Package dockervm implements cloudeng.io/vms.Instance using the Docker CLI.
 
 ## Constants
-### DefaultPollingInterval, DefaultStopTimeout
+### DefaultPollingInterval, DefaultForceStopTimeout
 ```go
 DefaultPollingInterval = 200 * time.Millisecond
-// DefaultStopTimeout is the graceful shutdown timeout for docker stop.
-// After this period Docker sends SIGKILL. Kept short because containers
-// should not need long graceful shutdown windows.
-DefaultStopTimeout = 10 * time.Second
+DefaultForceStopTimeout = 10 * time.Second
 
 ```
 
@@ -214,6 +211,14 @@ etc.
 
 
 ```go
+func WithForceStopTimeout(d time.Duration) Option
+```
+WithForceStopTimeout sets the graceful shutdown timeout passed to "docker
+stop --timeout". After this period Docker sends SIGKILL. Defaults to
+DefaultForceStopTimeout.
+
+
+```go
 func WithLogger(logger *slog.Logger) Option
 ```
 WithLogger sets the structured logger used for command tracing.
@@ -224,14 +229,6 @@ func WithPollingInterval(interval time.Duration) Option
 ```
 WithPollingInterval sets the interval used when polling for state
 transitions.
-
-
-```go
-func WithStopTimeout(d time.Duration) Option
-```
-WithStopTimeout sets the graceful shutdown timeout passed to "docker
-stop --timeout". After this period Docker sends SIGKILL. Defaults to
-DefaultStopTimeout.
 
 
 

@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/containerd/errdefs"
 	sdkclient "github.com/docker/go-sdk/client"
-	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/pkg/stdcopy"
+	mobycontainer "github.com/moby/moby/api/types/container"
 	mobyclient "github.com/moby/moby/client"
 
 	"cloudeng.io/os/executil"
@@ -26,11 +27,11 @@ import (
 // Instance implements vms.Instance backed by the Docker Go API.
 // image is the Docker image to create containers from; name is the Docker container name.
 type Instance struct {
-	image string
-	name  string
-	opts  options
+	image  string
+	name   string
+	opts   options
 	logger *slog.Logger
-	cli   sdkclient.SDKClient
+	cli    sdkclient.SDKClient
 
 	stateMu     sync.Mutex
 	state       vms.State // GUARDED by stateMu
@@ -45,17 +46,17 @@ type Instance struct {
 type Option func(o *options)
 
 type options struct {
-	pollingInterval time.Duration
-	stopTimeout     time.Duration
-	createArgs      []string // extra args interpreted as env vars (KEY=VAL) or labels
-	containerCmd    []string
-	logger          *slog.Logger
+	pollingInterval  time.Duration
+	forceStopTimeout time.Duration
+	createEnv        []string // extra args interpreted as env vars (KEY=VAL) or labels
+	containerCmd     []string
+	logger           *slog.Logger
 }
 
 const (
 	DefaultPollingInterval = 200 * time.Millisecond
-	// DefaultStopTimeout is the graceful shutdown timeout for docker stop.
-	DefaultStopTimeout = 10 * time.Second
+	// DefaultForceStopTimeout is the graceful shutdown timeout for docker stop.
+	DefaultForceStopTimeout = 10 * time.Second
 )
 
 // WithPollingInterval sets the interval used when polling for state transitions.
@@ -65,10 +66,10 @@ func WithPollingInterval(interval time.Duration) Option {
 	}
 }
 
-// WithStopTimeout sets the graceful shutdown timeout.
-func WithStopTimeout(d time.Duration) Option {
+// WithForceStopTimeout sets the graceful shutdown timeout.
+func WithForceStopTimeout(d time.Duration) Option {
 	return func(o *options) {
-		o.stopTimeout = d
+		o.forceStopTimeout = d
 	}
 }
 
@@ -86,6 +87,13 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithCreateEnv sets extra args interpreted as env vars (KEY=VAL) or labels.
+func WithCreateEnv(env []string) Option {
+	return func(o *options) {
+		o.createEnv = slices.Clone(env)
+	}
+}
+
 // DefaultContainerCmd returns the default command used to keep a container alive.
 func DefaultContainerCmd() []string {
 	return []string{"tail", "-f", "/dev/null"}
@@ -94,9 +102,9 @@ func DefaultContainerCmd() []string {
 // New returns an Instance in StateInitial.
 func New(ctx context.Context, image, name string, opts ...Option) (*Instance, error) {
 	o := options{
-		pollingInterval: DefaultPollingInterval,
-		stopTimeout:     DefaultStopTimeout,
-		containerCmd:    DefaultContainerCmd(),
+		pollingInterval:  DefaultPollingInterval,
+		forceStopTimeout: DefaultForceStopTimeout,
+		containerCmd:     DefaultContainerCmd(),
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -181,6 +189,7 @@ func (inst *Instance) Clone(ctx context.Context) error {
 		Image: inst.image,
 		Config: &mobycontainer.Config{
 			Cmd: inst.opts.containerCmd,
+			Env: inst.opts.createEnv,
 		},
 		HostConfig: &mobycontainer.HostConfig{
 			Init: &trueVal,
@@ -199,18 +208,16 @@ func (inst *Instance) Clone(ctx context.Context) error {
 	inst.containerID = result.ID
 	inst.state = vms.StateStopped
 	inst.stateMu.Unlock()
-	inst.logger.Info("docker API: container created", "name", inst.name, "id", result.ID[:12])
+	logID := result.ID
+	if len(logID) > 12 {
+		logID = logID[:12]
+	}
+	inst.logger.Info("docker API: container created", "name", inst.name, "id", logID)
 	return nil
 }
 
 // Start starts the container and blocks until it is running.
-func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error {
-	if stdout == nil {
-		stdout = io.Discard
-	}
-	if stderr == nil {
-		stderr = io.Discard
-	}
+func (inst *Instance) Start(ctx context.Context, _, _ io.Writer) error {
 	inst.opMutex.Lock()
 	defer inst.opMutex.Unlock()
 
@@ -229,14 +236,24 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	}
 
 	if err := inst.waitForDockerStatus(ctx, "running"); err != nil {
-		_, _ = inst.cli.ContainerStop(context.Background(), cid, mobyclient.ContainerStopOptions{})
+		timeoutSecs := int(inst.opts.forceStopTimeout.Seconds())
+		ctx, cancel := context.WithTimeout(context.Background(), inst.opts.forceStopTimeout)
+		defer cancel()
+		_, _ = inst.cli.ContainerStop(ctx, cid, mobyclient.ContainerStopOptions{
+			Timeout: &timeoutSecs,
+		})
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: waiting for running state: %w", inst.name, err)
 	}
 
 	ip, err := inst.fetchContainerIP(ctx, cid)
 	if err != nil {
-		_, _ = inst.cli.ContainerStop(context.Background(), cid, mobyclient.ContainerStopOptions{})
+		timeoutSecs := int(inst.opts.forceStopTimeout.Seconds())
+		ctx, cancel := context.WithTimeout(ctx, inst.opts.forceStopTimeout)
+		defer cancel()
+		_, _ = inst.cli.ContainerStop(ctx, cid, mobyclient.ContainerStopOptions{
+			Timeout: &timeoutSecs,
+		})
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: fetching IP: %w", inst.name, err)
 	}
@@ -263,15 +280,10 @@ func (inst *Instance) Stop(ctx context.Context, timeout time.Duration) (runErr, 
 		return nil, nil
 	}
 
-	stopTimeout := inst.opts.stopTimeout
-	if stopTimeout <= 0 {
-		stopTimeout = DefaultStopTimeout
-	}
-	_ = timeout // context carries the caller's overall deadline
-	timeoutSecs := int(stopTimeout.Seconds())
+	timeoutSecs := int(timeout.Seconds())
 	cid := inst.getContainerID()
 
-	inst.logger.Info("docker API: stopping container", "name", inst.name, "timeout", stopTimeout)
+	inst.logger.Info("docker API: stopping container", "name", inst.name, "timeout", timeout)
 	_, err := inst.cli.ContainerStop(ctx, cid, mobyclient.ContainerStopOptions{
 		Timeout: &timeoutSecs,
 	})
@@ -410,8 +422,6 @@ func isNotFoundAPIError(err error) bool {
 func isAlreadyStoppedAPIError(err error) bool {
 	return errdefs.IsNotModified(err)
 }
-
-
 
 func convertAPIError(name, op string, err error) error {
 	if isNotFoundAPIError(err) {

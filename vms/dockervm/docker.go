@@ -42,19 +42,16 @@ type Instance struct {
 type Option func(o *options)
 
 type options struct {
-	pollingInterval time.Duration
-	stopTimeout     time.Duration // graceful shutdown timeout passed to docker stop --timeout
-	createArgs      []string      // extra args to "docker create"
-	containerCmd    []string      // the command run inside the container
-	logger          *slog.Logger
+	pollingInterval  time.Duration
+	forceStopTimeout time.Duration // graceful shutdown timeout passed to docker stop --timeout
+	createArgs       []string      // extra args to "docker create"
+	containerCmd     []string      // the command run inside the container
+	logger           *slog.Logger
 }
 
 const (
-	DefaultPollingInterval = 200 * time.Millisecond
-	// DefaultStopTimeout is the graceful shutdown timeout for docker stop.
-	// After this period Docker sends SIGKILL. Kept short because containers
-	// should not need long graceful shutdown windows.
-	DefaultStopTimeout = 10 * time.Second
+	DefaultPollingInterval  = 200 * time.Millisecond
+	DefaultForceStopTimeout = 10 * time.Second
 )
 
 // WithPollingInterval sets the interval used when polling for state transitions.
@@ -72,11 +69,11 @@ func WithCreateArgs(args ...string) Option {
 	}
 }
 
-// WithStopTimeout sets the graceful shutdown timeout passed to "docker stop --timeout".
-// After this period Docker sends SIGKILL. Defaults to DefaultStopTimeout.
-func WithStopTimeout(d time.Duration) Option {
+// WithForceStopTimeout sets the graceful shutdown timeout passed to "docker stop --timeout".
+// After this period Docker sends SIGKILL. Defaults to DefaultForceStopTimeout.
+func WithForceStopTimeout(d time.Duration) Option {
 	return func(o *options) {
-		o.stopTimeout = d
+		o.forceStopTimeout = d
 	}
 }
 
@@ -105,9 +102,9 @@ func DefaultContainerCmd() []string {
 // image is the Docker image to use; name is the container name.
 func New(_ context.Context, image, name string, opts ...Option) *Instance {
 	o := options{
-		pollingInterval: DefaultPollingInterval,
-		stopTimeout:     DefaultStopTimeout,
-		containerCmd:    DefaultContainerCmd(),
+		pollingInterval:  DefaultPollingInterval,
+		forceStopTimeout: DefaultForceStopTimeout,
+		containerCmd:     DefaultContainerCmd(),
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -229,14 +226,18 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	}
 
 	if err := inst.waitForDockerStatus(ctx, "running"); err != nil {
-		_ = exec.CommandContext(context.Background(), "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
+		ctx, cancel := context.WithTimeout(context.Background(), inst.opts.forceStopTimeout)
+		defer cancel()
+		_ = exec.CommandContext(ctx, "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: waiting for running state: %w", inst.name, err)
 	}
 
 	ip, err := inst.fetchContainerIP(ctx)
 	if err != nil {
-		_ = exec.CommandContext(context.Background(), "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
+		ctx, cancel := context.WithTimeout(context.Background(), inst.opts.forceStopTimeout)
+		defer cancel()
+		_ = exec.CommandContext(ctx, "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: fetching IP: %w", inst.name, err)
 	}
@@ -264,14 +265,12 @@ func (inst *Instance) Stop(ctx context.Context, timeout time.Duration) (runErr, 
 	}
 
 	// Use the instance's configured stop timeout (not the caller's timeout, which
-	// is an overall operation deadline). Docker containers should stop quickly;
-	// if needed callers can extend via WithStopTimeout.
-	stopTimeout := inst.opts.stopTimeout
-	if stopTimeout <= 0 {
-		stopTimeout = DefaultStopTimeout
+
+	args := []string{"stop"}
+	if timeout > 0 {
+		args = append(args, "--timeout", strconv.Itoa(int(timeout.Seconds())))
 	}
-	_ = timeout // the ctx carries the caller's overall deadline
-	args := []string{"stop", "--timeout", strconv.Itoa(int(stopTimeout.Seconds())), inst.name}
+	args = append(args, inst.name)
 
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)

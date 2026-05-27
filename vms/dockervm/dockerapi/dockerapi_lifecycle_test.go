@@ -28,16 +28,16 @@ func TestMain(m *testing.M) {
 	// Verify the Docker daemon is reachable.
 	if out, err := exec.CommandContext(ctx, "docker", "info", "--format", "{{.ServerVersion}}").Output(); err != nil {
 		fmt.Fprintf(os.Stderr, "docker info failed: %v; skipping tests\n", err)
-		os.Exit(0)
+		os.Exit(1)
 	} else if strings.TrimSpace(string(out)) == "" {
 		fmt.Fprintln(os.Stderr, "docker daemon not running; skipping tests")
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	// Pull the test image if not already present.
 	if err := exec.CommandContext(ctx, "docker", "pull", testImage).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "docker pull %s failed: %v; skipping tests\n", testImage, err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	code := m.Run()
