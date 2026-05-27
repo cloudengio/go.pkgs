@@ -3,14 +3,14 @@ module cloudeng.io/file
 go 1.25.5
 
 require (
-	cloudeng.io/algo v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/algo v0.0.0-20260522180900-2a0ba73f37a3
 	cloudeng.io/cmdutil v0.0.0-20260518190654-a057386f3a79
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/logging v0.0.0-20260518190654-a057386f3a79
-	cloudeng.io/os v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/logging v0.0.0-20260522180900-2a0ba73f37a3
+	cloudeng.io/os v0.0.0-20260522180900-2a0ba73f37a3
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/sys v0.0.0-20260522180900-2a0ba73f37a3
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
 	golang.org/x/net v0.55.0
@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	cloudeng.io/debug v0.0.0-20260513030906-195852faa5d0 // indirect
+	cloudeng.io/debug v0.0.0-20260518190654-a057386f3a79 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	golang.org/x/sync v0.20.0 // indirect

@@ -23,17 +23,6 @@ TiB = 1_024 * GiB
 
 
 ## Functions
-### Func ErrorWithSource
-```go
-func ErrorWithSource(spec []byte, err error) error
-```
-ErrorWithSource returns an error that includes the yaml source code that
-was the cause of the error to help with debugging YAML errors. Note that the
-errors reported for the yaml parser may be inaccurate in terms of the lines
-the error is reported on. This seems to be particularly true for lists where
-errors with use of tabs to indent are often reported against the previous
-line rather than the offending one.
-
 ### Func ExpandEnv
 ```go
 func ExpandEnv(cfg any, envFunc func(string) string)
@@ -48,6 +37,8 @@ func ParseConfig(spec []byte, cfg any) error
 ```
 ParseConfig will parse the yaml config in spec into the requested type.
 It provides improved error reporting via ErrorWithSource.
+
+Deprecated: Use ParseConfigs instead.
 
 ### Func ParseConfigFile
 ```go
@@ -91,13 +82,17 @@ file contains unknown fields.
 func ParseConfigStrict(spec []byte, cfg any) error
 ```
 ParseConfigStrict is like ParseConfig but reports an error if there are
-unknown fields in the yaml specification.
+unknown fields in the yaml specification. Mapping fields at any level whose
+values carry a YAML anchor (&name) are permitted: they exist only to provide
+reusable values for alias references and are not struct fields.
+
+Deprecated: Use ParseConfigsStrict instead.
 
 ### Func ParseConfigString
 ```go
 func ParseConfigString(spec string, cfg any) error
 ```
-ParseConfigString is like ParseConfig but for a string.
+ParseConfigString parses the yaml config in spec (as a string) into cfg.
 
 ### Func ParseConfigStringStrict
 ```go
@@ -118,8 +113,10 @@ by an earlier one, while fields only in an earlier spec are retained.
 ```go
 func ParseConfigsStrict(cfg any, specs ...[]byte) error
 ```
-ParseConfigsStrict is like ParseConfigs but reports an error if any spec
-contains unknown fields.
+ParseConfigsStrict is like ParseConfigs but reports an error if there are
+unknown fields in the yaml specification. Mapping fields at any level whose
+values carry a YAML anchor (&name) are permitted: they exist only to provide
+reusable values for alias references and are not struct fields.
 
 ### Func ParseDeferred
 ```go
