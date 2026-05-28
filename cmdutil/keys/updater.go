@@ -20,11 +20,12 @@ import (
 // KeyStoreUpdater provides methods to automatically refresh keys in an
 // InMemoryKeyStore from YAML or JSON files.
 type KeyStoreUpdater struct {
-	ims    *InMemoryKeyStore
-	doneCh chan struct{}
-	mu     sync.Mutex
-	wg     ctxsync.WaitGroup
-	closed bool
+	ims      *InMemoryKeyStore
+	interval time.Duration
+	doneCh   chan struct{}
+	mu       sync.Mutex
+	wg       ctxsync.WaitGroup
+	closed   bool
 }
 
 const (
@@ -39,23 +40,25 @@ const (
 // the provided InMemoryKeyStore. Call ScheduleRefreshYAML or ScheduleRefreshJSON
 // to start the refresh process. Call Stop to stop the refresh process and wait
 // for any in-flight refreshes to complete.
-func NewKeyStoreUpdater(ims *InMemoryKeyStore) *KeyStoreUpdater {
-
-	return &KeyStoreUpdater{ims: ims, doneCh: make(chan struct{})}
+func NewKeyStoreUpdater(ims *InMemoryKeyStore, interval time.Duration) *KeyStoreUpdater {
+	if interval <= 0 {
+		interval = DefaultRefreshInterval
+	}
+	return &KeyStoreUpdater{ims: ims, interval: interval, doneCh: make(chan struct{})}
 }
 
 // ScheduleRefreshYAML starts a goroutine that will refresh keys in the underlying
 // KeyStore from the specified YAML files at the configured refresh interval.
 // The refresh process will continue until the context is canceled or Stop is called.
 func (u *KeyStoreUpdater) ScheduleRefreshYAML(ctx context.Context, fs file.ReadFileFS, files ...string) {
-	u.scheduleRefresh(ctx, true, 0, fs, files...)
+	u.scheduleRefresh(ctx, true, fs, files...)
 }
 
 // ScheduleRefreshJSON starts a goroutine that will refresh keys in the underlying
 // KeyStore from the specified JSON files at the configured refresh interval.
 // The refresh process will continue until the context is canceled or Stop is called.
 func (u *KeyStoreUpdater) ScheduleRefreshJSON(ctx context.Context, fs file.ReadFileFS, files ...string) {
-	u.scheduleRefresh(ctx, false, 0, fs, files...)
+	u.scheduleRefresh(ctx, false, fs, files...)
 }
 
 func (u *KeyStoreUpdater) Stop(ctx context.Context) {
@@ -70,17 +73,14 @@ func (u *KeyStoreUpdater) Stop(ctx context.Context) {
 	u.wg.Wait(ctx)
 }
 
-func (u *KeyStoreUpdater) scheduleRefresh(ctx context.Context, yamlOrJSON bool, interval time.Duration, fs file.ReadFileFS, files ...string) {
-	if interval <= 0 {
-		interval = DefaultRefreshInterval
-	}
+func (u *KeyStoreUpdater) scheduleRefresh(ctx context.Context, yamlOrJSON bool, fs file.ReadFileFS, files ...string) {
 	logger := ctxlog.Logger(ctx).With("component", "KeyStoreUpdater", "files", strings.Join(files, ","))
 
 	if err := u.refresh(ctx, yamlOrJSON, fs, files...); err != nil {
 		logger.Error("error refreshing keys", "error", err)
 	}
 
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(u.interval)
 
 	u.wg.Go(func() {
 		defer ticker.Stop()

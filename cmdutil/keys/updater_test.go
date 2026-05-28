@@ -17,7 +17,7 @@ func TestKeyStoreUpdaterYAML(t *testing.T) {
 	mfs := &mockFS{data: map[string][]byte{"keys.yaml": []byte(yamlList)}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshYAML(ctx, mfs, "keys.yaml")
 	defer u.Stop(ctx)
 
@@ -39,7 +39,7 @@ func TestKeyStoreUpdaterJSON(t *testing.T) {
 	mfs := &mockFS{data: map[string][]byte{"keys.json": []byte(jsonList)}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshJSON(ctx, mfs, "keys.json")
 	defer u.Stop(ctx)
 
@@ -63,7 +63,7 @@ func TestKeyStoreUpdaterMultipleFiles(t *testing.T) {
 	}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshYAML(ctx, mfs, "a.yaml", "b.yaml")
 	defer u.Stop(ctx)
 
@@ -90,7 +90,7 @@ func TestKeyStoreUpdaterMixedSchedule(t *testing.T) {
 	}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshYAML(ctx, mfs, "keys.yaml")
 	u.ScheduleRefreshJSON(ctx, mfs, "keys.json")
 	defer u.Stop(ctx)
@@ -112,7 +112,7 @@ func TestKeyStoreUpdaterStop(t *testing.T) {
 	mfs := &mockFS{data: map[string][]byte{"keys.yaml": []byte(yamlList)}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshYAML(ctx, mfs, "keys.yaml")
 
 	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -127,7 +127,7 @@ func TestKeyStoreUpdaterContextCancel(t *testing.T) {
 	mfs := &mockFS{data: map[string][]byte{"keys.yaml": []byte(yamlList)}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshYAML(ctx, mfs, "keys.yaml")
 
 	cancel() // goroutine exits via ctx.Done()
@@ -142,7 +142,7 @@ func TestKeyStoreUpdaterRefreshError(t *testing.T) {
 	mfs := &mockFS{data: map[string][]byte{}}
 
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 	u.ScheduleRefreshYAML(ctx, mfs, "missing.yaml")
 	defer u.Stop(ctx)
 
@@ -157,7 +157,7 @@ func TestKeyStoreUpdaterRefreshError(t *testing.T) {
 
 func TestKeyStoreUpdaterNoSchedule(t *testing.T) {
 	ims := keys.NewInMemoryKeyStore()
-	u := keys.NewKeyStoreUpdater(ims)
+	u := keys.NewKeyStoreUpdater(ims, time.Second)
 
 	stopCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
