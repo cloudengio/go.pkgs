@@ -6,3 +6,5 @@ require (
 	cloudeng.io/errors v0.0.9
 	golang.org/x/mod v0.36.0
 )
+
+replace cloudeng.io/errors => ../errors

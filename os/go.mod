@@ -7,3 +7,5 @@ require (
 	cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
 	golang.org/x/sys v0.45.0
 )
+
+replace cloudeng.io/errors => ../errors
