@@ -44,3 +44,7 @@ require (
 )
 
 replace cloudeng.io/vms => ../..
+
+replace cloudeng.io/errors => ../../../errors
+
+replace cloudeng.io/os => ../../../os

@@ -27,3 +27,7 @@ replace cloudeng.io/logging => ../logging
 replace cloudeng.io/sync => ../sync
 
 replace cloudeng.io/text => ../text
+
+replace cloudeng.io/sys => ../sys
+
+replace cloudeng.io/algo => ../algo

@@ -43,3 +43,9 @@ require (
 replace cloudeng.io/algo => ../algo
 
 replace cloudeng.io/file => ../file
+
+replace cloudeng.io/sync => ../sync
+
+replace cloudeng.io/sys => ../sys
+
+replace cloudeng.io/errors => ../errors

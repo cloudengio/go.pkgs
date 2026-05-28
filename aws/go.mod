@@ -120,3 +120,7 @@ replace cloudeng.io/logging => ../logging
 replace cloudeng.io/path => ../path
 
 replace cloudeng.io/text => ../text
+
+replace cloudeng.io/os => ../os
+
+replace cloudeng.io/sync => ../sync
