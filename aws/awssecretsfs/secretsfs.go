@@ -109,7 +109,7 @@ func NewSecretsFS(cfg aws.Config, options ...Option) *T {
 
 // Open implements fs.FS. Name can be the short name of the secret or the ARN.
 func (smfs *T) Open(name string) (fs.File, error) {
-	out, err := readSecret(context.Background(), smfs.client, name)
+	out, err := smfs.readSecret(context.Background(), smfs.client, name)
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -183,13 +183,24 @@ func (smfs *T) Delete(ctx context.Context, nameOrArn string) error {
 }
 
 func (smfs *T) readFileCtx(ctx context.Context, name string) ([]byte, error) {
-	v, err, _ := smfs.sf.Do(ctx, name, func() (any, error) {
-		return readSecret(ctx, smfs.client, name)
+	out, err := smfs.readSecret(ctx, smfs.client, name)
+	if err != nil {
+		return nil, err
+	}
+	return getData(out), nil
+}
+
+func (smfs *T) readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsmanager.GetSecretValueOutput, error) {
+	if !smfs.options.singleFlight {
+		return readSecret(ctx, client, nameOrArn)
+	}
+	v, err, _ := smfs.sf.Do(ctx, nameOrArn, func() (any, error) {
+		return readSecret(ctx, client, nameOrArn)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return getData(v.(*secretsmanager.GetSecretValueOutput)), nil
+	return v.(*secretsmanager.GetSecretValueOutput), nil
 }
 
 type secret struct {
@@ -258,12 +269,10 @@ func readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsm
 }
 
 func translateError(err error) error {
-	var rnfe *types.ResourceNotFoundException
-	if errors.As(err, &rnfe) {
+	if rnfe, ok := errors.AsType[*types.ResourceNotFoundException](err); ok {
 		return fmt.Errorf("%v: %w", rnfe.Error(), fs.ErrNotExist)
 	}
-	var ire *types.InvalidRequestException
-	if errors.As(err, &ire) {
+	if ire, ok := errors.AsType[*types.InvalidRequestException](err); ok {
 		if strings.Contains(ire.ErrorMessage(), "currently marked deleted") {
 			return fs.ErrNotExist
 		}

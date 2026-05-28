@@ -346,7 +346,7 @@ func TestSingleFlightDeduplicates(t *testing.T) {
 				return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(wantData)}, nil
 			},
 		}
-		sfs := awssecretsfs.NewSecretsFS(aws.Config{}, awssecretsfs.WithSecretsClient(mock))
+		sfs := awssecretsfs.NewSecretsFS(aws.Config{}, awssecretsfs.WithSecretsClient(mock), awssecretsfs.WithSingleFlight(true))
 
 		results := make([][]byte, n)
 		errs := make([]error, n)
@@ -396,7 +396,7 @@ func TestSingleFlightDeduplicates(t *testing.T) {
 				return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(aws.ToString(input.SecretId))}, nil
 			},
 		}
-		sfs := awssecretsfs.NewSecretsFS(aws.Config{}, awssecretsfs.WithSecretsClient(mock))
+		sfs := awssecretsfs.NewSecretsFS(aws.Config{}, awssecretsfs.WithSecretsClient(mock), awssecretsfs.WithSingleFlight(true))
 
 		var wg sync.WaitGroup
 		for range n {
