@@ -10,7 +10,10 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"cloudeng.io/aws/awssecretsfs"
 	"cloudeng.io/aws/awstestutil"
@@ -18,6 +21,39 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
+
+// mockClient implements awssecretsfs.Client for unit tests that do not require
+// a real AWS connection. Only GetSecretValue is wired; all other methods panic
+// because the singleflight tests use ARN-format keys (bypassing DescribeSecret).
+type mockClient struct {
+	calls          atomic.Int64
+	getSecretValue func(ctx context.Context, input *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
+}
+
+func (m *mockClient) GetSecretValue(ctx context.Context, input *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+	m.calls.Add(1)
+	return m.getSecretValue(ctx, input, optFns...)
+}
+
+func (m *mockClient) ListSecretVersionIds(_ context.Context, _ *secretsmanager.ListSecretVersionIdsInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretVersionIdsOutput, error) { //nolint:revive
+	panic("not implemented")
+}
+
+func (m *mockClient) DeleteSecret(_ context.Context, _ *secretsmanager.DeleteSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error) {
+	panic("not implemented")
+}
+
+func (m *mockClient) PutSecretValue(_ context.Context, _ *secretsmanager.PutSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.PutSecretValueOutput, error) {
+	panic("not implemented")
+}
+
+func (m *mockClient) CreateSecret(_ context.Context, _ *secretsmanager.CreateSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error) {
+	panic("not implemented")
+}
+
+func (m *mockClient) DescribeSecret(_ context.Context, _ *secretsmanager.DescribeSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.DescribeSecretOutput, error) {
+	panic("not implemented")
+}
 
 var awsInstance *awstestutil.AWS
 
@@ -281,6 +317,102 @@ func TestWriteFilePermissions(t *testing.T) {
 		err = wfs.WriteFileCtx(ctx, secretName, updatedSecretValue, 0600)
 		if err != nil {
 			t.Fatalf("update should have succeeded, but got: %v", err)
+		}
+	})
+}
+
+// TestSingleFlightDeduplicates verifies that concurrent ReadFileCtx calls for the
+// same key are coalesced into a single backend GetSecretValue invocation, and that
+// calls for different keys are not coalesced.
+//
+// ARN-format keys are used so readSecret bypasses DescribeSecret entirely, keeping
+// the mock simple.
+func TestSingleFlightDeduplicates(t *testing.T) {
+	const (
+		n         = 10
+		secretARN = "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-secret" //nolint:gosec //G101: Potential hardcoded credentials false positive
+		wantData  = "secret-value"
+	)
+
+	t.Run("SameKeyCoalesced", func(t *testing.T) {
+		started := make(chan struct{})
+		gate := make(chan struct{})
+		var signalOnce sync.Once
+
+		mock := &mockClient{
+			getSecretValue: func(_ context.Context, _ *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+				signalOnce.Do(func() { close(started) })
+				<-gate
+				return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(wantData)}, nil
+			},
+		}
+		sfs := awssecretsfs.NewSecretsFS(aws.Config{}, awssecretsfs.WithSecretsClient(mock), awssecretsfs.WithSingleFlight(true))
+
+		results := make([][]byte, n)
+		errs := make([]error, n)
+		var wg sync.WaitGroup
+		for i := range n {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				results[i], errs[i] = sfs.ReadFileCtx(context.Background(), secretARN)
+			}(i)
+		}
+
+		// Wait for the first GetSecretValue call to enter, then give the other
+		// goroutines a moment to queue up inside the singleflight group.
+		<-started
+		time.Sleep(20 * time.Millisecond)
+		close(gate)
+		wg.Wait()
+
+		for i, err := range errs {
+			if err != nil {
+				t.Errorf("goroutine %d: unexpected error: %v", i, err)
+			}
+			if !bytes.Equal(results[i], []byte(wantData)) {
+				t.Errorf("goroutine %d: got %q, want %q", i, results[i], wantData)
+			}
+		}
+		if got := mock.calls.Load(); got != 1 {
+			t.Errorf("GetSecretValue call count: got %d, want 1", got)
+		}
+	})
+
+	t.Run("DifferentKeysNotCoalesced", func(t *testing.T) {
+		const (
+			arnA = "arn:aws:secretsmanager:us-east-1:123456789012:secret:key-a"
+			arnB = "arn:aws:secretsmanager:us-east-1:123456789012:secret:key-b"
+		)
+
+		started := make(chan struct{})
+		gate := make(chan struct{})
+		var signalOnce sync.Once
+
+		mock := &mockClient{
+			getSecretValue: func(_ context.Context, input *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+				signalOnce.Do(func() { close(started) })
+				<-gate
+				return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(aws.ToString(input.SecretId))}, nil
+			},
+		}
+		sfs := awssecretsfs.NewSecretsFS(aws.Config{}, awssecretsfs.WithSecretsClient(mock), awssecretsfs.WithSingleFlight(true))
+
+		var wg sync.WaitGroup
+		for range n {
+			wg.Add(2)
+			go func() { defer wg.Done(); sfs.ReadFileCtx(context.Background(), arnA) }() //nolint:errcheck
+			go func() { defer wg.Done(); sfs.ReadFileCtx(context.Background(), arnB) }() //nolint:errcheck
+		}
+
+		<-started
+		time.Sleep(20 * time.Millisecond)
+		close(gate)
+		wg.Wait()
+
+		// Two distinct keys → exactly two backend calls, one per key.
+		if got := mock.calls.Load(); got != 2 {
+			t.Errorf("GetSecretValue call count: got %d, want 2", got)
 		}
 	})
 }

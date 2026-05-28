@@ -17,6 +17,7 @@ import (
 
 	"cloudeng.io/aws/awsutil"
 	"cloudeng.io/file"
+	"cloudeng.io/sync/ctxsync"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
@@ -31,6 +32,7 @@ type options struct {
 	client              Client
 	allowNew            bool
 	allowUpdates        bool
+	singleFlight        bool
 }
 
 // WithSecretsOptions wraps secretsmanager.Options for use when creating an s3.Client.
@@ -71,6 +73,14 @@ func WithAllowCreation(allow bool) Option {
 	}
 }
 
+// WithSingleFlight specifies whether to use singleflight to suppress
+// duplicate Read calls to secretsmanager for the same secret.
+func WithSingleFlight(enabled bool) Option {
+	return func(o *options) {
+		o.singleFlight = enabled
+	}
+}
+
 // New creates a new instance of fs.ReadFile backed by the secretsmanager.
 func New(cfg aws.Config, options ...Option) *T {
 	return NewSecretsFS(cfg, options...)
@@ -79,6 +89,7 @@ func New(cfg aws.Config, options ...Option) *T {
 // T implements fs.ReadFileFS for secretsmanager.
 type T struct {
 	client  Client
+	sf      ctxsync.SingleFlight
 	options options
 }
 
@@ -98,11 +109,10 @@ func NewSecretsFS(cfg aws.Config, options ...Option) *T {
 
 // Open implements fs.FS. Name can be the short name of the secret or the ARN.
 func (smfs *T) Open(name string) (fs.File, error) {
-	out, err := readSecret(context.Background(), smfs.client, name)
+	out, data, err := smfs.readSecret(context.Background(), smfs.client, name)
 	if err != nil {
 		return nil, translateError(err)
 	}
-	data := getData(out)
 	return &secret{name: aws.ToString(out.Name), size: len(data), buf: bytes.NewBuffer(data)}, nil
 }
 
@@ -172,11 +182,29 @@ func (smfs *T) Delete(ctx context.Context, nameOrArn string) error {
 }
 
 func (smfs *T) readFileCtx(ctx context.Context, name string) ([]byte, error) {
-	out, err := readSecret(ctx, smfs.client, name)
+	_, data, err := smfs.readSecret(ctx, smfs.client, name)
 	if err != nil {
 		return nil, translateError(err)
 	}
-	return getData(out), nil
+	return data, nil
+}
+
+func (smfs *T) readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsmanager.GetSecretValueOutput, []byte, error) {
+	if !smfs.options.singleFlight {
+		out, err := readSecret(ctx, client, nameOrArn)
+		if err != nil {
+			return nil, nil, err
+		}
+		return out, getData(out), nil
+	}
+	v, err, _ := smfs.sf.Do(ctx, nameOrArn, func() (any, error) {
+		return readSecret(ctx, client, nameOrArn)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	gs := v.(*secretsmanager.GetSecretValueOutput)
+	return gs, bytes.Clone(getData(gs)), nil
 }
 
 type secret struct {
@@ -245,15 +273,16 @@ func readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsm
 }
 
 func translateError(err error) error {
-	var rnfe *types.ResourceNotFoundException
-	if errors.As(err, &rnfe) {
+	if rnfe, ok := errors.AsType[*types.ResourceNotFoundException](err); ok {
 		return fmt.Errorf("%v: %w", rnfe.Error(), fs.ErrNotExist)
 	}
-	var ire *types.InvalidRequestException
-	if errors.As(err, &ire) {
+	if ire, ok := errors.AsType[*types.InvalidRequestException](err); ok {
+		fmt.Printf("..... %v\n", ire.ErrorMessage())
 		if strings.Contains(ire.ErrorMessage(), "currently marked deleted") {
 			return fs.ErrNotExist
 		}
+	} else {
+		fmt.Printf("..... %T\n", err)
 	}
 	return err
 }
