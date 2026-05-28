@@ -36,6 +36,12 @@ func TestStructDoc(t *testing.T) {
 			`struct { A string "tag:\"doc\""; B string }`,
 		},
 		{struct {
+			A string `tag:"doc"`
+			B string `tag:"-"`
+		}{}, "detail:\nA: doc\n",
+			`struct { A string "tag:\"doc\""; B string "tag:\"-\"" }`,
+		},
+		{struct {
 			A string `json:"b" tag:"doc"`
 		}{}, "detail:\nb: doc\n",
 			`struct { A string "json:\"b\" tag:\"doc\"" }`,

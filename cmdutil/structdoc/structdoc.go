@@ -41,6 +41,9 @@ func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Ty
 	for nf := 0; nf < typ.NumField(); nf++ {
 		field := typ.Field(nf)
 		doc, ok := field.Tag.Lookup(tagName)
+		if ok && doc == "-" {
+			continue
+		}
 		name := field.Name
 		// Heurestic to use the same name as any other intended encoding
 		// for this field.
