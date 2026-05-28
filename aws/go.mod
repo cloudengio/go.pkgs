@@ -3,11 +3,11 @@ module cloudeng.io/aws
 go 1.26.2
 
 require (
-	cloudeng.io/cicd v0.0.0-20260518190654-a057386f3a79
-	cloudeng.io/cmdutil v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/cicd v0.0.0-20260527194618-4cb6d4558850
+	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260518190654-a057386f3a79
-	cloudeng.io/logging v0.0.0-20260518190654-a057386f3a79
+	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
+	cloudeng.io/logging v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	github.com/alexbacchin/ssm-session-client v1.1.0
@@ -17,37 +17,37 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.23
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.304.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.52.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.60.5
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.61.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
-	github.com/aws/smithy-go v1.25.1
+	github.com/aws/smithy-go v1.26.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/orlangure/gnomock v0.32.0
 )
 
 require (
-	cloudeng.io/debug v0.0.0-20260518190654-a057386f3a79 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.6 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260423192734-dcff8da8cdec // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/moby/term v0.5.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/xtaci/smux v1.5.57 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
+	gotest.tools/v3 v3.5.2 // indirect
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260522180900-2a0ba73f37a3 // indirect
-	cloudeng.io/os v0.0.0-20260522180900-2a0ba73f37a3 // indirect
+	cloudeng.io/algo v0.0.0-20260527194618-4cb6d4558850 // indirect
+	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850 // indirect
 	cloudeng.io/sync v0.0.11 // indirect
-	cloudeng.io/sys v0.0.0-20260522180900-2a0ba73f37a3 // indirect
-	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
+	cloudeng.io/sys v0.0.0-20260527194618-4cb6d4558850 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.23 // indirect
@@ -56,7 +56,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.24 // indirect
 	github.com/aws/aws-sdk-go-v2/service/dsql v1.14.0
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.23 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.23 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.11 // indirect
@@ -85,10 +85,10 @@ require (
 	github.com/twinj/uuid v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
-	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.25.0 // indirect
-	go.opentelemetry.io/otel/metric v1.43.0 // indirect
-	go.opentelemetry.io/otel/trace v1.43.0 // indirect
+	go.opentelemetry.io/otel/metric v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
@@ -98,7 +98,7 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260519071638-aa98bba5eb94 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
@@ -106,3 +106,21 @@ require (
 )
 
 replace github.com/twinj/uuid => github.com/twinj/uuid v0.0.0-20151029044442-89173bcdda19
+
+replace cloudeng.io/cicd => ../cicd
+
+replace cloudeng.io/cmdutil => ../cmdutil
+
+replace cloudeng.io/errors => ../errors
+
+replace cloudeng.io/file => ../file
+
+replace cloudeng.io/logging => ../logging
+
+replace cloudeng.io/path => ../path
+
+replace cloudeng.io/text => ../text
+
+replace cloudeng.io/os => ../os
+
+replace cloudeng.io/sync => ../sync

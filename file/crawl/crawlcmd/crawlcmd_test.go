@@ -153,11 +153,11 @@ func ExampleCrawlCacheConfig() {
 	var cfg crawlcmd.CrawlCacheConfig
 	var service cloudConfig
 
-	err := cmdyaml.ParseConfig([]byte(`
+	err := cmdyaml.ParseConfigs(&cfg, []byte(`
 downloads: cloud-service://bucket/downloads
 service_config:
   region: us-west-2
-`), &cfg)
+`))
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 	}
