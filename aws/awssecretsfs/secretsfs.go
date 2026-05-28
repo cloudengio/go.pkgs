@@ -109,11 +109,10 @@ func NewSecretsFS(cfg aws.Config, options ...Option) *T {
 
 // Open implements fs.FS. Name can be the short name of the secret or the ARN.
 func (smfs *T) Open(name string) (fs.File, error) {
-	out, err := smfs.readSecret(context.Background(), smfs.client, name)
+	out, data, err := smfs.readSecret(context.Background(), smfs.client, name)
 	if err != nil {
 		return nil, translateError(err)
 	}
-	data := getData(out)
 	return &secret{name: aws.ToString(out.Name), size: len(data), buf: bytes.NewBuffer(data)}, nil
 }
 
@@ -183,24 +182,29 @@ func (smfs *T) Delete(ctx context.Context, nameOrArn string) error {
 }
 
 func (smfs *T) readFileCtx(ctx context.Context, name string) ([]byte, error) {
-	out, err := smfs.readSecret(ctx, smfs.client, name)
+	_, data, err := smfs.readSecret(ctx, smfs.client, name)
 	if err != nil {
-		return nil, err
+		return nil, translateError(err)
 	}
-	return getData(out), nil
+	return data, nil
 }
 
-func (smfs *T) readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsmanager.GetSecretValueOutput, error) {
+func (smfs *T) readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsmanager.GetSecretValueOutput, []byte, error) {
 	if !smfs.options.singleFlight {
-		return readSecret(ctx, client, nameOrArn)
+		out, err := readSecret(ctx, client, nameOrArn)
+		if err != nil {
+			return nil, nil, err
+		}
+		return out, getData(out), nil
 	}
 	v, err, _ := smfs.sf.Do(ctx, nameOrArn, func() (any, error) {
 		return readSecret(ctx, client, nameOrArn)
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return v.(*secretsmanager.GetSecretValueOutput), nil
+	gs := v.(*secretsmanager.GetSecretValueOutput)
+	return gs, bytes.Clone(getData(gs)), nil
 }
 
 type secret struct {
@@ -273,9 +277,12 @@ func translateError(err error) error {
 		return fmt.Errorf("%v: %w", rnfe.Error(), fs.ErrNotExist)
 	}
 	if ire, ok := errors.AsType[*types.InvalidRequestException](err); ok {
+		fmt.Printf("..... %v\n", ire.ErrorMessage())
 		if strings.Contains(ire.ErrorMessage(), "currently marked deleted") {
 			return fs.ErrNotExist
 		}
+	} else {
+		fmt.Printf("..... %T\n", err)
 	}
 	return err
 }
