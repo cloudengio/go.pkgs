@@ -17,6 +17,7 @@ import (
 
 	"cloudeng.io/aws/awsutil"
 	"cloudeng.io/file"
+	"cloudeng.io/sync/ctxsync"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
@@ -31,6 +32,7 @@ type options struct {
 	client              Client
 	allowNew            bool
 	allowUpdates        bool
+	singleFlight        bool
 }
 
 // WithSecretsOptions wraps secretsmanager.Options for use when creating an s3.Client.
@@ -71,6 +73,14 @@ func WithAllowCreation(allow bool) Option {
 	}
 }
 
+// WithSingleFlight specifies whether to use singleflight to suppress
+// duplicate Read calls to secretsmanager for the same secret.
+func WithSingleFlight(enabled bool) Option {
+	return func(o *options) {
+		o.singleFlight = enabled
+	}
+}
+
 // New creates a new instance of fs.ReadFile backed by the secretsmanager.
 func New(cfg aws.Config, options ...Option) *T {
 	return NewSecretsFS(cfg, options...)
@@ -79,6 +89,7 @@ func New(cfg aws.Config, options ...Option) *T {
 // T implements fs.ReadFileFS for secretsmanager.
 type T struct {
 	client  Client
+	sf      ctxsync.SingleFlight
 	options options
 }
 
@@ -172,11 +183,13 @@ func (smfs *T) Delete(ctx context.Context, nameOrArn string) error {
 }
 
 func (smfs *T) readFileCtx(ctx context.Context, name string) ([]byte, error) {
-	out, err := readSecret(ctx, smfs.client, name)
+	v, err, _ := smfs.sf.Do(ctx, name, func() (any, error) {
+		return readSecret(ctx, smfs.client, name)
+	})
 	if err != nil {
-		return nil, translateError(err)
+		return nil, err
 	}
-	return getData(out), nil
+	return getData(v.(*secretsmanager.GetSecretValueOutput)), nil
 }
 
 type secret struct {

@@ -65,6 +65,13 @@ WithSecretsOptions wraps secretsmanager.Options for use when creating an
 s3.Client.
 
 
+```go
+func WithSingleFlight(enabled bool) Option
+```
+WithSingleFlight specifies whether to use singleflight to suppress duplicate
+Read calls to secretsmanager for the same secret.
+
+
 
 
 ### Type T
