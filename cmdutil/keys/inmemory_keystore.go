@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"sort"
 	"sync"
 
@@ -140,6 +141,8 @@ func (ims *InMemoryKeyStore) KeySpecs() []KeySpec {
 	return owners
 }
 
+// Add adds a key to the store. If a key with the same user and ID already
+// exists, it will be overwritten.
 func (ims *InMemoryKeyStore) Add(key Info) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
@@ -159,6 +162,13 @@ func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 		return key, true
 	}
 	return Info{}, false
+}
+
+// Delete removes a key from the store by its user and ID.
+func (ims *InMemoryKeyStore) Delete(user, id string) {
+	ims.mu.Lock()
+	defer ims.mu.Unlock()
+	delete(ims.keys, KeySpec{ID: id, User: user})
 }
 
 func (ims *InMemoryKeyStore) Len() int {
@@ -191,4 +201,30 @@ func (ims *InMemoryKeyStore) ReadYAML(ctx context.Context, fs file.ReadFileFS, n
 		return err
 	}
 	return yaml.Unmarshal(data, ims)
+}
+
+// WriteJSON marshals the InMemoryKeyStore to JSON and writes it to a file
+// using the provided file.WriteFileFS.
+func (ims *InMemoryKeyStore) WriteJSON(ctx context.Context, wfs file.WriteFileFS, name string, perm fs.FileMode) error {
+	if len(name) == 0 {
+		return fmt.Errorf("no keychain item name provided")
+	}
+	data, err := ims.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	return wfs.WriteFileCtx(ctx, name, data, perm)
+}
+
+// WriteYAML marshals the InMemoryKeyStore to YAML and writes it to a file
+// using the provided file.WriteFileFS.
+func (ims *InMemoryKeyStore) WriteYAML(ctx context.Context, wfs file.WriteFileFS, name string, perm fs.FileMode) error {
+	if len(name) == 0 {
+		return fmt.Errorf("no keychain item name provided")
+	}
+	data, err := yaml.Marshal(ims)
+	if err != nil {
+		return err
+	}
+	return wfs.WriteFileCtx(ctx, name, data, perm)
 }

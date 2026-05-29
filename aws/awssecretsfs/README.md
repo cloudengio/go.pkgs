@@ -126,6 +126,11 @@ ReadFileCtx is like ReadFile but with a context.
 
 
 ```go
+func (smfs *T) WriteFile(nameOrArn string, data []byte, mode fs.FileMode) error
+```
+
+
+```go
 func (smfs *T) WriteFileCtx(ctx context.Context, nameOrArn string, data []byte, _ fs.FileMode) error
 ```
 

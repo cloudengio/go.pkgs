@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"reflect"
 	"testing"
 
@@ -459,6 +460,19 @@ func (m *mockFS) ReadFileCtx(_ context.Context, name string) ([]byte, error) {
 	return m.ReadFile(name)
 }
 
+type mockWriteFS struct {
+	data map[string][]byte
+}
+
+func (m *mockWriteFS) WriteFile(name string, data []byte, _ fs.FileMode) error {
+	m.data[name] = append([]byte(nil), data...)
+	return nil
+}
+
+func (m *mockWriteFS) WriteFileCtx(_ context.Context, name string, data []byte, perm fs.FileMode) error {
+	return m.WriteFile(name, data, perm)
+}
+
 func TestKeySpecString(t *testing.T) {
 	ks := keys.KeySpec{ID: "id1"}
 	if got, want := ks.String(), "id1"; got != want {
@@ -603,6 +617,68 @@ func TestAppendUnmarshal(t *testing.T) {
 
 			verifyAppendedKeys(t, ks, len(tc.data) > 1)
 		})
+	}
+}
+
+func TestDelete(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(keys.NewInfo("id1", "user1", []byte("t1")))
+	ks.Add(keys.NewInfo("id2", "user2", []byte("t2")))
+
+	ks.Delete("user1", "id1")
+	if got, want := ks.Len(), 1; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if _, ok := ks.Get("user1", "id1"); ok {
+		t.Error("deleted key still present")
+	}
+	if _, ok := ks.Get("user2", "id2"); !ok {
+		t.Error("remaining key not found")
+	}
+
+	// Delete of a non-existent key is a no-op.
+	ks.Delete("user1", "id1")
+	if got, want := ks.Len(), 1; got != want {
+		t.Errorf("after no-op delete: got %v, want %v", got, want)
+	}
+}
+
+func TestWriteFiles(t *testing.T) {
+	ctx := context.Background()
+
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(keys.NewInfo("key1", "user1", []byte("value1")))
+	ks.Add(keys.NewInfo("key2", "user2", []byte("value2")))
+
+	wfs := &mockWriteFS{data: make(map[string][]byte)}
+	rfs := &mockFS{data: wfs.data}
+
+	// WriteJSON round-trip.
+	if err := ks.WriteJSON(ctx, wfs, "keys.json", 0o600); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+	ks2 := keys.NewInMemoryKeyStore()
+	if err := ks2.ReadJSON(ctx, rfs, "keys.json"); err != nil {
+		t.Fatalf("ReadJSON after WriteJSON: %v", err)
+	}
+	verifyKeys(t, ks2)
+
+	// WriteYAML round-trip.
+	if err := ks.WriteYAML(ctx, wfs, "keys.yaml", 0o600); err != nil {
+		t.Fatalf("WriteYAML: %v", err)
+	}
+	ks3 := keys.NewInMemoryKeyStore()
+	if err := ks3.ReadYAML(ctx, rfs, "keys.yaml"); err != nil {
+		t.Fatalf("ReadYAML after WriteYAML: %v", err)
+	}
+	verifyKeys(t, ks3)
+
+	// Empty name is an error for both formats.
+	if err := ks.WriteJSON(ctx, wfs, "", 0o600); err == nil {
+		t.Error("WriteJSON: expected error for empty name")
+	}
+	if err := ks.WriteYAML(ctx, wfs, "", 0o600); err == nil {
+		t.Error("WriteYAML: expected error for empty name")
 	}
 }
 
