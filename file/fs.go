@@ -76,6 +76,13 @@ type ReadFileFS interface {
 	ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 }
 
+// ReadWriteFileFS provides an interface for reading and writing the entire
+// contents of a file.
+type ReadWriteFileFS interface {
+	ReadFileFS
+	WriteFileFS
+}
+
 // ErrNotImplemented is returned by methods that are not implemented
 // by a particular filesystem.
 var ErrNotImplemented = fmt.Errorf("not implemented")
