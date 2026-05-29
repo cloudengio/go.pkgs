@@ -126,8 +126,8 @@ func (smfs *T) ReadFileCtx(ctx context.Context, nameOrArn string) ([]byte, error
 	return smfs.readFileCtx(ctx, nameOrArn)
 }
 
-func (smfs *T) WriteFile(nameOrArn string, data []byte, _ fs.FileMode) error {
-	return smfs.WriteFileCtx(context.Background(), nameOrArn, data, _)
+func (smfs *T) WriteFile(nameOrArn string, data []byte, mode fs.FileMode) error {
+	return smfs.WriteFileCtx(context.Background(), nameOrArn, data, mode)
 }
 
 func (smfs *T) WriteFileCtx(ctx context.Context, nameOrArn string, data []byte, _ fs.FileMode) error {
