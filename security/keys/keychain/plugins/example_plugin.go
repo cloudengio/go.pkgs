@@ -78,8 +78,8 @@ func run() error {
 		contents = []byte(contentsFlag)
 	}
 	resp := req.NewResponse(contents, respErr)
-	if err := resp.WithSysSpecific(req.SysSpecific); err != nil {
-		// This would typically be a JSON marshaling error for the sysSpecific part.
+	if err := resp.WithPluginSpecific(req.PluginSpecific); err != nil {
+		// This would typically be a JSON marshaling error for the pluginSpecific part.
 		return fmt.Errorf("failed to create response: %w", err)
 	}
 

@@ -94,10 +94,11 @@ file.ReadFileFS and file.WriteFileFS.
 ### Functions
 
 ```go
-func NewFS(pluginPath string, sysSpecific any, args ...string) *FS
+func NewFS(pluginPath string, pluginSpecific any, args ...string) *FS
 ```
 NewFS creates a new FS instance with the specified plugin path,
-system-specific data, and plugin arguments.
+plugin-specific data, and plugin arguments. The plugin-specific data is
+passed to the plugin in the request.
 
 
 
@@ -111,6 +112,12 @@ func (f FS) ReadFile(name string) ([]byte, error)
 ```go
 func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 ```
+
+
+```go
+func (f *FS) WithLogger(logger *slog.Logger) *FS
+```
+WithLogger returns a new FS instance with the provided logger.
 
 
 ```go
@@ -128,11 +135,11 @@ func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.Fil
 ### Type Request
 ```go
 type Request struct {
-	ID          int32           `json:"id,omitempty"`
-	Keyname     string          `json:"keyname"`
-	Write       bool            `json:"write,omitempty"`
-	Contents    []byte          `json:"contents,omitempty"`
-	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
+	ID             int32           `json:"id,omitempty"`
+	Keyname        string          `json:"keyname"`
+	Write          bool            `json:"write,omitempty"`
+	Contents       []byte          `json:"contents,omitempty"`
+	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
 }
 ```
 Request represents the request to the keychain plugin.
@@ -140,7 +147,7 @@ Request represents the request to the keychain plugin.
 ### Functions
 
 ```go
-func NewRequest(keyname string, sysSpecific any) (Request, error)
+func NewRequest(keyname string, pluginSpecific any) (Request, error)
 ```
 NewRequest creates a Request to read a key with the given keyname and
 system-specific data. The ID is automatically generated and is unique for
@@ -148,10 +155,10 @@ each call to this function.
 
 
 ```go
-func NewWriteRequest(keyname string, contents []byte, sysSpecific any) (Request, error)
+func NewWriteRequest(keyname string, contents []byte, pluginSpecific any) (Request, error)
 ```
 NewWriteRequest creates a Request to write a key with the given keyname,
-contents, and system-specific data. The ID is automatically generated and is
+contents, and plugin-specific data. The ID is automatically generated and is
 unique for each call to this function.
 
 
@@ -169,10 +176,11 @@ NewResponse creates a Response with the given contents and error.
 ### Type Response
 ```go
 type Response struct {
-	ID          int32           `json:"id,omitempty"`
-	Contents    []byte          `json:"contents,omitempty"`
-	Error       *Error          `json:"error,omitempty"`
-	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
+	ID             int32           `json:"id,omitempty"`
+	Contents       []byte          `json:"contents,omitempty"`
+	Stderr         string          `json:"-"` // Stderr is the stder output from the plugin and is filled in by RunExtPlugin.
+	Error          *Error          `json:"error,omitempty"`
+	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
 }
 ```
 Response represents the response from the keychain plugin.
@@ -191,15 +199,15 @@ path to the plugin executable.
 ### Methods
 
 ```go
-func (resp Response) UnmarshalSysSpecific(v any) error
+func (resp Response) UnmarshalPluginSpecific(v any) error
 ```
 
 
 ```go
-func (resp *Response) WithSysSpecific(sysSpecific any) error
+func (resp *Response) WithPluginSpecific(pluginSpecific any) error
 ```
-WithSysSpecific sets the SysSpecific field of the Response to the JSON
-encoding of the given sysSpecific data.
+WithPluginSpecific sets the PluginSpecific field of the Response to the JSON
+encoding of the given pluginSpecific data.
 
 
 
