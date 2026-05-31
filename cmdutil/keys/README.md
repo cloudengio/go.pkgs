@@ -78,6 +78,14 @@ NewInMemoryKeyStore creates a new InMemoryKeyStore instance.
 ```go
 func (ims *InMemoryKeyStore) Add(key Info)
 ```
+Add adds a key to the store. If a key with the same user and ID already
+exists, it will be overwritten.
+
+
+```go
+func (ims *InMemoryKeyStore) Delete(user, id string)
+```
+Delete removes a key from the store by its user and ID.
 
 
 ```go
@@ -142,6 +150,20 @@ UnmarshalYAML implements the yaml.Unmarshaler interface to allow
 unmarshaling from both a list and a map of keys. The unmarshaled
 keys update any existing keys in the store, using User+ID as the key.
 textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
+
+
+```go
+func (ims *InMemoryKeyStore) WriteJSON(ctx context.Context, wfs file.WriteFileFS, name string, perm fs.FileMode) error
+```
+WriteJSON marshals the InMemoryKeyStore to JSON and writes it to a file
+using the provided file.WriteFileFS.
+
+
+```go
+func (ims *InMemoryKeyStore) WriteYAML(ctx context.Context, wfs file.WriteFileFS, name string, perm fs.FileMode) error
+```
+WriteYAML marshals the InMemoryKeyStore to YAML and writes it to a file
+using the provided file.WriteFileFS.
 
 
 
@@ -306,7 +328,7 @@ InMemoryKeyStore from YAML or JSON files.
 ### Functions
 
 ```go
-func NewKeyStoreUpdater(ims *InMemoryKeyStore) *KeyStoreUpdater
+func NewKeyStoreUpdater(ims *InMemoryKeyStore, interval time.Duration) *KeyStoreUpdater
 ```
 NewKeyStoreUpdater creates a new KeyStoreUpdater that will refresh
 keys in the provided InMemoryKeyStore. Call ScheduleRefreshYAML or
