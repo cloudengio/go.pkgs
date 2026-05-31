@@ -8,25 +8,37 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 )
 
 // FS implements a plugin-based file system for keychain
 // that implements file.ReadFileFS and file.WriteFileFS.
 type FS struct {
-	sysSpecific any
-	binary      string
-	args        []string
+	pluginSpecific any
+	binary         string
+	args           []string
+	logger         *slog.Logger
 }
 
-// NewFS creates a new FS instance with the specified plugin path, system-specific data, and plugin arguments.
-func NewFS(pluginPath string, sysSpecific any, args ...string) *FS {
+// NewFS creates a new FS instance with the specified plugin path, plugin-specific
+// data, and plugin arguments. The plugin-specific data is passed to the plugin
+// in the request.
+func NewFS(pluginPath string, pluginSpecific any, args ...string) *FS {
 	return &FS{
-		sysSpecific: sysSpecific,
-		binary:      pluginPath,
-		args:        args,
+		pluginSpecific: pluginSpecific,
+		binary:         pluginPath,
+		args:           args,
+		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
+}
+
+// WithLogger returns a new FS instance with the provided logger.
+func (f *FS) WithLogger(logger *slog.Logger) *FS {
+	f.logger = logger.With("plugin", f.binary)
+	return f
 }
 
 func (f FS) ReadFile(name string) ([]byte, error) {
@@ -34,11 +46,12 @@ func (f FS) ReadFile(name string) ([]byte, error) {
 }
 
 func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
-	req, err := NewRequest(name, f.sysSpecific)
+	req, err := NewRequest(name, f.pluginSpecific)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	resp, err := RunExtPlugin(ctx, f.binary, req, f.args...)
+	f.logger.Info("plugin read file", "name", name, "stderr", resp.Stderr, "error", err)
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +69,12 @@ func (f FS) WriteFile(name string, data []byte, perm fs.FileMode) error {
 }
 
 func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.FileMode) error {
-	req, err := NewWriteRequest(name, data, f.sysSpecific)
+	req, err := NewWriteRequest(name, data, f.pluginSpecific)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	resp, err := RunExtPlugin(ctx, f.binary, req, f.args...)
+	f.logger.Info("plugin write file", "name", name, "stderr", resp.Stderr, "error", err)
 	if err != nil {
 		return err
 	}

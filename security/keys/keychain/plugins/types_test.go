@@ -18,7 +18,7 @@ func TestNewRequest(t *testing.T) {
 		Field string `json:"field"`
 	}
 
-	// Test case 1: Basic request with sysSpecific
+	// Test case 1: Basic request with pluginSpecific
 	keyname := "test-key"
 	spec := sysSpec{Field: "value"}
 	req, err := plugins.NewRequest(keyname, spec)
@@ -34,20 +34,20 @@ func TestNewRequest(t *testing.T) {
 	}
 
 	var gotSpec sysSpec
-	if err := json.Unmarshal(req.SysSpecific, &gotSpec); err != nil {
-		t.Fatalf("failed to unmarshal sysSpecific: %v", err)
+	if err := json.Unmarshal(req.PluginSpecific, &gotSpec); err != nil {
+		t.Fatalf("failed to unmarshal pluginSpecific: %v", err)
 	}
 	if gotSpec != spec {
 		t.Errorf("got %v, want %v", gotSpec, spec)
 	}
 
-	// Test case 2: Request with nil sysSpecific
+	// Test case 2: Request with nil pluginSpecific
 	req2, err := plugins.NewRequest("key2", nil)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
-	if req2.SysSpecific != nil {
-		t.Errorf("got %v, want nil", req2.SysSpecific)
+	if req2.PluginSpecific != nil {
+		t.Errorf("got %v, want nil", req2.PluginSpecific)
 	}
 	if req2.ID <= req.ID {
 		t.Errorf("ID did not increment: got %d, previous %d", req2.ID, req.ID)
@@ -102,20 +102,20 @@ func TestNewResponse(t *testing.T) {
 	}
 
 	var gotSpec sysSpec
-	if err := json.Unmarshal(resp.SysSpecific, &gotSpec); err != nil {
-		t.Fatalf("failed to unmarshal sysSpecific: %v", err)
+	if err := json.Unmarshal(resp.PluginSpecific, &gotSpec); err != nil {
+		t.Fatalf("failed to unmarshal pluginSpecific: %v", err)
 	}
 	if gotSpec != spec {
 		t.Errorf("got %v, want %v", gotSpec, spec)
 	}
 
-	// Test case 2: Response with nil error and nil sysSpecific
+	// Test case 2: Response with nil error and nil pluginSpecific
 	resp2 := req.NewResponse(contents, nil)
 	if resp2.Error != nil {
 		t.Errorf("got %q, want nil", resp2.Error)
 	}
-	if resp2.SysSpecific != nil {
-		t.Errorf("got %v, want nil", resp2.SysSpecific)
+	if resp2.PluginSpecific != nil {
+		t.Errorf("got %v, want nil", resp2.PluginSpecific)
 	}
 
 	// Test case 3: JSON marshal error
@@ -177,20 +177,20 @@ func TestNewWriteRequest(t *testing.T) {
 	}
 
 	var gotSpec sysSpec
-	if err := json.Unmarshal(req.SysSpecific, &gotSpec); err != nil {
-		t.Fatalf("failed to unmarshal sysSpecific: %v", err)
+	if err := json.Unmarshal(req.PluginSpecific, &gotSpec); err != nil {
+		t.Fatalf("failed to unmarshal pluginSpecific: %v", err)
 	}
 	if gotSpec != spec {
 		t.Errorf("got spec %v, want %v", gotSpec, spec)
 	}
 
-	// Test case 2: nil sysSpecific
+	// Test case 2: nil pluginSpecific
 	req2, err := plugins.NewWriteRequest("key2", contents, nil)
 	if err != nil {
 		t.Fatalf("NewWriteRequest failed: %v", err)
 	}
-	if req2.SysSpecific != nil {
-		t.Errorf("got spec %v, want nil", req2.SysSpecific)
+	if req2.PluginSpecific != nil {
+		t.Errorf("got spec %v, want nil", req2.PluginSpecific)
 	}
 
 	// Test case 3: JSON marshal error

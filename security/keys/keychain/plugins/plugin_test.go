@@ -60,8 +60,8 @@ func TestExtPlugin(t *testing.T) {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 
-	if err := resp.UnmarshalSysSpecific(&withAccount); err != nil {
-		t.Fatalf("failed to unmarshal sysSpecific: %v", err)
+	if err := resp.UnmarshalPluginSpecific(&withAccount); err != nil {
+		t.Fatalf("failed to unmarshal pluginSpecific: %v", err)
 	}
 
 	if got, want := withAccount.Account, "account1"; got != want {

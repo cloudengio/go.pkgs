@@ -62,19 +62,20 @@ func (e *Error) Is(target error) bool {
 
 // Request represents the request to the keychain plugin.
 type Request struct {
-	ID          int32           `json:"id,omitempty"`
-	Keyname     string          `json:"keyname"`
-	Write       bool            `json:"write,omitempty"`
-	Contents    []byte          `json:"contents,omitempty"`
-	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
+	ID             int32           `json:"id,omitempty"`
+	Keyname        string          `json:"keyname"`
+	Write          bool            `json:"write,omitempty"`
+	Contents       []byte          `json:"contents,omitempty"`
+	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
 }
 
 // Response represents the response from the keychain plugin.
 type Response struct {
-	ID          int32           `json:"id,omitempty"`
-	Contents    []byte          `json:"contents,omitempty"`
-	Error       *Error          `json:"error,omitempty"`
-	SysSpecific json.RawMessage `json:"sys_specific,omitempty"`
+	ID             int32           `json:"id,omitempty"`
+	Contents       []byte          `json:"contents,omitempty"`
+	Stderr         string          `json:"-"` // Stderr is the stder output from the plugin and is filled in by RunExtPlugin.
+	Error          *Error          `json:"error,omitempty"`
+	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
 }
 
 var nextID int32 = 1
@@ -87,19 +88,19 @@ func NextID() int32 {
 // system-specific data.
 // The ID is automatically generated and is unique for each call to this
 // function.
-func NewRequest(keyname string, sysSpecific any) (Request, error) {
-	var sysSpecificJSON json.RawMessage
-	if sysSpecific != nil {
-		b, err := json.Marshal(sysSpecific)
+func NewRequest(keyname string, pluginSpecific any) (Request, error) {
+	var pluginSpecificJSON json.RawMessage
+	if pluginSpecific != nil {
+		b, err := json.Marshal(pluginSpecific)
 		if err != nil {
 			return Request{}, err
 		}
-		sysSpecificJSON = b
+		pluginSpecificJSON = b
 	}
 	return Request{
-		ID:          NextID(),
-		Keyname:     keyname,
-		SysSpecific: sysSpecificJSON,
+		ID:             NextID(),
+		Keyname:        keyname,
+		PluginSpecific: pluginSpecificJSON,
 	}, nil
 }
 
@@ -107,21 +108,21 @@ func NewRequest(keyname string, sysSpecific any) (Request, error) {
 // contents, and system-specific data.
 // The ID is automatically generated and is unique for each call to this
 // function.
-func NewWriteRequest(keyname string, contents []byte, sysSpecific any) (Request, error) {
-	var sysSpecificJSON json.RawMessage
-	if sysSpecific != nil {
-		b, err := json.Marshal(sysSpecific)
+func NewWriteRequest(keyname string, contents []byte, pluginSpecific any) (Request, error) {
+	var pluginSpecificJSON json.RawMessage
+	if pluginSpecific != nil {
+		b, err := json.Marshal(pluginSpecific)
 		if err != nil {
 			return Request{}, err
 		}
-		sysSpecificJSON = b
+		pluginSpecificJSON = b
 	}
 	return Request{
-		ID:          NextID(),
-		Keyname:     keyname,
-		Write:       true,
-		Contents:    contents,
-		SysSpecific: sysSpecificJSON,
+		ID:             NextID(),
+		Keyname:        keyname,
+		Write:          true,
+		Contents:       contents,
+		PluginSpecific: pluginSpecificJSON,
 	}, nil
 }
 
@@ -134,24 +135,24 @@ func (req Request) NewResponse(contents []byte, responseError *Error) *Response 
 	}
 }
 
-// WithSysSpecific sets the SysSpecific field of the Response to the JSON
-// encoding of the given sysSpecific data.
+// WithSysSpecific sets the PluginSpecific field of the Response to the JSON
+// encoding of the given pluginSpecific data.
 func (resp *Response) WithSysSpecific(sysSpecific any) error {
 	if sysSpecific != nil {
 		b, err := json.Marshal(sysSpecific)
 		if err != nil {
 			return err
 		}
-		resp.SysSpecific = b
+		resp.PluginSpecific = b
 	}
 	return nil
 }
 
-func (resp Response) UnmarshalSysSpecific(v any) error {
-	if resp.SysSpecific == nil {
+func (resp Response) UnmarshalPluginSpecific(v any) error {
+	if resp.PluginSpecific == nil {
 		return nil
 	}
-	return json.Unmarshal(resp.SysSpecific, v)
+	return json.Unmarshal(resp.PluginSpecific, v)
 }
 
 // AsError attempts to convert the given error to a *Error and returns it.
