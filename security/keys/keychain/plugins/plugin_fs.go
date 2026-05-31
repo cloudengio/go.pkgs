@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -31,14 +30,17 @@ func NewFS(pluginPath string, pluginSpecific any, args ...string) *FS {
 		pluginSpecific: pluginSpecific,
 		binary:         pluginPath,
 		args:           args,
-		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 }
 
 // WithLogger returns a new FS instance with the provided logger.
 func (f *FS) WithLogger(logger *slog.Logger) *FS {
-	f.logger = logger.With("plugin", f.binary)
-	return f
+	if logger == nil {
+		return f
+	}
+	n := *f
+	n.logger = logger.With("plugin", f.binary)
+	return &n
 }
 
 func (f FS) ReadFile(name string) ([]byte, error) {
@@ -51,7 +53,9 @@ func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	resp, err := RunExtPlugin(ctx, f.binary, req, f.args...)
-	f.logger.Info("plugin read file", "name", name, "stderr", resp.Stderr, "error", err)
+	if f.logger != nil {
+		f.logger.Info("plugin read file", "name", name, "stderr", resp.Stderr, "error", err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +78,9 @@ func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.Fil
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	resp, err := RunExtPlugin(ctx, f.binary, req, f.args...)
-	f.logger.Info("plugin write file", "name", name, "stderr", resp.Stderr, "error", err)
+	if f.logger != nil {
+		f.logger.Info("plugin write file", "name", name, "stderr", resp.Stderr, "error", err)
+	}
 	if err != nil {
 		return err
 	}

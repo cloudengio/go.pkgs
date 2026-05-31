@@ -105,7 +105,7 @@ func NewRequest(keyname string, pluginSpecific any) (Request, error) {
 }
 
 // NewWriteRequest creates a Request to write a key with the given keyname,
-// contents, and system-specific data.
+// contents, and plugin-specific data.
 // The ID is automatically generated and is unique for each call to this
 // function.
 func NewWriteRequest(keyname string, contents []byte, pluginSpecific any) (Request, error) {
@@ -135,11 +135,11 @@ func (req Request) NewResponse(contents []byte, responseError *Error) *Response 
 	}
 }
 
-// WithSysSpecific sets the PluginSpecific field of the Response to the JSON
+// WithPluginSpecific sets the PluginSpecific field of the Response to the JSON
 // encoding of the given pluginSpecific data.
-func (resp *Response) WithSysSpecific(sysSpecific any) error {
-	if sysSpecific != nil {
-		b, err := json.Marshal(sysSpecific)
+func (resp *Response) WithPluginSpecific(pluginSpecific any) error {
+	if pluginSpecific != nil {
+		b, err := json.Marshal(pluginSpecific)
 		if err != nil {
 			return err
 		}

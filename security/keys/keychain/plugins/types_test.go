@@ -79,7 +79,7 @@ func TestNewResponse(t *testing.T) {
 
 	// Test case 1: Response with error and contents
 	resp := req.NewResponse(contents, respErr)
-	err := resp.WithSysSpecific(spec)
+	err := resp.WithPluginSpecific(spec)
 	if err != nil {
 		t.Fatalf("NewResponse failed: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestNewResponse(t *testing.T) {
 	}
 
 	// Test case 3: JSON marshal error
-	err = req.NewResponse(contents, nil).WithSysSpecific(make(chan int))
+	err = req.NewResponse(contents, nil).WithPluginSpecific(make(chan int))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

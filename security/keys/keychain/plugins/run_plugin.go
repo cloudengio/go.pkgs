@@ -64,6 +64,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	}
 	if resp.Error != nil {
 		resp.Error.Stderr = stderr.String()
+		resp.Stderr = stderr.String()
 		return resp, nil
 	}
 	resp.Stderr = stderr.String()

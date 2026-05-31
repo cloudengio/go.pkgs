@@ -115,6 +115,12 @@ func (f FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
 
 
 ```go
+func (f *FS) WithLogger(logger *slog.Logger) *FS
+```
+WithLogger returns a new FS instance with the provided logger.
+
+
+```go
 func (f FS) WriteFile(name string, data []byte, perm fs.FileMode) error
 ```
 
@@ -152,7 +158,7 @@ each call to this function.
 func NewWriteRequest(keyname string, contents []byte, pluginSpecific any) (Request, error)
 ```
 NewWriteRequest creates a Request to write a key with the given keyname,
-contents, and system-specific data. The ID is automatically generated and is
+contents, and plugin-specific data. The ID is automatically generated and is
 unique for each call to this function.
 
 
@@ -198,9 +204,9 @@ func (resp Response) UnmarshalPluginSpecific(v any) error
 
 
 ```go
-func (resp *Response) WithSysSpecific(sysSpecific any) error
+func (resp *Response) WithPluginSpecific(pluginSpecific any) error
 ```
-WithSysSpecific sets the PluginSpecific field of the Response to the JSON
+WithPluginSpecific sets the PluginSpecific field of the Response to the JSON
 encoding of the given pluginSpecific data.
 
 
