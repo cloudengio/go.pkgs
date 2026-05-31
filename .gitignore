@@ -19,3 +19,5 @@
 go.work
 go.work.sum
 .*.swp
+
+aws/cmd/aws-secrets/aws-secrets

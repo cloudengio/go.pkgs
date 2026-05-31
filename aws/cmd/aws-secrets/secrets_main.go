@@ -99,6 +99,9 @@ func (sc secretsCmd) Read(ctx context.Context, f any, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("%w", handleError(err))
 	}
+	if fl.ARN == "" {
+		return fmt.Errorf("missing secret ARN or name; use --arn to specify it")
+	}
 	fs := awssecretsfs.New(cfg)
 	contents, err := fs.ReadFileCtx(ctx, fl.ARN)
 	if err != nil {
@@ -136,7 +139,8 @@ func (sc secretsCmd) Write(ctx context.Context, f any, args []string) error {
 }
 
 func handleError(err error) error {
+	// placeholder for catching AWS specific errors.
 	return err
 }
 
-// ssl-onprem-certs-read
+// TODO add support for decoding TLS certificates
