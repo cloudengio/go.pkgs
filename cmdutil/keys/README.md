@@ -24,6 +24,19 @@ DefaultRefreshInterval = time.Minute
 
 
 ## Functions
+### Func ClearBytes
+```go
+func ClearBytes(b []byte)
+```
+ClearBytes zeroes every byte of b in place.
+
+### Func ClearString
+```go
+func ClearString(s string)
+```
+ClearString zeroes the underlying bytes of s in place. The caller must
+ensure s was not created from a string literal (read-only memory).
+
 ### Func ContextWithKey
 ```go
 func ContextWithKey(ctx context.Context, ki Info) context.Context
@@ -44,6 +57,54 @@ InMemoryKeyStore.
 func ContextWithoutKeyStore(ctx context.Context) context.Context
 ```
 ContextWithoutKeyStore returns a new context without an InMemoryKeyStore.
+
+### Func RedactBytesHead
+```go
+func RedactBytesHead(b []byte, keep int) []byte
+```
+RedactBytesHead returns a redacted copy of b that shows the first keep bytes
+followed by "******". If keep is zero or >= len(b), all bytes are replaced
+with '*'.
+
+### Func RedactBytesTail
+```go
+func RedactBytesTail(b []byte, keep int) []byte
+```
+RedactBytesTail returns a redacted copy of b that hides everything except
+the last keep bytes, shown as a suffix after "******". If keep is zero or >=
+len(b), all bytes are replaced with '*'.
+
+### Func RedactKeyBytes
+```go
+func RedactKeyBytes(b []byte, keep int) []byte
+```
+RedactKeyBytes redacts b, keeping keep visible bytes. A positive keep
+preserves a prefix (RedactBytesHead); a negative keep preserves a suffix
+(RedactBytesTail).
+
+### Func RedactKeyString
+```go
+func RedactKeyString(s string, keep int) string
+```
+RedactKeyString redacts s, keeping keep visible characters. A positive keep
+preserves a prefix (RedactStringHead); a negative keep preserves a suffix
+(RedactStringTail).
+
+### Func RedactStringHead
+```go
+func RedactStringHead(s string, keep int) string
+```
+RedactStringHead returns a redacted copy of s that shows the first keep
+bytes followed by "******". If keep is zero or >= len(s), all characters are
+replaced with "*".
+
+### Func RedactStringTail
+```go
+func RedactStringTail(s string, keep int) string
+```
+RedactStringTail returns a redacted copy of s that hides everything except
+the last keep bytes, which are shown as a suffix after "******". If keep is
+zero or >= len(s), all characters are replaced with "*".
 
 
 
@@ -78,6 +139,14 @@ NewInMemoryKeyStore creates a new InMemoryKeyStore instance.
 ```go
 func (ims *InMemoryKeyStore) Add(key Info)
 ```
+Add adds a key to the store. If a key with the same user and ID already
+exists, it will be overwritten.
+
+
+```go
+func (ims *InMemoryKeyStore) Delete(user, id string)
+```
+Delete removes a key from the store by its user and ID.
 
 
 ```go
@@ -142,6 +211,20 @@ UnmarshalYAML implements the yaml.Unmarshaler interface to allow
 unmarshaling from both a list and a map of keys. The unmarshaled
 keys update any existing keys in the store, using User+ID as the key.
 textutil.TrimUnicodeQuotes is used on the ID, User, and Token fields.
+
+
+```go
+func (ims *InMemoryKeyStore) WriteJSON(ctx context.Context, wfs file.WriteFileFS, name string, perm fs.FileMode) error
+```
+WriteJSON marshals the InMemoryKeyStore to JSON and writes it to a file
+using the provided file.WriteFileFS.
+
+
+```go
+func (ims *InMemoryKeyStore) WriteYAML(ctx context.Context, wfs file.WriteFileFS, name string, perm fs.FileMode) error
+```
+WriteYAML marshals the InMemoryKeyStore to YAML and writes it to a file
+using the provided file.WriteFileFS.
 
 
 
@@ -306,7 +389,7 @@ InMemoryKeyStore from YAML or JSON files.
 ### Functions
 
 ```go
-func NewKeyStoreUpdater(ims *InMemoryKeyStore) *KeyStoreUpdater
+func NewKeyStoreUpdater(ims *InMemoryKeyStore, interval time.Duration) *KeyStoreUpdater
 ```
 NewKeyStoreUpdater creates a new KeyStoreUpdater that will refresh
 keys in the provided InMemoryKeyStore. Call ScheduleRefreshYAML or
@@ -374,7 +457,7 @@ the context.
 ### Methods
 
 ```go
-func (t *Token) Clear()
+func (t Token) Clear()
 ```
 Clear zeros the token value.
 

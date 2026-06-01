@@ -399,15 +399,23 @@ func TestToken(t *testing.T) {
 		t.Errorf("input slice was not cleared")
 	}
 	tok.Clear()
+
+	// Make sure underlying token value is cleared
 	for _, b := range tok.Value() {
 		if b != 0 {
 			t.Errorf("token was not cleared")
 		}
 	}
-	if got, want := tok.ID, ""; got != want {
+	for _, b := range val {
+		if b != 0 {
+			t.Errorf("token was not cleared")
+		}
+	}
+	// UserID and ID need not be cleared
+	if got, want := tok.ID, tok.ID; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := tok.User, ""; got != want {
+	if got, want := tok.User, tok.User; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"strings"
 	"time"
 
 	"cloudeng.io/aws/awsutil"
@@ -277,16 +276,5 @@ func readSecret(ctx context.Context, client Client, nameOrArn string) (*secretsm
 }
 
 func translateError(err error) error {
-	if rnfe, ok := errors.AsType[*types.ResourceNotFoundException](err); ok {
-		return fmt.Errorf("%v: %w", rnfe.Error(), fs.ErrNotExist)
-	}
-	if ire, ok := errors.AsType[*types.InvalidRequestException](err); ok {
-		fmt.Printf("..... %v\n", ire.ErrorMessage())
-		if strings.Contains(ire.ErrorMessage(), "currently marked deleted") {
-			return fs.ErrNotExist
-		}
-	} else {
-		fmt.Printf("..... %T\n", err)
-	}
-	return err
+	return awsutil.InterpretError(err)
 }

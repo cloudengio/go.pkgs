@@ -12,6 +12,14 @@ func AccountID(ctx context.Context, cfg aws.Config) (string, error)
 ```
 AccountID returns the account id from the aws.Config and caches it locally.
 
+### Func InterpretError
+```go
+func InterpretError(err error) error
+```
+InterpretError attempts to interpret AWS SDK errors and either improve the
+error reporting to the caller and/or map to already defined error types as
+fs.ErrNotExist.
+
 ### Func IsARN
 ```go
 func IsARN(name string) bool
