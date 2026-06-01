@@ -62,11 +62,8 @@ func (t Token) Value() []byte {
 }
 
 // Clear zeros the token value.
-func (t *Token) Clear() {
-	t.KeySpec = KeySpec{}
-	for i := range t.token {
-		t.token[i] = 0
-	}
+func (t Token) Clear() {
+	clear(t.token)
 }
 
 func (t Token) String() string {

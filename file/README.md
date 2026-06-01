@@ -290,6 +290,17 @@ within the context.
 
 
 
+### Type ReadWriteFileFS
+```go
+type ReadWriteFileFS interface {
+	ReadFileFS
+	WriteFileFS
+}
+```
+ReadWriteFileFS provides an interface for reading and writing the entire
+contents of a file.
+
+
 ### Type WriteFileFS
 ```go
 type WriteFileFS interface {
