@@ -14,16 +14,12 @@ import (
 // ensure s was not created from a string literal (read-only memory).
 func ClearString(s string) {
 	b := unsafe.Slice(unsafe.StringData(s), len(s))
-	for i := range b {
-		b[i] = 0
-	}
+	clear(b)
 }
 
 // ClearBytes zeroes every byte of b in place.
 func ClearBytes(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
+	clear(b)
 }
 
 // RedactKeyString redacts s, keeping keep visible characters. A positive keep
