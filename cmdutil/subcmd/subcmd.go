@@ -602,7 +602,7 @@ func (cmds *CommandSet) Dispatch(ctx context.Context) error {
 func (cmds *CommandSet) MustDispatch(ctx context.Context) {
 	err := cmds.DispatchWithArgs(ctx, filepath.Base(os.Args[0]), os.Args[1:]...)
 	if err != nil {
-		cmdutil.Exit("%v", err)
+		cmdutil.Exitf("%v", err)
 	}
 }
 

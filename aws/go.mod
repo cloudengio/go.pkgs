@@ -16,7 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.19
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.25
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.304.2
-	github.com/aws/aws-sdk-go-v2/service/kms v1.52.2
+	github.com/aws/aws-sdk-go-v2/service/kms v1.53.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.9
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.61.0
@@ -44,10 +44,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260529160711-8ba9f0c7b2ae // indirect
-	cloudeng.io/os v0.0.0-20260529160711-8ba9f0c7b2ae // indirect
+	cloudeng.io/algo v0.0.0-20260601212956-cbb9ba55a911 // indirect
+	cloudeng.io/os v0.0.0-20260601212956-cbb9ba55a911 // indirect
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260529160711-8ba9f0c7b2ae // indirect
+	cloudeng.io/sys v0.0.0-20260601212956-cbb9ba55a911 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.25 // indirect

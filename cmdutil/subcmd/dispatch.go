@@ -16,17 +16,17 @@ import (
 // signal or if the CommandSetYAML returns an error.
 func Dispatch(ctx context.Context, cli *CommandSetYAML) {
 	if cli == nil {
-		cmdutil.Exit("CommandSetYAML instance provided to Dispatch is nil")
+		cmdutil.Exitf("CommandSetYAML instance provided to Dispatch is nil")
 		return
 	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	cmdutil.HandleSignals(func() { cancel(cmdutil.ErrInterrupt) }, os.Interrupt)
 	err := cli.Dispatch(ctx)
 	if context.Cause(ctx) == cmdutil.ErrInterrupt {
-		cmdutil.Exit("%v", cmdutil.ErrInterrupt)
+		cmdutil.Exitf("%v", cmdutil.ErrInterrupt)
 	}
 	if err != nil {
-		cmdutil.Exit("%v", err)
+		cmdutil.Exitf("%v", err)
 		return
 	}
 }
