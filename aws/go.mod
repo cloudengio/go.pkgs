@@ -11,23 +11,23 @@ require (
 	cloudeng.io/path v0.0.10-0.20260114020737-744f6c0f8e64
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	github.com/alexbacchin/ssm-session-client v1.1.0
-	github.com/aws/aws-sdk-go-v2 v1.41.9
-	github.com/aws/aws-sdk-go-v2/config v1.32.20
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.19
-	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.25
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.304.2
-	github.com/aws/aws-sdk-go-v2/service/kms v1.52.2
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.0
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.9
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.61.0
-	github.com/aws/aws-sdk-go-v2/service/sts v1.42.3
-	github.com/aws/smithy-go v1.26.0
+	github.com/aws/aws-sdk-go-v2 v1.41.10
+	github.com/aws/aws-sdk-go-v2/config v1.32.21
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.20
+	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.26
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.305.0
+	github.com/aws/aws-sdk-go-v2/service/kms v1.53.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.0
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.42.0
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.62.1
+	github.com/aws/aws-sdk-go-v2/service/sts v1.43.0
+	github.com/aws/smithy-go v1.27.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/orlangure/gnomock v0.32.0
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.69.0 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260423192734-dcff8da8cdec // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -44,24 +44,24 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260529160711-8ba9f0c7b2ae // indirect
-	cloudeng.io/os v0.0.0-20260529160711-8ba9f0c7b2ae // indirect
+	cloudeng.io/algo v0.0.0-20260601212956-cbb9ba55a911 // indirect
+	cloudeng.io/os v0.0.0-20260601212956-cbb9ba55a911 // indirect
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260529160711-8ba9f0c7b2ae // indirect
+	cloudeng.io/sys v0.0.0-20260601212956-cbb9ba55a911 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.25 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.25 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.25 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.26 // indirect
-	github.com/aws/aws-sdk-go-v2/service/dsql v1.14.2
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.11 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.27 // indirect
+	github.com/aws/aws-sdk-go-v2/service/dsql v1.14.3
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.10 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.16 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.25 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.1.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.30.19 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.19 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.26 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.26 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.1.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.31.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -84,7 +84,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/twinj/uuid v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.25.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect

@@ -37,12 +37,20 @@ func HandleSignals(fn func(), signals ...os.Signal) {
 	}()
 }
 
-// Exit formats and prints the supplied parameters to os.Stderr and then
+// Exitf formats and prints the supplied parameters to os.Stderr and then
 // calls os.Exit(1).
-func Exit(format string, args ...any) {
+func Exitf(format string, args ...any) {
 	if !strings.HasSuffix(format, "\n") {
 		format += "\n"
 	}
 	fmt.Fprintf(os.Stderr, format, args...)
 	os.Exit(1)
+}
+
+// Exit formats and prints the supplied parameters to os.Stderr and then
+// calls os.Exit(1).
+//
+// Deprecated: use Exitf instead.
+func Exit(format string, args ...any) {
+	Exitf(format, args...)
 }
