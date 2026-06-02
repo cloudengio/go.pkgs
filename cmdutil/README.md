@@ -55,6 +55,15 @@ func Exit(format string, args ...any)
 Exit formats and prints the supplied parameters to os.Stderr and then calls
 os.Exit(1).
 
+Deprecated: use Exitf instead.
+
+### Func Exitf
+```go
+func Exitf(format string, args ...any)
+```
+Exitf formats and prints the supplied parameters to os.Stderr and then calls
+os.Exit(1).
+
 ### Func HandleInterrupt
 ```go
 func HandleInterrupt(ctx context.Context) (context.Context, context.CancelCauseFunc)
