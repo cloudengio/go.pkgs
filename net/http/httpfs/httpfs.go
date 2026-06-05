@@ -111,6 +111,21 @@ func (fs *FS) IsNotExist(err error) bool {
 	return false
 }
 
+// ReadFile implements file.ReadFileFS.
+func (fs *FS) ReadFile(name string) ([]byte, error) {
+	return fs.ReadFileCtx(context.Background(), name)
+}
+
+// ReadFileCtx implements file.ReadFileFS.
+func (fs *FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	f, err := fs.OpenCtx(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
 type httpXAttr struct {
 	XAttr file.XAttr
 	obj   *http.Response

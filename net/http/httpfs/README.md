@@ -136,6 +136,18 @@ OpenCtx implements file.FS.
 
 
 ```go
+func (fs *FS) ReadFile(name string) ([]byte, error)
+```
+ReadFile implements file.ReadFileFS.
+
+
+```go
+func (fs *FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error)
+```
+ReadFileCtx implements file.ReadFileFS.
+
+
+```go
 func (fs *FS) Readlink(_ context.Context, _ string) (string, error)
 ```
 Readlink returns the contents of a redirect without following it.
