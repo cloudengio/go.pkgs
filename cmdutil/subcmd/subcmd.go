@@ -785,6 +785,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 		ctx = WithFlagSet(ctx, cmd.flags) // Make the command's FlagSet available to the Runner and any functions it calls.
 		err = cmd.runner(ctx, cmd.flags.flagValues, args)
 		errs.Append(err)
+
 		return cmds.runPostHooks(ctx, cmd.name, postHooks, &errs)
 	})
 }
@@ -797,7 +798,14 @@ func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHook
 			post PostHook
 			err  error
 		)
+		octx := ctx
 		ctx, id, post, err = pre(ctx)
+		if ctx == nil {
+			if err == nil {
+				return octx, postHooks, fmt.Errorf("%v: pre-hook (%v) returned a nil context", cmdName, id)
+			}
+			return octx, postHooks, fmt.Errorf("%v: pre-hook failed (%v) and returned a nil context: %w", cmdName, id, err)
+		}
 		if err != nil {
 			return ctx, postHooks, fmt.Errorf("%v: pre-hook failed (%v): %w", cmdName, id, err)
 		}

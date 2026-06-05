@@ -11,6 +11,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"time"
 )
@@ -81,6 +82,27 @@ type ReadFileFS interface {
 type ReadWriteFileFS interface {
 	ReadFileFS
 	WriteFileFS
+}
+
+type readfileFS struct{ fs FS }
+
+func (rfs readfileFS) ReadFile(name string) ([]byte, error) {
+	return rfs.ReadFileCtx(context.Background(), name)
+}
+
+func (rfs readfileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	f, err := rfs.fs.OpenCtx(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+// ReadFileFSFromFS returns a ReadFileFS that uses the provided FS for
+// its implementation.
+func ReadFileFSFromFS(fs FS) ReadFileFS {
+	return readfileFS{fs: fs}
 }
 
 // ErrNotImplemented is returned by methods that are not implemented
