@@ -5,5 +5,13 @@ annotations:
     license: |
       // Use of this source code is governed by the Apache-2.0
       // license that can be found in the LICENSE file.
+    exclusions:
+      - vms/vmstestutil/instancetests_test.go
+      - vms/vmstestutil/pooltests_test.go
+      - vms/dockervm/dockerinstance_test.go
+      - vms/dockervm/dockerpool_test.go
+      - vms/dockervm/dockerapi/dockerapiinstance_test.go
+      - vms/dockervm/dockerapi/dockerapipool_test.go
+      - vms/doc_gen.go
 options:
   concurrency: 0
