@@ -86,12 +86,12 @@ type ReadWriteFileFS interface {
 
 type readfileFS struct{ fs FS }
 
-func (fs readfileFS) ReadFile(name string) ([]byte, error) {
-	return fs.ReadFileCtx(context.Background(), name)
+func (rfs readfileFS) ReadFile(name string) ([]byte, error) {
+	return rfs.ReadFileCtx(context.Background(), name)
 }
 
-func (fs readfileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
-	f, err := fs.fs.OpenCtx(ctx, name)
+func (rfs readfileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
+	f, err := rfs.fs.OpenCtx(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (fs readfileFS) ReadFileCtx(ctx context.Context, name string) ([]byte, erro
 	return io.ReadAll(f)
 }
 
-// ReadFileFSFromFS returns a ReadFileFS that using the provided FS for
+// ReadFileFSFromFS returns a ReadFileFS that uses the provided FS for
 // its implementation.
 func ReadFileFSFromFS(fs FS) ReadFileFS {
 	return readfileFS{fs: fs}

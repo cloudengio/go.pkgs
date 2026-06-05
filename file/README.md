@@ -291,7 +291,7 @@ within the context.
 ```go
 func ReadFileFSFromFS(fs FS) ReadFileFS
 ```
-ReadFileFSFromFS returns a ReadFileFS that using the provided FS for its
+ReadFileFSFromFS returns a ReadFileFS that uses the provided FS for its
 implementation.
 
 
