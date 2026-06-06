@@ -5,6 +5,7 @@
 package cmdyaml
 
 import (
+	"fmt"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -47,7 +48,7 @@ func (t *FlexTime) UnmarshalYAML(value *yaml.Node) error {
 			return nil
 		}
 	}
-	return nil
+	return fmt.Errorf("invalid time: %v, use one of time.RFC3339, time.DateTime, time.Date or time.Time only formats", value.Value)
 }
 
 func (t FlexTime) String() string {

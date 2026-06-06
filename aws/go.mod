@@ -21,7 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.42.2
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.62.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.2
-	github.com/aws/smithy-go v1.27.1
+	github.com/aws/smithy-go v1.27.2
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/orlangure/gnomock v0.32.0
 )
@@ -44,10 +44,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260602205728-76c4accb8394 // indirect
-	cloudeng.io/os v0.0.0-20260602205728-76c4accb8394 // indirect
+	cloudeng.io/algo v0.0.0-20260605174237-2d6c1041426f // indirect
+	cloudeng.io/os v0.0.0-20260605174237-2d6c1041426f // indirect
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260602205728-76c4accb8394 // indirect
+	cloudeng.io/sys v0.0.0-20260605174237-2d6c1041426f // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.28 // indirect
