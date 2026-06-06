@@ -54,6 +54,30 @@ func TestRFC3339Time(t *testing.T) {
 		}
 	})
 
+	t.Run("UnmarshalNull", func(t *testing.T) {
+		var s jsonTimeStruct
+		if err := json.Unmarshal([]byte(`{"when":null}`), &s); err != nil {
+			t.Fatalf("unexpected error for null: %v", err)
+		}
+		if !time.Time(s.When).IsZero() {
+			t.Errorf("expected zero time for null, got %v", s.When)
+		}
+	})
+
+	t.Run("UnmarshalInvalidTime", func(t *testing.T) {
+		var s jsonTimeStruct
+		if err := json.Unmarshal([]byte(`{"when":"not-a-time"}`), &s); err == nil {
+			t.Error("expected error for invalid RFC3339 string")
+		}
+	})
+
+	t.Run("UnmarshalNonString", func(t *testing.T) {
+		var s jsonTimeStruct
+		if err := json.Unmarshal([]byte(`{"when":12345}`), &s); err == nil {
+			t.Error("expected error for non-string JSON value")
+		}
+	})
+
 	t.Run("String", func(t *testing.T) {
 		rt := cmdjson.RFC3339Time(now)
 		if got, want := rt.String(), now.Format(time.RFC3339); got != want {
@@ -108,6 +132,30 @@ func TestFlexTime(t *testing.T) {
 		}
 		if _, err := time.Parse(time.RFC3339, raw.FlexTime); err != nil {
 			t.Errorf("marshaled FlexTime %q is not RFC3339: %v", raw.FlexTime, err)
+		}
+	})
+
+	t.Run("UnmarshalNull", func(t *testing.T) {
+		var s jsonTimeStruct
+		if err := json.Unmarshal([]byte(`{"flextime":null}`), &s); err != nil {
+			t.Fatalf("unexpected error for null: %v", err)
+		}
+		if !time.Time(s.FlexTime).IsZero() {
+			t.Errorf("expected zero time for null, got %v", s.FlexTime)
+		}
+	})
+
+	t.Run("InvalidFormat", func(t *testing.T) {
+		var s jsonTimeStruct
+		if err := json.Unmarshal([]byte(`{"flextime":"not-a-time"}`), &s); err == nil {
+			t.Error("expected error for unrecognized time format")
+		}
+	})
+
+	t.Run("UnmarshalNonString", func(t *testing.T) {
+		var s jsonTimeStruct
+		if err := json.Unmarshal([]byte(`{"flextime":12345}`), &s); err == nil {
+			t.Error("expected error for non-string JSON value")
 		}
 	})
 }

@@ -42,7 +42,7 @@ RFC3339Time is a time.Time that marshals to and from RFC3339 format.
 ### Methods
 
 ```go
-func (t *RFC3339Time) MarshalJSON() ([]byte, error)
+func (t RFC3339Time) MarshalJSON() ([]byte, error)
 ```
 
 

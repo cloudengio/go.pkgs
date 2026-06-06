@@ -6,17 +6,21 @@ package cmdjson
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
 // RFC3339Time is a time.Time that marshals to and from RFC3339 format.
 type RFC3339Time time.Time
 
-func (t *RFC3339Time) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Time(*t).Format(time.RFC3339))
+func (t RFC3339Time) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Time(t).Format(time.RFC3339))
 }
 
 func (t *RFC3339Time) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
@@ -43,6 +47,9 @@ func (t FlexTime) MarshalJSON() ([]byte, error) {
 }
 
 func (t *FlexTime) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
@@ -54,7 +61,7 @@ func (t *FlexTime) UnmarshalJSON(data []byte) error {
 			return nil
 		}
 	}
-	return nil
+	return fmt.Errorf("invalid time: %v, use one of time.RFC3339, time.DateTime, time.Date or time.Time only formats", s)
 }
 
 func (t FlexTime) String() string {
