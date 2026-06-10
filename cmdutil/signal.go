@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+
+	"cloudeng.io/sync/errgroup"
 )
 
 // ErrInterrupt is returned as the cause for HandleInterrupt cancellations.
@@ -53,4 +55,27 @@ func Exitf(format string, args ...any) {
 // Deprecated: use Exitf instead.
 func Exit(format string, args ...any) {
 	Exitf(format, args...)
+}
+
+// WaitForExit waits for all provided functions to return
+func WaitForExit(ctx context.Context, funcs ...func() error) error {
+	g, _ := errgroup.WithContext(ctx)
+	for _, fn := range funcs {
+		g.Go(func() error {
+			return fn()
+		})
+	}
+	return g.Wait()
+}
+
+// WaitForExitCtx is like WaitForExit but the functions are passed the context
+// that is cancelled when an error is returned by any of the functions.
+func WaitForExitCtx(ctx context.Context, funcs ...func(context.Context) error) error {
+	g, ctx := errgroup.WithContext(ctx)
+	for _, fn := range funcs {
+		g.Go(func() error {
+			return fn(ctx)
+		})
+	}
+	return g.Wait()
 }

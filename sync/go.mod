@@ -7,7 +7,7 @@ require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 )
 
-require golang.org/x/sync v0.20.0
+require golang.org/x/sync v0.21.0
 
 replace cloudeng.io/debug => ../debug
 

@@ -130,6 +130,19 @@ if available. The returned values are the revision, last commit time,
 a boolean indicating whether there were uncommitted changes (dirty) and a
 boolean indicating whether the information was successfully extracted.
 
+### Func WaitForExit
+```go
+func WaitForExit(ctx context.Context, funcs ...func() error) error
+```
+WaitForExit waits for all provided functions to return
+
+### Func WaitForExitCtx
+```go
+func WaitForExitCtx(ctx context.Context, funcs ...func(context.Context) error) error
+```
+WaitForExitCtx is like WaitForExit but the functions are passed the context
+that is cancelled when an error is returned by any of the functions.
+
 
 
 ## Types
