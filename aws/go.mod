@@ -7,7 +7,7 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
-	cloudeng.io/logging v0.0.0-20260606211206-13a5cf17eb80
+	cloudeng.io/logging v0.0.0-20260610222212-db2b4dc1ef8c
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	github.com/alexbacchin/ssm-session-client v1.1.0
@@ -98,7 +98,7 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610202329-623566214e0c // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
