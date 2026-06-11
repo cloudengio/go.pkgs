@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
-	cloudeng.io/logging v0.0.0-20260606211206-13a5cf17eb80
+	cloudeng.io/logging v0.0.0-20260610222212-db2b4dc1ef8c
 	cloudeng.io/sync v0.0.11
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
 	gopkg.in/yaml.v3 v3.0.1
