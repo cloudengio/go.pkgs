@@ -35,7 +35,7 @@ plugins:
     port: 9090
 `
 	var cfg appConfig
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 
@@ -91,7 +91,7 @@ plugins:
     port: 9090
 `
 	var cfg appConfig
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 
@@ -134,7 +134,7 @@ plugins:
 		Plugins []cmdyaml.Deferred `yaml:"plugins"`
 	}
 	var cfg wrapper
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestDeferredRoundtrip(t *testing.T) {
       port: 9090
 `
 	var cfg appConfig
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 
@@ -179,7 +179,7 @@ func TestDeferredRoundtrip(t *testing.T) {
 		Plugins []cmdyaml.Deferred `yaml:"plugins"`
 	}
 	var cfg2 pluginsOnly
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg2); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg2, []byte(input)); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 	out, err := yaml.Marshal(cfg2)
@@ -214,7 +214,7 @@ backends:
     ttl: 5m
 `
 	var cfg serviceConfig
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg, []byte(input)); err != nil {
 		fmt.Printf("parse error: %v\n", err)
 		return
 	}
@@ -251,7 +251,7 @@ routes:
     path: /api/v1/users
 `
 	var cfg routerConfig
-	if err := cmdyaml.ParseConfig([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser().Parse(&cfg, []byte(input)); err != nil {
 		fmt.Printf("parse error: %v\n", err)
 		return
 	}

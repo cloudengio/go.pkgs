@@ -14,7 +14,7 @@ func envLookup(vars map[string]string) func(string) string {
 	return func(key string) string { return vars[key] }
 }
 
-func TestExpandEnv(t *testing.T) {
+func TestExpand(t *testing.T) {
 	env := envLookup(map[string]string{
 		"HOST": "localhost",
 		"PORT": "8080",
@@ -29,7 +29,7 @@ func TestExpandEnv(t *testing.T) {
 	}
 
 	s := simple{Addr: "$HOST:$PORT", NoTag: "$HOST", NonStr: 42, Dir: "${DIR}"}
-	cmdyaml.ExpandEnv(&s, env)
+	cmdyaml.Expand(&s, env)
 	if got, want := s.Addr, "localhost:8080"; got != want {
 		t.Errorf("Addr: got %q, want %q", got, want)
 	}
@@ -44,7 +44,7 @@ func TestExpandEnv(t *testing.T) {
 	}
 }
 
-func TestExpandEnvEmbedded(t *testing.T) {
+func TestExpandEmbedded(t *testing.T) {
 	env := envLookup(map[string]string{"A": "alpha", "B": "beta"})
 
 	type inner struct {
@@ -56,7 +56,7 @@ func TestExpandEnvEmbedded(t *testing.T) {
 	}
 
 	o := outer{inner: inner{X: "$A"}, Y: "$B"}
-	cmdyaml.ExpandEnv(&o, env)
+	cmdyaml.Expand(&o, env)
 	if got, want := o.X, "alpha"; got != want {
 		t.Errorf("X: got %q, want %q", got, want)
 	}
@@ -65,7 +65,7 @@ func TestExpandEnvEmbedded(t *testing.T) {
 	}
 }
 
-func TestExpandEnvNestedStruct(t *testing.T) {
+func TestExpandNestedStruct(t *testing.T) {
 	env := envLookup(map[string]string{"VAL": "expanded"})
 
 	type leaf struct {
@@ -76,13 +76,13 @@ func TestExpandEnvNestedStruct(t *testing.T) {
 	}
 
 	r := root{Sub: leaf{V: "$VAL"}}
-	cmdyaml.ExpandEnv(&r, env)
+	cmdyaml.Expand(&r, env)
 	if got, want := r.Sub.V, "expanded"; got != want {
 		t.Errorf("Sub.V: got %q, want %q", got, want)
 	}
 }
 
-func TestExpandEnvPointerEmbedded(t *testing.T) {
+func TestExpandPointerEmbedded(t *testing.T) {
 	env := envLookup(map[string]string{"Z": "zeta"})
 
 	type inner struct {
@@ -94,7 +94,7 @@ func TestExpandEnvPointerEmbedded(t *testing.T) {
 	}
 
 	o := outer{inner: &inner{W: "$Z"}, Q: "$Z"}
-	cmdyaml.ExpandEnv(&o, env)
+	cmdyaml.Expand(&o, env)
 	if got, want := o.W, "zeta"; got != want {
 		t.Errorf("W: got %q, want %q", got, want)
 	}
@@ -103,7 +103,7 @@ func TestExpandEnvPointerEmbedded(t *testing.T) {
 	}
 }
 
-func TestExpandEnvSlice(t *testing.T) {
+func TestExpandSlice(t *testing.T) {
 	env := envLookup(map[string]string{"HOST": "localhost", "PORT": "8080"})
 
 	type item struct {
@@ -113,9 +113,9 @@ func TestExpandEnvSlice(t *testing.T) {
 		Items []item `yaml:"items"`
 	}
 
-	c := cfg{Items: []item{{"$HOST"}, {"$PORT"}}}
-	cmdyaml.ExpandEnv(&c, env)
-	if got, want := c.Items[0].Addr, "localhost"; got != want {
+	c := cfg{Items: []item{{"__${HOST}__"}, {"${PORT}"}}}
+	cmdyaml.Expand(&c, env)
+	if got, want := c.Items[0].Addr, "__localhost__"; got != want {
 		t.Errorf("Items[0]: got %q, want %q", got, want)
 	}
 	if got, want := c.Items[1].Addr, "8080"; got != want {
@@ -123,7 +123,7 @@ func TestExpandEnvSlice(t *testing.T) {
 	}
 }
 
-func TestExpandEnvSliceOfStrings(t *testing.T) {
+func TestExpandSliceOfStrings(t *testing.T) {
 	env := envLookup(map[string]string{"A": "alpha", "B": "beta"})
 
 	type cfg struct {
@@ -131,7 +131,7 @@ func TestExpandEnvSliceOfStrings(t *testing.T) {
 	}
 
 	c := cfg{Tags: []string{"$A", "$B", "literal"}}
-	cmdyaml.ExpandEnv(&c, env)
+	cmdyaml.Expand(&c, env)
 	want := []string{"alpha", "beta", "literal"}
 	for i, w := range want {
 		if got := c.Tags[i]; got != w {
@@ -140,7 +140,7 @@ func TestExpandEnvSliceOfStrings(t *testing.T) {
 	}
 }
 
-func TestExpandEnvMap(t *testing.T) {
+func TestExpandMap(t *testing.T) {
 	env := envLookup(map[string]string{"VAL": "expanded"})
 
 	type cfg struct {
@@ -148,7 +148,7 @@ func TestExpandEnvMap(t *testing.T) {
 	}
 
 	c := cfg{Vars: map[string]string{"key": "$VAL", "other": "static"}}
-	cmdyaml.ExpandEnv(&c, env)
+	cmdyaml.Expand(&c, env)
 	if got, want := c.Vars["key"], "expanded"; got != want {
 		t.Errorf("Vars[key]: got %q, want %q", got, want)
 	}
@@ -157,7 +157,7 @@ func TestExpandEnvMap(t *testing.T) {
 	}
 }
 
-func TestExpandEnvMapOfStructs(t *testing.T) {
+func TestExpandMapOfStructs(t *testing.T) {
 	env := envLookup(map[string]string{"HOST": "localhost"})
 
 	type server struct {
@@ -168,7 +168,7 @@ func TestExpandEnvMapOfStructs(t *testing.T) {
 	}
 
 	c := cfg{Servers: map[string]server{"web": {"$HOST"}, "api": {"static"}}}
-	cmdyaml.ExpandEnv(&c, env)
+	cmdyaml.Expand(&c, env)
 	if got, want := c.Servers["web"].Addr, "localhost"; got != want {
 		t.Errorf("Servers[web].Addr: got %q, want %q", got, want)
 	}
@@ -177,7 +177,7 @@ func TestExpandEnvMapOfStructs(t *testing.T) {
 	}
 }
 
-func TestExpandEnvPointerToString(t *testing.T) {
+func TestExpandPointerToString(t *testing.T) {
 	env := envLookup(map[string]string{"HOST": "localhost"})
 
 	addr := "$HOST"
@@ -187,7 +187,7 @@ func TestExpandEnvPointerToString(t *testing.T) {
 	}
 
 	c := cfg{Addr: &addr, Optional: nil}
-	cmdyaml.ExpandEnv(&c, env)
+	cmdyaml.Expand(&c, env)
 	if got, want := *c.Addr, "localhost"; got != want {
 		t.Errorf("Addr: got %q, want %q", got, want)
 	}
@@ -196,7 +196,7 @@ func TestExpandEnvPointerToString(t *testing.T) {
 	}
 }
 
-func TestExpandEnvSliceOfPointerToString(t *testing.T) {
+func TestExpandSliceOfPointerToString(t *testing.T) {
 	env := envLookup(map[string]string{"A": "alpha", "B": "beta"})
 
 	a, b, lit := "$A", "$B", "literal"
@@ -205,7 +205,7 @@ func TestExpandEnvSliceOfPointerToString(t *testing.T) {
 	}
 
 	c := cfg{Tags: []*string{&a, &b, &lit}}
-	cmdyaml.ExpandEnv(&c, env)
+	cmdyaml.Expand(&c, env)
 	want := []string{"alpha", "beta", "literal"}
 	for i, w := range want {
 		if got := *c.Tags[i]; got != w {
@@ -214,10 +214,10 @@ func TestExpandEnvSliceOfPointerToString(t *testing.T) {
 	}
 }
 
-func TestExpandEnvNilSafe(*testing.T) {
+func TestExpandNilSafe(*testing.T) {
 	// nil pointer and non-struct inputs must not panic.
-	cmdyaml.ExpandEnv(nil, func(string) string { return "" })
+	cmdyaml.Expand(nil, func(string) string { return "" })
 
 	var p *struct{ X string }
-	cmdyaml.ExpandEnv(p, func(string) string { return "" })
+	cmdyaml.Expand(p, func(string) string { return "" })
 }

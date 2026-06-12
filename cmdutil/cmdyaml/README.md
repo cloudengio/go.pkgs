@@ -23,43 +23,13 @@ TiB = 1_024 * GiB
 
 
 ## Functions
-### Func ExpandEnv
+### Func Expand
 ```go
-func ExpandEnv(cfg any, envFunc func(string) string)
+func Expand(cfg any, mapping func(string) string)
 ```
 ExpandEnv recursively expands environment variables in the fields of the
 provided struct that have a 'yaml' tag. Embedded structs are also processed.
-The provided envFunc is used to look up environment variable values.
-
-### Func ParseConfig
-```go
-func ParseConfig(spec []byte, cfg any) error
-```
-ParseConfig will parse the yaml config in spec into the requested type.
-It provides improved error reporting via ErrorWithSource.
-
-Deprecated: Use ParseConfigs instead.
-
-### Func ParseConfigFile
-```go
-func ParseConfigFile(ctx context.Context, filename string, cfg any) error
-```
-ParseConfigFile reads a yaml config file as per ParseConfig using
-file.FSReadFile to read the file. The use of FSReadFile allows for the
-configuration file to be read from storage system, including from embed.FS,
-instead of the local filesystem if an instance of fs.ReadFileFS is stored in
-the context.
-
-Deprecated: Use ParseConfigFiles instead.
-
-### Func ParseConfigFileStrict
-```go
-func ParseConfigFileStrict(ctx context.Context, filename string, cfg any) error
-```
-ParseConfigFileStrict is like ParseConfigFile but reports an error if there
-are unknown fields in the yaml specification.
-
-Deprecated: Use ParseConfigFilesStrict instead.
+The provided mapping is used to look up variable values.
 
 ### Func ParseConfigFiles
 ```go
@@ -77,30 +47,6 @@ func ParseConfigFilesStrict(ctx context.Context, cfg any, filenames ...string) e
 ParseConfigFilesStrict is like ParseConfigFiles but reports an error if any
 file contains unknown fields.
 
-### Func ParseConfigStrict
-```go
-func ParseConfigStrict(spec []byte, cfg any) error
-```
-ParseConfigStrict is like ParseConfig but reports an error if there are
-unknown fields in the yaml specification. Mapping fields at any level whose
-values carry a YAML anchor (&name) are permitted: they exist only to provide
-reusable values for alias references and are not struct fields.
-
-Deprecated: Use ParseConfigsStrict instead.
-
-### Func ParseConfigString
-```go
-func ParseConfigString(spec string, cfg any) error
-```
-ParseConfigString parses the yaml config in spec (as a string) into cfg.
-
-### Func ParseConfigStringStrict
-```go
-func ParseConfigStringStrict(spec string, cfg any) error
-```
-ParseConfigStringStrict is like ParseConfigString but reports an error if
-there are unknown fields in the yaml specification.
-
 ### Func ParseConfigs
 ```go
 func ParseConfigs(cfg any, specs ...[]byte) error
@@ -115,8 +61,7 @@ func ParseConfigsStrict(cfg any, specs ...[]byte) error
 ```
 ParseConfigsStrict is like ParseConfigs but reports an error if there are
 unknown fields in the yaml specification. Mapping fields at any level whose
-values carry a YAML anchor (&name) are permitted: they exist only to provide
-reusable values for alias references and are not struct fields.
+values carry a YAML anchor (&name) are permitted.
 
 ### Func ParseDeferred
 ```go
@@ -236,6 +181,86 @@ func (t *FlexTime) UnmarshalYAML(value *yaml.Node) error
 
 
 
+### Type Option
+```go
+type Option func(*parserOptions)
+```
+Option configures a Parser.
+
+### Functions
+
+```go
+func WithExpandMapping(fn func(string) string) Option
+```
+WithExpandMapping expands ${VAR} and $VAR references in the destination
+struct using fn after parsing.
+
+
+```go
+func WithFS(fs file.ReadFileFS) Option
+```
+WithFS sets the file system used by ParseFiles. Defaults to the local OS
+file system rooted at the current working directory.
+
+
+```go
+func WithStrictFields(strict bool) Option
+```
+WithStrictFields causes Parse and ParseFiles to report an error for any YAML
+field that does not map to a struct field. Mapping fields at any level whose
+values carry a YAML anchor (&name) are permitted.
+
+
+```go
+func WithYAMLVariables(mapName string) Option
+```
+WithYAMLVariables instructs the parser to collect scalar key-value pairs
+from the named top-level mapping and expand $VAR and ${VAR} references in
+specs before parsing.
+
+
+
+
+### Type Parser
+```go
+type Parser struct {
+	// contains filtered or unexported fields
+}
+```
+Parser parses and merges YAML configurations into a destination struct,
+optionally expanding environment variables and YAML-defined variables.
+Create one with NewParser.
+
+### Functions
+
+```go
+func NewParser(opts ...Option) *Parser
+```
+NewParser returns a Parser configured with the supplied options.
+
+
+
+### Methods
+
+```go
+func (p *Parser) Parse(cfg any, specs ...[]byte) error
+```
+Parse merges the YAML content of each spec into cfg. Specs are processed in
+order; a field present in a later spec overrides the value set by an earlier
+one, while fields only in an earlier spec are retained.
+
+
+```go
+func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) error
+```
+ParseFiles reads and merges the YAML contents of each named file into cfg.
+Files are processed in order; a field present in a later file overrides
+the value set by an earlier one, while fields only in an earlier file are
+retained. At least one filename must be supplied.
+
+
+
+
 ### Type RFC3339Time
 ```go
 type RFC3339Time time.Time
@@ -257,6 +282,44 @@ func (t RFC3339Time) String() string
 ```go
 func (t *RFC3339Time) UnmarshalYAML(value *yaml.Node) error
 ```
+
+
+
+
+### Type Variables
+```go
+type Variables struct {
+	// contains filtered or unexported fields
+}
+```
+Variables accumulates scalar key-value pairs parsed from YAML mappings.
+Multiple calls to Load merge into the same map; later values overwrite
+earlier ones for duplicate keys.
+
+### Functions
+
+```go
+func NewVariables() *Variables
+```
+
+
+
+### Methods
+
+```go
+func (v *Variables) Load(spec []byte, mapName string) error
+```
+Load parses spec, locates the top-level YAML mapping named mapName,
+and merges its entries into v. All values must be scalar (string, number, or
+boolean); aggregate types (mappings, sequences) are rejected with an error.
+If mapName is not present in spec Load is a no-op.
+
+
+```go
+func (v *Variables) Mapping(key string) string
+```
+Mapping returns the value stored for key, or "" if key is not present.
+It is safe to call on a nil or zero-value Variables.
 
 
 
