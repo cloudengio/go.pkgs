@@ -192,8 +192,8 @@ Option configures a Parser.
 ```go
 func WithExpandMapping(fn func(string) string) Option
 ```
-WithExpandMapping expands ${VAR} and $VAR references in the destination
-struct using fn after parsing.
+WithExpandMapping expands ${VAR} and $VAR references in the spec using fn
+before parsing.
 
 
 ```go

@@ -40,10 +40,10 @@ func (v *Variables) Mapping(key string) string {
 func (v *Variables) Load(spec []byte, mapName string) error {
 	var top map[string]any
 	if err := yaml.Unmarshal(spec, &top); err != nil {
-		return fmt.Errorf("parse YAML: %w", err)
+		return err
 	}
 	raw, ok := top[mapName]
-	if !ok {
+	if !ok || raw == nil {
 		return nil
 	}
 	m, ok := raw.(map[string]any)

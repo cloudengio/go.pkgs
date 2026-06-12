@@ -42,8 +42,8 @@ func WithYAMLVariables(mapName string) Option {
 	}
 }
 
-// WithExpandMapping expands ${VAR} and $VAR references in the destination struct
-// using fn after parsing.
+// WithExpandMapping expands ${VAR} and $VAR references in the spec
+// using fn before parsing.
 func WithExpandMapping(fn func(string) string) Option {
 	return func(opts *parserOptions) {
 		opts.expandEnv = fn
@@ -97,17 +97,12 @@ func (p *Parser) Parse(cfg any, specs ...[]byte) error {
 		variables = NewVariables()
 	}
 	for _, spec := range specs {
-		spec, err := p.expandSpec(spec, variables)
+		spec, err := p.expandSpec("", spec, variables)
 		if err != nil {
 			return err
 		}
 		if err := ps.parse("", spec, cfg); err != nil {
 			return err
-		}
-		if variables != nil {
-			if err := variables.Load(spec, p.variablesMapName); err != nil {
-				return fmt.Errorf("parse variables: %w", err)
-			}
 		}
 	}
 	return nil
@@ -134,30 +129,28 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
-		spec, err = p.expandSpec(spec, variables)
+		spec, err = p.expandSpec(filename, spec, variables)
 		if err != nil {
 			return err
 		}
 		if err := ps.parse(filename, spec, cfg); err != nil {
 			return err
 		}
-
 	}
 	return nil
 }
 
-func (p *Parser) expandSpec(spec []byte, variables *Variables) ([]byte, error) {
+func (p *Parser) expandSpec(filename string, spec []byte, variables *Variables) ([]byte, error) {
 	out := spec
 	if variables != nil {
 		if err := variables.Load(spec, p.variablesMapName); err != nil {
-			return nil, fmt.Errorf("failed parsing variables in %v: %w", p.variablesMapName, err)
+			return nil, errorWithSource(filename, 0, spec, fmt.Errorf("failed parsing variables in %v: %w", p.variablesMapName, err))
 		}
 		out = []byte(os.Expand(string(spec), variables.Mapping))
 	}
 	if p.expandEnv != nil {
 		out = []byte(os.Expand(string(out), p.expandEnv))
 	}
-	fmt.Printf("expanded spec:\n%s\n", out)
 	return out, nil
 }
 
