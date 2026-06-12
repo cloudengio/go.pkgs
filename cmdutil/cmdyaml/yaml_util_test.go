@@ -54,7 +54,7 @@ list:
 	  - b
 `, `yaml: line 3: "  - a": found a tab character that violates indentation`},
 	} {
-		err := cmdyaml.ParseConfig([]byte(tc.input), &ts)
+		err := cmdyaml.NewParser().Parse(&ts, []byte(tc.input))
 		if err == nil || strings.TrimSpace(err.Error()) != tc.errMsg {
 			t.Errorf("%v: got %v, want %v", i, err, tc.errMsg)
 		}
@@ -318,7 +318,7 @@ a: hello
 <<: *defaults
 `
 	var cfg mergeStruct
-	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.A != "hello" {
@@ -343,7 +343,7 @@ nested:
   <<: *sub_defaults
 `
 	var cfg nestedMergeStruct
-	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Top != "hello" {
@@ -377,7 +377,7 @@ items:
     value: direct
 `
 	var cfg seqStruct
-	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err != nil {
+	if err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(cfg.Items) != 2 {
@@ -405,7 +405,7 @@ unknown_field: bad
 a: hello
 `
 	var cfg mergeStruct
-	if err := cmdyaml.ParseConfigStrict([]byte(input), &cfg); err == nil {
+	if err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input)); err == nil {
 		t.Fatal("expected error for unknown_field, got nil")
 	}
 }
@@ -429,7 +429,7 @@ a: hello
 unknown: bad
 `
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
+	err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input))
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
@@ -470,7 +470,7 @@ func TestErrorLineNumber_StrictUnknownField(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var cfg mergeStruct
-			err := cmdyaml.ParseConfigStrict([]byte(tc.input), &cfg)
+			err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(tc.input))
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -492,7 +492,7 @@ func TestErrorLineNumber_StrictUnknownField(t *testing.T) {
 func TestErrorLineNumber_MultipleUnknownFields(t *testing.T) {
 	const input = "a: hello\nunknown1: bad\nb: world\nunknown2: also-bad\n"
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
+	err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -513,7 +513,7 @@ func TestErrorLineNumber_TypeMismatch(t *testing.T) {
 	// testStruct.Field expects []int; a map value triggers a TypeError.
 	const input = "field:\n  sub: not-an-int\n"
 	var ts testStruct
-	err := cmdyaml.ParseConfig([]byte(input), &ts)
+	err := cmdyaml.NewParser().Parse(&ts, []byte(input))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -543,7 +543,7 @@ _d: &d
 a: hello
 `
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
+	err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input))
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
@@ -577,7 +577,7 @@ b: {p: 6, q: 7, v: 1, w: 2, x: 3, y: 4, z: 5}
 unknown: bad
 `
 	var cfg mergeStruct
-	err := cmdyaml.ParseConfigStrict([]byte(input), &cfg)
+	err := cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&cfg, []byte(input))
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
@@ -589,18 +589,65 @@ unknown: bad
 	}
 }
 
+// TestStrictVariablesMapAllowed verifies that the variables map name is not
+// treated as an unknown field when strict mode and WithYAMLVariables are both
+// active.
+func TestStrictVariablesMapAllowed(t *testing.T) {
+	type config struct {
+		Host string `yaml:"host"`
+	}
+	spec := []byte(`
+vars:
+  greeting: hello
+host: ${greeting}
+`)
+	var cfg config
+	p := cmdyaml.NewParser(
+		cmdyaml.WithStrictFields(true),
+		cmdyaml.WithYAMLVariables("vars"),
+	)
+	if err := p.Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error with variables map in strict mode: %v", err)
+	}
+	if cfg.Host != "hello" {
+		t.Errorf("Host: got %q, want %q", cfg.Host, "hello")
+	}
+}
+
+// TestStrictVariablesMapRealUnknownStillRejected verifies that a genuinely
+// unknown field is still rejected even when WithYAMLVariables is set.
+func TestStrictVariablesMapRealUnknownStillRejected(t *testing.T) {
+	type config struct {
+		Host string `yaml:"host"`
+	}
+	spec := []byte(`
+vars:
+  greeting: hello
+host: world
+truly_unknown: bad
+`)
+	var cfg config
+	p := cmdyaml.NewParser(
+		cmdyaml.WithStrictFields(true),
+		cmdyaml.WithYAMLVariables("vars"),
+	)
+	if err := p.Parse(&cfg, spec); err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+}
+
 func TestStrictParse(t *testing.T) {
 	var ts testStruct
 	input := `
 field: [1,2]
 unknown: [3,4]
 `
-	err := cmdyaml.ParseConfig([]byte(input), &ts)
+	err := cmdyaml.NewParser().Parse(&ts, []byte(input))
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
 
-	err = cmdyaml.ParseConfigStrict([]byte(input), &ts)
+	err = cmdyaml.NewParser(cmdyaml.WithStrictFields(true)).Parse(&ts, []byte(input))
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}

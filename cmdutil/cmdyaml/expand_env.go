@@ -12,8 +12,8 @@ import (
 // ExpandEnv recursively expands environment variables in the
 // fields of the provided struct that have a 'yaml' tag. Embedded
 // structs are also processed.
-// The provided envFunc is used to look up environment variable values.
-func ExpandEnv(cfg any, envFunc func(string) string) {
+// The provided mapping is used to look up variable values.
+func Expand(cfg any, mapping func(string) string) {
 	v := reflect.ValueOf(cfg)
 	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
@@ -24,10 +24,10 @@ func ExpandEnv(cfg any, envFunc func(string) string) {
 	if v.Kind() != reflect.Struct {
 		return
 	}
-	expandEnvStruct(v, envFunc)
+	expandStruct(v, mapping)
 }
 
-func expandEnvStruct(v reflect.Value, envFunc func(string) string) {
+func expandStruct(v reflect.Value, mapping func(string) string) {
 	t := v.Type()
 	for i := range t.NumField() {
 		fv := v.Field(i)
@@ -35,10 +35,10 @@ func expandEnvStruct(v reflect.Value, envFunc func(string) string) {
 		if field.Anonymous {
 			switch fv.Kind() {
 			case reflect.Struct:
-				expandEnvStruct(fv, envFunc)
+				expandStruct(fv, mapping)
 			case reflect.Pointer:
 				if fv.Type().Elem().Kind() == reflect.Struct && !fv.IsNil() {
-					expandEnvStruct(fv.Elem(), envFunc)
+					expandStruct(fv.Elem(), mapping)
 				}
 			}
 			continue
@@ -46,25 +46,25 @@ func expandEnvStruct(v reflect.Value, envFunc func(string) string) {
 		if _, ok := field.Tag.Lookup("yaml"); !ok {
 			continue
 		}
-		expandEnvValue(fv, envFunc)
+		expandValue(fv, mapping)
 	}
 }
 
-func expandEnvValue(v reflect.Value, envFunc func(string) string) {
+func expandValue(v reflect.Value, mapping func(string) string) {
 	switch v.Kind() {
 	case reflect.String:
 		if v.CanSet() {
-			v.SetString(os.Expand(v.String(), envFunc))
+			v.SetString(os.Expand(v.String(), mapping))
 		}
 	case reflect.Struct:
-		expandEnvStruct(v, envFunc)
+		expandStruct(v, mapping)
 	case reflect.Pointer:
 		if !v.IsNil() {
-			expandEnvValue(v.Elem(), envFunc)
+			expandValue(v.Elem(), mapping)
 		}
 	case reflect.Slice:
 		for i := range v.Len() {
-			expandEnvValue(v.Index(i), envFunc)
+			expandValue(v.Index(i), mapping)
 		}
 	case reflect.Map:
 		for _, key := range v.MapKeys() {
@@ -72,7 +72,7 @@ func expandEnvValue(v reflect.Value, envFunc func(string) string) {
 			// Map values are not addressable; copy via a new value.
 			tmp := reflect.New(elem.Type()).Elem()
 			tmp.Set(elem)
-			expandEnvValue(tmp, envFunc)
+			expandValue(tmp, mapping)
 			v.SetMapIndex(key, tmp)
 		}
 	}

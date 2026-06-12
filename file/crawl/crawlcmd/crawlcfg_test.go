@@ -40,7 +40,7 @@ const crawlsSpec = `
 
 func TestCrawlConfig(t *testing.T) {
 	var crawl crawlcmd.Config
-	if err := cmdyaml.ParseConfigString(crawlsSpec, &crawl); err != nil {
+	if err := cmdyaml.ParseConfigs(&crawl, []byte(crawlsSpec)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +92,7 @@ download:
 
 func TestRateControl(t *testing.T) {
 	var crawl crawlcmd.Config
-	if err := cmdyaml.ParseConfigString(crawlsRateControlSpec, &crawl); err != nil {
+	if err := cmdyaml.ParseConfigs(&crawl, []byte(crawlsRateControlSpec)); err != nil {
 		t.Fatal(err)
 	}
 
