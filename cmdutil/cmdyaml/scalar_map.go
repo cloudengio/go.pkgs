@@ -42,6 +42,13 @@ func (v *Variables) Load(spec []byte, mapName string) error {
 	if err := yaml.Unmarshal(spec, &top); err != nil {
 		return err
 	}
+	return v.mergeFrom(top, mapName)
+}
+
+// mergeFrom extracts the named mapping from top and merges its scalar entries
+// into v. It is called by Load (after a plain Unmarshal) and by the parser's
+// two-document anchor-aware path in expandSpec.
+func (v *Variables) mergeFrom(top map[string]any, mapName string) error {
 	raw, ok := top[mapName]
 	if !ok || raw == nil {
 		return nil

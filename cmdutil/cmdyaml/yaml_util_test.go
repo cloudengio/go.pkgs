@@ -636,6 +636,331 @@ truly_unknown: bad
 	}
 }
 
+// TestVariablesSingleSpecExpansion verifies that ${VAR} references in a spec
+// are replaced by values from the vars block declared in the same spec.
+func TestVariablesSingleSpecExpansion(t *testing.T) {
+	type config struct {
+		Host string `yaml:"host"`
+		Addr string `yaml:"addr"`
+	}
+	spec := []byte(`
+vars:
+  h: localhost
+  suffix: api
+host: ${h}
+addr: ${h}/${suffix}
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Host, "localhost"; got != want {
+		t.Errorf("Host: got %q, want %q", got, want)
+	}
+	if got, want := cfg.Addr, "localhost/api"; got != want {
+		t.Errorf("Addr: got %q, want %q", got, want)
+	}
+}
+
+// TestVariablesCrossSpecExpansion verifies that variables defined in an earlier
+// spec's vars block are expanded when processing a later spec that has no vars
+// block of its own.
+func TestVariablesCrossSpecExpansion(t *testing.T) {
+	type config struct {
+		Host string `yaml:"host"`
+		Path string `yaml:"path"`
+	}
+	spec1 := []byte(`
+vars:
+  base: myserver
+`)
+	spec2 := []byte(`
+host: ${base}
+path: /api/${base}
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).Parse(&cfg, spec1, spec2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Host, "myserver"; got != want {
+		t.Errorf("Host: got %q, want %q", got, want)
+	}
+	if got, want := cfg.Path, "/api/myserver"; got != want {
+		t.Errorf("Path: got %q, want %q", got, want)
+	}
+}
+
+// TestVariablesAccumulateAcrossSpecs verifies that each spec's vars block adds
+// to the accumulated variable set, so a later spec can reference variables from
+// both its own vars block and those of earlier specs.
+func TestVariablesAccumulateAcrossSpecs(t *testing.T) {
+	type config struct {
+		A string `yaml:"a"`
+		B string `yaml:"b"`
+	}
+	spec1 := []byte(`
+vars:
+  x: hello
+a: ${x}
+`)
+	spec2 := []byte(`
+vars:
+  y: world
+b: ${x}-${y}
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).Parse(&cfg, spec1, spec2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.A, "hello"; got != want {
+		t.Errorf("A: got %q, want %q", got, want)
+	}
+	if got, want := cfg.B, "hello-world"; got != want {
+		t.Errorf("B: got %q, want %q", got, want)
+	}
+}
+
+// TestVariablesLaterSpecOverrides verifies that a variable redefined in a later
+// spec's vars block overrides the value from the earlier spec.
+func TestVariablesLaterSpecOverrides(t *testing.T) {
+	type config struct {
+		Host string `yaml:"host"`
+	}
+	spec1 := []byte(`
+vars:
+  target: old-host
+`)
+	spec2 := []byte(`
+vars:
+  target: new-host
+host: ${target}
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).Parse(&cfg, spec1, spec2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Host, "new-host"; got != want {
+		t.Errorf("Host: got %q, want %q", got, want)
+	}
+}
+
+// TestVariablesExpansionFiles verifies that ParseFiles accumulates variables
+// across files: a variable defined in file 1's vars block expands references
+// found in file 2.
+func TestVariablesExpansionFiles(t *testing.T) {
+	type config struct {
+		Endpoint string `yaml:"endpoint"`
+	}
+	dir := t.TempDir()
+	f1 := writeTempYAML(t, dir, "f1.yaml", "vars:\n  host: myserver\n  port: nine090\n")
+	f2 := writeTempYAML(t, dir, "f2.yaml", "endpoint: http://${host}:${port}/api\n")
+
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).ParseFiles(context.Background(), &cfg, f1, f2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Endpoint, "http://myserver:nine090/api"; got != want {
+		t.Errorf("Endpoint: got %q, want %q", got, want)
+	}
+}
+
+// TestWithExpandMapping verifies that WithExpandMapping expands $VAR and ${VAR}
+// references in the raw spec bytes using the provided function before parsing.
+func TestWithExpandMapping(t *testing.T) {
+	type config struct {
+		Addr string `yaml:"addr"`
+		Name string `yaml:"name"`
+	}
+	spec := []byte(`
+addr: ${HOST}
+name: $APP_NAME
+`)
+	envFn := func(key string) string {
+		return map[string]string{"HOST": "localhost", "APP_NAME": "myapp"}[key]
+	}
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithExpandMapping(envFn)).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Addr, "localhost"; got != want {
+		t.Errorf("Addr: got %q, want %q", got, want)
+	}
+	if got, want := cfg.Name, "myapp"; got != want {
+		t.Errorf("Name: got %q, want %q", got, want)
+	}
+}
+
+// TestVariablesExpandMappingOrdering verifies that when both WithYAMLVariables
+// and WithExpandMapping are active, YAML variable expansion runs first (using
+// the vars block), then WithExpandMapping handles remaining references.
+// References to keys absent from the vars block are consumed by the vars pass
+// (returning ""), so WithExpandMapping should be used for keys that do not
+// appear in any vars block.
+func TestVariablesExpandMappingOrdering(t *testing.T) {
+	type config struct {
+		Addr string `yaml:"addr"`
+		Tag  string `yaml:"tag"`
+	}
+	// ${host} is in the vars block; ${env_tag} is not — it is handled by expandMapping.
+	// The vars pass expands ${host} correctly but replaces ${env_tag} with ""
+	// because it is absent from the vars map.  WithExpandMapping then runs on
+	// the already-expanded bytes, where ${env_tag} has been erased.
+	// This test documents the current ordering behaviour.
+	spec := []byte(`
+vars:
+  host: myserver
+addr: ${host}
+tag: ${env_tag}
+`)
+	envFn := func(key string) string {
+		return map[string]string{"env_tag": "prod"}[key]
+	}
+	var cfg config
+	p := cmdyaml.NewParser(
+		cmdyaml.WithYAMLVariables("vars"),
+		cmdyaml.WithExpandMapping(envFn),
+	)
+	if err := p.Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Addr, "myserver"; got != want {
+		t.Errorf("Addr: got %q, want %q", got, want)
+	}
+	// ${env_tag} was consumed by the vars pass (returned ""); WithExpandMapping
+	// did not see it, so Tag is empty.
+	if got, want := cfg.Tag, ""; got != want {
+		t.Errorf("Tag: got %q, want %q (vars expansion consumes unknown refs)", got, want)
+	}
+}
+
+// TestVarsAndAnchorReferenceInSameFile verifies that a spec can simultaneously
+// carry a vars block and reference an anchor defined in an earlier spec.
+// This exercises the case where expandSpec must resolve cross-file anchors
+// before it can successfully unmarshal the vars block.
+func TestVarsAndAnchorReferenceInSameFile(t *testing.T) {
+	type config struct {
+		Name    string `yaml:"name"`
+		Host    string `yaml:"host"`
+		Version string `yaml:"version"`
+	}
+
+	// File 1: anchor definition only, no vars block.
+	f1Content := "_service: &service\n  host: svc.internal\n  version: v1\n"
+	// File 2: vars block whose name expands ${name}, PLUS a merge key that
+	// references the anchor from file 1.  Without the fix, variables.Load
+	// fails with "unknown anchor 'service'" when it calls yaml.Unmarshal on
+	// these raw bytes.
+	f2Content := strings.Join([]string{
+		"vars:",
+		"  name: myservice",
+		"name: ${name}",
+		"<<: *service",
+		"",
+	}, "\n")
+
+	for _, tc := range []struct {
+		name   string
+		strict bool
+	}{
+		{"non-strict", false},
+		{"strict", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			f1 := writeTempYAML(t, dir, "base.yaml", f1Content)
+			f2 := writeTempYAML(t, dir, "svc.yaml", f2Content)
+
+			opts := []cmdyaml.Option{cmdyaml.WithYAMLVariables("vars")}
+			if tc.strict {
+				opts = append(opts, cmdyaml.WithStrictFields(true))
+			}
+			var cfg config
+			if err := cmdyaml.NewParser(opts...).ParseFiles(context.Background(), &cfg, f1, f2); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got, want := cfg.Name, "myservice"; got != want {
+				t.Errorf("Name: got %q, want %q", got, want)
+			}
+			if got, want := cfg.Host, "svc.internal"; got != want {
+				t.Errorf("Host: got %q, want %q", got, want)
+			}
+			if got, want := cfg.Version, "v1"; got != want {
+				t.Errorf("Version: got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestVariablesAndAnchorsAcrossFiles verifies that variables defined in a vars
+// block in file 1 are expanded into an anchor in the same file, and that anchor
+// is correctly resolved when referenced via a merge key in file 2.  The test
+// also runs in strict mode to confirm that the anchor-definition field and the
+// vars map name are both permitted.
+func TestVariablesAndAnchorsAcrossFiles(t *testing.T) {
+	type config struct {
+		Name string `yaml:"name"`
+		Host string `yaml:"host"`
+		Path string `yaml:"path"`
+		Tag  string `yaml:"tag"`
+	}
+
+	// File 1: declares vars and an anchor whose values use those vars.
+	// _conn is the anchor-definition field; its value carries &conn.
+	f1Content := strings.Join([]string{
+		"vars:",
+		"  host: db.internal",
+		"  base_path: /v1",
+		"_conn: &conn",
+		"  host: ${host}",
+		"  path: ${base_path}",
+		"",
+	}, "\n")
+
+	// File 2: merges the anchor from file 1 and adds its own fields.
+	f2Content := strings.Join([]string{
+		"name: payments",
+		"tag: live",
+		"<<: *conn",
+		"",
+	}, "\n")
+
+	for _, tc := range []struct {
+		name   string
+		strict bool
+	}{
+		{"non-strict", false},
+		{"strict", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			f1 := writeTempYAML(t, dir, "base.yaml", f1Content)
+			f2 := writeTempYAML(t, dir, "svc.yaml", f2Content)
+
+			opts := []cmdyaml.Option{cmdyaml.WithYAMLVariables("vars")}
+			if tc.strict {
+				opts = append(opts, cmdyaml.WithStrictFields(true))
+			}
+			var cfg config
+			if err := cmdyaml.NewParser(opts...).ParseFiles(context.Background(), &cfg, f1, f2); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got, want := cfg.Name, "payments"; got != want {
+				t.Errorf("Name: got %q, want %q", got, want)
+			}
+			if got, want := cfg.Tag, "live"; got != want {
+				t.Errorf("Tag: got %q, want %q", got, want)
+			}
+			// These two come from the anchor, which was expanded using the vars block.
+			if got, want := cfg.Host, "db.internal"; got != want {
+				t.Errorf("Host: got %q, want %q", got, want)
+			}
+			if got, want := cfg.Path, "/v1"; got != want {
+				t.Errorf("Path: got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestStrictParse(t *testing.T) {
 	var ts testStruct
 	input := `
