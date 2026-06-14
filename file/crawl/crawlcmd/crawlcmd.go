@@ -160,6 +160,7 @@ func (c *Crawler) run(ctx context.Context, downloads string) error {
 
 	wg.Wait()
 	close(extractorErrCh)
+	errs.Append(c.cache.Finish(ctx))
 	return errs.Err()
 }
 
