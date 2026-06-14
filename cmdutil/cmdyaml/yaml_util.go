@@ -84,6 +84,19 @@ func NewParser(opts ...Option) *Parser {
 	return p
 }
 
+func expandEnvPreserving(spec []byte, mapping func(string) string) []byte {
+	if mapping == nil {
+		return spec
+	}
+	return []byte(os.Expand(string(spec), func(s string) string {
+		rs := mapping(s)
+		if len(rs) == 0 {
+			return "${" + s + "}"
+		}
+		return rs
+	}))
+}
+
 // Parse merges the YAML content of each spec into cfg. Specs are processed in
 // order; a field present in a later spec overrides the value set by an earlier
 // one, while fields only in an earlier spec are retained.
@@ -92,15 +105,8 @@ func (p *Parser) Parse(cfg any, specs ...[]byte) error {
 		return fmt.Errorf("no config specs provided")
 	}
 	ps := newParseState(p.strict, p.variablesMapName)
-	var variables *Variables
-	if p.variablesMapName != "" {
-		variables = NewVariables()
-	}
 	for _, spec := range specs {
-		spec, err := p.expandSpec("", spec, variables)
-		if err != nil {
-			return err
-		}
+		spec = expandEnvPreserving(spec, p.expandEnv)
 		if err := ps.parse("", spec, cfg); err != nil {
 			return err
 		}
@@ -117,10 +123,6 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		return fmt.Errorf("no config files specified")
 	}
 	ps := newParseState(p.strict, p.variablesMapName)
-	var variables *Variables
-	if p.variablesMapName != "" {
-		variables = NewVariables()
-	}
 	for _, filename := range filenames {
 		if len(filename) == 0 {
 			return fmt.Errorf("one of the filenames in %v is empty", filenames)
@@ -129,29 +131,12 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
-		spec, err = p.expandSpec(filename, spec, variables)
-		if err != nil {
-			return err
-		}
+		spec = expandEnvPreserving(spec, p.expandEnv)
 		if err := ps.parse(filename, spec, cfg); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func (p *Parser) expandSpec(filename string, spec []byte, variables *Variables) ([]byte, error) {
-	out := spec
-	if variables != nil {
-		if err := variables.Load(spec, p.variablesMapName); err != nil {
-			return nil, errorWithSource(filename, 0, spec, fmt.Errorf("failed parsing variables in %v: %w", p.variablesMapName, err))
-		}
-		out = []byte(os.Expand(string(spec), variables.Mapping))
-	}
-	if p.expandEnv != nil {
-		out = []byte(os.Expand(string(out), p.expandEnv))
-	}
-	return out, nil
 }
 
 // ParseConfigs merges the YAML content of each spec into cfg. Specs are
@@ -187,20 +172,25 @@ type parseState struct {
 	variablesMapName string
 	anchors          map[string]anchorNode
 	order            []string
+	variables        *Variables
 }
 
 func newParseState(strict bool, variablesMapName string) *parseState {
-	return &parseState{
+	p := &parseState{
 		strict:           strict,
 		variablesMapName: variablesMapName,
 		anchors:          map[string]anchorNode{},
 		order:            []string{},
 	}
+	if variablesMapName != "" {
+		p.variables = NewVariables()
+	}
+	return p
 }
 
-func (p *parseState) buildPreamble() []byte {
+func (p *parseState) buildPreamble() ([]byte, error) {
 	if len(p.anchors) == 0 {
-		return nil
+		return nil, nil
 	}
 	content := make([]*yaml.Node, 0, 2*len(p.anchors))
 	for _, name := range p.order {
@@ -208,51 +198,46 @@ func (p *parseState) buildPreamble() []byte {
 			content = append(content, an.key, an.value)
 		}
 	}
-	data, _ := yaml.Marshal(&yaml.Node{Kind: yaml.MappingNode, Content: content})
-	return data
+	data, err := yaml.Marshal(&yaml.Node{Kind: yaml.MappingNode, Content: content})
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (p *parseState) withPreamble(spec []byte) ([]byte, int, error) {
+	preamble, err := p.buildPreamble()
+	if err != nil {
+		return nil, 0, fmt.Errorf("internal error building YAML preamble: %w", err)
+	}
+	if len(preamble) == 0 {
+		return spec, 0, nil
+	}
+	combined := append(append(preamble, preambleSep...), spec...)
+	lineAdjustment := bytes.Count(preamble, []byte{'\n'}) + bytes.Count(preambleSep, []byte{'\n'})
+	return combined, lineAdjustment, nil
+
 }
 
 var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
 var preambleSep = []byte("\n---\n")
 
-func (p *parseState) initDecoder(filename string, spec []byte) (*yaml.Decoder, int, error) {
-	preamble := p.buildPreamble()
-
-	// Create a single decoder over a two-document stream:
-	//   document 1 – preamble (anchor definitions from prior specs)
-	//   document 2 – the actual spec
-	// Decoding the preamble into a dummy yaml.Node registers its anchors in
-	// the decoder's internal state so that alias references in the spec can
-	// resolve, without touching cfg or triggering KnownFields errors.
-	// The separator "\n---\n" contributes to line-number offsets reported by
-	// the decoder; lineAdjustment corrects those back to spec-local line numbers.
-	var dec *yaml.Decoder
-	var lineAdjustment int
-	if len(preamble) > 0 {
-		combined := append(append(preamble, preambleSep...), spec...)
-		lineAdjustment = bytes.Count(preamble, []byte{'\n'}) + bytes.Count(preambleSep, []byte{'\n'})
-		dec = yaml.NewDecoder(bytes.NewReader(combined))
-		var dummy yaml.Node
-		if err := dec.Decode(&dummy); err != nil && !errors.Is(err, io.EOF) {
-			return nil, 0, errorWithSource(filename, 0, spec, err)
-		}
-	} else {
-		dec = yaml.NewDecoder(bytes.NewReader(spec))
-	}
-	return dec, lineAdjustment, nil
-
-}
-
 func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 	// Build the preamble from anchors accumulated by previous specs, then
 	// register this spec's own anchors (for use by future specs and for
 	// error filtering below).
-	p.allAnchorFields(spec)
 
-	dec, lineAdjustment, err := p.initDecoder(filename, spec)
+	combined, lineAdjustment, err := p.withPreamble(spec)
 	if err != nil {
 		return err
 	}
+	p.preParse(combined)
+
+	expanded := combined
+	if p.variables != nil {
+		expanded = expandEnvPreserving(combined, p.variables.Mapping)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(expanded))
 
 	if p.strict {
 		dec.KnownFields(true)
@@ -303,11 +288,15 @@ type anchorNode struct {
 	value *yaml.Node
 }
 
-// allAnchorFields returns the names of all mapping keys in spec, at any
-// nesting level, whose values carry a YAML anchor (&name). These fields exist
-// solely to define reusable anchors and are not themselves configuration
-// struct fields.
-func (p *parseState) allAnchorFields(spec []byte) {
+// preParse parses spec to:
+//  1. collect the names and values of all mapping keys whose values carry YAML
+//     anchors (&name) into p.anchors, these fields exist solely to define r
+//     reusable anchors and are not themselves configuration and hence must
+//     be ignored when parsing in strict mode.
+//
+// 2. collect a mapping keyed by p.variablesMapName of scalar key-value pairs
+// from the named top-level mapping, if present, into p.variables.
+func (p *parseState) preParse(spec []byte) {
 	dec := yaml.NewDecoder(bytes.NewReader(spec))
 	for {
 		var doc yaml.Node
@@ -315,6 +304,10 @@ func (p *parseState) allAnchorFields(spec []byte) {
 			break // catches io.EOF
 		}
 		p.collectAnchorFields(&doc)
+		if p.variables != nil {
+			// ignore errors here since the variables block may be absent or malformed, and in either case we just won't have any variables to expand.
+			_ = p.variables.mergeFromNode(&doc, p.variablesMapName)
+		}
 	}
 }
 

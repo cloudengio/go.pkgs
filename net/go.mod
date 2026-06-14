@@ -3,14 +3,14 @@ module cloudeng.io/net
 go 1.25.5
 
 require (
-	cloudeng.io/algo v0.0.0-20260611161950-23029f4a5674
+	cloudeng.io/algo v0.0.0-20260612215057-2c1fdd49d80a
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
 )
 
 require (
 	cloudeng.io/sync v0.0.11 // indirect
-	cloudeng.io/sys v0.0.0-20260611161950-23029f4a5674 // indirect
+	cloudeng.io/sys v0.0.0-20260612215057-2c1fdd49d80a // indirect
 	golang.org/x/sys v0.46.0 // indirect
 )
 
