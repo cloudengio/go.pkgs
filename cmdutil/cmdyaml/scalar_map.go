@@ -63,17 +63,19 @@ func (v *Variables) mergeFromNode(node *yaml.Node, mapName string) error {
 		return nil
 	}
 	for _, child := range node.Content {
-		if len(child.Content) < 2 {
-			return fmt.Errorf("expected mapping node with 2 content nodes, got %d", len(child.Content))
+		if child.Kind != yaml.MappingNode {
+			continue
 		}
-		key := child.Content[0]
-		val := child.Content[1]
-		if key.Kind == yaml.ScalarNode && key.Value == mapName {
-			if child.Kind != yaml.MappingNode || val.Kind != yaml.MappingNode {
-				return fmt.Errorf("%q is not a YAML mapping", mapName)
-			}
-			if err := v.parseVariablesBlock(child.Content[1], mapName); err != nil {
-				return err
+		for i := 0; i+1 < len(child.Content); i += 2 {
+			key := child.Content[i]
+			val := child.Content[i+1]
+			if key.Kind == yaml.ScalarNode && key.Value == mapName {
+				if val.Kind != yaml.MappingNode {
+					return fmt.Errorf("%q is not a YAML mapping", mapName)
+				}
+				if err := v.parseVariablesBlock(val, mapName); err != nil {
+					return err
+				}
 			}
 		}
 	}

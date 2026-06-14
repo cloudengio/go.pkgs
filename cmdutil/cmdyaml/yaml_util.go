@@ -84,12 +84,12 @@ func NewParser(opts ...Option) *Parser {
 	return p
 }
 
-func (p *Parser) expandEnvPreserving(spec []byte) []byte {
-	if p.expandEnv == nil {
+func expandEnvPreserving(spec []byte, mapping func(string) string) []byte {
+	if mapping == nil {
 		return spec
 	}
 	return []byte(os.Expand(string(spec), func(s string) string {
-		rs := p.expandEnv(s)
+		rs := mapping(s)
 		if len(rs) == 0 {
 			return "${" + s + "}"
 		}
@@ -106,7 +106,7 @@ func (p *Parser) Parse(cfg any, specs ...[]byte) error {
 	}
 	ps := newParseState(p.strict, p.variablesMapName)
 	for _, spec := range specs {
-		spec = p.expandEnvPreserving(spec)
+		spec = expandEnvPreserving(spec, p.expandEnv)
 		if err := ps.parse("", spec, cfg); err != nil {
 			return err
 		}
@@ -131,7 +131,7 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
-		spec = p.expandEnvPreserving(spec)
+		spec = expandEnvPreserving(spec, p.expandEnv)
 		if err := ps.parse(filename, spec, cfg); err != nil {
 			return err
 		}
@@ -232,7 +232,11 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 		return err
 	}
 	p.preParse(combined)
-	expanded := []byte(os.Expand(string(combined), p.variables.Mapping))
+
+	expanded := combined
+	if p.variables != nil {
+		expanded = expandEnvPreserving(combined, p.variables.Mapping)
+	}
 	dec := yaml.NewDecoder(bytes.NewReader(expanded))
 
 	if p.strict {
@@ -301,7 +305,8 @@ func (p *parseState) preParse(spec []byte) {
 		}
 		p.collectAnchorFields(&doc)
 		if p.variables != nil {
-			p.variables.mergeFromNode(&doc, p.variablesMapName)
+			// ignore errors here since the variables block may be absent or malformed, and in either case we just won't have any variables to expand.
+			_ = p.variables.mergeFromNode(&doc, p.variablesMapName)
 		}
 	}
 }

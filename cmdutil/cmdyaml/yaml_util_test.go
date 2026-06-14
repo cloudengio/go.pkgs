@@ -594,9 +594,12 @@ unknown: bad
 // active.
 func TestStrictVariablesMapAllowed(t *testing.T) {
 	type config struct {
-		Host string `yaml:"host"`
+		Host  string            `yaml:"host"`
+		Dummy map[string]string `yaml:"dummy"`
 	}
 	spec := []byte(`
+dummy:
+  ignore: me
 vars:
   greeting: hello
 host: ${greeting}
