@@ -791,29 +791,28 @@ name: $APP_NAME
 }
 
 // TestVariablesExpandMappingOrdering verifies that when both WithYAMLVariables
-// and WithExpandMapping are active, YAML variable expansion runs first (using
-// the vars block), then WithExpandMapping handles remaining references.
-// References to keys absent from the vars block are consumed by the vars pass
-// (returning ""), so WithExpandMapping should be used for keys that do not
-// appear in any vars block.
+// and WithExpandMapping are active. This means that env variables can be used
+// in the vars block itself, and that variables from the vars block can be used
+// in the same spec alongside env variables, regardless of map iteration order.
 func TestVariablesExpandMappingOrdering(t *testing.T) {
 	type config struct {
-		Addr string `yaml:"addr"`
-		Tag  string `yaml:"tag"`
+		Addr    string `yaml:"addr"`
+		EnvAddr string `yaml:"env_addr"`
+		Tag     string `yaml:"tag"`
 	}
-	// ${host} is in the vars block; ${env_tag} is not — it is handled by expandMapping.
-	// The vars pass expands ${host} correctly but replaces ${env_tag} with ""
-	// because it is absent from the vars map.  WithExpandMapping then runs on
-	// the already-expanded bytes, where ${env_tag} has been erased.
-	// This test documents the current ordering behaviour.
 	spec := []byte(`
 vars:
   host: myserver
+  envhost: ${env_host}
 addr: ${host}
+env_addr: ${envhost}
 tag: ${env_tag}
 `)
 	envFn := func(key string) string {
-		return map[string]string{"env_tag": "prod"}[key]
+		return map[string]string{
+			"env_tag":  "prod",
+			"env_host": "another-server",
+		}[key]
 	}
 	var cfg config
 	p := cmdyaml.NewParser(
@@ -826,10 +825,12 @@ tag: ${env_tag}
 	if got, want := cfg.Addr, "myserver"; got != want {
 		t.Errorf("Addr: got %q, want %q", got, want)
 	}
-	// ${env_tag} was consumed by the vars pass (returned ""); WithExpandMapping
-	// did not see it, so Tag is empty.
-	if got, want := cfg.Tag, ""; got != want {
-		t.Errorf("Tag: got %q, want %q (vars expansion consumes unknown refs)", got, want)
+
+	if got, want := cfg.Tag, "prod"; got != want {
+		t.Errorf("Tag: got %q, want %q", got, want)
+	}
+	if got, want := cfg.EnvAddr, "another-server"; got != want {
+		t.Errorf("EnvAddr: got %q, want %q", got, want)
 	}
 }
 

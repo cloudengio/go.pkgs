@@ -40,7 +40,7 @@ func (v *Variables) Mapping(key string) string {
 func (v *Variables) Load(spec []byte, mapName string) error {
 	var top map[string]any
 	if err := yaml.Unmarshal(spec, &top); err != nil {
-		return err
+		return errorWithSource("", 0, spec, fmt.Errorf("failed parsing variables tag: %v: %w", mapName, err))
 	}
 	return v.mergeFrom(top, mapName)
 }
