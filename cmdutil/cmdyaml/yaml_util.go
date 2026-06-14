@@ -300,36 +300,9 @@ func (p *parseState) preParse(spec []byte) {
 			break // catches io.EOF
 		}
 		p.collectAnchorFields(&doc)
-		p.collectVariables(&doc)
-	}
-}
-
-func (p *parseState) collectVariables(node *yaml.Node) {
-	if node == nil || p.variables == nil || node.Kind != yaml.DocumentNode {
-		return
-	}
-	for _, child := range node.Content {
-		if child.Kind != yaml.MappingNode {
-			continue
+		if p.variables != nil {
+			p.variables.mergeFromNode(&doc, p.variablesMapName)
 		}
-		key := child.Content[0]
-		if key.Kind == yaml.ScalarNode && key.Value == p.variablesMapName {
-			p.parseVariablesBlock(child.Content[1])
-		}
-	}
-}
-
-func (p *parseState) parseVariablesBlock(node *yaml.Node) {
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		keyNode := node.Content[i]
-		valNode := node.Content[i+1]
-		if keyNode.Kind != yaml.ScalarNode {
-			continue
-		}
-		if valNode.Kind != yaml.ScalarNode {
-			continue
-		}
-		p.variables.vars[keyNode.Value] = valNode.Value
 	}
 }
 

@@ -20,7 +20,7 @@ vars:
   empty:
 `)
 
-	var v cmdyaml.Variables
+	v := cmdyaml.NewVariables()
 	if err := v.Load(spec, "vars"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestVariablesLoad_Accumulates(t *testing.T) {
   c: three
 `)
 
-	var v cmdyaml.Variables
+	v := cmdyaml.NewVariables()
 	if err := v.Load(spec1, "vars"); err != nil {
 		t.Fatalf("load spec1: %v", err)
 	}

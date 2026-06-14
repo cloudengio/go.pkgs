@@ -5,8 +5,10 @@
 package cmdyaml
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
-	"strconv"
+	"io"
 
 	"gopkg.in/yaml.v3"
 )
@@ -38,55 +40,57 @@ func (v *Variables) Mapping(key string) string {
 // boolean); aggregate types (mappings, sequences) are rejected with an error.
 // If mapName is not present in spec Load is a no-op.
 func (v *Variables) Load(spec []byte, mapName string) error {
-	var top map[string]any
-	if err := yaml.Unmarshal(spec, &top); err != nil {
-		return errorWithSource("", 0, spec, fmt.Errorf("failed parsing variables tag: %v: %w", mapName, err))
-	}
-	return v.mergeFrom(top, mapName)
-}
-
-// mergeFrom extracts the named mapping from top and merges its scalar entries
-// into v. It is called by Load (after a plain Unmarshal) and by the parser's
-// two-document anchor-aware path in expandSpec.
-func (v *Variables) mergeFrom(top map[string]any, mapName string) error {
-	raw, ok := top[mapName]
-	if !ok || raw == nil {
-		return nil
-	}
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return fmt.Errorf("%q is not a YAML mapping", mapName)
-	}
 	if v.vars == nil {
-		v.vars = make(map[string]string, len(m))
+		v.vars = make(map[string]string)
 	}
-	for k, val := range m {
-		s, err := scalarToString(mapName, k, val)
-		if err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(spec))
+	for {
+		var doc yaml.Node
+		if err := dec.Decode(&doc); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return err
 		}
-		v.vars[k] = s
+		if err := v.mergeFromNode(&doc, mapName); err != nil {
+			return err
+		}
+	}
+}
+
+func (v *Variables) mergeFromNode(node *yaml.Node, mapName string) error {
+	if node == nil || node.Kind != yaml.DocumentNode {
+		return nil
+	}
+	for _, child := range node.Content {
+		if len(child.Content) < 2 {
+			return fmt.Errorf("expected mapping node with 2 content nodes, got %d", len(child.Content))
+		}
+		key := child.Content[0]
+		val := child.Content[1]
+		if key.Kind == yaml.ScalarNode && key.Value == mapName {
+			if child.Kind != yaml.MappingNode || val.Kind != yaml.MappingNode {
+				return fmt.Errorf("%q is not a YAML mapping", mapName)
+			}
+			if err := v.parseVariablesBlock(child.Content[1], mapName); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
-func scalarToString(mapName, key string, v any) (string, error) {
-	switch val := v.(type) {
-	case string:
-		return val, nil
-	case int:
-		return strconv.Itoa(val), nil
-	case int64:
-		return strconv.FormatInt(val, 10), nil
-	case uint64:
-		return strconv.FormatUint(val, 10), nil
-	case float64:
-		return strconv.FormatFloat(val, 'f', -1, 64), nil
-	case bool:
-		return strconv.FormatBool(val), nil
-	case nil:
-		return "", nil
-	default:
-		return "", fmt.Errorf("%q: value for key %q must be a scalar (string, number, or boolean), got %T", mapName, key, v)
+func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valNode := node.Content[i+1]
+		if keyNode.Kind != yaml.ScalarNode {
+			continue
+		}
+		if valNode.Kind != yaml.ScalarNode {
+			return fmt.Errorf("%q: value for key %q must be a scalar", mapName, keyNode.Value)
+		}
+		v.vars[keyNode.Value] = valNode.Value
 	}
+	return nil
 }
