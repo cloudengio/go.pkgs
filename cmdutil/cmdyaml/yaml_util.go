@@ -133,7 +133,7 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		}
 		spec = expandEnvPreserving(spec, p.expandEnv)
 		if err := ps.parse(filename, spec, cfg); err != nil {
-			return err
+			return fmt.Errorf("error parsing config file %s: %w", filename, err)
 		}
 	}
 	return nil
@@ -229,7 +229,7 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 
 	combined, lineAdjustment, err := p.withPreamble(spec)
 	if err != nil {
-		return err
+		return fmt.Errorf("error building YAML preamble for file %s: %w", filename, err)
 	}
 	p.preParse(combined)
 
@@ -255,12 +255,12 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 			return errorWithSource(filename, lineAdjustment, spec, err)
 		}
 
-		var yerr *yaml.TypeError
-		if !errors.As(err, &yerr) {
+		yerr, ok := errors.AsType[*yaml.TypeError](err)
+		if !ok {
 			return errorWithSource(filename, lineAdjustment, spec, err)
 		}
 
-		var filtered []string
+		var remaining []string
 		for _, errStr := range yerr.Errors {
 			matches := unknownFieldRE.FindStringSubmatch(errStr)
 			if len(matches) == 2 {
@@ -272,11 +272,11 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 					continue
 				}
 			}
-			filtered = append(filtered, errStr)
+			remaining = append(remaining, errStr)
 		}
 
-		if len(filtered) > 0 {
-			yerr.Errors = filtered
+		if len(remaining) > 0 {
+			yerr.Errors = remaining
 			return errorWithSource(filename, lineAdjustment, spec, yerr)
 		}
 	}
@@ -349,7 +349,7 @@ func (p *parseState) collectAnchorFields(node *yaml.Node) {
 // against the previous line rather than the offending one.
 func errorWithSource(filename string, lineAdjustment int, spec []byte, err error) error {
 	specLines := bytes.Split(spec, []byte{'\n'})
-	if yerr, ok := err.(*yaml.TypeError); ok {
+	if yerr, ok := errors.AsType[*yaml.TypeError](err); ok {
 		return yamlTypeErrorWithSource(filename, lineAdjustment, specLines, yerr)
 	}
 	return yamlOtherErrorWithSource(filename, lineAdjustment, specLines, err)
@@ -358,6 +358,7 @@ func errorWithSource(filename string, lineAdjustment int, spec []byte, err error
 var yamlPanicErrsRE = regexp.MustCompile(`(.*)line (\d+):\s*(.*)`)
 
 func yamlOtherErrorWithSource(filename string, lineAdjustment int, specLines [][]byte, err error) error {
+
 	sc := bufio.NewScanner(bytes.NewReader([]byte(err.Error())))
 	var newError strings.Builder
 	for sc.Scan() {
