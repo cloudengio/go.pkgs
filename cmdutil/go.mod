@@ -1,6 +1,6 @@
 module cloudeng.io/cmdutil
 
-go 1.25.5
+go 1.26.4
 
 require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278

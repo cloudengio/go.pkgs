@@ -147,7 +147,7 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		}
 		spec = expandEnvPreserving(spec, p.expandEnv)
 		if err := ps.parse(filename, spec, cfg); err != nil {
-			return fmt.Errorf("error parsing config file %s: %w", filename, err)
+			return err
 		}
 	}
 	return nil
@@ -221,10 +221,20 @@ func (p *parseState) buildPreamble() ([]byte, error) {
 	return data, nil
 }
 
-func (p *parseState) withPreamble(spec []byte) (preamble, combined []byte, lineAdjustment int, err error) {
+func (p *parseState) expandEnvPreserving(spec []byte) []byte {
+	if p.variables == nil {
+		return spec
+	}
+	return expandEnvPreserving(spec, p.variables.Mapping)
+}
+
+func (p *parseState) withPreamble(filename string, spec []byte) (preamble, combined []byte, lineAdjustment int, err error) {
 	preamble, err = p.buildPreamble()
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("internal error building YAML preamble: %w", err)
+		if len(filename) > 0 {
+			return nil, nil, 0, fmt.Errorf("error building YAML preamble for file %s: %w", filename, err)
+		}
+		return nil, nil, 0, fmt.Errorf("error building YAML preamble: %w", err)
 	}
 	if len(preamble) == 0 {
 		return nil, spec, 0, nil
@@ -237,13 +247,23 @@ func (p *parseState) withPreamble(spec []byte) (preamble, combined []byte, lineA
 var unknownFieldRE = regexp.MustCompile(`field\s+(\S+)\s+not\s+found\s+in\s+type`)
 var preambleSep = []byte("\n---\n")
 
+func (p *parseState) expandPreamble(preamble, decodeSpec []byte) ([]byte, int) {
+	if len(preamble) == 0 {
+		return decodeSpec, 0
+	}
+	decPreamble := p.expandEnvPreserving(preamble)
+	expanded := append(append(decPreamble, preambleSep...), decodeSpec...)
+	lineAdjustment := bytes.Count(decPreamble, []byte{'\n'}) + bytes.Count(preambleSep, []byte{'\n'})
+	return expanded, lineAdjustment
+}
+
 func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 	// Build the preamble from anchors accumulated by previous specs, then
 	// register this spec's own anchors (for use by future specs and for
 	// error filtering below).
-	preamble, combined, _, err := p.withPreamble(spec)
+	preamble, combined, _, err := p.withPreamble(filename, spec)
 	if err != nil {
-		return fmt.Errorf("error building YAML preamble for file %s: %w", filename, err)
+		return err
 	}
 	p.preParse(combined)
 
@@ -255,33 +275,18 @@ func (p *parseState) parse(filename string, spec []byte, cfg any) error {
 	if p.seqMergeKey != "" {
 		// Parse combined so cross-spec aliases are resolved, then flatten
 		// sequence merge nodes in the spec document and re-marshal.
-		if merged := p.applySequenceMerge(combined); merged != nil {
+		if merged := p.applySequenceMerge(combined, len(preamble) > 0); merged != nil {
 			decodeSpec = merged
 		}
 	}
-	if p.variables != nil {
-		decodeSpec = expandEnvPreserving(decodeSpec, p.variables.Mapping)
-	}
+	decodeSpec = p.expandEnvPreserving(decodeSpec)
 
 	// Rebuild the full decode stream: (var-expanded) preamble + sep + decodeSpec.
 	// Recompute lineAdjustment from the actual preamble bytes used.
-	var expanded []byte
-	lineAdjustment := 0
-	if len(preamble) > 0 {
-		decPreamble := preamble
-		if p.variables != nil {
-			decPreamble = expandEnvPreserving(preamble, p.variables.Mapping)
-		}
-		expanded = append(append(decPreamble, preambleSep...), decodeSpec...)
-		lineAdjustment = bytes.Count(decPreamble, []byte{'\n'}) + bytes.Count(preambleSep, []byte{'\n'})
-	} else {
-		expanded = decodeSpec
-	}
+	expanded, lineAdjustment := p.expandPreamble(preamble, decodeSpec)
 
 	dec := yaml.NewDecoder(bytes.NewReader(expanded))
-	if p.strict {
-		dec.KnownFields(true)
-	}
+	dec.KnownFields(p.strict)
 
 	for {
 		err := dec.Decode(cfg)
@@ -381,11 +386,12 @@ func (p *parseState) collectAnchorFields(node *yaml.Node) {
 }
 
 // applySequenceMerge parses combined as a YAML stream (so cross-spec aliases
-// are resolved), applies flattenSequenceMerges to the last document (the
-// caller's spec), and returns the re-marshalled spec bytes. Returns nil if
-// parsing or marshalling fails, in which case the caller should use the
-// original spec and let the main decoder surface the parse error.
-func (p *parseState) applySequenceMerge(combined []byte) []byte {
+// are resolved), applies flattenSequenceMerges to every spec document, and
+// returns the re-marshalled spec bytes. hasPreamble indicates that the first
+// document in combined is the injected anchor preamble and should be skipped.
+// Returns nil if parsing or marshalling fails, in which case the caller should
+// use the original spec and let the main decoder surface the parse error.
+func (p *parseState) applySequenceMerge(combined []byte, hasPreamble bool) []byte {
 	var docs []*yaml.Node
 	dec := yaml.NewDecoder(bytes.NewReader(combined))
 	for {
@@ -397,38 +403,58 @@ func (p *parseState) applySequenceMerge(combined []byte) []byte {
 		}
 		docs = append(docs, &doc)
 	}
-	if len(docs) == 0 {
+	firstSpec := 0
+	if hasPreamble {
+		firstSpec = 1
+	}
+	if firstSpec >= len(docs) {
 		return nil
 	}
-	specDoc := docs[len(docs)-1]
-	flattenSequenceMerges(specDoc, p.seqMergeKey)
-	out, err := yaml.Marshal(specDoc)
-	if err != nil {
-		return nil
+	var out []byte
+	for i, doc := range docs[firstSpec:] {
+		flattenSequenceMerges(doc, p.seqMergeKey)
+		b, err := yaml.Marshal(doc)
+		if err != nil {
+			return nil
+		}
+		if i > 0 {
+			out = append(out, preambleSep...)
+		}
+		out = append(out, b...)
 	}
 	return out
 }
 
 // flattenSequenceMerges walks the AST and replaces every sequence element of
 // the form {mergeKey: *anchor} — where *anchor resolves to a sequence — with
-// the referenced sequence's items inlined at that position.
+// the referenced sequence's items inlined at that position. The merge target
+// is recursively flattened before its content is inlined, so cross-spec
+// anchors whose own contents contain sequence merges are fully resolved.
+// A visited map guards against re-processing the same node and prevents
+// infinite recursion if the node graph contains cycles.
 func flattenSequenceMerges(node *yaml.Node, mergeKey string) {
-	if node == nil {
+	flattenSeqMergesVisited(node, mergeKey, map[*yaml.Node]bool{})
+}
+
+func flattenSeqMergesVisited(node *yaml.Node, mergeKey string, visited map[*yaml.Node]bool) {
+	if node == nil || visited[node] {
 		return
 	}
+	visited[node] = true
 	switch node.Kind {
 	case yaml.DocumentNode, yaml.MappingNode:
 		for _, child := range node.Content {
-			flattenSequenceMerges(child, mergeKey)
+			flattenSeqMergesVisited(child, mergeKey, visited)
 		}
 	case yaml.SequenceNode:
 		var flat []*yaml.Node
 		for _, child := range node.Content {
 			if target := seqMergeTarget(child, mergeKey); target != nil {
+				flattenSeqMergesVisited(target, mergeKey, visited)
 				flat = append(flat, target.Content...)
 			} else {
 				flat = append(flat, child)
-				flattenSequenceMerges(child, mergeKey)
+				flattenSeqMergesVisited(child, mergeKey, visited)
 			}
 		}
 		node.Content = flat
