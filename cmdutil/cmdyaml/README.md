@@ -204,6 +204,18 @@ file system rooted at the current working directory.
 
 
 ```go
+func WithSequenceMerge(mergeKey string) Option
+```
+WithSequenceMerge enables list merging via a special single-key mapping
+element. When a sequence contains an element of the form {key: *anchor}
+where key matches mergeKey and *anchor resolves to another sequence, the
+referenced sequence's items are inlined at that position. Cross-spec anchors
+are supported: an anchor defined in an earlier spec can be merged into a
+sequence in a later spec. The conventional value for mergeKey is "<<",
+mirroring YAML's map merge key.
+
+
+```go
 func WithStrictFields(strict bool) Option
 ```
 WithStrictFields causes Parse and ParseFiles to report an error for any YAML

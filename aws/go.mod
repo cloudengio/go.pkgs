@@ -1,6 +1,6 @@
 module cloudeng.io/aws
 
-go 1.26.2
+go 1.26.4
 
 require (
 	cloudeng.io/cicd v0.0.0-20260527194618-4cb6d4558850
@@ -44,10 +44,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260612215057-2c1fdd49d80a // indirect
-	cloudeng.io/os v0.0.0-20260612215057-2c1fdd49d80a // indirect
+	cloudeng.io/algo v0.0.0-20260614044727-06c50b507753 // indirect
+	cloudeng.io/os v0.0.0-20260614044727-06c50b507753 // indirect
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260612215057-2c1fdd49d80a // indirect
+	cloudeng.io/sys v0.0.0-20260614044727-06c50b507753 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.29 // indirect

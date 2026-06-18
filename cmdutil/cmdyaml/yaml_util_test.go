@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -982,5 +983,238 @@ unknown: [3,4]
 	}
 	if got, want := err.Error(), `line 3: "unknown: [3,4]": field unknown not found in type cmdyaml_test.testStruct`; !strings.Contains(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeNestedCrossSpec exposes the bug where a preamble anchor
+// whose own content contains a sequence merge is not recursively flattened
+// before being inlined. spec1 defines _inner and _outer (which itself merges
+// *inner); spec2 merges *outer into items. Without the fix, items receives the
+// un-flattened content of _outer — including the raw {<<: *inner} mapping node
+// — instead of the fully resolved [a, b, c, d].
+func TestSequenceMergeNestedCrossSpec(t *testing.T) {
+	type config struct {
+		Items []string `yaml:"items"`
+	}
+	spec1 := []byte(`
+_inner: &inner
+  - a
+  - b
+_outer: &outer
+  - <<: *inner
+  - c
+`)
+	spec2 := []byte(`
+items:
+  - <<: *outer
+  - d
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithSequenceMerge("<<")).Parse(&cfg, spec1, spec2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Items, []string{"a", "b", "c", "d"}; !slices.Equal(got, want) {
+		t.Errorf("Items: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeNestedSameSpec verifies that nested sequence merges within
+// a single spec are fully resolved (regression: this already worked via
+// in-place modification of anchor nodes during the DFS walk, but must continue
+// to work after adding cycle detection).
+func TestSequenceMergeNestedSameSpec(t *testing.T) {
+	type config struct {
+		Items []string `yaml:"items"`
+	}
+	spec := []byte(`
+_inner: &inner
+  - a
+  - b
+_outer: &outer
+  - <<: *inner
+  - c
+items:
+  - <<: *outer
+  - d
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithSequenceMerge("<<")).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Items, []string{"a", "b", "c", "d"}; !slices.Equal(got, want) {
+		t.Errorf("Items: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeMultiDocSpec verifies that sequence merging preserves all
+// YAML documents in a multi-document spec. Before the fix, applySequenceMerge
+// took only docs[len(docs)-1], silently dropping every preceding spec document.
+func TestSequenceMergeMultiDocSpec(t *testing.T) {
+	type config struct {
+		A []string `yaml:"a"`
+		B []string `yaml:"b"`
+	}
+	// Two documents in one spec: first defines the anchor and field A,
+	// second references the same anchor for field B.
+	spec := []byte(`
+_base: &base
+  - shared
+
+a:
+  - <<: *base
+  - only-a
+---
+b:
+  - <<: *base
+  - only-b
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithSequenceMerge("<<")).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.A, []string{"shared", "only-a"}; !slices.Equal(got, want) {
+		t.Errorf("A: got %v, want %v", got, want)
+	}
+	if got, want := cfg.B, []string{"shared", "only-b"}; !slices.Equal(got, want) {
+		t.Errorf("B: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeSameSpec verifies that <<: *anchor inside a sequence
+// flattens the referenced sequence inline when anchor and reference are in
+// the same spec.
+func TestSequenceMergeSameSpec(t *testing.T) {
+	type config struct {
+		Items []string `yaml:"items"`
+	}
+	spec := []byte(`
+_base: &base
+  - a
+  - b
+
+items:
+  - <<: *base
+  - c
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithSequenceMerge("<<")).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Items, []string{"a", "b", "c"}; !slices.Equal(got, want) {
+		t.Errorf("Items: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeCrossSpec verifies that an anchor defined in one spec can
+// be merged into a sequence in a later spec.
+func TestSequenceMergeCrossSpec(t *testing.T) {
+	type config struct {
+		Items []string `yaml:"items"`
+	}
+	spec1 := []byte(`
+_base: &base
+  - x
+  - y
+`)
+	spec2 := []byte(`
+items:
+  - <<: *base
+  - z
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithSequenceMerge("<<")).Parse(&cfg, spec1, spec2); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Items, []string{"x", "y", "z"}; !slices.Equal(got, want) {
+		t.Errorf("Items: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeStrictMode verifies that the anchor-definition field and
+// the merged sequence do not trigger strict-mode unknown-field errors.
+func TestSequenceMergeStrictMode(t *testing.T) {
+	type config struct {
+		Items []string `yaml:"items"`
+	}
+	spec := []byte(`
+_base: &base
+  - p
+  - q
+
+items:
+  - <<: *base
+  - r
+`)
+	var cfg config
+	p := cmdyaml.NewParser(
+		cmdyaml.WithSequenceMerge("<<"),
+		cmdyaml.WithStrictFields(true),
+	)
+	if err := p.Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected strict-mode error: %v", err)
+	}
+	if got, want := cfg.Items, []string{"p", "q", "r"}; !slices.Equal(got, want) {
+		t.Errorf("Items: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeWithVariables verifies that sequence merging and variable
+// expansion work together: variable values inside merged items are expanded.
+func TestSequenceMergeWithVariables(t *testing.T) {
+	type config struct {
+		Routes []string `yaml:"routes"`
+	}
+	spec := []byte(`
+vars:
+  prefix: /api/v1
+
+_base: &base
+  - ${prefix}/users
+  - ${prefix}/posts
+
+routes:
+  - <<: *base
+  - ${prefix}/admin
+`)
+	var cfg config
+	p := cmdyaml.NewParser(
+		cmdyaml.WithSequenceMerge("<<"),
+		cmdyaml.WithYAMLVariables("vars"),
+	)
+	if err := p.Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"/api/v1/users", "/api/v1/posts", "/api/v1/admin"}
+	if got := cfg.Routes; !slices.Equal(got, want) {
+		t.Errorf("Routes: got %v, want %v", got, want)
+	}
+}
+
+// TestSequenceMergeMultiple verifies that multiple <<: *anchor elements in the
+// same sequence are each flattened in order.
+func TestSequenceMergeMultiple(t *testing.T) {
+	type config struct {
+		All []string `yaml:"all"`
+	}
+	spec := []byte(`
+_a: &a
+  - one
+  - two
+_b: &b
+  - three
+  - four
+
+all:
+  - <<: *a
+  - <<: *b
+  - five
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithSequenceMerge("<<")).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"one", "two", "three", "four", "five"}
+	if got := cfg.All; !slices.Equal(got, want) {
+		t.Errorf("All: got %v, want %v", got, want)
 	}
 }
