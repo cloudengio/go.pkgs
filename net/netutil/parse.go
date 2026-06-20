@@ -7,6 +7,7 @@
 package netutil
 
 import (
+	"fmt"
 	"net"
 	"net/netip"
 	"strconv"
@@ -16,11 +17,21 @@ import (
 // ParseAddrOrPrefix parses an IP address or prefix string and returns a
 // netip.Prefix. If the string is an IP address without a prefix, it is treated
 // as a full-bit prefix (/32 for IPv4, /128 for IPv6).
-// ParseAddrOrPrefix calls Resolve to resolve the address before parsing it.
+// ParseAddrOrPrefix calls ResolveFirst to resolve the address before parsing it.
 func ParseAddrOrPrefix(addr string) (netip.Prefix, error) {
-	addr = Resolve(addr)
-	if !strings.Contains(addr, "/") {
-		ip, err := netip.ParseAddr(addr)
+	// The "/prefixlen" suffix, if any, must be split off before resolving:
+	// the host (or literal IP) is what gets resolved, not the whole string.
+	host := addr
+	prefixSuffix := ""
+	if idx := strings.LastIndex(addr, "/"); idx >= 0 {
+		host, prefixSuffix = addr[:idx], addr[idx:]
+	}
+	host, err := ResolveFirst(host)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	if prefixSuffix == "" {
+		ip, err := netip.ParseAddr(host)
 		if err != nil {
 			return netip.Prefix{}, err
 		}
@@ -30,15 +41,18 @@ func ParseAddrOrPrefix(addr string) (netip.Prefix, error) {
 		}
 		return netip.PrefixFrom(ip, bits), nil
 	}
-	return netip.ParsePrefix(addr)
+	return netip.ParsePrefix(host + prefixSuffix)
 }
 
 // ParseAddrIgnoringPort parses an IP address string and returns the address.
 // If the string is an address with a port, it will be parsed as an address
 // with a port and the address will be returned, ignoring the port.
-// ParseAddrIgnoringPort calls Resolve to resolve the address before parsing it.
+// ParseAddrIgnoringPort calls ResolveFirst to resolve the address before parsing it.
 func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
-	addr = Resolve(addr)
+	addr, err := ResolveFirst(addr)
+	if err != nil {
+		return netip.Addr{}, err
+	}
 	ap, err := netip.ParseAddrPort(addr)
 	if err == nil {
 		return ap.Addr(), nil
@@ -50,10 +64,13 @@ func ParseAddrIgnoringPort(addr string) (netip.Addr, error) {
 // already contains a port, it is parsed and returned. Otherwise, the
 // supplied default port is used to construct and parse an address with
 // that port. If the address contains only a port an address of "::" is
-// used. ParseAddrDefaultPort calls Resolve to resolve the address before
+// used. ParseAddrDefaultPort calls ResolveFirst to resolve the address before
 // parsing it.
 func ParseAddrDefaultPort(addr, defaultPort string) (netip.AddrPort, error) {
-	addr = Resolve(addr)
+	addr, err := ResolveFirst(addr)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
 	host, port, err := net.SplitHostPort(addr)
 	if err == nil {
 		// Addr is of the form :<port> with no address.
@@ -97,9 +114,12 @@ func HTTPServerAddr(addrPort netip.AddrPort) string {
 	}
 }
 
-// Resolve replaces the address component of addr with the first IP address
-// resolved for the host component of addr. If the host component of addr
-// cannot be resolved, addr is returned unchanged.
+// Resolve replaces the host component of addr with the first IP address
+// resolved for that host. If the host component of addr cannot be resolved,
+// addr is returned unchanged.
+//
+// Deprecated: Use ResolveFirst instead, which returns an error if the host
+// cannot be resolved instead of returning the original address.
 func Resolve(addr string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -113,4 +133,39 @@ func Resolve(addr string) string {
 		return ips[0].String()
 	}
 	return net.JoinHostPort(ips[0].String(), port)
+}
+
+// ResolveAll returns all IP addresses resolved for the host component of addr.
+func ResolveAll(addr string) ([]net.IP, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	return net.LookupIP(host)
+}
+
+// ResolveFirst returns addr with the host component replaced by the first IP
+// address resolved for that host; any port is preserved unchanged. If the
+// host component is empty (e.g. "" or ":80") addr is returned unchanged since
+// there is nothing to resolve. If the host cannot be resolved, an error is
+// returned.
+func ResolveFirst(addr string) (string, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		host, port = addr, ""
+	}
+	if host == "" {
+		return addr, nil
+	}
+	ips, err := ResolveAll(host)
+	if err != nil {
+		return "", err
+	}
+	if len(ips) == 0 {
+		return "", fmt.Errorf("no addresses resolved for %q", host)
+	}
+	if port == "" {
+		return ips[0].String(), nil
+	}
+	return net.JoinHostPort(ips[0].String(), port), nil
 }
