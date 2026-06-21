@@ -141,6 +141,12 @@ func ResolveAll(addr string) ([]net.IP, error) {
 	if err != nil {
 		host = addr
 	}
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return []net.IP{ip}, nil
+	}
 	return net.LookupIP(host)
 }
 
