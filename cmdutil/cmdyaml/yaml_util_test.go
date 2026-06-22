@@ -732,7 +732,8 @@ func TestVariablesExpansionInVars(t *testing.T) {
 	}
 	spec1 := []byte(`
 vars:
-  x: hello
+  a: hello
+  x: ${a}
 a: ${x}
 `)
 	spec2 := []byte(`
