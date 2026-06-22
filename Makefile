@@ -22,3 +22,10 @@ pr:
 		cloudeng.io/go/cmd/gomarkdown@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	multimod --config=.multimod.yaml usage annotate markdown
+
+all:
+	multimod update
+	multimod build
+	multimod test
+	multimod lint
+	multimod --config=.multimod.yaml markdown

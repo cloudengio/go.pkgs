@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"gopkg.in/yaml.v3"
 )
@@ -92,7 +93,19 @@ func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
 		if valNode.Kind != yaml.ScalarNode {
 			return fmt.Errorf("%q: value for key %q must be a scalar", mapName, keyNode.Value)
 		}
-		v.vars[keyNode.Value] = valNode.Value
+		v.vars[keyNode.Value] = v.expand(valNode.Value)
 	}
 	return nil
+}
+
+// expand resolves $VAR and ${VAR} references in s against the variables
+// already known to v, leaving unresolved references untouched.
+func (v *Variables) expand(s string) string {
+	return os.Expand(s, func(name string) string {
+		rs := v.Mapping(name)
+		if len(rs) == 0 {
+			return "${" + name + "}"
+		}
+		return rs
+	})
 }

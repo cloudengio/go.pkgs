@@ -7,17 +7,17 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
-	cloudeng.io/logging v0.0.0-20260611161950-23029f4a5674
+	cloudeng.io/logging v0.0.0-20260621005150-1f2f4ecc2626
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/text v0.0.16-0.20260312171538-61fcde6ce278
-	github.com/alexbacchin/ssm-session-client v1.1.0
+	github.com/alexbacchin/ssm-session-client v1.2.0
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.25
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.24
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.29
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.307.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.307.1
 	github.com/aws/aws-sdk-go-v2/service/kms v1.53.4
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.3
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.104.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.42.3
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.62.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.3
@@ -28,7 +28,7 @@ require (
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.69.3 // indirect
-	github.com/aws/session-manager-plugin v0.0.0-20260423192734-dcff8da8cdec // indirect
+	github.com/aws/session-manager-plugin v0.0.0-20260615221425-930a08e65d3a // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
@@ -44,10 +44,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260614044727-06c50b507753 // indirect
-	cloudeng.io/os v0.0.0-20260614044727-06c50b507753 // indirect
+	cloudeng.io/algo v0.0.0-20260621005150-1f2f4ecc2626 // indirect
+	cloudeng.io/os v0.0.0-20260621005150-1f2f4ecc2626 // indirect
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260614044727-06c50b507753 // indirect
+	cloudeng.io/sys v0.0.0-20260621005150-1f2f4ecc2626 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.29 // indirect

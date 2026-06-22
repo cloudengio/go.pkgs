@@ -8,8 +8,8 @@ require (
 	cloudeng.io/vms v0.0.0-20260527194618-4cb6d4558850
 	github.com/containerd/errdefs v1.0.0
 	github.com/docker/go-sdk/client v0.1.0-alpha013
-	github.com/moby/moby/api v1.54.2
-	github.com/moby/moby/client v0.4.1
+	github.com/moby/moby/api v1.55.0
+	github.com/moby/moby/client v0.5.0
 )
 
 require (
