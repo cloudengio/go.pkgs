@@ -726,14 +726,17 @@ b: ${x}-${y}
 
 func TestVariablesExpansionInVars(t *testing.T) {
 	type config struct {
-		A string `yaml:"a"`
-		B string `yaml:"b"`
-		C string `yaml:"c"`
+		BA string `yaml:"ba"`
+		A  string `yaml:"a"`
+		B  string `yaml:"b"`
+		C  string `yaml:"c"`
 	}
 	spec1 := []byte(`
 vars:
+  ba: ${a}
   a: hello
   x: ${a}
+ba: ${ba}
 a: ${x}
 `)
 	spec2 := []byte(`
@@ -748,6 +751,9 @@ c: ${x}-${y}-${z}
 	var cfg config
 	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).Parse(&cfg, spec1, spec2, spec3); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.BA, "hello"; got != want {
+		t.Errorf("BA: got %q, want %q", got, want)
 	}
 	if got, want := cfg.A, "hello"; got != want {
 		t.Errorf("A: got %q, want %q", got, want)

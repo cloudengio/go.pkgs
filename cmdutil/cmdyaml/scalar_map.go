@@ -83,7 +83,16 @@ func (v *Variables) mergeFromNode(node *yaml.Node, mapName string) error {
 	return nil
 }
 
+// parseVariablesBlock collects the raw key/value pairs of node and resolves
+// $VAR and ${VAR} references within their values via repeated passes, so
+// that variables may reference one another regardless of the order in which
+// they are declared within the block (e.g. ba: ${a} declared before a:
+// hello). Each pass re-expands every raw value against the variables
+// resolved so far (this block's own entries plus any already accumulated by
+// v); it stops once a full pass produces no further changes.
 func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
+	var keys []string
+	raw := make(map[string]string)
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
 		valNode := node.Content[i+1]
@@ -93,16 +102,44 @@ func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
 		if valNode.Kind != yaml.ScalarNode {
 			return fmt.Errorf("%q: value for key %q must be a scalar", mapName, keyNode.Value)
 		}
-		v.vars[keyNode.Value] = v.expand(valNode.Value)
+		if _, ok := raw[keyNode.Value]; !ok {
+			keys = append(keys, keyNode.Value)
+		}
+		raw[keyNode.Value] = valNode.Value
+	}
+
+	resolved := make(map[string]string, len(keys))
+	lookup := func(name string) string {
+		if rs, ok := resolved[name]; ok {
+			return rs
+		}
+		return v.Mapping(name)
+	}
+	for pass := 0; pass <= len(keys); pass++ {
+		changed := false
+		for _, key := range keys {
+			next := expandVars(raw[key], lookup)
+			if next != resolved[key] {
+				resolved[key] = next
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+
+	for _, key := range keys {
+		v.vars[key] = resolved[key]
 	}
 	return nil
 }
 
-// expand resolves $VAR and ${VAR} references in s against the variables
-// already known to v, leaving unresolved references untouched.
-func (v *Variables) expand(s string) string {
+// expandVars resolves $VAR and ${VAR} references in s using mapping,
+// leaving unresolved references untouched.
+func expandVars(s string, mapping func(string) string) string {
 	return os.Expand(s, func(name string) string {
-		rs := v.Mapping(name)
+		rs := mapping(name)
 		if len(rs) == 0 {
 			return "${" + name + "}"
 		}
