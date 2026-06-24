@@ -12,8 +12,8 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260621005150-1f2f4ecc2626 // indirect
-	cloudeng.io/sys v0.0.0-20260621005150-1f2f4ecc2626 // indirect
+	cloudeng.io/algo v0.0.0-20260622224828-d069000db737 // indirect
+	cloudeng.io/sys v0.0.0-20260622224828-d069000db737 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect

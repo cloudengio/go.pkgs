@@ -175,3 +175,18 @@ func ResolveFirst(addr string) (string, error) {
 	}
 	return net.JoinHostPort(ips[0].String(), port), nil
 }
+
+// EnsureHostPort returns addr that is guaranteed to have a port.
+// If addr already has a port, it is returned unchanged. If addr does not have
+// a port, the supplied port is appended. If addr is an IPv6 address,
+// it will be enclosed in brackets if it is not already.
+func EnsureHostPort(addr, port string) string {
+	if _, _, err := net.SplitHostPort(addr); err == nil {
+		return addr
+	}
+	// Avoid double brackets for IPv6 addresses.
+	if len(addr) > 0 && addr[0] == '[' && addr[len(addr)-1] == ']' {
+		addr = addr[1 : len(addr)-1]
+	}
+	return net.JoinHostPort(addr, port)
+}

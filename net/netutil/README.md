@@ -8,6 +8,15 @@ Package netutil provides utility functions for networking, including parsing
 IP addresses and prefixes.
 
 ## Functions
+### Func EnsureHostPort
+```go
+func EnsureHostPort(addr, port string) string
+```
+EnsureHostPort returns addr that is guaranteed to have a port. If addr
+already has a port, it is returned unchanged. If addr does not have a port,
+the supplied port is appended. If addr is an IPv6 address, it will be
+enclosed in brackets if it is not already.
+
 ### Func HTTPServerAddr
 ```go
 func HTTPServerAddr(addrPort netip.AddrPort) string
