@@ -5,6 +5,7 @@
 package textutil
 
 import (
+	"bytes"
 	"iter"
 	"strings"
 	"unicode/utf8"
@@ -44,4 +45,59 @@ func SplitString(s string, sep rune) iter.Seq2[int, string] {
 			i++
 		}
 	}
+}
+
+// Head returns the first n lines of b, where lines are delimited by sep. If
+// b has fewer than n lines, it returns the entire slice. The returned slice
+// aliases b.
+func Head(b []byte, sep byte, n int) []byte {
+	idx := 0
+	for range n {
+		next := bytes.IndexByte(b[idx:], sep)
+		if next == -1 {
+			return b
+		}
+		idx += next + 1
+	}
+	if idx == 0 {
+		return b
+	}
+	return b[:idx-1]
+}
+
+// Tail returns the last n lines of b, where lines are delimited by sep. If b
+// has fewer than n lines, it returns the entire slice. A trailing separator,
+// if present, terminates the last line rather than introducing an additional
+// empty line. The returned slice aliases b.
+func Tail(b []byte, sep byte, n int) []byte {
+	end := len(b)
+	if end > 0 && b[end-1] == sep {
+		end--
+	}
+	idx := end
+	for range n {
+		prev := bytes.LastIndexByte(b[:idx], sep)
+		if prev == -1 {
+			return b
+		}
+		idx = prev
+	}
+	if idx == end {
+		return b
+	}
+	return b[idx+1 : end]
+}
+
+// HeadString returns the first n lines of the given string. If the string has
+// fewer than n lines, it returns the entire string.
+func HeadString(s string, n int) string {
+	return BytesToString(Head(StringToBytes(s), '\n', n))
+}
+
+// TailString returns the last n lines of the given string. If the string has
+// fewer than n lines, it returns the entire string. A trailing newline, if
+// present, terminates the last line rather than introducing an additional
+// empty line.
+func TailString(s string, n int) string {
+	return BytesToString(Tail(StringToBytes(s), '\n', n))
 }
