@@ -16,6 +16,21 @@ BytesToString returns a string with the supplied byte slice as its
 contents. The original byte slice must never be modified. Taken from
 strings.Builder.String().
 
+### Func Head
+```go
+func Head(b []byte, sep byte, n int) []byte
+```
+Head returns the first n lines of b, where lines are delimited by sep.
+If b has fewer than n lines, it returns the entire slice. The returned slice
+aliases b.
+
+### Func HeadString
+```go
+func HeadString(s string, n int) string
+```
+HeadString returns the first n lines of the given string. If the string has
+fewer than n lines, it returns the entire string.
+
 ### Func ReverseBytes
 ```go
 func ReverseBytes(input string) []byte
@@ -56,6 +71,24 @@ StringToBytes returns the byte slice containing the data for the
 supplied string without any allocations or copies. It should only
 be used when the resulting byte slice will never be modified. See
 https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
+
+### Func Tail
+```go
+func Tail(b []byte, sep byte, n int) []byte
+```
+Tail returns the last n lines of b, where lines are delimited by sep. If b
+has fewer than n lines, it returns the entire slice. A trailing separator,
+if present, terminates the last line rather than introducing an additional
+empty line. The returned slice aliases b.
+
+### Func TailString
+```go
+func TailString(s string, n int) string
+```
+TailString returns the last n lines of the given string. If the string
+has fewer than n lines, it returns the entire string. A trailing newline,
+if present, terminates the last line rather than introducing an additional
+empty line.
 
 ### Func TrimUnicodeQuotes
 ```go
