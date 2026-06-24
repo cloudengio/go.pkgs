@@ -141,9 +141,7 @@ func ResolveAll(addr string) ([]net.IP, error) {
 	if err != nil {
 		host = addr
 	}
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = host[1 : len(host)-1]
-	}
+	host = TrimIPv6(host)
 	if ip := net.ParseIP(host); ip != nil {
 		return []net.IP{ip}, nil
 	}
@@ -174,4 +172,27 @@ func ResolveFirst(addr string) (string, error) {
 		return ips[0].String(), nil
 	}
 	return net.JoinHostPort(ips[0].String(), port), nil
+}
+
+// EnsureHostPort returns addr that is guaranteed to have a port.
+// If addr already has a port, it is returned unchanged. If addr does not have
+// a port, the supplied port is appended. If addr is an IPv6 address,
+// it will be enclosed in brackets if it is not already.
+func EnsureHostPort(addr, port string) string {
+	if _, _, err := net.SplitHostPort(addr); err == nil {
+		return addr
+	}
+	// Avoid double brackets for IPv6 addresses.
+	if len(addr) > 0 && addr[0] == '[' && addr[len(addr)-1] == ']' {
+		addr = addr[1 : len(addr)-1]
+	}
+	return net.JoinHostPort(TrimIPv6(addr), port)
+}
+
+// TrimIPv6 removes brackets from an IPv6 address if they are present.
+func TrimIPv6(addr string) string {
+	if len(addr) > 0 && addr[0] == '[' && addr[len(addr)-1] == ']' {
+		return addr[1 : len(addr)-1]
+	}
+	return addr
 }

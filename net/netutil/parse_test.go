@@ -154,6 +154,25 @@ func TestResolveInFunctions(t *testing.T) {
 	}
 }
 
+func TestEnsureHostPort(t *testing.T) {
+	for _, tc := range []struct {
+		addr, port, want string
+	}{
+		{"192.168.1.1:80", "443", "192.168.1.1:80"},
+		{"[::1]:80", "443", "[::1]:80"},
+		{":80", "443", ":80"},
+		{"192.168.1.1", "53", "192.168.1.1:53"},
+		{"example.com", "80", "example.com:80"},
+		{"::1", "53", "[::1]:53"},
+		{"[::1]", "53", "[::1]:53"},
+		{"", "80", ":80"},
+	} {
+		if got := netutil.EnsureHostPort(tc.addr, tc.port); got != tc.want {
+			t.Errorf("EnsureHostPort(%q, %q): got %q, want %q", tc.addr, tc.port, got, tc.want)
+		}
+	}
+}
+
 func TestResolve(t *testing.T) {
 	for _, tc := range []struct {
 		input string
