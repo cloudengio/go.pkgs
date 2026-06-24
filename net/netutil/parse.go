@@ -141,9 +141,7 @@ func ResolveAll(addr string) ([]net.IP, error) {
 	if err != nil {
 		host = addr
 	}
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = host[1 : len(host)-1]
-	}
+	host = TrimIPv6(host)
 	if ip := net.ParseIP(host); ip != nil {
 		return []net.IP{ip}, nil
 	}
@@ -188,5 +186,13 @@ func EnsureHostPort(addr, port string) string {
 	if len(addr) > 0 && addr[0] == '[' && addr[len(addr)-1] == ']' {
 		addr = addr[1 : len(addr)-1]
 	}
-	return net.JoinHostPort(addr, port)
+	return net.JoinHostPort(TrimIPv6(addr), port)
+}
+
+// TrimIPv6 removes brackets from an IPv6 address if they are present.
+func TrimIPv6(addr string) string {
+	if len(addr) > 0 && addr[0] == '[' && addr[len(addr)-1] == ']' {
+		return addr[1 : len(addr)-1]
+	}
+	return addr
 }
