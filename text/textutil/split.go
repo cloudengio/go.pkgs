@@ -51,6 +51,9 @@ func SplitString(s string, sep rune) iter.Seq2[int, string] {
 // b has fewer than n lines, it returns the entire slice. The returned slice
 // aliases b.
 func Head(b []byte, sep byte, n int) []byte {
+	if n <= 0 {
+		return nil
+	}
 	idx := 0
 	for range n {
 		next := bytes.IndexByte(b[idx:], sep)
@@ -59,10 +62,8 @@ func Head(b []byte, sep byte, n int) []byte {
 		}
 		idx += next + 1
 	}
-	if idx == 0 {
-		return b
-	}
-	return b[:idx-1]
+	return b[:idx]
+
 }
 
 // Tail returns the last n lines of b, where lines are delimited by sep. If b
@@ -70,6 +71,9 @@ func Head(b []byte, sep byte, n int) []byte {
 // if present, terminates the last line rather than introducing an additional
 // empty line. The returned slice aliases b.
 func Tail(b []byte, sep byte, n int) []byte {
+	if n <= 0 {
+		return nil
+	}
 	end := len(b)
 	if end > 0 && b[end-1] == sep {
 		end--
@@ -82,10 +86,7 @@ func Tail(b []byte, sep byte, n int) []byte {
 		}
 		idx = prev
 	}
-	if idx == end {
-		return b
-	}
-	return b[idx+1 : end]
+	return b[idx+1:]
 }
 
 // HeadString returns the first n lines of the given string. If the string has

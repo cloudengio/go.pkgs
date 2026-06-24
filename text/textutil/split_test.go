@@ -57,13 +57,13 @@ func TestHeadString(t *testing.T) {
 		want  string
 	}{
 		{"empty", "", 2, ""},
-		{"zero lines requested", "a\nb\nc", 0, "a\nb\nc"},
+		{"zero lines requested", "a\nb\nc", 0, ""},
 		{"fewer lines than n", "a\nb", 5, "a\nb"},
 		{"fewer lines than n, trailing newline", "a\nb\n", 5, "a\nb\n"},
 		{"exact line count, no trailing newline", "a\nb\nc", 3, "a\nb\nc"},
-		{"first line", "a\nb\nc", 1, "a"},
-		{"first two lines", "a\nb\nc", 2, "a\nb"},
-		{"trailing newline", "a\nb\nc\n", 2, "a\nb"},
+		{"first line", "a\nb\nc", 1, "a\n"},
+		{"first two lines", "a\nb\nc", 2, "a\nb\n"},
+		{"trailing newline", "a\nb\nc\n", 2, "a\nb\n"},
 		{"single line, no newline", "hello", 1, "hello"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -82,14 +82,14 @@ func TestTailString(t *testing.T) {
 		want  string
 	}{
 		{"empty", "", 2, ""},
-		{"zero lines requested", "a\nb\nc", 0, "a\nb\nc"},
+		{"zero lines requested", "a\nb\nc", 0, ""},
 		{"fewer lines than n", "a\nb", 5, "a\nb"},
 		{"fewer lines than n, trailing newline", "a\nb\n", 5, "a\nb\n"},
 		{"exact line count, no trailing newline", "a\nb\nc", 3, "a\nb\nc"},
 		{"exact line count, trailing newline", "a\nb\nc\n", 3, "a\nb\nc\n"},
 		{"last line", "a\nb\nc", 1, "c"},
 		{"last two lines", "a\nb\nc", 2, "b\nc"},
-		{"trailing newline", "a\nb\nc\n", 2, "b\nc"},
+		{"trailing newline", "a\nb\nc\n", 2, "b\nc\n"},
 		{"single line, no newline", "hello", 1, "hello"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,13 +109,15 @@ func TestHead(t *testing.T) {
 		want  string
 	}{
 		{"empty", "", '\n', 2, ""},
-		{"zero lines requested", "a\nb\nc", '\n', 0, "a\nb\nc"},
+		{"zero lines requested", "a\nb\nc", '\n', 0, ""},
 		{"fewer lines than n", "a\nb", '\n', 5, "a\nb"},
+		{"fewer lines than n, trailing sep", "a\nb\n", '\n', 5, "a\nb\n"},
 		{"exact line count, no trailing sep", "a\nb\nc", '\n', 3, "a\nb\nc"},
-		{"first two lines", "a\nb\nc", '\n', 2, "a\nb"},
-		{"trailing sep", "a\nb\nc\n", '\n', 2, "a\nb"},
+		{"first line", "a\nb\nc", '\n', 1, "a\n"},
+		{"first two lines", "a\nb\nc", '\n', 2, "a\nb\n"},
+		{"trailing sep", "a\nb\nc\n", '\n', 2, "a\nb\n"},
 		{"single line, no sep", "hello", '\n', 1, "hello"},
-		{"custom separator", "a,b,c", ',', 2, "a,b"},
+		{"custom separator", "a,b,c", ',', 2, "a,b,"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := textutil.Head([]byte(tc.input), tc.sep, tc.n)
@@ -135,12 +137,14 @@ func TestTail(t *testing.T) {
 		want  string
 	}{
 		{"empty", "", '\n', 2, ""},
-		{"zero lines requested", "a\nb\nc", '\n', 0, "a\nb\nc"},
+		{"zero lines requested", "a\nb\nc", '\n', 0, ""},
 		{"fewer lines than n", "a\nb", '\n', 5, "a\nb"},
+		{"fewer lines than n, trailing sep", "a\nb\n", '\n', 5, "a\nb\n"},
 		{"exact line count, no trailing sep", "a\nb\nc", '\n', 3, "a\nb\nc"},
 		{"exact line count, trailing sep", "a\nb\nc\n", '\n', 3, "a\nb\nc\n"},
+		{"last line", "a\nb\nc", '\n', 1, "c"},
 		{"last two lines", "a\nb\nc", '\n', 2, "b\nc"},
-		{"trailing sep", "a\nb\nc\n", '\n', 2, "b\nc"},
+		{"trailing sep", "a\nb\nc\n", '\n', 2, "b\nc\n"},
 		{"single line, no sep", "hello", '\n', 1, "hello"},
 		{"custom separator", "a,b,c", ',', 2, "b,c"},
 	} {
