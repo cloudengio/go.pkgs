@@ -92,6 +92,11 @@ vars:
 	if err := v.Load(spec, "vars"); err == nil {
 		t.Fatal("expected error for nested map value, got nil")
 	}
+	// A non-scalar entry must not prevent its valid siblings from being
+	// registered.
+	if got, want := v.Mapping("host"), "localhost"; got != want {
+		t.Errorf("Mapping(%q) = %q, want %q", "host", got, want)
+	}
 }
 
 func TestVariablesLoad_RejectsSequence(t *testing.T) {
@@ -105,6 +110,59 @@ vars:
 	var v cmdyaml.Variables
 	if err := v.Load(spec, "vars"); err == nil {
 		t.Fatal("expected error for sequence value, got nil")
+	}
+	if got, want := v.Mapping("host"), "localhost"; got != want {
+		t.Errorf("Mapping(%q) = %q, want %q", "host", got, want)
+	}
+}
+
+// TestVariablesLoad_AliasToScalar verifies that a vars entry whose value is
+// an alias to a scalar anchor is resolved to that scalar's value, and that
+// the presence of such an alias does not prevent other, plain entries in the
+// same vars block from being registered (regression test: previously any
+// non-ScalarNode value, including an AliasNode, caused the entire block to
+// be dropped since the error was returned before any entries were
+// committed).
+func TestVariablesLoad_AliasToScalar(t *testing.T) {
+	spec := []byte(`
+base: &base hello
+vars:
+  x: *base
+  y: world
+`)
+	v := cmdyaml.NewVariables()
+	if err := v.Load(spec, "vars"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cases := []struct{ key, want string }{
+		{"x", "hello"},
+		{"y", "world"},
+	}
+	for _, tc := range cases {
+		if got := v.Mapping(tc.key); got != tc.want {
+			t.Errorf("Mapping(%q) = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}
+
+// TestVariablesLoad_AliasToNonScalar verifies that an alias resolving to a
+// non-scalar (e.g. a mapping) is still reported as an error, but, as with
+// any other non-scalar entry, does not prevent its siblings from being
+// registered.
+func TestVariablesLoad_AliasToNonScalar(t *testing.T) {
+	spec := []byte(`
+base: &base
+  nested: true
+vars:
+  x: *base
+  y: world
+`)
+	v := cmdyaml.NewVariables()
+	if err := v.Load(spec, "vars"); err == nil {
+		t.Fatal("expected error for alias to non-scalar value, got nil")
+	}
+	if got, want := v.Mapping("y"), "world"; got != want {
+		t.Errorf("Mapping(%q) = %q, want %q", "y", got, want)
 	}
 }
 

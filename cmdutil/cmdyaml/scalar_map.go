@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -90,17 +91,27 @@ func (v *Variables) mergeFromNode(node *yaml.Node, mapName string) error {
 // hello). Each pass re-expands every raw value against the variables
 // resolved so far (this block's own entries plus any already accumulated by
 // v); it stops once a full pass produces no further changes.
+//
+// An entry whose value is an alias (&name/*name) to a scalar is treated as
+// that scalar's value. An entry whose value is not a scalar, even after
+// resolving an alias, is reported in the returned error but does not prevent
+// the other, valid entries in the block from being registered.
 func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
 	var keys []string
 	raw := make(map[string]string)
+	var errs []string
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
 		valNode := node.Content[i+1]
 		if keyNode.Kind != yaml.ScalarNode {
 			continue
 		}
+		if valNode.Kind == yaml.AliasNode {
+			valNode = valNode.Alias
+		}
 		if valNode.Kind != yaml.ScalarNode {
-			return fmt.Errorf("%q: value for key %q must be a scalar", mapName, keyNode.Value)
+			errs = append(errs, fmt.Sprintf("%q: value for key %q must be a scalar", mapName, keyNode.Value))
+			continue
 		}
 		if _, ok := raw[keyNode.Value]; !ok {
 			keys = append(keys, keyNode.Value)
@@ -131,6 +142,9 @@ func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
 
 	for _, key := range keys {
 		v.vars[key] = resolved[key]
+	}
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
 }
