@@ -766,6 +766,36 @@ c: ${x}-${y}-${z}
 	}
 }
 
+// TestVariablesAliasInVarsDoesNotDropSiblings is a regression test: a vars
+// entry whose value is an alias (*name) to a scalar anchor previously caused
+// the entire vars block to be dropped, since parseVariablesBlock returned an
+// error before any of the block's entries were registered. Here "x" aliases
+// the "base" anchor and "y" is a plain entry; both must resolve correctly.
+func TestVariablesAliasInVarsDoesNotDropSiblings(t *testing.T) {
+	type config struct {
+		A string `yaml:"a"`
+		B string `yaml:"b"`
+	}
+	spec := []byte(`
+base: &base hello
+vars:
+  x: *base
+  y: world
+a: ${x}
+b: ${y}
+`)
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithYAMLVariables("vars")).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.A, "hello"; got != want {
+		t.Errorf("A: got %q, want %q", got, want)
+	}
+	if got, want := cfg.B, "world"; got != want {
+		t.Errorf("B: got %q, want %q", got, want)
+	}
+}
+
 // TestVariablesLaterSpecOverrides verifies that a variable redefined in a later
 // spec's vars block overrides the value from the earlier spec.
 func TestVariablesLaterSpecOverrides(t *testing.T) {
