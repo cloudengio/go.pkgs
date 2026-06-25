@@ -109,7 +109,7 @@ func (v *Variables) parseVariablesBlock(node *yaml.Node, mapName string) error {
 		if valNode.Kind == yaml.AliasNode {
 			valNode = valNode.Alias
 		}
-		if valNode.Kind != yaml.ScalarNode {
+		if valNode == nil || valNode.Kind != yaml.ScalarNode {
 			errs = append(errs, fmt.Sprintf("%q: value for key %q must be a scalar", mapName, keyNode.Value))
 			continue
 		}
