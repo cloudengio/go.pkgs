@@ -10,8 +10,8 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/alexbacchin/ssm-session-client v1.2.0 h1:CLkvCdlurqpT8G6hi6GWVQQigE/XbahUs5cpZlqQoD4=
-github.com/alexbacchin/ssm-session-client v1.2.0/go.mod h1:raTBYJWcPumv1nq/s3W8ewlALs0EDxnMJsR1ebtYiDI=
+github.com/alexbacchin/ssm-session-client v1.2.1 h1:ocVikF4Xy4KVfOV+EjLpDKZhRVR4DLRMqRpzTMGvtrw=
+github.com/alexbacchin/ssm-session-client v1.2.1/go.mod h1:gzWroszlIesvXO7nZl1j3PVcJzCEQ2YU4dgVTk2T0Ew=
 github.com/aws/aws-sdk-go-v2 v1.42.0 h1:XvXMJTkFQtpBKIWZnmr9ZEOc2InWM2yldjXEJ/bymhA=
 github.com/aws/aws-sdk-go-v2 v1.42.0/go.mod h1:27+ACypSLljLAEKsCYOmrjKh83vuTRkuAe9Uv/3A4bg=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 h1:p1BBrg/Hhp6uK7zpejeI8QFXHJeC/mynzi04Sl03k9g=

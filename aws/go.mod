@@ -10,7 +10,7 @@ require (
 	cloudeng.io/logging v0.0.0-20260624171915-da98fe9dec2b
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
-	github.com/alexbacchin/ssm-session-client v1.2.0
+	github.com/alexbacchin/ssm-session-client v1.2.1
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.25
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.24
@@ -124,3 +124,8 @@ replace cloudeng.io/text => ../text
 replace cloudeng.io/os => ../os
 
 replace cloudeng.io/sync => ../sync
+
+replace (
+	github.com/docker/docker/client => github.com/moby/moby/client v0.5.0
+	github.com/docker/docker/api/types => github.com/moby/moby/api/types v1.55.0
+)
