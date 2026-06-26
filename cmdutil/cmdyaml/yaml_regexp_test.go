@@ -78,8 +78,24 @@ func TestRegexpZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if got, want := strings.TrimSpace(string(out)), `""`; got != want {
+	if got, want := strings.TrimSpace(string(out)), "null"; got != want {
 		t.Errorf("Marshal(zero value) = %q, want %q", got, want)
+	}
+}
+
+func TestRegexpUnmarshalNull(t *testing.T) {
+	type cfg struct {
+		Pattern cmdyaml.Regexp `yaml:"pattern"`
+	}
+
+	for _, in := range []string{"pattern: null", "pattern:"} {
+		var c cfg
+		if err := yaml.Unmarshal([]byte(in), &c); err != nil {
+			t.Fatalf("Unmarshal(%q): %v", in, err)
+		}
+		if c.Pattern.Regexp != nil {
+			t.Errorf("Unmarshal(%q): Pattern.Regexp = %v, want nil", in, c.Pattern.Regexp)
+		}
 	}
 }
 
@@ -162,5 +178,51 @@ func TestRegexpListEmpty(t *testing.T) {
 	}
 	if got, want := len(c.Patterns), 0; got != want {
 		t.Errorf("got %v patterns, want %v", got, want)
+	}
+}
+
+func TestRegexpListNilMarshal(t *testing.T) {
+	type cfg struct {
+		Patterns cmdyaml.RegexpList `yaml:"patterns"`
+	}
+	var c cfg
+	if c.Patterns != nil {
+		t.Fatalf("test setup: Patterns is not nil: %v", c.Patterns)
+	}
+	out, err := yaml.Marshal(c)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if got, want := strings.TrimSpace(string(out)), "patterns: []"; got != want {
+		t.Errorf("Marshal(nil list) = %q, want %q", got, want)
+	}
+}
+
+func TestRegexpListRegexps(t *testing.T) {
+	var c struct {
+		Patterns cmdyaml.RegexpList `yaml:"patterns"`
+	}
+	in := `patterns: ["^foo", "bar$"]`
+	if err := yaml.Unmarshal([]byte(in), &c); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	res := c.Patterns.Regexps()
+	if got, want := len(res), len(c.Patterns); got != want {
+		t.Fatalf("got %v regexps, want %v", got, want)
+	}
+	for i, re := range res {
+		if re == nil {
+			t.Fatalf("Regexps()[%d] is nil", i)
+		}
+		if got, want := re.String(), c.Patterns[i].String(); got != want {
+			t.Errorf("Regexps()[%d] = %q, want %q", i, got, want)
+		}
+	}
+
+	// Regexps() on a nil/empty list returns an empty, non-nil slice.
+	var empty cmdyaml.RegexpList
+	if got := empty.Regexps(); len(got) != 0 {
+		t.Errorf("Regexps() on empty list = %v, want empty", got)
 	}
 }

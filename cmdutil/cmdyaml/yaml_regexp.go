@@ -30,12 +30,19 @@ func (r Regexp) String() string {
 // MarshalYAML implements yaml.Marshaler, encoding r as its source pattern
 // string.
 func (r Regexp) MarshalYAML() (any, error) {
+	if r.Regexp == nil {
+		return nil, nil
+	}
 	return r.String(), nil
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler, compiling the YAML scalar
 // string value as a regular expression.
 func (r *Regexp) UnmarshalYAML(value *yaml.Node) error {
+	if value.Tag == "!!null" {
+		r.Regexp = nil
+		return nil
+	}
 	var s string
 	if err := value.Decode(&s); err != nil {
 		return err
@@ -55,6 +62,9 @@ type RegexpList []Regexp
 // MarshalYAML implements yaml.Marshaler, encoding rl as a sequence of
 // source pattern strings.
 func (rl RegexpList) MarshalYAML() (any, error) {
+	if rl == nil {
+		return []Regexp{}, nil
+	}
 	out := make([]string, len(rl))
 	for i, r := range rl {
 		out[i] = r.String()
@@ -65,17 +75,9 @@ func (rl RegexpList) MarshalYAML() (any, error) {
 // UnmarshalYAML implements yaml.Unmarshaler, compiling each element of the
 // YAML sequence as a regular expression.
 func (rl *RegexpList) UnmarshalYAML(value *yaml.Node) error {
-	var exprs []string
-	if err := value.Decode(&exprs); err != nil {
+	var list []Regexp
+	if err := value.Decode(&list); err != nil {
 		return err
-	}
-	list := make(RegexpList, len(exprs))
-	for i, expr := range exprs {
-		re, err := regexp.Compile(expr)
-		if err != nil {
-			return fmt.Errorf("invalid regular expression %q: %w", expr, err)
-		}
-		list[i] = Regexp{re}
 	}
 	*rl = list
 	return nil
