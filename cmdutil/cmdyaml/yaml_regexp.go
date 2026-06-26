@@ -80,3 +80,12 @@ func (rl *RegexpList) UnmarshalYAML(value *yaml.Node) error {
 	*rl = list
 	return nil
 }
+
+// Regexps returns a slice of the *regexp.Regexp values in rl.
+func (rl RegexpList) Regexps() []*regexp.Regexp {
+	out := make([]*regexp.Regexp, len(rl))
+	for i, r := range rl {
+		out[i] = r.Regexp
+	}
+	return out
+}

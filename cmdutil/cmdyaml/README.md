@@ -298,6 +298,72 @@ func (t *RFC3339Time) UnmarshalYAML(value *yaml.Node) error
 
 
 
+### Type Regexp
+```go
+type Regexp struct {
+	*regexp.Regexp
+}
+```
+Regexp wraps a *regexp.Regexp so that it can be marshaled to and unmarshaled
+from YAML as the regular expression's source pattern string. The zero value
+has a nil *regexp.Regexp.
+
+### Methods
+
+```go
+func (r Regexp) MarshalYAML() (any, error)
+```
+MarshalYAML implements yaml.Marshaler, encoding r as its source pattern
+string.
+
+
+```go
+func (r Regexp) String() string
+```
+String returns the source text of the regular expression, or "" if r wraps a
+nil *regexp.Regexp.
+
+
+```go
+func (r *Regexp) UnmarshalYAML(value *yaml.Node) error
+```
+UnmarshalYAML implements yaml.Unmarshaler, compiling the YAML scalar string
+value as a regular expression.
+
+
+
+
+### Type RegexpList
+```go
+type RegexpList []Regexp
+```
+RegexpList is a list of Regexp values that can be marshaled to and
+unmarshaled from a YAML sequence of regular expression strings.
+
+### Methods
+
+```go
+func (rl RegexpList) MarshalYAML() (any, error)
+```
+MarshalYAML implements yaml.Marshaler, encoding rl as a sequence of source
+pattern strings.
+
+
+```go
+func (rl RegexpList) Regexps() []*regexp.Regexp
+```
+Regexps returns a slice of the *regexp.Regexp values in rl.
+
+
+```go
+func (rl *RegexpList) UnmarshalYAML(value *yaml.Node) error
+```
+UnmarshalYAML implements yaml.Unmarshaler, compiling each element of the
+YAML sequence as a regular expression.
+
+
+
+
 ### Type Variables
 ```go
 type Variables struct {
