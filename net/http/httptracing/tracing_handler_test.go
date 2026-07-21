@@ -249,7 +249,7 @@ func TestTracingHandlerPanicRecovery(t *testing.T) {
 		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
 		handler := NewTracingHandler(
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				panic("something went wrong after header")
 			}),
