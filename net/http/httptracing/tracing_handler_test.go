@@ -144,6 +144,73 @@ func TestTracingResponseWriterHijackErrors(t *testing.T) {
 	}
 }
 
+func TestTracingHandlerPanicRecovery(t *testing.T) {
+	t.Parallel()
+
+	t.Run("panic-before-write", func(t *testing.T) {
+		t.Parallel()
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+		handler := NewTracingHandler(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				panic("something went wrong")
+			}),
+			WithTraceHandlerLogger(logger),
+		)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req) // must not re-panic
+
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		if got, want := resp.StatusCode, http.StatusInternalServerError; got != want {
+			t.Errorf("status: got %v, want %v", got, want)
+		}
+		if strings.Contains(string(body), "goroutine") {
+			t.Errorf("response body contains a stack trace: %s", body)
+		}
+
+		logOutput := logBuf.String()
+		if !strings.Contains(logOutput, "panic in HTTP handler") {
+			t.Errorf("log does not contain panic message: %s", logOutput)
+		}
+		if !strings.Contains(logOutput, "something went wrong") {
+			t.Errorf("log does not contain panic value: %s", logOutput)
+		}
+	})
+
+	t.Run("panic-after-header", func(t *testing.T) {
+		t.Parallel()
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+		handler := NewTracingHandler(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				panic("something went wrong after header")
+			}),
+			WithTraceHandlerLogger(logger),
+		)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req) // must not re-panic
+
+		resp := w.Result()
+		body, _ := io.ReadAll(resp.Body)
+
+		if strings.Contains(string(body), "goroutine") {
+			t.Errorf("response body contains a stack trace: %s", body)
+		}
+		if !strings.Contains(logBuf.String(), "panic in HTTP handler") {
+			t.Errorf("log does not contain panic message: %s", logBuf.String())
+		}
+	})
+}
+
 func TestTracingHandlerResponseBody(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
