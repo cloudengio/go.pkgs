@@ -37,7 +37,7 @@ func continuousSender(senderCtx context.Context, f *patterns.FIFO[int]) *sync.Wa
 // TestBoundedFIFOOrdering verifies items exit in FIFO order when the buffer
 // is large enough that nothing is dropped.
 func TestBoundedFIFOOrdering(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 10)
 
 	for i := range 5 {
@@ -57,7 +57,7 @@ func TestBoundedFIFOOrdering(t *testing.T) {
 // TestBoundedFIFODropOldest verifies that the oldest buffered item is discarded
 // when the output buffer is full.
 func TestBoundedFIFODropOldest(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 3)
 
 	// Sequential sends are safe: in is unbuffered, so each send blocks until
@@ -82,7 +82,7 @@ func TestBoundedFIFODropOldest(t *testing.T) {
 // TestBoundedFIFOSizeOne verifies a buffer of size one: every new item evicts
 // the single buffered item.
 func TestBoundedFIFOSizeOne(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 1)
 
 	f.In() <- 1 // out = [1]
@@ -102,7 +102,7 @@ func TestBoundedFIFOSizeOne(t *testing.T) {
 // TestBoundedFIFOCloseIn verifies that closing In() causes Out() to close
 // after all buffered items have been drained (the clean-shutdown path).
 func TestBoundedFIFOCloseIn(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 5)
 
 	go func() {
@@ -125,7 +125,7 @@ func TestBoundedFIFOCloseIn(t *testing.T) {
 // while a continuous sender is active. doneCh is checked inside the select so
 // it fires as soon as run is processing an item.
 func TestBoundedFIFOStop(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 4)
 
 	senderCtx, cancelSender := context.WithCancel(context.Background())
@@ -146,7 +146,7 @@ func TestBoundedFIFOStop(t *testing.T) {
 // only checked inside the select, so an active sender is needed to ensure run
 // re-enters the select.
 func TestBoundedFIFOContextCancel(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 
 	fifoCtx, cancelFIFO := context.WithCancel(context.Background())
 	f := patterns.NewFIFO[int](fifoCtx, 4)
@@ -170,7 +170,7 @@ func TestBoundedFIFOContextCancel(t *testing.T) {
 // Stop(). When run exits via return (Stop or ctx cancel), it skips the
 // close(b.out) call that follows the for-range loop.
 func TestBoundedFIFOOutNotClosedAfterStop(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 4)
 
 	senderCtx, cancelSender := context.WithCancel(context.Background())
@@ -211,7 +211,7 @@ drained:
 // even when there is no active sender. The run goroutine always blocks in a
 // select that includes doneCh, so Stop() is effective regardless of load.
 func TestBoundedFIFOStopWhileIdle(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 3)
 
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -223,7 +223,7 @@ func TestBoundedFIFOStopWhileIdle(t *testing.T) {
 // In() simultaneously. Because In() is unbuffered, senders serialise through
 // the run goroutine — no data corruption or panics should occur.
 func TestBoundedFIFOConcurrentSenders(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	f := patterns.NewFIFO[int](context.Background(), 16)
 
 	const (
@@ -267,7 +267,7 @@ func TestBoundedFIFOConcurrentSenders(t *testing.T) {
 // without touching b.out. The consumer's read pace has no influence on how
 // quickly a send to In() returns.
 func TestBoundedFIFOSendNotBlockedBySlowConsumer(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	const (
 		capacity = 2
 		count    = 1000
@@ -308,7 +308,7 @@ func TestBoundedFIFOSendNotBlockedBySlowConsumer(t *testing.T) {
 //
 // This test verifies that the ring-buffer implementation preserves its capacity.
 func TestBoundedFIFOBufferCapShrinksOnDeliver(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	const size = 8
 	f := patterns.NewFIFO[int](context.Background(), size)
 
@@ -347,7 +347,7 @@ func TestBoundedFIFOBufferCapShrinksOnDeliver(t *testing.T) {
 //
 // This test verifies that the ring-buffer implementation preserves its capacity after a drop.
 func TestBoundedFIFOBufferCapCorruptsOnDrop(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	const size = 4
 	f := patterns.NewFIFO[int](context.Background(), size)
 
@@ -381,7 +381,7 @@ func TestBoundedFIFOBufferCapCorruptsOnDrop(t *testing.T) {
 //
 // This test verifies that the ring-buffer implementation has zero steady-state allocations.
 func TestBoundedFIFODropCausesAllocations(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	const (
 		size = 8
 		ops  = 1_000

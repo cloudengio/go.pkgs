@@ -25,7 +25,7 @@ func drainSub[T any](sub *patterns.Subscriber[T]) []T {
 }
 
 func TestPubSubSingleSubscriber(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
@@ -41,7 +41,7 @@ func TestPubSubSingleSubscriber(t *testing.T) {
 }
 
 func TestPubSubMultipleSubscribers(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	subs := make([]*patterns.Subscriber[int], 4)
@@ -62,7 +62,7 @@ func TestPubSubMultipleSubscribers(t *testing.T) {
 }
 
 func TestPubSubUnsubscribe(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
@@ -78,7 +78,7 @@ func TestPubSubUnsubscribe(t *testing.T) {
 }
 
 func TestPubSubUnsubscribeIdempotent(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
@@ -90,7 +90,7 @@ func TestPubSubUnsubscribeIdempotent(t *testing.T) {
 }
 
 func TestPubSubUnsubscribePartial(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub1 := ps.Subscribe(context.Background(), 10)
@@ -110,7 +110,7 @@ func TestPubSubUnsubscribePartial(t *testing.T) {
 }
 
 func TestPubSubCloseIdempotent(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
@@ -121,7 +121,7 @@ func TestPubSubCloseIdempotent(t *testing.T) {
 }
 
 func TestPubSubSubscribeAfterClose(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 	ps.Close()
 
@@ -134,7 +134,7 @@ func TestPubSubSubscribeAfterClose(t *testing.T) {
 }
 
 func TestPubSubPublishAfterClose(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
@@ -189,7 +189,7 @@ func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
 }
 
 func TestPubSubDropOldest(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ps := patterns.New[int]()
 
 	sub := ps.Subscribe(context.Background(), 3)
@@ -209,7 +209,7 @@ func TestPubSubDropOldest(t *testing.T) {
 }
 
 func TestPubSubDropOldestPerSubscriber(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	// Each subscriber owns a separate FIFO with its own capacity-2 buffer.
 	// With 8 publishes, each subscriber buffers at most 2 of the published
 	// values. The internal buffer is managed exclusively by each run goroutine,
@@ -238,7 +238,7 @@ func TestPubSubDropOldestPerSubscriber(t *testing.T) {
 }
 
 func TestPubSubConcurrentPublish(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	const (
 		publishers = 8
 		perPub     = 20
@@ -284,7 +284,7 @@ func TestPubSubConcurrentPublish(t *testing.T) {
 // internal buffer is full, run drops the oldest entry and accepts the new one;
 // the consumer's read pace has no influence on how quickly Publish returns.
 func TestPubSubPublishNotBlockedBySlowSubscriber(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	// Tiny capacity so the internal buffer fills after just 2 items.
 	const (
 		capacity = 2
