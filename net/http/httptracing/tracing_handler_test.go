@@ -116,6 +116,20 @@ func TestTracingResponseWriter(t *testing.T) {
 	}
 }
 
+func TestTracingResponseWriterImplicit200(t *testing.T) {
+	t.Parallel()
+	// Write without a prior WriteHeader should record 200, matching net/http behaviour.
+	mockRW := newMockResponseWriter(nil)
+	trw := &tracingResponseWriter{wr: mockRW}
+
+	if _, err := trw.Write([]byte("hello")); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if got, want := trw.statusCode, http.StatusOK; got != want {
+		t.Errorf("statusCode after implicit write: got %v, want %v", got, want)
+	}
+}
+
 func TestTracingResponseWriterNoFlusher(t *testing.T) {
 	t.Parallel()
 	// A ResponseWriter that doesn't implement http.Flusher.
@@ -142,6 +156,124 @@ func TestTracingResponseWriterHijackErrors(t *testing.T) {
 	if err != hijackErr {
 		t.Errorf("unexpected error: %v", err)
 	}
+}
+
+func TestTracingHandlerPanicRecovery(t *testing.T) {
+	t.Parallel()
+
+	t.Run("panic-before-write", func(t *testing.T) {
+		t.Parallel()
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+		handler := NewTracingHandler(
+			http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+				panic("something went wrong")
+			}),
+			WithTraceHandlerLogger(logger),
+		)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req) // must not re-panic
+
+		resp := w.Result()
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+
+		if got, want := resp.StatusCode, http.StatusInternalServerError; got != want {
+			t.Errorf("status: got %v, want %v", got, want)
+		}
+		if strings.Contains(string(body), "goroutine") {
+			t.Errorf("response body contains a stack trace: %s", body)
+		}
+
+		logOutput := logBuf.String()
+		if !strings.Contains(logOutput, "panic in HTTP handler") {
+			t.Errorf("log does not contain panic message: %s", logOutput)
+		}
+		if !strings.Contains(logOutput, "something went wrong") {
+			t.Errorf("log does not contain panic value: %s", logOutput)
+		}
+	})
+
+	t.Run("panic-after-implicit-write", func(t *testing.T) {
+		t.Parallel()
+		// Handler calls Write (no WriteHeader) then panics.
+		// The implicit 200 means trw.statusCode == 200, so http.Error must NOT be
+		// attempted (that would corrupt the already-started response).
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+		handler := NewTracingHandler(
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("partial"))
+				panic("panic after implicit write")
+			}),
+			WithTraceHandlerLogger(logger),
+		)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+
+		// Status must be the implicit 200 — http.Error must not have overwritten it.
+		if got, want := resp.StatusCode, http.StatusOK; got != want {
+			t.Errorf("status: got %v, want %v", got, want)
+		}
+		// Body must contain the partial write but no stack trace.
+		if !strings.Contains(string(body), "partial") {
+			t.Errorf("expected partial body, got: %s", body)
+		}
+		if strings.Contains(string(body), "goroutine") {
+			t.Errorf("response body contains a stack trace: %s", body)
+		}
+		if !strings.Contains(logBuf.String(), "panic in HTTP handler") {
+			t.Errorf("log does not contain panic message: %s", logBuf.String())
+		}
+	})
+
+	t.Run("panic-after-header", func(t *testing.T) {
+		t.Parallel()
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+		handler := NewTracingHandler(
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				panic("something went wrong after header")
+			}),
+			WithTraceHandlerLogger(logger),
+		)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req) // must not re-panic
+
+		resp := w.Result()
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+
+		if strings.Contains(string(body), "goroutine") {
+			t.Errorf("response body contains a stack trace: %s", body)
+		}
+		if !strings.Contains(logBuf.String(), "panic in HTTP handler") {
+			t.Errorf("log does not contain panic message: %s", logBuf.String())
+		}
+	})
 }
 
 func TestTracingHandlerResponseBody(t *testing.T) {

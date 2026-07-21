@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"sync/atomic"
 )
 
@@ -105,12 +106,25 @@ func (th *TracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logger.Info("HTTP Request")
 	}
 	trw := &tracingResponseWriter{wr: w}
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Error("panic in HTTP handler", "panic", rec, "stack", string(debug.Stack()))
+			if trw.statusCode == 0 {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+			return
+		}
+		status := trw.statusCode
+		if status == 0 {
+			status = http.StatusOK
+		}
+		if th.opts.responseBody != nil {
+			th.opts.responseBody(r.Context(), logger, r, w.Header(), status, trw.Data())
+		} else {
+			logger.Info("HTTP Request Completed", "status", status, "response_size", len(trw.Data()))
+		}
+	}()
 	th.next.ServeHTTP(trw, r)
-	if th.opts.responseBody != nil {
-		th.opts.responseBody(r.Context(), logger, r, w.Header(), trw.statusCode, trw.Data())
-	} else {
-		logger.Info("HTTP Request Completed", "status", trw.statusCode, "response_size", len(trw.Data()))
-	}
 }
 
 type tracingResponseWriter struct {
@@ -124,6 +138,9 @@ func (trw *tracingResponseWriter) Header() http.Header {
 }
 
 func (trw *tracingResponseWriter) Write(data []byte) (int, error) {
+	if trw.statusCode == 0 {
+		trw.statusCode = http.StatusOK // mirror the implicit-200 behaviour of net/http
+	}
 	trw.data = append(trw.data, data...)
 	return trw.wr.Write(data)
 }
