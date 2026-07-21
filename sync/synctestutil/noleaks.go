@@ -22,7 +22,7 @@ type Errorf interface {
 // Usage is as shown below:
 //
 //	func TestExample(t *testing.T) {
-//		defer synctestutil.AssertNoGoroutines(t, time.Second)()
+//		defer synctestutil.AssertNoGoroutines(t)()
 //		...
 //	}
 //
@@ -33,10 +33,15 @@ type Errorf interface {
 // example is equivalent to:
 //
 //	func TestExample(t *testing.T) {
-//		fn := synctestutil.AssertNoGoroutines(t, time.Second)
+//		fn := synctestutil.AssertNoGoroutines(t)
 //		...
 //		fn()
 //	}
+//
+// AssertNoGoroutines takes a single snapshot with no grace period, so it
+// can spuriously report a leak when the test synchronizes on a WaitGroup:
+// Wait can return while the goroutine that satisfied it is still unwinding
+// and has not yet exited. Use AssertNoGoroutinesRacy in that case.
 func AssertNoGoroutines(t Errorf) func() {
 	runtime.GC()
 	bycreator, err := getGoroutines()
