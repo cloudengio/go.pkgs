@@ -209,7 +209,7 @@ func TestTracingHandlerPanicRecovery(t *testing.T) {
 		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
 		handler := NewTracingHandler(
-			http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte("partial"))
 				panic("panic after implicit write")
 			}),
