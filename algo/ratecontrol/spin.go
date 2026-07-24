@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// SpinDetector can be used to detect when a caller is spinning. A spin
-// is defined as an excess of some number of calls within a time period.
-// Tick should be called on each iteration, and the detector will reset the count and
-// expiration when a spin is detected.
 // SpinDetectorOption configures a SpinDetector.
 type SpinDetectorOption func(*SpinDetector)
 
@@ -23,6 +19,10 @@ func WithClock(f func() time.Time) SpinDetectorOption {
 	return func(s *SpinDetector) { s.now = f }
 }
 
+// SpinDetector can be used to detect when a caller is spinning. A spin
+// is defined as an excess of some number of calls within a time period.
+// Tick should be called on each iteration, and the detector will reset the count and
+// expiration when a spin is detected.
 type SpinDetector struct {
 	max        int64
 	count      atomic.Int64
@@ -45,6 +45,10 @@ func NewSpinDetector(maxIterations int64, period time.Duration, opts ...SpinDete
 	return s
 }
 
+// Tick should be called on each iteration. It returns true if a spin is detected,
+// i.e. the number of calls has exceeded the threshold within the period.
+// The spin detector reset on returning true, so the next call will be the first
+// in a new period.
 func (s *SpinDetector) Tick() bool {
 	count := s.count.Add(1)
 	if count < s.max {

@@ -77,7 +77,7 @@ func TestSpinDetectorPeriodExpiry(t *testing.T) {
 	sd := ratecontrol.NewSpinDetector(maxIterations, period, ratecontrol.WithClock(clk.Now))
 
 	// Make (max-1) calls so the count is one shy of the threshold.
-	for range make([]struct{}, maxIterations-1) {
+	for range maxIterations - 1 {
 		sd.Tick()
 	}
 

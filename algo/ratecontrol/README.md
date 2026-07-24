@@ -62,7 +62,7 @@ of a spin.
 ### Functions
 
 ```go
-func NewBackoffOnSpin(max int64, period time.Duration, backoff Backoff, opts ...SpinDetectorOption) *BackoffOnSpin
+func NewBackoffOnSpin(maxIterations int64, period time.Duration, backoff Backoff, opts ...SpinDetectorOption) *BackoffOnSpin
 ```
 
 
@@ -298,11 +298,15 @@ type SpinDetector struct {
 	// contains filtered or unexported fields
 }
 ```
+SpinDetector can be used to detect when a caller is spinning. A spin is
+defined as an excess of some number of calls within a time period. Tick
+should be called on each iteration, and the detector will reset the count
+and expiration when a spin is detected.
 
 ### Functions
 
 ```go
-func NewSpinDetector(max int64, period time.Duration, opts ...SpinDetectorOption) *SpinDetector
+func NewSpinDetector(maxIterations int64, period time.Duration, opts ...SpinDetectorOption) *SpinDetector
 ```
 
 
@@ -312,6 +316,10 @@ func NewSpinDetector(max int64, period time.Duration, opts ...SpinDetectorOption
 ```go
 func (s *SpinDetector) Tick() bool
 ```
+Tick should be called on each iteration. It returns true if a spin is
+detected, i.e. the number of calls has exceeded the threshold within the
+period. The spin detector reset on returning true, so the next call will be
+the first in a new period.
 
 
 
@@ -320,11 +328,7 @@ func (s *SpinDetector) Tick() bool
 ```go
 type SpinDetectorOption func(*SpinDetector)
 ```
-SpinDetector can be used to detect when a caller is spinning. A spin
-is defined as an excess of some number of calls within a time period.
-Tick should be called on each iteration, and the detector will reset the
-count and expiration when a spin is detected. SpinDetectorOption configures
-a SpinDetector.
+SpinDetectorOption configures a SpinDetector.
 
 ### Functions
 
