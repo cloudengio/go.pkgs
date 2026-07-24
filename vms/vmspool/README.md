@@ -24,6 +24,32 @@ DefaultStopTimeout = time.Minute
 
 
 ## Types
+### Type Config
+```go
+type Config struct {
+	Size             int              `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
+	CleanupTimeout   time.Duration    `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
+	CreateTimeout    time.Duration    `yaml:"create_timeout" doc:"The timeout for creating a single VM. A 0 or negative value is treated as DefaultCreateTimeout."`
+	CreateInterval   time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
+	StopTimeout      time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
+	StagingBehaviour StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
+}
+```
+
+### Methods
+
+```go
+func (c Config) Options() []Option
+```
+Options returns a slice of Option values derived from the Config fields.
+Zero or negative durations and sizes are left to the individual With*
+functions to replace with their documented defaults. It does not include
+WithStatus or WithStdoutStderr, which require non-serialisable values
+(channels, functions).
+
+
+
+
 ### Type Constructor
 ```go
 type Constructor interface {
@@ -252,8 +278,25 @@ StagingBehaviourStopped
 ### Methods
 
 ```go
+func (s StagingBehaviour) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler, emitting the string name of
+the behaviour. yaml.v3, encoding/json, and other text-based encoders will
+call this automatically.
+
+
+```go
 func (s StagingBehaviour) String() string
 ```
+
+
+```go
+func (s *StagingBehaviour) UnmarshalText(b []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler, accepting the string name
+of the behaviour case-insensitively ("Running", "Suspended", "Stopped").
+yaml.v3 calls this for string-valued YAML nodes, so no direct yaml import is
+needed in this package.
 
 
 

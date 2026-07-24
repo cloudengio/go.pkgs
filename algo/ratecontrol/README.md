@@ -44,6 +44,43 @@ type Backoff interface {
 Backoff represents the interface to a backoff algorithm.
 
 
+### Type BackoffOnSpin
+```go
+type BackoffOnSpin struct {
+	SpinDetector *SpinDetector
+	Backoff      Backoff
+}
+```
+BackoffOnSpin is a backoff strategy that is invoked when a caller is
+detected to be spinning. It is intended to be used as a safeguard in
+situations where a caller expects to be able to make a call without a need
+for a backoff strategy, but that in rare cases a spin may occur due to
+unexpected conditions. In such cases, this strategy will apply a backoff to
+prevent excessive spinning. Note the backoff is stateful across detections
+of a spin.
+
+### Functions
+
+```go
+func NewBackoffOnSpin(maxIterations int64, period time.Duration, backoff Backoff, opts ...SpinDetectorOption) *BackoffOnSpin
+```
+
+
+
+### Methods
+
+```go
+func (b *BackoffOnSpin) Retries() int
+```
+
+
+```go
+func (b *BackoffOnSpin) Wait(ctx context.Context, val any) (bool, error)
+```
+
+
+
+
 ### Type Controller
 ```go
 type Controller struct {
@@ -251,6 +288,54 @@ func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option
 WithRequestsPerTick sets the rate for requests in requests per tick.
 If tickInterval is less than or equal to zero, DefaultTickInterval is used.
 If rpt is less than or equal to zero, DefaultRequestsPerTick is used.
+
+
+
+
+### Type SpinDetector
+```go
+type SpinDetector struct {
+	// contains filtered or unexported fields
+}
+```
+SpinDetector can be used to detect when a caller is spinning. A spin is
+defined as an excess of some number of calls within a time period. Tick
+should be called on each iteration, and the detector will reset the count
+and expiration when a spin is detected.
+
+### Functions
+
+```go
+func NewSpinDetector(maxIterations int64, period time.Duration, opts ...SpinDetectorOption) *SpinDetector
+```
+
+
+
+### Methods
+
+```go
+func (s *SpinDetector) Tick() bool
+```
+Tick should be called on each iteration. It returns true if a spin is
+detected, i.e. the number of calls has exceeded the threshold within the
+period. The spin detector resets on returning true, so the next call will be
+the first in a new period.
+
+
+
+
+### Type SpinDetectorOption
+```go
+type SpinDetectorOption func(*SpinDetector)
+```
+SpinDetectorOption configures a SpinDetector.
+
+### Functions
+
+```go
+func WithClock(f func() time.Time) SpinDetectorOption
+```
+WithClock overrides the clock used by SpinDetector. Intended for testing.
 
 
 

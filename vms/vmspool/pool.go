@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,6 +74,29 @@ const (
 	DefaultCreateInterval = 500 * time.Millisecond
 	DefaultStopTimeout    = time.Minute
 )
+
+type Config struct {
+	Size             int              `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
+	CleanupTimeout   time.Duration    `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
+	CreateTimeout    time.Duration    `yaml:"create_timeout" doc:"The timeout for creating a single VM. A 0 or negative value is treated as DefaultCreateTimeout."`
+	CreateInterval   time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
+	StopTimeout      time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
+	StagingBehaviour StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
+}
+
+// Options returns a slice of Option values derived from the Config fields.
+// Zero or negative durations and sizes are left to the individual With* functions
+// to replace with their documented defaults. It does not include WithStatus or
+// WithStdoutStderr, which require non-serialisable values (channels, functions).
+func (c Config) Options() []Option {
+	return []Option{
+		WithSize(c.Size),
+		WithCleanupTimeout(c.CleanupTimeout),
+		WithCreateTimeoutAndInterval(c.CreateTimeout, c.CreateInterval),
+		WithStopTimeout(c.StopTimeout),
+		WithStagingBehaviour(c.StagingBehaviour),
+	}
+}
 
 type Option func(*options)
 
@@ -161,6 +185,37 @@ func (s StagingBehaviour) String() string {
 		return "Stopped"
 	}
 	return "Unknown"
+}
+
+// MarshalText implements encoding.TextMarshaler, emitting the string name of
+// the behaviour. yaml.v3, encoding/json, and other text-based encoders will
+// call this automatically.
+func (s StagingBehaviour) MarshalText() ([]byte, error) {
+	switch s {
+	case StagingBehaviourRunning, StagingBehaviourSuspended, StagingBehaviourStopped:
+		return []byte(s.String()), nil
+	default:
+		return nil, fmt.Errorf("vmspool: unknown staging behaviour %d", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler, accepting the string name
+// of the behaviour case-insensitively ("Running", "Suspended", "Stopped").
+// yaml.v3 calls this for string-valued YAML nodes, so no direct yaml import is
+// needed in this package.
+func (s *StagingBehaviour) UnmarshalText(b []byte) error {
+	v := strings.TrimSpace(string(b))
+	switch strings.ToLower(v) {
+	case "running":
+		*s = StagingBehaviourRunning
+	case "suspended":
+		*s = StagingBehaviourSuspended
+	case "stopped":
+		*s = StagingBehaviourStopped
+	default:
+		return fmt.Errorf("vmspool: unknown StagingBehaviour %q; valid values: Running, Suspended, Stopped", v)
+	}
+	return nil
 }
 
 const (
