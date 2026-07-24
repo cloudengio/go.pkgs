@@ -47,9 +47,12 @@ func NewSpinDetector(maxIterations int64, period time.Duration, opts ...SpinDete
 
 // Tick should be called on each iteration. It returns true if a spin is detected,
 // i.e. the number of calls has exceeded the threshold within the period.
-// The spin detector reset on returning true, so the next call will be the first
+// The spin detector resets on returning true, so the next call will be the first
 // in a new period.
 func (s *SpinDetector) Tick() bool {
+	if s.max <= 0 || s.period <= 0 {
+		return false
+	}
 	count := s.count.Add(1)
 	if count < s.max {
 		return false

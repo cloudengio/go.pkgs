@@ -191,7 +191,12 @@ func (s StagingBehaviour) String() string {
 // the behaviour. yaml.v3, encoding/json, and other text-based encoders will
 // call this automatically.
 func (s StagingBehaviour) MarshalText() ([]byte, error) {
-	return []byte(s.String()), nil
+	switch s {
+	case StagingBehaviourRunning, StagingBehaviourSuspended, StagingBehaviourStopped:
+		return []byte(s.String()), nil
+	default:
+		return nil, fmt.Errorf("vmspool: unknown staging behaviour %d", s)
+	}
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler, accepting the string name
@@ -199,7 +204,8 @@ func (s StagingBehaviour) MarshalText() ([]byte, error) {
 // yaml.v3 calls this for string-valued YAML nodes, so no direct yaml import is
 // needed in this package.
 func (s *StagingBehaviour) UnmarshalText(b []byte) error {
-	switch strings.ToLower(string(b)) {
+	v := strings.TrimSpace(string(b))
+	switch strings.ToLower(v) {
 	case "running":
 		*s = StagingBehaviourRunning
 	case "suspended":
@@ -207,7 +213,7 @@ func (s *StagingBehaviour) UnmarshalText(b []byte) error {
 	case "stopped":
 		*s = StagingBehaviourStopped
 	default:
-		return fmt.Errorf("vmspool: unknown StagingBehaviour %q; valid values: Running, Suspended, Stopped", string(b))
+		return fmt.Errorf("vmspool: unknown StagingBehaviour %q; valid values: Running, Suspended, Stopped", v)
 	}
 	return nil
 }
