@@ -318,7 +318,7 @@ func (s *SpinDetector) Tick() bool
 ```
 Tick should be called on each iteration. It returns true if a spin is
 detected, i.e. the number of calls has exceeded the threshold within the
-period. The spin detector reset on returning true, so the next call will be
+period. The spin detector resets on returning true, so the next call will be
 the first in a new period.
 
 
