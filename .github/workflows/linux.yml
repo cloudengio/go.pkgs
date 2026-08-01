@@ -10,17 +10,21 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test-lint:
     uses: cloudengio/.github/.github/workflows/go-test-multimod.yml@main
     with:
       runner: |
-        [ "ubuntu-latest" ]
+        [ "self-hosted", "linux", "arm64" ]
       go-versions: |
         [ "1.26.x" ]
+      with-webapp: true
+      pebble-version: "v2.8.0"
+      with-lint: true
+      with-govuln: true
 
-  lint:
-    uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
-    with:
-      runner: |
-        [ "ubuntu-latest" ]
-      go-version: ">=1.26.5"
+#  lint:
+#    uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
+#    with:
+#      runner: |
+#        [ "self-hosted", "linux", "arm64" ]
+#      go-version: "1.26.x"
