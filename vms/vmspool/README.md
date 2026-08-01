@@ -321,6 +321,8 @@ Exec runs cmd with args inside the VM, writing output to stdout and stderr.
 ```go
 func (v *VM) ID() string
 ```
+ID returns the unique identifier of the VM instance. It may be empty if the
+VM is invalid.
 
 
 ```go
