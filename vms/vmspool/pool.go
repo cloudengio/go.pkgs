@@ -605,3 +605,11 @@ func (v *VM) Release(ctx context.Context) error {
 	v.pool.notify(EventReleased, nil)
 	return cleanupErr
 }
+
+// ID returns the unique identifier of the VM instance. It may be empty if the VM is invalid.
+func (v *VM) ID() string {
+	if v.inst == nil || v.inst.Instance == nil {
+		return ""
+	}
+	return v.inst.ID()
+}

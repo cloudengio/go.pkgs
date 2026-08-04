@@ -104,7 +104,7 @@ type Instance interface {
 	// ID returns a unique identifier for the instance.
 	ID() string
 
-	// Clone prepares an instance for being stated. It should be
+	// Clone prepares an instance for being started. It should be
 	// a synchronous operation and when it returns the state should be Stopped.
 	// States: success: [Initial, Deleted] -> Cloning -> Stopped
 	// States:   error: [Initial, Deleted] -> Cloning -> Initial
