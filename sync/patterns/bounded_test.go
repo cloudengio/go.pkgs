@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,9 +21,8 @@ import (
 // senderCtx is cancelled. The returned WaitGroup lets the caller join it.
 func continuousSender(senderCtx context.Context, f *patterns.FIFO[int]) *sync.WaitGroup {
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	// wg.Go calls Done when the function returns, so no explicit Done here.
+	wg.Go(func() {
 		for i := 0; ; i++ {
 			select {
 			case f.In() <- i:
@@ -30,7 +30,7 @@ func continuousSender(senderCtx context.Context, f *patterns.FIFO[int]) *sync.Wa
 				return
 			}
 		}
-	}()
+	})
 	return &wg
 }
 
@@ -231,14 +231,12 @@ func TestBoundedFIFOConcurrentSenders(t *testing.T) {
 		perSender = 50
 	)
 	var wg sync.WaitGroup
-	for i := range senders {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
+	for id := range senders {
+		wg.Go(func() {
 			for j := range perSender {
 				f.In() <- id*1000 + j
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 	close(f.In())
@@ -421,4 +419,56 @@ func TestBoundedFIFODropCausesAllocations(t *testing.T) {
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopCancel()
 	f.Stop(stopCtx)
+}
+
+// TestBoundedFIFOPeriodicScan verifies that a configured periodic scan removes
+// the items its predicate selects (here: "expired" ones) while leaving the rest
+// buffered in FIFO order.
+func TestBoundedFIFOPeriodicScan(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+
+	type item struct {
+		id      int
+		expired bool
+	}
+
+	const total, numExpired = 10, 5
+	var removed atomic.Int32
+	allExpiredGone := make(chan struct{})
+	remove := func(v item) bool {
+		if !v.expired {
+			return false
+		}
+		// Each expired item is removed exactly once (it never reappears), so the
+		// count reaches numExpired a single time: signal a completed expiry pass.
+		if removed.Add(1) == numExpired {
+			close(allExpiredGone)
+		}
+		return true
+	}
+
+	f := patterns.NewFIFO(context.Background(), 16,
+		patterns.WithPeriodicScan(time.Millisecond, remove))
+
+	// Capacity (16) exceeds total (10), so nothing is dropped for lack of room;
+	// only the scan removes items. Nothing reads Out(), so all items buffer.
+	// Odd ids are marked expired.
+	for i := range total {
+		f.In() <- item{id: i, expired: i%2 == 1}
+	}
+
+	select {
+	case <-allExpiredGone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("periodic scan did not remove all expired items")
+	}
+
+	close(f.In())
+	var got []int
+	for v := range f.Out() {
+		got = append(got, v.id)
+	}
+	if want := []int{0, 2, 4, 6, 8}; !slices.Equal(got, want) {
+		t.Errorf("survivors: got %v, want %v", got, want)
+	}
 }

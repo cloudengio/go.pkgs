@@ -40,7 +40,7 @@ external readers and requires no allocations after the initial make.
 ### Functions
 
 ```go
-func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T]
+func NewFIFO[T any](ctx context.Context, capacity int, opts ...Option[T]) *FIFO[T]
 ```
 NewFIFO creates a new FIFO with the specified buffer capacity. If capacity
 is <= 0, it defaults to DefaultFIFOSize.
@@ -62,6 +62,33 @@ func (b *FIFO[T]) Out() <-chan T
 ```go
 func (b *FIFO[T]) Stop(ctx context.Context)
 ```
+
+
+
+
+### Type Option
+```go
+type Option[T any] func(*options[T])
+```
+Option configures a FIFO created with NewFIFO.
+
+### Functions
+
+```go
+func WithPeriodicScan[T any](interval time.Duration, remove func(item T) bool) Option[T]
+```
+WithPeriodicScan configures the FIFO to invoke remove for every buffered
+item every interval, removing (dropping) each item for which remove returns
+true. Items are visited oldest-to-newest and removed items are compacted out
+of the buffer in place, preserving the FIFO order of those that remain.
+
+This can be used to implement expiration: store an enqueue time (or
+deadline) alongside each item and have remove report whether it has elapsed.
+
+remove runs on the FIFO's internal goroutine, serialized with delivery and
+drop-oldest, so it must not call back into the FIFO (In, Out, or Stop)
+and should not block. If interval is <= 0 or remove is nil, no scan is
+scheduled.
 
 
 
