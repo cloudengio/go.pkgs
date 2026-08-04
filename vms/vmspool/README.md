@@ -332,6 +332,14 @@ Release deletes the VM and asynchronously replenishes the pool with a new
 suspended instance. It must be called exactly once per acquired VM.
 
 
+```go
+func (v *VM) Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error)
+```
+Stop stops the VM and returns any error from the last command run in the VM
+and any error from stopping the VM. Stop is idempotent. The caller must call
+Release after Stop to delete the VM and replenish the pool.
+
+
 
 
 

@@ -593,6 +593,20 @@ func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, arg
 	return v.inst.Exec(ctx, stdout, stderr, cmd, args...)
 }
 
+// Stop stops the VM and returns any error from the last command run in the VM
+// and any error from stopping the VM. Stop is idempotent. The caller must call
+// Release after Stop to delete the VM and replenish the pool.
+func (v *VM) Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error) {
+	if v.inst == nil || v.inst.Instance == nil {
+		return nil, fmt.Errorf("vmspool: invalid VM instance")
+	}
+	runErr, stopErr = v.inst.Stop(ctx, timeout)
+	if stopErr == nil {
+		v.inst.stopped = true
+	}
+	return runErr, stopErr
+}
+
 // Release deletes the VM and asynchronously replenishes the pool with a new
 // suspended instance. It must be called exactly once per acquired VM.
 func (v *VM) Release(ctx context.Context) error {

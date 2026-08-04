@@ -16,3 +16,15 @@ import (
 func (p *Pool) InjectVM(inst vms.Instance) {
 	p.ready <- &vmsInstance{Instance: inst, stdout: io.Discard, stderr: io.Discard}
 }
+
+// NewTestVM builds a VM backed by inst for use by external tests, which cannot
+// construct the unexported vmsInstance directly. Pass a nil inst to exercise the
+// nil-underlying-instance guard.
+func NewTestVM(inst vms.Instance) *VM {
+	return &VM{inst: &vmsInstance{Instance: inst}}
+}
+
+// Stopped reports the VM's internal stopped flag, set by Stop on success.
+func (v *VM) Stopped() bool {
+	return v.inst != nil && v.inst.stopped
+}
