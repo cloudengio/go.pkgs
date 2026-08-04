@@ -8,6 +8,7 @@ package patterns
 
 import (
 	"context"
+	"time"
 
 	"cloudeng.io/sync/ctxsync"
 )
@@ -29,29 +30,67 @@ type FIFO[T any] struct {
 	head   int // index of the oldest item
 	tail   int // index where the next item will be written
 	count  int // number of items currently buffered
+
+	// Periodic-scan configuration; set at construction and read only by the
+	// run goroutine, so it needs no synchronization.
+	scanInterval time.Duration
+	scanRemove   func(T) bool
 }
 
 const DefaultFIFOSize = 100
 
+// options holds the optional configuration for a FIFO.
+type options[T any] struct {
+	scanInterval time.Duration
+	scanRemove   func(T) bool
+}
+
+// Option configures a FIFO created with NewFIFO.
+type Option[T any] func(*options[T])
+
+// WithPeriodicScan configures the FIFO to invoke remove for every buffered
+// item every interval, removing (dropping) each item for which remove returns
+// true. Items are visited oldest-to-newest and removed items are compacted out
+// of the buffer in place, preserving the FIFO order of those that remain.
+//
+// This can be used to implement expiration: store an enqueue time (or deadline)
+// alongside each item and have remove report whether it has elapsed.
+//
+// remove runs on the FIFO's internal goroutine, serialized with delivery and
+// drop-oldest, so it must not call back into the FIFO (In, Out, or Stop) and
+// should not block. If interval is <= 0 or remove is nil, no scan is scheduled.
+func WithPeriodicScan[T any](interval time.Duration, remove func(item T) bool) Option[T] {
+	return func(o *options[T]) {
+		o.scanInterval = interval
+		o.scanRemove = remove
+	}
+}
+
 // NewFIFO creates a new FIFO with the specified buffer capacity.
 // If capacity is <= 0, it defaults to DefaultFIFOSize.
-func NewFIFO[T any](ctx context.Context, capacity int) *FIFO[T] {
-	return newFIFO[T](ctx, capacity, nil)
+func NewFIFO[T any](ctx context.Context, capacity int, opts ...Option[T]) *FIFO[T] {
+	return newFIFO(ctx, capacity, nil, opts...)
 }
 
 // newFIFO is the internal constructor. If notify is non-nil it is closed when
 // the run goroutine exits, allowing callers to observe liveness without
 // coupling that concept to FIFO itself.
-func newFIFO[T any](ctx context.Context, capacity int, notify chan struct{}) *FIFO[T] {
+func newFIFO[T any](ctx context.Context, capacity int, notify chan struct{}, opts ...Option[T]) *FIFO[T] {
 	if capacity <= 0 {
 		capacity = DefaultFIFOSize
 	}
+	var o options[T]
+	for _, opt := range opts {
+		opt(&o)
+	}
 	bf := &FIFO[T]{
-		in:     make(chan T),
-		out:    make(chan T),
-		doneCh: make(chan struct{}),
-		size:   capacity,
-		buf:    make([]T, capacity), // allocated once; never resized
+		in:           make(chan T),
+		out:          make(chan T),
+		doneCh:       make(chan struct{}),
+		size:         capacity,
+		buf:          make([]T, capacity), // allocated once; never resized
+		scanInterval: o.scanInterval,
+		scanRemove:   o.scanRemove,
 	}
 	bf.wg.Go(func() {
 		if notify != nil {
@@ -87,10 +126,44 @@ func (b *FIFO[T]) pop() {
 	b.count--
 }
 
-func (b *FIFO[T]) runBuffered(ctx context.Context) bool {
+// scan visits every buffered item oldest-to-newest, dropping those for which
+// remove returns true, and compacts the survivors in place so FIFO order is
+// preserved. It runs on the run goroutine, so it mutates the ring buffer
+// without synchronization.
+func (b *FIFO[T]) scan(remove func(T) bool) {
+	if b.count == 0 || remove == nil {
+		return
+	}
+	read, write, kept := b.head, b.head, 0
+	for range b.count {
+		v := b.buf[read]
+		if !remove(v) {
+			// write never overtakes read (it only advances for kept items),
+			// so this copy can never clobber an unread slot.
+			b.buf[write] = v
+			write = (write + 1) % b.size
+			kept++
+		}
+		read = (read + 1) % b.size
+	}
+	// Clear the vacated tail slots [write, oldTail) so the GC can reclaim any
+	// dropped (or moved) pointer-typed items.
+	var zero T
+	for range b.count - kept {
+		b.buf[write] = zero
+		write = (write + 1) % b.size
+	}
+	b.tail = (b.head + kept) % b.size
+	b.count = kept
+}
+
+func (b *FIFO[T]) runBuffered(ctx context.Context, scanCh <-chan time.Time) bool {
 	select {
 	case b.out <- b.front():
 		b.pop()
+		return false
+	case <-scanCh:
+		b.scan(b.scanRemove)
 		return false
 	case v, ok := <-b.in:
 		if !ok {
@@ -121,6 +194,14 @@ func (b *FIFO[T]) runBuffered(ctx context.Context) bool {
 }
 
 func (b *FIFO[T]) run(ctx context.Context) {
+	// A nil channel blocks forever in a select, so when no scan is configured
+	// scanCh simply never fires.
+	var scanCh <-chan time.Time
+	if b.scanInterval > 0 && b.scanRemove != nil {
+		ticker := time.NewTicker(b.scanInterval)
+		defer ticker.Stop()
+		scanCh = ticker.C
+	}
 	for {
 		if b.count == 0 {
 			select {
@@ -130,6 +211,8 @@ func (b *FIFO[T]) run(ctx context.Context) {
 					return
 				}
 				b.push(v)
+			case <-scanCh:
+				// Nothing buffered to scan; wait for the next event.
 			case <-b.doneCh:
 				return
 			case <-ctx.Done():
@@ -137,7 +220,7 @@ func (b *FIFO[T]) run(ctx context.Context) {
 			}
 			continue
 		}
-		if b.runBuffered(ctx) {
+		if b.runBuffered(ctx, scanCh) {
 			return
 		}
 	}
