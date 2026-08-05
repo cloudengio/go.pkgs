@@ -52,7 +52,7 @@ transitions for suspendable VMs.
 ```go
 func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig)
 ```
-TestPoolAcquireExecRelease verifies the full acquire → exec → release →
+TestPoolAcquireExecRelease verifies the full acquire → exec → delete →
 replenish cycle: releasing a VM triggers replenishment so the pool can serve
 another Acquire.
 
@@ -158,6 +158,13 @@ func (m *Mock) Clone(ctx context.Context) error
 ```go
 func (m *Mock) Delete(_ context.Context) error
 ```
+
+
+```go
+func (m *Mock) DeleteCalls() int
+```
+DeleteCalls returns the number of times Delete has been called, including
+calls that returned an error.
 
 
 ```go

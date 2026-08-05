@@ -5,8 +5,10 @@
 // Package vmspool manages a fixed-size pool of suspended or stopped virtual
 // machine instances. The pool pre-creates and mantains VMs according to the
 // requested StagingBehaviour so they can be  started quickly when acquired.
-// When a caller releases a VM, it is deleted and a new one is created asynchronously
-// to restore the pool to its target size.
+// An acquired VM is deleted by VM.Delete, and a new one is created
+// asynchronously to restore the pool to its target size. A caller that calls
+// VM.StopAndRelease first triggers that replacement at the point of the stop
+// rather than at the delete, since a stopped VM will not run again.
 package vmspool
 
 import (
@@ -32,8 +34,33 @@ type Constructor interface {
 type vmsInstance struct {
 	vms.Instance
 	stdout, stderr io.Writer
-	stopped        bool
 	acquired       bool // guarded by Pool.opMutex
+
+	mu sync.Mutex
+	// stopped records that the VM is not running: either because it is staged
+	// stopped or suspended in the pool, or because the caller that acquired it
+	// has stopped it. It determines whether Acquire must start the VM before
+	// handing it over, and which of VM.StopAndRelease and VM.Delete requests
+	// the replacement VM. GUARDED by mu.
+	stopped bool
+}
+
+// setStopped records whether the VM is running and reports whether this call
+// changed the flag. Only the caller that wins the transition to stopped
+// requests replenishment, so repeated calls to VM.StopAndRelease cannot grow
+// the pool beyond its configured size.
+func (inst *vmsInstance) setStopped(stopped bool) bool {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	changed := inst.stopped != stopped
+	inst.stopped = stopped
+	return changed
+}
+
+func (inst *vmsInstance) isStopped() bool {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.stopped
 }
 
 // Pool manages a fixed-size set of suspended virtual machine instances.
@@ -433,7 +460,7 @@ func (p *Pool) createVM(ctx context.Context) (*vmsInstance, error) {
 	// leave VM in stopped state.
 	if p.options.stagingBehaviour == StagingBehaviourStopped ||
 		(!inst.Suspendable() && (p.options.stagingBehaviour == StagingBehaviourSuspended)) {
-		vmsInst.stopped = true
+		vmsInst.setStopped(true)
 		return p.discardIfClosed(vmsInst)
 	}
 
@@ -447,7 +474,7 @@ func (p *Pool) createVM(ctx context.Context) (*vmsInstance, error) {
 		return p.discardIfClosed(vmsInst)
 	}
 
-	vmsInst.stopped = true
+	vmsInst.setStopped(true)
 	if err := inst.Suspend(ctx); err != nil {
 		// Instance may be Running; stop and delete it.
 		p.cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
@@ -586,7 +613,7 @@ func (p *Pool) setClosed() bool {
 }
 
 // Acquire waits for a suspended VM, starts it, and returns a handle. The
-// caller must call VM.Release when finished with the VM. Acquire blocks until
+// caller must call VM.Delete when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	if p.isClosed() {
@@ -621,7 +648,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
-	if inst.stopped {
+	if inst.isStopped() {
 		if err := inst.Start(ctx, inst.stdout, inst.stderr); err != nil {
 			// Start failed; clean up the VM and replenish so the pool stays full.
 			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
@@ -630,6 +657,9 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 			p.notify(EventAcquireFailed, err)
 			return nil, err
 		}
+		// The VM is running again, so it is the caller's Stop or Release that
+		// requests its replacement, not its staging state.
+		inst.setStopped(false)
 	}
 	inst.acquired = true
 	p.notify(EventAcquired, nil)
@@ -709,7 +739,7 @@ drained:
 }
 
 // VM is a running virtual machine instance acquired from a Pool.
-// Use Exec to run commands and Release when done.
+// Use Exec to run commands and Delete when done.
 type VM struct {
 	inst *vmsInstance
 	pool *Pool
@@ -723,31 +753,45 @@ func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, arg
 	return v.inst.Exec(ctx, stdout, stderr, cmd, args...)
 }
 
-// Stop stops the VM and returns any error from the last command run in the VM
-// and any error from stopping the VM. Stop is idempotent. The caller must call
-// Release after Stop to delete the VM and replenish the pool.
-func (v *VM) Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error) {
+// StopAndRelease stops the VM and releases its slot in the pool, returning any
+// error from the last command run in the VM and any error from stopping it.
+// It is idempotent.
+//
+// A stopped VM is never handed out again, so the first successful stop
+// asynchronously replenishes the pool rather than leaving the slot idle: the
+// replacement is created while the caller is still finishing with the stopped
+// VM (collecting logs, say). The VM itself is not deleted; the caller must
+// still call Delete when done with it, which will not request a second
+// replacement.
+func (v *VM) StopAndRelease(ctx context.Context, timeout time.Duration) (runErr, stopErr error) {
 	if v.inst == nil || v.inst.Instance == nil {
 		return nil, fmt.Errorf("vmspool: invalid VM instance")
 	}
 	runErr, stopErr = v.inst.Stop(ctx, timeout)
-	if stopErr == nil {
-		v.inst.stopped = true
+	if stopErr == nil && v.inst.setStopped(true) {
+		v.pool.requestReplenish()
 	}
 	return runErr, stopErr
 }
 
-// Release deletes the VM and asynchronously replenishes the pool with a new
-// suspended instance. It must be called exactly once per acquired VM. If the
-// pool has been closed and deletes acquired VMs on close (the default), the
-// VM has already been deleted by Close and Release does nothing.
-func (v *VM) Release(ctx context.Context) error {
+// Delete deletes the VM, stopping it first if it is still running. It must be
+// called exactly once per acquired VM. If the pool has been closed and deletes
+// acquired VMs on close (the default), the VM has already been deleted by Close
+// and Delete does not delete it again.
+//
+// Delete asynchronously replenishes the pool unless the VM has already been
+// stopped by StopAndRelease, which released the slot at that point; requesting
+// a second replacement would grow the pool beyond its configured size.
+func (v *VM) Delete(ctx context.Context) error {
 	v.pool.notify(EventRelease, nil)
+	replenish := v.inst != nil && !v.inst.isStopped()
 	cleanupErr := v.pool.cleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
 	if cleanupErr != nil {
-		cleanupErr = fmt.Errorf("vmspool: release: %w", cleanupErr)
+		cleanupErr = fmt.Errorf("vmspool: delete: %w", cleanupErr)
 	}
-	v.pool.requestReplenish()
+	if replenish {
+		v.pool.requestReplenish()
+	}
 	v.pool.notify(EventReleased, nil)
 	return cleanupErr
 }

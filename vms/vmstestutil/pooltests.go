@@ -101,7 +101,7 @@ func waitForPoolEvent(t cicd.TestingT, statusCh <-chan vmspool.Event, kind vmspo
 	}
 }
 
-// TestPoolAcquireExecRelease verifies the full acquire → exec → release → replenish cycle:
+// TestPoolAcquireExecRelease verifies the full acquire → exec → delete → replenish cycle:
 // releasing a VM triggers replenishment so the pool can serve another Acquire.
 func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	size := cfg.poolSize()
@@ -139,8 +139,8 @@ func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:as
 		t.Errorf("Exec stderr: got %q, want %q", got, want)
 	}
 
-	if err := vm.Release(ctx); err != nil {
-		t.Fatalf("Release: %v", err)
+	if err := vm.Delete(ctx); err != nil {
+		t.Fatalf("Delete: %v", err)
 	}
 
 	if err := vm.Exec(ctx, stdout, stderr, cfg.ExecCmd, cfg.ExecArgs...); err == nil {
@@ -167,8 +167,8 @@ func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:as
 		t.Errorf("Exec stderr: got %q, want %q", got, want)
 	}
 
-	if err := vm2.Release(ctx); err != nil {
-		t.Errorf("Release vm2: %v", err)
+	if err := vm2.Delete(ctx); err != nil {
+		t.Errorf("Delete vm2: %v", err)
 	}
 }
 
@@ -197,8 +197,8 @@ func TestPoolContextCancellation(t cicd.TestingT, cfg PoolTestConfig) { //cicd:a
 		t.Fatalf("Acquire (drain): %v", err)
 	}
 	defer func() {
-		if err := vm.Release(context.Background()); err != nil {
-			t.Errorf("Release: %v", err)
+		if err := vm.Delete(context.Background()); err != nil {
+			t.Errorf("Delete: %v", err)
 		}
 	}()
 
@@ -273,8 +273,8 @@ func TestPoolConcurrentAcquire(t cicd.TestingT, cfg PoolTestConfig) { //cicd:ast
 		if r.vm == nil {
 			continue
 		}
-		if err := r.vm.Release(context.Background()); err != nil {
-			t.Errorf("Release[%d]: %v", i, err)
+		if err := r.vm.Delete(context.Background()); err != nil {
+			t.Errorf("Delete[%d]: %v", i, err)
 		}
 	}
 }

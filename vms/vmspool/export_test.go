@@ -23,12 +23,16 @@ func (p *Pool) InjectVM(inst vms.Instance) {
 
 // NewTestVM builds a VM backed by inst for use by external tests, which cannot
 // construct the unexported vmsInstance directly. Pass a nil inst to exercise the
-// nil-underlying-instance guard.
+// nil-underlying-instance guard. The VM is backed by a closed pool so that the
+// replenishment Stop requests is a no-op: these tests exercise VM in isolation,
+// with no pool running behind it.
 func NewTestVM(inst vms.Instance) *VM {
-	return &VM{inst: &vmsInstance{Instance: inst}}
+	p := New(nil)
+	p.closed = true
+	return &VM{inst: &vmsInstance{Instance: inst}, pool: p}
 }
 
 // Stopped reports the VM's internal stopped flag, set by Stop on success.
 func (v *VM) Stopped() bool {
-	return v.inst != nil && v.inst.stopped
+	return v.inst != nil && v.inst.isStopped()
 }
