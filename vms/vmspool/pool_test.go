@@ -693,7 +693,9 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 }
 
 // TestPoolReleaseCloseRace verifies that Release and Close can run concurrently
-// without triggering sync.WaitGroup misuse (Add after Wait) or a data race.
+// without triggering sync.WaitGroup misuse (Add after Wait), a data race, or a
+// double cleanup: exactly one of the two claims the acquired VM and deletes it,
+// the other is a no-op, and neither returns an error.
 // Run with -race to validate.
 func TestPoolReleaseCloseRace(t *testing.T) {
 	const iterations = 100
@@ -712,15 +714,30 @@ func TestPoolReleaseCloseRace(t *testing.T) {
 		// Release and Close race: exactly the scenario that caused wg misuse.
 		var wg sync.WaitGroup
 		wg.Add(2)
+		var releaseErr, closeErr error
 		go func() {
 			defer wg.Done()
-			_ = vm.Release(context.Background())
+			releaseErr = vm.Release(context.Background())
 		}()
 		go func() {
 			defer wg.Done()
-			_ = p.Close(context.Background())
+			closeErr = p.Close(context.Background())
 		}()
 		wg.Wait()
+
+		if releaseErr != nil {
+			t.Fatalf("Release: %v", releaseErr)
+		}
+		if closeErr != nil {
+			t.Fatalf("Close: %v", closeErr)
+		}
+		mocks := factory.Mocks()
+		if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
+			t.Fatalf("VM state = %s, want Deleted", got)
+		}
+		if got := mocks[0].DeleteCalls(); got != 1 {
+			t.Fatalf("Delete called %d times, want exactly 1", got)
+		}
 	}
 }
 
@@ -953,6 +970,11 @@ func TestPoolCloseDeletesAcquiredVM(t *testing.T) {
 		}
 		if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
 			t.Errorf("deleteAcquiredOnClose=%v: state after Release = %s, want Deleted", deleteAcquired, got)
+		}
+		// Whichever of Close and Release deleted the VM, the other must not
+		// have attempted a second delete.
+		if got := mocks[0].DeleteCalls(); got != 1 {
+			t.Errorf("deleteAcquiredOnClose=%v: Delete called %d times, want exactly 1", deleteAcquired, got)
 		}
 	}
 }
