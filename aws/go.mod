@@ -7,7 +7,7 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
-	cloudeng.io/logging v0.0.0-20260721222700-155e56185eeb
+	cloudeng.io/logging v0.0.0-20260804222138-e9281ed260ba
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
 	github.com/alexbacchin/ssm-session-client v1.2.3
@@ -44,10 +44,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260721222700-155e56185eeb // indirect
-	cloudeng.io/os v0.0.0-20260721222700-155e56185eeb // indirect
+	cloudeng.io/algo v0.0.0-20260804222138-e9281ed260ba // indirect
+	cloudeng.io/os v0.0.0-20260804222138-e9281ed260ba // indirect
 	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260721222700-155e56185eeb // indirect
+	cloudeng.io/sys v0.0.0-20260804222138-e9281ed260ba // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.31 // indirect
