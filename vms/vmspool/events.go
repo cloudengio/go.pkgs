@@ -76,43 +76,32 @@ const (
 	EventAcquiredVMRetained
 )
 
+// eventKindNames maps each EventKind to its name. It is indexed by the
+// EventKind itself, so every EventKind must have an entry here.
+var eventKindNames = [...]string{
+	EventAcquireWaiting:         "AcquireWaiting",
+	EventVMDequeued:             "VMDequeued",
+	EventAcquired:               "Acquired",
+	EventAcquireFailed:          "AcquireFailed",
+	EventAttemptToUseClosedPool: "AttemptToUseClosedPool",
+	EventRelease:                "Release",
+	EventReleased:               "Released",
+	EventVMCreateStarted:        "VMCreateStarted",
+	EventVMCreated:              "VMCreated",
+	EventVMCreateFailed:         "VMCreateFailed",
+	EventReplenishStarted:       "ReplenishStarted",
+	EventReplenished:            "Replenished",
+	EventReplenishFailed:        "ReplenishFailed",
+	EventStartPoolFull:          "StartPoolFull",
+	EventOrphanedVMDeleted:      "OrphanedVMDeleted",
+	EventAcquiredVMRetained:     "AcquiredVMRetained",
+}
+
 func (e EventKind) String() string {
-	switch e {
-	case EventAcquireWaiting:
-		return "AcquireWaiting"
-	case EventVMDequeued:
-		return "VMDequeued"
-	case EventAcquired:
-		return "Acquired"
-	case EventAcquireFailed:
-		return "AcquireFailed"
-	case EventAttemptToUseClosedPool:
-		return "AttemptToUseClosedPool"
-	case EventRelease:
-		return "Release"
-	case EventReleased:
-		return "Released"
-	case EventVMCreateStarted:
-		return "VMCreateStarted"
-	case EventVMCreated:
-		return "VMCreated"
-	case EventVMCreateFailed:
-		return "VMCreateFailed"
-	case EventReplenishStarted:
-		return "ReplenishStarted"
-	case EventReplenished:
-		return "Replenished"
-	case EventReplenishFailed:
-		return "ReplenishFailed"
-	case EventStartPoolFull:
-		return "StartPoolFull"
-	case EventOrphanedVMDeleted:
-		return "OrphanedVMDeleted"
-	case EventAcquiredVMRetained:
-		return "AcquiredVMRetained"
-	default:
+	if uint(e) >= uint(len(eventKindNames)) {
 		return "Unknown"
 	}
+	return eventKindNames[e]
 }
 
 // Event describes a single pool lifecycle event.
