@@ -30,6 +30,8 @@ type Mock struct {
 	properties  vms.Properties
 	suspendable bool
 	execCalls   []ExecCall
+	cloned      bool // set by a successful Clone; the VM "exists" once set.
+	deleteCalls int
 
 	// CloneBlock, if non-nil, causes Clone to block until the channel is
 	// closed or the context is cancelled. Used by tests to pause a VM
@@ -73,6 +75,7 @@ func (m *Mock) Clone(ctx context.Context) error {
 	if m.CloneErr != nil {
 		return m.CloneErr
 	}
+	m.cloned = true
 	m.state = vms.StateStopped
 	return nil
 }
@@ -143,14 +146,30 @@ func (m *Mock) Suspend(_ context.Context) error {
 func (m *Mock) Delete(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.state != vms.StateStopped && m.state != vms.StateSuspended && m.state != vms.StateErrorUnknown {
+	m.deleteCalls++
+	if !m.state.Allowed(vms.ActionDelete) {
 		return fmt.Errorf("cannot delete VM in state %v", m.state)
 	}
 	if m.DeleteErr != nil {
 		return m.DeleteErr
 	}
+	if m.state == vms.StateInitial && !m.cloned {
+		// Nothing was ever created, as reported by a hypervisor asked to delete
+		// a VM that does not exist. The state is left unchanged. A cloned
+		// instance that is back in StateInitial had its clone interrupted part
+		// way through and may still exist, so it is deleted as usual.
+		return fmt.Errorf("mock %v: %w", m.id, vms.ErrVMNotFound)
+	}
 	m.state = vms.StateDeleted
 	return nil
+}
+
+// DeleteCalls returns the number of times Delete has been called, including
+// calls that returned an error.
+func (m *Mock) DeleteCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.deleteCalls
 }
 
 func (m *Mock) State(_ context.Context) vms.State {

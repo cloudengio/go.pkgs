@@ -15,18 +15,49 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-func TestCleanupVMInitialOrDeleted(t *testing.T) {
+func TestCleanupVMDeleted(t *testing.T) {
 	ctx := context.Background()
-	for _, state := range []vms.State{vms.StateInitial, vms.StateDeleted} {
-		m := vmstestutil.NewMock("")
-		m.SetState(state)
-		if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
-			t.Errorf("state %v: expected no error, got %v", state, err)
-		}
-		// Should not have been changed.
-		if m.State(ctx) != state {
-			t.Errorf("state %v changed to %v", state, m.State(ctx))
-		}
+	m := vmstestutil.NewMock("")
+	m.SetState(vms.StateDeleted)
+	if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	// Should not have been changed.
+	if got := m.State(ctx); got != vms.StateDeleted {
+		t.Errorf("state changed to %v", got)
+	}
+}
+
+// An instance in StateInitial that was never cloned has nothing to delete: the
+// delete is still attempted, but its error is discarded.
+func TestCleanupVMInitialNeverCloned(t *testing.T) {
+	ctx := context.Background()
+	m := vmstestutil.NewMock("")
+	if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if got := m.DeleteCalls(); got != 1 {
+		t.Errorf("expected a best-effort delete to be attempted, got %v calls", got)
+	}
+	if got := m.State(ctx); got != vms.StateInitial {
+		t.Errorf("expected state Initial, got %v", got)
+	}
+}
+
+// An instance in StateInitial whose clone was interrupted part way through may
+// still exist and must be deleted.
+func TestCleanupVMInitialAfterInterruptedClone(t *testing.T) {
+	ctx := context.Background()
+	m := vmstestutil.NewMock("")
+	if err := m.Clone(ctx); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	m.SetState(vms.StateInitial) // as if the clone had failed part way through.
+	if err := vms.CleanupVM(ctx, m, time.Second); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if got := m.State(ctx); got != vms.StateDeleted {
+		t.Errorf("expected state Deleted, got %v", got)
 	}
 }
 

@@ -909,6 +909,93 @@ func TestAcquireOnClosedPoolEvent(t *testing.T) {
 	waitForEvent(t, statusCh, vmspool.EventAttemptToUseClosedPool, 5*time.Second)
 }
 
+// TestPoolCloseDeletesAcquiredVM verifies that Close deletes a VM that a caller
+// acquired but never released, and that WithDeleteAcquiredOnClose(false) leaves
+// it for the caller to release instead.
+func TestPoolCloseDeletesAcquiredVM(t *testing.T) {
+	for _, deleteAcquired := range []bool{true, false} {
+		statusCh := make(chan vmspool.Event, 32)
+		factory := vmstestutil.NewMockFactory(true)
+		p := vmspool.New(factory,
+			vmspool.WithSize(1),
+			vmspool.WithStatus(statusCh),
+			vmspool.WithDeleteAcquiredOnClose(deleteAcquired))
+		if err := p.Start(context.Background()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+
+		vm, err := p.Acquire(context.Background())
+		if err != nil {
+			t.Fatalf("Acquire: %v", err)
+		}
+		if err := p.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+
+		mocks := factory.Mocks()
+		if len(mocks) != 1 {
+			t.Fatalf("expected 1 mock, got %d", len(mocks))
+		}
+		want, wantEvent := vms.StateDeleted, vmspool.EventOrphanedVMDeleted
+		if !deleteAcquired {
+			want, wantEvent = vms.StateRunning, vmspool.EventAcquiredVMRetained
+		}
+		if got := mocks[0].State(context.Background()); got != want {
+			t.Errorf("deleteAcquiredOnClose=%v: acquired VM state = %s, want %s", deleteAcquired, got, want)
+		}
+		waitForEvent(t, statusCh, wantEvent, 5*time.Second)
+
+		// Releasing after Close must work either way: the VM is already gone in
+		// the first case and is the caller's to clean up in the second.
+		if err := vm.Release(context.Background()); err != nil {
+			t.Errorf("deleteAcquiredOnClose=%v: Release after Close: %v", deleteAcquired, err)
+		}
+		if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
+			t.Errorf("deleteAcquiredOnClose=%v: state after Release = %s, want Deleted", deleteAcquired, got)
+		}
+	}
+}
+
+// TestPoolCloseDeletesAbandonedVM verifies that a VM whose creation was still
+// in flight when the pool gave up waiting for it is deleted by Close rather
+// than leaked. The pool's create timeout expires while the mock is blocked in
+// Clone, so attemptCreateVM abandons the instance and retries with a new one.
+func TestPoolCloseDeletesAbandonedVM(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+
+	blockingMock := vmstestutil.NewMock("abandoned")
+	cloneBlock := make(chan struct{})
+	blockingMock.CloneBlock = cloneBlock
+	factory.Inject(blockingMock)
+	factory.Inject(vmstestutil.NewMock("replacement"))
+
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(50*time.Millisecond, time.Millisecond),
+	)
+
+	go func() {
+		// Let the create timeout elapse and the retry succeed, then release the
+		// abandoned mock so that its creation runs to completion.
+		time.Sleep(100 * time.Millisecond)
+		close(cloneBlock)
+	}()
+
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+
+	mocks := factory.Mocks()
+	if len(mocks) != 2 {
+		t.Fatalf("expected 2 mocks (1 abandoned + 1 retry), got %d", len(mocks))
+	}
+	allInState(t, mocks, vms.StateDeleted)
+}
+
 // TestAttemptCreateVMTimeout verifies that if VM creation times out, it is handled and retried.
 func TestAttemptCreateVMTimeout(t *testing.T) {
 	factory := vmstestutil.NewMockFactory(true)

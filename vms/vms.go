@@ -64,9 +64,12 @@ type Instance interface {
 	// States:   error: [Running] -> Suspending -> Suspended or StateErrorUnknown
 	Suspend(ctx context.Context) error
 
-	// Delete deletes the instance.
-	// States: success: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted
-	// States:   error: [Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted or StateErrorUnknown
+	// Delete deletes the instance. Delete is allowed from Initial so that
+	// instances whose Clone failed part way through, and which may therefore
+	// have left artifacts behind, can be cleaned up; such a Delete is expected
+	// to return ErrVMNotFound when there is nothing to delete.
+	// States: success: [Initial, Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted
+	// States:   error: [Initial, Stopped, Suspended, ErrorUnknown] -> Deleting -> Deleted or StateErrorUnknown
 	Delete(ctx context.Context) error
 
 	// State returns the current state of the instance, it may be
@@ -117,6 +120,9 @@ const (
 var transitionTable = map[State]map[Action]State{
 	StateInitial: {
 		ActionClone: StateCloning,
+		// Allow deleting from the initial state to clean up after a clone that
+		// failed, or was interrupted, part way through.
+		ActionDelete: StateDeleting,
 	},
 	StateCloning: {
 		ActionNone: StateCloning, // No-op to allow waiting for clone to complete
@@ -264,13 +270,21 @@ func PrintStates(out io.Writer) {
 // CleanupVM attempts to clean up the given instance by stopping and deleting
 // it if necessary. Suspended VMs are stopped before deletion.
 // It returns an error if any of the operations fail.
+//
+// An instance in StateInitial may never have been cloned, or its clone may have
+// failed or been interrupted part way through and left artifacts behind. Such
+// instances are deleted on a best-effort basis and any error from that delete
+// is discarded since there is most likely nothing to delete.
 func CleanupVM(ctx context.Context, inst Instance, timeout time.Duration) error {
 	if inst == nil {
 		return nil
 	}
 	s := inst.State(ctx)
 	switch s {
-	case StateDeleted, StateInitial:
+	case StateDeleted:
+		return nil
+	case StateInitial:
+		_ = inst.Delete(ctx)
 		return nil
 	case StateRunning:
 		if runErr, stopErr := inst.Stop(ctx, timeout); runErr != nil || stopErr != nil {

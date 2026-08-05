@@ -64,6 +64,16 @@ const (
 	// EventStartPoolFull is emitted when the asynchronous process to
 	// fill the pool initiated by Start is completed.
 	EventStartPoolFull
+
+	// EventOrphanedVMDeleted is emitted by Close for each VM it deletes that
+	// was not waiting in the pool: one abandoned part way through creation, or
+	// one still held by a caller that never released it.
+	EventOrphanedVMDeleted
+
+	// EventAcquiredVMRetained is emitted by Close for each acquired VM it
+	// leaves in place because WithDeleteAcquiredOnClose(false) was set. The
+	// caller that holds the VM is responsible for releasing it.
+	EventAcquiredVMRetained
 )
 
 func (e EventKind) String() string {
@@ -96,6 +106,10 @@ func (e EventKind) String() string {
 		return "ReplenishFailed"
 	case EventStartPoolFull:
 		return "StartPoolFull"
+	case EventOrphanedVMDeleted:
+		return "OrphanedVMDeleted"
+	case EventAcquiredVMRetained:
+		return "AcquiredVMRetained"
 	default:
 		return "Unknown"
 	}
