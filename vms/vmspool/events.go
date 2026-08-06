@@ -31,7 +31,7 @@ const (
 	// that is already closed or has been signalled to close. Err is set.
 	EventAttemptToUseClosedPool
 
-	// EventRelease is emitted when Release is called by the caller.
+	// EventRelease is emitted when VM.Delete is called by the caller.
 	EventRelease
 
 	// EventReleased is emitted after the VM has been deleted and
@@ -64,41 +64,44 @@ const (
 	// EventStartPoolFull is emitted when the asynchronous process to
 	// fill the pool initiated by Start is completed.
 	EventStartPoolFull
+
+	// EventOrphanedVMDeleted is emitted by Close for each VM it deletes that
+	// was not waiting in the pool: one abandoned part way through creation, or
+	// one still held by a caller that never deleted it.
+	EventOrphanedVMDeleted
+
+	// EventAcquiredVMRetained is emitted by Close for each acquired VM it
+	// leaves in place because WithDeleteAcquiredOnClose(false) was set. The
+	// caller that holds the VM is responsible for deleting it.
+	EventAcquiredVMRetained
 )
 
+// eventKindNames maps each EventKind to its name. It is indexed by the
+// EventKind itself, so every EventKind must have an entry here.
+var eventKindNames = [...]string{
+	EventAcquireWaiting:         "AcquireWaiting",
+	EventVMDequeued:             "VMDequeued",
+	EventAcquired:               "Acquired",
+	EventAcquireFailed:          "AcquireFailed",
+	EventAttemptToUseClosedPool: "AttemptToUseClosedPool",
+	EventRelease:                "Release",
+	EventReleased:               "Released",
+	EventVMCreateStarted:        "VMCreateStarted",
+	EventVMCreated:              "VMCreated",
+	EventVMCreateFailed:         "VMCreateFailed",
+	EventReplenishStarted:       "ReplenishStarted",
+	EventReplenished:            "Replenished",
+	EventReplenishFailed:        "ReplenishFailed",
+	EventStartPoolFull:          "StartPoolFull",
+	EventOrphanedVMDeleted:      "OrphanedVMDeleted",
+	EventAcquiredVMRetained:     "AcquiredVMRetained",
+}
+
 func (e EventKind) String() string {
-	switch e {
-	case EventAcquireWaiting:
-		return "AcquireWaiting"
-	case EventVMDequeued:
-		return "VMDequeued"
-	case EventAcquired:
-		return "Acquired"
-	case EventAcquireFailed:
-		return "AcquireFailed"
-	case EventAttemptToUseClosedPool:
-		return "AttemptToUseClosedPool"
-	case EventRelease:
-		return "Release"
-	case EventReleased:
-		return "Released"
-	case EventVMCreateStarted:
-		return "VMCreateStarted"
-	case EventVMCreated:
-		return "VMCreated"
-	case EventVMCreateFailed:
-		return "VMCreateFailed"
-	case EventReplenishStarted:
-		return "ReplenishStarted"
-	case EventReplenished:
-		return "Replenished"
-	case EventReplenishFailed:
-		return "ReplenishFailed"
-	case EventStartPoolFull:
-		return "StartPoolFull"
-	default:
+	if uint(e) >= uint(len(eventKindNames)) {
 		return "Unknown"
 	}
+	return eventKindNames[e]
 }
 
 // Event describes a single pool lifecycle event.

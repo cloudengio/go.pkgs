@@ -13,18 +13,26 @@ import (
 // InjectVM wraps inst in a vmsInstance with discard stdout/stderr and sends it
 // into the pool's ready channel. Used in tests that need to fill the channel
 // to capacity in order to provoke a blocking send from a replenishment goroutine.
+// The instance is tracked, preserving the invariant that every instance in the
+// ready channel is claimable for cleanup.
 func (p *Pool) InjectVM(inst vms.Instance) {
-	p.ready <- &vmsInstance{Instance: inst, stdout: io.Discard, stderr: io.Discard}
+	vmsInst := &vmsInstance{Instance: inst, stdout: io.Discard, stderr: io.Discard}
+	p.track(vmsInst)
+	p.ready <- vmsInst
 }
 
 // NewTestVM builds a VM backed by inst for use by external tests, which cannot
 // construct the unexported vmsInstance directly. Pass a nil inst to exercise the
-// nil-underlying-instance guard.
+// nil-underlying-instance guard. The VM is backed by a closed pool so that the
+// replenishment Stop requests is a no-op: these tests exercise VM in isolation,
+// with no pool running behind it.
 func NewTestVM(inst vms.Instance) *VM {
-	return &VM{inst: &vmsInstance{Instance: inst}}
+	p := New(nil)
+	p.closed = true
+	return &VM{inst: &vmsInstance{Instance: inst}, pool: p}
 }
 
 // Stopped reports the VM's internal stopped flag, set by Stop on success.
 func (v *VM) Stopped() bool {
-	return v.inst != nil && v.inst.stopped
+	return v.inst != nil && v.inst.isStopped()
 }

@@ -100,12 +100,12 @@ func TestPoolStartAndAquire(t *testing.T) {
 				t.Errorf("running VMs after Acquire: got %d, want %d", got, want)
 			}
 
-			if err := vm.Release(context.Background()); err != nil {
-				t.Fatalf("Release: %v", err)
+			if err := vm.Delete(context.Background()); err != nil {
+				t.Fatalf("Delete: %v", err)
 			}
 
 			if got, want := countInState(mocks, vms.StateDeleted), 1; got != want {
-				t.Errorf("deleted VMs after Release: got %d, want %d", got, want)
+				t.Errorf("deleted VMs after Delete: got %d, want %d", got, want)
 			}
 
 			if got, want := countInState(mocks, tc.wantState), 2; got != want {
@@ -124,7 +124,7 @@ func TestPoolExec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
-	defer vm.Release(context.Background()) //nolint
+	defer vm.Delete(context.Background()) //nolint
 
 	if err := vm.Exec(context.Background(), io.Discard, io.Discard, "echo", "hello"); err != nil {
 		t.Fatalf("Exec: %v", err)
@@ -144,8 +144,8 @@ func TestPoolExec(t *testing.T) {
 	t.Error("no mock recorded an Exec call")
 }
 
-// TestPoolRelease verifies that releasing a VM deletes it and replenishes the pool.
-func TestPoolRelease(t *testing.T) {
+// TestPoolDelete verifies that Delete deletes the VM and replenishes the pool.
+func TestPoolDelete(t *testing.T) {
 	for _, behaviour := range []vmspool.StagingBehaviour{
 		vmspool.StagingBehaviourSuspended,
 		vmspool.StagingBehaviourRunning,
@@ -159,8 +159,8 @@ func TestPoolRelease(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Acquire: %v", err)
 			}
-			if err := vm.Release(context.Background()); err != nil {
-				t.Fatalf("Release: %v", err)
+			if err := vm.Delete(context.Background()); err != nil {
+				t.Fatalf("Delete: %v", err)
 			}
 
 			// The original VM should now be deleted.
@@ -178,7 +178,7 @@ func TestPoolRelease(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Acquire after replenishment: %v", err)
 			}
-			defer vm2.Release(context.Background()) //nolint
+			defer vm2.Delete(context.Background()) //nolint
 
 			// Factory must have created a second mock for the replenishment.
 			if n := len(factory.Mocks()); n != 2 {
@@ -226,7 +226,7 @@ func TestPoolAcquireCancelled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	defer vm.Release(context.Background()) //nolint
+	defer vm.Delete(context.Background()) //nolint
 
 	// Now try to acquire with a pre-cancelled context.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -263,11 +263,11 @@ func TestPoolConcurrency(t *testing.T) {
 		}
 	}
 
-	// Release all VMs.
+	// Delete all VMs.
 	for _, vm := range vmsAcquired {
 		if vm != nil {
-			if err := vm.Release(context.Background()); err != nil {
-				t.Errorf("Release: %v", err)
+			if err := vm.Delete(context.Background()); err != nil {
+				t.Errorf("Delete: %v", err)
 			}
 		}
 	}
@@ -280,7 +280,7 @@ func TestPoolConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("re-Acquire[%d] after replenishment: %v", i, err)
 		}
-		defer vm.Release(context.Background()) //nolint
+		defer vm.Delete(context.Background()) //nolint
 	}
 }
 
@@ -437,12 +437,12 @@ func TestPoolStatus(t *testing.T) {
 	if err := vm.Exec(context.Background(), io.Discard, io.Discard, "true"); err != nil {
 		t.Fatalf("Exec: %v", err)
 	}
-	if err := vm.Release(context.Background()); err != nil {
-		t.Fatalf("Release: %v", err)
+	if err := vm.Delete(context.Background()); err != nil {
+		t.Fatalf("Delete: %v", err)
 	}
 
-	// Close the pool before releasing vm2 so that any replenish request made by
-	// Release becomes a no-op against the closed pool.
+	// Close the pool before deleting vm2 so that any replenish request made by
+	// Delete becomes a no-op against the closed pool.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	vm2, err := p.Acquire(ctx)
@@ -452,8 +452,8 @@ func TestPoolStatus(t *testing.T) {
 	if err := p.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if err := vm2.Release(context.Background()); err != nil {
-		t.Fatalf("Release after Close: %v", err)
+	if err := vm2.Delete(context.Background()); err != nil {
+		t.Fatalf("Delete after Close: %v", err)
 	}
 
 	var events []vmspool.EventKind
@@ -467,7 +467,7 @@ func TestPoolStatus(t *testing.T) {
 	}
 done:
 
-	// vm.Release triggers replenishment; vm2.Release (after Close) does not.
+	// vm.Delete triggers replenishment; vm2 (deleted after Close) does not.
 	// Both releases emit Release+Released, so counts are 2.
 	wantCounts := map[vmspool.EventKind]int{
 		vmspool.EventAcquireWaiting:   2,
@@ -542,7 +542,7 @@ func waitForEvent(t *testing.T, statusCh <-chan vmspool.Event, kind vmspool.Even
 //
 // Setup:
 //  1. Acquire the only pool VM so p.ready becomes empty.
-//  2. Inject a blocking mock (Clone waits for a signal) then Release, which
+//  2. Inject a blocking mock (Clone waits for a signal) then Delete, which
 //     triggers a replenishment goroutine that pauses inside Clone.
 //  3. While the goroutine is paused, fill p.ready to capacity via ReadyCh.
 //  4. Unblock Clone — the goroutine proceeds through Start+Suspend and
@@ -572,11 +572,11 @@ func TestPoolReplenishBlockedOnReadySend(t *testing.T) {
 		t.Fatalf("Acquire: %v", err)
 	}
 
-	// Queue the blocking mock for the next constructor call, then Release to
+	// Queue the blocking mock for the next constructor call, then Delete to
 	// trigger replenishment. The goroutine will block inside Clone immediately.
 	factory.Inject(blockingMock)
-	if err := vm.Release(context.Background()); err != nil {
-		t.Fatalf("Release: %v", err)
+	if err := vm.Delete(context.Background()); err != nil {
+		t.Fatalf("Delete: %v", err)
 	}
 
 	// Wait until the replenishment goroutine has started running.
@@ -639,7 +639,7 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	defer vm.Release(context.Background()) //nolint
+	defer vm.Delete(context.Background()) //nolint
 
 	// Start a second Acquire that will block because the pool is empty.
 	acquireDone := make(chan error, 1)
@@ -693,7 +693,9 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 }
 
 // TestPoolReleaseCloseRace verifies that Release and Close can run concurrently
-// without triggering sync.WaitGroup misuse (Add after Wait) or a data race.
+// without triggering sync.WaitGroup misuse (Add after Wait), a data race, or a
+// double cleanup: exactly one of the two claims the acquired VM and deletes it,
+// the other is a no-op, and neither returns an error.
 // Run with -race to validate.
 func TestPoolReleaseCloseRace(t *testing.T) {
 	const iterations = 100
@@ -712,15 +714,30 @@ func TestPoolReleaseCloseRace(t *testing.T) {
 		// Release and Close race: exactly the scenario that caused wg misuse.
 		var wg sync.WaitGroup
 		wg.Add(2)
+		var releaseErr, closeErr error
 		go func() {
 			defer wg.Done()
-			_ = vm.Release(context.Background())
+			releaseErr = vm.Delete(context.Background())
 		}()
 		go func() {
 			defer wg.Done()
-			_ = p.Close(context.Background())
+			closeErr = p.Close(context.Background())
 		}()
 		wg.Wait()
+
+		if releaseErr != nil {
+			t.Fatalf("Release: %v", releaseErr)
+		}
+		if closeErr != nil {
+			t.Fatalf("Close: %v", closeErr)
+		}
+		mocks := factory.Mocks()
+		if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
+			t.Fatalf("VM state = %s, want Deleted", got)
+		}
+		if got := mocks[0].DeleteCalls(); got != 1 {
+			t.Fatalf("Delete called %d times, want exactly 1", got)
+		}
 	}
 }
 
@@ -836,8 +853,8 @@ func TestPoolOptionsDefaults(t *testing.T) {
 		t.Fatalf("Acquire 2: %v", err)
 	}
 
-	vm1.Release(context.Background()) //nolint:errcheck
-	vm2.Release(context.Background()) //nolint:errcheck
+	vm1.Delete(context.Background()) //nolint:errcheck
+	vm2.Delete(context.Background()) //nolint:errcheck
 }
 
 // TestPoolStartTwice verifies that calling Start multiple times returns an error.
@@ -907,6 +924,98 @@ func TestAcquireOnClosedPoolEvent(t *testing.T) {
 	}
 
 	waitForEvent(t, statusCh, vmspool.EventAttemptToUseClosedPool, 5*time.Second)
+}
+
+// TestPoolCloseDeletesAcquiredVM verifies that Close deletes a VM that a caller
+// acquired but never released, and that WithDeleteAcquiredOnClose(false) leaves
+// it for the caller to release instead.
+func TestPoolCloseDeletesAcquiredVM(t *testing.T) {
+	for _, deleteAcquired := range []bool{true, false} {
+		statusCh := make(chan vmspool.Event, 32)
+		factory := vmstestutil.NewMockFactory(true)
+		p := vmspool.New(factory,
+			vmspool.WithSize(1),
+			vmspool.WithStatus(statusCh),
+			vmspool.WithDeleteAcquiredOnClose(deleteAcquired))
+		if err := p.Start(context.Background()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+
+		vm, err := p.Acquire(context.Background())
+		if err != nil {
+			t.Fatalf("Acquire: %v", err)
+		}
+		if err := p.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+
+		mocks := factory.Mocks()
+		if len(mocks) != 1 {
+			t.Fatalf("expected 1 mock, got %d", len(mocks))
+		}
+		want, wantEvent := vms.StateDeleted, vmspool.EventOrphanedVMDeleted
+		if !deleteAcquired {
+			want, wantEvent = vms.StateRunning, vmspool.EventAcquiredVMRetained
+		}
+		if got := mocks[0].State(context.Background()); got != want {
+			t.Errorf("deleteAcquiredOnClose=%v: acquired VM state = %s, want %s", deleteAcquired, got, want)
+		}
+		waitForEvent(t, statusCh, wantEvent, 5*time.Second)
+
+		// Releasing after Close must work either way: the VM is already gone in
+		// the first case and is the caller's to clean up in the second.
+		if err := vm.Delete(context.Background()); err != nil {
+			t.Errorf("deleteAcquiredOnClose=%v: Release after Close: %v", deleteAcquired, err)
+		}
+		if got := mocks[0].State(context.Background()); got != vms.StateDeleted {
+			t.Errorf("deleteAcquiredOnClose=%v: state after Release = %s, want Deleted", deleteAcquired, got)
+		}
+		// Whichever of Close and Release deleted the VM, the other must not
+		// have attempted a second delete.
+		if got := mocks[0].DeleteCalls(); got != 1 {
+			t.Errorf("deleteAcquiredOnClose=%v: Delete called %d times, want exactly 1", deleteAcquired, got)
+		}
+	}
+}
+
+// TestPoolCloseDeletesAbandonedVM verifies that a VM whose creation was still
+// in flight when the pool gave up waiting for it is deleted by Close rather
+// than leaked. The pool's create timeout expires while the mock is blocked in
+// Clone, so attemptCreateVM abandons the instance and retries with a new one.
+func TestPoolCloseDeletesAbandonedVM(t *testing.T) {
+	factory := vmstestutil.NewMockFactory(true)
+
+	blockingMock := vmstestutil.NewMock("abandoned")
+	cloneBlock := make(chan struct{})
+	blockingMock.CloneBlock = cloneBlock
+	factory.Inject(blockingMock)
+	factory.Inject(vmstestutil.NewMock("replacement"))
+
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithCreateTimeoutAndInterval(50*time.Millisecond, time.Millisecond),
+	)
+
+	go func() {
+		// Let the create timeout elapse and the retry succeed, then release the
+		// abandoned mock so that its creation runs to completion.
+		time.Sleep(100 * time.Millisecond)
+		close(cloneBlock)
+	}()
+
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Close(context.Background()); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+
+	mocks := factory.Mocks()
+	if len(mocks) != 2 {
+		t.Fatalf("expected 2 mocks (1 abandoned + 1 retry), got %d", len(mocks))
+	}
+	allInState(t, mocks, vms.StateDeleted)
 }
 
 // TestAttemptCreateVMTimeout verifies that if VM creation times out, it is handled and retried.

@@ -10,7 +10,7 @@
 // and the resulting next state. "(waiting)" denotes the ActionNone
 // no-op used to poll until an in-progress operation completes.
 //
-//	Initial         Clone -> Cloning
+//	Initial         Clone -> Cloning,  Delete -> Deleting
 //	Cloning         (waiting) -> Cloning
 //	Starting        (waiting) -> Starting
 //	Running         Stop -> Stopping,  Suspend -> Suspending

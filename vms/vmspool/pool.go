@@ -5,8 +5,10 @@
 // Package vmspool manages a fixed-size pool of suspended or stopped virtual
 // machine instances. The pool pre-creates and mantains VMs according to the
 // requested StagingBehaviour so they can be  started quickly when acquired.
-// When a caller releases a VM, it is deleted and a new one is created asynchronously
-// to restore the pool to its target size.
+// An acquired VM is deleted by VM.Delete, and a new one is created
+// asynchronously to restore the pool to its target size. A caller that calls
+// VM.StopAndRelease first triggers that replacement at the point of the stop
+// rather than at the delete, since a stopped VM will not run again.
 package vmspool
 
 import (
@@ -32,7 +34,33 @@ type Constructor interface {
 type vmsInstance struct {
 	vms.Instance
 	stdout, stderr io.Writer
-	stopped        bool
+	acquired       bool // guarded by Pool.opMutex
+
+	mu sync.Mutex
+	// stopped records that the VM is not running: either because it is staged
+	// stopped or suspended in the pool, or because the caller that acquired it
+	// has stopped it. It determines whether Acquire must start the VM before
+	// handing it over, and which of VM.StopAndRelease and VM.Delete requests
+	// the replacement VM. GUARDED by mu.
+	stopped bool
+}
+
+// setStopped records whether the VM is running and reports whether this call
+// changed the flag. Only the caller that wins the transition to stopped
+// requests replenishment, so repeated calls to VM.StopAndRelease cannot grow
+// the pool beyond its configured size.
+func (inst *vmsInstance) setStopped(stopped bool) bool {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	changed := inst.stopped != stopped
+	inst.stopped = stopped
+	return changed
+}
+
+func (inst *vmsInstance) isStopped() bool {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.stopped
 }
 
 // Pool manages a fixed-size set of suspended virtual machine instances.
@@ -44,11 +72,16 @@ type Pool struct {
 
 	opMutex sync.Mutex // guards acquire and close operations
 
-	// mu guards closed, replenishCtx, replenishCancel
+	// mu guards closed, live, replenishCtx, replenishCancel
 	// and serialises wg.Add with Close's wg.Wait, preventing
-	// sync.WaitGroup misuse when Release/Acquire race with Close.
-	mu              sync.Mutex
-	closed          bool
+	// sync.WaitGroup misuse when Delete/Acquire race with Close.
+	mu     sync.Mutex
+	closed bool
+	// live tracks every instance the pool has created and not yet deleted,
+	// including those still being created, those queued in ready and those
+	// acquired by a caller. Close uses it to delete VMs that never reached
+	// ready, or that have left it, and which would otherwise be leaked.
+	live            map[*vmsInstance]struct{}
 	replenishCtx    context.Context
 	replenishCancel context.CancelFunc
 	// tracks in-flight replenishment and vm creation goroutines
@@ -56,15 +89,16 @@ type Pool struct {
 }
 
 type options struct {
-	size             int
-	statusCh         chan<- Event
-	stagingBehaviour StagingBehaviour
-	cleanupTimeout   time.Duration
-	createTimeout    time.Duration
-	createInterval   time.Duration
-	stopTimeout      time.Duration
-	createStdout     func(id string) io.Writer
-	createStderr     func(id string) io.Writer
+	size                  int
+	statusCh              chan<- Event
+	stagingBehaviour      StagingBehaviour
+	cleanupTimeout        time.Duration
+	createTimeout         time.Duration
+	createInterval        time.Duration
+	stopTimeout           time.Duration
+	createStdout          func(id string) io.Writer
+	createStderr          func(id string) io.Writer
+	deleteAcquiredOnClose bool
 }
 
 const (
@@ -76,12 +110,13 @@ const (
 )
 
 type Config struct {
-	Size             int              `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
-	CleanupTimeout   time.Duration    `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
-	CreateTimeout    time.Duration    `yaml:"create_timeout" doc:"The timeout for creating a single VM. A 0 or negative value is treated as DefaultCreateTimeout."`
-	CreateInterval   time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
-	StopTimeout      time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
-	StagingBehaviour StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
+	Size                  int              `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
+	CleanupTimeout        time.Duration    `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
+	CreateTimeout         time.Duration    `yaml:"create_timeout" doc:"The timeout for creating a single VM. A 0 or negative value is treated as DefaultCreateTimeout."`
+	CreateInterval        time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
+	StopTimeout           time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
+	StagingBehaviour      StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
+	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
 }
 
 // Options returns a slice of Option values derived from the Config fields.
@@ -95,6 +130,7 @@ func (c Config) Options() []Option {
 		WithCreateTimeoutAndInterval(c.CreateTimeout, c.CreateInterval),
 		WithStopTimeout(c.StopTimeout),
 		WithStagingBehaviour(c.StagingBehaviour),
+		WithDeleteAcquiredOnClose(c.DeleteAcquiredOnClose),
 	}
 }
 
@@ -158,6 +194,19 @@ func WithStopTimeout(timeout time.Duration) Option {
 func WithStatus(ch chan<- Event) Option {
 	return func(o *options) {
 		o.statusCh = ch
+	}
+}
+
+// WithDeleteAcquiredOnClose controls whether Close deletes VMs that are still
+// held by a caller, ie. that have been acquired but not yet deleted, whether or
+// not the caller has stopped them with VM.StopAndRelease. The default is true,
+// on the basis that the pool owns every VM it creates and Close is the last
+// chance to delete them. Set it to false when callers outlive the pool and are
+// responsible for calling VM.Delete themselves; Close then emits
+// EventAcquiredVMRetained for each VM it leaves behind.
+func WithDeleteAcquiredOnClose(v bool) Option {
+	return func(o *options) {
+		o.deleteAcquiredOnClose = v
 	}
 }
 
@@ -256,6 +305,7 @@ func New(constructor Constructor, opts ...Option) *Pool {
 	options.createInterval = DefaultCreateInterval
 	options.stopTimeout = DefaultStopTimeout
 	options.stagingBehaviour = StagingBehaviourRunning
+	options.deleteAcquiredOnClose = true
 	options.createStdout = func(string) io.Writer {
 		return io.Discard
 	}
@@ -270,7 +320,44 @@ func New(constructor Constructor, opts ...Option) *Pool {
 		constructor: constructor,
 		ready:       make(chan *vmsInstance, options.size),
 		done:        make(chan struct{}),
+		live:        map[*vmsInstance]struct{}{},
 	}
+}
+
+// track records inst as owned by the pool. Every instance returned by the
+// constructor must be tracked before any operation is attempted on it so that
+// Close can delete it however the creation turns out.
+func (p *Pool) track(inst *vmsInstance) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.live[inst] = struct{}{}
+}
+
+// claim removes inst from the live set and reports whether the caller won
+// ownership of its cleanup. Several paths may try to delete the same instance
+// (a caller's Delete, Close's sweep of acquired VMs, the creation error
+// paths); exactly one of them wins the claim and performs the cleanup, the
+// rest treat it as already handled. In particular this is what makes Delete
+// a no-op for a VM that Close has already deleted.
+func (p *Pool) claim(inst *vmsInstance) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.live[inst]; !ok {
+		return false
+	}
+	delete(p.live, inst)
+	return true
+}
+
+// tracked returns the instances the pool owns that have not been deleted.
+func (p *Pool) tracked() []*vmsInstance {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	insts := make([]*vmsInstance, 0, len(p.live))
+	for inst := range p.live {
+		insts = append(insts, inst)
+	}
+	return insts
 }
 
 func (p *Pool) notify(kind EventKind, err error) {
@@ -322,19 +409,27 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 	return nil
 }
 
-// cleanupVMOnError can be called from any code path.
-func cleanupVMOnError(inst *vmsInstance, timeout time.Duration) {
-	if inst == nil || inst.Instance == nil {
-		return
-	}
-	_ = vms.CleanupVM(context.Background(), inst.Instance, timeout)
-}
-
-func cleanupVMOnClose(inst *vmsInstance, timeout time.Duration) error {
+// cleanupVM stops and deletes inst provided the caller wins the claim for it;
+// if another path has already claimed the instance the cleanup is theirs and
+// cleanupVM returns nil immediately. A claimed instance is no longer tracked
+// even if its cleanup fails: the error is returned to the initiating caller,
+// and an external sweep (such as deleting VMs by name at startup) is the
+// backstop for any VM leaked this way.
+func (p *Pool) cleanupVM(ctx context.Context, inst *vmsInstance, timeout time.Duration) error {
 	if inst == nil || inst.Instance == nil {
 		return nil
 	}
-	return vms.CleanupVM(context.Background(), inst.Instance, timeout)
+	if !p.claim(inst) {
+		return nil
+	}
+	return vms.CleanupVM(ctx, inst.Instance, timeout)
+}
+
+// cleanupVMOnError is cleanupVM for paths that are already returning an error.
+// It runs on a background context since the context that governs those paths
+// has typically been cancelled, which is what brought them here.
+func (p *Pool) cleanupVMOnError(inst *vmsInstance, timeout time.Duration) {
+	_ = p.cleanupVM(context.Background(), inst, timeout)
 }
 
 // createVM clones, starts, and suspends a new instance then places it in the
@@ -346,41 +441,57 @@ func (p *Pool) createVM(ctx context.Context) (*vmsInstance, error) {
 		return nil, fmt.Errorf("vmspool: constructor returned nil instance")
 	}
 
+	// Track the instance before cloning it: a clone that fails, or that is
+	// interrupted, may still have left a VM behind that only Close can delete.
+	vmsInst := &vmsInstance{Instance: inst}
+	p.track(vmsInst)
+
 	if err := inst.Clone(ctx); err != nil {
-		// Clone transitions from Initial; nothing to clean up beyond the
-		// instance itself, which is already in Initial/Deleted state.
+		p.cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
 		return nil, fmt.Errorf("vmspool: clone: %w", err)
 	}
 
+	// Create the output writers only once there is a VM to write about;
+	// creating them earlier would leave a trail of empty files behind for
+	// every clone that fails.
 	stdout := p.options.createStdout(inst.ID())
 	stderr := p.options.createStderr(inst.ID())
-
-	vmsInst := &vmsInstance{Instance: inst, stdout: stdout, stderr: stderr}
+	vmsInst.stdout, vmsInst.stderr = stdout, stderr
 
 	// leave VM in stopped state.
 	if p.options.stagingBehaviour == StagingBehaviourStopped ||
 		(!inst.Suspendable() && (p.options.stagingBehaviour == StagingBehaviourSuspended)) {
-		vmsInst.stopped = true
-		return vmsInst, nil
+		vmsInst.setStopped(true)
+		return p.discardIfClosed(vmsInst)
 	}
 
 	if err := vmsInst.Start(ctx, stdout, stderr); err != nil {
 		// Instance is Stopped after Clone; clean it up.
-		cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
+		p.cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
 		return nil, fmt.Errorf("vmspool: start: %w", err)
 	}
 
 	if p.options.stagingBehaviour == StagingBehaviourRunning || !inst.Suspendable() {
-		return vmsInst, nil
+		return p.discardIfClosed(vmsInst)
 	}
 
-	vmsInst.stopped = true
+	vmsInst.setStopped(true)
 	if err := inst.Suspend(ctx); err != nil {
 		// Instance may be Running; stop and delete it.
-		cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
+		p.cleanupVMOnError(vmsInst, p.options.cleanupTimeout)
 		return nil, fmt.Errorf("vmspool: suspend: %w", err)
 	}
-	return vmsInst, nil
+	return p.discardIfClosed(vmsInst)
+}
+
+// discardIfClosed deletes a newly created VM if the pool was closed while it
+// was being created, since nothing will ever take it out of the ready channel.
+func (p *Pool) discardIfClosed(inst *vmsInstance) (*vmsInstance, error) {
+	if !p.isClosed() {
+		return inst, nil
+	}
+	p.cleanupVMOnError(inst, p.options.cleanupTimeout)
+	return nil, fmt.Errorf("vmspool: pool was closed while creating a VM")
 }
 
 func (p *Pool) createVMAndNotify(ctx context.Context) (*vmsInstance, error) {
@@ -449,23 +560,27 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 		close(doneCh)
 	})
 
+	// The abandoned cases below, where creation is still in progress when this
+	// call gives up on it, do not clean up: reading inst would race with the
+	// goroutine still writing it. The instance was tracked before its first
+	// operation, so Close deletes whatever the goroutine ends up creating.
 	select {
 	case <-doneCh:
 		if err != nil {
-			cleanupVMOnError(inst, p.options.cleanupTimeout)
+			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
 			return err
 		}
 	case <-ctx.Done():
 		select {
 		case <-doneCh:
-			cleanupVMOnError(inst, p.options.cleanupTimeout)
+			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
 		default:
 		}
 		return ctx.Err()
 	case <-time.After(timeout):
 		select {
 		case <-doneCh:
-			cleanupVMOnError(inst, p.options.cleanupTimeout)
+			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
 		default:
 		}
 		return fmt.Errorf("vmspool: create VM timed out after %s", timeout)
@@ -479,7 +594,7 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 	case p.ready <- inst:
 		return nil
 	case <-ctx.Done():
-		cleanupVMOnError(inst, p.options.cleanupTimeout)
+		p.cleanupVMOnError(inst, p.options.cleanupTimeout)
 		return ctx.Err()
 	}
 }
@@ -499,7 +614,7 @@ func (p *Pool) setClosed() bool {
 }
 
 // Acquire waits for a suspended VM, starts it, and returns a handle. The
-// caller must call VM.Release when finished with the VM. Acquire blocks until
+// caller must call VM.Delete when finished with the VM. Acquire blocks until
 // a VM is available, ctx is cancelled, or the pool is closed.
 func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	if p.isClosed() {
@@ -523,7 +638,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	case inst = <-p.ready:
 		if p.isClosed() {
 			var errs errors.M
-			errs.Append(cleanupVMOnClose(inst, p.options.cleanupTimeout))
+			errs.Append(p.cleanupVM(context.Background(), inst, p.options.cleanupTimeout))
 			err := fmt.Errorf("vmspool: pool is closed")
 			errs.Append(err)
 			p.notify(EventAttemptToUseClosedPool, err)
@@ -534,23 +649,37 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
-	if inst.stopped {
+	if inst.isStopped() {
 		if err := inst.Start(ctx, inst.stdout, inst.stderr); err != nil {
 			// Start failed; clean up the VM and replenish so the pool stays full.
-			cleanupVMOnError(inst, p.options.cleanupTimeout)
+			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
 			p.requestReplenish()
 			err = fmt.Errorf("vmspool: acquire: %w", err)
 			p.notify(EventAcquireFailed, err)
 			return nil, err
 		}
+		// The VM is running again, so it is the caller's StopAndRelease or Delete that
+		// requests its replacement, not its staging state.
+		inst.setStopped(false)
 	}
+	inst.acquired = true
 	p.notify(EventAcquired, nil)
 	return &VM{inst: inst, pool: p}, nil
 }
 
 // Close stops accepting new acquires, waits for all replenishment goroutines
-// to finish, then deletes every suspended VM remaining in the pool. Close
-// is idempotent.
+// to finish, then deletes every VM the pool created whose deletion has not
+// already been performed, or claimed, by another path (such as a concurrent
+// Delete). That includes VMs queued in the pool, VMs abandoned part way
+// through creation, and, unless WithDeleteAcquiredOnClose(false) was used, VMs
+// that a caller acquired and has not deleted. Close is idempotent.
+//
+// A cancelled ctx bounds only the wait for the in-flight creation goroutines:
+// Close then attempts to delete their VMs while the creation operations are
+// still running. Such attempts fail with 'unexpected VM state' errors that are
+// included in the returned error, and those VMs are instead deleted by the
+// creation goroutines' own cleanup once they observe the cancellation or the
+// closed pool. Deletion itself is not bounded by ctx.
 func (p *Pool) Close(ctx context.Context) error {
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
@@ -568,18 +697,50 @@ func (p *Pool) Close(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		errs.Append(err)
 	}
+	// Drain the VMs waiting to be acquired.
+drained:
 	for {
 		select {
 		case inst := <-p.ready:
-			errs.Append(cleanupVMOnClose(inst, p.options.stopTimeout))
+			errs.Append(p.cleanupVM(context.Background(), inst, p.options.stopTimeout))
 		default:
-			return errs.Err()
+			break drained
 		}
 	}
+	// Delete whatever is left: VMs abandoned during creation and VMs still
+	// held by a caller. Deleting them concurrently keeps Close bounded by a
+	// single VM's stop timeout rather than one per VM.
+	var g errgroup.T
+	for _, inst := range p.tracked() {
+		if inst.acquired && !p.options.deleteAcquiredOnClose {
+			p.notify(EventAcquiredVMRetained, nil)
+			continue
+		}
+		g.Go(func() error {
+			if !p.claim(inst) {
+				// Another path (eg. a concurrent Delete) claimed the
+				// instance after the tracked snapshot was taken; its
+				// cleanup is theirs.
+				return nil
+			}
+			if err := vms.CleanupVM(context.Background(), inst.Instance, p.options.stopTimeout); err != nil {
+				// Return the claim so that the instance's owner can still
+				// delete it via its own cleanup path; this is how a VM whose
+				// creation outlived a Close bounded by a cancelled ctx gets
+				// deleted rather than leaked.
+				p.track(inst)
+				return err
+			}
+			p.notify(EventOrphanedVMDeleted, nil)
+			return nil
+		})
+	}
+	errs.Append(g.Wait())
+	return errs.Err()
 }
 
 // VM is a running virtual machine instance acquired from a Pool.
-// Use Exec to run commands and Release when done.
+// Use Exec to run commands and Delete when done.
 type VM struct {
 	inst *vmsInstance
 	pool *Pool
@@ -593,29 +754,45 @@ func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, arg
 	return v.inst.Exec(ctx, stdout, stderr, cmd, args...)
 }
 
-// Stop stops the VM and returns any error from the last command run in the VM
-// and any error from stopping the VM. Stop is idempotent. The caller must call
-// Release after Stop to delete the VM and replenish the pool.
-func (v *VM) Stop(ctx context.Context, timeout time.Duration) (runErr, stopErr error) {
+// StopAndRelease stops the VM and releases its slot in the pool, returning any
+// error from the last command run in the VM and any error from stopping it.
+// It is idempotent.
+//
+// A stopped VM is never handed out again, so the first successful stop
+// asynchronously replenishes the pool rather than leaving the slot idle: the
+// replacement is created while the caller is still finishing with the stopped
+// VM (collecting logs, say). The VM itself is not deleted; the caller must
+// still call Delete when done with it, which will not request a second
+// replacement.
+func (v *VM) StopAndRelease(ctx context.Context, timeout time.Duration) (runErr, stopErr error) {
 	if v.inst == nil || v.inst.Instance == nil {
 		return nil, fmt.Errorf("vmspool: invalid VM instance")
 	}
 	runErr, stopErr = v.inst.Stop(ctx, timeout)
-	if stopErr == nil {
-		v.inst.stopped = true
+	if stopErr == nil && v.inst.setStopped(true) {
+		v.pool.requestReplenish()
 	}
 	return runErr, stopErr
 }
 
-// Release deletes the VM and asynchronously replenishes the pool with a new
-// suspended instance. It must be called exactly once per acquired VM.
-func (v *VM) Release(ctx context.Context) error {
+// Delete deletes the VM, stopping it first if it is still running. It must be
+// called exactly once per acquired VM. If the pool has been closed and deletes
+// acquired VMs on close (the default), the VM has already been deleted by Close
+// and Delete does not delete it again.
+//
+// Delete asynchronously replenishes the pool unless the VM has already been
+// stopped by StopAndRelease, which released the slot at that point; requesting
+// a second replacement would grow the pool beyond its configured size.
+func (v *VM) Delete(ctx context.Context) error {
 	v.pool.notify(EventRelease, nil)
-	cleanupErr := vms.CleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
+	replenish := v.inst != nil && !v.inst.isStopped()
+	cleanupErr := v.pool.cleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
 	if cleanupErr != nil {
-		cleanupErr = fmt.Errorf("vmspool: release: %w", cleanupErr)
+		cleanupErr = fmt.Errorf("vmspool: delete: %w", cleanupErr)
 	}
-	v.pool.requestReplenish()
+	if replenish {
+		v.pool.requestReplenish()
+	}
 	v.pool.notify(EventReleased, nil)
 	return cleanupErr
 }

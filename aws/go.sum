@@ -1,9 +1,9 @@
-cloudeng.io/algo v0.0.0-20260721222700-155e56185eeb h1:Cewy/CPq4Sw3hF5IA7emNKvh+XmPfepIwZumNH+mXTs=
-cloudeng.io/algo v0.0.0-20260721222700-155e56185eeb/go.mod h1:VXfkJ15IS4nXNdqqndiOceVAY49AXmQVBsaz/MIyZw4=
+cloudeng.io/algo v0.0.0-20260804222138-e9281ed260ba h1:fDnMoqD2Pc64nK0ZtarHVfGMwHG79ddZf/pmxqnAgZo=
+cloudeng.io/algo v0.0.0-20260804222138-e9281ed260ba/go.mod h1:VXfkJ15IS4nXNdqqndiOceVAY49AXmQVBsaz/MIyZw4=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
-cloudeng.io/sys v0.0.0-20260721222700-155e56185eeb h1:Lm2Sy33vxVZyHtu0J6Fi/PnzhpZWCvg0lTnqcaOCIXc=
-cloudeng.io/sys v0.0.0-20260721222700-155e56185eeb/go.mod h1:743L2810r+Sw0FLR4r5G8a3UsEWniPRFYovEvMNpRBE=
+cloudeng.io/sys v0.0.0-20260804222138-e9281ed260ba h1:ZnI/XEcIzLU3dY5UziClmy9Dpi9f21RCcS74bVueUSs=
+cloudeng.io/sys v0.0.0-20260804222138-e9281ed260ba/go.mod h1:743L2810r+Sw0FLR4r5G8a3UsEWniPRFYovEvMNpRBE=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e h1:88FLgbskFkcsZSgh3jncYqYBg1J2eLHGzmdp74APrCQ=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e/go.mod h1:tUOArMXLISe8OY+lHimWwdHMev5N7MwQGczQgTYZb3Y=
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEKWjV8V+WSxDXJ4NFATAsZjh8iIbsQIg=
