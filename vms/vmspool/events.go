@@ -31,7 +31,7 @@ const (
 	// that is already closed or has been signalled to close. Err is set.
 	EventAttemptToUseClosedPool
 
-	// EventRelease is emitted when Release is called by the caller.
+	// EventRelease is emitted when VM.Delete is called by the caller.
 	EventRelease
 
 	// EventReleased is emitted after the VM has been deleted and
@@ -67,12 +67,12 @@ const (
 
 	// EventOrphanedVMDeleted is emitted by Close for each VM it deletes that
 	// was not waiting in the pool: one abandoned part way through creation, or
-	// one still held by a caller that never released it.
+	// one still held by a caller that never deleted it.
 	EventOrphanedVMDeleted
 
 	// EventAcquiredVMRetained is emitted by Close for each acquired VM it
 	// leaves in place because WithDeleteAcquiredOnClose(false) was set. The
-	// caller that holds the VM is responsible for releasing it.
+	// caller that holds the VM is responsible for deleting it.
 	EventAcquiredVMRetained
 )
 

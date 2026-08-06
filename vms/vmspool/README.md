@@ -35,7 +35,7 @@ type Config struct {
 	CreateInterval        time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
 	StopTimeout           time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
 	StagingBehaviour      StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
-	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not released. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for releasing their own VMs; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
+	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
 }
 ```
 
@@ -99,7 +99,7 @@ EventAcquireFailed
 // EventAttemptToUseClosedPool is emitted when Acquire is called on a pool
 // that is already closed or has been signalled to close. Err is set.
 EventAttemptToUseClosedPool
-// EventRelease is emitted when Release is called by the caller.
+// EventRelease is emitted when VM.Delete is called by the caller.
 EventRelease
 // EventReleased is emitted after the VM has been deleted and
 // replenishment has been scheduled.
@@ -126,11 +126,11 @@ EventReplenishFailed
 EventStartPoolFull
 // EventOrphanedVMDeleted is emitted by Close for each VM it deletes that
 // was not waiting in the pool: one abandoned part way through creation, or
-// one still held by a caller that never released it.
+// one still held by a caller that never deleted it.
 EventOrphanedVMDeleted
 // EventAcquiredVMRetained is emitted by Close for each acquired VM it
 // leaves in place because WithDeleteAcquiredOnClose(false) was set. The
-// caller that holds the VM is responsible for releasing it.
+// caller that holds the VM is responsible for deleting it.
 EventAcquiredVMRetained
 
 ```
@@ -174,11 +174,12 @@ treated as DefaultCreateTimeout or DefaultCreateInterval.
 func WithDeleteAcquiredOnClose(v bool) Option
 ```
 WithDeleteAcquiredOnClose controls whether Close deletes VMs that are
-still held by a caller, ie. that have been acquired but not released.
+still held by a caller, ie. that have been acquired but not yet deleted,
+whether or not the caller has stopped them with VM.StopAndRelease.
 The default is true, on the basis that the pool owns every VM it creates
 and Close is the last chance to delete them. Set it to false when callers
-outlive the pool and are responsible for releasing their own VMs; Close then
-emits EventAcquiredVMRetained for each VM it leaves behind.
+outlive the pool and are responsible for calling VM.Delete themselves;
+Close then emits EventAcquiredVMRetained for each VM it leaves behind.
 
 
 ```go
@@ -256,9 +257,9 @@ func (p *Pool) Close(ctx context.Context) error
 Close stops accepting new acquires, waits for all replenishment goroutines
 to finish, then deletes every VM the pool created whose deletion has not
 already been performed, or claimed, by another path (such as a concurrent
-Release). That includes VMs queued in the pool, VMs abandoned part way
+Delete). That includes VMs queued in the pool, VMs abandoned part way
 through creation, and, unless WithDeleteAcquiredOnClose(false) was used,
-VMs that a caller acquired and has not released. Close is idempotent.
+VMs that a caller acquired and has not deleted. Close is idempotent.
 
 A cancelled ctx bounds only the wait for the in-flight creation goroutines:
 Close then attempts to delete their VMs while the creation operations are

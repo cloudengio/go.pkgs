@@ -74,7 +74,7 @@ type Pool struct {
 
 	// mu guards closed, live, replenishCtx, replenishCancel
 	// and serialises wg.Add with Close's wg.Wait, preventing
-	// sync.WaitGroup misuse when Release/Acquire race with Close.
+	// sync.WaitGroup misuse when Delete/Acquire race with Close.
 	mu     sync.Mutex
 	closed bool
 	// live tracks every instance the pool has created and not yet deleted,
@@ -116,7 +116,7 @@ type Config struct {
 	CreateInterval        time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
 	StopTimeout           time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
 	StagingBehaviour      StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
-	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not released. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for releasing their own VMs; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
+	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
 }
 
 // Options returns a slice of Option values derived from the Config fields.
@@ -198,10 +198,11 @@ func WithStatus(ch chan<- Event) Option {
 }
 
 // WithDeleteAcquiredOnClose controls whether Close deletes VMs that are still
-// held by a caller, ie. that have been acquired but not released. The default
-// is true, on the basis that the pool owns every VM it creates and Close is the
-// last chance to delete them. Set it to false when callers outlive the pool and
-// are responsible for releasing their own VMs; Close then emits
+// held by a caller, ie. that have been acquired but not yet deleted, whether or
+// not the caller has stopped them with VM.StopAndRelease. The default is true,
+// on the basis that the pool owns every VM it creates and Close is the last
+// chance to delete them. Set it to false when callers outlive the pool and are
+// responsible for calling VM.Delete themselves; Close then emits
 // EventAcquiredVMRetained for each VM it leaves behind.
 func WithDeleteAcquiredOnClose(v bool) Option {
 	return func(o *options) {
@@ -334,9 +335,9 @@ func (p *Pool) track(inst *vmsInstance) {
 
 // claim removes inst from the live set and reports whether the caller won
 // ownership of its cleanup. Several paths may try to delete the same instance
-// (a caller's Release, Close's sweep of acquired VMs, the creation error
+// (a caller's Delete, Close's sweep of acquired VMs, the creation error
 // paths); exactly one of them wins the claim and performs the cleanup, the
-// rest treat it as already handled. In particular this is what makes Release
+// rest treat it as already handled. In particular this is what makes Delete
 // a no-op for a VM that Close has already deleted.
 func (p *Pool) claim(inst *vmsInstance) bool {
 	p.mu.Lock()
@@ -657,7 +658,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 			p.notify(EventAcquireFailed, err)
 			return nil, err
 		}
-		// The VM is running again, so it is the caller's Stop or Release that
+		// The VM is running again, so it is the caller's StopAndRelease or Delete that
 		// requests its replacement, not its staging state.
 		inst.setStopped(false)
 	}
@@ -669,9 +670,9 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 // Close stops accepting new acquires, waits for all replenishment goroutines
 // to finish, then deletes every VM the pool created whose deletion has not
 // already been performed, or claimed, by another path (such as a concurrent
-// Release). That includes VMs queued in the pool, VMs abandoned part way
+// Delete). That includes VMs queued in the pool, VMs abandoned part way
 // through creation, and, unless WithDeleteAcquiredOnClose(false) was used, VMs
-// that a caller acquired and has not released. Close is idempotent.
+// that a caller acquired and has not deleted. Close is idempotent.
 //
 // A cancelled ctx bounds only the wait for the in-flight creation goroutines:
 // Close then attempts to delete their VMs while the creation operations are
@@ -717,7 +718,7 @@ drained:
 		}
 		g.Go(func() error {
 			if !p.claim(inst) {
-				// Another path (eg. a concurrent Release) claimed the
+				// Another path (eg. a concurrent Delete) claimed the
 				// instance after the tracked snapshot was taken; its
 				// cleanup is theirs.
 				return nil
