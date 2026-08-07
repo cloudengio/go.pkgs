@@ -37,9 +37,9 @@ ErrVMNotRunning = errors.New("virtual machine not running")
 ```go
 func CleanupVM(ctx context.Context, inst Instance, timeout time.Duration) error
 ```
-CleanupVM attempts to clean up the given instance by stopping and deleting
-it if necessary. Suspended VMs are stopped before deletion. It returns an
-error if any of the operations fail.
+CleanupVM attempts to clean up the given instance by deleting it. If the VM
+is running, it will be stopped and then deleted. It returns an error if the
+instance is not Stopped or Deleted.
 
 An instance in StateInitial may never have been cloned, or its clone may
 have failed or been interrupted part way through and left artifacts behind.

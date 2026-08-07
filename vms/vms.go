@@ -267,9 +267,9 @@ func PrintStates(out io.Writer) {
 	}
 }
 
-// CleanupVM attempts to clean up the given instance by stopping and deleting
-// it if necessary. Suspended VMs are stopped before deletion.
-// It returns an error if any of the operations fail.
+// CleanupVM attempts to clean up the given instance by deleting it. If the
+// VM is running, it will be stopped and then deleted.
+// It returns an error if the instance is not Stopped or Deleted.
 //
 // An instance in StateInitial may never have been cloned, or its clone may have
 // failed or been interrupted part way through and left artifacts behind. Such
@@ -287,20 +287,24 @@ func CleanupVM(ctx context.Context, inst Instance, timeout time.Duration) error 
 		_ = inst.Delete(ctx)
 		return nil
 	case StateRunning:
-		if runErr, stopErr := inst.Stop(ctx, timeout); runErr != nil || stopErr != nil {
+		runErr, stopErr := inst.Stop(ctx, timeout)
+		s = inst.State(ctx)
+		if s != StateStopped {
 			var errs errors.M
 			errs.Append(runErr)
 			errs.Append(stopErr)
-			return fmt.Errorf("cleanup: failed to stop VM: %w", errs.Err())
-		}
-		s = inst.State(ctx)
-		if s != StateStopped {
-			return fmt.Errorf("cleanup: expected VM to be stopped after stopping, got %s", s)
+			if err := errs.Err(); err != nil {
+				return fmt.Errorf("cleanup: expected VM to be stopped after stopping, in state %s, run/stop err: %w", s, err)
+			}
+			return fmt.Errorf("cleanup: expected VM to be stopped after stopping, in state %s", s)
 		}
 		fallthrough
 	case StateStopped, StateSuspended, StateErrorUnknown:
 		if err := inst.Delete(ctx); err != nil {
-			return fmt.Errorf("cleanup: failed to delete VM: %w", err)
+			return fmt.Errorf("cleanup: failed to delete VM from state %s: %w", s, err)
+		}
+		if state := inst.State(ctx); state != StateDeleted {
+			return fmt.Errorf("cleanup: expected VM to be deleted after delete, in state %s", state)
 		}
 	default:
 		return fmt.Errorf("cleanup: unexpected VM state %s", s)

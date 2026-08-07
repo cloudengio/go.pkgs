@@ -79,7 +79,7 @@ func TestCleanupVMRunningStopFailure(t *testing.T) {
 	m.SetState(vms.StateRunning)
 	m.StopErr = errors.New("stop failed")
 	err := vms.CleanupVM(ctx, m, time.Second)
-	if err == nil || !strings.Contains(err.Error(), "cleanup: failed to stop VM") {
+	if err == nil || !strings.Contains(err.Error(), "cleanup: expected VM to be stopped after stopping") {
 		t.Errorf("expected stop error, got %v", err)
 	}
 }
