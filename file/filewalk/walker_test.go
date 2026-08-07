@@ -620,14 +620,14 @@ func (d *dbScanner) dirsAndFiles() (dirs, files, unchanged []string) {
 }
 
 func TestUnchanged(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 	sc := localfs.New()
 	dbl := &dbScanner{
 		fs:        sc,
 		db:        map[string]file.Info{},
 		unchanged: map[string]bool{}}
-	wk := filewalk.New[bool](sc, dbl, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(2))
+	wk := filewalk.New(sc, dbl, filewalk.WithScanSize(1), filewalk.WithConcurrentScans(2))
 
 	// Use a separate copy of the test tree that can be modified without
 	// affecting other tests.
