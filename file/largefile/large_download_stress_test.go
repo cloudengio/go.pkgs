@@ -446,20 +446,30 @@ func TestRateControl(t *testing.T) {
 	cacheSize := int64(diskusage.KB * 7)
 	blockSize := 1024
 	concurrency := 10
-	// No rate control, should be faster than the slower download.
+
+	// 1 request per tick: the first block gets the initial token immediately,
+	// each subsequent block waits one full tick. With numBlocks blocks and
+	// concurrency > numBlocks the guaranteed lower bound is (numBlocks-1)*tick.
+	// Subtract half a tick to absorb Go timer imprecision (tickers may fire a
+	// few ms early).
+	tickInterval := 50 * time.Millisecond
+	numBlocks := (cacheSize + int64(blockSize) - 1) / int64(blockSize)
+	minRateControlled := time.Duration(numBlocks-1)*tickInterval - tickInterval/2
+
 	st := downloadFile(ctx, t, cacheSize, blockSize, 0, false,
 		largefile.WithDownloadRateController(ratecontrol.New(ratecontrol.WithNoRateControl())),
 		largefile.WithDownloadConcurrency(concurrency))
 
-	slower := ratecontrol.New(ratecontrol.WithBytesPerTick(time.Millisecond*100, 10))
 	sst := downloadFile(ctx, t, cacheSize, blockSize, 0, false,
-		largefile.WithDownloadRateController(slower),
+		largefile.WithDownloadRateController(ratecontrol.New(ratecontrol.WithRequestsPerTick(tickInterval, 1))),
 		largefile.WithDownloadConcurrency(concurrency))
 
-	if (2 * st.Duration) > sst.Duration {
-		t.Errorf("expected faster download with no rate control, got %v vs %v", st.Duration, sst.Duration)
+	// Assert against the deterministic lower bound, not against the noisy
+	// uncontrolled duration which varies with system load.
+	if sst.Duration < minRateControlled {
+		t.Errorf("rate-controlled download %v finished faster than the theoretical minimum %v", sst.Duration, minRateControlled)
 	}
-	t.Logf("no rate control download duration: %v, slower download duration: %v\n", st.Duration, sst.Duration)
+	t.Logf("no rate control: %v, rate controlled: %v, minimum expected: %v", st.Duration, sst.Duration, minRateControlled)
 }
 
 func TestCacheRetriesAndRunToCompletion(t *testing.T) {
