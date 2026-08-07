@@ -21,10 +21,3 @@ jobs:
       pebble-version: "v2.8.0"
       with-lint: true
       with-govuln: true
-
-#  lint:
-#    uses: cloudengio/.github/.github/workflows/go-lint-multimod.yml@main
-#    with:
-#      runner: |
-#        [ "self-hosted", "linux", "arm64" ]
-#      go-version: "1.26.x"

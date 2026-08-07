@@ -37,7 +37,7 @@ func TestVMStopAndRelease(t *testing.T) {
 		wantState   vms.State
 	}{
 		{"success", nil, nil, nil, nil, true, vms.StateStopped},
-		{"run error only", errRun, nil, errRun, nil, true, vms.StateErrorUnknown},
+		{"run error only", errRun, nil, errRun, nil, true, vms.StateStopped},
 		{"stop error only", nil, errStop, nil, errStop, false, vms.StateErrorUnknown},
 		{"both errors", errRun, errStop, errRun, errStop, false, vms.StateErrorUnknown},
 	} {

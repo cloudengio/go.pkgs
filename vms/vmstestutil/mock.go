@@ -108,8 +108,12 @@ func (m *Mock) Stop(_ context.Context, _ time.Duration) (error, error) {
 	if m.state != vms.StateRunning {
 		return nil, fmt.Errorf("cannot stop VM in state %v", m.state)
 	}
-	if m.StopRunErr != nil || m.StopErr != nil {
-		m.state = vms.StateErrorUnknown
+	if m.StopErr != nil {
+		if m.StopState != nil {
+			m.state = *m.StopState
+		} else {
+			m.state = vms.StateErrorUnknown
+		}
 		return m.StopRunErr, m.StopErr
 	}
 	if m.StopState != nil {
@@ -117,7 +121,7 @@ func (m *Mock) Stop(_ context.Context, _ time.Duration) (error, error) {
 	} else {
 		m.state = vms.StateStopped
 	}
-	return nil, nil
+	return m.StopRunErr, nil
 }
 
 func (m *Mock) Suspendable() bool {
