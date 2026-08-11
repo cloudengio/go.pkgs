@@ -20,8 +20,8 @@ import (
 
 // InstanceTestConfig configures the test suite for an implementation of vms.Instance.
 type InstanceTestConfig struct {
-	// Constructor creates a new uninitialized vms.Instance for each test.
-	Constructor vmspool.Constructor
+	// // Constructor provides the vmspool.Provider used to create instances for each test.
+	Constructor vmspool.Provider
 
 	// Timeout caps individual operations. Defaults to 30 s.
 	Timeout time.Duration
@@ -52,7 +52,7 @@ func TestInstanceCloneStartStopDelete(t cicd.TestingT, cfg InstanceTestConfig) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New()
+	inst := cfg.Constructor.New(ctx)
 	if got := inst.State(ctx); got != vms.StateInitial {
 		t.Errorf("expected state %s, got %s", vms.StateInitial, got)
 	}
@@ -102,7 +102,7 @@ func TestInstanceSuspendResume(t cicd.TestingT, cfg InstanceTestConfig) { //cicd
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New()
+	inst := cfg.Constructor.New(ctx)
 	t.Cleanup(func() {
 		_ = vms.CleanupVM(context.Background(), inst, cfg.timeout())
 	})
@@ -142,7 +142,7 @@ func TestInstanceExec(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New()
+	inst := cfg.Constructor.New(ctx)
 	t.Cleanup(func() {
 		_ = vms.CleanupVM(context.Background(), inst, cfg.timeout())
 	})
@@ -171,7 +171,7 @@ func TestInstanceDeleteFromSuspended(t cicd.TestingT, cfg InstanceTestConfig) { 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New()
+	inst := cfg.Constructor.New(ctx)
 	t.Cleanup(func() {
 		_ = vms.CleanupVM(context.Background(), inst, cfg.timeout())
 	})
@@ -199,7 +199,7 @@ func TestInstanceDeleteFromSuspended(t cicd.TestingT, cfg InstanceTestConfig) { 
 func TestInstanceStateErrors(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	t.Helper()
 
-	inst := cfg.Constructor.New()
+	inst := cfg.Constructor.New(context.Background())
 	runErr, stopErr := inst.Stop(context.Background(), cfg.timeout())
 	if runErr == nil && stopErr == nil {
 		t.Fatalf("instance should not be running at start of test")
@@ -242,7 +242,7 @@ func TestInstanceLifecycle(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:ast
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New()
+	inst := cfg.Constructor.New(ctx)
 
 	requireState := func(ctx context.Context, inst vms.Instance, msg string, final vms.State, intermediate ...vms.State) {
 		t.Helper()

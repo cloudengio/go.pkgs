@@ -792,12 +792,24 @@ type nilConstructor struct {
 	factory *vmstestutil.MockFactory
 }
 
-func (c *nilConstructor) New() vms.Instance {
+func (c *nilConstructor) New(ctx context.Context) vms.Instance {
 	if !c.hitNil {
 		c.hitNil = true
 		return nil
 	}
-	return c.factory.New()
+	return c.factory.New(ctx)
+}
+
+func (c *nilConstructor) List(ctx context.Context) ([]vmspool.VMInfo, error) {
+	return c.factory.List(ctx)
+}
+
+func (c *nilConstructor) Get(ctx context.Context, name string) (vmspool.VMDetail, error) {
+	return c.factory.Get(ctx, name)
+}
+
+func (c *nilConstructor) Delete(ctx context.Context, d time.Duration) ([]string, error) {
+	return c.factory.Delete(ctx, d)
 }
 
 // TestPoolNilConstructor verifies that a nil return from the constructor is

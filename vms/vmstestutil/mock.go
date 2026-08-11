@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloudeng.io/vms"
+	"cloudeng.io/vms/vmspool"
 )
 
 // ExecCall records a single invocation of Mock.Exec.
@@ -247,7 +248,7 @@ func (f *MockFactory) Inject(m *Mock) {
 	f.pending = append(f.pending, m)
 }
 
-func (f *MockFactory) New() vms.Instance {
+func (f *MockFactory) New(context.Context) vms.Instance {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var m *Mock
@@ -259,6 +260,47 @@ func (f *MockFactory) New() vms.Instance {
 	m.SetSuspendable(f.suspendable)
 	f.mocks = append(f.mocks, m)
 	return m
+}
+
+// mockVMInfo builds a VMInfo reflecting the mock's current state.
+func mockVMInfo(ctx context.Context, m *Mock) vmspool.VMInfo {
+	st := m.State(ctx)
+	return vmspool.VMInfo{
+		Name:    m.ID(),
+		State:   st.String(),
+		Running: st == vms.StateRunning,
+	}
+}
+
+// List implements vmspool.Provider, reporting the mocks created so far with
+// their current state.
+func (f *MockFactory) List(ctx context.Context) ([]vmspool.VMInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]vmspool.VMInfo, 0, len(f.mocks))
+	for _, m := range f.mocks {
+		out = append(out, mockVMInfo(ctx, m))
+	}
+	return out, nil
+}
+
+// Get implements vmspool.Provider, returning details for a previously-created
+// mock by name, reflecting its current state.
+func (f *MockFactory) Get(ctx context.Context, name string) (vmspool.VMDetail, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, m := range f.mocks {
+		if m.ID() == name {
+			return vmspool.VMDetail{VMInfo: mockVMInfo(ctx, m)}, nil
+		}
+	}
+	return vmspool.VMDetail{}, fmt.Errorf("no such vm: %s", name)
+}
+
+// Delete implements vmspool.Provider; the mock factory manages no external
+// resources, so there is nothing to reclaim.
+func (f *MockFactory) Delete(context.Context, time.Duration) ([]string, error) {
+	return nil, nil
 }
 
 // Mocks returns a snapshot of all Mock instances produced so far.

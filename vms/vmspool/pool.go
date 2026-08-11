@@ -25,10 +25,44 @@ import (
 	"cloudeng.io/vms"
 )
 
-// Constructor is an interface used to create new, uninitialized VM instances.
-// Each call must return a distinct vms.Instance.
-type Constructor interface {
-	New() vms.Instance
+// VMInfo is a backend-neutral summary of a VM managed by a Provider. It holds
+// only the lightweight fields that are cheap to obtain in bulk via
+// Provider.List.
+type VMInfo struct {
+	Name     string
+	Pool     string
+	State    string // backend-specific state string, e.g. "running", "stopped"
+	Running  bool
+	Accessed time.Time // best-effort last activity time; may be creation time if last access is unavailable
+}
+
+// VMDetail extends VMInfo with the fuller, potentially more expensive per-VM
+// details returned by Provider.Get, such as the resources allocated to the VM.
+type VMDetail struct {
+	VMInfo
+	DiskGiB  int // size of the VM's disk in GiB
+	NumCores int // number of CPU cores allocated to the VM
+	MemGiB   int // amount of RAM allocated to the VM in GiB
+}
+
+// Provider creates and manages the VMs for a Pool. In addition to constructing
+// new instances it can enumerate, inspect and delete the VMs it has created,
+// which pools and cleanup tooling use for status reporting and reclaiming
+// orphaned VMs.
+type Provider interface {
+	// New returns a new, uninitialized VM instance. Each call must return a
+	// distinct vms.Instance. ctx governs any work done to construct the
+	// instance.
+	New(ctx context.Context) vms.Instance
+	// List returns lightweight summaries of the VMs currently present for this
+	// provider's pool.
+	List(ctx context.Context) ([]VMInfo, error)
+	// Get returns the full details of a single VM by name.
+	Get(ctx context.Context, vmName string) (VMDetail, error)
+	// Delete stops (if running) and deletes every VM belonging to this
+	// provider's pool, returning the names deleted. It continues past individual
+	// failures.
+	Delete(ctx context.Context, stopTimeout time.Duration) ([]string, error)
 }
 
 type vmsInstance struct {
@@ -65,10 +99,10 @@ func (inst *vmsInstance) isStopped() bool {
 
 // Pool manages a fixed-size set of suspended virtual machine instances.
 type Pool struct {
-	options     options
-	constructor Constructor
-	ready       chan *vmsInstance // suspended VMs waiting to be acquired
-	done        chan struct{}     // closed by Close to signal pool shutdown
+	options  options
+	provider Provider
+	ready    chan *vmsInstance // suspended VMs waiting to be acquired
+	done     chan struct{}     // closed by Close to signal pool shutdown
 
 	opMutex sync.Mutex // guards acquire and close operations
 
@@ -295,9 +329,9 @@ func WithStdoutStderr(stdout, stderr func(id string) io.Writer) Option {
 	}
 }
 
-// New returns a Pool that will maintain size suspended VMs using constructor.
+// New returns a Pool that will maintain size suspended VMs using provider.
 // Call Start to fill the pool before calling Acquire.
-func New(constructor Constructor, opts ...Option) *Pool {
+func New(provider Provider, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
 	options.cleanupTimeout = DefaultCleanupTimeout
@@ -316,11 +350,11 @@ func New(constructor Constructor, opts ...Option) *Pool {
 		opt(&options)
 	}
 	return &Pool{
-		options:     options,
-		constructor: constructor,
-		ready:       make(chan *vmsInstance, options.size),
-		done:        make(chan struct{}),
-		live:        map[*vmsInstance]struct{}{},
+		options:  options,
+		provider: provider,
+		ready:    make(chan *vmsInstance, options.size),
+		done:     make(chan struct{}),
+		live:     map[*vmsInstance]struct{}{},
 	}
 }
 
@@ -436,9 +470,9 @@ func (p *Pool) cleanupVMOnError(inst *vmsInstance, timeout time.Duration) {
 // ready channel. Returns an error if any step fails or the context is done.
 // Any partially-created instance is cleaned up before returning an error.
 func (p *Pool) createVM(ctx context.Context) (*vmsInstance, error) {
-	inst := p.constructor.New()
+	inst := p.provider.New(ctx)
 	if inst == nil {
-		return nil, fmt.Errorf("vmspool: constructor returned nil instance")
+		return nil, fmt.Errorf("vmspool: provider returned nil instance")
 	}
 
 	// Track the instance before cloning it: a clone that fails, or that is

@@ -93,8 +93,8 @@ ExecCall records a single invocation of Mock.Exec.
 ### Type InstanceTestConfig
 ```go
 type InstanceTestConfig struct {
-	// Constructor creates a new uninitialized vms.Instance for each test.
-	Constructor vmspool.Constructor
+	// // Constructor provides the vmspool.Provider used to create instances for each test.
+	Constructor vmspool.Provider
 
 	// Timeout caps individual operations. Defaults to 30 s.
 	Timeout time.Duration
@@ -252,10 +252,31 @@ NewMockFactory returns an empty MockFactory.
 ### Methods
 
 ```go
+func (f *MockFactory) Delete(context.Context, time.Duration) ([]string, error)
+```
+Delete implements vmspool.Provider; the mock factory manages no external
+resources, so there is nothing to reclaim.
+
+
+```go
+func (f *MockFactory) Get(ctx context.Context, name string) (vmspool.VMDetail, error)
+```
+Get implements vmspool.Provider, returning details for a previously-created
+mock by name, reflecting its current state.
+
+
+```go
 func (f *MockFactory) Inject(m *Mock)
 ```
 Inject queues m to be returned by the next New call instead of a freshly
 allocated Mock. Useful for injecting pre-configured error states.
+
+
+```go
+func (f *MockFactory) List(ctx context.Context) ([]vmspool.VMInfo, error)
+```
+List implements vmspool.Provider, reporting the mocks created so far with
+their current state.
 
 
 ```go
@@ -265,7 +286,7 @@ Mocks returns a snapshot of all Mock instances produced so far.
 
 
 ```go
-func (f *MockFactory) New() vms.Instance
+func (f *MockFactory) New(context.Context) vms.Instance
 ```
 
 
@@ -274,8 +295,8 @@ func (f *MockFactory) New() vms.Instance
 ### Type PoolTestConfig
 ```go
 type PoolTestConfig struct {
-	// Constructor creates new VM instances. Required.
-	Constructor vmspool.Constructor
+	//  Constructor provides the vmspool.Provider used by the pool tests. Required.
+	Constructor vmspool.Provider
 
 	// PoolSize is the default pool size used across all tests. Defaults to 2.
 	// Some subtests intentionally use a size-1 pool for deterministic behavior.

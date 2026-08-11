@@ -47,6 +47,15 @@ func (c CloneInfo) String() string
 
 
 
+### Type Constructor
+```go
+type Constructor = func(ctx context.Context) vms.Instance
+```
+Constructor creates a new, uninitialized Docker VM instance. Each call must
+return a distinct vms.Instance (typically via New with a unique name).
+ctx governs any work done to construct the instance.
+
+
 ### Type ContainerInfo
 ```go
 type ContainerInfo struct {
@@ -229,6 +238,83 @@ func WithPollingInterval(interval time.Duration) Option
 ```
 WithPollingInterval sets the interval used when polling for state
 transitions.
+
+
+
+
+### Type Provider
+```go
+type Provider struct {
+	// contains filtered or unexported fields
+}
+```
+Provider is a vmspool.Provider backed by Docker containers. It delegates VM
+construction to a caller-supplied Constructor and implements List, Get and
+Delete directly via the docker CLI, so using Docker with a vmspool.Pool only
+requires supplying the construction function.
+
+### Functions
+
+```go
+func NewProvider(constructor Constructor, opts ...ProviderOption) *Provider
+```
+NewProvider returns a Provider that constructs containers with constructor
+and implements the remaining vmspool.Provider methods via the docker CLI.
+
+
+
+### Methods
+
+```go
+func (p *Provider) Delete(ctx context.Context, stopTimeout time.Duration) ([]string, error)
+```
+Delete implements vmspool.Provider, stopping (if running) and removing
+every container belonging to this pool. Deletion continues past individual
+failures.
+
+
+```go
+func (p *Provider) Get(ctx context.Context, vmName string) (vmspool.VMDetail, error)
+```
+Get implements vmspool.Provider, returning the resources allocated to a
+single container via "docker inspect --size".
+
+
+```go
+func (p *Provider) List(ctx context.Context) ([]vmspool.VMInfo, error)
+```
+List implements vmspool.Provider.
+
+
+```go
+func (p *Provider) New(ctx context.Context) vms.Instance
+```
+New implements vmspool.Provider.
+
+
+
+
+### Type ProviderOption
+```go
+type ProviderOption func(*Provider)
+```
+ProviderOption configures a Provider.
+
+### Functions
+
+```go
+func WithNamePrefix(prefix string) ProviderOption
+```
+WithNamePrefix scopes List and Delete to containers whose names start
+with prefix. Without it a Provider manages every container on the daemon,
+which is rarely desirable when the host runs unrelated containers.
+
+
+```go
+func WithPoolName(name string) ProviderOption
+```
+WithPoolName sets the pool name reported in VMInfo.Pool for the Provider's
+VMs.
 
 
 
