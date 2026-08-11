@@ -33,7 +33,7 @@ type VMInfo struct {
 	Pool     string
 	State    string // backend-specific state string, e.g. "running", "stopped"
 	Running  bool
-	Accessed time.Time
+	Accessed time.Time // best-effort last activity time; may be creation time if last access is unavailable
 }
 
 // VMDetail extends VMInfo with the fuller, potentially more expensive per-VM

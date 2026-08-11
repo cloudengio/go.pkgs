@@ -262,25 +262,36 @@ func (f *MockFactory) New(context.Context) vms.Instance {
 	return m
 }
 
-// List implements vmspool.Provider, reporting the mocks created so far.
-func (f *MockFactory) List(context.Context) ([]vmspool.VMInfo, error) {
+// mockVMInfo builds a VMInfo reflecting the mock's current state.
+func mockVMInfo(ctx context.Context, m *Mock) vmspool.VMInfo {
+	st := m.State(ctx)
+	return vmspool.VMInfo{
+		Name:    m.ID(),
+		State:   st.String(),
+		Running: st == vms.StateRunning,
+	}
+}
+
+// List implements vmspool.Provider, reporting the mocks created so far with
+// their current state.
+func (f *MockFactory) List(ctx context.Context) ([]vmspool.VMInfo, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]vmspool.VMInfo, 0, len(f.mocks))
 	for _, m := range f.mocks {
-		out = append(out, vmspool.VMInfo{Name: m.ID(), Running: true})
+		out = append(out, mockVMInfo(ctx, m))
 	}
 	return out, nil
 }
 
 // Get implements vmspool.Provider, returning details for a previously-created
-// mock by name.
-func (f *MockFactory) Get(_ context.Context, name string) (vmspool.VMDetail, error) {
+// mock by name, reflecting its current state.
+func (f *MockFactory) Get(ctx context.Context, name string) (vmspool.VMDetail, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, m := range f.mocks {
 		if m.ID() == name {
-			return vmspool.VMDetail{VMInfo: vmspool.VMInfo{Name: name, Running: true}}, nil
+			return vmspool.VMDetail{VMInfo: mockVMInfo(ctx, m)}, nil
 		}
 	}
 	return vmspool.VMDetail{}, fmt.Errorf("no such vm: %s", name)

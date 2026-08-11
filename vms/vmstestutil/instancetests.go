@@ -20,7 +20,7 @@ import (
 
 // InstanceTestConfig configures the test suite for an implementation of vms.Instance.
 type InstanceTestConfig struct {
-	// Constructor creates a new uninitialized vms.Instance for each test.
+	// // Constructor provides the vmspool.Provider used to create instances for each test.
 	Constructor vmspool.Provider
 
 	// Timeout caps individual operations. Defaults to 30 s.

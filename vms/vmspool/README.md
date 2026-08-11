@@ -53,16 +53,6 @@ WithStatus or WithStdoutStderr, which require non-serialisable values
 
 
 
-### Type Constructor
-```go
-type Constructor interface {
-	New() vms.Instance
-}
-```
-Constructor is an interface used to create new, uninitialized VM instances.
-Each call must return a distinct vms.Instance.
-
-
 ### Type Event
 ```go
 type Event struct {
@@ -234,9 +224,9 @@ Pool manages a fixed-size set of suspended virtual machine instances.
 ### Functions
 
 ```go
-func New(constructor Constructor, opts ...Option) *Pool
+func New(provider Provider, opts ...Option) *Pool
 ```
-New returns a Pool that will maintain size suspended VMs using constructor.
+New returns a Pool that will maintain size suspended VMs using provider.
 Call Start to fill the pool before calling Acquire.
 
 
@@ -279,6 +269,30 @@ called more than once. After Start returns, the pool is ready to accept
 Acquire calls.
 
 
+
+
+### Type Provider
+```go
+type Provider interface {
+	// New returns a new, uninitialized VM instance. Each call must return a
+	// distinct vms.Instance. ctx governs any work done to construct the
+	// instance.
+	New(ctx context.Context) vms.Instance
+	// List returns lightweight summaries of the VMs currently present for this
+	// provider's pool.
+	List(ctx context.Context) ([]VMInfo, error)
+	// Get returns the full details of a single VM by name.
+	Get(ctx context.Context, vmName string) (VMDetail, error)
+	// Delete stops (if running) and deletes every VM belonging to this
+	// provider's pool, returning the names deleted. It continues past individual
+	// failures.
+	Delete(ctx context.Context, stopTimeout time.Duration) ([]string, error)
+}
+```
+Provider creates and manages the VMs for a Pool. In addition to constructing
+new instances it can enumerate, inspect and delete the VMs it has created,
+which pools and cleanup tooling use for status reporting and reclaiming
+orphaned VMs.
 
 
 ### Type StagingBehaviour
@@ -386,6 +400,34 @@ must still call Delete when done with it, which will not request a second
 replacement.
 
 
+
+
+### Type VMDetail
+```go
+type VMDetail struct {
+	VMInfo
+	DiskGiB  int // size of the VM's disk in GiB
+	NumCores int // number of CPU cores allocated to the VM
+	MemGiB   int // amount of RAM allocated to the VM in GiB
+}
+```
+VMDetail extends VMInfo with the fuller, potentially more expensive per-VM
+details returned by Provider.Get, such as the resources allocated to the VM.
+
+
+### Type VMInfo
+```go
+type VMInfo struct {
+	Name     string
+	Pool     string
+	State    string // backend-specific state string, e.g. "running", "stopped"
+	Running  bool
+	Accessed time.Time // best-effort last activity time; may be creation time if last access is unavailable
+}
+```
+VMInfo is a backend-neutral summary of a VM managed by a Provider.
+It holds only the lightweight fields that are cheap to obtain in bulk via
+Provider.List.
 
 
 
