@@ -20,21 +20,33 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-// dockerAPIConstructor implements vmspool.Constructor for API-backed containers.
+// dockerAPIConstructor implements vmspool.Provider for API-backed containers.
 type dockerAPIConstructor struct {
 	image   string
 	counter atomic.Int64
 }
 
-func (c *dockerAPIConstructor) New() vms.Instance {
+func (c *dockerAPIConstructor) New(ctx context.Context) vms.Instance {
 	n := c.counter.Add(1)
 	name := fmt.Sprintf("vmstest-%d-%d", time.Now().Unix()%100000, n)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})).With("test", name, "image", c.image)
-	inst, err := dockerapi.New(context.Background(), c.image, name, dockerapi.WithLogger(logger))
+	inst, err := dockerapi.New(ctx, c.image, name, dockerapi.WithLogger(logger))
 	if err != nil {
 		panic(fmt.Sprintf("dockerapi.New: %v", err))
 	}
 	return inst
+}
+
+// List, Get and Delete satisfy vmspool.Provider. The pool/instance test harness
+// does not exercise them, so they are minimal stubs.
+func (c *dockerAPIConstructor) List(context.Context) ([]vmspool.VMInfo, error) { return nil, nil }
+
+func (c *dockerAPIConstructor) Get(_ context.Context, name string) (vmspool.VMDetail, error) {
+	return vmspool.VMDetail{VMInfo: vmspool.VMInfo{Name: name}}, nil
+}
+
+func (c *dockerAPIConstructor) Delete(context.Context, time.Duration) ([]string, error) {
+	return nil, nil
 }
 
 func newDockerAPIConstructor() *dockerAPIConstructor {
