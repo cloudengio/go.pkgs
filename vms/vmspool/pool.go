@@ -52,8 +52,8 @@ type VMDetail struct {
 type Provider interface {
 	// New returns a new, uninitialized VM instance. Each call must return a
 	// distinct vms.Instance. ctx governs any work done to construct the
-	// instance.
-	New(ctx context.Context) vms.Instance
+	// instance. It returns an error if the instance could not be created.
+	New(ctx context.Context) (vms.Instance, error)
 	// List returns lightweight summaries of the VMs currently present for this
 	// provider's pool.
 	List(ctx context.Context) ([]VMInfo, error)
@@ -470,7 +470,10 @@ func (p *Pool) cleanupVMOnError(inst *vmsInstance, timeout time.Duration) {
 // ready channel. Returns an error if any step fails or the context is done.
 // Any partially-created instance is cleaned up before returning an error.
 func (p *Pool) createVM(ctx context.Context) (*vmsInstance, error) {
-	inst := p.provider.New(ctx)
+	inst, err := p.provider.New(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("vmspool: provider failed to create instance: %w", err)
+	}
 	if inst == nil {
 		return nil, fmt.Errorf("vmspool: provider returned nil instance")
 	}

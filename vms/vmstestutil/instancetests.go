@@ -52,7 +52,10 @@ func TestInstanceCloneStartStopDelete(t cicd.TestingT, cfg InstanceTestConfig) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New(ctx)
+	inst, newErr := cfg.Constructor.New(ctx)
+	if newErr != nil {
+		t.Fatalf("New: %v", newErr)
+	}
 	if got := inst.State(ctx); got != vms.StateInitial {
 		t.Errorf("expected state %s, got %s", vms.StateInitial, got)
 	}
@@ -102,7 +105,10 @@ func TestInstanceSuspendResume(t cicd.TestingT, cfg InstanceTestConfig) { //cicd
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New(ctx)
+	inst, newErr := cfg.Constructor.New(ctx)
+	if newErr != nil {
+		t.Fatalf("New: %v", newErr)
+	}
 	t.Cleanup(func() {
 		_ = vms.CleanupVM(context.Background(), inst, cfg.timeout())
 	})
@@ -142,7 +148,10 @@ func TestInstanceExec(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New(ctx)
+	inst, newErr := cfg.Constructor.New(ctx)
+	if newErr != nil {
+		t.Fatalf("New: %v", newErr)
+	}
 	t.Cleanup(func() {
 		_ = vms.CleanupVM(context.Background(), inst, cfg.timeout())
 	})
@@ -171,7 +180,10 @@ func TestInstanceDeleteFromSuspended(t cicd.TestingT, cfg InstanceTestConfig) { 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New(ctx)
+	inst, newErr := cfg.Constructor.New(ctx)
+	if newErr != nil {
+		t.Fatalf("New: %v", newErr)
+	}
 	t.Cleanup(func() {
 		_ = vms.CleanupVM(context.Background(), inst, cfg.timeout())
 	})
@@ -199,7 +211,10 @@ func TestInstanceDeleteFromSuspended(t cicd.TestingT, cfg InstanceTestConfig) { 
 func TestInstanceStateErrors(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:astest
 	t.Helper()
 
-	inst := cfg.Constructor.New(context.Background())
+	inst, newErr := cfg.Constructor.New(context.Background())
+	if newErr != nil {
+		t.Fatalf("New: %v", newErr)
+	}
 	runErr, stopErr := inst.Stop(context.Background(), cfg.timeout())
 	if runErr == nil && stopErr == nil {
 		t.Fatalf("instance should not be running at start of test")
@@ -242,7 +257,10 @@ func TestInstanceLifecycle(t cicd.TestingT, cfg InstanceTestConfig) { //cicd:ast
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
 
-	inst := cfg.Constructor.New(ctx)
+	inst, newErr := cfg.Constructor.New(ctx)
+	if newErr != nil {
+		t.Fatalf("New: %v", newErr)
+	}
 
 	requireState := func(ctx context.Context, inst vms.Instance, msg string, final vms.State, intermediate ...vms.State) {
 		t.Helper()

@@ -26,15 +26,11 @@ type dockerAPIConstructor struct {
 	counter atomic.Int64
 }
 
-func (c *dockerAPIConstructor) New(ctx context.Context) vms.Instance {
+func (c *dockerAPIConstructor) New(ctx context.Context) (vms.Instance, error) {
 	n := c.counter.Add(1)
 	name := fmt.Sprintf("vmstest-%d-%d", time.Now().Unix()%100000, n)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})).With("test", name, "image", c.image)
-	inst, err := dockerapi.New(ctx, c.image, name, dockerapi.WithLogger(logger))
-	if err != nil {
-		panic(fmt.Sprintf("dockerapi.New: %v", err))
-	}
-	return inst
+	return dockerapi.New(ctx, c.image, name, dockerapi.WithLogger(logger))
 }
 
 // List, Get and Delete satisfy vmspool.Provider. The pool/instance test harness
