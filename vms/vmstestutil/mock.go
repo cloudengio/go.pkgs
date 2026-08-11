@@ -248,7 +248,7 @@ func (f *MockFactory) Inject(m *Mock) {
 	f.pending = append(f.pending, m)
 }
 
-func (f *MockFactory) New(context.Context) vms.Instance {
+func (f *MockFactory) New(context.Context) (vms.Instance, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var m *Mock
@@ -259,7 +259,7 @@ func (f *MockFactory) New(context.Context) vms.Instance {
 	}
 	m.SetSuspendable(f.suspendable)
 	f.mocks = append(f.mocks, m)
-	return m
+	return m, nil
 }
 
 // mockVMInfo builds a VMInfo reflecting the mock's current state.

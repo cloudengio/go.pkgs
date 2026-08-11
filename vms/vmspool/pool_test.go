@@ -792,10 +792,10 @@ type nilConstructor struct {
 	factory *vmstestutil.MockFactory
 }
 
-func (c *nilConstructor) New(ctx context.Context) vms.Instance {
+func (c *nilConstructor) New(ctx context.Context) (vms.Instance, error) {
 	if !c.hitNil {
 		c.hitNil = true
-		return nil
+		return nil, nil
 	}
 	return c.factory.New(ctx)
 }

@@ -22,8 +22,9 @@ import (
 
 // Constructor creates a new, uninitialized Docker VM instance. Each call must
 // return a distinct vms.Instance (typically via New with a unique name). ctx
-// governs any work done to construct the instance.
-type Constructor = func(ctx context.Context) vms.Instance
+// governs any work done to construct the instance. It returns an error if the
+// instance could not be created.
+type Constructor = func(ctx context.Context) (vms.Instance, error)
 
 // Provider is a vmspool.Provider backed by Docker containers. It delegates VM
 // construction to a caller-supplied Constructor and implements List, Get and
@@ -67,7 +68,7 @@ func NewProvider(constructor Constructor, opts ...ProviderOption) *Provider {
 }
 
 // New implements vmspool.Provider.
-func (p *Provider) New(ctx context.Context) vms.Instance { return p.constructor(ctx) }
+func (p *Provider) New(ctx context.Context) (vms.Instance, error) { return p.constructor(ctx) }
 
 // psEntry is one line of "docker ps --format {{json .}}".
 type psEntry struct {

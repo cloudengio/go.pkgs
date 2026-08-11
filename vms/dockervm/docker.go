@@ -311,13 +311,15 @@ func (inst *Instance) Delete(ctx context.Context) error {
 	stderrBuf := executil.NewTailWriter(1024)
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stderr = stderrBuf
-	if err := cmd.Run(); err != nil {
-		stderr := string(stderrBuf.Bytes())
-		inst.logger.Info("docker command failed", "args", args, "stderr", stderr, "error", err)
-		if isContainerNotFound(stderr) {
+	err := cmd.Run()
+	stderr := string(stderrBuf.Bytes())
+	if err != nil || isContainerNotFound(stderr) {
+		if err == nil {
 			inst.setState(vms.StateDeleted)
-			return nil
+			err = fmt.Errorf("container not found")
+			return convertError(args, stderr, err)
 		}
+		inst.logger.Info("docker command failed", "args", args, "stderr", stderr, "error", err)
 		inst.setState(prev)
 		return convertError(args, stderr, err)
 	}

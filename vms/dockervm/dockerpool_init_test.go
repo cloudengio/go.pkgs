@@ -30,10 +30,10 @@ const dockerTestPrefix = "vmstest-"
 
 func newDockerConstructor() *dockerConstructor {
 	var counter atomic.Int64
-	construct := func(ctx context.Context) vms.Instance {
+	construct := func(ctx context.Context) (vms.Instance, error) {
 		name := fmt.Sprintf("%s%d-%d", dockerTestPrefix, time.Now().Unix()%100000, counter.Add(1))
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})).With("test", name, "image", testImage)
-		return dockervm.New(ctx, testImage, name, dockervm.WithLogger(logger))
+		return dockervm.New(ctx, testImage, name, dockervm.WithLogger(logger)), nil
 	}
 	return &dockerConstructor{dockervm.NewProvider(construct, dockervm.WithNamePrefix(dockerTestPrefix), dockervm.WithPoolName("vmstest"))}
 }
