@@ -1,9 +1,7 @@
-cloudeng.io/algo v0.0.0-20260806150854-f21c21e021b8 h1:RzD+SeWH1c+9YtIE6BksyG7lWCjC2VD8z8uRB/Yca6k=
-cloudeng.io/algo v0.0.0-20260806150854-f21c21e021b8/go.mod h1:VXfkJ15IS4nXNdqqndiOceVAY49AXmQVBsaz/MIyZw4=
+cloudeng.io/algo v0.0.0-20260807191443-11b7f4ecaaa0 h1:Pjv7AQGFrTCGU28C5WGHWetBkRKTN/NQgIK+vJ6DeKA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
-cloudeng.io/sys v0.0.0-20260806150854-f21c21e021b8 h1:Lj+zmdlAvd5HBCKOHmNgadkrdakuLxqW1D8fPav+Ew4=
-cloudeng.io/sys v0.0.0-20260806150854-f21c21e021b8/go.mod h1:743L2810r+Sw0FLR4r5G8a3UsEWniPRFYovEvMNpRBE=
+cloudeng.io/sys v0.0.0-20260807191443-11b7f4ecaaa0 h1:ktIKF8j1fgkjwJb1npJZ1B7jHN717DUnt3WL6vBntR8=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e h1:88FLgbskFkcsZSgh3jncYqYBg1J2eLHGzmdp74APrCQ=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e/go.mod h1:tUOArMXLISe8OY+lHimWwdHMev5N7MwQGczQgTYZb3Y=
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEKWjV8V+WSxDXJ4NFATAsZjh8iIbsQIg=
@@ -32,8 +30,7 @@ github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.36 h1:jbGY4CXLzZElOXgGsexlC3Hi+3Y
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.36/go.mod h1:uBu/9aKsS/UQGc72RAt3y54kjgYQxmhut8ZD2dXCDNE=
 github.com/aws/aws-sdk-go-v2/service/dsql v1.16.5 h1:kUTtPDRJksDOD0XDnNdmdbsUxbU8I8CKed9y/kpdFs4=
 github.com/aws/aws-sdk-go-v2/service/dsql v1.16.5/go.mod h1:LfmIePd6EawVCVWFQfid8aIfvL7/7elqCz13lJD0cLo=
-github.com/aws/aws-sdk-go-v2/service/ec2 v1.320.0 h1:/tI2/yVgVh/IxJJVvb4Csfec8FsHmi49By8iLHmTEhc=
-github.com/aws/aws-sdk-go-v2/service/ec2 v1.320.0/go.mod h1:Gi5mEHpABbT34fHwafgyxqrIte9oHUEHscusPBYEdHA=
+github.com/aws/aws-sdk-go-v2/service/ec2 v1.321.0 h1:XxzwotCCRk2Un1OWcJujk4vAC2OZkGh5l816W1w+Fd8=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.15 h1:JJLBQxwY+AFwuPAi5ivGc1ChnTdUt4cXMv7e76m2c/Y=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.15/go.mod h1:lQknBIe78MVL0cQOQDlag8KGflMbMEVFx9mB6O8ENvk=
 github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.28 h1:Q1TF1J9jVD+vFo0LzNnmNdQ9EAt52TS+MQlq9Ir+Yxo=
@@ -66,8 +63,7 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.45.4 h1:w/AryDYMjSUANSQ2uoZxJovUsMTw
 github.com/aws/aws-sdk-go-v2/service/sts v1.45.4/go.mod h1:WeBiAa67azG7Su9Vf+ChGDBLiAozJCXzdjXiPBUwtbc=
 github.com/aws/session-manager-plugin v0.0.0-20260615221425-930a08e65d3a h1:KT3wpMH8QZNY2JyTKdEWXQxfPpEzZi27J7ZUlVqjL9w=
 github.com/aws/session-manager-plugin v0.0.0-20260615221425-930a08e65d3a/go.mod h1:7n17tunRPUsniNBu5Ja9C7WwJWTdOzaLqr/H0Ns3uuI=
-github.com/aws/smithy-go v1.27.6 h1:0zjT8jgK3jbrTT7JJ3EE6JsMhX8JTrZ+f1sEndYDXrA=
-github.com/aws/smithy-go v1.27.6/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
+github.com/aws/smithy-go v1.27.7 h1:Zgj5z4LfcDYoQIVk+n/yGdTkP/2y6ZT5vYxe0fp7bqE=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

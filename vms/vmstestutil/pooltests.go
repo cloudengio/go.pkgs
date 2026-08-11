@@ -18,7 +18,7 @@ import (
 // PoolTestConfig configures the pool integration test suite run by RunPoolTests.
 type PoolTestConfig struct {
 	// Constructor creates new VM instances. Required.
-	Constructor vmspool.Constructor
+	Constructor vmspool.Provider
 
 	// PoolSize is the default pool size used across all tests. Defaults to 2.
 	// Some subtests intentionally use a size-1 pool for deterministic behavior.

@@ -15,13 +15,13 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.35
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.34
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.35
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.320.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.321.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.44.4
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.66.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.4
-	github.com/aws/smithy-go v1.27.6
+	github.com/aws/smithy-go v1.27.7
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/orlangure/gnomock v0.32.0
 )
@@ -44,10 +44,10 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260806150854-f21c21e021b8 // indirect
-	cloudeng.io/os v0.0.0-20260804222138-e9281ed260ba // indirect
-	cloudeng.io/sync v0.0.11
-	cloudeng.io/sys v0.0.0-20260806150854-f21c21e021b8 // indirect
+	cloudeng.io/algo v0.0.0-20260807191443-11b7f4ecaaa0 // indirect
+	cloudeng.io/os v0.0.0-20260807191443-11b7f4ecaaa0 // indirect
+	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
+	cloudeng.io/sys v0.0.0-20260807191443-11b7f4ecaaa0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.35 // indirect

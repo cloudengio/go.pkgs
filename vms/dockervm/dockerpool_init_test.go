@@ -20,24 +20,22 @@ import (
 	"cloudeng.io/vms/vmstestutil"
 )
 
-// dockerConstructor implements vmspool.Constructor for Docker-backed containers.
-// Each New() call returns a distinct Instance with a unique name derived from
-// a timestamp and an atomic counter so concurrent pool replenishment never
-// reuses a name.
+// dockerConstructor adapts the real dockervm.Provider to the shared pool and
+// instance test harness, exercising its New/List/Get/Delete implementation.
 type dockerConstructor struct {
-	image   string
-	counter atomic.Int64
+	*dockervm.Provider
 }
 
-func (c *dockerConstructor) New() vms.Instance {
-	n := c.counter.Add(1)
-	name := fmt.Sprintf("vmstest-%d-%d", time.Now().Unix()%100000, n)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})).With("test", name, "image", c.image)
-	return dockervm.New(context.Background(), c.image, name, dockervm.WithLogger(logger))
-}
+const dockerTestPrefix = "vmstest-"
 
 func newDockerConstructor() *dockerConstructor {
-	return &dockerConstructor{image: testImage}
+	var counter atomic.Int64
+	construct := func(ctx context.Context) vms.Instance {
+		name := fmt.Sprintf("%s%d-%d", dockerTestPrefix, time.Now().Unix()%100000, counter.Add(1))
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})).With("test", name, "image", testImage)
+		return dockervm.New(ctx, testImage, name, dockervm.WithLogger(logger))
+	}
+	return &dockerConstructor{dockervm.NewProvider(construct, dockervm.WithNamePrefix(dockerTestPrefix), dockervm.WithPoolName("vmstest"))}
 }
 
 func rwc(_ string) io.Writer {
