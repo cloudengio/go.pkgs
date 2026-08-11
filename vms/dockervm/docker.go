@@ -315,7 +315,9 @@ func (inst *Instance) Delete(ctx context.Context) error {
 	stderr := string(stderrBuf.Bytes())
 	if err != nil || isContainerNotFound(stderr) {
 		if err == nil {
+			inst.setState(vms.StateDeleted)
 			err = fmt.Errorf("container not found")
+			return convertError(args, stderr, err)
 		}
 		inst.logger.Info("docker command failed", "args", args, "stderr", stderr, "error", err)
 		inst.setState(prev)
