@@ -383,6 +383,136 @@ func TestExtraWithPrivateFields(t *testing.T) {
 		t.Errorf("key1 extra: got %v, want %v", got, want)
 	}
 
+	// Test Extra marshaling/unmarshaling roundtrip across representations
+	// 1. extraYAML -> MarshalJSON -> UnmarshalJSON -> verify extra and token
+	kiYAML := `key_id: yaml_extra_key
+token: "secret_val_1"
+user: yaml_user
+extra:
+  scope: admin
+`
+	var kYAML keys.Info
+	unmarshalYAML(t, []byte(kiYAML), &kYAML)
+	if got, want := string(kYAML.Token().Value()), "secret_val_1"; got != want {
+		t.Errorf("token: got %v, want %v", got, want)
+	}
+	jsonBuf := marshalJSON(t, &kYAML)
+	var kFromYAMLtoHex keys.Info
+	unmarshalJSON(t, jsonBuf, &kFromYAMLtoHex)
+	if got, want := string(kFromYAMLtoHex.Token().Value()), "secret_val_1"; got != want {
+		t.Errorf("roundtrip token: got %v, want %v", got, want)
+	}
+	verifyExtra(t, kFromYAMLtoHex, extraType{Scope: "admin"})
+
+	// 2. extraJSON -> MarshalYAML -> UnmarshalYAML -> verify extra and token
+	kiJSON := `{"key_id": "json_extra_key", "token": "secret_val_2", "user": "json_user", "extra": {"scope": "operator"}}`
+	var kJSON keys.Info
+	unmarshalJSON(t, []byte(kiJSON), &kJSON)
+	if got, want := string(kJSON.Token().Value()), "secret_val_2"; got != want {
+		t.Errorf("token: got %v, want %v", got, want)
+	}
+	yamlBuf := marshalYAML(t, &kJSON)
+	var kFromJSONtoYAML keys.Info
+	unmarshalYAML(t, yamlBuf, &kFromJSONtoYAML)
+	if got, want := string(kFromJSONtoYAML.Token().Value()), "secret_val_2"; got != want {
+		t.Errorf("roundtrip token: got %v, want %v", got, want)
+	}
+	verifyExtra(t, kFromJSONtoYAML, extraType{Scope: "operator"})
+
+	// 3. WithExtra (extraAny) -> MarshalYAML -> UnmarshalYAML
+	kWithExtra := keys.NewInfo("extra_any_key", "any_user", []byte("secret_val_3"))
+	kWithExtra.WithExtra(extraType{Scope: "custom"})
+	yamlBuf2 := marshalYAML(t, &kWithExtra)
+	var kFromAnyToYAML keys.Info
+	unmarshalYAML(t, yamlBuf2, &kFromAnyToYAML)
+	if got, want := string(kFromAnyToYAML.Token().Value()), "secret_val_3"; got != want {
+		t.Errorf("token: got %v, want %v", got, want)
+	}
+	verifyExtra(t, kFromAnyToYAML, extraType{Scope: "custom"})
+
+	// 4. WithExtra (extraAny) -> MarshalJSON -> UnmarshalJSON
+	jsonBuf2 := marshalJSON(t, &kWithExtra)
+	var kFromAnyToJSON keys.Info
+	unmarshalJSON(t, jsonBuf2, &kFromAnyToJSON)
+	if got, want := string(kFromAnyToJSON.Token().Value()), "secret_val_3"; got != want {
+		t.Errorf("token: got %v, want %v", got, want)
+	}
+	verifyExtra(t, kFromAnyToJSON, extraType{Scope: "custom"})
+}
+
+func TestTokenRedaction(t *testing.T) {
+	tok := keys.NewToken("idval", "user", []byte("abcdefghijk"))
+
+	// Test FirstN
+	testsFirstN := []struct {
+		keep int
+		want string
+	}{
+		{keep: 0, want: "***********"},
+		{keep: -1, want: "***********"},
+		{keep: 1, want: "a******"},
+		{keep: 3, want: "abc******"},
+		{keep: 6, want: "abcdef******"},
+		{keep: 7, want: "abcdef******"}, // capped at DefaultRedactionLimit (6)
+		{keep: 100, want: "abcdef******"},
+	}
+	for _, tc := range testsFirstN {
+		if got := tok.FirstN(tc.keep); got != tc.want {
+			t.Errorf("tok.FirstN(%d) = %q, want %q", tc.keep, got, tc.want)
+		}
+	}
+
+	// Test LastN
+	testsLastN := []struct {
+		keep int
+		want string
+	}{
+		{keep: 0, want: "***********"},
+		{keep: -1, want: "***********"},
+		{keep: 1, want: "******k"},
+		{keep: 3, want: "******ijk"},
+		{keep: 6, want: "******fghijk"},
+		{keep: 7, want: "******fghijk"}, // capped at DefaultRedactionLimit (6)
+		{keep: 100, want: "******fghijk"},
+	}
+	for _, tc := range testsLastN {
+		if got := tok.LastN(tc.keep); got != tc.want {
+			t.Errorf("tok.LastN(%d) = %q, want %q", tc.keep, got, tc.want)
+		}
+	}
+
+	// Short token tests (token length <= keep)
+	tokShort := keys.NewToken("short", "user", []byte("abc"))
+	if got, want := tokShort.FirstN(3), "***"; got != want {
+		t.Errorf("tokShort.FirstN(3) = %q, want %q", got, want)
+	}
+	if got, want := tokShort.FirstN(4), "***"; got != want {
+		t.Errorf("tokShort.FirstN(4) = %q, want %q", got, want)
+	}
+	if got, want := tokShort.LastN(3), "***"; got != want {
+		t.Errorf("tokShort.LastN(3) = %q, want %q", got, want)
+	}
+	if got, want := tokShort.LastN(4), "***"; got != want {
+		t.Errorf("tokShort.LastN(4) = %q, want %q", got, want)
+	}
+
+	// Token shorter than 6 characters with valid keep < len
+	tokMid := keys.NewToken("mid", "user", []byte("abcde"))
+	if got, want := tokMid.FirstN(2), "ab******"; got != want {
+		t.Errorf("tokMid.FirstN(2) = %q, want %q", got, want)
+	}
+	if got, want := tokMid.LastN(2), "******de"; got != want {
+		t.Errorf("tokMid.LastN(2) = %q, want %q", got, want)
+	}
+
+	// Empty token
+	tokEmpty := keys.NewToken("empty", "user", []byte(""))
+	if got, want := tokEmpty.FirstN(3), ""; got != want {
+		t.Errorf("tokEmpty.FirstN(3) = %q, want %q", got, want)
+	}
+	if got, want := tokEmpty.LastN(3), ""; got != want {
+		t.Errorf("tokEmpty.LastN(3) = %q, want %q", got, want)
+	}
 }
 
 func TestToken(t *testing.T) {
@@ -394,6 +524,7 @@ func TestToken(t *testing.T) {
 	if got, want := tok.String(), "idval[user]:****"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+
 	// Verify input was cleared
 	if string(val) == "secret" {
 		t.Errorf("input slice was not cleared")
@@ -445,6 +576,9 @@ func TestInfo(t *testing.T) {
 	if got, want := e["a"], "b"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+	if got, want := info.GetExtra().(map[string]string)["a"], "b"; got != want {
+		t.Errorf("GetExtra: got %v, want %v", got, want)
+	}
 
 	// Verify input was cleared
 	if string(val) == "secret" {
@@ -490,12 +624,40 @@ func TestKeySpecString(t *testing.T) {
 	if got, want := ks.String(), "id1[user1]"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
+
+	// ParseKeySpecValue tests
+	parsed := keys.ParseKeySpecValue("id1")
+	if got, want := parsed, (keys.KeySpec{ID: "id1"}); got != want {
+		t.Errorf("ParseKeySpecValue(id1) = %+v, want %+v", got, want)
+	}
+
+	parsedWithUser := keys.ParseKeySpecValue("id1[user1]")
+	if got, want := parsedWithUser, (keys.KeySpec{ID: "id1", User: "user1"}); got != want {
+		t.Errorf("ParseKeySpecValue(id1[user1]) = %+v, want %+v", got, want)
+	}
+
+	parsedMalformed := keys.ParseKeySpecValue("id1[user1")
+	if got, want := parsedMalformed, (keys.KeySpec{ID: "id1[user1"}); got != want {
+		t.Errorf("ParseKeySpecValue(id1[user1) = %+v, want %+v", got, want)
+	}
 }
 
 func TestInMemoryKeyStoreMethods(t *testing.T) {
 	ks := keys.NewInMemoryKeyStore()
 	ks.Add(keys.NewInfo("id1", "user1", []byte("t1")))
 	ks.Add(keys.NewInfo("id2", "user2", []byte("t2")))
+
+	// Keys
+	kiList := ks.Keys()
+	if got, want := len(kiList), 2; got != want {
+		t.Errorf("got %v keys, want %v", got, want)
+	}
+	if got, want := kiList[0].ID, "id1"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := kiList[1].ID, "id2"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 
 	// KeySpecs
 	specs := ks.KeySpecs()

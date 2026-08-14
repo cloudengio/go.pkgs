@@ -10,78 +10,62 @@ import (
 	"strings"
 )
 
-// Map represents a mapping of strings to values that implements flag.Value
-// and can be used for command line flag values. It must be appropriately
-// initialized with name, value pairs and a default value using its
-// Register and Default methods.
-type Map struct {
-	value  any
-	values map[string]any
+// EnumValues must be implemented by any type that is to be used with Enum.
+type EnumValues[T any] interface {
+	EnumValues() map[string]T
 }
 
-type ErrMap struct {
-	msg string
+// EnumType combines comparable underlying types with EnumSpec.
+type EnumType[T any] interface {
+	comparable
+	EnumValues[T]
 }
 
-// Error implements error.
-func (me *ErrMap) Error() string {
-	return me.msg
+// Enum is a generic flag.Value wrapper that supports enumerated types.
+type Enum[T EnumType[T]] struct {
+	Value T
 }
 
-// Is implements errors.Is.
-func (me ErrMap) Is(target error) bool {
-	_, ok := target.(*ErrMap)
-	return ok
-}
-
-// Set implements flag.Value.
-func (ef *Map) Set(v string) error {
-	if ef.values == nil {
-		return &ErrMap{msg: "no values have been registered"}
+// String implements flag.Value
+func (e Enum[T]) String() string {
+	opts := e.Value.EnumValues()
+	for str, val := range opts {
+		if val == e.Value {
+			return str
+		}
 	}
-	tmp, ok := ef.values[v]
+	return fmt.Sprintf("%v", e.Value)
+}
+
+// AllowedValues returns a sorted, comma-separated list of all valid string
+// representations for this Enum.
+func (e Enum[T]) AllowedValues() string {
+	opts := e.Value.EnumValues()
+	vals := make([]string, 0, len(opts))
+	for k := range opts {
+		vals = append(vals, k)
+	}
+	sort.Strings(vals)
+	return strings.Join(vals, ", ")
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (e Enum[T]) MarshalText() ([]byte, error) {
+	return []byte(e.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (e *Enum[T]) UnmarshalText(text []byte) error {
+	return e.Set(string(text))
+}
+
+// Set implements flag.Value and returns available options on invalid input.
+func (e *Enum[T]) Set(val string) error {
+	opts := e.Value.EnumValues()
+	parsed, ok := opts[val]
 	if !ok {
-		vals := make([]string, 0, len(ef.values))
-		for k := range ef.values {
-			vals = append(vals, k)
-		}
-		sort.Strings(vals)
-		return &ErrMap{msg: fmt.Sprintf("%v not one of %v", v, strings.Join(vals, ", "))}
+		return fmt.Errorf("invalid value %q (must be one of: %s)", val, e.AllowedValues())
 	}
-	ef.value = tmp
+	e.Value = parsed
 	return nil
-}
-
-// String implements flag.Value.
-func (ef *Map) String() string {
-	for k, v := range ef.values {
-		if v == ef.value {
-			return k
-		}
-	}
-	if ef.value == nil {
-		return ""
-	}
-	return fmt.Sprintf("%v", ef.value)
-}
-
-// Value implements flag.Getter.
-func (ef *Map) Get() any {
-	return ef.value
-}
-
-func (ef Map) Register(name string, val any) Map {
-	if ef.values == nil {
-		ef.values = map[string]any{}
-	}
-	ef.values[name] = val
-	return ef
-}
-
-func (ef Map) Default(val any) Map {
-	if ef.values == nil {
-		ef.values = map[string]any{}
-	}
-	ef.value = val
-	return ef
 }

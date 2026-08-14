@@ -70,6 +70,24 @@ func (t Token) String() string {
 	return t.KeySpec.String() + ":****"
 }
 
+const DefaultRedactionLimit = 6
+
+// LastN returns a string representation of the token value with all but the
+// last N characters redacted, N is capped at DefaultRedactionLimit.
+// If the token value is shorter than N characters then the entire value is redacted.
+func (t Token) LastN(keep int) string {
+	keep = min(keep, DefaultRedactionLimit)
+	return RedactStringTail(string(t.token), keep)
+}
+
+// FirstN returns a string representation of the token value with all but the
+// first N characters redacted, N is capped at DefaultRedactionLimit.
+// If the token value is shorter than N characters then the entire value is redacted.
+func (t Token) FirstN(keep int) string {
+	keep = min(keep, DefaultRedactionLimit)
+	return RedactStringHead(string(t.token), keep)
+}
+
 // NewToken creates a new Token instance, cloning the provided value
 // and zeroing the input slice.
 func NewToken(id, user string, value []byte) Token {

@@ -154,6 +154,18 @@ mapping node.
 
 
 
+### Type Enum
+```go
+type Enum[T flags.EnumType[T]] struct {
+	flags.Enum[T]
+}
+```
+Enum wraps flags.Enum for use in YAML-unmarshaled configuration structs.
+It inherits Set, String, AllowedValues, MarshalText, and UnmarshalText
+from the embedded flags.Enum, which gopkg.in/yaml.v3 uses automatically for
+scalar string values.
+
+
 ### Type FlexTime
 ```go
 type FlexTime time.Time

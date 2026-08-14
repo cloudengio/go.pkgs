@@ -11,6 +11,12 @@ storing and retrieving keys, as well as context utilities for passing key
 stores across API boundaries.
 
 ## Constants
+### DefaultRedactionLimit
+```go
+DefaultRedactionLimit = 6
+
+```
+
 ### DefaultRefreshInterval
 ```go
 // DefaultRefreshInterval is the default interval at which the
@@ -57,6 +63,15 @@ InMemoryKeyStore.
 func ContextWithoutKeyStore(ctx context.Context) context.Context
 ```
 ContextWithoutKeyStore returns a new context without an InMemoryKeyStore.
+
+### Func IsStdoutPiped
+```go
+func IsStdoutPiped() bool
+```
+IsStdoutPiped returns true if stdout is piped or redirected, false if it
+is a terminal. Use it to determine whether to output sensitive information
+to stdout, generally key values, which should not be printed to a terminal,
+should only ever be sent to a pipe or redirected to a file.
 
 ### Func RedactBytesHead
 ```go
@@ -105,6 +120,14 @@ func RedactStringTail(s string, keep int) string
 RedactStringTail returns a redacted copy of s that hides everything except
 the last keep bytes, which are shown as a suffix after "******". If keep is
 zero or >= len(s), all characters are replaced with "*".
+
+### Func SafeWriteKeyInfoToStdout
+```go
+func SafeWriteKeyInfoToStdout(ctx context.Context, ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error
+```
+SafeWriteKeyInfoToStdout writes the provided key info to stdout in YAML
+format if stdout is piped or redirected. If stdout is a terminal, it writes
+a redacted key.
 
 
 
@@ -160,6 +183,11 @@ indicating whether the key was found.
 func (ims *InMemoryKeyStore) KeySpecs() []KeySpec
 ```
 KeySpecs returns the owners of keys in the store, sorted by ID and User.
+
+
+```go
+func (ims *InMemoryKeyStore) Keys() []Info
+```
 
 
 ```go
@@ -460,6 +488,22 @@ the context.
 func (t Token) Clear()
 ```
 Clear zeros the token value.
+
+
+```go
+func (t Token) FirstN(keep int) string
+```
+FirstN returns a string representation of the token value with all but the
+first N characters redacted, N is capped at DefaultRedactionLimit. If the
+token value is shorter than N characters then the entire value is redacted.
+
+
+```go
+func (t Token) LastN(keep int) string
+```
+LastN returns a string representation of the token value with all but the
+last N characters redacted, N is capped at DefaultRedactionLimit. If the
+token value is shorter than N characters then the entire value is redacted.
 
 
 ```go

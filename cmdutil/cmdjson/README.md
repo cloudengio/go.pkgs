@@ -6,6 +6,18 @@ import cloudeng.io/cmdutil/cmdjson
 
 
 ## Types
+### Type Enum
+```go
+type Enum[T flags.EnumType[T]] struct {
+	flags.Enum[T]
+}
+```
+Enum wraps flags.Enum for use in JSON-unmarshaled configuration structs.
+It inherits Set, String, AllowedValues, MarshalText, and UnmarshalText
+from the embedded flags.Enum, which encoding/json uses automatically for
+string-valued JSON fields.
+
+
 ### Type FlexTime
 ```go
 type FlexTime time.Time

@@ -45,13 +45,13 @@ func TestFS(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "keystore")
 
-	newfs := func(args ...string) *plugins.FS {
+	newfs := func(writable bool, args ...string) *plugins.FS {
 		t.Helper()
-		return plugins.NewFS(pluginPath, nil, args...)
+		return plugins.NewFS(pluginPath, writable, nil, args...)
 	}
 
 	t.Run("write-and-read", func(t *testing.T) {
-		fs := newfs("--tempfile="+tmpFile, "--keyname=my-secret-key")
+		fs := newfs(true, "--tempfile="+tmpFile, "--keyname=my-secret-key")
 		key := "my-secret-key"
 		secret := []byte("my-super-secret-value")
 
@@ -72,7 +72,7 @@ func TestFS(t *testing.T) {
 	})
 
 	t.Run("read-not-found", func(t *testing.T) {
-		fs := newfs("--tempfile="+tmpFile, "--keyname=my-secret-key")
+		fs := newfs(false, "--tempfile="+tmpFile, "--keyname=my-secret-key")
 		_, err := fs.ReadFileCtx(ctx, "non-existent-key")
 		if err == nil {
 			t.Fatal("expected an error, got nil")
@@ -82,8 +82,32 @@ func TestFS(t *testing.T) {
 		}
 	})
 
+	t.Run("write-readonly", func(t *testing.T) {
+		fs := newfs(false)
+		err := fs.WriteFileCtx(ctx, "any-key", []byte("any-data"), 0600)
+		if !errors.Is(err, plugins.ErrReadOnly) {
+			t.Errorf("expected ErrReadOnly, got %v", err)
+		}
+		// Also test non-context WriteFile
+		err = fs.WriteFile("any-key", []byte("any-data"), 0600)
+		if !errors.Is(err, plugins.ErrReadOnly) {
+			t.Errorf("expected ErrReadOnly from WriteFile, got %v", err)
+		}
+	})
+
+	t.Run("plugin-path-and-logger", func(t *testing.T) {
+		fs := newfs(true)
+		if got, want := fs.PluginPath(), pluginPath; got != want {
+			t.Errorf("PluginPath() = %q, want %q", got, want)
+		}
+		fsWithLogger := fs.WithLogger(nil)
+		if fsWithLogger != fs {
+			t.Errorf("WithLogger(nil) should return same pointer")
+		}
+	})
+
 	t.Run("write-error", func(t *testing.T) {
-		fs := newfs("--error=write-failed")
+		fs := newfs(true, "--error=write-failed")
 		err := fs.WriteFileCtx(ctx, "any-key", []byte("any-data"), 0600)
 		if err == nil {
 			t.Fatal("expected an error, got nil")
@@ -98,7 +122,7 @@ func TestFSErrorMessages(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("binary-not-found", func(t *testing.T) {
-		fs := plugins.NewFS("/nonexistent/plugin-binary", nil)
+		fs := plugins.NewFS("/nonexistent/plugin-binary", false, nil)
 		_, err := fs.ReadFileCtx(ctx, "key")
 		msg := checkNoDuplicateSegments(t, err)
 		if !strings.Contains(msg, "failed to run plugin") {
@@ -107,7 +131,7 @@ func TestFSErrorMessages(t *testing.T) {
 	})
 
 	t.Run("write-plugin-error", func(t *testing.T) {
-		fs := plugins.NewFS(pluginPath, nil, "--error=write-failed")
+		fs := plugins.NewFS(pluginPath, true, nil, "--error=write-failed")
 		err := fs.WriteFileCtx(ctx, "key", []byte("data"), 0600)
 		msg := checkNoDuplicateSegments(t, err)
 		if !strings.Contains(msg, "write-failed") {
@@ -116,7 +140,7 @@ func TestFSErrorMessages(t *testing.T) {
 	})
 
 	t.Run("read-plugin-error", func(t *testing.T) {
-		fs := plugins.NewFS(pluginPath, nil, "--error=read-failed")
+		fs := plugins.NewFS(pluginPath, false, nil, "--error=read-failed")
 		_, err := fs.ReadFileCtx(ctx, "key")
 		msg := checkNoDuplicateSegments(t, err)
 		if !strings.Contains(msg, "read-failed") {
@@ -125,7 +149,7 @@ func TestFSErrorMessages(t *testing.T) {
 	})
 
 	t.Run("binary-not-found-write", func(t *testing.T) {
-		fs := plugins.NewFS("/nonexistent/plugin-binary", nil)
+		fs := plugins.NewFS("/nonexistent/plugin-binary", true, nil)
 		err := fs.WriteFileCtx(ctx, "key", []byte("data"), 0600)
 		msg := checkNoDuplicateSegments(t, err)
 		if !strings.Contains(msg, "failed to run plugin") {

@@ -8,6 +8,7 @@ require (
 	cloudeng.io/logging v0.0.0-20260806150854-f21c21e021b8
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
+	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297
 	gopkg.in/yaml.v3 v3.0.1
 )
 
