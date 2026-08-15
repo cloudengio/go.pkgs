@@ -219,7 +219,9 @@ Set implements flag.Value and returns available options on invalid input.
 ```go
 func (e Enum[T]) String() string
 ```
-String implements flag.Value
+String implements flag.Value. If multiple strings map to the same value
+the lexicographically smallest one is returned so that the result is stable
+regardless of map iteration order.
 
 
 ```go
@@ -237,7 +239,7 @@ type EnumType[T any] interface {
 	EnumValues[T]
 }
 ```
-EnumType combines comparable underlying types with EnumSpec.
+EnumType combines comparable underlying types with EnumValues.
 
 
 ### Type EnumValues

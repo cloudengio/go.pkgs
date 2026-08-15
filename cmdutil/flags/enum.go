@@ -15,7 +15,7 @@ type EnumValues[T any] interface {
 	EnumValues() map[string]T
 }
 
-// EnumType combines comparable underlying types with EnumSpec.
+// EnumType combines comparable underlying types with EnumValues.
 type EnumType[T any] interface {
 	comparable
 	EnumValues[T]
@@ -26,13 +26,23 @@ type Enum[T EnumType[T]] struct {
 	Value T
 }
 
-// String implements flag.Value
+// String implements flag.Value. If multiple strings map to the same value
+// the lexicographically smallest one is returned so that the result is
+// stable regardless of map iteration order.
 func (e Enum[T]) String() string {
 	opts := e.Value.EnumValues()
+	found := false
+	best := ""
 	for str, val := range opts {
-		if val == e.Value {
-			return str
+		if val != e.Value {
+			continue
 		}
+		if !found || str < best {
+			best, found = str, true
+		}
+	}
+	if found {
+		return best
 	}
 	return fmt.Sprintf("%v", e.Value)
 }

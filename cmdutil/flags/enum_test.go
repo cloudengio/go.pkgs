@@ -98,6 +98,62 @@ func TestEnum(t *testing.T) {
 	}
 }
 
+// aliased has multiple string representations for the same value.
+type aliased int
+
+const (
+	aliasedOn aliased = iota
+	aliasedOff
+)
+
+func (aliased) EnumValues() map[string]aliased {
+	return map[string]aliased{
+		"on":    aliasedOn,
+		"true":  aliasedOn,
+		"yes":   aliasedOn,
+		"off":   aliasedOff,
+		"false": aliasedOff,
+		"no":    aliasedOff,
+	}
+}
+
+func TestEnumAliases(t *testing.T) {
+	// String must be stable across calls and independent of map iteration
+	// order: the lexicographically smallest alias is returned.
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{"on", "on"},
+		{"true", "on"},
+		{"yes", "on"},
+		{"off", "false"},
+		{"false", "false"},
+		{"no", "false"},
+	} {
+		var e flags.Enum[aliased]
+		if err := e.Set(tc.input); err != nil {
+			t.Errorf("Set(%q): unexpected error: %v", tc.input, err)
+			continue
+		}
+		for range 100 {
+			if got, want := e.String(), tc.want; got != want {
+				t.Errorf("String() after Set(%q): got %q, want %q", tc.input, got, want)
+				break
+			}
+			text, err := e.MarshalText()
+			if err != nil {
+				t.Errorf("MarshalText: unexpected error: %v", err)
+				break
+			}
+			if got, want := string(text), tc.want; got != want {
+				t.Errorf("MarshalText() after Set(%q): got %q, want %q", tc.input, got, want)
+				break
+			}
+		}
+	}
+}
+
 // logLevel is a string-based comparable type showing that Enum works beyond
 // integer underlying types.
 type logLevel string

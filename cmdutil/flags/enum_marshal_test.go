@@ -171,7 +171,6 @@ func TestCmdYAMLEnum(t *testing.T) {
 
 func TestCmdYAMLEnumEmbedsFlagsEnum(t *testing.T) {
 	var e flags.Enum[direction]
-	var _ flags.Enum[direction] = e
 	if err := e.Set("north"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
