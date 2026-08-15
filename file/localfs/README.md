@@ -31,9 +31,9 @@ type AnonymousReadFile struct {
 }
 ```
 AnonymousReadFile is a wrapper around an io.Reader that implements the
-ReadFileFS interface and returns the same content regardless of the file
-name passed to ReadFile or ReadFileCtx. It's useful for wrapping os.Stdin
-for example.
+ReadFileFS interface by reading from the underlying reader and ignoring
+the file name passed to ReadFile or ReadFileCtx. It's useful for wrapping
+os.Stdin for example.
 
 ### Methods
 
@@ -56,9 +56,9 @@ type AnonymousWriteFile struct {
 }
 ```
 AnonymousWriteFile is a wrapper around an io.Writer that implements the
-WriteFileFS interface and writes the same content regardless of the file
-name passed to WriteFile or WriteFileCtx. It's useful for wrapping os.Stdout
-for example.
+WriteFileFS interface by writing to the underlying writer and ignoring the
+file name passed to WriteFile or WriteFileCtx. It's useful for wrapping
+os.Stdout for example.
 
 ### Methods
 

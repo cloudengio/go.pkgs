@@ -19,8 +19,12 @@ func CaptureStdout(fn func() error) (string, error) {
 		return "", err
 	}
 	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+	defer w.Close()
 
-	outChan := make(chan string)
+	outChan := make(chan string, 1)
 	go func() {
 		var buf bytes.Buffer
 		_, _ = io.Copy(&buf, r)
@@ -30,7 +34,6 @@ func CaptureStdout(fn func() error) (string, error) {
 
 	fnErr := fn()
 	_ = w.Close()
-	os.Stdout = oldStdout
 	out := <-outChan
 	return out, fnErr
 }
@@ -44,8 +47,12 @@ func CaptureStderr(fn func() error) (string, error) {
 		return "", err
 	}
 	os.Stderr = w
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+	defer w.Close()
 
-	outChan := make(chan string)
+	outChan := make(chan string, 1)
 	go func() {
 		var buf bytes.Buffer
 		_, _ = io.Copy(&buf, r)
@@ -55,7 +62,6 @@ func CaptureStderr(fn func() error) (string, error) {
 
 	fnErr := fn()
 	_ = w.Close()
-	os.Stderr = oldStderr
 	out := <-outChan
 	return out, fnErr
 }
@@ -69,6 +75,10 @@ func FeedStdin(input string, fn func() error) error {
 		return err
 	}
 	os.Stdin = r
+	defer func() {
+		os.Stdin = oldStdin
+	}()
+	defer r.Close()
 
 	go func() {
 		_, _ = w.Write([]byte(input))
@@ -77,6 +87,5 @@ func FeedStdin(input string, fn func() error) error {
 
 	fnErr := fn()
 	_ = r.Close()
-	os.Stdin = oldStdin
 	return fnErr
 }

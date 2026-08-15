@@ -69,3 +69,56 @@ func TestFeedStdin(t *testing.T) {
 		t.Errorf("got %q, want %q", readData, "hello stdin")
 	}
 }
+
+func TestCaptureStdoutPanic(t *testing.T) {
+	origStdout := os.Stdout
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		if os.Stdout != origStdout {
+			t.Errorf("os.Stdout was not restored: got %v, want %v", os.Stdout, origStdout)
+		}
+	}()
+
+	_, _ = filetestutil.CaptureStdout(func() error {
+		fmt.Print("something before panic")
+		panic("panic in stdout capture")
+	})
+}
+
+func TestCaptureStderrPanic(t *testing.T) {
+	origStderr := os.Stderr
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		if os.Stderr != origStderr {
+			t.Errorf("os.Stderr was not restored: got %v, want %v", os.Stderr, origStderr)
+		}
+	}()
+
+	_, _ = filetestutil.CaptureStderr(func() error {
+		fmt.Fprint(os.Stderr, "something before panic")
+		panic("panic in stderr capture")
+	})
+}
+
+func TestFeedStdinPanic(t *testing.T) {
+	origStdin := os.Stdin
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		if os.Stdin != origStdin {
+			t.Errorf("os.Stdin was not restored: got %v, want %v", os.Stdin, origStdin)
+		}
+	}()
+
+	_ = filetestutil.FeedStdin("hello", func() error {
+		panic("panic in stdin feed")
+	})
+}
