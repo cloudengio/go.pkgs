@@ -6,6 +6,20 @@ import cloudeng.io/file/filetestutil
 
 
 ## Functions
+### Func CaptureStderr
+```go
+func CaptureStderr(fn func() error) (string, error)
+```
+CaptureStderr redirects os.Stderr to a pipe, runs fn, and returns any output
+written to os.Stderr along with any error returned by fn.
+
+### Func CaptureStdout
+```go
+func CaptureStdout(fn func() error) (string, error)
+```
+CaptureStdout redirects os.Stdout to a pipe, runs fn, and returns any output
+written to os.Stdout along with any error returned by fn.
+
 ### Func CompareFS
 ```go
 func CompareFS(a, b file.FS) error
@@ -23,6 +37,13 @@ func CompareFileInfo(a, b file.InfoList) error
 func Contents(fs file.FS) map[string][]byte
 ```
 Contents returns the contents stored in the mock fs.FS.
+
+### Func FeedStdin
+```go
+func FeedStdin(input string, fn func() error) error
+```
+FeedStdin redirects os.Stdin to read from a pipe populated with input,
+runs fn, and restores os.Stdin.
 
 ### Func NewFile
 ```go

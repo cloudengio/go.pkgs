@@ -7,6 +7,7 @@ package localfs
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -237,4 +238,37 @@ func (f *R) DeleteAll(ctx context.Context, path string) error {
 
 func (f *R) EnsurePrefix(ctx context.Context, path string, perm fs.FileMode) error {
 	return f.T.EnsurePrefix(ctx, filepath.Join(f.root, path), perm)
+}
+
+// AnonymousReadFile is a wrapper around an io.Reader that implements
+// the ReadFileFS interface and returns the same content regardless of the
+// file name passed to ReadFile or ReadFileCtx. It's useful for wrapping
+// os.Stdin for example.
+type AnonymousReadFile struct {
+	io.Reader
+}
+
+func (arf AnonymousReadFile) ReadFile(_ string) ([]byte, error) {
+	return io.ReadAll(arf.Reader)
+}
+
+func (arf AnonymousReadFile) ReadFileCtx(_ context.Context, _ string) ([]byte, error) {
+	return arf.ReadFile("")
+}
+
+// AnonymousWriteFile is a wrapper around an io.Writer that implements
+// the WriteFileFS interface and writes the same content regardless of the
+// file name passed to WriteFile or WriteFileCtx. It's useful for wrapping
+// os.Stdout for example.
+type AnonymousWriteFile struct {
+	io.Writer
+}
+
+func (awf AnonymousWriteFile) WriteFile(_ string, data []byte, _ fs.FileMode) error {
+	_, err := awf.Writer.Write(data)
+	return err
+}
+
+func (awf AnonymousWriteFile) WriteFileCtx(_ context.Context, _ string, data []byte, _ fs.FileMode) error {
+	return awf.WriteFile("", data, 0)
 }

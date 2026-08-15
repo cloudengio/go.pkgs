@@ -24,6 +24,56 @@ func NewLevelScanner(path string, openwait time.Duration) filewalk.LevelScanner
 
 
 ## Types
+### Type AnonymousReadFile
+```go
+type AnonymousReadFile struct {
+	io.Reader
+}
+```
+AnonymousReadFile is a wrapper around an io.Reader that implements the
+ReadFileFS interface and returns the same content regardless of the file
+name passed to ReadFile or ReadFileCtx. It's useful for wrapping os.Stdin
+for example.
+
+### Methods
+
+```go
+func (arf AnonymousReadFile) ReadFile(_ string) ([]byte, error)
+```
+
+
+```go
+func (arf AnonymousReadFile) ReadFileCtx(_ context.Context, _ string) ([]byte, error)
+```
+
+
+
+
+### Type AnonymousWriteFile
+```go
+type AnonymousWriteFile struct {
+	io.Writer
+}
+```
+AnonymousWriteFile is a wrapper around an io.Writer that implements the
+WriteFileFS interface and writes the same content regardless of the file
+name passed to WriteFile or WriteFileCtx. It's useful for wrapping os.Stdout
+for example.
+
+### Methods
+
+```go
+func (awf AnonymousWriteFile) WriteFile(_ string, data []byte, _ fs.FileMode) error
+```
+
+
+```go
+func (awf AnonymousWriteFile) WriteFileCtx(_ context.Context, _ string, data []byte, _ fs.FileMode) error
+```
+
+
+
+
 ### Type LargeFile
 ```go
 type LargeFile struct {
