@@ -7,6 +7,9 @@ package keyscmd_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,6 +17,8 @@ import (
 
 	"cloudeng.io/cmdutil/keys"
 	"cloudeng.io/cmdutil/keys/keyscmd"
+	"cloudeng.io/cmdutil/subcmd"
+	"gopkg.in/yaml.v3"
 )
 
 type mockReadWriteFS struct {
@@ -89,6 +94,8 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	// Try to add k1 again without update=true -> should error
 	if err := writer.SetKeys(ctx, "store.yaml", false, k1); err == nil {
 		t.Errorf("expected error adding existing key with update=false, got nil")
+	} else if !errors.Is(err, keyscmd.ErrUpdateNotAllowed) {
+		t.Errorf("expected ErrUpdateNotAllowed, got %v", err)
 	}
 
 	// Add k1 with update=true -> should succeed
@@ -104,9 +111,11 @@ func TestKeyReaderAndWriter(t *testing.T) {
 		t.Errorf("got token %q, want %q", got, want)
 	}
 
-	// Non-existent key lookup -> should error
+	// Non-existent key lookup -> should error with ErrKeyInfoNotFound
 	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "notfound", User: "user"}); err == nil {
 		t.Errorf("expected error looking up notfound key")
+	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
+		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
 	}
 
 	// Delete a key
@@ -118,39 +127,80 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	_, err = reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"})
 	if err == nil {
 		t.Fatalf("expected error getting deleted key, got nil")
+	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
+		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
 	}
 
-	// Test ReadKeyInfoFromLocalJSON and ReadKeyInfoFromLocalYAML
+	// Non-existent file lookup in GetKeys
+	if _, err := reader.GetKeys(ctx, "nonexistent.yaml"); err == nil {
+		t.Errorf("expected error getting keys from nonexistent file")
+	}
+
+	// Non-existent file in DeleteKey
+	if err := writer.DeleteKey(ctx, "nonexistent.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err == nil {
+		t.Errorf("expected error deleting key from nonexistent file")
+	}
+
+	// Test SafeWriteKeyInfoJSON and SafeWriteKeyInfoYAML to local file
 	tmpDir := t.TempDir()
 	jsonFile := filepath.Join(tmpDir, "key.json")
 	yamlFile := filepath.Join(tmpDir, "key.yaml")
 
-	if err := reader.SafeWriteKeyInfoJSON(ctx, k2, jsonFile, 0o600); err != nil {
+	if err := keyscmd.SafeWriteKeyInfoJSON(ctx, k2, jsonFile, 0o600); err != nil {
 		t.Fatalf("SafeWriteKeyInfoJSON: %v", err)
 	}
-	if err := reader.SafeWriteKeyInfoYAML(ctx, k2, yamlFile, 0o600); err != nil {
+	if err := keyscmd.SafeWriteKeyInfoYAML(ctx, k2, yamlFile, 0o600); err != nil {
 		t.Fatalf("SafeWriteKeyInfoYAML: %v", err)
 	}
 
-	readJSONKey, err := writer.ReadKeyInfoFromLocalJSON(ctx, jsonFile)
+	// Verify jsonFile contains valid JSON
+	jsonContent, err := os.ReadFile(jsonFile)
+	if err != nil {
+		t.Fatalf("ReadFile(jsonFile): %v", err)
+	}
+	var checkJSON keys.Info
+	if err := json.Unmarshal(jsonContent, &checkJSON); err != nil {
+		t.Fatalf("json.Unmarshal failed on written JSON file: %v", err)
+	}
+
+	// Verify yamlFile contains valid YAML
+	yamlContent, err := os.ReadFile(yamlFile)
+	if err != nil {
+		t.Fatalf("ReadFile(yamlFile): %v", err)
+	}
+	var checkYAML keys.Info
+	if err := yaml.Unmarshal(yamlContent, &checkYAML); err != nil {
+		t.Fatalf("yaml.Unmarshal failed on written YAML file: %v", err)
+	}
+
+	readJSONKey, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, jsonFile)
 	if err != nil {
 		t.Fatalf("ReadKeyInfoFromLocalJSON: %v", err)
 	}
 	if got, want := readJSONKey.ID, "k2"; got != want {
 		t.Errorf("readJSONKey.ID = %q, want %q", got, want)
 	}
+	if got, want := string(readJSONKey.Token().Value()), "val2"; got != want {
+		t.Errorf("readJSONKey.Token = %q, want %q", got, want)
+	}
 
-	readYAMLKey, err := writer.ReadKeyInfoFromLocalYAML(ctx, yamlFile)
+	readYAMLKey, err := keyscmd.ReadKeyInfoFromLocalYAML(ctx, yamlFile)
 	if err != nil {
 		t.Fatalf("ReadKeyInfoFromLocalYAML: %v", err)
 	}
 	if got, want := readYAMLKey.ID, "k2"; got != want {
 		t.Errorf("readYAMLKey.ID = %q, want %q", got, want)
 	}
+	if got, want := string(readYAMLKey.Token().Value()), "val2"; got != want {
+		t.Errorf("readYAMLKey.Token = %q, want %q", got, want)
+	}
 
 	// Read from non-existent file
-	if _, err := writer.ReadKeyInfoFromLocalJSON(ctx, filepath.Join(tmpDir, "notfound.json")); err == nil {
+	if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, filepath.Join(tmpDir, "notfound.json")); err == nil {
 		t.Errorf("expected error reading non-existent json file")
+	}
+	if _, err := keyscmd.ReadKeyInfoFromLocalYAML(ctx, filepath.Join(tmpDir, "notfound.yaml")); err == nil {
+		t.Errorf("expected error reading non-existent yaml file")
 	}
 
 	// Read corrupted file
@@ -158,15 +208,198 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	if err := os.WriteFile(corruptFile, []byte("not valid json"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if _, err := writer.ReadKeyInfoFromLocalJSON(ctx, corruptFile); err == nil {
+	if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, corruptFile); err == nil {
 		t.Errorf("expected error reading corrupt json file")
 	}
+}
+
+func TestSafeWriteKeyInfoStdout(t *testing.T) {
+	ctx := context.Background()
+	ki := keys.NewInfo("pipeKey", "pipeUser", []byte("secret_value_12345"))
+
+	for _, name := range []string{"-", ""} {
+		t.Run("JSON_"+name, func(t *testing.T) {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("os.Pipe: %v", err)
+			}
+			defer r.Close()
+
+			origStdout := os.Stdout
+			os.Stdout = w
+			defer func() {
+				os.Stdout = origStdout
+			}()
+
+			if err := keyscmd.SafeWriteKeyInfoJSON(ctx, ki, name, 0o600); err != nil {
+				t.Fatalf("SafeWriteKeyInfoJSON to stdout (%q): %v", name, err)
+			}
+			w.Close()
+
+			out, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("ReadAll: %v", err)
+			}
+
+			var got keys.Info
+			if err := json.Unmarshal(out, &got); err != nil {
+				t.Fatalf("json.Unmarshal: %v", err)
+			}
+			if got.ID != "pipeKey" || got.User != "pipeUser" || string(got.Token().Value()) != "secret_value_12345" {
+				t.Errorf("unmarshaled info = %+v, want ki", got)
+			}
+		})
+
+		t.Run("YAML_"+name, func(t *testing.T) {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("os.Pipe: %v", err)
+			}
+			defer r.Close()
+
+			origStdout := os.Stdout
+			os.Stdout = w
+			defer func() {
+				os.Stdout = origStdout
+			}()
+
+			if err := keyscmd.SafeWriteKeyInfoYAML(ctx, ki, name, 0o600); err != nil {
+				t.Fatalf("SafeWriteKeyInfoYAML to stdout (%q): %v", name, err)
+			}
+			w.Close()
+
+			out, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("ReadAll: %v", err)
+			}
+
+			var got keys.Info
+			if err := yaml.Unmarshal(out, &got); err != nil {
+				t.Fatalf("yaml.Unmarshal: %v", err)
+			}
+			if got.ID != "pipeKey" || got.User != "pipeUser" || string(got.Token().Value()) != "secret_value_12345" {
+				t.Errorf("unmarshaled info = %+v, want ki", got)
+			}
+		})
+	}
+}
+
+func TestReadKeyInfoStdin(t *testing.T) {
+	ctx := context.Background()
+	ki := keys.NewInfo("stdinKey", "stdinUser", []byte("secret_from_stdin"))
+
+	for _, name := range []string{"-", ""} {
+		t.Run("JSON_"+name, func(t *testing.T) {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("os.Pipe: %v", err)
+			}
+			defer r.Close()
+
+			origStdin := os.Stdin
+			os.Stdin = r
+			defer func() {
+				os.Stdin = origStdin
+			}()
+
+			data, err := json.Marshal(ki)
+			if err != nil {
+				t.Fatalf("json.Marshal: %v", err)
+			}
+			if _, err := w.Write(data); err != nil {
+				t.Fatalf("w.Write: %v", err)
+			}
+			w.Close()
+
+			readKi, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, name)
+			if err != nil {
+				t.Fatalf("ReadKeyInfoFromLocalJSON(%q): %v", name, err)
+			}
+			if readKi.ID != "stdinKey" || readKi.User != "stdinUser" || string(readKi.Token().Value()) != "secret_from_stdin" {
+				t.Errorf("ReadKeyInfoFromLocalJSON = %+v, want ki", readKi)
+			}
+		})
+
+		t.Run("YAML_"+name, func(t *testing.T) {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("os.Pipe: %v", err)
+			}
+			defer r.Close()
+
+			origStdin := os.Stdin
+			os.Stdin = r
+			defer func() {
+				os.Stdin = origStdin
+			}()
+
+			data, err := yaml.Marshal(ki)
+			if err != nil {
+				t.Fatalf("yaml.Marshal: %v", err)
+			}
+			if _, err := w.Write(data); err != nil {
+				t.Fatalf("w.Write: %v", err)
+			}
+			w.Close()
+
+			readKi, err := keyscmd.ReadKeyInfoFromLocalYAML(ctx, name)
+			if err != nil {
+				t.Fatalf("ReadKeyInfoFromLocalYAML(%q): %v", name, err)
+			}
+			if readKi.ID != "stdinKey" || readKi.User != "stdinUser" || string(readKi.Token().Value()) != "secret_from_stdin" {
+				t.Errorf("ReadKeyInfoFromLocalYAML = %+v, want ki", readKi)
+			}
+		})
+	}
+
+	t.Run("corrupted_stdin", func(t *testing.T) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		defer r.Close()
+
+		origStdin := os.Stdin
+		os.Stdin = r
+		defer func() {
+			os.Stdin = origStdin
+		}()
+
+		if _, err := w.Write([]byte("not valid json or yaml")); err != nil {
+			t.Fatalf("w.Write: %v", err)
+		}
+		w.Close()
+
+		if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, "-"); err == nil {
+			t.Errorf("expected error unmarshaling invalid JSON from stdin")
+		}
+	})
 }
 
 func TestIsDstSafe(t *testing.T) {
 	// Should not fail for normal filenames
 	if err := keyscmd.IsDstSafe("testfile.txt"); err != nil {
 		t.Errorf("IsDstSafe(testfile.txt) got error: %v", err)
+	}
+
+	// When stdout is piped (via os.Pipe), IsDstSafe("-") and IsDstSafe("") should succeed
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer r.Close()
+
+	origStdout := os.Stdout
+	os.Stdout = w
+	defer func() {
+		os.Stdout = origStdout
+	}()
+
+	if err := keyscmd.IsDstSafe("-"); err != nil {
+		t.Errorf("IsDstSafe(-) on pipe got error: %v", err)
+	}
+	if err := keyscmd.IsDstSafe(""); err != nil {
+		t.Errorf("IsDstSafe(\"\") on pipe got error: %v", err)
 	}
 }
 
@@ -357,12 +590,6 @@ func TestSecretConfig(t *testing.T) {
 		t.Errorf("SecretConfig() = %+v, unexpected fields", scFromFlags)
 	}
 
-	// Extension creation
-	ext := keyscmd.NewKeyInfoExtenstion("test-ext", nil)
-	if ext.Name() != "test-ext" {
-		t.Errorf("ext.Name() = %q, want test-ext", ext.Name())
-	}
-
 	// Invalid size
 	scInvalidSize := keyscmd.SecretConfig{
 		Size:   0,
@@ -370,6 +597,14 @@ func TestSecretConfig(t *testing.T) {
 	}
 	if _, err := scInvalidSize.New(); err == nil {
 		t.Errorf("expected error for size 0")
+	}
+
+	scNegativeSize := keyscmd.SecretConfig{
+		Size:   -5,
+		Format: keyscmd.SecretFormatHex,
+	}
+	if _, err := scNegativeSize.New(); err == nil {
+		t.Errorf("expected error for negative size")
 	}
 
 	// Invalid format
@@ -385,6 +620,26 @@ func TestSecretConfig(t *testing.T) {
 	ev := keyscmd.SecretFormatRaw.EnumValues()
 	if len(ev) != 3 {
 		t.Errorf("EnumValues len = %d, want 3", len(ev))
+	}
+}
+
+func TestKeyInfoExtension(t *testing.T) {
+	appended := false
+	ext := keyscmd.NewKeyInfoExtension("test-ext", func(cmd *subcmd.CommandSetYAML) error {
+		appended = true
+		return nil
+	})
+	if got, want := ext.Name(), "test-ext"; got != want {
+		t.Errorf("ext.Name() = %q, want %q", got, want)
+	}
+	if got, want := ext.YAML(), keyscmd.KeyInfoSubcmdTree; got != want {
+		t.Errorf("ext.YAML() = %q, want %q", got, want)
+	}
+	if err := ext.Set(nil); err != nil {
+		t.Fatalf("ext.Set: %v", err)
+	}
+	if !appended {
+		t.Errorf("expected appendFn to have been called")
 	}
 }
 
@@ -415,22 +670,6 @@ func TestReadWriteFSStdout(t *testing.T) {
 		t.Fatalf("WriteFileCtx: %v", err)
 	}
 
-	// When name is stdout ("-")
-	stdoutFS := keyscmd.ReadWriteFSWithStdout(mfs, "-")
-	if stdoutFS == nil {
-		t.Fatalf("ReadWriteFSWithStdout returned nil")
-	}
-
-	// Test WriteFSWithStdout and ReadFSWithStdin
-	wfs := keyscmd.WriteFSWithStdout(mfs, "-")
-	if wfs == nil {
-		t.Fatalf("WriteFSWithStdout returned nil")
-	}
-	rfs := keyscmd.ReadFSWithStdin(mfs, "-")
-	if rfs == nil {
-		t.Fatalf("ReadFSWithStdin returned nil")
-	}
-
 	// Normal names
 	wfsNorm := keyscmd.WriteFSWithStdout(mfs, "norm.txt")
 	if wfsNorm == nil {
@@ -440,6 +679,121 @@ func TestReadWriteFSStdout(t *testing.T) {
 	if rfsNorm == nil {
 		t.Fatalf("ReadFSWithStdin norm returned nil")
 	}
+
+	// Test writing to stdoutFS ("-")
+	t.Run("stdoutFS_write", func(t *testing.T) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		defer r.Close()
+
+		origStdout := os.Stdout
+		os.Stdout = w
+		defer func() {
+			os.Stdout = origStdout
+		}()
+
+		stdoutFS := keyscmd.ReadWriteFSWithStdout(mfs, "-")
+		if stdoutFS == nil {
+			t.Fatalf("ReadWriteFSWithStdout returned nil")
+		}
+
+		if err := stdoutFS.WriteFile("anything", []byte("data1"), 0o600); err != nil {
+			t.Fatalf("stdoutFS.WriteFile: %v", err)
+		}
+		if err := stdoutFS.WriteFileCtx(ctx, "anything", []byte("data2"), 0o600); err != nil {
+			t.Fatalf("stdoutFS.WriteFileCtx: %v", err)
+		}
+		w.Close()
+
+		out, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if got, want := string(out), "data1data2"; got != want {
+			t.Errorf("stdoutFS output = %q, want %q", got, want)
+		}
+	})
+
+	// Test writing to wfs ("-")
+	t.Run("wfs_write", func(t *testing.T) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		defer r.Close()
+
+		origStdout := os.Stdout
+		os.Stdout = w
+		defer func() {
+			os.Stdout = origStdout
+		}()
+
+		wfs := keyscmd.WriteFSWithStdout(mfs, "-")
+		if wfs == nil {
+			t.Fatalf("WriteFSWithStdout returned nil")
+		}
+
+		if err := wfs.WriteFile("anything", []byte("wfs1"), 0o600); err != nil {
+			t.Fatalf("wfs.WriteFile: %v", err)
+		}
+		if err := wfs.WriteFileCtx(ctx, "anything", []byte("wfs2"), 0o600); err != nil {
+			t.Fatalf("wfs.WriteFileCtx: %v", err)
+		}
+		w.Close()
+
+		out, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if got, want := string(out), "wfs1wfs2"; got != want {
+			t.Errorf("wfs output = %q, want %q", got, want)
+		}
+	})
+
+	// Test reading from rfs ("-")
+	t.Run("rfs_read", func(t *testing.T) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		defer r.Close()
+
+		origStdin := os.Stdin
+		os.Stdin = r
+		defer func() {
+			os.Stdin = origStdin
+		}()
+
+		rfs := keyscmd.ReadFSWithStdin(mfs, "-")
+		if rfs == nil {
+			t.Fatalf("ReadFSWithStdin returned nil")
+		}
+
+		if _, err := w.Write([]byte("rfs_input")); err != nil {
+			t.Fatalf("w.Write: %v", err)
+		}
+		w.Close()
+
+		data, err := rfs.ReadFile("anything")
+		if err != nil {
+			t.Fatalf("rfs.ReadFile: %v", err)
+		}
+		if got, want := string(data), "rfs_input"; got != want {
+			t.Errorf("rfs output = %q, want %q", got, want)
+		}
+
+		dataCtx, err := rfs.ReadFileCtx(ctx, "anything")
+		if err != nil {
+			t.Fatalf("rfs.ReadFileCtx: %v", err)
+		}
+		// Second read returns empty because stdin reached EOF
+		if len(dataCtx) != 0 {
+			t.Errorf("expected empty data at EOF, got %q", string(dataCtx))
+		}
+	})
 }
+
 
 

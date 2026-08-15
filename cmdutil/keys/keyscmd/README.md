@@ -9,9 +9,9 @@ keys stored in a single item in a file system using the format used by
 keys.InMemoryKeyStore.
 
 ## Constants
-### KeysSubcmdTree
+### KeyInfoSubcmdTree
 ```go
-KeysSubcmdTree = `
+KeyInfoSubcmdTree = `
 - name: key-info
   summary: manage key info items in a keychain/secrets store, multiple key info items can be stored in a single item. In all cases if input or output is a filename, then "-" or "" will result in stdin or stdout being used as appropriate.
   commands:
@@ -34,6 +34,8 @@ KeysSubcmdTree = `
 `
 
 ```
+KeyInfoSubcmdTree is the subcmd extension tree for managing key info items
+in a keychain/secrets store.
 
 
 
@@ -75,10 +77,12 @@ func IsStdoutStdin(name string) bool
 IsStdoutStdin returns true if the provided name is "-" or empty, indicating
 that the operation should read from stdin or write to stdout.
 
-### Func NewKeyInfoExtenstion
+### Func NewKeyInfoExtension
 ```go
-func NewKeyInfoExtenstion(name string, appendFn func(cmd *subcmd.CommandSetYAML) error) subcmd.Extension
+func NewKeyInfoExtension(name string, appendFn func(cmd *subcmd.CommandSetYAML) error) subcmd.Extension
 ```
+NewKeyInfoExtension creates a new subcmd.Extension for key info management
+commands.
 
 ### Func ReadFSWithStdin
 ```go
@@ -92,12 +96,49 @@ is "-" or empty.
 func ReadFromLocal(ctx context.Context, filename string, dstFS file.WriteFileFS, dst string, perm fs.FileMode) error
 ```
 
+### Func ReadKeyInfoFromLocal
+```go
+func ReadKeyInfoFromLocal(ctx context.Context, filename string, unmarshal func([]byte, any) error) (keys.Info, error)
+```
+ReadKeyInfoFromLocal reads key information from a local file or stdin,
+unmarshals it using the provided unmarshal function, and returns the
+resulting keys.Info.
+
+### Func ReadKeyInfoFromLocalJSON
+```go
+func ReadKeyInfoFromLocalJSON(ctx context.Context, filename string) (keys.Info, error)
+```
+ReadKeyInfoFromLocalJSON reads key information from a local JSON file or
+stdin and returns the resulting keys.Info.
+
+### Func ReadKeyInfoFromLocalYAML
+```go
+func ReadKeyInfoFromLocalYAML(ctx context.Context, filename string) (keys.Info, error)
+```
+ReadKeyInfoFromLocalYAML reads key information from a local YAML file or
+stdin and returns the resulting keys.Info.
+
 ### Func ReadWriteFSWithStdout
 ```go
 func ReadWriteFSWithStdout(fs file.ReadWriteFileFS, name string) file.ReadWriteFileFS
 ```
 ReadWriterFSWithStdout returns a file.ReadWriteFileFS that reads from fs and
 writes to stdout if the name is "-" or empty.
+
+### Func SafeWriteKeyInfoJSON
+```go
+func SafeWriteKeyInfoJSON(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error
+```
+
+### Func SafeWriteKeyInfoToLocal
+```go
+func SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, marshal func(any) ([]byte, error), dst string, perm fs.FileMode) error
+```
+
+### Func SafeWriteKeyInfoYAML
+```go
+func SafeWriteKeyInfoYAML(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error
+```
 
 ### Func SafeWriteToLocal
 ```go
@@ -120,6 +161,8 @@ type KeyReader struct {
 	// contains filtered or unexported fields
 }
 ```
+KeyReader provides methods to read keys from a file system in the
+InMemoryKeyStore
 
 ### Functions
 
@@ -148,21 +191,6 @@ GetKeys reads all keys from the specified item in the file system and
 returns them as a slice of keys.Info.
 
 
-```go
-func (r *KeyReader) SafeWriteKeyInfoJSON(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error
-```
-
-
-```go
-func (r *KeyReader) SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, marshal func(any) ([]byte, error), dst string, perm fs.FileMode) error
-```
-
-
-```go
-func (r *KeyReader) SafeWriteKeyInfoYAML(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error
-```
-
-
 
 
 ### Type KeySpecFlags
@@ -172,12 +200,14 @@ type KeySpecFlags struct {
 	User string `subcmd:"key-user,,key user"`
 }
 ```
+KeySpecFlags defines command-line flags for specifying a key's ID and user.
 
 ### Methods
 
 ```go
 func (f KeySpecFlags) KeySpec() keys.KeySpec
 ```
+KeySpec returns a keys.KeySpec constructed from the KeySpecFlags.
 
 
 
@@ -189,6 +219,8 @@ type KeyWriter struct {
 	// contains filtered or unexported fields
 }
 ```
+KeyWriter provides methods to write keys to a file system in the
+InMemoryKeyStore format.
 
 ### Functions
 
@@ -209,21 +241,6 @@ DeleteKey removes a specific key from the specified item in the file system
 based on the provided keys.KeySpec. It works by reading all of the existing
 keys, removing the specified key, and then writing the updated list back to
 the file system.
-
-
-```go
-func (w *KeyWriter) ReadKeyInfoFromLocal(ctx context.Context, filename string, unmarshal func([]byte, any) error) (keys.Info, error)
-```
-
-
-```go
-func (w *KeyWriter) ReadKeyInfoFromLocalJSON(ctx context.Context, filename string) (keys.Info, error)
-```
-
-
-```go
-func (w *KeyWriter) ReadKeyInfoFromLocalYAML(ctx context.Context, filename string) (keys.Info, error)
-```
 
 
 ```go

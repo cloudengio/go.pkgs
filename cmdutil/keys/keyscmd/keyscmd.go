@@ -142,15 +142,7 @@ func NewKeyReader(fs file.ReadFileFS) KeyReader {
 	return KeyReader{fs: fs}
 }
 
-// NewKeyWriter creates a new KeyWriter that writes keys to an InMemoryKeyStore
-// using the provided file.ReadWriteFileFS in the InMemoryKeyStore format.
-func NewKeyWriter(fs file.ReadWriteFileFS) KeyWriter {
-	return KeyWriter{
-		KeyReader: NewKeyReader(fs),
-		fs:        fs,
-	}
-}
-
+// KeyReader provides methods to read keys from a file system in the InMemoryKeyStore
 type KeyReader struct {
 	fs file.ReadFileFS
 }
@@ -165,7 +157,7 @@ func (r *KeyReader) GetKeys(ctx context.Context, name string) ([]keys.Info, erro
 	return ims.Keys(), nil
 }
 
-func (r *KeyReader) SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, marshal func(any) ([]byte, error), dst string, perm fs.FileMode) error {
+func SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, marshal func(any) ([]byte, error), dst string, perm fs.FileMode) error {
 	if IsStdoutStdin(dst) {
 		redact := func(data []byte) []byte {
 			// Redact the key bytes in the token value
@@ -173,7 +165,7 @@ func (r *KeyReader) SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, m
 		}
 		return keys.SafeWriteKeyInfoToStdout(ctx, ki, marshal, redact)
 	}
-	out, err := json.Marshal(ki)
+	out, err := marshal(ki)
 	if err != nil {
 		return err
 	}
@@ -181,12 +173,12 @@ func (r *KeyReader) SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, m
 	return fs.WriteFileCtx(ctx, dst, out, perm)
 }
 
-func (r *KeyReader) SafeWriteKeyInfoJSON(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error {
-	return r.SafeWriteKeyInfoToLocal(ctx, ki, json.Marshal, dst, perm)
+func SafeWriteKeyInfoJSON(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error {
+	return SafeWriteKeyInfoToLocal(ctx, ki, json.Marshal, dst, perm)
 }
 
-func (r *KeyReader) SafeWriteKeyInfoYAML(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error {
-	return r.SafeWriteKeyInfoToLocal(ctx, ki, yaml.Marshal, dst, perm)
+func SafeWriteKeyInfoYAML(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error {
+	return SafeWriteKeyInfoToLocal(ctx, ki, yaml.Marshal, dst, perm)
 }
 
 var ErrKeyInfoNotFound = errors.New("key info not found")
@@ -205,9 +197,20 @@ func (r *KeyReader) GetKey(ctx context.Context, name string, spec keys.KeySpec) 
 	return ki, nil
 }
 
+// KeyWriter provides methods to write keys to a file system in the InMemoryKeyStore
+// format.
 type KeyWriter struct {
 	KeyReader
 	fs file.ReadWriteFileFS
+}
+
+// NewKeyWriter creates a new KeyWriter that writes keys to an InMemoryKeyStore
+// using the provided file.ReadWriteFileFS in the InMemoryKeyStore format.
+func NewKeyWriter(fs file.ReadWriteFileFS) KeyWriter {
+	return KeyWriter{
+		KeyReader: NewKeyReader(fs),
+		fs:        fs,
+	}
 }
 
 // SetKeys adds or updates keys in the specified item in the file system. If update is false,
@@ -227,7 +230,9 @@ func (w *KeyWriter) SetKeys(ctx context.Context, name string, update bool, keys 
 	return writeIMS(ctx, w.fs, name, ims)
 }
 
-func (w *KeyWriter) ReadKeyInfoFromLocal(ctx context.Context, filename string, unmarshal func([]byte, any) error) (keys.Info, error) {
+// ReadKeyInfoFromLocal reads key information from a local file or stdin, unmarshals it
+// using the provided unmarshal function, and returns the resulting keys.Info.
+func ReadKeyInfoFromLocal(ctx context.Context, filename string, unmarshal func([]byte, any) error) (keys.Info, error) {
 	var contents []byte
 	if IsStdoutStdin(filename) {
 		data, err := io.ReadAll(os.Stdin)
@@ -249,12 +254,16 @@ func (w *KeyWriter) ReadKeyInfoFromLocal(ctx context.Context, filename string, u
 	return ki, nil
 }
 
-func (w *KeyWriter) ReadKeyInfoFromLocalJSON(ctx context.Context, filename string) (keys.Info, error) {
-	return w.ReadKeyInfoFromLocal(ctx, filename, json.Unmarshal)
+// ReadKeyInfoFromLocalJSON reads key information from a local JSON file or stdin and
+// returns the resulting keys.Info.
+func ReadKeyInfoFromLocalJSON(ctx context.Context, filename string) (keys.Info, error) {
+	return ReadKeyInfoFromLocal(ctx, filename, json.Unmarshal)
 }
 
-func (w *KeyWriter) ReadKeyInfoFromLocalYAML(ctx context.Context, filename string) (keys.Info, error) {
-	return w.ReadKeyInfoFromLocal(ctx, filename, yaml.Unmarshal)
+// ReadKeyInfoFromLocalYAML reads key information from a local YAML file or stdin and
+// returns the resulting keys.Info.
+func ReadKeyInfoFromLocalYAML(ctx context.Context, filename string) (keys.Info, error) {
+	return ReadKeyInfoFromLocal(ctx, filename, yaml.Unmarshal)
 }
 
 // DeleteKey removes a specific key from the specified item in the file system based on the
@@ -269,20 +278,25 @@ func (w *KeyWriter) DeleteKey(ctx context.Context, name string, spec keys.KeySpe
 	return writeIMS(ctx, w.fs, name, ims)
 }
 
-func NewKeyInfoExtenstion(name string, appendFn func(cmd *subcmd.CommandSetYAML) error) subcmd.Extension {
-	return subcmd.NewExtension(name, KeysSubcmdTree, appendFn)
+// NewKeyInfoExtension creates a new subcmd.Extension for key info management commands.
+func NewKeyInfoExtension(name string, appendFn func(cmd *subcmd.CommandSetYAML) error) subcmd.Extension {
+	return subcmd.NewExtension(name, KeyInfoSubcmdTree, appendFn)
 }
 
+// KeySpecFlags defines command-line flags for specifying a key's ID and user.
 type KeySpecFlags struct {
 	ID   string `subcmd:"key-id,,key id"`
 	User string `subcmd:"key-user,,key user"`
 }
 
+// KeySpec returns a keys.KeySpec constructed from the KeySpecFlags.
 func (f KeySpecFlags) KeySpec() keys.KeySpec {
 	return keys.KeySpec{ID: f.ID, User: f.User}
 }
 
-const KeysSubcmdTree = `
+// KeyInfoSubcmdTree is the subcmd extension tree for managing key info items in a
+// keychain/secrets store.
+const KeyInfoSubcmdTree = `
 - name: key-info
   summary: manage key info items in a keychain/secrets store, multiple key info items can be stored in a single item. In all cases if input or output is a filename, then "-" or "" will result in stdin or stdout being used as appropriate.
   commands:
