@@ -49,20 +49,6 @@ func (arf AnonymousReadFile) ReadFileCtx(_ context.Context, _ string) ([]byte, e
 
 
 
-### Type AnonymousReadWriteFile
-```go
-type AnonymousReadWriteFile struct {
-	AnonymousReadFile
-	AnonymousWriteFile
-}
-```
-AnonymousReadWriteFile is a wrapper around an io.Reader and io.Writer
-that implements the ReadWriteFileFS interface and reads/writes the same
-content regardless of the file name passed to ReadFile/ReadFileCtx or
-WriteFile/WriteFileCtx. It's useful for wrapping os.Stdin and os.Stdout for
-example.
-
-
 ### Type AnonymousWriteFile
 ```go
 type AnonymousWriteFile struct {
