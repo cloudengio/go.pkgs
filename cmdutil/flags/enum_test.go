@@ -41,7 +41,6 @@ func ExampleEnum() {
 	// 1
 }
 
-
 func TestEnum(t *testing.T) {
 	var e flags.Enum[colour]
 

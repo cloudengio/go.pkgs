@@ -328,7 +328,6 @@ func TestCmdJSONEnumString(t *testing.T) {
 
 func TestCmdJSONEnumEmbedsFlagsEnum(t *testing.T) {
 	var e flags.Enum[priority]
-	var _ flags.Enum[priority] = e
 	if err := e.Set("low"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
