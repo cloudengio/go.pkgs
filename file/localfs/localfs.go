@@ -265,7 +265,7 @@ type AnonymousWriteFile struct {
 }
 
 func (awf AnonymousWriteFile) WriteFile(_ string, data []byte, _ fs.FileMode) error {
-	_, err := awf.Writer.Write(data)
+	_, err := awf.Write(data)
 	return err
 }
 
