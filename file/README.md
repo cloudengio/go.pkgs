@@ -30,6 +30,25 @@ func ContextWithFS(ctx context.Context, container ...ReadFileFS) context.Context
 ContextWithFS returns a new context that contains the provided instances of
 ReadFileFS stored with as a value within it.
 
+### Func ContextWithReadWriteFS
+```go
+func ContextWithReadWriteFS(ctx context.Context, fs ReadWriteFileFS) context.Context
+```
+ContextWithReadWriteFS returns a new context that contains the provided
+instance of ReadWriteFileFS.
+
+### Func ContextWithReadWriteFileFS
+```go
+func ContextWithReadWriteFileFS(ctx context.Context, fs ReadWriteFileFS) context.Context
+```
+ContextWithReadWriteFileFS is an alias for ContextWithReadWriteFS.
+
+### Func ContextWithoutReadWriteFS
+```go
+func ContextWithoutReadWriteFS(ctx context.Context) context.Context
+```
+ContextWithoutReadWriteFS returns a new context without a ReadWriteFileFS.
+
 ### Func FSReadFile
 ```go
 func FSReadFile(ctx context.Context, name string) ([]byte, error)
@@ -306,6 +325,22 @@ type ReadWriteFileFS interface {
 ```
 ReadWriteFileFS provides an interface for reading and writing the entire
 contents of a file.
+
+### Functions
+
+```go
+func ReadWriteFSFromContext(ctx context.Context) (ReadWriteFileFS, bool)
+```
+ReadWriteFSFromContext returns the ReadWriteFileFS instance, if any,
+stored within the context.
+
+
+```go
+func ReadWriteFileFSFromContext(ctx context.Context) (ReadWriteFileFS, bool)
+```
+ReadWriteFileFSFromContext is an alias for ReadWriteFSFromContext.
+
+
 
 
 ### Type WriteFileFS
