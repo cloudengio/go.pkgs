@@ -125,9 +125,11 @@ zero or >= len(s), all characters are replaced with "*".
 ```go
 func SafeWriteKeyInfoToStdout(ctx context.Context, ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error
 ```
-SafeWriteKeyInfoToStdout writes the provided key info to stdout in YAML
-format if stdout is piped or redirected. If stdout is a terminal, it writes
-a redacted key.
+SafeWriteKeyInfoToStdout writes the provided key info to stdout using
+marshal to serialize the key info and redact to redact the key value
+if stdout is a terminal. It writes the full key info if stdout is not
+a terminal. It returns an error if the key info cannot be marshaled or
+written.
 
 
 

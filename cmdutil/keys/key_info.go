@@ -77,7 +77,7 @@ const DefaultRedactionLimit = 6
 // If the token value is shorter than N characters then the entire value is redacted.
 func (t Token) LastN(keep int) string {
 	keep = min(keep, DefaultRedactionLimit)
-	return RedactStringTail(string(t.token), keep)
+	return string(RedactBytesTail(t.token, keep))
 }
 
 // FirstN returns a string representation of the token value with all but the

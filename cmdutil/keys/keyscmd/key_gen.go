@@ -23,7 +23,7 @@ func newSecret(size int) ([]byte, error) {
 	raw := make([]byte, size)
 	n, err := rand.Read(raw)
 	if err != nil {
-		return nil, fmt.Errorf("error generating random secret: %v", err)
+		return nil, fmt.Errorf("generating random secret: %v", err)
 	}
 	if n != size {
 		return nil, fmt.Errorf("generated secret of incorrect size: expected %d bytes, got %d bytes", size, n)
@@ -44,17 +44,15 @@ const (
 	SecretFormatBase64
 )
 
-type formatValues map[string]SecretFormat
-
-var values = formatValues{
-	"raw":    SecretFormatRaw,
-	"hex":    SecretFormatHex,
-	"base64": SecretFormatBase64,
-}
-
-// SecretFormat implements the flags.Enum interface for SecretFormat.
-func (f SecretFormat) EnumValues() map[string]SecretFormat {
-	return values
+// EnumValues implements flags.EnumValues for SecretFormat. A new map is
+// returned on each call so that callers cannot mutate the values shared by
+// every SecretFormat.
+func (SecretFormat) EnumValues() map[string]SecretFormat {
+	return map[string]SecretFormat{
+		"raw":    SecretFormatRaw,
+		"hex":    SecretFormatHex,
+		"base64": SecretFormatBase64,
+	}
 }
 
 type SecretConfigFlags struct {

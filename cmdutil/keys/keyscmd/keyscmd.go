@@ -37,7 +37,7 @@ func ReadFSWithStdin(fs file.ReadFileFS, name string) file.ReadFileFS {
 	return fs
 }
 
-// WriterSWithStdout returns a file.WriteFileFS that writes to stdout if the name is "-" or empty.
+// WriteFSWithStdout returns a file.WriteFileFS that writes to stdout if the name is "-" or empty.
 func WriteFSWithStdout(fs file.WriteFileFS, name string) file.WriteFileFS {
 	if IsStdoutStdin(name) {
 		return localfs.AnonymousWriteFile{
@@ -169,8 +169,7 @@ func SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, marshal func(any
 	if err != nil {
 		return err
 	}
-	fs := localfs.New()
-	return fs.WriteFileCtx(ctx, dst, out, perm)
+	return localfs.New().WriteFileCtx(ctx, dst, out, perm)
 }
 
 func SafeWriteKeyInfoJSON(ctx context.Context, ki keys.Info, dst string, perm fs.FileMode) error {

@@ -149,7 +149,7 @@ func SafeWriteToLocal(ctx context.Context, srcFS file.ReadFileFS, src string, fi
 ```go
 func WriteFSWithStdout(fs file.WriteFileFS, name string) file.WriteFileFS
 ```
-WriterSWithStdout returns a file.WriteFileFS that writes to stdout if the
+WriteFSWithStdout returns a file.WriteFileFS that writes to stdout if the
 name is "-" or empty.
 
 
@@ -318,9 +318,11 @@ SecretFormatBase64
 ### Methods
 
 ```go
-func (f SecretFormat) EnumValues() map[string]SecretFormat
+func (SecretFormat) EnumValues() map[string]SecretFormat
 ```
-SecretFormat implements the flags.Enum interface for SecretFormat.
+EnumValues implements flags.EnumValues for SecretFormat. A new map is
+returned on each call so that callers cannot mutate the values shared by
+every SecretFormat.
 
 
 
