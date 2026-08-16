@@ -8,17 +8,21 @@ import cloudeng.io/file/filetestutil
 ## Functions
 ### Func CaptureStderr
 ```go
-func CaptureStderr(fn func() error) (string, error)
+func CaptureStderr(fn func() error) ([]byte, error)
 ```
-CaptureStderr redirects os.Stderr to a pipe, runs fn, and returns any output
-written to os.Stderr along with any error returned by fn.
+CaptureStderr redirects os.Stderr to a pipe, runs fn, and returns any
+output written to os.Stderr along with any error returned by fn. NOTE:
+CaptureStderr temporarily replaces os.Stderr and is not safe for concurrent
+use.
 
 ### Func CaptureStdout
 ```go
-func CaptureStdout(fn func() error) (string, error)
+func CaptureStdout(fn func() error) ([]byte, error)
 ```
-CaptureStdout redirects os.Stdout to a pipe, runs fn, and returns any output
-written to os.Stdout along with any error returned by fn.
+CaptureStdout redirects os.Stdout to a pipe, runs fn, and returns any
+output written to os.Stdout along with any error returned by fn. NOTE:
+CaptureStdout temporarily replaces os.Stdout and is not safe for concurrent
+use.
 
 ### Func CompareFS
 ```go
@@ -42,8 +46,9 @@ Contents returns the contents stored in the mock fs.FS.
 ```go
 func FeedStdin(input string, fn func() error) error
 ```
-FeedStdin redirects os.Stdin to read from a pipe populated with input,
-runs fn, and restores os.Stdin.
+FeedStdin redirects os.Stdin to read from a pipe populated with input, runs
+fn, and restores os.Stdin. NOTE: FeedStdin temporarily replaces os.Stdin and
+is not safe for concurrent use.
 
 ### Func NewFile
 ```go

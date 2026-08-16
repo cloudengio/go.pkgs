@@ -5,6 +5,7 @@
 package keys_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -642,37 +643,52 @@ func TestKeySpecString(t *testing.T) {
 	}
 }
 
+func cmpKeyInfo(t *testing.T, a, b keys.Info) {
+	t.Helper()
+	if a.ID != b.ID || a.User != b.User {
+		t.Fatalf("key info mismatch: a=%+v, b=%+v", a, b)
+	}
+	if !bytes.Equal(a.Token().Value(), b.Token().Value()) {
+		t.Fatalf("key info token mismatch: a=%+v, b=%+v", a, b)
+	}
+}
+
+func cmpKeySpec(t *testing.T, a, b keys.KeySpec) {
+	t.Helper()
+	if a.ID != b.ID || a.User != b.User {
+		t.Fatalf("key spec mismatch: a=%+v, b=%+v", a, b)
+	}
+}
+
 func TestInMemoryKeyStoreMethods(t *testing.T) {
 	ks := keys.NewInMemoryKeyStore()
-	ks.Add(keys.NewInfo("id1", "user1", []byte("t1")))
-	ks.Add(keys.NewInfo("id2", "user2", []byte("t2")))
+	k1 := keys.NewInfo("id1", "user1", []byte("t1"))
+	k2 := keys.NewInfo("id2", "user1", []byte("t1.1"))
+	k3 := keys.NewInfo("id2", "user2", []byte("t2"))
+	ks.Add(k3)
+	ks.Add(k2)
+	ks.Add(k1)
 
 	// Keys
 	kiList := ks.Keys()
-	if got, want := len(kiList), 2; got != want {
+	if got, want := len(kiList), 3; got != want {
 		t.Errorf("got %v keys, want %v", got, want)
 	}
-	if got, want := kiList[0].ID, "id1"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if got, want := kiList[1].ID, "id2"; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
+	cmpKeyInfo(t, kiList[0], k1)
+	cmpKeyInfo(t, kiList[1], k2)
+	cmpKeyInfo(t, kiList[2], k3)
 
 	// KeySpecs
 	specs := ks.KeySpecs()
-	if got, want := len(specs), 2; got != want {
+	if got, want := len(specs), 3; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	// Order is sorted by ID and User
-	if got, want := specs[0].ID, "id1"; got != want {
+	if got, want := ks.Len(), 3; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
-	// Len
-	if got, want := ks.Len(), 2; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
+	cmpKeySpec(t, specs[0], k1.KeySpec())
+	cmpKeySpec(t, specs[1], k2.KeySpec())
+	cmpKeySpec(t, specs[2], k3.KeySpec())
 
 	// MarshalJSON
 	buf, err := ks.MarshalJSON()
@@ -684,29 +700,20 @@ func TestInMemoryKeyStoreMethods(t *testing.T) {
 	if err := json.Unmarshal(buf, &ks2); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if ks2.Len() != 2 {
-		t.Errorf("got %v, want 2", ks2.Len())
+	if ks2.Len() != 3 {
+		t.Errorf("got %v, want 3", ks2.Len())
 	}
 
 	// Verify the actual keys after unmarshalling
 	owners2 := ks2.KeySpecs()
-	if got, want := len(owners2), 2; got != want {
+	if got, want := len(owners2), 3; got != want {
 		t.Fatalf("unmarshaled store has %v keys, want %v", got, want)
 	}
 
 	// Assuming order is sorted by ID and User
-	if got, want := owners2[0].ID, "id1"; got != want {
-		t.Errorf("unmarshaled key 1 ID: got %v, want %v", got, want)
-	}
-	if got, want := owners2[0].User, "user1"; got != want {
-		t.Errorf("unmarshaled key 1 User: got %v, want %v", got, want)
-	}
-	if got, want := owners2[1].ID, "id2"; got != want {
-		t.Errorf("unmarshaled key 2 ID: got %v, want %v", got, want)
-	}
-	if got, want := owners2[1].User, "user2"; got != want {
-		t.Errorf("unmarshaled key 2 User: got %v, want %v", got, want)
-	}
+	cmpKeySpec(t, owners2[0], k1.KeySpec())
+	cmpKeySpec(t, owners2[1], k2.KeySpec())
+	cmpKeySpec(t, owners2[2], k3.KeySpec())
 
 	// Also verify that the token values are preserved (lazy loaded)
 	k1Unmarshaled, _ := ks2.Get("user1", "id1")

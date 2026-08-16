@@ -166,6 +166,10 @@ func (k Info) Token() Token {
 	return Token{KeySpec: KeySpec{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
 }
 
+func (k Info) KeySpec() KeySpec {
+	return KeySpec{ID: k.ID, User: k.User}
+}
+
 func (k Info) extraFromJSON(v any) error {
 	if err := json.Unmarshal(k.extraJSON, v); err != nil {
 		return fmt.Errorf("failed to unmarshal extra json for key_id: %v: %w", k.ID, err)

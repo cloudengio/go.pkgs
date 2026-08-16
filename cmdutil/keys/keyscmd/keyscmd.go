@@ -163,7 +163,7 @@ func SafeWriteKeyInfoToLocal(ctx context.Context, ki keys.Info, marshal func(any
 			// Redact the key bytes in the token value
 			return keys.RedactKeyBytes(data, 4)
 		}
-		return keys.SafeWriteKeyInfoToStdout(ctx, ki, marshal, redact)
+		return keys.SafeWriteKeyInfoToStdout(ki, marshal, redact)
 	}
 	out, err := marshal(ki)
 	if err != nil {

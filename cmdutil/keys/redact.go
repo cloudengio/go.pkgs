@@ -6,7 +6,6 @@ package keys
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -108,7 +107,7 @@ func IsStdoutPiped() bool {
 // to serialize the key info and redact to redact the key value if stdout is
 // a terminal. It writes the full key info if stdout is not a terminal.
 // It returns an error if the key info cannot be marshaled or written.
-func SafeWriteKeyInfoToStdout(ctx context.Context, ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error {
+func SafeWriteKeyInfoToStdout(ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error {
 	if IsStdoutPiped() {
 		out, err := marshal(ki)
 		if err != nil {
