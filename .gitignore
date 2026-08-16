@@ -21,3 +21,5 @@ go.work.sum
 .*.swp
 
 .gograph/
+.graphifyignore
+graphify-out/
