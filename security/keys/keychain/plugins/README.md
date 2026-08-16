@@ -22,6 +22,13 @@ ErrKeyNotFound = NewErrorKeyNotFound("")
 ErrKeyNotFound can be used as the target of errors.Is to check for a key not
 found error.
 
+### ErrReadOnly
+```go
+ErrReadOnly = errors.New("read-only FS")
+
+```
+ErrReadOnly is returned when attempting to write to a read-only FS.
+
 
 
 ## Functions
@@ -94,11 +101,11 @@ file.ReadFileFS and file.WriteFileFS.
 ### Functions
 
 ```go
-func NewFS(pluginPath string, pluginSpecific any, args ...string) *FS
+func NewFS(pluginPath string, writable bool, pluginSpecific any, args ...string) *FS
 ```
-NewFS creates a new FS instance with the specified plugin path,
-plugin-specific data, and plugin arguments. The plugin-specific data is
-passed to the plugin in the request.
+NewFS creates a new FS instance with the specified plugin path, writable
+flag, plugin-specific data, and plugin arguments. The plugin-specific data
+is passed to the plugin in the request.
 
 
 

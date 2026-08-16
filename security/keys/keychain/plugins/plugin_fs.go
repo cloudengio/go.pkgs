@@ -20,17 +20,26 @@ type FS struct {
 	binary         string
 	args           []string
 	logger         *slog.Logger
+	writable       bool
 }
 
-// NewFS creates a new FS instance with the specified plugin path, plugin-specific
-// data, and plugin arguments. The plugin-specific data is passed to the plugin
-// in the request.
-func NewFS(pluginPath string, pluginSpecific any, args ...string) *FS {
+// ErrReadOnly is returned when attempting to write to a read-only FS.
+var ErrReadOnly = errors.New("read-only FS")
+
+// NewFS creates a new FS instance with the specified plugin path, writable flag,
+// plugin-specific data, and plugin arguments. The plugin-specific data is passed
+// to the plugin in the request.
+func NewFS(pluginPath string, writable bool, pluginSpecific any, args ...string) *FS {
 	return &FS{
 		pluginSpecific: pluginSpecific,
 		binary:         pluginPath,
 		args:           args,
+		writable:       writable,
 	}
+}
+
+func (f *FS) PluginPath() string {
+	return f.binary
 }
 
 // WithLogger returns a new FS instance with the provided logger.
@@ -73,6 +82,9 @@ func (f FS) WriteFile(name string, data []byte, perm fs.FileMode) error {
 }
 
 func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.FileMode) error {
+	if !f.writable {
+		return ErrReadOnly
+	}
 	req, err := NewWriteRequest(name, data, f.pluginSpecific)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
