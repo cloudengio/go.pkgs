@@ -228,3 +228,7 @@ func (ims *InMemoryKeyStore) WriteYAML(ctx context.Context, wfs file.WriteFileFS
 	}
 	return wfs.WriteFileCtx(ctx, name, data, perm)
 }
+
+func (ims *InMemoryKeyStore) Keys() []Info {
+	return ims.getSortedKeys()
+}

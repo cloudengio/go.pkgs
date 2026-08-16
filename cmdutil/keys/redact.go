@@ -6,6 +6,8 @@ package keys
 
 import (
 	"bytes"
+	"fmt"
+	"os"
 	"strings"
 	"unsafe"
 )
@@ -86,4 +88,37 @@ func RedactBytesTail(b []byte, keep int) []byte {
 	copy(out, "******")
 	copy(out[6:], b[len(b)-keep:])
 	return out
+}
+
+// IsStdoutPiped returns true if stdout is piped or redirected,
+// false if it is a terminal. Use it to determine whether to output sensitive
+// information to stdout, generally key values, which should not be printed to a
+// terminal, should only ever be sent to a pipe or redirected to a file.
+func IsStdoutPiped() bool {
+	stat, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	// If the ModeCharDevice bit is not set, stdout is piped or redirected
+	return (stat.Mode() & os.ModeCharDevice) == 0
+}
+
+// SafeWriteKeyInfoToStdout writes the provided key info to stdout using marshal
+// to serialize the key info and redact to redact the key value if stdout is
+// a terminal. It writes the full key info if stdout is not a terminal.
+// It returns an error if the key info cannot be marshaled or written.
+func SafeWriteKeyInfoToStdout(ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error {
+	if IsStdoutPiped() {
+		out, err := marshal(ki)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(out)
+		return err
+	}
+	tok := ki.Token()
+	redacted := redact(tok.Value())
+	tok.Clear()
+	_, err := fmt.Fprintf(os.Stdout, "%s: %s\n", ki.String(), redacted)
+	return err
 }
