@@ -22,8 +22,8 @@ func TestCaptureStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CaptureStdout: %v", err)
 	}
-	if out != "hello stdout" {
-		t.Errorf("got %q, want %q", out, "hello stdout")
+	if string(out) != "hello stdout" {
+		t.Errorf("got %q, want %q", string(out), "hello stdout")
 	}
 
 	testErr := errors.New("test error")
@@ -34,8 +34,8 @@ func TestCaptureStdout(t *testing.T) {
 	if !errors.Is(err2, testErr) {
 		t.Errorf("got %v, want %v", err2, testErr)
 	}
-	if out2 != "with error" {
-		t.Errorf("got %q, want %q", out2, "with error")
+	if string(out2) != "with error" {
+		t.Errorf("got %q, want %q", string(out2), "with error")
 	}
 }
 
@@ -47,8 +47,8 @@ func TestCaptureStderr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CaptureStderr: %v", err)
 	}
-	if out != "hello stderr" {
-		t.Errorf("got %q, want %q", out, "hello stderr")
+	if string(out) != "hello stderr" {
+		t.Errorf("got %q, want %q", string(out), "hello stderr")
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,6 +17,8 @@ import (
 	"cloudeng.io/cmdutil/keys"
 	"cloudeng.io/cmdutil/keys/keyscmd"
 	"cloudeng.io/cmdutil/subcmd"
+	"cloudeng.io/file"
+	"cloudeng.io/file/filetestutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,6 +44,54 @@ func (m *mockReadWriteFS) WriteFile(name string, data []byte, _ fs.FileMode) err
 
 func (m *mockReadWriteFS) WriteFileCtx(_ context.Context, name string, data []byte, perm fs.FileMode) error {
 	return m.WriteFile(name, data, perm)
+}
+
+// captureStdout redirects os.Stdout to a pipe for the duration of fn and
+// returns everything written to it. Nothing drains the pipe until fn returns,
+// so the amount written must fit in the pipe's buffer.
+func captureStdout(t *testing.T, fn func()) []byte {
+	t.Helper()
+	out, err := filetestutil.CaptureStdout(func() error {
+		fn()
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("CaptureStdout: %v", err)
+	}
+	return out
+}
+
+// withStdin replaces os.Stdin for the duration of fn with a pipe primed with
+// data and closed, so that readers see the data followed by EOF.
+func withStdin(t *testing.T, data []byte, fn func()) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer r.Close()
+	orig := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = orig }()
+	if _, err := w.Write(data); err != nil {
+		t.Fatalf("w.Write: %v", err)
+	}
+	w.Close()
+	fn()
+}
+
+// wantKeyInfo checks that ki has the expected id, user and token value.
+func wantKeyInfo(t *testing.T, ki keys.Info, id, user, token string) {
+	t.Helper()
+	if got, want := ki.ID, id; got != want {
+		t.Errorf("ID = %q, want %q", got, want)
+	}
+	if got, want := ki.User, user; got != want {
+		t.Errorf("User = %q, want %q", got, want)
+	}
+	if got, want := string(ki.Token().Value()), token; got != want {
+		t.Errorf("Token = %q, want %q", got, want)
+	}
 }
 
 func TestIsStdoutStdin(t *testing.T) {
@@ -91,6 +140,26 @@ func TestKeyReaderAndWriter(t *testing.T) {
 		t.Errorf("got key ID %q, want %q", got, want)
 	}
 
+	// Non-existent key lookup -> should error with ErrKeyInfoNotFound
+	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "notfound", User: "user"}); err == nil {
+		t.Errorf("expected error looking up notfound key")
+	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
+		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
+	}
+}
+
+func TestKeyWriterUpdateAndDelete(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
+
+	writer := keyscmd.NewKeyWriter(mfs)
+	reader := keyscmd.NewKeyReader(mfs)
+
+	k1 := keys.NewInfo("k1", "user1", []byte("val1"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, k1); err != nil {
+		t.Fatalf("SetKeys: %v", err)
+	}
+
 	// Try to add k1 again without update=true -> should error
 	if err := writer.SetKeys(ctx, "store.yaml", false, k1); err == nil {
 		t.Errorf("expected error adding existing key with update=false, got nil")
@@ -111,35 +180,39 @@ func TestKeyReaderAndWriter(t *testing.T) {
 		t.Errorf("got token %q, want %q", got, want)
 	}
 
-	// Non-existent key lookup -> should error with ErrKeyInfoNotFound
-	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "notfound", User: "user"}); err == nil {
-		t.Errorf("expected error looking up notfound key")
-	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
-		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
-	}
-
 	// Delete a key
 	if err := writer.DeleteKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err != nil {
 		t.Fatalf("DeleteKey k1: %v", err)
 	}
 
 	// Ensure it is deleted
-	_, err = reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"})
-	if err == nil {
+	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err == nil {
 		t.Fatalf("expected error getting deleted key, got nil")
 	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
 		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
 	}
+}
+
+func TestKeyReaderAndWriterMissingFile(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
 
 	// Non-existent file lookup in GetKeys
+	reader := keyscmd.NewKeyReader(mfs)
 	if _, err := reader.GetKeys(ctx, "nonexistent.yaml"); err == nil {
 		t.Errorf("expected error getting keys from nonexistent file")
 	}
 
 	// Non-existent file in DeleteKey
+	writer := keyscmd.NewKeyWriter(mfs)
 	if err := writer.DeleteKey(ctx, "nonexistent.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err == nil {
 		t.Errorf("expected error deleting key from nonexistent file")
 	}
+}
+
+func TestSafeWriteReadKeyInfoLocal(t *testing.T) {
+	ctx := context.Background()
+	k2 := keys.NewInfo("k2", "user2", []byte("val2"))
 
 	// Test SafeWriteKeyInfoJSON and SafeWriteKeyInfoYAML to local file
 	tmpDir := t.TempDir()
@@ -177,23 +250,13 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadKeyInfoFromLocalJSON: %v", err)
 	}
-	if got, want := readJSONKey.ID, "k2"; got != want {
-		t.Errorf("readJSONKey.ID = %q, want %q", got, want)
-	}
-	if got, want := string(readJSONKey.Token().Value()), "val2"; got != want {
-		t.Errorf("readJSONKey.Token = %q, want %q", got, want)
-	}
+	wantKeyInfo(t, readJSONKey, "k2", "user2", "val2")
 
 	readYAMLKey, err := keyscmd.ReadKeyInfoFromLocalYAML(ctx, yamlFile)
 	if err != nil {
 		t.Fatalf("ReadKeyInfoFromLocalYAML: %v", err)
 	}
-	if got, want := readYAMLKey.ID, "k2"; got != want {
-		t.Errorf("readYAMLKey.ID = %q, want %q", got, want)
-	}
-	if got, want := string(readYAMLKey.Token().Value()), "val2"; got != want {
-		t.Errorf("readYAMLKey.Token = %q, want %q", got, want)
-	}
+	wantKeyInfo(t, readYAMLKey, "k2", "user2", "val2")
 
 	// Read from non-existent file
 	if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, filepath.Join(tmpDir, "notfound.json")); err == nil {
@@ -217,70 +280,31 @@ func TestSafeWriteKeyInfoStdout(t *testing.T) {
 	ctx := context.Background()
 	ki := keys.NewInfo("pipeKey", "pipeUser", []byte("secret_value_12345"))
 
+	encodings := []struct {
+		name      string
+		write     func(context.Context, keys.Info, string, fs.FileMode) error
+		unmarshal func([]byte, any) error
+	}{
+		{"JSON", keyscmd.SafeWriteKeyInfoJSON, json.Unmarshal},
+		{"YAML", keyscmd.SafeWriteKeyInfoYAML, yaml.Unmarshal},
+	}
+
+	// Both "-" and "" name stdout.
 	for _, name := range []string{"-", ""} {
-		t.Run("JSON_"+name, func(t *testing.T) {
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("os.Pipe: %v", err)
-			}
-			defer r.Close()
-
-			origStdout := os.Stdout
-			os.Stdout = w
-			defer func() {
-				os.Stdout = origStdout
-			}()
-
-			if err := keyscmd.SafeWriteKeyInfoJSON(ctx, ki, name, 0o600); err != nil {
-				t.Fatalf("SafeWriteKeyInfoJSON to stdout (%q): %v", name, err)
-			}
-			w.Close()
-
-			out, err := io.ReadAll(r)
-			if err != nil {
-				t.Fatalf("ReadAll: %v", err)
-			}
-
-			var got keys.Info
-			if err := json.Unmarshal(out, &got); err != nil {
-				t.Fatalf("json.Unmarshal: %v", err)
-			}
-			if got.ID != "pipeKey" || got.User != "pipeUser" || string(got.Token().Value()) != "secret_value_12345" {
-				t.Errorf("unmarshaled info = %+v, want ki", got)
-			}
-		})
-
-		t.Run("YAML_"+name, func(t *testing.T) {
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("os.Pipe: %v", err)
-			}
-			defer r.Close()
-
-			origStdout := os.Stdout
-			os.Stdout = w
-			defer func() {
-				os.Stdout = origStdout
-			}()
-
-			if err := keyscmd.SafeWriteKeyInfoYAML(ctx, ki, name, 0o600); err != nil {
-				t.Fatalf("SafeWriteKeyInfoYAML to stdout (%q): %v", name, err)
-			}
-			w.Close()
-
-			out, err := io.ReadAll(r)
-			if err != nil {
-				t.Fatalf("ReadAll: %v", err)
-			}
-
-			var got keys.Info
-			if err := yaml.Unmarshal(out, &got); err != nil {
-				t.Fatalf("yaml.Unmarshal: %v", err)
-			}
-			if got.ID != "pipeKey" || got.User != "pipeUser" || string(got.Token().Value()) != "secret_value_12345" {
-				t.Errorf("unmarshaled info = %+v, want ki", got)
-			}
-		})
+		for _, enc := range encodings {
+			t.Run(enc.name+"_"+name, func(t *testing.T) {
+				out := captureStdout(t, func() {
+					if err := enc.write(ctx, ki, name, 0o600); err != nil {
+						t.Fatalf("SafeWriteKeyInfo%s to stdout (%q): %v", enc.name, name, err)
+					}
+				})
+				var got keys.Info
+				if err := enc.unmarshal(out, &got); err != nil {
+					t.Fatalf("%s unmarshal: %v", enc.name, err)
+				}
+				wantKeyInfo(t, got, "pipeKey", "pipeUser", "secret_value_12345")
+			})
+		}
 	}
 }
 
@@ -288,91 +312,40 @@ func TestReadKeyInfoStdin(t *testing.T) {
 	ctx := context.Background()
 	ki := keys.NewInfo("stdinKey", "stdinUser", []byte("secret_from_stdin"))
 
+	encodings := []struct {
+		name    string
+		marshal func(any) ([]byte, error)
+		read    func(context.Context, string) (keys.Info, error)
+	}{
+		{"JSON", json.Marshal, keyscmd.ReadKeyInfoFromLocalJSON},
+		{"YAML", yaml.Marshal, keyscmd.ReadKeyInfoFromLocalYAML},
+	}
+
+	// Both "-" and "" name stdin.
 	for _, name := range []string{"-", ""} {
-		t.Run("JSON_"+name, func(t *testing.T) {
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("os.Pipe: %v", err)
-			}
-			defer r.Close()
-
-			origStdin := os.Stdin
-			os.Stdin = r
-			defer func() {
-				os.Stdin = origStdin
-			}()
-
-			data, err := json.Marshal(ki)
-			if err != nil {
-				t.Fatalf("json.Marshal: %v", err)
-			}
-			if _, err := w.Write(data); err != nil {
-				t.Fatalf("w.Write: %v", err)
-			}
-			w.Close()
-
-			readKi, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, name)
-			if err != nil {
-				t.Fatalf("ReadKeyInfoFromLocalJSON(%q): %v", name, err)
-			}
-			if readKi.ID != "stdinKey" || readKi.User != "stdinUser" || string(readKi.Token().Value()) != "secret_from_stdin" {
-				t.Errorf("ReadKeyInfoFromLocalJSON = %+v, want ki", readKi)
-			}
-		})
-
-		t.Run("YAML_"+name, func(t *testing.T) {
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("os.Pipe: %v", err)
-			}
-			defer r.Close()
-
-			origStdin := os.Stdin
-			os.Stdin = r
-			defer func() {
-				os.Stdin = origStdin
-			}()
-
-			data, err := yaml.Marshal(ki)
-			if err != nil {
-				t.Fatalf("yaml.Marshal: %v", err)
-			}
-			if _, err := w.Write(data); err != nil {
-				t.Fatalf("w.Write: %v", err)
-			}
-			w.Close()
-
-			readKi, err := keyscmd.ReadKeyInfoFromLocalYAML(ctx, name)
-			if err != nil {
-				t.Fatalf("ReadKeyInfoFromLocalYAML(%q): %v", name, err)
-			}
-			if readKi.ID != "stdinKey" || readKi.User != "stdinUser" || string(readKi.Token().Value()) != "secret_from_stdin" {
-				t.Errorf("ReadKeyInfoFromLocalYAML = %+v, want ki", readKi)
-			}
-		})
+		for _, enc := range encodings {
+			t.Run(enc.name+"_"+name, func(t *testing.T) {
+				data, err := enc.marshal(ki)
+				if err != nil {
+					t.Fatalf("%s marshal: %v", enc.name, err)
+				}
+				withStdin(t, data, func() {
+					readKi, err := enc.read(ctx, name)
+					if err != nil {
+						t.Fatalf("ReadKeyInfoFromLocal%s(%q): %v", enc.name, name, err)
+					}
+					wantKeyInfo(t, readKi, "stdinKey", "stdinUser", "secret_from_stdin")
+				})
+			})
+		}
 	}
 
 	t.Run("corrupted_stdin", func(t *testing.T) {
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("os.Pipe: %v", err)
-		}
-		defer r.Close()
-
-		origStdin := os.Stdin
-		os.Stdin = r
-		defer func() {
-			os.Stdin = origStdin
-		}()
-
-		if _, err := w.Write([]byte("not valid json or yaml")); err != nil {
-			t.Fatalf("w.Write: %v", err)
-		}
-		w.Close()
-
-		if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, "-"); err == nil {
-			t.Errorf("expected error unmarshaling invalid JSON from stdin")
-		}
+		withStdin(t, []byte("not valid json or yaml"), func() {
+			if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, "-"); err == nil {
+				t.Errorf("expected error unmarshaling invalid JSON from stdin")
+			}
+		})
 	})
 }
 
@@ -528,54 +501,53 @@ func TestSafeWriteToLocalAndReadFromLocal(t *testing.T) {
 }
 
 func TestSecretConfig(t *testing.T) {
-	// Raw
-	scRaw := keyscmd.SecretConfig{
-		Size:   16,
-		Format: keyscmd.SecretFormatRaw,
-		ID:     "rawKey",
-		User:   "user1",
+	for _, tc := range []struct {
+		name    string
+		format  keyscmd.SecretFormat
+		id      string
+		wantLen int // encoded length of a 16 byte secret
+	}{
+		{"raw", keyscmd.SecretFormatRaw, "rawKey", 16},
+		{"hex", keyscmd.SecretFormatHex, "hexKey", 32},       // 16 bytes * 2 hex chars
+		{"base64", keyscmd.SecretFormatBase64, "b64Key", 24}, // 16 bytes -> 24 chars
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := keyscmd.SecretConfig{
+				Size:   16,
+				Format: tc.format,
+				ID:     tc.id,
+				User:   "user1",
+			}
+			ki, err := sc.New()
+			if err != nil {
+				t.Fatalf("New(): %v", err)
+			}
+			if got, want := len(ki.Token().Value()), tc.wantLen; got != want {
+				t.Errorf("key len = %d, want %d", got, want)
+			}
+			if got, want := ki.ID, tc.id; got != want {
+				t.Errorf("key ID = %q, want %q", got, want)
+			}
+		})
 	}
-	kiRaw, err := scRaw.New()
-	if err != nil {
-		t.Fatalf("scRaw.New(): %v", err)
-	}
-	if len(kiRaw.Token().Value()) != 16 {
-		t.Errorf("raw key len = %d, want 16", len(kiRaw.Token().Value()))
-	}
-	if got, want := kiRaw.ID, "rawKey"; got != want {
-		t.Errorf("raw key ID = %q, want %q", got, want)
-	}
+}
 
-	// Hex
-	scHex := keyscmd.SecretConfig{
-		Size:   16,
-		Format: keyscmd.SecretFormatHex,
-		ID:     "hexKey",
-		User:   "user1",
+func TestSecretConfigInvalid(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  keyscmd.SecretConfig
+	}{
+		{"zero size", keyscmd.SecretConfig{Size: 0, Format: keyscmd.SecretFormatHex}},
+		{"negative size", keyscmd.SecretConfig{Size: -5, Format: keyscmd.SecretFormatHex}},
+		{"invalid format", keyscmd.SecretConfig{Size: 16, Format: keyscmd.SecretFormat(999)}},
+	} {
+		if _, err := tc.cfg.New(); err == nil {
+			t.Errorf("%v: expected an error, got nil", tc.name)
+		}
 	}
-	kiHex, err := scHex.New()
-	if err != nil {
-		t.Fatalf("scHex.New(): %v", err)
-	}
-	if len(kiHex.Token().Value()) != 32 { // 16 bytes * 2 hex chars
-		t.Errorf("hex key len = %d, want 32", len(kiHex.Token().Value()))
-	}
+}
 
-	// Base64
-	scB64 := keyscmd.SecretConfig{
-		Size:   16,
-		Format: keyscmd.SecretFormatBase64,
-		ID:     "b64Key",
-		User:   "user1",
-	}
-	kiB64, err := scB64.New()
-	if err != nil {
-		t.Fatalf("scB64.New(): %v", err)
-	}
-	if len(kiB64.Token().Value()) != 24 { // 16 bytes encoded base64 -> 24 chars
-		t.Errorf("b64 key len = %d, want 24", len(kiB64.Token().Value()))
-	}
-
+func TestSecretConfigFlags(t *testing.T) {
 	// SecretConfigFlags conversion
 	flags := keyscmd.SecretConfigFlags{
 		Size: 24,
@@ -585,41 +557,20 @@ func TestSecretConfig(t *testing.T) {
 	if err := flags.Format.Set("hex"); err != nil {
 		t.Fatalf("flags.Format.Set: %v", err)
 	}
-	scFromFlags := flags.SecretConfig()
-	if scFromFlags.Size != 24 || scFromFlags.ID != "from-flags" || scFromFlags.User != "flags-user" || scFromFlags.Format != keyscmd.SecretFormatHex {
-		t.Errorf("SecretConfig() = %+v, unexpected fields", scFromFlags)
-	}
-
-	// Invalid size
-	scInvalidSize := keyscmd.SecretConfig{
-		Size:   0,
+	got := flags.SecretConfig()
+	want := keyscmd.SecretConfig{
+		Size:   24,
 		Format: keyscmd.SecretFormatHex,
+		ID:     "from-flags",
+		User:   "flags-user",
 	}
-	if _, err := scInvalidSize.New(); err == nil {
-		t.Errorf("expected error for size 0")
-	}
-
-	scNegativeSize := keyscmd.SecretConfig{
-		Size:   -5,
-		Format: keyscmd.SecretFormatHex,
-	}
-	if _, err := scNegativeSize.New(); err == nil {
-		t.Errorf("expected error for negative size")
-	}
-
-	// Invalid format
-	scInvalidFmt := keyscmd.SecretConfig{
-		Size:   16,
-		Format: keyscmd.SecretFormat(999),
-	}
-	if _, err := scInvalidFmt.New(); err == nil {
-		t.Errorf("expected error for invalid format")
+	if got != want {
+		t.Errorf("SecretConfig() = %+v, want %+v", got, want)
 	}
 
 	// EnumValues check
-	ev := keyscmd.SecretFormatRaw.EnumValues()
-	if len(ev) != 3 {
-		t.Errorf("EnumValues len = %d, want 3", len(ev))
+	if got, want := len(keyscmd.SecretFormatRaw.EnumValues()), 3; got != want {
+		t.Errorf("EnumValues len = %d, want %d", got, want)
 	}
 }
 
@@ -680,102 +631,59 @@ func TestReadWriteFSStdout(t *testing.T) {
 		t.Fatalf("ReadFSWithStdin norm returned nil")
 	}
 
-	// Test writing to stdoutFS ("-")
-	t.Run("stdoutFS_write", func(t *testing.T) {
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("os.Pipe: %v", err)
-		}
-		defer r.Close()
+}
 
-		origStdout := os.Stdout
-		os.Stdout = w
-		defer func() {
-			os.Stdout = origStdout
-		}()
+// Both ReadWriteFSWithStdout and WriteFSWithStdout send writes to stdout when
+// the name is "-", regardless of the name passed to WriteFile.
+func TestWriteFSStdout(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
 
-		stdoutFS := keyscmd.ReadWriteFSWithStdout(mfs, "-")
-		if stdoutFS == nil {
-			t.Fatalf("ReadWriteFSWithStdout returned nil")
-		}
+	for _, tc := range []struct {
+		name  string
+		newFS func() file.WriteFileFS
+		data  [2]string
+	}{
+		{"ReadWriteFSWithStdout",
+			func() file.WriteFileFS { return keyscmd.ReadWriteFSWithStdout(mfs, "-") },
+			[2]string{"data1", "data2"}},
+		{"WriteFSWithStdout",
+			func() file.WriteFileFS { return keyscmd.WriteFSWithStdout(mfs, "-") },
+			[2]string{"wfs1", "wfs2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The FS must be created while stdout is redirected since it
+			// captures os.Stdout at construction time.
+			out := captureStdout(t, func() {
+				wfs := tc.newFS()
+				if wfs == nil {
+					t.Fatalf("%v returned nil", tc.name)
+				}
+				if err := wfs.WriteFile("anything", []byte(tc.data[0]), 0o600); err != nil {
+					t.Fatalf("WriteFile: %v", err)
+				}
+				if err := wfs.WriteFileCtx(ctx, "anything", []byte(tc.data[1]), 0o600); err != nil {
+					t.Fatalf("WriteFileCtx: %v", err)
+				}
+			})
+			if got, want := string(out), tc.data[0]+tc.data[1]; got != want {
+				t.Errorf("output = %q, want %q", got, want)
+			}
+		})
+	}
+}
 
-		if err := stdoutFS.WriteFile("anything", []byte("data1"), 0o600); err != nil {
-			t.Fatalf("stdoutFS.WriteFile: %v", err)
-		}
-		if err := stdoutFS.WriteFileCtx(ctx, "anything", []byte("data2"), 0o600); err != nil {
-			t.Fatalf("stdoutFS.WriteFileCtx: %v", err)
-		}
-		w.Close()
+// ReadFSWithStdin reads from stdin when the name is "-".
+func TestReadFSStdin(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
 
-		out, err := io.ReadAll(r)
-		if err != nil {
-			t.Fatalf("ReadAll: %v", err)
-		}
-		if got, want := string(out), "data1data2"; got != want {
-			t.Errorf("stdoutFS output = %q, want %q", got, want)
-		}
-	})
-
-	// Test writing to wfs ("-")
-	t.Run("wfs_write", func(t *testing.T) {
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("os.Pipe: %v", err)
-		}
-		defer r.Close()
-
-		origStdout := os.Stdout
-		os.Stdout = w
-		defer func() {
-			os.Stdout = origStdout
-		}()
-
-		wfs := keyscmd.WriteFSWithStdout(mfs, "-")
-		if wfs == nil {
-			t.Fatalf("WriteFSWithStdout returned nil")
-		}
-
-		if err := wfs.WriteFile("anything", []byte("wfs1"), 0o600); err != nil {
-			t.Fatalf("wfs.WriteFile: %v", err)
-		}
-		if err := wfs.WriteFileCtx(ctx, "anything", []byte("wfs2"), 0o600); err != nil {
-			t.Fatalf("wfs.WriteFileCtx: %v", err)
-		}
-		w.Close()
-
-		out, err := io.ReadAll(r)
-		if err != nil {
-			t.Fatalf("ReadAll: %v", err)
-		}
-		if got, want := string(out), "wfs1wfs2"; got != want {
-			t.Errorf("wfs output = %q, want %q", got, want)
-		}
-	})
-
-	// Test reading from rfs ("-")
-	t.Run("rfs_read", func(t *testing.T) {
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("os.Pipe: %v", err)
-		}
-		defer r.Close()
-
-		origStdin := os.Stdin
-		os.Stdin = r
-		defer func() {
-			os.Stdin = origStdin
-		}()
-
+	// As above, ReadFSWithStdin captures os.Stdin at construction time.
+	withStdin(t, []byte("rfs_input"), func() {
 		rfs := keyscmd.ReadFSWithStdin(mfs, "-")
 		if rfs == nil {
 			t.Fatalf("ReadFSWithStdin returned nil")
 		}
-
-		if _, err := w.Write([]byte("rfs_input")); err != nil {
-			t.Fatalf("w.Write: %v", err)
-		}
-		w.Close()
-
 		data, err := rfs.ReadFile("anything")
 		if err != nil {
 			t.Fatalf("rfs.ReadFile: %v", err)
