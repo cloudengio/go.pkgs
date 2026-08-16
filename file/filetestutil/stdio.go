@@ -12,52 +12,38 @@ import (
 
 // CaptureStdout redirects os.Stdout to a pipe, runs fn, and returns any
 // output written to os.Stdout along with any error returned by fn.
-func CaptureStdout(fn func() error) (string, error) {
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", err
-	}
-	os.Stdout = w
-	defer func() {
-		os.Stdout = oldStdout
-	}()
-	defer w.Close()
-
-	outChan := make(chan string, 1)
-	go func() {
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-		_ = r.Close()
-		outChan <- buf.String()
-	}()
-
-	fnErr := fn()
-	_ = w.Close()
-	out := <-outChan
-	return out, fnErr
+// NOTE: CaptureStdout temporarily replaces os.Stdout and is not
+// safe for concurrent use.
+func CaptureStdout(fn func() error) ([]byte, error) {
+	return captureOSOutput(func() *os.File { return os.Stdout }, func(w *os.File) { os.Stdout = w }, fn)
 }
 
 // CaptureStderr redirects os.Stderr to a pipe, runs fn, and returns any
 // output written to os.Stderr along with any error returned by fn.
-func CaptureStderr(fn func() error) (string, error) {
-	oldStderr := os.Stderr
+// NOTE: CaptureStderr temporarily replaces os.Stderr and is not
+// safe for concurrent use.
+func CaptureStderr(fn func() error) ([]byte, error) {
+	return captureOSOutput(func() *os.File { return os.Stderr }, func(w *os.File) { os.Stderr = w }, fn)
+}
+
+func captureOSOutput(get func() *os.File, set func(*os.File), fn func() error) ([]byte, error) {
+	old := get()
 	r, w, err := os.Pipe()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	os.Stderr = w
+	set(w)
 	defer func() {
-		os.Stderr = oldStderr
+		set(old)
 	}()
 	defer w.Close()
 
-	outChan := make(chan string, 1)
+	outChan := make(chan []byte, 1)
 	go func() {
 		var buf bytes.Buffer
 		_, _ = io.Copy(&buf, r)
 		_ = r.Close()
-		outChan <- buf.String()
+		outChan <- buf.Bytes()
 	}()
 
 	fnErr := fn()
@@ -68,6 +54,8 @@ func CaptureStderr(fn func() error) (string, error) {
 
 // FeedStdin redirects os.Stdin to read from a pipe populated with input,
 // runs fn, and restores os.Stdin.
+// NOTE: FeedStdin temporarily replaces os.Stdin and is not
+// safe for concurrent use.
 func FeedStdin(input string, fn func() error) error {
 	oldStdin := os.Stdin
 	r, w, err := os.Pipe()
