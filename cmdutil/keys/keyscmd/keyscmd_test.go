@@ -36,7 +36,7 @@ func (m *mockReadWriteFS) ReadFileCtx(_ context.Context, name string) ([]byte, e
 	return m.ReadFile(name)
 }
 
-func (m *mockReadWriteFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
+func (m *mockReadWriteFS) WriteFile(name string, data []byte, _ fs.FileMode) error {
 	m.data[name] = append([]byte(nil), data...)
 	return nil
 }
@@ -625,7 +625,7 @@ func TestSecretConfig(t *testing.T) {
 
 func TestKeyInfoExtension(t *testing.T) {
 	appended := false
-	ext := keyscmd.NewKeyInfoExtension("test-ext", func(cmd *subcmd.CommandSetYAML) error {
+	ext := keyscmd.NewKeyInfoExtension("test-ext", func(_ *subcmd.CommandSetYAML) error {
 		appended = true
 		return nil
 	})
@@ -794,6 +794,3 @@ func TestReadWriteFSStdout(t *testing.T) {
 		}
 	})
 }
-
-
-

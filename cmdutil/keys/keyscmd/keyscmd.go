@@ -61,13 +61,13 @@ type readWriteFSStdout struct {
 	io.Writer
 }
 
-func (r readWriteFSStdout) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	_, err := r.Writer.Write(data)
+func (r readWriteFSStdout) WriteFile(_ string, data []byte, _ fs.FileMode) error {
+	_, err := r.Write(data)
 	return err
 }
 
-func (r readWriteFSStdout) WriteFileCtx(_ context.Context, _ string, data []byte, perm fs.FileMode) error {
-	_, err := r.Writer.Write(data)
+func (r readWriteFSStdout) WriteFileCtx(_ context.Context, _ string, data []byte, _ fs.FileMode) error {
+	_, err := r.Write(data)
 	return err
 }
 

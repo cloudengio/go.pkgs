@@ -131,4 +131,3 @@ func TestIsStdoutPiped(t *testing.T) {
 	// Call IsStdoutPiped directly, which should not crash and returns a boolean value
 	_ = IsStdoutPiped()
 }
-
