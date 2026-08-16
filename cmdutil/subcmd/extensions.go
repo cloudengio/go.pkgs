@@ -19,7 +19,7 @@ import (
 //
 //   - name: command
 //     commands:
-//     {{range subcmdExtension "exensionName"}}{{.}}
+//     {{range subcmdExtension "extensionName"}}{{.}}
 //     {{end}}
 //
 // The extensionName is the name of the extension as returned by the Name
