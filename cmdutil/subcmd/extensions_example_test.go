@@ -47,18 +47,22 @@ commands:
 
 	dbExt := subcmd.NewExtension("db", dbYAML,
 		func(cmd *subcmd.CommandSetYAML) error {
-			run := func(ctx context.Context, f any, args []string) error {
-				name, _ := ctx.Value("subcmd").(string)
-				fl := f.(*dbFlags)
-				if fl.DryRun {
-					fmt.Printf("dry-run: %s\n", name)
-				} else {
-					fmt.Printf("running: %s\n", name)
+			// The context carries the command's FlagSet (see
+			// subcmd.FlagSetFromContext) but not the command's name,
+			// so capture the name in a closure when registering the runner.
+			run := func(name string) func(context.Context, any, []string) error {
+				return func(_ context.Context, f any, _ []string) error {
+					fl := f.(*dbFlags)
+					if fl.DryRun {
+						fmt.Printf("dry-run: %s\n", name)
+					} else {
+						fmt.Printf("running: %s\n", name)
+					}
+					return nil
 				}
-				return nil
 			}
-			cmd.Set("db", "migrate").MustRunner(run, &dbFlags{})
-			cmd.Set("db", "reset").MustRunner(run, &dbFlags{})
+			cmd.Set("db", "migrate").MustRunner(run("migrate"), &dbFlags{})
+			cmd.Set("db", "reset").MustRunner(run("reset"), &dbFlags{})
 			return nil
 		},
 	)
@@ -72,8 +76,19 @@ commands:
 
 	// The command tree now contains both "status" and the "db" subtree.
 	fmt.Println(strings.Contains(cmd.String(), "db"))
+
+	// Dispatching runs the registered runner for the named subcommand.
+	ctx := context.Background()
+	if err := cmd.DispatchWithArgs(ctx, "tool", "db", "migrate"); err != nil {
+		panic(err)
+	}
+	if err := cmd.DispatchWithArgs(ctx, "tool", "db", "reset", "--dry-run"); err != nil {
+		panic(err)
+	}
 	// Output:
 	// true
+	// running: migrate
+	// dry-run: reset
 }
 
 // ExampleMergeExtensions shows how to combine multiple independent extensions
