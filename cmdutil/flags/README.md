@@ -187,6 +187,70 @@ String inplements flag.Value.
 
 
 
+### Type Enum
+```go
+type Enum[T EnumType[T]] struct {
+	Value T
+}
+```
+Enum is a generic flag.Value wrapper that supports enumerated types.
+
+### Methods
+
+```go
+func (e Enum[T]) AllowedValues() string
+```
+AllowedValues returns a sorted, comma-separated list of all valid string
+representations for this Enum.
+
+
+```go
+func (e Enum[T]) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler.
+
+
+```go
+func (e *Enum[T]) Set(val string) error
+```
+Set implements flag.Value and returns available options on invalid input.
+
+
+```go
+func (e Enum[T]) String() string
+```
+String implements flag.Value. If multiple strings map to the same value
+the lexicographically smallest one is returned so that the result is stable
+regardless of map iteration order.
+
+
+```go
+func (e *Enum[T]) UnmarshalText(text []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler.
+
+
+
+
+### Type EnumType
+```go
+type EnumType[T any] interface {
+	comparable
+	EnumValues[T]
+}
+```
+EnumType combines comparable underlying types with EnumValues.
+
+
+### Type EnumValues
+```go
+type EnumValues[T any] interface {
+	EnumValues() map[string]T
+}
+```
+EnumValues must be implemented by any type that is to be used with Enum.
+
+
 ### Type ErrInvalidRange
 ```go
 type ErrInvalidRange struct {
@@ -206,29 +270,6 @@ Error implements error.
 
 ```go
 func (ire ErrInvalidRange) Is(target error) bool
-```
-Is implements errors.Is.
-
-
-
-
-### Type ErrMap
-```go
-type ErrMap struct {
-	// contains filtered or unexported fields
-}
-```
-
-### Methods
-
-```go
-func (me *ErrMap) Error() string
-```
-Error implements error.
-
-
-```go
-func (me ErrMap) Is(target error) bool
 ```
 Is implements errors.Is.
 
@@ -277,49 +318,6 @@ Set implements flag.Value.
 
 ```go
 func (irs *IntRangeSpecs) String() string
-```
-String implements flag.Value.
-
-
-
-
-### Type Map
-```go
-type Map struct {
-	// contains filtered or unexported fields
-}
-```
-Map represents a mapping of strings to values that implements flag.Value
-and can be used for command line flag values. It must be appropriately
-initialized with name, value pairs and a default value using its Register
-and Default methods.
-
-### Methods
-
-```go
-func (ef Map) Default(val any) Map
-```
-
-
-```go
-func (ef *Map) Get() any
-```
-Value implements flag.Getter.
-
-
-```go
-func (ef Map) Register(name string, val any) Map
-```
-
-
-```go
-func (ef *Map) Set(v string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (ef *Map) String() string
 ```
 String implements flag.Value.
 
@@ -525,9 +523,19 @@ String implements flag.Value.
 
 
 ## Examples
+### [Example_jsonEnumMarshal](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-_jsonEnumMarshal)
+
+### [Example_jsonEnumUnmarshal](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-_jsonEnumUnmarshal)
+
+### [Example_yamlEnumMarshal](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-_yamlEnumMarshal)
+
+### [Example_yamlEnumUnmarshal](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-_yamlEnumUnmarshal)
+
 ### [ExampleRegisterFlagsInStruct](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-RegisterFlagsInStruct)
 
-### [ExampleMap](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-Map)
+### [ExampleEnum](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-Enum)
+
+### [ExampleEnum_string](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-Enum_string)
 
 ### [ExampleRangeSpecs](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-RangeSpecs)
 

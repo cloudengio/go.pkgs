@@ -5,74 +5,227 @@
 package flags_test
 
 import (
-	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"cloudeng.io/cmdutil/flags"
 )
 
-func ExampleMap() {
-	type dependEnum int
-	const (
-		Dependencies dependEnum = iota
-		Dependents
-	)
-	mp := flags.Map{}.
-		Register("dependencies", Dependencies).
-		Register("dependents", Dependents).
-		Default(Dependencies)
+// colour implements EnumType for use in tests.
+type colour int
 
-	if err := mp.Set("dependents"); err != nil {
+const (
+	Red colour = iota
+	Green
+	Blue
+)
+
+func (colour) EnumValues() map[string]colour {
+	return map[string]colour{
+		"red":   Red,
+		"green": Green,
+		"blue":  Blue,
+	}
+}
+
+func ExampleEnum() {
+	var e flags.Enum[colour]
+	if err := e.Set("green"); err != nil {
 		panic(err)
 	}
-	fmt.Println(mp.String())
-	fmt.Println(mp.Get().(dependEnum))
+	fmt.Println(e.String())
+	fmt.Println(e.Value)
 	// Output:
-	// dependents
+	// green
 	// 1
 }
 
-type dependEnum int
+func TestEnum(t *testing.T) {
+	var e flags.Enum[colour]
+
+	// Zero value: String returns the name for the zero value.
+	if got, want := e.String(), "red"; got != want {
+		t.Errorf("zero String: got %q, want %q", got, want)
+	}
+
+	// Set valid values.
+	for _, tc := range []struct {
+		input string
+		want  colour
+	}{
+		{"red", Red},
+		{"green", Green},
+		{"blue", Blue},
+	} {
+		if err := e.Set(tc.input); err != nil {
+			t.Errorf("Set(%q): unexpected error: %v", tc.input, err)
+			continue
+		}
+		if e.Value != tc.want {
+			t.Errorf("Set(%q): got %v, want %v", tc.input, e.Value, tc.want)
+		}
+		if got := e.String(); got != tc.input {
+			t.Errorf("String() after Set(%q): got %q", tc.input, got)
+		}
+	}
+
+	// Set invalid value returns an error that names the invalid input and
+	// lists the allowed values.
+	err := e.Set("purple")
+	if err == nil {
+		t.Fatal("Set(invalid): expected error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "purple") {
+		t.Errorf("error missing invalid value: %q", msg)
+	}
+	for _, valid := range []string{"red", "green", "blue"} {
+		if !strings.Contains(msg, valid) {
+			t.Errorf("error missing allowed value %q: %q", valid, msg)
+		}
+	}
+	// Value must be unchanged after a failed Set.
+	if e.Value != Blue {
+		t.Errorf("value changed after failed Set: got %v, want Blue", e.Value)
+	}
+
+	// AllowedValues returns a sorted, comma-separated list.
+	allowed := e.AllowedValues()
+	if got, want := allowed, "blue, green, red"; got != want {
+		t.Errorf("AllowedValues: got %q, want %q", got, want)
+	}
+}
+
+// aliased has multiple string representations for the same value.
+type aliased int
 
 const (
-	Dependencies dependEnum = iota
-	Dependents
+	aliasedOn aliased = iota
+	aliasedOff
 )
 
-func TestMap(t *testing.T) {
-	mp := flags.Map{}
-	err := mp.Set("dependents")
-	if got, want := mp.String(), ""; got != want {
-		t.Errorf("got %v, want %v", got, want)
+func (aliased) EnumValues() map[string]aliased {
+	return map[string]aliased{
+		"on":    aliasedOn,
+		"true":  aliasedOn,
+		"yes":   aliasedOn,
+		"off":   aliasedOff,
+		"false": aliasedOff,
+		"no":    aliasedOff,
 	}
-	mp = mp.Default("bar")
-	if got, want := mp.String(), "bar"; got != want {
-		t.Errorf("got %v, want %v", got, want)
+}
+
+func TestEnumAliases(t *testing.T) {
+	// String must be stable across calls and independent of map iteration
+	// order: the lexicographically smallest alias is returned.
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{"on", "on"},
+		{"true", "on"},
+		{"yes", "on"},
+		{"off", "false"},
+		{"false", "false"},
+		{"no", "false"},
+	} {
+		var e flags.Enum[aliased]
+		if err := e.Set(tc.input); err != nil {
+			t.Errorf("Set(%q): unexpected error: %v", tc.input, err)
+			continue
+		}
+		for range 100 {
+			if got, want := e.String(), tc.want; got != want {
+				t.Errorf("String() after Set(%q): got %q, want %q", tc.input, got, want)
+				break
+			}
+			text, err := e.MarshalText()
+			if err != nil {
+				t.Errorf("MarshalText: unexpected error: %v", err)
+				break
+			}
+			if got, want := string(text), tc.want; got != want {
+				t.Errorf("MarshalText() after Set(%q): got %q, want %q", tc.input, got, want)
+				break
+			}
+		}
 	}
-	if got, want := mp.Get().(string), "bar"; got != want {
-		t.Errorf("got %v, want %v", got, want)
+}
+
+// logLevel is a string-based comparable type showing that Enum works beyond
+// integer underlying types.
+type logLevel string
+
+const (
+	LevelDebug logLevel = "debug"
+	LevelInfo  logLevel = "info"
+	LevelError logLevel = "error"
+)
+
+func (logLevel) EnumValues() map[string]logLevel {
+	return map[string]logLevel{
+		"debug": LevelDebug,
+		"info":  LevelInfo,
+		"error": LevelError,
 	}
-	if err == nil || !errors.Is(err, &flags.ErrMap{}) {
-		t.Errorf("missing or wrong error: %v", err)
+}
+
+func ExampleEnum_string() {
+	var e flags.Enum[logLevel]
+	if err := e.Set("info"); err != nil {
+		panic(err)
 	}
-	mp = mp.Register("dependencies", Dependencies)
-	err = mp.Set("xxx")
-	t.Log(err)
-	if err == nil || !errors.Is(err, &flags.ErrMap{}) {
-		t.Errorf("missing or wrong error: %v", err)
+	fmt.Println(e.String())
+	fmt.Println(e.Value)
+	// Output:
+	// info
+	// info
+}
+
+func TestEnumString(t *testing.T) {
+	var e flags.Enum[logLevel]
+
+	// Zero value is logLevel(""), not in the map; String falls back to %v.
+	if got, want := e.String(), ""; got != want {
+		t.Errorf("zero String: got %q, want %q", got, want)
 	}
-	if got, want := mp.String(), "bar"; got != want {
-		t.Errorf("got %v, want %v", got, want)
+
+	// Set valid values and check round-trip.
+	for _, tc := range []struct {
+		input string
+		want  logLevel
+	}{
+		{"debug", LevelDebug},
+		{"info", LevelInfo},
+		{"error", LevelError},
+	} {
+		if err := e.Set(tc.input); err != nil {
+			t.Errorf("Set(%q): unexpected error: %v", tc.input, err)
+			continue
+		}
+		if e.Value != tc.want {
+			t.Errorf("Set(%q): got %v, want %v", tc.input, e.Value, tc.want)
+		}
+		if got := e.String(); got != tc.input {
+			t.Errorf("String() after Set(%q): got %q", tc.input, got)
+		}
 	}
-	mp = mp.Register("dependents", Dependents)
-	if err := mp.Set("dependents"); err != nil {
-		t.Fatal(err)
+
+	// Invalid value: error must mention the bad input and leave Value unchanged.
+	err := e.Set("trace")
+	if err == nil {
+		t.Fatal("Set(invalid): expected error, got nil")
 	}
-	if got, want := mp.Get().(dependEnum), Dependents; got != want {
-		t.Errorf("got %v, want %v", got, want)
+	if !strings.Contains(err.Error(), "trace") {
+		t.Errorf("error missing invalid value: %q", err.Error())
 	}
-	if got, want := mp.String(), "dependents"; got != want {
-		t.Errorf("got %v, want %v", got, want)
+	if e.Value != LevelError {
+		t.Errorf("value changed after failed Set: got %v", e.Value)
+	}
+
+	// AllowedValues is sorted alphabetically.
+	if got, want := e.AllowedValues(), "debug, error, info"; got != want {
+		t.Errorf("AllowedValues: got %q, want %q", got, want)
 	}
 }
