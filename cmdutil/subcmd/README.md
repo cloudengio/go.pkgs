@@ -522,7 +522,7 @@ at runtime. Implementations of extension are used in conjunction with a
 templated version of the YAML command tree spec. The template can refer to
 an extension using the subcmdExtension function in a template pipeline:
 
-  - name: command commands: {{range subcmdExtension "exensionName"}}{{.}}
+  - name: command commands: {{range subcmdExtension "extensionName"}}{{.}}
     {{end}}
 
 The extensionName is the name of the extension as returned by the Name
