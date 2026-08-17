@@ -123,7 +123,7 @@ zero or >= len(s), all characters are replaced with "*".
 
 ### Func SafeWriteKeyInfoToStdout
 ```go
-func SafeWriteKeyInfoToStdout(ctx context.Context, ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error
+func SafeWriteKeyInfoToStdout(ki Info, marshal func(any) ([]byte, error), redact func([]byte) []byte) error
 ```
 SafeWriteKeyInfoToStdout writes the provided key info to stdout using
 marshal to serialize the key info and redact to redact the key value
@@ -308,6 +308,11 @@ can be set using WithExtra and accessed using UnmarshalExtra.
 func (k Info) GetExtra() any
 ```
 GetExtra returns the extra information for the key.
+
+
+```go
+func (k Info) KeySpec() KeySpec
+```
 
 
 ```go

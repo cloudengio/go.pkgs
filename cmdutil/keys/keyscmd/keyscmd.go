@@ -88,9 +88,12 @@ func ReadWriteFSWithStdout(fs file.ReadWriteFileFS, name string) file.ReadWriteF
 func CopyContents(ctx context.Context, srcFS file.ReadFileFS, src string, dstFS file.WriteFileFS, dst string, perm fs.FileMode) error {
 	contents, err := srcFS.ReadFileCtx(ctx, src)
 	if err != nil {
-		return err
+		return fmt.Errorf("CopyContents: failed to read %v: %w", src, err)
 	}
-	return dstFS.WriteFileCtx(ctx, dst, contents, perm)
+	if err := dstFS.WriteFileCtx(ctx, dst, contents, perm); err != nil {
+		return fmt.Errorf("CopyContents: failed to write %v: %w", dst, err)
+	}
+	return nil
 }
 
 func SafeWriteToLocal(ctx context.Context, srcFS file.ReadFileFS, src string, filename string, perm fs.FileMode) error {
