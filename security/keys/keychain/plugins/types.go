@@ -158,8 +158,7 @@ func (resp Response) UnmarshalPluginSpecific(v any) error {
 // AsError attempts to convert the given error to a *Error and returns it.
 // If the error is not a *Error, it returns nil.
 func AsError(err error) *Error {
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return e
 	}
 	return nil
