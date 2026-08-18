@@ -87,7 +87,7 @@ func TryOpenFile(name string, flag int, perm os.FileMode) (f *File, ok bool, err
 	if err != nil || !ok {
 		return nil, ok, err
 	}
-	lf.osFile.File = of
+	lf.File = of
 
 	// See OpenFile: report a missing Close on a best-effort basis.
 	runtime.SetFinalizer(lf, func(f *File) {

@@ -114,7 +114,8 @@ func TestTryLockHelper(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("helper TryEdit: ok=%v err=%v", ok, err)
 	}
-	if err := os.WriteFile(path+".ready", nil, 0o644); err != nil {
+
+	if err := os.WriteFile(path+".ready", nil, 0o644); err != nil { //nolint:gosec // G306: Expect WriteFile permissions to be 0600 or less
 		t.Fatalf("helper ready: %v", err)
 	}
 	buf := make([]byte, 1)
