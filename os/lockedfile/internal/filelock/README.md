@@ -57,6 +57,26 @@ If f is already read- or write-locked, the behavior of RLock is unspecified.
 Closing the file may or may not release the lock promptly. Callers should
 ensure that Unlock is always called if RLock succeeds.
 
+### Func TryLock
+```go
+func TryLock(f File) (locked bool, err error)
+```
+TryLock is like Lock but, instead of blocking, returns locked=false (with a
+nil error) if the file is already locked by another process.
+
+If TryLock returns locked=true, the caller holds the lock and must call
+Unlock exactly as after a successful Lock.
+
+### Func TryRLock
+```go
+func TryRLock(f File) (locked bool, err error)
+```
+TryRLock is like RLock but, instead of blocking, returns locked=false (with
+a nil error) if the file is already write-locked by another process.
+
+If TryRLock returns locked=true, the caller holds the lock and must call
+Unlock exactly as after a successful RLock.
+
 ### Func Unlock
 ```go
 func Unlock(f File) error

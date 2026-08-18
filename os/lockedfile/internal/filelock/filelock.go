@@ -55,6 +55,24 @@ func RLock(f File) error {
 	return lock(f, readLock)
 }
 
+// TryLock is like Lock but, instead of blocking, returns locked=false (with a
+// nil error) if the file is already locked by another process.
+//
+// If TryLock returns locked=true, the caller holds the lock and must call Unlock
+// exactly as after a successful Lock.
+func TryLock(f File) (locked bool, err error) {
+	return tryLock(f, writeLock)
+}
+
+// TryRLock is like RLock but, instead of blocking, returns locked=false (with a
+// nil error) if the file is already write-locked by another process.
+//
+// If TryRLock returns locked=true, the caller holds the lock and must call
+// Unlock exactly as after a successful RLock.
+func TryRLock(f File) (locked bool, err error) {
+	return tryLock(f, readLock)
+}
+
 // Unlock removes an advisory lock placed on f by this process.
 //
 // The caller must not attempt to unlock a file that is not locked.

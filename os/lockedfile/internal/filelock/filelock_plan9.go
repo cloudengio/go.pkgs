@@ -25,6 +25,14 @@ func lock(f File, lt lockType) error {
 	}
 }
 
+func tryLock(f File, lt lockType) (bool, error) {
+	return false, &os.PathError{
+		Op:   "Try" + lt.String(),
+		Path: f.Name(),
+		Err:  ErrNotSupported,
+	}
+}
+
 func unlock(f File) error {
 	return &os.PathError{
 		Op:   "Unlock",

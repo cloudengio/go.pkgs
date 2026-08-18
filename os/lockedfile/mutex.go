@@ -66,10 +66,39 @@ func (mu *Mutex) Lock() (unlock func(), err error) {
 	}, nil
 }
 
+// TryLock is like Lock but, instead of blocking, returns ok=false (with a nil
+// error and a nil unlock) if the Mutex is already locked by another process.
+//
+// This makes a Mutex suitable for single-instance enforcement: the lock is held
+// until unlock is called or the process exits (including on crash), so it never
+// goes stale.
+func (mu *Mutex) TryLock() (unlock func(), ok bool, err error) {
+	if mu.Path == "" {
+		panic("lockedfile.Mutex: missing Path during TryLock")
+	}
+	// Fast path and non-blocking guarantee: if another goroutine in this process
+	// already holds the mutex, return immediately without touching the
+	// filesystem. Using the non-blocking sync.Mutex.TryLock here (rather than the
+	// blocking Lock used by Lock/RLock) is what keeps TryLock itself non-blocking.
+	if !mu.mu.TryLock() {
+		return nil, false, nil
+	}
+	f, ok, err := TryOpenFile(mu.Path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil || !ok {
+		mu.mu.Unlock()
+		return nil, ok, err
+	}
+
+	return func() {
+		mu.mu.Unlock()
+		f.Close()
+	}, true, nil
+}
+
 // RLock attempts to lock the Mutex for read-only access.
 func (mu *Mutex) RLock() (unlock func(), err error) {
 	if mu.Path == "" {
-		panic("lockedfile.Mutex: missing Path during Lock")
+		panic("lockedfile.Mutex: missing Path during RLock")
 	}
 	f, err := OpenFile(mu.Path, os.O_RDONLY, 0444)
 	if err != nil {
@@ -87,7 +116,7 @@ func (mu *Mutex) RLock() (unlock func(), err error) {
 // will create the lock file if one does not already exist.
 func (mu *Mutex) RLockCreate() (unlock func(), err error) {
 	if mu.Path == "" {
-		panic("lockedfile.Mutex: missing Path during Lock")
+		panic("lockedfile.Mutex: missing Path during RLockCreate")
 	}
 	f, err := OpenFile(mu.Path, os.O_RDONLY, 0444)
 	if err != nil {

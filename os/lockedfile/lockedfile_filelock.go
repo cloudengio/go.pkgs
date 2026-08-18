@@ -54,6 +54,45 @@ func openFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	return f, nil
 }
 
+// tryOpenFile is the non-blocking counterpart of openFile: it returns ok=false
+// (with a nil error) if the file is already locked by another process.
+func tryOpenFile(name string, flag int, perm os.FileMode) (*os.File, bool, error) {
+	f, err := os.OpenFile(name, flag&^os.O_TRUNC, perm)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var locked bool
+	switch flag & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR) {
+	case os.O_WRONLY, os.O_RDWR:
+		locked, err = filelock.TryLock(f)
+	default:
+		locked, err = filelock.TryRLock(f)
+	}
+	if err != nil {
+		f.Close()
+		return nil, false, err
+	}
+	if !locked {
+		f.Close()
+		return nil, false, nil
+	}
+
+	if flag&os.O_TRUNC == os.O_TRUNC {
+		if err := f.Truncate(0); err != nil {
+			if fi, statErr := f.Stat(); statErr != nil || fi.Mode().IsRegular() {
+				if uerr := filelock.Unlock(f); uerr != nil {
+					err = errors.NewM(err, uerr)
+				}
+				f.Close()
+				return nil, false, err
+			}
+		}
+	}
+
+	return f, true, nil
+}
+
 func closeFile(f *os.File) error {
 	// Since locking syscalls operate on file descriptors, we must unlock the file
 	// while the descriptor is still valid — that is, before the file is closed —

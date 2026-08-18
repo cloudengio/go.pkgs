@@ -165,6 +165,77 @@ func lock(f File, lt lockType) (err error) {
 	return nil
 }
 
+// tryLock is the non-blocking counterpart of lock. It respects the same
+// per-inode bookkeeping: if the inode is already owned by another descriptor in
+// this process it returns (false, nil) without queuing, and if the OS lock is
+// held by another process it returns (false, nil) after relinquishing internal
+// ownership.
+func tryLock(f File, lt lockType) (bool, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return false, err
+	}
+	ino := fi.Sys().(*syscall.Stat_t).Ino
+
+	mu.Lock()
+	if i, dup := inodes[f]; dup && i != ino {
+		mu.Unlock()
+		return false, &os.PathError{
+			Op:   "Try" + lt.String(),
+			Path: f.Name(),
+			Err:  errors.New("inode for file changed since last Lock or RLock"),
+		}
+	}
+	l := locks[ino]
+	if l.owner != nil && l.owner != f {
+		// Held internally by another descriptor: acquiring would block.
+		mu.Unlock()
+		return false, nil
+	}
+	inodes[f] = ino
+	becameOwner := l.owner == nil
+	if becameOwner {
+		l.owner = f
+		locks[ino] = l
+	}
+	mu.Unlock()
+
+	// Attempt the OS lock without blocking.
+	err = setlk(f.Fd(), lt)
+	if err == nil {
+		return true, nil
+	}
+	// Failed: relinquish the internal ownership we tentatively took.
+	if becameOwner {
+		relinquish(f, ino)
+	}
+	if err == syscall.EAGAIN || err == syscall.EACCES {
+		return false, nil
+	}
+	return false, &os.PathError{
+		Op:   "Try" + lt.String(),
+		Path: f.Name(),
+		Err:  err,
+	}
+}
+
+// relinquish reverts the internal ownership taken by tryLock when the OS lock
+// could not be acquired. It mirrors the bookkeeping in unlock but performs no OS
+// unlock, since no OS lock was ever held.
+func relinquish(f File, ino inode) {
+	mu.Lock()
+	l := locks[ino]
+	if len(l.queue) == 0 {
+		delete(locks, ino)
+	} else {
+		l.owner = <-l.queue[0]
+		l.queue = l.queue[1:]
+		locks[ino] = l
+	}
+	delete(inodes, f)
+	mu.Unlock()
+}
+
 func unlock(f File) error {
 	var owner File
 
@@ -203,6 +274,22 @@ func unlock(f File) error {
 func setlkw(fd uintptr, lt lockType) error {
 	for {
 		err := syscall.FcntlFlock(fd, syscall.F_SETLKW, &syscall.Flock_t{
+			Type:   int16(lt),
+			Whence: io.SeekStart,
+			Start:  0,
+			Len:    0, // All bytes.
+		})
+		if err != syscall.EINTR {
+			return err
+		}
+	}
+}
+
+// setlk calls FcntlFlock with the non-blocking F_SETLK for the entire file
+// indicated by fd; it returns EAGAIN or EACCES if the lock is already held.
+func setlk(fd uintptr, lt lockType) error {
+	for {
+		err := syscall.FcntlFlock(fd, syscall.F_SETLK, &syscall.Flock_t{
 			Type:   int16(lt),
 			Whence: io.SeekStart,
 			Start:  0,
