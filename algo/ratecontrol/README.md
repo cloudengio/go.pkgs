@@ -265,7 +265,7 @@ can be used when creating a Controller.
 func (ebc ExponentialBackoffConfig) NewBackoff() Backoff
 ```
 NewBackoff creates a ExponentialBackoffOffset if RandomizeStart is set,
-and ExponentialBackoff otherwise. If either IntialDelay and Steps are less
+and ExponentialBackoff otherwise. If either InitialDelay or Steps are less
 than or equal to zero then NoBackoff is returned.
 
 

@@ -17,7 +17,7 @@ type ExponentialBackoffConfig struct {
 }
 
 // NewBackoff creates a ExponentialBackoffOffset if RandomizeStart is set, and
-// ExponentialBackoff otherwise. If either IntialDelay and Steps are less than
+// ExponentialBackoff otherwise. If either InitialDelay or Steps are less than
 // or equal to zero then NoBackoff is returned.
 func (ebc ExponentialBackoffConfig) NewBackoff() Backoff {
 	if ebc.InitialDelay > 0 && ebc.Steps > 0 {
