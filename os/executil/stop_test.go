@@ -40,6 +40,11 @@ func startStoppable(ctx context.Context, t *testing.T, hang bool, out *bytes.Buf
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	})
 	sc := bufio.NewScanner(forscanning)
 	for sc.Scan() {
 		line := sc.Text()

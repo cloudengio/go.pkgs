@@ -21,7 +21,7 @@ import (
 
 func Example() {
 	go func() {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 10)
 		buf := make([]byte, 1024*1024)
 		n := runtime.Stack(buf, true)
 		fmt.Fprintf(os.Stderr, "%s\n", string(buf[:n]))
@@ -29,14 +29,16 @@ func Example() {
 	}()
 	ctx := context.Background()
 	all := &bytes.Buffer{}
-	// Use go run testdata/cat.go for compatibility across windows and unix.
-	cmd := exec.CommandContext(ctx, "go", "run", filepath.Join("testdata", "cat.go"), filepath.Join("testdata", "example")) // #nosec G204
+	cmd := exec.CommandContext(ctx, catHelper, filepath.Join("testdata", "example")) // #nosec G204
 	ch := make(chan []byte, 1)
 	filter := executil.NewLineFilter(all, ch, regexp.MustCompile("filter me:"))
 	cmd.Stdout = filter
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		if err := cmd.Start(); err != nil {
+			panic(err)
+		}
+		if err := cmd.Wait(); err != nil {
 			panic(err)
 		}
 	})
