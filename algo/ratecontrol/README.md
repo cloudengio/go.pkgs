@@ -190,6 +190,25 @@ when a new request can be made.
 
 
 
+### Type ControllerConfig
+```go
+type ControllerConfig struct {
+	Rate               RateConfig               `yaml:"rate_control" doc:"the rate control parameters"`
+	ExponentialBackoff ExponentialBackoffConfig `yaml:"exponential_backoff" doc:"the exponential backoff parameters"`
+}
+```
+ControllerConfig combines a rate with an exponential backoff.
+
+### Methods
+
+```go
+func (rc ControllerConfig) NewController() *Controller
+```
+NewController creates a new Controller based on the configuration.
+
+
+
+
 ### Type ExponentialBackoff
 ```go
 type ExponentialBackoff struct {
@@ -416,25 +435,6 @@ type RateConfig struct {
 }
 ```
 RateConfig represents the configuration for a rate controller.
-
-
-### Type RateControlConfig
-```go
-type RateControlConfig struct {
-	Rate               RateConfig               `yaml:"rate_control" doc:"the rate control parameters"`
-	ExponentialBackoff ExponentialBackoffConfig `yaml:"exponential_backoff" doc:"the exponential backoff parameters"`
-}
-```
-RateControlConfig combines a rate with an exponential backoff.
-
-### Methods
-
-```go
-func (rc RateControlConfig) NewController() *Controller
-```
-NewController creates a new Controller based on the configuration.
-
-
 
 
 ### Type SpinDetector

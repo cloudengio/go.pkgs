@@ -91,9 +91,9 @@ func TestExponentialBackoffConfigBackoffOption(t *testing.T) {
 	}
 }
 
-func TestRateControlConfigNewControllerDefaults(t *testing.T) {
+func TestControllerConfigNewControllerDefaults(t *testing.T) {
 	ctx := context.Background()
-	c := ratecontrol.RateControlConfig{}.NewController()
+	c := ratecontrol.ControllerConfig{}.NewController()
 	if got, want := typeOf(c.Backoff()), "NoBackoff"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -105,10 +105,10 @@ func TestRateControlConfigNewControllerDefaults(t *testing.T) {
 	}
 }
 
-func TestRateControlConfigNewControllerBackoff(t *testing.T) {
+func TestControllerConfigNewControllerBackoff(t *testing.T) {
 	ctx := context.Background()
 	numRetries := 3
-	cfg := ratecontrol.RateControlConfig{
+	cfg := ratecontrol.ControllerConfig{
 		ExponentialBackoff: ratecontrol.ExponentialBackoffConfig{
 			InitialDelay: time.Millisecond,
 			Steps:        numRetries,
@@ -131,10 +131,10 @@ func TestRateControlConfigNewControllerBackoff(t *testing.T) {
 	}
 }
 
-func TestRateControlConfigNewControllerRequestRate(t *testing.T) {
+func TestControllerConfigNewControllerRequestRate(t *testing.T) {
 	ctx := context.Background()
 	tick := time.Millisecond * 500
-	cfg := ratecontrol.RateControlConfig{
+	cfg := ratecontrol.ControllerConfig{
 		Rate: ratecontrol.RateConfig{Tick: tick, RequestsPerTick: 1},
 	}
 	c := cfg.NewController()
@@ -146,10 +146,10 @@ func TestRateControlConfigNewControllerRequestRate(t *testing.T) {
 	}
 }
 
-func TestRateControlConfigNewControllerDataRate(t *testing.T) {
+func TestControllerConfigNewControllerDataRate(t *testing.T) {
 	ctx := context.Background()
 	tick := time.Millisecond * 100
-	cfg := ratecontrol.RateControlConfig{
+	cfg := ratecontrol.ControllerConfig{
 		Rate: ratecontrol.RateConfig{Tick: tick, BytesPerTick: 10},
 	}
 	c := cfg.NewController()
