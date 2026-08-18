@@ -206,7 +206,7 @@ func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*c
 // NewRateController creates a new rate controller based on the values
 // contained in RateControl.
 func (c RateControl) NewRateController() (*ratecontrol.Controller, error) {
-	rc := ratecontrol.RateControlConfig{
+	rc := ratecontrol.ControllerConfig{
 		Rate:               c.Rate,
 		ExponentialBackoff: c.ExponentialBackoff.ExponentialBackoffConfig,
 	}

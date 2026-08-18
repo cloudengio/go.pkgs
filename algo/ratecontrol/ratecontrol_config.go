@@ -42,14 +42,14 @@ type RateConfig struct {
 	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
 }
 
-// RateControlConfig combines a rate with an exponential backoff.
-type RateControlConfig struct {
+// ControllerConfig combines a rate with an exponential backoff.
+type ControllerConfig struct {
 	Rate               RateConfig               `yaml:"rate_control" doc:"the rate control parameters"`
 	ExponentialBackoff ExponentialBackoffConfig `yaml:"exponential_backoff" doc:"the exponential backoff parameters"`
 }
 
 // NewController creates a new Controller based on the configuration.
-func (rc RateControlConfig) NewController() *Controller {
+func (rc ControllerConfig) NewController() *Controller {
 	opts := []Option{}
 	if rc.Rate.BytesPerTick > 0 {
 		opts = append(opts, WithBytesPerTick(rc.Rate.Tick, rc.Rate.BytesPerTick))
