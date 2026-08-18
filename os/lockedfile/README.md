@@ -83,6 +83,23 @@ os.O_WRONLY or os.O_RDWR, the file is write-locked; otherwise, it is
 read-locked.
 
 
+```go
+func TryEdit(name string) (*File, bool, error)
+```
+TryEdit is like Edit but non-blocking: it returns ok=false (with a nil
+error) if the file is already locked by another process. Because the lock is
+held for the lifetime of the process (released on Close or exit, including
+on crash), TryEdit is well suited to single-instance enforcement.
+
+
+```go
+func TryOpenFile(name string, flag int, perm os.FileMode) (f *File, ok bool, err error)
+```
+TryOpenFile is like OpenFile but, instead of blocking, returns ok=false
+(with a nil error) if the file is already locked by another process.
+On ok=true the returned *File must be Closed to release the lock.
+
+
 
 ### Methods
 
@@ -154,6 +171,17 @@ the lock file if one does not already exist.
 ```go
 func (mu *Mutex) String() string
 ```
+
+
+```go
+func (mu *Mutex) TryLock() (unlock func(), ok bool, err error)
+```
+TryLock is like Lock but, instead of blocking, returns ok=false (with a nil
+error and a nil unlock) if the Mutex is already locked by another process.
+
+This makes a Mutex suitable for single-instance enforcement: the lock is
+held until unlock is called or the process exits (including on crash),
+so it never goes stale.
 
 
 
