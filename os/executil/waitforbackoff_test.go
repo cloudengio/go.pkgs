@@ -256,6 +256,55 @@ func TestWaitForBackoff_ExponentialBackoff(t *testing.T) {
 	}
 }
 
+// TestWaitForBackoff_NoBackoff verifies that NoBackoff polls without delay and
+// without limit: its channel is ready immediately and carries a value, so the
+// receive succeeds rather than reporting exhaustion the way a closed channel
+// would. The loop therefore spins as fast as check returns until check is done.
+func TestWaitForBackoff_NoBackoff(t *testing.T) {
+	const target = 4
+	var backoff ratecontrol.NoBackoff
+	calls := 0
+	check := func(_ context.Context) (bool, error) {
+		calls++
+		return calls >= target, nil
+	}
+	if err := executil.WaitForBackoff(context.Background(), backoff, check); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != target {
+		t.Errorf("check called %d times, want %d", calls, target)
+	}
+	if backoff.Done() {
+		t.Error("NoBackoff reports it is done, but it has no limit to reach")
+	}
+}
+
+// TestWaitForBackoff_ExponentialBackoffOffset covers the offset variant, whose
+// first delay is randomised and whose subsequent delays and exhaustion are
+// inherited from ExponentialBackoff.
+func TestWaitForBackoff_ExponentialBackoffOffset(t *testing.T) {
+	const steps = 3
+	backoff := ratecontrol.NewExponentialBackoffOffset(tick, steps)
+	calls := 0
+	check := func(_ context.Context) (bool, error) {
+		calls++
+		return false, nil // never done, so the backoff runs to its limit
+	}
+	err := executil.WaitForBackoff(context.Background(), backoff, check)
+	if err == nil {
+		t.Fatal("got nil error, want the backoff to report that it is done")
+	}
+	if !strings.Contains(err.Error(), "backoff done") {
+		t.Errorf("error %q does not report that the backoff is done", err)
+	}
+	if got, want := calls, steps+1; got != want {
+		t.Errorf("check called %d times, want %d", got, want)
+	}
+	if !backoff.Done() {
+		t.Error("backoff reports it is not done")
+	}
+}
+
 // TestWaitForBackoff_ExponentialBackoffSucceedsBeforeLimit verifies that a
 // check which succeeds partway through leaves the backoff with retries to
 // spare rather than running it to exhaustion.
