@@ -1,3 +1,5 @@
+cloudeng.io/algo v0.0.0-20260818231247-605c3766963e h1:G8p02CF4BVxFRdP0f4EQoPFNsEpnWnZQnF33fkylwJo=
+cloudeng.io/algo v0.0.0-20260818231247-605c3766963e/go.mod h1:VXfkJ15IS4nXNdqqndiOceVAY49AXmQVBsaz/MIyZw4=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=

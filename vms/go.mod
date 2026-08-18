@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	cloudeng.io/algo v0.0.0-20260818231247-605c3766963e // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
