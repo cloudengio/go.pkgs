@@ -22,3 +22,5 @@ replace cloudeng.io/errors => ../errors
 replace cloudeng.io/os => ../os
 
 replace cloudeng.io/sync => ../sync
+
+replace cloudeng.io/algo => ../algo
