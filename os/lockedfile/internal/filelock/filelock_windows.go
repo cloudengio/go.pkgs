@@ -23,9 +23,14 @@ const (
 	allBytes = ^uint32(0)
 )
 
-// ERROR_LOCK_VIOLATION is returned by LockFileEx with LOCKFILE_FAIL_IMMEDIATELY
-// when the requested region is already locked.
-const ERROR_LOCK_VIOLATION syscall.Errno = 33
+// When LockFileEx is called with LOCKFILE_FAIL_IMMEDIATELY and the region is
+// already locked, it fails immediately with ERROR_LOCK_VIOLATION, or with
+// ERROR_SHARING_VIOLATION if another process holds it with an incompatible
+// sharing mode.
+const (
+	ERROR_SHARING_VIOLATION syscall.Errno = 32
+	ERROR_LOCK_VIOLATION    syscall.Errno = 33
+)
 
 func tryLock(f File, lt lockType) (bool, error) {
 	ol := new(syscall.Overlapped)
@@ -33,7 +38,7 @@ func tryLock(f File, lt lockType) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if err == ERROR_LOCK_VIOLATION {
+	if err == ERROR_LOCK_VIOLATION || err == ERROR_SHARING_VIOLATION {
 		return false, nil
 	}
 	return false, &os.PathError{

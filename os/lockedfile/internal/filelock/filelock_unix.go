@@ -38,19 +38,22 @@ func lock(f File, lt lockType) (err error) {
 func tryLock(f File, lt lockType) (bool, error) {
 	for {
 		err := syscall.Flock(int(f.Fd()), int(lt)|syscall.LOCK_NB)
-		switch err {
-		case nil:
+		if err == nil {
 			return true, nil
-		case syscall.EINTR:
+		}
+		if err == syscall.EINTR {
 			continue
-		case syscall.EWOULDBLOCK:
+		}
+		// A held lock is reported as EWOULDBLOCK, but some systems use EAGAIN.
+		// (On Linux and the BSDs these are the same value, hence the if rather
+		// than a switch, which would be a duplicate-case compile error.)
+		if err == syscall.EWOULDBLOCK || err == syscall.EAGAIN {
 			return false, nil
-		default:
-			return false, &os.PathError{
-				Op:   "Try" + lt.String(),
-				Path: f.Name(),
-				Err:  err,
-			}
+		}
+		return false, &os.PathError{
+			Op:   "Try" + lt.String(),
+			Path: f.Name(),
+			Err:  err,
 		}
 	}
 }

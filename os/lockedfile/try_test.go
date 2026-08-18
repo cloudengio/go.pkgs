@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloudeng.io/os/lockedfile"
+	"cloudeng.io/os/lockedfile/internal/testenv"
 )
 
 func TestTryEditSameProcess(t *testing.T) {
@@ -63,6 +64,40 @@ func TestMutexTryLockSameProcess(t *testing.T) {
 	unlock2()
 }
 
+// TestMutexTryLockNonBlocking verifies TryLock returns promptly (does not block
+// on the internal mutex) when the Mutex is already held by a blocking Lock in
+// the same process.
+func TestMutexTryLockNonBlocking(t *testing.T) {
+	mu := lockedfile.MutexAt(filepath.Join(t.TempDir(), "n.lock"))
+	unlock, err := mu.Lock()
+	if err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+	defer unlock()
+
+	type result struct {
+		ok  bool
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		u, ok, err := mu.TryLock()
+		if u != nil {
+			u()
+		}
+		done <- result{ok, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil || r.ok {
+			t.Fatalf("TryLock while held: ok=%v err=%v, want ok=false err=nil", r.ok, r.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("TryLock blocked while the mutex was held")
+	}
+}
+
 // lockHelperEnv, when set, turns the test binary into a helper that acquires the
 // named lock, signals readiness by creating <lock>.ready, and holds it until its
 // stdin is closed.
@@ -88,6 +123,7 @@ func TestTryLockHelper(t *testing.T) {
 }
 
 func TestTryLockCrossProcess(t *testing.T) {
+	testenv.MustHaveExec(t)
 	path := filepath.Join(t.TempDir(), "cross.lock")
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestTryLockHelper$", "-test.timeout=60s") //nolint:gosec // os.Args[0] is the test binary.
