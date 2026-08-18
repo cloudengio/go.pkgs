@@ -207,7 +207,10 @@ func TestBackoffOnSpinNext(t *testing.T) {
 	// the underlying backoff.
 	for i := range maxIterations - 1 {
 		select {
-		case <-bos.Next():
+		case _, ok := <-bos.Next():
+			if !ok {
+				t.Fatalf("tick %d: expected ok=true below threshold", i)
+			}
 		case <-time.After(time.Second):
 			t.Fatalf("tick %d: Next did not fire immediately below threshold", i)
 		}

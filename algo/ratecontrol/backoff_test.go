@@ -151,7 +151,10 @@ func TestNoBackoff(t *testing.T) {
 	nb := ratecontrol.NoBackoff{}
 	for range 3 {
 		select {
-		case <-nb.Next():
+		case _, ok := <-nb.Next():
+			if !ok {
+				t.Fatal("expected ok to be true for NoBackoff.Next")
+			}
 		case <-time.After(time.Second):
 			t.Fatal("Next did not fire immediately")
 		}
