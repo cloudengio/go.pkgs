@@ -79,14 +79,13 @@ func (m *mockLargeFile) GetReader(_ context.Context, from, to int64) (io.ReadClo
 	return io.NopCloser(bytes.NewReader(buf)), &noRetryResponse{}, nil
 }
 
-type noBackoff struct{ retries int }
+type noBackoff struct {
+	ratecontrol.NoBackoff
+	retries int
+}
 
 func (nb noBackoff) Retries() int {
 	return nb.retries
-}
-
-func (nb noBackoff) Wait(_ context.Context, _ any) (bool, error) {
-	return false, nil
 }
 
 type jitterRateLimiter struct{ retries int }
