@@ -190,6 +190,25 @@ when a new request can be made.
 
 
 
+### Type ControllerConfig
+```go
+type ControllerConfig struct {
+	Rate               RateConfig               `yaml:"rate_control" doc:"the rate control parameters"`
+	ExponentialBackoff ExponentialBackoffConfig `yaml:"exponential_backoff" doc:"the exponential backoff parameters"`
+}
+```
+ControllerConfig combines a rate with an exponential backoff.
+
+### Methods
+
+```go
+func (rc ControllerConfig) NewController() *Controller
+```
+NewController creates a new Controller based on the configuration.
+
+
+
+
 ### Type ExponentialBackoff
 ```go
 type ExponentialBackoff struct {
@@ -237,6 +256,36 @@ Retries implements Backoff.
 func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error)
 ```
 Wait implements Backoff.
+
+
+
+
+### Type ExponentialBackoffConfig
+```go
+type ExponentialBackoffConfig struct {
+	InitialDelay   time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
+	Steps          int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
+	RandomizeStart bool          `yaml:"randomize_start" doc:"if true, a random offset of up to initial_delay will be used to randomize the start of the backoff period to avoid thundering herd issues when many retries are attempted at the same time."`
+}
+```
+ExponentialBackoffConfig represents a configuration struct that can be used
+to create a Backoff instance that implements an exponential backoff.
+
+### Methods
+
+```go
+func (ebc ExponentialBackoffConfig) BackoffOption() Option
+```
+BackoffOption returns an Option representing the backoff configuration that
+can be used when creating a Controller.
+
+
+```go
+func (ebc ExponentialBackoffConfig) NewBackoff() Backoff
+```
+NewBackoff creates a ExponentialBackoffOffset if RandomizeStart is set,
+and ExponentialBackoff otherwise. If either InitialDelay or Steps are less
+than or equal to zero then NoBackoff is returned.
 
 
 
@@ -375,6 +424,17 @@ If tickInterval is less than or equal to zero, DefaultTickInterval is used.
 If rpt is less than or equal to zero, DefaultRequestsPerTick is used.
 
 
+
+
+### Type RateConfig
+```go
+type RateConfig struct {
+	Tick            time.Duration `yaml:"tick" doc:"the duration of a tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick" doc:"the number of requests per tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
+}
+```
+RateConfig represents the configuration for a rate controller.
 
 
 ### Type SpinDetector
