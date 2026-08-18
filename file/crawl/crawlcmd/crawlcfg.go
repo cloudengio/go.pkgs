@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/file/checkpoint"
@@ -23,22 +22,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ExponentialBackoffConfig is the configuration for an exponential backoff
+// ExponentialBackoff is the configuration for an exponential backoff
 // retry strategy for downloads.
 type ExponentialBackoff struct {
-	InitialDelay   time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
-	Steps          int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
-	RandomizeStart bool          `yaml:"randomize_start" doc:"if true, a random offset of up to initial_delay will be used to randomize the start of the backoff period to avoid thundering herd issues when many retries are attempted at the same time."`
-	StatusCodes    []int         `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
+	ratecontrol.ExponentialBackoffConfig `yaml:",inline"`
+	StatusCodes                          []int `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
 }
 
 // Rate specifies a rate in one of several forms, only one should
 // be used.
-type Rate struct {
-	Tick            time.Duration `yaml:"tick" doc:"the duration of a tick"`
-	RequestsPerTick int           `yaml:"requests_per_tick" doc:"the number of requests per tick"`
-	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
-}
+type Rate = ratecontrol.RateConfig
 
 // RateControl is the configuration for rate based control of download
 // requests.
@@ -213,15 +206,9 @@ func (c Config) ExtractorRegistry(avail map[content.Type]outlinks.Extractor) (*c
 // NewRateController creates a new rate controller based on the values
 // contained in RateControl.
 func (c RateControl) NewRateController() (*ratecontrol.Controller, error) {
-	opts := []ratecontrol.Option{}
-	if c.Rate.BytesPerTick > 0 {
-		opts = append(opts, ratecontrol.WithBytesPerTick(c.Rate.Tick, c.Rate.BytesPerTick))
+	rc := ratecontrol.RateControlConfig{
+		Rate:               c.Rate,
+		ExponentialBackoff: c.ExponentialBackoff.ExponentialBackoffConfig,
 	}
-	if c.Rate.RequestsPerTick > 0 {
-		opts = append(opts, ratecontrol.WithRequestsPerTick(c.Rate.Tick, c.Rate.RequestsPerTick))
-	}
-	if c.ExponentialBackoff.InitialDelay > 0 {
-		opts = append(opts, ratecontrol.WithExponentialBackoff(c.ExponentialBackoff.InitialDelay, c.ExponentialBackoff.Steps, c.ExponentialBackoff.RandomizeStart))
-	}
-	return ratecontrol.New(opts...), nil
+	return rc.NewController(), nil
 }

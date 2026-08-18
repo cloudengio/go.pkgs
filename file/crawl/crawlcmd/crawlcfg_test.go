@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/cmdutil/cmdyaml"
 	"cloudeng.io/file"
 	"cloudeng.io/file/content"
@@ -88,6 +89,8 @@ download:
   exponential_backoff:
     initial_delay: 1s
     steps: 4
+    randomize_start: true
+    status_codes: [429, 503]
 `
 
 func TestRateControl(t *testing.T) {
@@ -103,8 +106,12 @@ func TestRateControl(t *testing.T) {
 			BytesPerTick:    200,
 		},
 		ExponentialBackoff: crawlcmd.ExponentialBackoff{
-			InitialDelay: time.Second,
-			Steps:        4,
+			ExponentialBackoffConfig: ratecontrol.ExponentialBackoffConfig{
+				InitialDelay:   time.Second,
+				Steps:          4,
+				RandomizeStart: true,
+			},
+			StatusCodes: []int{429, 503},
 		},
 	}
 

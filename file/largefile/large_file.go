@@ -57,7 +57,7 @@ func (b *backoff) Retries() int {
 // Next implements ratecontrol.Backoff. Next has no access to a
 // RetryResponse and hence always uses the exponential backoff delay.
 func (b *backoff) Next() <-chan time.Time {
-	if b.retries >= b.steps {
+	if b.Retries() >= b.steps {
 		b.done = true
 		ch := make(chan time.Time)
 		close(ch)
@@ -72,7 +72,7 @@ func (b *backoff) Done() bool {
 }
 
 func (b *backoff) Wait(ctx context.Context, r any) (bool, error) {
-	if b.retries >= b.steps {
+	if b.Retries() >= b.steps {
 		b.done = true
 		return true, nil
 	}

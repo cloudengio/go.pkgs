@@ -5,6 +5,7 @@
 package largefile_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -402,6 +403,153 @@ func TestByteRanges_NotifyAndTail(t *testing.T) {
 		}
 		if !reflect.DeepEqual(r, want) {
 			t.Errorf("Tail() = %v, want %v", r, want)
+		}
+	})
+}
+
+type mockRetryResponse struct {
+	hasDuration bool
+	duration    time.Duration
+}
+
+func (m *mockRetryResponse) IsRetryable() bool {
+	return true
+}
+
+func (m *mockRetryResponse) BackoffDuration() (bool, time.Duration) {
+	return m.hasDuration, m.duration
+}
+
+func TestLargeFileBackoff(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("exponential only", func(t *testing.T) {
+		steps := 3
+		b := largefile.NewBackoff(time.Millisecond, steps)
+		noDur := &mockRetryResponse{hasDuration: false}
+		for i := 0; i < steps; i++ {
+			done, err := b.Wait(ctx, noDur)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if done {
+				t.Fatalf("iteration %d: unexpected done=true", i)
+			}
+		}
+		done, err := b.Wait(ctx, noDur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !done {
+			t.Fatal("expected done=true after exhausting steps")
+		}
+		if got, want := b.Retries(), steps; got != want {
+			t.Errorf("Retries() = %v, want %v", got, want)
+		}
+		if !b.Done() {
+			t.Error("expected Done() to be true")
+		}
+	})
+
+	t.Run("custom duration only", func(t *testing.T) {
+		steps := 3
+		b := largefile.NewBackoff(time.Millisecond, steps)
+		hasDur := &mockRetryResponse{hasDuration: true, duration: time.Millisecond}
+		for i := 0; i < steps; i++ {
+			done, err := b.Wait(ctx, hasDur)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if done {
+				t.Fatalf("iteration %d: unexpected done=true", i)
+			}
+		}
+		done, err := b.Wait(ctx, hasDur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !done {
+			t.Fatal("expected done=true after exhausting steps")
+		}
+		if got, want := b.Retries(), steps; got != want {
+			t.Errorf("Retries() = %v, want %v", got, want)
+		}
+		if !b.Done() {
+			t.Error("expected Done() to be true")
+		}
+	})
+
+	t.Run("mixed retries terminate at steps", func(t *testing.T) {
+		steps := 4
+		b := largefile.NewBackoff(time.Millisecond, steps)
+		hasDur := &mockRetryResponse{hasDuration: true, duration: time.Millisecond}
+		noDur := &mockRetryResponse{hasDuration: false}
+
+		// Alternate between custom duration and fallback
+		for i := 0; i < steps; i++ {
+			var resp any
+			if i%2 == 0 {
+				resp = hasDur
+			} else {
+				resp = noDur
+			}
+			done, err := b.Wait(ctx, resp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if done {
+				t.Fatalf("iteration %d: unexpected done=true before reaching steps", i)
+			}
+		}
+		done, err := b.Wait(ctx, hasDur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !done {
+			t.Fatal("expected done=true after exhausting steps in mixed mode")
+		}
+		if got, want := b.Retries(), steps; got != want {
+			t.Errorf("Retries() = %v, want %v", got, want)
+		}
+		if !b.Done() {
+			t.Error("expected Done() to be true")
+		}
+	})
+
+	t.Run("Next stops at steps with mixed usage", func(t *testing.T) {
+		steps := 3
+		b := largefile.NewBackoff(time.Millisecond, steps)
+		hasDur := &mockRetryResponse{hasDuration: true, duration: time.Millisecond}
+
+		// 1 custom duration retry via Wait
+		done, err := b.Wait(ctx, hasDur)
+		if err != nil || done {
+			t.Fatalf("first Wait: done=%v err=%v", done, err)
+		}
+
+		// remaining 2 retries via Next
+		for i := 0; i < 2; i++ {
+			select {
+			case <-b.Next():
+			case <-time.After(time.Second):
+				t.Fatalf("Next %d did not fire", i)
+			}
+		}
+
+		// Next after 3 retries must return closed channel
+		select {
+		case _, ok := <-b.Next():
+			if ok {
+				t.Fatal("expected closed channel after exhausting steps via Next")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("Next did not return immediately when done")
+		}
+		if got, want := b.Retries(), steps; got != want {
+			t.Errorf("Retries() = %v, want %v", got, want)
+		}
+		if !b.Done() {
+			t.Error("expected Done() to be true")
 		}
 	})
 }
