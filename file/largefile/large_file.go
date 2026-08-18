@@ -34,6 +34,7 @@ type backoff struct {
 	exponential ratecontrol.Backoff
 	steps       int
 	retries     int
+	done        bool
 }
 
 // NewBackoff creates a new backoff instance that implements an
@@ -50,11 +51,29 @@ func NewBackoff(initial time.Duration, steps int) ratecontrol.Backoff {
 }
 
 func (b *backoff) Retries() int {
-	return b.retries
+	return b.retries + b.exponential.Retries()
+}
+
+// Next implements ratecontrol.Backoff. Next has no access to a
+// RetryResponse and hence always uses the exponential backoff delay.
+func (b *backoff) Next() <-chan time.Time {
+	if b.retries >= b.steps {
+		b.done = true
+		ch := make(chan time.Time)
+		close(ch)
+		return ch
+	}
+	return b.exponential.Next()
+}
+
+// Done implements ratecontrol.Backoff.
+func (b *backoff) Done() bool {
+	return b.done || b.exponential.Done()
 }
 
 func (b *backoff) Wait(ctx context.Context, r any) (bool, error) {
 	if b.retries >= b.steps {
+		b.done = true
 		return true, nil
 	}
 	rr, ok := r.(RetryResponse)
