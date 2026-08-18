@@ -34,20 +34,23 @@ type Backoff interface {
 	//    // backoff has reached its limit
 	//  }
 	//
-	// This allows for the backoff to be used in select statements, as per
-	// the following example:
+	// Next records a retry and arms a new timer on each invocation. It is
+	// intended to be called when a retry is needed, for example in a select
+	// statement:
 	//
 	//  for {
-	//    select {
-	//    ...
-	//    case <-ctx.Done():
-	//      return ctx.Err()
-	//    case _, ok := <-backoff.Next():
-	//      if !ok { // equivalently: backoff.Done()
-	//        return err
+	//    if err := doOperation(); err != nil {
+	//      select {
+	//      case <-ctx.Done():
+	//        return ctx.Err()
+	//      case _, ok := <-backoff.Next():
+	//        if !ok { // equivalently: backoff.Done()
+	//          return err
+	//        }
 	//      }
-	//      ...
+	//      continue
 	//    }
+	//    return nil
 	//  }
 	//
 	// The caller cannot stop the timer underlying the returned channel;
