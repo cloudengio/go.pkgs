@@ -243,6 +243,16 @@ func (b *customBackoff) Retries() int {
 	return 33
 }
 
+func (b *customBackoff) Next() <-chan time.Time {
+	ch := make(chan time.Time, 1)
+	ch <- time.Now()
+	return ch
+}
+
+func (b *customBackoff) Done() bool {
+	return false
+}
+
 func TestCustomBackoff(t *testing.T) {
 	ctx := context.Background()
 	backoff := &customBackoff{}

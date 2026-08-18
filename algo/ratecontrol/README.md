@@ -35,6 +35,42 @@ type Backoff interface {
 	// or a retry response. It can be nil if no such data is needed.
 	Wait(context.Context, any) (bool, error)
 
+	// Next returns a channel, as per time.Timer.C, that is ready when the
+	// next backoff delay has expired. Once the backoff algorithm has
+	// reached its limit, Next returns a closed channel and Done will
+	// return true. Note that this differs from a time.Timer.C, which is
+	// never closed: receiving from the closed channel yields a zero
+	// time.Time immediately (and repeatedly), so completion can be
+	// detected either by calling Done or by testing the received value:
+	//
+	//  if _, ok := <-backoff.Next(); !ok {
+	//    // backoff has reached its limit
+	//  }
+	//
+	// This allows for the backoff to be used in select statements, as per
+	// the following example:
+	//
+	//  for {
+	//    select {
+	//    ...
+	//    case <-ctx.Done():
+	//      return ctx.Err()
+	//    case _, ok := <-backoff.Next():
+	//      if !ok { // equivalently: backoff.Done()
+	//        return err
+	//      }
+	//      ...
+	//    }
+	//  }
+	//
+	// The caller cannot stop the timer underlying the returned channel;
+	// abandoned timers are garbage collected.
+	Next() <-chan time.Time
+	// Done returns true if the backoff algorithm has reached its limit and
+	// no more requests should be attempted. The limit is reached when Wait
+	// returns true or when Next is called after all retries have been used.
+	Done() bool
+
 	// Retries returns the number of retries that the backoff algorithm
 	// has recorded, ie. the number of times that Backoff was called and
 	// returned false.
@@ -68,6 +104,20 @@ func NewBackoffOnSpin(maxIterations int64, period time.Duration, backoff Backoff
 
 
 ### Methods
+
+```go
+func (b *BackoffOnSpin) Done() bool
+```
+Done implements Backoff by delegating to the underlying Backoff.
+
+
+```go
+func (b *BackoffOnSpin) Next() <-chan time.Time
+```
+Next implements Backoff. The returned channel is immediately ready unless
+a spin is detected, in which case the underlying Backoff's Next channel is
+returned.
+
 
 ```go
 func (b *BackoffOnSpin) Retries() int
@@ -161,6 +211,20 @@ less than or equal to zero, DefaultBackoffSteps is used.
 ### Methods
 
 ```go
+func (eb *ExponentialBackoff) Done() bool
+```
+Done implements Backoff.
+
+
+```go
+func (eb *ExponentialBackoff) Next() <-chan time.Time
+```
+Next implements Backoff. The retry is recorded when the timer is armed,
+not when it fires, so a caller that abandons the returned channel (eg.
+because its context was canceled) will still have consumed that retry.
+
+
+```go
 func (eb *ExponentialBackoff) Retries() int
 ```
 Retries implements Backoff.
@@ -199,6 +263,13 @@ If steps is less than or equal to zero, DefaultBackoffSteps is used.
 ### Methods
 
 ```go
+func (eb *ExponentialBackoffOffset) Next() <-chan time.Time
+```
+Next implements Backoff, using a random offset for the first delay as per
+Wait.
+
+
+```go
 func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error)
 ```
 
@@ -221,9 +292,20 @@ Limiter is an interface that defines a generic rate limiter.
 type NoBackoff struct{}
 ```
 NoBackoff implements a Backoff that does not perform any backoff and always
-returns false for Wait and 0 for Retries.
+returns false for Wait and Done, an immediately ready channel for Next and 0
+for Retries.
 
 ### Methods
+
+```go
+func (nb NoBackoff) Done() bool
+```
+
+
+```go
+func (nb NoBackoff) Next() <-chan time.Time
+```
+
 
 ```go
 func (nb NoBackoff) Retries() int

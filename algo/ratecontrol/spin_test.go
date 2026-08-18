@@ -130,10 +130,13 @@ func TestSpinDetectorConcurrent(t *testing.T) {
 	}
 }
 
-// countingBackoff is a Backoff that counts how many times Wait is called.
+// countingBackoff is a Backoff that counts how many times Wait and Next
+// are called.
 type countingBackoff struct {
-	calls   int
-	retries int
+	calls     int
+	nextCalls int
+	retries   int
+	done      bool
 }
 
 func (cb *countingBackoff) Wait(_ context.Context, _ any) (bool, error) {
@@ -141,6 +144,16 @@ func (cb *countingBackoff) Wait(_ context.Context, _ any) (bool, error) {
 	cb.retries++
 	return false, nil
 }
+
+func (cb *countingBackoff) Next() <-chan time.Time {
+	cb.nextCalls++
+	cb.retries++
+	ch := make(chan time.Time, 1)
+	ch <- time.Now()
+	return ch
+}
+
+func (cb *countingBackoff) Done() bool { return cb.done }
 
 func (cb *countingBackoff) Retries() int { return cb.retries }
 
@@ -178,6 +191,44 @@ func TestBackoffOnSpin(t *testing.T) {
 	// Retries delegates to the underlying Backoff.
 	if got, want := bos.Retries(), cb.Retries(); got != want {
 		t.Errorf("Retries(): got %v, want %v", got, want)
+	}
+}
+
+func TestBackoffOnSpinNext(t *testing.T) {
+	const (
+		maxIterations = int64(3)
+		period        = 100 * time.Millisecond
+	)
+	clk := newFakeClock()
+	cb := &countingBackoff{}
+	bos := ratecontrol.NewBackoffOnSpin(maxIterations, period, cb, ratecontrol.WithClock(clk.Now))
+
+	// Below the threshold Next must be immediately ready without invoking
+	// the underlying backoff.
+	for i := range maxIterations - 1 {
+		select {
+		case <-bos.Next():
+		case <-time.After(time.Second):
+			t.Fatalf("tick %d: Next did not fire immediately below threshold", i)
+		}
+	}
+	if cb.nextCalls != 0 {
+		t.Errorf("expected no backoff Next calls below threshold, got %d", cb.nextCalls)
+	}
+
+	// The max-th call must delegate to the underlying backoff.
+	<-bos.Next()
+	if cb.nextCalls != 1 {
+		t.Errorf("expected 1 backoff Next call on spin, got %d", cb.nextCalls)
+	}
+
+	// Done delegates to the underlying Backoff.
+	if bos.Done() {
+		t.Error("expected Done to be false")
+	}
+	cb.done = true
+	if !bos.Done() {
+		t.Error("expected Done to delegate to the underlying backoff")
 	}
 }
 
