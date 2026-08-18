@@ -35,6 +35,45 @@ type Backoff interface {
 	// or a retry response. It can be nil if no such data is needed.
 	Wait(context.Context, any) (bool, error)
 
+	// Next returns a channel, as per time.Timer.C, that is ready when the
+	// next backoff delay has expired. Once the backoff algorithm has
+	// reached its limit, Next returns a closed channel and Done will
+	// return true. Note that this differs from a time.Timer.C, which is
+	// never closed: receiving from the closed channel yields a zero
+	// time.Time immediately (and repeatedly), so completion can be
+	// detected either by calling Done or by testing the received value:
+	//
+	//  if _, ok := <-backoff.Next(); !ok {
+	//    // backoff has reached its limit
+	//  }
+	//
+	// Next records a retry and arms a new timer on each invocation. It is
+	// intended to be called when a retry is needed, for example in a select
+	// statement:
+	//
+	//  for {
+	//    if err := doOperation(); err != nil {
+	//      select {
+	//      case <-ctx.Done():
+	//        return ctx.Err()
+	//      case _, ok := <-backoff.Next():
+	//        if !ok { // equivalently: backoff.Done()
+	//          return err
+	//        }
+	//      }
+	//      continue
+	//    }
+	//    return nil
+	//  }
+	//
+	// The caller cannot stop the timer underlying the returned channel;
+	// abandoned timers are garbage collected.
+	Next() <-chan time.Time
+	// Done returns true if the backoff algorithm has reached its limit and
+	// no more requests should be attempted. The limit is reached when Wait
+	// returns true or when Next is called after all retries have been used.
+	Done() bool
+
 	// Retries returns the number of retries that the backoff algorithm
 	// has recorded, ie. the number of times that Backoff was called and
 	// returned false.
@@ -68,6 +107,20 @@ func NewBackoffOnSpin(maxIterations int64, period time.Duration, backoff Backoff
 
 
 ### Methods
+
+```go
+func (b *BackoffOnSpin) Done() bool
+```
+Done implements Backoff by delegating to the underlying Backoff.
+
+
+```go
+func (b *BackoffOnSpin) Next() <-chan time.Time
+```
+Next implements Backoff. The returned channel is immediately ready unless
+a spin is detected, in which case the underlying Backoff's Next channel is
+returned.
+
 
 ```go
 func (b *BackoffOnSpin) Retries() int
@@ -137,6 +190,25 @@ when a new request can be made.
 
 
 
+### Type ControllerConfig
+```go
+type ControllerConfig struct {
+	Rate               RateConfig               `yaml:"rate_control" doc:"the rate control parameters"`
+	ExponentialBackoff ExponentialBackoffConfig `yaml:"exponential_backoff" doc:"the exponential backoff parameters"`
+}
+```
+ControllerConfig combines a rate with an exponential backoff.
+
+### Methods
+
+```go
+func (rc ControllerConfig) NewController() *Controller
+```
+NewController creates a new Controller based on the configuration.
+
+
+
+
 ### Type ExponentialBackoff
 ```go
 type ExponentialBackoff struct {
@@ -161,6 +233,20 @@ less than or equal to zero, DefaultBackoffSteps is used.
 ### Methods
 
 ```go
+func (eb *ExponentialBackoff) Done() bool
+```
+Done implements Backoff.
+
+
+```go
+func (eb *ExponentialBackoff) Next() <-chan time.Time
+```
+Next implements Backoff. The retry is recorded when the timer is armed,
+not when it fires, so a caller that abandons the returned channel (eg.
+because its context was canceled) will still have consumed that retry.
+
+
+```go
 func (eb *ExponentialBackoff) Retries() int
 ```
 Retries implements Backoff.
@@ -170,6 +256,36 @@ Retries implements Backoff.
 func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error)
 ```
 Wait implements Backoff.
+
+
+
+
+### Type ExponentialBackoffConfig
+```go
+type ExponentialBackoffConfig struct {
+	InitialDelay   time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
+	Steps          int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
+	RandomizeStart bool          `yaml:"randomize_start" doc:"if true, a random offset of up to initial_delay will be used to randomize the start of the backoff period to avoid thundering herd issues when many retries are attempted at the same time."`
+}
+```
+ExponentialBackoffConfig represents a configuration struct that can be used
+to create a Backoff instance that implements an exponential backoff.
+
+### Methods
+
+```go
+func (ebc ExponentialBackoffConfig) BackoffOption() Option
+```
+BackoffOption returns an Option representing the backoff configuration that
+can be used when creating a Controller.
+
+
+```go
+func (ebc ExponentialBackoffConfig) NewBackoff() Backoff
+```
+NewBackoff creates a ExponentialBackoffOffset if RandomizeStart is set,
+and ExponentialBackoff otherwise. If either InitialDelay or Steps are less
+than or equal to zero then NoBackoff is returned.
 
 
 
@@ -199,6 +315,13 @@ If steps is less than or equal to zero, DefaultBackoffSteps is used.
 ### Methods
 
 ```go
+func (eb *ExponentialBackoffOffset) Next() <-chan time.Time
+```
+Next implements Backoff, using a random offset for the first delay as per
+Wait.
+
+
+```go
 func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error)
 ```
 
@@ -221,9 +344,20 @@ Limiter is an interface that defines a generic rate limiter.
 type NoBackoff struct{}
 ```
 NoBackoff implements a Backoff that does not perform any backoff and always
-returns false for Wait and 0 for Retries.
+returns false for Wait and Done, an immediately ready channel for Next and 0
+for Retries.
 
 ### Methods
+
+```go
+func (nb NoBackoff) Done() bool
+```
+
+
+```go
+func (nb NoBackoff) Next() <-chan time.Time
+```
+
 
 ```go
 func (nb NoBackoff) Retries() int
@@ -290,6 +424,17 @@ If tickInterval is less than or equal to zero, DefaultTickInterval is used.
 If rpt is less than or equal to zero, DefaultRequestsPerTick is used.
 
 
+
+
+### Type RateConfig
+```go
+type RateConfig struct {
+	Tick            time.Duration `yaml:"tick" doc:"the duration of a tick"`
+	RequestsPerTick int           `yaml:"requests_per_tick" doc:"the number of requests per tick"`
+	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
+}
+```
+RateConfig represents the configuration for a rate controller.
 
 
 ### Type SpinDetector
