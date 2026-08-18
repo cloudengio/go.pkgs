@@ -78,6 +78,33 @@ func Edit(name string) (*File, error) {
 	return OpenFile(name, os.O_RDWR|os.O_CREATE, 0666)
 }
 
+// TryOpenFile is like OpenFile but, instead of blocking, returns ok=false (with
+// a nil error) if the file is already locked by another process. On ok=true the
+// returned *File must be Closed to release the lock.
+func TryOpenFile(name string, flag int, perm os.FileMode) (f *File, ok bool, err error) {
+	lf := new(File)
+	of, ok, err := tryOpenFile(name, flag, perm)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	lf.osFile.File = of
+
+	// See OpenFile: report a missing Close on a best-effort basis.
+	runtime.SetFinalizer(lf, func(f *File) {
+		panic(fmt.Sprintf("lockedfile.File %s became unreachable without a call to Close", f.Name()))
+	})
+
+	return lf, true, nil
+}
+
+// TryEdit is like Edit but non-blocking: it returns ok=false (with a nil error)
+// if the file is already locked by another process. Because the lock is held for
+// the lifetime of the process (released on Close or exit, including on crash),
+// TryEdit is well suited to single-instance enforcement.
+func TryEdit(name string) (*File, bool, error) {
+	return TryOpenFile(name, os.O_RDWR|os.O_CREATE, 0666)
+}
+
 // Close unlocks and closes the underlying file.
 //
 // Close may be called multiple times; all calls after the first will return a

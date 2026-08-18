@@ -66,6 +66,28 @@ func (mu *Mutex) Lock() (unlock func(), err error) {
 	}, nil
 }
 
+// TryLock is like Lock but, instead of blocking, returns ok=false (with a nil
+// error and a nil unlock) if the Mutex is already locked by another process.
+//
+// This makes a Mutex suitable for single-instance enforcement: the lock is held
+// until unlock is called or the process exits (including on crash), so it never
+// goes stale.
+func (mu *Mutex) TryLock() (unlock func(), ok bool, err error) {
+	if mu.Path == "" {
+		panic("lockedfile.Mutex: missing Path during TryLock")
+	}
+	f, ok, err := TryOpenFile(mu.Path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	mu.mu.Lock()
+
+	return func() {
+		mu.mu.Unlock()
+		f.Close()
+	}, true, nil
+}
+
 // RLock attempts to lock the Mutex for read-only access.
 func (mu *Mutex) RLock() (unlock func(), err error) {
 	if mu.Path == "" {

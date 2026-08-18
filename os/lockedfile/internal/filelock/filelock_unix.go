@@ -35,6 +35,26 @@ func lock(f File, lt lockType) (err error) {
 	return nil
 }
 
+func tryLock(f File, lt lockType) (bool, error) {
+	for {
+		err := syscall.Flock(int(f.Fd()), int(lt)|syscall.LOCK_NB)
+		switch err {
+		case nil:
+			return true, nil
+		case syscall.EINTR:
+			continue
+		case syscall.EWOULDBLOCK:
+			return false, nil
+		default:
+			return false, &os.PathError{
+				Op:   "Try" + lt.String(),
+				Path: f.Name(),
+				Err:  err,
+			}
+		}
+	}
+}
+
 func unlock(f File) error {
 	return lock(f, syscall.LOCK_UN)
 }

@@ -16,9 +16,9 @@ import (
 // Opening an exclusive-use file returns an error.
 // The expected error strings are:
 //
-//  - "open/create -- file is locked" (cwfs, kfs)
-//  - "exclusive lock" (fossil)
-//  - "exclusive use file already open" (ramfs)
+//   - "open/create -- file is locked" (cwfs, kfs)
+//   - "exclusive lock" (fossil)
+//   - "exclusive use file already open" (ramfs)
 var lockedErrStrings = [...]string{
 	"file is locked",
 	"exclusive lock",
@@ -86,6 +86,30 @@ func openFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 		// Apply 10% jitter to avoid synchronizing collisions.
 		nextSleep += time.Duration((0.1*rand.Float64() - 0.05) * float64(nextSleep))
 	}
+}
+
+// tryOpenFile is the non-blocking counterpart of openFile: it makes a single
+// open attempt and returns ok=false (with a nil error) if the file is already
+// exclusively open (locked) by another process.
+func tryOpenFile(name string, flag int, perm os.FileMode) (*os.File, bool, error) {
+	if fi, err := os.Stat(name); err == nil {
+		if fi.Mode()&os.ModeExclusive == 0 {
+			if err := os.Chmod(name, fi.Mode()|os.ModeExclusive); err != nil {
+				return nil, false, err
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, false, err
+	}
+
+	f, err := os.OpenFile(name, flag, perm|os.ModeExclusive)
+	if err != nil {
+		if isLocked(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return f, true, nil
 }
 
 func closeFile(f *os.File) error {

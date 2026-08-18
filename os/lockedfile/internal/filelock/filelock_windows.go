@@ -23,6 +23,26 @@ const (
 	allBytes = ^uint32(0)
 )
 
+// ERROR_LOCK_VIOLATION is returned by LockFileEx with LOCKFILE_FAIL_IMMEDIATELY
+// when the requested region is already locked.
+const ERROR_LOCK_VIOLATION syscall.Errno = 33
+
+func tryLock(f File, lt lockType) (bool, error) {
+	ol := new(syscall.Overlapped)
+	err := LockFileEx(syscall.Handle(f.Fd()), uint32(lt)|LOCKFILE_FAIL_IMMEDIATELY, reserved, allBytes, allBytes, ol)
+	if err == nil {
+		return true, nil
+	}
+	if err == ERROR_LOCK_VIOLATION {
+		return false, nil
+	}
+	return false, &os.PathError{
+		Op:   "Try" + lt.String(),
+		Path: f.Name(),
+		Err:  err,
+	}
+}
+
 func lock(f File, lt lockType) error {
 	// Per https://golang.org/issue/19098, “Programs currently expect the Fd
 	// method to return a handle that uses ordinary synchronous I/O.”
