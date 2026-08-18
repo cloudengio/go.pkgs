@@ -22,6 +22,45 @@ type Backoff interface {
 	// or a retry response. It can be nil if no such data is needed.
 	Wait(context.Context, any) (bool, error)
 
+	// Next returns a channel, as per time.Timer.C, that is ready when the
+	// next backoff delay has expired. Once the backoff algorithm has
+	// reached its limit, Next returns a closed channel and Done will
+	// return true. Note that this differs from a time.Timer.C, which is
+	// never closed: receiving from the closed channel yields a zero
+	// time.Time immediately (and repeatedly), so completion can be
+	// detected either by calling Done or by testing the received value:
+	//
+	//  if _, ok := <-backoff.Next(); !ok {
+	//    // backoff has reached its limit
+	//  }
+	//
+	// Next records a retry and arms a new timer on each invocation. It is
+	// intended to be called when a retry is needed, for example in a select
+	// statement:
+	//
+	//  for {
+	//    if err := doOperation(); err != nil {
+	//      select {
+	//      case <-ctx.Done():
+	//        return ctx.Err()
+	//      case _, ok := <-backoff.Next():
+	//        if !ok { // equivalently: backoff.Done()
+	//          return err
+	//        }
+	//      }
+	//      continue
+	//    }
+	//    return nil
+	//  }
+	//
+	// The caller cannot stop the timer underlying the returned channel;
+	// abandoned timers are garbage collected.
+	Next() <-chan time.Time
+	// Done returns true if the backoff algorithm has reached its limit and
+	// no more requests should be attempted. The limit is reached when Wait
+	// returns true or when Next is called after all retries have been used.
+	Done() bool
+
 	// Retries returns the number of retries that the backoff algorithm
 	// has recorded, ie. the number of times that Backoff was called and
 	// returned false.
@@ -35,7 +74,16 @@ type ExponentialBackoff struct {
 	steps     int
 	retries   int
 	nextDelay time.Duration
+	done      bool
 }
+
+// closedTimeChan is returned by Next once a backoff has reached its limit;
+// receiving from it never blocks.
+var closedTimeChan = func() <-chan time.Time {
+	ch := make(chan time.Time)
+	close(ch)
+	return ch
+}()
 
 // NewExponentialBackoff returns a instance of ExponentialBackoff.
 // If initial is less than or equal to zero, DefaultBackoffInterval is used.
@@ -58,6 +106,7 @@ func (eb *ExponentialBackoff) Retries() int {
 // Wait implements Backoff.
 func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error) {
 	if eb.retries >= eb.steps {
+		eb.done = true
 		return true, nil
 	}
 	timer := time.NewTimer(eb.nextDelay)
@@ -74,8 +123,30 @@ func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error) {
 	return false, nil
 }
 
+// Next implements Backoff. The retry is recorded when the timer is armed,
+// not when it fires, so a caller that abandons the returned channel (eg.
+// because its context was canceled) will still have consumed that retry.
+func (eb *ExponentialBackoff) Next() <-chan time.Time {
+	if eb.retries >= eb.steps {
+		eb.done = true
+		return closedTimeChan
+	}
+	delay := eb.nextDelay
+	if eb.nextDelay < time.Duration(1<<62) {
+		eb.nextDelay *= 2
+	}
+	eb.retries++
+	return time.NewTimer(delay).C
+}
+
+// Done implements Backoff.
+func (eb *ExponentialBackoff) Done() bool {
+	return eb.done
+}
+
 // NoBackoff implements a Backoff that does not perform any backoff and always
-// returns false for Wait and 0 for Retries.
+// returns false for Wait and Done, an immediately ready channel for Next and
+// 0 for Retries.
 type NoBackoff struct{}
 
 func (nb NoBackoff) Retries() int {
@@ -84,6 +155,16 @@ func (nb NoBackoff) Retries() int {
 
 func (nb NoBackoff) Wait(_ context.Context, _ any) (bool, error) {
 	return false, nil
+}
+
+func (nb NoBackoff) Next() <-chan time.Time {
+	ch := make(chan time.Time, 1)
+	ch <- time.Now()
+	return ch
+}
+
+func (nb NoBackoff) Done() bool {
+	return false
 }
 
 // ExponentialBackoffOffset implements an exponential backoff algorithm with
@@ -109,16 +190,22 @@ func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialB
 	}
 }
 
+// randomOffset returns a random duration in (0, limit).
+func randomOffset(limit time.Duration) time.Duration {
+	offset := time.Duration(rand.Int63n(int64(limit))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
+	if offset == 0 {
+		offset = time.Nanosecond
+	}
+	return offset
+}
+
 func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error) {
 	if eb.retries >= eb.steps {
+		eb.done = true
 		return true, nil
 	}
 	if eb.retries == 0 && eb.nextDelay > 0 {
-		offset := time.Duration(rand.Int63n(int64(eb.nextDelay))) //nolint:gosec // G404: false positive, no need for crypto strength randomness here.
-		if offset == 0 {
-			offset = time.Nanosecond
-		}
-		timer := time.NewTimer(offset)
+		timer := time.NewTimer(randomOffset(eb.nextDelay))
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
@@ -132,4 +219,18 @@ func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, erro
 		return false, nil
 	}
 	return eb.ExponentialBackoff.Wait(ctx, v)
+}
+
+// Next implements Backoff, using a random offset for the first delay as
+// per Wait.
+func (eb *ExponentialBackoffOffset) Next() <-chan time.Time {
+	if eb.retries == 0 && eb.retries < eb.steps && eb.nextDelay > 0 {
+		offset := randomOffset(eb.nextDelay)
+		if eb.nextDelay < time.Duration(1<<62) {
+			eb.nextDelay *= 2
+		}
+		eb.retries++
+		return time.NewTimer(offset).C
+	}
+	return eb.ExponentialBackoff.Next()
 }

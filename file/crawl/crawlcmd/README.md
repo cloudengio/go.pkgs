@@ -190,14 +190,12 @@ parametised via its DownloadFactoryConfig receiver.
 ### Type ExponentialBackoff
 ```go
 type ExponentialBackoff struct {
-	InitialDelay   time.Duration `yaml:"initial_delay" doc:"the initial delay between retries for exponential backoff"`
-	Steps          int           `yaml:"steps" doc:"the number of steps of exponential backoff before giving up"`
-	RandomizeStart bool          `yaml:"randomize_start" doc:"if true, a random offset of up to initial_delay will be used to randomize the start of the backoff period to avoid thundering herd issues when many retries are attempted at the same time."`
-	StatusCodes    []int         `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
+	ratecontrol.ExponentialBackoffConfig `yaml:",inline"`
+	StatusCodes                          []int `yaml:"status_codes,flow" doc:"the status codes that trigger a retry"`
 }
 ```
-ExponentialBackoffConfig is the configuration for an exponential backoff
-retry strategy for downloads.
+ExponentialBackoff is the configuration for an exponential backoff retry
+strategy for downloads.
 
 
 ### Type FSFactory
@@ -209,11 +207,7 @@ FSFactory is a function that returns a file.FS used to crawl a given FS.
 
 ### Type Rate
 ```go
-type Rate struct {
-	Tick            time.Duration `yaml:"tick" doc:"the duration of a tick"`
-	RequestsPerTick int           `yaml:"requests_per_tick" doc:"the number of requests per tick"`
-	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
-}
+type Rate = ratecontrol.RateConfig
 ```
 Rate specifies a rate in one of several forms, only one should be used.
 

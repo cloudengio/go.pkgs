@@ -5,6 +5,7 @@
 package largefile_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -403,5 +404,115 @@ func TestByteRanges_NotifyAndTail(t *testing.T) {
 		if !reflect.DeepEqual(r, want) {
 			t.Errorf("Tail() = %v, want %v", r, want)
 		}
+	})
+}
+
+type mockRetryResponse struct {
+	hasDuration bool
+	duration    time.Duration
+}
+
+func (m *mockRetryResponse) IsRetryable() bool {
+	return true
+}
+
+func (m *mockRetryResponse) BackoffDuration() (bool, time.Duration) {
+	return m.hasDuration, m.duration
+}
+
+// testBackoffExhausts drives a new backoff through steps Waits, expecting
+// done=false for each, then verifies that the next Wait returns done=true
+// and that Retries and Done report the limit was reached. The response
+// passed to each Wait is chosen by resp, keyed on the iteration number.
+func testBackoffExhausts(ctx context.Context, t *testing.T, steps int, resp func(i int) any) {
+	t.Helper()
+	b := largefile.NewBackoff(time.Millisecond, steps)
+	for i := range steps {
+		done, err := b.Wait(ctx, resp(i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			t.Fatalf("iteration %d: unexpected done=true", i)
+		}
+	}
+	done, err := b.Wait(ctx, resp(steps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !done {
+		t.Fatal("expected done=true after exhausting steps")
+	}
+	if got, want := b.Retries(), steps; got != want {
+		t.Errorf("Retries() = %v, want %v", got, want)
+	}
+	if !b.Done() {
+		t.Error("expected Done() to be true")
+	}
+}
+
+func testBackoffNextStops(ctx context.Context, t *testing.T) {
+	t.Helper()
+	steps := 3
+	b := largefile.NewBackoff(time.Millisecond, steps)
+	hasDur := &mockRetryResponse{hasDuration: true, duration: time.Millisecond}
+
+	// 1 custom duration retry via Wait
+	done, err := b.Wait(ctx, hasDur)
+	if err != nil || done {
+		t.Fatalf("first Wait: done=%v err=%v", done, err)
+	}
+
+	// remaining 2 retries via Next
+	for i := range 2 {
+		select {
+		case <-b.Next():
+		case <-time.After(time.Second):
+			t.Fatalf("Next %d did not fire", i)
+		}
+	}
+
+	// Next after 3 retries must return closed channel
+	select {
+	case _, ok := <-b.Next():
+		if ok {
+			t.Fatal("expected closed channel after exhausting steps via Next")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Next did not return immediately when done")
+	}
+	if got, want := b.Retries(), steps; got != want {
+		t.Errorf("Retries() = %v, want %v", got, want)
+	}
+	if !b.Done() {
+		t.Error("expected Done() to be true")
+	}
+}
+
+func TestLargeFileBackoff(t *testing.T) {
+	ctx := context.Background()
+	noDur := &mockRetryResponse{hasDuration: false}
+	hasDur := &mockRetryResponse{hasDuration: true, duration: time.Millisecond}
+
+	t.Run("exponential only", func(t *testing.T) {
+		testBackoffExhausts(ctx, t, 3, func(int) any { return noDur })
+	})
+
+	t.Run("custom duration only", func(t *testing.T) {
+		testBackoffExhausts(ctx, t, 3, func(int) any { return hasDur })
+	})
+
+	t.Run("mixed retries terminate at steps", func(t *testing.T) {
+		// Alternate between custom duration and fallback.
+		testBackoffExhausts(ctx, t, 4, func(i int) any {
+			if i%2 == 0 {
+				return hasDur
+			}
+			return noDur
+		})
+	})
+
+	t.Run("Next stops at steps with mixed usage", func(t *testing.T) {
+		testBackoffNextStops(ctx, t)
 	})
 }

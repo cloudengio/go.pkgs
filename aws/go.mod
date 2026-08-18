@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.37
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.36
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.1.37
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.321.2
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.321.3
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.2
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.44.6
@@ -36,7 +36,7 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/stretchr/testify v1.12.0 // indirect
 	github.com/xtaci/smux v1.5.57 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
@@ -124,3 +124,5 @@ replace cloudeng.io/text => ../text
 replace cloudeng.io/os => ../os
 
 replace cloudeng.io/sync => ../sync
+
+replace cloudeng.io/algo => ../algo

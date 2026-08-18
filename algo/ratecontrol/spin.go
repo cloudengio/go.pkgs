@@ -97,3 +97,20 @@ func (b *BackoffOnSpin) Wait(ctx context.Context, val any) (bool, error) {
 func (b *BackoffOnSpin) Retries() int {
 	return b.Backoff.Retries()
 }
+
+// Next implements Backoff. The returned channel is immediately ready unless
+// a spin is detected, in which case the underlying Backoff's Next channel
+// is returned.
+func (b *BackoffOnSpin) Next() <-chan time.Time {
+	if b.SpinDetector.Tick() {
+		return b.Backoff.Next()
+	}
+	ch := make(chan time.Time, 1)
+	ch <- time.Now()
+	return ch
+}
+
+// Done implements Backoff by delegating to the underlying Backoff.
+func (b *BackoffOnSpin) Done() bool {
+	return b.Backoff.Done()
+}
