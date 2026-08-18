@@ -50,4 +50,4 @@ replace cloudeng.io/errors => ../../../errors
 
 replace cloudeng.io/os => ../../../os
 
-replace cloudeng.io/algo => ../algo
+replace cloudeng.io/algo => ../../../algo
