@@ -105,7 +105,9 @@ func (b *BackoffOnSpin) Next() <-chan time.Time {
 	if b.SpinDetector.Tick() {
 		return b.Backoff.Next()
 	}
-	return closedTimeChan
+	ch := make(chan time.Time, 1)
+	ch <- time.Now()
+	return ch
 }
 
 // Done implements Backoff by delegating to the underlying Backoff.

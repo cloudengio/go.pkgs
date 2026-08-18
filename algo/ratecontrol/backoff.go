@@ -158,7 +158,9 @@ func (nb NoBackoff) Wait(_ context.Context, _ any) (bool, error) {
 }
 
 func (nb NoBackoff) Next() <-chan time.Time {
-	return closedTimeChan
+	ch := make(chan time.Time, 1)
+	ch <- time.Now()
+	return ch
 }
 
 func (nb NoBackoff) Done() bool {
