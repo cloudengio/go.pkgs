@@ -280,9 +280,12 @@ func (w *KeyWriter) DeleteKey(ctx context.Context, name string, spec keys.KeySpe
 	return writeIMS(ctx, w.fs, name, ims)
 }
 
-// NewKeyInfoExtension creates a new subcmd.Extension for key info management commands.
+// NewKeyInfoExtension creates a new subcmd.Extension for key info management commands,
+// name specifies the name of the command tree and also the name of the template variable
+// used to include it in the parent command tree.
 func NewKeyInfoExtension(name string, appendFn func(cmd *subcmd.CommandSetYAML) error) subcmd.Extension {
-	return subcmd.NewExtension(name, KeyInfoSubcmdTree, appendFn)
+	spec := fmt.Sprintf(keyInfoSubcmdTree, name)
+	return subcmd.NewExtension(name, spec, appendFn)
 }
 
 // KeySpecFlags defines command-line flags for specifying a key's ID and user.
@@ -296,10 +299,10 @@ func (f KeySpecFlags) KeySpec() keys.KeySpec {
 	return keys.KeySpec{ID: f.ID, User: f.User}
 }
 
-// KeyInfoSubcmdTree is the subcmd extension tree for managing key info items in a
+// keyInfoSubcmdTree is the subcmd extension tree for managing key info items in a
 // keychain/secrets store.
-const KeyInfoSubcmdTree = `
-- name: key-info
+const keyInfoSubcmdTree = `
+- name: %s
   summary: manage key info items in a keychain/secrets store, multiple key info items can be stored in a single item. In all cases if input or output is a filename, then "-" or "" will result in stdin or stdout being used as appropriate.
   commands:
     - name: create
@@ -319,3 +322,9 @@ const KeyInfoSubcmdTree = `
     - name: delete
       summary: delete a key info from an item in the keychain
 `
+
+// ExtensionSpec returns the subcmd extension tree for managing key info
+// items in a keychain/secrets store, formatted with the provided name.
+func ExtensionSpec(name string) string {
+	return fmt.Sprintf(keyInfoSubcmdTree, name)
+}

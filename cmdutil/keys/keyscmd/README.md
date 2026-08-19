@@ -8,37 +8,6 @@ Package keyscmd provides a set of utilities for reading and writing multiple
 keys stored in a single item in a file system using the format used by
 keys.InMemoryKeyStore.
 
-## Constants
-### KeyInfoSubcmdTree
-```go
-KeyInfoSubcmdTree = `
-- name: key-info
-  summary: manage key info items in a keychain/secrets store, multiple key info items can be stored in a single item. In all cases if input or output is a filename, then "-" or "" will result in stdin or stdout being used as appropriate.
-  commands:
-    - name: create
-      summary: create a new key info, including secret, and write it to <filename>
-      arguments:
-        - <filename>
-    - name: list
-      summary: list all key info items in an item
-    - name: get
-      summary: get a key info from an item from the keychain and write it to <filename>
-      arguments:
-        - <filename>
-    - name: set
-      summary: set a key info, read from filename, in an item in the keychain. If the key info already exists it will be overwritten.
-      arguments:
-        - <filename>
-    - name: delete
-      summary: delete a key info from an item in the keychain
-`
-
-```
-KeyInfoSubcmdTree is the subcmd extension tree for managing key info items
-in a keychain/secrets store.
-
-
-
 ## Variables
 ### ErrKeyInfoNotFound
 ```go
@@ -62,6 +31,13 @@ func CopyContents(ctx context.Context, srcFS file.ReadFileFS, src string, dstFS 
 CopyContents copies the contents of the source file in srcFS to the
 destination file in dstFS.
 
+### Func ExtensionSpec
+```go
+func ExtensionSpec(name string) string
+```
+ExtensionSpec returns the subcmd extension tree for managing key info items
+in a keychain/secrets store, formatted with the provided name.
+
 ### Func IsDstSafe
 ```go
 func IsDstSafe(dst string) error
@@ -82,7 +58,8 @@ that the operation should read from stdin or write to stdout.
 func NewKeyInfoExtension(name string, appendFn func(cmd *subcmd.CommandSetYAML) error) subcmd.Extension
 ```
 NewKeyInfoExtension creates a new subcmd.Extension for key info management
-commands.
+commands, name specifies the name of the command tree and also the name of
+the template variable used to include it in the parent command tree.
 
 ### Func ReadFSWithStdin
 ```go
