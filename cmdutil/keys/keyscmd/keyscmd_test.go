@@ -583,7 +583,7 @@ func TestKeyInfoExtension(t *testing.T) {
 	if got, want := ext.Name(), "test-ext"; got != want {
 		t.Errorf("ext.Name() = %q, want %q", got, want)
 	}
-	if got, want := ext.YAML(), keyscmd.KeysCmdExtensionSpec("test-ext"); got != want {
+	if got, want := ext.YAML(), keyscmd.ExtensionSpec("test-ext"); got != want {
 		t.Errorf("ext.YAML() = %q, want %q", got, want)
 	}
 	if err := ext.Set(nil); err != nil {

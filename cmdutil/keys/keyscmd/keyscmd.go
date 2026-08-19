@@ -323,8 +323,8 @@ const keyInfoSubcmdTree = `
       summary: delete a key info from an item in the keychain
 `
 
-// KeysCmdExtensionSpec returns the subcmd extension tree for managing key info
+// ExtensionSpec returns the subcmd extension tree for managing key info
 // items in a keychain/secrets store, formatted with the provided name.
-func KeysCmdExtensionSpec(name string) string {
+func ExtensionSpec(name string) string {
 	return fmt.Sprintf(keyInfoSubcmdTree, name)
 }

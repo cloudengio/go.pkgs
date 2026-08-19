@@ -31,6 +31,13 @@ func CopyContents(ctx context.Context, srcFS file.ReadFileFS, src string, dstFS 
 CopyContents copies the contents of the source file in srcFS to the
 destination file in dstFS.
 
+### Func ExtensionSpec
+```go
+func ExtensionSpec(name string) string
+```
+ExtensionSpec returns the subcmd extension tree for managing key info items
+in a keychain/secrets store, formatted with the provided name.
+
 ### Func IsDstSafe
 ```go
 func IsDstSafe(dst string) error
@@ -45,13 +52,6 @@ func IsStdoutStdin(name string) bool
 ```
 IsStdoutStdin returns true if the provided name is "-" or empty, indicating
 that the operation should read from stdin or write to stdout.
-
-### Func KeysCmdExtensionSpec
-```go
-func KeysCmdExtensionSpec(name string) string
-```
-KeysCmdExtensionSpec returns the subcmd extension tree for managing key info
-items in a keychain/secrets store, formatted with the provided name.
 
 ### Func NewKeyInfoExtension
 ```go
