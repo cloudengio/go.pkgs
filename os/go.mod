@@ -8,6 +8,6 @@ require (
 	golang.org/x/sys v0.47.0
 )
 
-require cloudeng.io/algo v0.0.0-20260818231247-605c3766963e // indirect
+require cloudeng.io/algo v0.0.0-20260818231247-605c3766963e
 
 replace cloudeng.io/errors => ../errors

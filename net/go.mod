@@ -3,7 +3,7 @@ module cloudeng.io/net
 go 1.26.4
 
 require (
-	cloudeng.io/algo v0.0.0-20260807191443-11b7f4ecaaa0
+	cloudeng.io/algo v0.0.0-20260818231247-605c3766963e
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
 )
