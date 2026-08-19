@@ -30,11 +30,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.73.6 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260615221425-930a08e65d3a // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/moby/term v0.5.2 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.12.0 // indirect
 	github.com/xtaci/smux v1.5.57 // indirect
@@ -44,7 +42,7 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260807191443-11b7f4ecaaa0 // indirect
+	cloudeng.io/algo v0.0.0-20260818231247-605c3766963e // indirect
 	cloudeng.io/os v0.0.0-20260807191443-11b7f4ecaaa0 // indirect
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 	cloudeng.io/sys v0.0.0-20260807191443-11b7f4ecaaa0 // indirect
