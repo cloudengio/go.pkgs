@@ -49,11 +49,12 @@ func (c CloneInfo) String() string
 
 ### Type Constructor
 ```go
-type Constructor = func(ctx context.Context) vms.Instance
+type Constructor = func(ctx context.Context) (vms.Instance, error)
 ```
 Constructor creates a new, uninitialized Docker VM instance. Each call must
 return a distinct vms.Instance (typically via New with a unique name).
-ctx governs any work done to construct the instance.
+ctx governs any work done to construct the instance. It returns an error if
+the instance could not be created.
 
 
 ### Type ContainerInfo
@@ -287,7 +288,7 @@ List implements vmspool.Provider.
 
 
 ```go
-func (p *Provider) New(ctx context.Context) vms.Instance
+func (p *Provider) New(ctx context.Context) (vms.Instance, error)
 ```
 New implements vmspool.Provider.
 
