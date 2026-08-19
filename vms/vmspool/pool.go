@@ -598,6 +598,9 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 		close(doneCh)
 	})
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	// The abandoned cases below, where creation is still in progress when this
 	// call gives up on it, do not clean up: reading inst would race with the
 	// goroutine still writing it. The instance was tracked before its first
@@ -615,7 +618,7 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 		default:
 		}
 		return ctx.Err()
-	case <-time.After(timeout):
+	case <-timer.C:
 		select {
 		case <-doneCh:
 			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
@@ -624,10 +627,10 @@ func (p *Pool) attemptCreateVM(ctx context.Context, timeout time.Duration) error
 		return fmt.Errorf("vmspool: create VM timed out after %s", timeout)
 	}
 
-	// this is racy since if the context is canceled and the select may
-	// unblock due to either ctx.Done or p.done; if ctx.Done is selected,
-	// the created VM is cleaned up immediately, but if p.done is selected,
-	// the VM is added to the pool and will be cleaned up later by Close.
+	// This select is racy if the context is cancelled concurrently: if
+	// ctx.Done is selected, the created VM is cleaned up immediately; if
+	// sending to ready is selected, the VM is queued in the pool and will be
+	// cleaned up on Acquire or Close.
 	select {
 	case p.ready <- inst:
 		return nil
