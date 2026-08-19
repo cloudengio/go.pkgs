@@ -309,15 +309,24 @@ func (inst *Instance) Delete(ctx context.Context) error {
 	args := []string{"rm", "--force", inst.name}
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
+	stdoutBuf := executil.NewTailWriter(1024)
 	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
 	err := cmd.Run()
 	stderr := string(stderrBuf.Bytes())
-	if err != nil || isContainerNotFound(stderr) {
+	// "rm --force" echoes the name of each removed container to stdout;
+	// recent docker versions exit 0 with no output at all when the container
+	// does not exist, so an empty stdout means nothing was removed. Older
+	// versions exit non-zero with "No such container" on stderr.
+	removedNothing := err == nil && len(strings.TrimSpace(string(stdoutBuf.Bytes()))) == 0
+	if err != nil || removedNothing || isContainerNotFound(stderr) {
 		if err == nil {
 			inst.setState(vms.StateDeleted)
-			err = fmt.Errorf("container not found")
-			return convertError(args, stderr, err)
+			if isContainerNotFound(stderr) {
+				return convertError(args, stderr, fmt.Errorf("container not found"))
+			}
+			return fmt.Errorf("%s: container does not exist: %w", strings.Join(args, " "), vms.ErrVMNotFound)
 		}
 		inst.logger.Info("docker command failed", "args", args, "stderr", stderr, "error", err)
 		inst.setState(prev)

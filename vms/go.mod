@@ -3,6 +3,7 @@ module cloudeng.io/vms
 go 1.26.2
 
 require (
+	cloudeng.io/algo v0.0.0-20260818231247-605c3766963e
 	cloudeng.io/cicd v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850
@@ -10,7 +11,6 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260818231247-605c3766963e // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
