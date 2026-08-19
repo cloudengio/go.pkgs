@@ -288,6 +288,25 @@ and ExponentialBackoff otherwise. If either InitialDelay or Steps are less
 than or equal to zero then NoBackoff is returned.
 
 
+```go
+func (ebc ExponentialBackoffConfig) String() string
+```
+String returns a compact representation of the backoff configuration and the
+total time it can spend waiting, eg. "initial=100ms steps=10 total=1m42.3s"
+with " randomized" appended if RandomizeStart is set. A configuration that
+yields NoBackoff is represented as "no backoff".
+
+
+```go
+func (ebc ExponentialBackoffConfig) TotalTimeout() time.Duration
+```
+TotalTimeout returns the total time that a backoff created from this
+configuration can spend waiting across all of its steps, ie. InitialDelay *
+(2^Steps - 1). It does not account for any randomization of the start of the
+backoff period (RandomizeStart). Zero is returned for a configuration that
+yields NoBackoff.
+
+
 
 
 ### Type ExponentialBackoffOffset
@@ -435,6 +454,17 @@ type RateConfig struct {
 }
 ```
 RateConfig represents the configuration for a rate controller.
+
+### Methods
+
+```go
+func (rc RateConfig) String() string
+```
+String returns a compact representation of the rate configuration, eg.
+"10 requests/1s, 1000 bytes/1s". Limits that are not configured are omitted
+and "no rate limits" is returned when neither is configured.
+
+
 
 
 ### Type SpinDetector

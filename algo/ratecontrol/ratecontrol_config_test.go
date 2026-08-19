@@ -6,6 +6,7 @@ package ratecontrol_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -63,6 +64,59 @@ func TestExponentialBackoffConfigNewBackoffSteps(t *testing.T) {
 	}
 	if got, want := b.Done(), true; got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestExponentialBackoffConfigTotalTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  ratecontrol.ExponentialBackoffConfig
+		want time.Duration
+	}{
+		{"single step", ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Second, Steps: 1}, time.Second},
+		{"three steps", ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Millisecond, Steps: 3}, 7 * time.Millisecond},
+		{"randomization ignored", ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Millisecond, Steps: 3, RandomizeStart: true}, 7 * time.Millisecond},
+		{"zero delay", ratecontrol.ExponentialBackoffConfig{Steps: 3}, 0},
+		{"zero steps", ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Millisecond}, 0},
+		{"overflow", ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Hour, Steps: 64}, math.MaxInt64},
+	} {
+		if got, want := tc.cfg.TotalTimeout(), tc.want; got != want {
+			t.Errorf("%v: got %v, want %v", tc.name, got, want)
+		}
+	}
+}
+
+func TestExponentialBackoffConfigString(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  ratecontrol.ExponentialBackoffConfig
+		want string
+	}{
+		{"exponential", ratecontrol.ExponentialBackoffConfig{InitialDelay: 100 * time.Millisecond, Steps: 3}, "initial=100ms steps=3 total=700ms"},
+		{"randomized", ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Second, Steps: 2, RandomizeStart: true}, "initial=1s steps=2 total=3s randomized"},
+		{"no backoff", ratecontrol.ExponentialBackoffConfig{Steps: 3}, "no backoff"},
+	} {
+		if got, want := tc.cfg.String(), tc.want; got != want {
+			t.Errorf("%v: got %q, want %q", tc.name, got, want)
+		}
+	}
+}
+
+func TestRateConfigString(t *testing.T) {
+	tick := time.Second
+	for _, tc := range []struct {
+		name string
+		cfg  ratecontrol.RateConfig
+		want string
+	}{
+		{"requests", ratecontrol.RateConfig{Tick: tick, RequestsPerTick: 10}, "10 requests/1s"},
+		{"bytes", ratecontrol.RateConfig{Tick: tick, BytesPerTick: 1000}, "1000 bytes/1s"},
+		{"both", ratecontrol.RateConfig{Tick: tick, RequestsPerTick: 10, BytesPerTick: 1000}, "10 requests/1s, 1000 bytes/1s"},
+		{"none", ratecontrol.RateConfig{Tick: tick}, "no rate limits"},
+	} {
+		if got, want := tc.cfg.String(), tc.want; got != want {
+			t.Errorf("%v: got %q, want %q", tc.name, got, want)
+		}
 	}
 }
 

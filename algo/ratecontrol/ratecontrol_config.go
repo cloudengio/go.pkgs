@@ -5,6 +5,9 @@
 package ratecontrol
 
 import (
+	"fmt"
+	"math"
+	"strings"
 	"time"
 )
 
@@ -35,11 +38,67 @@ func (ebc ExponentialBackoffConfig) BackoffOption() Option {
 	return WithExponentialBackoff(ebc.InitialDelay, ebc.Steps, ebc.RandomizeStart)
 }
 
+// TotalTimeout returns the total time that a backoff created from this
+// configuration can spend waiting across all of its steps, ie.
+// InitialDelay * (2^Steps - 1). It does not account for any randomization
+// of the start of the backoff period (RandomizeStart). Zero is returned
+// for a configuration that yields NoBackoff.
+func (ebc ExponentialBackoffConfig) TotalTimeout() time.Duration {
+	if ebc.InitialDelay <= 0 || ebc.Steps <= 0 {
+		return 0
+	}
+	total, delay := time.Duration(0), ebc.InitialDelay
+	for i := 0; i < ebc.Steps; i++ {
+		total += delay
+		if total < 0 {
+			// Overflowed; return the largest possible timeout.
+			return math.MaxInt64
+		}
+		delay *= 2
+		if delay < 0 {
+			delay = math.MaxInt64
+		}
+	}
+	return total
+}
+
+// String returns a compact representation of the backoff configuration and
+// the total time it can spend waiting, eg. "initial=100ms steps=10 total=1m42.3s"
+// with " randomized" appended if RandomizeStart is set. A configuration that
+// yields NoBackoff is represented as "no backoff".
+func (ebc ExponentialBackoffConfig) String() string {
+	if ebc.InitialDelay <= 0 || ebc.Steps <= 0 {
+		return "no backoff"
+	}
+	randomized := ""
+	if ebc.RandomizeStart {
+		randomized = " randomized"
+	}
+	return fmt.Sprintf("initial=%v steps=%v total=%v%s", ebc.InitialDelay, ebc.Steps, ebc.TotalTimeout(), randomized)
+}
+
 // RateConfig represents the configuration for a rate controller.
 type RateConfig struct {
 	Tick            time.Duration `yaml:"tick" doc:"the duration of a tick"`
 	RequestsPerTick int           `yaml:"requests_per_tick" doc:"the number of requests per tick"`
 	BytesPerTick    int           `yaml:"bytes_per_tick" doc:"the number of bytes per tick"`
+}
+
+// String returns a compact representation of the rate configuration,
+// eg. "10 requests/1s, 1000 bytes/1s". Limits that are not configured are
+// omitted and "no rate limits" is returned when neither is configured.
+func (rc RateConfig) String() string {
+	parts := make([]string, 0, 2)
+	if rc.RequestsPerTick > 0 {
+		parts = append(parts, fmt.Sprintf("%v requests/%v", rc.RequestsPerTick, rc.Tick))
+	}
+	if rc.BytesPerTick > 0 {
+		parts = append(parts, fmt.Sprintf("%v bytes/%v", rc.BytesPerTick, rc.Tick))
+	}
+	if len(parts) == 0 {
+		return "no rate limits"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ControllerConfig combines a rate with an exponential backoff.
