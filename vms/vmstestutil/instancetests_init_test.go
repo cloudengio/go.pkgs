@@ -8,6 +8,7 @@ import (
 	"context"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/vms"
 	"cloudeng.io/vms/vmstestutil"
 )
@@ -21,6 +22,7 @@ var instanceTestConfig = vmstestutil.InstanceTestConfig{
 	ExecArgs:    []string{"hello"},
 	RequireUnderlyingState: func(ctx context.Context, inst vms.Instance, _ string, final vms.State, intermediate ...vms.State) error {
 		// no point in testing the underlying state of the mock.
-		return vms.WaitForState(ctx, inst, time.Millisecond, final, intermediate...)
+		backoff := ratecontrol.NewExponentialBackoff(time.Millisecond, 20)
+		return vms.WaitForState(ctx, inst, backoff, final, intermediate...)
 	},
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/errors"
 	"cloudeng.io/os/executil"
 )
@@ -322,12 +323,9 @@ var (
 // checks that any intermediate states returned by inst.State are in the set of
 // allowed intermediate states on the way to the final state, returning an
 // error if an unexpected intermediate state is observed.
-func WaitForState(ctx context.Context, inst Instance, interval time.Duration, final State, intermediate ...State) error {
-	if interval <= 0 {
-		return fmt.Errorf("vms: WaitForState: interval must be positive: %v", interval)
-	}
+func WaitForState(ctx context.Context, inst Instance, backoff ratecontrol.Backoff, final State, intermediate ...State) error {
 	found := WaitForStateFunc(inst, final, intermediate)
-	return executil.WaitFor(ctx, interval, found)
+	return executil.WaitForBackoff(ctx, backoff, found)
 }
 
 // WaitForStateFunc returns a function that can be used with executil.
