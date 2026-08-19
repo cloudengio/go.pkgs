@@ -81,6 +81,15 @@ done=true, or the context is done. It waits for the specified interval
 between calls. If check returns an error, it is ignored unless done=true,
 in which case it is returned immediately.
 
+### Func WaitForBackoff
+```go
+func WaitForBackoff(ctx context.Context, backoff ratecontrol.Backoff, check func(ctx context.Context) (done bool, err error)) error
+```
+WaitForBackoff repeatedly calls the provided check function until it returns
+done=true, or the context is done. It waits for the next backoff delay
+between calls. If check returns an error, it is ignored unless done=true,
+in which case it is returned immediately.
+
 ### Func WaitForStopped
 ```go
 func WaitForStopped(ctx context.Context, pid int, waitFor time.Duration) error

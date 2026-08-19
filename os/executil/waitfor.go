@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"cloudeng.io/algo/ratecontrol"
 )
 
 // WaitFor repeatedly calls the provided check function until it returns
@@ -36,5 +38,29 @@ func WaitFor(ctx context.Context, interval time.Duration, check func(ctx context
 			}
 		}
 	}
+}
 
+// WaitForBackoff repeatedly calls the provided check function until it returns
+// done=true, or the context is done. It waits for the next backoff delay
+// between calls. If check returns an error, it is ignored unless done=true,
+// in which case it is returned immediately.
+func WaitForBackoff(ctx context.Context, backoff ratecontrol.Backoff, check func(ctx context.Context) (done bool, err error)) error {
+	if done, err := check(ctx); done {
+		return err
+	}
+
+	for {
+		nextCh := backoff.Next()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case _, ok := <-nextCh:
+			if !ok {
+				return fmt.Errorf("executil: WaitForBackoff: backoff done")
+			}
+			if done, err := check(ctx); done {
+				return err
+			}
+		}
+	}
 }

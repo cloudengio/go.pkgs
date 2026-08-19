@@ -16,10 +16,13 @@ import (
 	"cloudeng.io/os/executil"
 )
 
-var sleepHelper string
+var (
+	sleepHelper string
+	catHelper   string
+)
 
 func TestMain(m *testing.M) {
-	tmpDir, err := os.MkdirTemp("", "sleep-helper")
+	tmpDir, err := os.MkdirTemp("", "executil-helpers")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
 		os.Exit(1)
@@ -32,6 +35,15 @@ func TestMain(m *testing.M) {
 		os.RemoveAll(tmpDir)
 		os.Exit(1)
 	}
+
+	catHelper = filepath.Join(tmpDir, "cat")
+	catHelper, err = executil.GoBuild(context.Background(), catHelper, "./testdata/cat.go")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build cat helper: %v\n", err)
+		os.RemoveAll(tmpDir)
+		os.Exit(1)
+	}
+
 	code := m.Run()
 	os.RemoveAll(tmpDir)
 	os.Exit(code)
