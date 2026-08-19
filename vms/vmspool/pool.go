@@ -19,7 +19,9 @@ import (
 	"sync"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/errors"
+	"cloudeng.io/os/executil"
 	"cloudeng.io/sync/ctxsync"
 	"cloudeng.io/sync/errgroup"
 	"cloudeng.io/vms"
@@ -127,8 +129,7 @@ type options struct {
 	statusCh              chan<- Event
 	stagingBehaviour      StagingBehaviour
 	cleanupTimeout        time.Duration
-	createTimeout         time.Duration
-	createInterval        time.Duration
+	createBackoff         ratecontrol.ExponentialBackoffConfig
 	stopTimeout           time.Duration
 	createStdout          func(id string) io.Writer
 	createStderr          func(id string) io.Writer
@@ -138,19 +139,24 @@ type options struct {
 const (
 	DefaultPoolSize       = 2
 	DefaultCleanupTimeout = time.Minute
-	DefaultCreateTimeout  = 5 * time.Minute
-	DefaultCreateInterval = 500 * time.Millisecond
 	DefaultStopTimeout    = time.Minute
 )
 
+// DefaultCreateBackoff returns the default backoff used when creating VMs:
+// a 500ms initial delay doubling over 10 steps, for a total delay budget of
+// ~8.5 minutes, which is also the timeout allowed for a single creation
+// attempt.
+func DefaultCreateBackoff() ratecontrol.ExponentialBackoffConfig {
+	return ratecontrol.ExponentialBackoffConfig{InitialDelay: 500 * time.Millisecond, Steps: 10}
+}
+
 type Config struct {
-	Size                  int              `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
-	CleanupTimeout        time.Duration    `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
-	CreateTimeout         time.Duration    `yaml:"create_timeout" doc:"The timeout for creating a single VM. A 0 or negative value is treated as DefaultCreateTimeout."`
-	CreateInterval        time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
-	StopTimeout           time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
-	StagingBehaviour      StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
-	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
+	Size                  int                                  `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
+	CleanupTimeout        time.Duration                        `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
+	CreateBackoff         ratecontrol.ExponentialBackoffConfig `yaml:"create_backoff" doc:"The backoff applied between attempts to create a VM. Its total delay budget also bounds a single creation attempt. A configuration with a non-positive initial delay or number of steps is treated as DefaultCreateBackoff."`
+	StopTimeout           time.Duration                        `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
+	StagingBehaviour      StagingBehaviour                     `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
+	DeleteAcquiredOnClose bool                                 `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
 }
 
 // Options returns a slice of Option values derived from the Config fields.
@@ -161,7 +167,7 @@ func (c Config) Options() []Option {
 	return []Option{
 		WithSize(c.Size),
 		WithCleanupTimeout(c.CleanupTimeout),
-		WithCreateTimeoutAndInterval(c.CreateTimeout, c.CreateInterval),
+		WithCreateBackoff(c.CreateBackoff),
 		WithStopTimeout(c.StopTimeout),
 		WithStagingBehaviour(c.StagingBehaviour),
 		WithDeleteAcquiredOnClose(c.DeleteAcquiredOnClose),
@@ -193,20 +199,18 @@ func WithCleanupTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithCreateTimeoutAndInterval sets the timeout for creating a single
-// VM and the interval between creation attempts.
-// The default timeout and interval are DefaultCreateTimeout and DefaultCreateInterval.
-// A 0 or negative value is treated as DefaultCreateTimeout or DefaultCreateInterval.
-func WithCreateTimeoutAndInterval(timeout, interval time.Duration) Option {
+// WithCreateBackoff sets the backoff applied between attempts to create a VM.
+// Its total delay budget also bounds how long a single creation attempt may
+// take before it is abandoned and retried.
+// The default is DefaultCreateBackoff(); a configuration with a non-positive
+// initial delay or number of steps is replaced by it, so that an unset
+// configuration cannot produce a NoBackoff that retries without pausing.
+func WithCreateBackoff(cfg ratecontrol.ExponentialBackoffConfig) Option {
 	return func(o *options) {
-		if timeout <= 0 {
-			timeout = DefaultCreateTimeout
+		if cfg.InitialDelay <= 0 || cfg.Steps <= 0 {
+			cfg = DefaultCreateBackoff()
 		}
-		if interval <= 0 {
-			interval = DefaultCreateInterval
-		}
-		o.createTimeout = timeout
-		o.createInterval = interval
+		o.createBackoff = cfg
 	}
 }
 
@@ -335,8 +339,7 @@ func New(provider Provider, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
 	options.cleanupTimeout = DefaultCleanupTimeout
-	options.createTimeout = DefaultCreateTimeout
-	options.createInterval = DefaultCreateInterval
+	options.createBackoff = DefaultCreateBackoff()
 	options.stopTimeout = DefaultStopTimeout
 	options.stagingBehaviour = StagingBehaviourRunning
 	options.deleteAcquiredOnClose = true
@@ -422,7 +425,7 @@ func (p *Pool) Start(ctx context.Context) error {
 }
 
 func (p *Pool) fill(ctx context.Context, size int) error {
-	err := p.createVMWithRetry(ctx, p.options.createInterval, p.options.createTimeout)
+	err := p.createVMWithRetry(ctx)
 	if err != nil {
 		return err
 	}
@@ -433,7 +436,7 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 		var g errgroup.T
 		for range size - 1 {
 			g.GoContext(p.replenishCtx, func() error {
-				return p.createVMWithRetry(p.replenishCtx, p.options.createInterval, p.options.createTimeout)
+				return p.createVMWithRetry(p.replenishCtx)
 			})
 		}
 		if g.Wait() == nil {
@@ -553,7 +556,7 @@ func (p *Pool) requestReplenish() {
 	}
 	p.notify(EventReplenishStarted, nil)
 	p.wg.Go(func() {
-		err := p.createVMWithRetry(p.replenishCtx, p.options.createInterval, p.options.createTimeout)
+		err := p.createVMWithRetry(p.replenishCtx)
 		if err != nil {
 			// Log the error but keep the pool running; a later replenishment may succeed and restore capacity.
 			p.notify(EventReplenishFailed, err)
@@ -565,25 +568,23 @@ func (p *Pool) requestReplenish() {
 
 }
 
-// createVMWithRetry runs a loop that tries to create a new VM and add it to the pool
-// until the pool is closed or the context is done.
-func (p *Pool) createVMWithRetry(ctx context.Context, interval, timeout time.Duration) error {
-	if p.attemptCreateVM(ctx, timeout) == nil {
-		return nil
+// createVMWithRetry tries to create a new VM and add it to the pool, retrying
+// with the configured backoff until it succeeds, the backoff is exhausted, or
+// the context is done. The backoff's total delay budget is also the timeout for
+// each individual attempt.
+func (p *Pool) createVMWithRetry(ctx context.Context) error {
+	timeout := p.options.createBackoff.TotalTimeout()
+	var lastErr error
+	err := executil.WaitForBackoff(ctx, p.options.createBackoff.NewBackoff(),
+		func(ctx context.Context) (bool, error) {
+			lastErr = p.attemptCreateVM(ctx, timeout)
+			return lastErr == nil, nil
+		})
+	if err != nil && lastErr != nil {
+		// Report why creation kept failing, not just that the retries ran out.
+		return fmt.Errorf("%w: last attempt: %v", err, lastErr)
 	}
-	// Keep retrying to replenish the pool.
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if p.attemptCreateVM(ctx, timeout) == nil {
-				return nil
-			}
-		}
-	}
+	return err
 }
 
 // attemptCreateVM creates a single VM and adds it to the pool.

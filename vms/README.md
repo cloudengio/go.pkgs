@@ -55,7 +55,7 @@ transitions to out.
 
 ### Func WaitForState
 ```go
-func WaitForState(ctx context.Context, inst Instance, interval time.Duration, final State, intermediate ...State) error
+func WaitForState(ctx context.Context, inst Instance, backoff ratecontrol.Backoff, final State, intermediate ...State) error
 ```
 WaitForState polls inst.State until it returns the requested final state
 or the context is done. If intermediate states are provided, it also checks

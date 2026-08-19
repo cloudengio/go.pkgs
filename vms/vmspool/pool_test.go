@@ -14,10 +14,24 @@ import (
 	"testing"
 	"time"
 
+	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/vms"
 	"cloudeng.io/vms/vmspool"
 	"cloudeng.io/vms/vmstestutil"
 )
+
+// fastCreateBackoff retries VM creation almost immediately, with a total delay
+// budget — which is also the per-attempt create timeout — of ~8s, ample for
+// tests whose first attempt fails fast and whose retry succeeds.
+func fastCreateBackoff() ratecontrol.ExponentialBackoffConfig {
+	return ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Millisecond, Steps: 13}
+}
+
+// shortCreateBackoff gives a per-attempt create timeout of ~31ms, short enough
+// for tests that need an attempt to time out while a mock is blocked in Clone.
+func shortCreateBackoff() ratecontrol.ExponentialBackoffConfig {
+	return ratecontrol.ExponentialBackoffConfig{InitialDelay: time.Millisecond, Steps: 5}
+}
 
 // newPool creates a pool and waits for it be full.
 func newPool(t *testing.T, size int, stagingBehaviour vmspool.StagingBehaviour, factory *vmstestutil.MockFactory) *vmspool.Pool {
@@ -351,7 +365,7 @@ func TestPoolStartError(t *testing.T) {
 			p := vmspool.New(factory,
 				vmspool.WithSize(1),
 				vmspool.WithStagingBehaviour(tc.behaviour),
-				vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+				vmspool.WithCreateBackoff(fastCreateBackoff()))
 			if err := p.Start(context.Background()); err != nil {
 				t.Fatalf("Start should succeed via retry, got: %v", err)
 			}
@@ -395,7 +409,7 @@ func TestPoolCreateVM_PartialCleanup(t *testing.T) {
 	p := vmspool.New(factory,
 		vmspool.WithSize(1),
 		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourSuspended),
-		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+		vmspool.WithCreateBackoff(fastCreateBackoff()))
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start should succeed via retry, got: %v", err)
 	}
@@ -820,7 +834,7 @@ func TestPoolNilConstructor(t *testing.T) {
 	ctor := &nilConstructor{factory: factory}
 
 	p := vmspool.New(ctor, vmspool.WithSize(1),
-		vmspool.WithCreateTimeoutAndInterval(5*time.Second, time.Millisecond))
+		vmspool.WithCreateBackoff(fastCreateBackoff()))
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start should succeed via retry after nil constructor, got: %v", err)
 	}
@@ -843,7 +857,7 @@ func TestPoolOptionsDefaults(t *testing.T) {
 	p := vmspool.New(factory,
 		vmspool.WithSize(-1),
 		vmspool.WithCleanupTimeout(-1),
-		vmspool.WithCreateTimeoutAndInterval(-1, -1),
+		vmspool.WithCreateBackoff(ratecontrol.ExponentialBackoffConfig{}),
 		vmspool.WithStopTimeout(-1),
 		vmspool.WithStdoutStderr(nil, nil),
 	)
@@ -1006,7 +1020,7 @@ func TestPoolCloseDeletesAbandonedVM(t *testing.T) {
 
 	p := vmspool.New(factory,
 		vmspool.WithSize(1),
-		vmspool.WithCreateTimeoutAndInterval(50*time.Millisecond, time.Millisecond),
+		vmspool.WithCreateBackoff(shortCreateBackoff()),
 	)
 
 	go func() {
@@ -1042,7 +1056,7 @@ func TestAttemptCreateVMTimeout(t *testing.T) {
 
 	p := vmspool.New(factory,
 		vmspool.WithSize(1),
-		vmspool.WithCreateTimeoutAndInterval(50*time.Millisecond, time.Millisecond),
+		vmspool.WithCreateBackoff(shortCreateBackoff()),
 	)
 
 	go func() {
