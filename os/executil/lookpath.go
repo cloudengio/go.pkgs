@@ -6,6 +6,7 @@ package executil
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -38,7 +39,7 @@ func Getenv(env []string, key string) (string, bool) {
 // the specified paths that do not already exist in pathList appended to the
 // end of the returned string.
 func AppendMissingPathComponents(pathList string, paths ...string) string {
-	pathComponents := strings.Split(pathList, string(os.PathListSeparator))
+	pathComponents := filepath.SplitList(pathList)
 	for _, c := range paths {
 		if !slices.Contains(pathComponents, c) {
 			pathComponents = append(pathComponents, c)

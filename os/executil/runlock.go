@@ -49,7 +49,7 @@ func AcquireRunLock(path string) (unlock func(), err error) {
 		return nil, fmt.Errorf("acquiring run lock %s: %w", path, err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("another process is already running: pid: %s, lock file: %s: %w", lockHolder(path), path, ErrAlreadyRunning)
+		return nil, fmt.Errorf("another process is already running%s, lock file: %s: %w", lockHolder(path), path, ErrAlreadyRunning)
 	}
 	// Record our PID for diagnostics (best effort); truncate first in case a
 	// previous holder wrote a longer value.
