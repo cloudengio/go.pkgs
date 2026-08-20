@@ -37,9 +37,9 @@ func TestSigner(t *testing.T) {
 	client := awsService.KMS(cfg)
 
 	keyOutput, err := client.CreateKey(ctx, &kms.CreateKeyInput{
-		KeyUsage:              types.KeyUsageTypeSignVerify,
-		CustomerMasterKeySpec: types.CustomerMasterKeySpecEccNistP256,
-		Description:           aws.String("TestSignerKey"),
+		KeyUsage:    types.KeyUsageTypeSignVerify,
+		KeySpec:     types.KeySpecEccNistP256,
+		Description: aws.String("TestSignerKey"),
 	})
 	if err != nil {
 		t.Fatalf("failed to create key: %v", err)
