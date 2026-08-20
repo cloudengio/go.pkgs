@@ -13,15 +13,24 @@ VM.StopAndRelease first triggers that replacement at the point of the stop
 rather than at the delete, since a stopped VM will not run again.
 
 ## Constants
-### DefaultPoolSize, DefaultCleanupTimeout, DefaultCreateTimeout, DefaultCreateInterval, DefaultStopTimeout
+### DefaultPoolSize, DefaultCleanupTimeout, DefaultStopTimeout
 ```go
 DefaultPoolSize = 2
 DefaultCleanupTimeout = time.Minute
-DefaultCreateTimeout = 5 * time.Minute
-DefaultCreateInterval = 500 * time.Millisecond
 DefaultStopTimeout = time.Minute
 
 ```
+
+
+
+## Functions
+### Func DefaultCreateBackoff
+```go
+func DefaultCreateBackoff() ratecontrol.ExponentialBackoffConfig
+```
+DefaultCreateBackoff returns the default backoff used when creating VMs: a
+500ms initial delay doubling over 10 steps, for a total delay budget of ~8.5
+minutes, which is also the timeout allowed for a single creation attempt.
 
 
 
@@ -29,13 +38,12 @@ DefaultStopTimeout = time.Minute
 ### Type Config
 ```go
 type Config struct {
-	Size                  int              `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
-	CleanupTimeout        time.Duration    `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
-	CreateTimeout         time.Duration    `yaml:"create_timeout" doc:"The timeout for creating a single VM. A 0 or negative value is treated as DefaultCreateTimeout."`
-	CreateInterval        time.Duration    `yaml:"create_interval" doc:"The interval between VM creation attempts. A 0 or negative value is treated as DefaultCreateInterval."`
-	StopTimeout           time.Duration    `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
-	StagingBehaviour      StagingBehaviour `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
-	DeleteAcquiredOnClose bool             `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
+	Size                  int                                  `yaml:"size" doc:"The number of VMs to maintain in the pool. A 0 or negative value is treated as DefaultPoolSize."`
+	CleanupTimeout        time.Duration                        `yaml:"cleanup_timeout" doc:"The timeout for cleaning up VMs during Acquire and Close. A 0 or negative value is treated as DefaultCleanupTimeout."`
+	CreateBackoff         ratecontrol.ExponentialBackoffConfig `yaml:"create_backoff" doc:"The backoff applied between attempts to create a VM. Its total delay budget also bounds a single creation attempt. A configuration with a non-positive initial delay or number of steps is treated as DefaultCreateBackoff."`
+	StopTimeout           time.Duration                        `yaml:"stop_timeout" doc:"The timeout for stopping VMs. A 0 or negative value is treated as DefaultStopTimeout."`
+	StagingBehaviour      StagingBehaviour                     `yaml:"staging_behaviour" doc:"The staging behaviour for VMs in the pool. The default is StagingBehaviourRunning. The behaviours are: StagingBehaviourRunning: VMs are left running and Acquire will hand them to the caller as-is. StagingBehaviourSuspended: VMs are suspended and Acquire will resume them before handing them to the caller provided that the VM supports suspend/resume; if not, the pool falls back to StagingBehaviourStopped behaviour. StagingBehaviourStopped: VMs are stopped and Acquire will start them before handing them to the caller."`
+	DeleteAcquiredOnClose bool                                 `yaml:"delete_acquired_on_close" doc:"Controls whether Close deletes VMs that are still held by a caller, ie. that have been acquired but not yet deleted, whether or not the caller has stopped them with VM.StopAndRelease. The default is true, on the basis that the pool owns every VM it creates and Close is the last chance to delete them. Set it to false when callers outlive the pool and are responsible for calling VM.Delete themselves; Close then emits EventAcquiredVMRetained for each VM it leaves behind."`
 }
 ```
 
@@ -152,12 +160,14 @@ treated as DefaultCleanupTimeout.
 
 
 ```go
-func WithCreateTimeoutAndInterval(timeout, interval time.Duration) Option
+func WithCreateBackoff(cfg ratecontrol.ExponentialBackoffConfig) Option
 ```
-WithCreateTimeoutAndInterval sets the timeout for creating a single VM and
-the interval between creation attempts. The default timeout and interval
-are DefaultCreateTimeout and DefaultCreateInterval. A 0 or negative value is
-treated as DefaultCreateTimeout or DefaultCreateInterval.
+WithCreateBackoff sets the backoff applied between attempts to create
+a VM. Its total delay budget also bounds how long a single creation
+attempt may take before it is abandoned and retried. The default is
+DefaultCreateBackoff(); a configuration with a non-positive initial delay
+or number of steps is replaced by it, so that an unset configuration cannot
+produce a NoBackoff that retries without pausing.
 
 
 ```go
@@ -276,8 +286,8 @@ Acquire calls.
 type Provider interface {
 	// New returns a new, uninitialized VM instance. Each call must return a
 	// distinct vms.Instance. ctx governs any work done to construct the
-	// instance.
-	New(ctx context.Context) vms.Instance
+	// instance. It returns an error if the instance could not be created.
+	New(ctx context.Context) (vms.Instance, error)
 	// List returns lightweight summaries of the VMs currently present for this
 	// provider's pool.
 	List(ctx context.Context) ([]VMInfo, error)

@@ -6,7 +6,43 @@ import cloudeng.io/os/executil
 
 Package executil provides utilities for working with os/exec.
 
+## Variables
+### ErrAlreadyRunning
+```go
+ErrAlreadyRunning = errors.New("another instance of this process is already running")
+
+```
+ErrAlreadyRunning is returned when another orchestrator already holds the
+run lock.
+
+
+
 ## Functions
+### Func AcquireRunLock
+```go
+func AcquireRunLock(path string) (unlock func(), err error)
+```
+AcquireRunLock takes a non-blocking, exclusive file lock so that only one
+orchestrator runs at a time. The returned unlock function must be called
+when the run finishes; the lock is also released automatically when the
+process exits — including on crash or SIGKILL — so it never goes stale.
+If another instance already holds the lock, ErrAlreadyRunning is returned,
+annotated with the holder's PID and the lock path.
+
+TryOpenFile is used rather than Mutex.TryLock so that the PID can be
+recorded through the locked handle itself. The Mutex's additional in-process
+guard is not needed: only RunCommand.Run acquires this lock, once per
+process.
+
+### Func AppendMissingPathComponents
+```go
+func AppendMissingPathComponents(pathList string, paths ...string) string
+```
+AppendMissingPathComponents treats pathList as a path list, ie. a list of
+paths separated by os.PathListSeparator. It returns a copy of pathList with
+any of the specified paths that do not already exist in pathList appended to
+the end of the returned string.
+
 ### Func ExecName
 ```go
 func ExecName(path string) string
@@ -71,6 +107,13 @@ for both calling Wait and for waiting for the process to stop after each
 signal, hence the total time spent waiting may be up to len(sigs)+1 times
 perSignalOrWait. If the process stops after any signal, SignalAndWait
 returns immediately.
+
+### Func UserConfigDirPath
+```go
+func UserConfigDirPath(path string) (string, error)
+```
+UserConfigDirPath appends path to the per-user config directory as returned
+by os.UserConfigDir.
 
 ### Func WaitFor
 ```go

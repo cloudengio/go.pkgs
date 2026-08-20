@@ -286,7 +286,7 @@ Mocks returns a snapshot of all Mock instances produced so far.
 
 
 ```go
-func (f *MockFactory) New(context.Context) vms.Instance
+func (f *MockFactory) New(context.Context) (vms.Instance, error)
 ```
 
 
