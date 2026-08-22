@@ -190,19 +190,19 @@ func (c LoggingConfig) Leveler() slog.Leveler
 
 
 ```go
-func (c LoggingConfig) NewLogger() (*Logger, error)
+func (c LoggingConfig) NewLogger(opts ...LoggingOption) (*Logger, error)
 ```
 NewLogger creates a new logger based on the configuration.
 
 
 ```go
-func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions) *Logger
+func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions, loggingOpts ...LoggingOption) *Logger
 ```
 NewLoggerMust is like NewLogger but panics on error.
 
 
 ```go
-func (c LoggingConfig) NewLoggerOpts(opts *slog.HandlerOptions) (*Logger, error)
+func (c LoggingConfig) NewLoggerOpts(handlerOpts *slog.HandlerOptions, loggingOpts ...LoggingOption) (*Logger, error)
 ```
 NewLoggerOpts creates a new logger based on the configuration and custom
 handler options.
@@ -239,6 +239,26 @@ LoggingFlags represents common logging related command line flags.
 func (lf LoggingFlags) LoggingConfig() LoggingConfig
 ```
 LoggingConfig returns the logging configuration represented by the flags.
+
+
+
+
+### Type LoggingOption
+```go
+type LoggingOption func(*loggingOptions)
+```
+LoggingOption represents an option for configuring a logger beyond the
+slog.HandlerOptions provided by the LoggingConfig.
+
+### Functions
+
+```go
+func WithWriteCloser(wr io.WriteCloser) LoggingOption
+```
+WithWriteCloser sets the io.Writer for the slog.Logger to use and the Closer
+to return. It is intended to allow for setting a writer that supports
+log rotation or other logging destinations. If set, the File field of the
+LoggingConfig is ignored and the WriteCloser passed here is used instead.
 
 
 
