@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"cloudeng.io/cmdutil"
@@ -314,5 +315,173 @@ func TestReplaceAttrNoTimeWithConfig(t *testing.T) {
 	}
 	if !strings.Contains(output, "test message with config") {
 		t.Errorf("expected log message, got: %s", output)
+	}
+}
+
+// recordingWriteCloser captures everything written to it and records whether it
+// was closed, so tests can assert both that log output is routed to a supplied
+// writer and that the Logger takes ownership of closing it.
+type recordingWriteCloser struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	closed int
+}
+
+func (w *recordingWriteCloser) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+func (w *recordingWriteCloser) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closed++
+	return nil
+}
+
+func (w *recordingWriteCloser) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+func (w *recordingWriteCloser) closeCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.closed
+}
+
+// TestWithUnderlyingWriteCloser verifies that a supplied WriteCloser receives
+// the log output, for both constructors that accept logging options.
+func TestWithUnderlyingWriteCloser(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		new  func(cmdutil.LoggingConfig, ...cmdutil.LoggingOption) (*cmdutil.Logger, error)
+	}{
+		{"NewLogger", func(c cmdutil.LoggingConfig, opts ...cmdutil.LoggingOption) (*cmdutil.Logger, error) {
+			return c.NewLogger(opts...)
+		}},
+		{"NewLoggerOpts", func(c cmdutil.LoggingConfig, opts ...cmdutil.LoggingOption) (*cmdutil.Logger, error) {
+			return c.NewLoggerOpts(nil, opts...)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wc := &recordingWriteCloser{}
+			cfg := cmdutil.LoggingConfig{Level: 2, Format: "text"}
+
+			logger, err := tc.new(cfg, cmdutil.WithWriteCloser(wc))
+			if err != nil {
+				t.Fatalf("creating logger: %v", err)
+			}
+			logger.Info("hello", "key", "value")
+
+			if got := wc.String(); !strings.Contains(got, "hello") || !strings.Contains(got, "key=value") {
+				t.Errorf("output %q does not contain the logged message", got)
+			}
+		})
+	}
+}
+
+// TestWithWriteCloserOverridesFile verifies that a supplied
+// WriteCloser is used in preference to the configured File, which is left
+// untouched.
+func TestWithWriteCloserOverridesFile(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "unused.log")
+	wc := &recordingWriteCloser{}
+	cfg := cmdutil.LoggingConfig{Level: 2, Format: "text", File: logFile}
+
+	logger, err := cfg.NewLogger(cmdutil.WithWriteCloser(wc))
+	if err != nil {
+		t.Fatalf("creating logger: %v", err)
+	}
+	logger.Info("to the writer")
+
+	if got := wc.String(); !strings.Contains(got, "to the writer") {
+		t.Errorf("output %q does not contain the logged message", got)
+	}
+	if _, err := os.Stat(logFile); !os.IsNotExist(err) {
+		t.Errorf("the configured log file %v was created despite a writer being supplied (err %v)", logFile, err)
+	}
+}
+
+// TestWithWriteCloserClose verifies that Logger.Close closes the
+// supplied WriteCloser: the Logger takes ownership of it, as it does of a log
+// file it opened itself.
+func TestWithWriteCloserClose(t *testing.T) {
+	wc := &recordingWriteCloser{}
+	cfg := cmdutil.LoggingConfig{Level: 2, Format: "text"}
+
+	logger, err := cfg.NewLogger(cmdutil.WithWriteCloser(wc))
+	if err != nil {
+		t.Fatalf("creating logger: %v", err)
+	}
+	if got := wc.closeCount(); got != 0 {
+		t.Errorf("the writer was closed %d times before Logger.Close", got)
+	}
+	if err := logger.Close(); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+	if got, want := wc.closeCount(), 1; got != want {
+		t.Errorf("the writer was closed %d times, want %d", got, want)
+	}
+}
+
+// TestWithWriteCloserFormat verifies that the configured format is
+// applied to a supplied writer, ie. the option changes only the destination.
+func TestWithWriteCloserFormat(t *testing.T) {
+	wc := &recordingWriteCloser{}
+	cfg := cmdutil.LoggingConfig{Level: 2, Format: "json"}
+
+	logger, err := cfg.NewLogger(cmdutil.WithWriteCloser(wc))
+	if err != nil {
+		t.Fatalf("creating logger: %v", err)
+	}
+	logger.Info("structured", "key", "value")
+	if err := logger.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(wc.String())), &rec); err != nil {
+		t.Fatalf("output %q is not JSON: %v", wc.String(), err)
+	}
+	if got, want := rec["msg"], "structured"; got != want {
+		t.Errorf("msg: got %v, want %v", got, want)
+	}
+	if got, want := rec["key"], "value"; got != want {
+		t.Errorf("key: got %v, want %v", got, want)
+	}
+}
+
+// TestNoUnderlyingWriteCloser verifies that omitting the option leaves the
+// file-based behaviour, and its no-op closer, unchanged.
+func TestNoUnderlyingWriteCloser(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	cfg := cmdutil.LoggingConfig{Level: 2, Format: "text", File: logFile}
+
+	logger, err := cfg.NewLogger()
+	if err != nil {
+		t.Fatalf("creating logger: %v", err)
+	}
+	logger.Info("to the file")
+	if err := logger.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("reading %v: %v", logFile, err)
+	}
+	if !strings.Contains(string(data), "to the file") {
+		t.Errorf("log file %q does not contain the logged message", data)
+	}
+
+	// Stderr, the default, is not owned by the Logger, so Close is a no-op.
+	stderrLogger, err := cmdutil.LoggingConfig{Level: 2, Format: "text"}.NewLogger()
+	if err != nil {
+		t.Fatalf("creating logger: %v", err)
+	}
+	if err := stderrLogger.Close(); err != nil {
+		t.Errorf("Close on a stderr logger: %v", err)
 	}
 }

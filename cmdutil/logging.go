@@ -99,9 +99,31 @@ func (c LoggingConfig) Options() *slog.HandlerOptions {
 	}
 }
 
+// LoggingOption represents an option for configuring a logger
+// beyond the slog.HandlerOptions provided by the LoggingConfig.
+type LoggingOption func(*loggingOptions)
+
+// WithWriteCloser sets the io.Writer for the slog.Logger to use and the Closer
+// to return. It is intended to allow for setting a writer that supports log
+// rotation or other logging destinations. If set, the File field of the
+// LoggingConfig is ignored and the WriteCloser passed here is used instead.
+func WithWriteCloser(wr io.WriteCloser) LoggingOption {
+	return func(o *loggingOptions) {
+		o.wr = wr
+	}
+}
+
+type loggingOptions struct {
+	wr io.WriteCloser
+}
+
 // NewLogger creates a new logger based on the configuration.
-func (c LoggingConfig) NewLogger() (*Logger, error) {
-	return c.newLogger(c.Options())
+func (c LoggingConfig) NewLogger(opts ...LoggingOption) (*Logger, error) {
+	lo := loggingOptions{}
+	for _, opt := range opts {
+		opt(&lo)
+	}
+	return c.newLogger(lo, c.Options())
 }
 
 // WithFlagOverrides returns a new LoggingConfig with fields overridden by
@@ -125,24 +147,29 @@ func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) Logg
 	return c
 }
 
-func (c LoggingConfig) newLogger(opts *slog.HandlerOptions) (*Logger, error) {
+func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (*Logger, error) {
 	var handler slog.Handler
 	var closer io.Closer
 	var out io.Writer
-	switch c.File {
-	case "":
-		out = os.Stderr
-		closer = &noopCloser{}
-	case "-":
-		out = os.Stdout
-		closer = &noopCloser{}
-	default:
-		f, err := os.OpenFile(c.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open log file %q: %w", c.File, err)
+	if lo.wr == nil {
+		switch c.File {
+		case "":
+			out = os.Stderr
+			closer = &noopCloser{}
+		case "-":
+			out = os.Stdout
+			closer = &noopCloser{}
+		default:
+			f, err := os.OpenFile(c.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open log file %q: %w", c.File, err)
+			}
+			closer = f
+			out = f
 		}
-		closer = f
-		out = f
+	} else {
+		out = lo.wr
+		closer = lo.wr
 	}
 	switch c.Format {
 	case "json":
@@ -157,16 +184,20 @@ func (c LoggingConfig) newLogger(opts *slog.HandlerOptions) (*Logger, error) {
 
 // NewLoggerOpts creates a new logger based on the configuration and custom
 // handler options.
-func (c LoggingConfig) NewLoggerOpts(opts *slog.HandlerOptions) (*Logger, error) {
-	if opts == nil {
-		opts = c.Options()
+func (c LoggingConfig) NewLoggerOpts(handlerOpts *slog.HandlerOptions, loggingOpts ...LoggingOption) (*Logger, error) {
+	if handlerOpts == nil {
+		handlerOpts = c.Options()
 	}
-	return c.newLogger(opts)
+	lo := loggingOptions{}
+	for _, opt := range loggingOpts {
+		opt(&lo)
+	}
+	return c.newLogger(lo, handlerOpts)
 }
 
 // NewLoggerMust is like NewLogger but panics on error.
-func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions) *Logger {
-	logger, err := c.NewLoggerOpts(opts)
+func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions, loggingOpts ...LoggingOption) *Logger {
+	logger, err := c.NewLoggerOpts(opts, loggingOpts...)
 	if err != nil {
 		panic(err)
 	}
