@@ -193,7 +193,7 @@ func (inst *Instance) Clone(ctx context.Context) error {
 
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...) //nolint:gosec // G204 is too restrictive.
 	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
 		stderr := string(stderrBuf.Bytes())
@@ -228,7 +228,7 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	inst.logger.Info("docker command issued", "args", args)
 
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...) //nolint:gosec // G204 is too restrictive.
 	cmd.Stdout = stdout
 	cmd.Stderr = io.MultiWriter(stderr, stderrBuf)
 	if err := cmd.Run(); err != nil {
@@ -285,7 +285,7 @@ func (inst *Instance) Stop(ctx context.Context, timeout time.Duration) (runErr, 
 
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...) //nolint:gosec // G204 is too restrictive.
 	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
 		stderr := string(stderrBuf.Bytes())
@@ -323,7 +323,7 @@ func (inst *Instance) Delete(ctx context.Context) error {
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
 	stdoutBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...) //nolint:gosec // G204 is too restrictive.
 	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
 	err := cmd.Run()
@@ -357,7 +357,7 @@ func (inst *Instance) Exec(ctx context.Context, stdout, stderr io.Writer, cmdStr
 		return fmt.Errorf("exec only available for running containers, current state: %s", state)
 	}
 	allArgs := append([]string{"exec", inst.name, cmdStr}, args...)
-	c := exec.CommandContext(ctx, inst.opts.dockerBinary, allArgs...)
+	c := exec.CommandContext(ctx, inst.opts.dockerBinary, allArgs...) //nolint:gosec // G204 is too restrictive.
 	c.Stdout = stdout
 	c.Stderr = stderr
 	if err := c.Run(); err != nil {

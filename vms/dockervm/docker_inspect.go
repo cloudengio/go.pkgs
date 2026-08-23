@@ -68,7 +68,7 @@ func InspectContainerWithBinary(ctx context.Context, dockerBinary, name string) 
 	}
 	stdoutBuf := bytes.NewBuffer(make([]byte, 0, 4096))
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, dockerBinary, "inspect", name)
+	cmd := exec.CommandContext(ctx, dockerBinary, "inspect", name) //nolint:gosec // G204: name and dockerBinary are internal parameters.
 	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
