@@ -47,11 +47,13 @@ type options struct {
 	createArgs       []string      // extra args to "docker create"
 	containerCmd     []string      // the command run inside the container
 	logger           *slog.Logger
+	dockerBinary     string // the docker binary to use; defaults to "docker"
 }
 
 const (
 	DefaultPollingInterval  = 200 * time.Millisecond
 	DefaultForceStopTimeout = 10 * time.Second
+	DefaultDockerBinary     = "docker"
 )
 
 // WithPollingInterval sets the interval used when polling for state transitions.
@@ -91,6 +93,13 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithDockerBinary sets the docker binary to use. Defaults to "docker".
+func WithDockerBinary(binary string) Option {
+	return func(o *options) {
+		o.dockerBinary = binary
+	}
+}
+
 // DefaultContainerCmd returns the default command used to keep a container alive.
 // tail -f /dev/null is used because it handles SIGTERM properly (unlike sleep infinity
 // on some BusyBox implementations).
@@ -105,6 +114,7 @@ func New(_ context.Context, image, name string, opts ...Option) *Instance {
 		pollingInterval:  DefaultPollingInterval,
 		forceStopTimeout: DefaultForceStopTimeout,
 		containerCmd:     DefaultContainerCmd(),
+		dockerBinary:     DefaultDockerBinary,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -180,7 +190,7 @@ func (inst *Instance) Clone(ctx context.Context) error {
 
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
 	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
 		stderr := string(stderrBuf.Bytes())
@@ -215,7 +225,7 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	inst.logger.Info("docker command issued", "args", args)
 
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = io.MultiWriter(stderr, stderrBuf)
 	if err := cmd.Run(); err != nil {
@@ -228,7 +238,7 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	if err := inst.waitForDockerStatus(ctx, "running"); err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), inst.opts.forceStopTimeout)
 		defer cancel()
-		_ = exec.CommandContext(ctx, "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
+		_ = exec.CommandContext(ctx, inst.opts.dockerBinary, "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: waiting for running state: %w", inst.name, err)
 	}
@@ -237,7 +247,7 @@ func (inst *Instance) Start(ctx context.Context, stdout, stderr io.Writer) error
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), inst.opts.forceStopTimeout)
 		defer cancel()
-		_ = exec.CommandContext(ctx, "docker", "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
+		_ = exec.CommandContext(ctx, inst.opts.dockerBinary, "stop", inst.name).Run() //nolint:gosec // G204 is too restrictive.
 		inst.setState(prev)
 		return fmt.Errorf("docker start %s: fetching IP: %w", inst.name, err)
 	}
@@ -272,7 +282,7 @@ func (inst *Instance) Stop(ctx context.Context, timeout time.Duration) (runErr, 
 
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
 	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
 		stderr := string(stderrBuf.Bytes())
@@ -310,7 +320,7 @@ func (inst *Instance) Delete(ctx context.Context) error {
 	inst.logger.Info("docker command issued", "args", args)
 	stderrBuf := executil.NewTailWriter(1024)
 	stdoutBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, inst.opts.dockerBinary, args...)
 	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
 	err := cmd.Run()
@@ -344,7 +354,7 @@ func (inst *Instance) Exec(ctx context.Context, stdout, stderr io.Writer, cmdStr
 		return fmt.Errorf("exec only available for running containers, current state: %s", state)
 	}
 	allArgs := append([]string{"exec", inst.name, cmdStr}, args...)
-	c := exec.CommandContext(ctx, "docker", allArgs...)
+	c := exec.CommandContext(ctx, inst.opts.dockerBinary, allArgs...)
 	c.Stdout = stdout
 	c.Stderr = stderr
 	if err := c.Run(); err != nil {
