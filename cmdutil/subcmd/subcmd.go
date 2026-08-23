@@ -479,6 +479,11 @@ func NewCommandSet(cmds ...*Command) *CommandSet {
 // command <global-flags>* sub-command <sub-command-pflags>* args
 func (cmds *CommandSet) WithGlobalFlags(global *FlagSet) {
 	cmds.global = global
+	for _, cmd := range cmds.cmds {
+		if cmd.opts.subcmds != nil {
+			cmd.opts.subcmds.WithGlobalFlags(global)
+		}
+	}
 }
 
 // WithMain arranges for Main to be called by Dispatch to wrap the call
@@ -791,6 +796,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 }
 
 func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHooks []PreHook) (context.Context, []PostHook, error) {
+	ctx = WithFlagSet(ctx, cmds.global) // Make the global FlagSet available to the pre-hooks and any functions they call.
 	var postHooks []PostHook
 	for _, pre := range preHooks {
 		var (

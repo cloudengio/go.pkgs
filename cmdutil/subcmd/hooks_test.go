@@ -416,6 +416,130 @@ func TestPreHookWithSubcommands(t *testing.T) {
 	}
 }
 
+func TestPreHookSeesGlobalFlagSet(t *testing.T) {
+	ctx := context.Background()
+	type globalFlags struct {
+		Verbosity int `subcmd:"v,0,debugging verbosity"`
+	}
+	var globalValues globalFlags
+	globals := subcmd.NewFlagSet()
+	if err := globals.RegisterFlagStruct(&globalValues, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var hookFS, runnerFS *subcmd.FlagSet
+	var hookVerbosity int
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		hookFS = subcmd.FlagSetFromContext(ctx)
+		hookVerbosity = globalValues.Verbosity
+		return ctx, "capture", nil, nil
+	}
+	runner := func(ctx context.Context, _ any, _ []string) error {
+		runnerFS = subcmd.FlagSetFromContext(ctx)
+		return nil
+	}
+
+	cmdFS := subcmd.NewFlagSet()
+	cmd := subcmd.NewCommand("cmd", cmdFS, runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(pre),
+	)
+	cmd.Document("test command")
+	cs := subcmd.NewCommandSet(cmd)
+	cs.WithGlobalFlags(globals)
+
+	if err := cs.DispatchWithArgs(ctx, "test", "-v=3", "cmd"); err != nil {
+		t.Fatal(err)
+	}
+	if hookFS != globals {
+		t.Error("pre-hook did not receive the global FlagSet from the context")
+	}
+	// The global flags are parsed before dispatch, so their values must be
+	// visible by the time the pre-hook runs.
+	if hookVerbosity != 3 {
+		t.Errorf("pre-hook saw verbosity %d, want 3", hookVerbosity)
+	}
+	// The runner must see the command's own FlagSet, not the global one.
+	if runnerFS != cmdFS {
+		t.Error("runner did not receive the command's FlagSet from the context")
+	}
+}
+
+func TestPreHookNilGlobalFlagSet(t *testing.T) {
+	ctx := context.Background()
+
+	sentinel := subcmd.NewFlagSet()
+	hookFS := sentinel
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		hookFS = subcmd.FlagSetFromContext(ctx)
+		return ctx, "capture", nil, nil
+	}
+	runner := func(_ context.Context, _ any, _ []string) error { return nil }
+
+	cmd := subcmd.NewCommand("cmd", subcmd.NewFlagSet(), runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(pre),
+	)
+	cmd.Document("test command")
+	cs := subcmd.NewCommandSet(cmd)
+	// No WithGlobalFlags: the pre-hook must observe a nil FlagSet rather
+	// than a stale or arbitrary one.
+	if err := cs.DispatchWithArgs(ctx, "test", "cmd"); err != nil {
+		t.Fatal(err)
+	}
+	if hookFS != nil {
+		t.Errorf("pre-hook should see a nil FlagSet when no global flags are configured, got %v", hookFS)
+	}
+}
+
+func TestGlobalFlagSetPropagatesToSubcommands(t *testing.T) {
+	ctx := context.Background()
+	type globalFlags struct {
+		Verbosity int `subcmd:"v,0,debugging verbosity"`
+	}
+	var globalValues globalFlags
+	globals := subcmd.NewFlagSet()
+	if err := globals.RegisterFlagStruct(&globalValues, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var hookFS *subcmd.FlagSet
+	var hookVerbosity int
+	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
+		hookFS = subcmd.FlagSetFromContext(ctx)
+		hookVerbosity = globalValues.Verbosity
+		return ctx, "capture", nil, nil
+	}
+	runner := func(_ context.Context, _ any, _ []string) error { return nil }
+
+	// Three levels: top -> l1 -> l2 -> leaf, with the pre-hook on the leaf.
+	// WithGlobalFlags is called on the top-level set only and must reach the
+	// leaf's command set recursively.
+	leaf := subcmd.NewCommand("leaf", subcmd.NewFlagSet(), runner,
+		subcmd.WithoutArguments(),
+		subcmd.WithPreHooks(pre),
+	)
+	leaf.Document("leaf command")
+	l2Set := subcmd.NewCommandSet(leaf)
+	l2 := subcmd.NewCommandLevel("l2", l2Set)
+	l2.Document("second level")
+	l1Set := subcmd.NewCommandSet(l2)
+	l1 := subcmd.NewCommandLevel("l1", l1Set)
+	l1.Document("first level")
+	top := subcmd.NewCommandSet(l1)
+	top.WithGlobalFlags(globals)
+
+	if err := top.DispatchWithArgs(ctx, "test", "-v=2", "l1", "l2", "leaf"); err != nil {
+		t.Fatal(err)
+	}
+	if hookFS != globals {
+		t.Error("pre-hook on a nested subcommand did not receive the global FlagSet")
+	}
+	if hookVerbosity != 2 {
+		t.Errorf("pre-hook saw verbosity %d, want 2", hookVerbosity)
+	}
+}
+
 func TestPostHooksLIFOOrder(t *testing.T) {
 	ctx := context.Background()
 	var order []string
