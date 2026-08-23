@@ -96,6 +96,9 @@ func WithLogger(logger *slog.Logger) Option {
 // WithDockerBinary sets the docker binary to use. Defaults to "docker".
 func WithDockerBinary(binary string) Option {
 	return func(o *options) {
+		if binary == "" {
+			binary = DefaultDockerBinary
+		}
 		o.dockerBinary = binary
 	}
 }
@@ -374,7 +377,7 @@ func (inst *Instance) Properties(_ context.Context) (vms.Properties, error) {
 
 func (inst *Instance) waitForDockerStatus(ctx context.Context, status string) error {
 	found := func(ctx context.Context) (bool, error) {
-		info, exists, err := InspectContainer(ctx, inst.name)
+		info, exists, err := InspectContainerWithBinary(ctx, inst.opts.dockerBinary, inst.name)
 		if err != nil {
 			return true, err
 		}
@@ -387,7 +390,7 @@ func (inst *Instance) waitForDockerStatus(ctx context.Context, status string) er
 }
 
 func (inst *Instance) fetchContainerIP(ctx context.Context) (string, error) {
-	info, found, err := InspectContainer(ctx, inst.name)
+	info, found, err := InspectContainerWithBinary(ctx, inst.opts.dockerBinary, inst.name)
 	if err != nil {
 		return "", err
 	}

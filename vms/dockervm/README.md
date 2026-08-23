@@ -77,6 +77,14 @@ InspectContainer runs "docker inspect <name>" and returns the parsed result.
 Returns (zero, false, nil) if the container does not exist.
 
 
+```go
+func InspectContainerWithBinary(ctx context.Context, dockerBinary, name string) (ContainerInfo, bool, error)
+```
+InspectContainerWithBinary runs "<dockerBinary> inspect <name>" and returns
+the parsed result. Returns (zero, false, nil) if the container does not
+exist.
+
+
 
 ### Methods
 
@@ -323,6 +331,13 @@ func WithPoolName(name string) ProviderOption
 ```
 WithPoolName sets the pool name reported in VMInfo.Pool for the Provider's
 VMs.
+
+
+```go
+func WithProviderDockerBinary(path string) ProviderOption
+```
+WithProviderDockerBinary sets the path to the docker binary used by the
+Provider. If not set, DefaultDockerBinary is used.
 
 
 
