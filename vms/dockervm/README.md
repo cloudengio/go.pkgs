@@ -7,10 +7,11 @@ import cloudeng.io/vms/dockervm
 Package dockervm implements cloudeng.io/vms.Instance using the Docker CLI.
 
 ## Constants
-### DefaultPollingInterval, DefaultForceStopTimeout
+### DefaultPollingInterval, DefaultForceStopTimeout, DefaultDockerBinary
 ```go
 DefaultPollingInterval = 200 * time.Millisecond
 DefaultForceStopTimeout = 10 * time.Second
+DefaultDockerBinary = "docker"
 
 ```
 
@@ -74,6 +75,14 @@ func InspectContainer(ctx context.Context, name string) (ContainerInfo, bool, er
 ```
 InspectContainer runs "docker inspect <name>" and returns the parsed result.
 Returns (zero, false, nil) if the container does not exist.
+
+
+```go
+func InspectContainerWithBinary(ctx context.Context, dockerBinary, name string) (ContainerInfo, bool, error)
+```
+InspectContainerWithBinary runs "<dockerBinary> inspect <name>" and returns
+the parsed result. Returns (zero, false, nil) if the container does not
+exist.
 
 
 
@@ -221,6 +230,12 @@ etc.
 
 
 ```go
+func WithDockerBinary(binary string) Option
+```
+WithDockerBinary sets the docker binary to use. Defaults to "docker".
+
+
+```go
 func WithForceStopTimeout(d time.Duration) Option
 ```
 WithForceStopTimeout sets the graceful shutdown timeout passed to "docker
@@ -316,6 +331,13 @@ func WithPoolName(name string) ProviderOption
 ```
 WithPoolName sets the pool name reported in VMInfo.Pool for the Provider's
 VMs.
+
+
+```go
+func WithProviderDockerBinary(path string) ProviderOption
+```
+WithProviderDockerBinary sets the path to the docker binary used by the
+Provider. If not set, DefaultDockerBinary is used.
 
 
 

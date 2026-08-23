@@ -57,9 +57,18 @@ func (c ContainerInfo) VMSState() vms.State {
 // InspectContainer runs "docker inspect <name>" and returns the parsed result.
 // Returns (zero, false, nil) if the container does not exist.
 func InspectContainer(ctx context.Context, name string) (ContainerInfo, bool, error) {
+	return InspectContainerWithBinary(ctx, DefaultDockerBinary, name)
+}
+
+// InspectContainerWithBinary runs "<dockerBinary> inspect <name>" and returns the parsed result.
+// Returns (zero, false, nil) if the container does not exist.
+func InspectContainerWithBinary(ctx context.Context, dockerBinary, name string) (ContainerInfo, bool, error) {
+	if dockerBinary == "" {
+		dockerBinary = DefaultDockerBinary
+	}
 	stdoutBuf := bytes.NewBuffer(make([]byte, 0, 4096))
 	stderrBuf := executil.NewTailWriter(1024)
-	cmd := exec.CommandContext(ctx, "docker", "inspect", name)
+	cmd := exec.CommandContext(ctx, dockerBinary, "inspect", name) //nolint:gosec // G204: name and dockerBinary are internal parameters.
 	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {

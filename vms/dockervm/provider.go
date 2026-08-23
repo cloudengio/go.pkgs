@@ -31,10 +31,11 @@ type Constructor = func(ctx context.Context) (vms.Instance, error)
 // Delete directly via the docker CLI, so using Docker with a vmspool.Pool only
 // requires supplying the construction function.
 type Provider struct {
-	constructor Constructor
-	prefix      string // if set, only containers whose name has this prefix are managed
-	pool        string // optional pool name used to tag VMInfo.Pool
-	logger      *slog.Logger
+	constructor  Constructor
+	prefix       string // if set, only containers whose name has this prefix are managed
+	pool         string // optional pool name used to tag VMInfo.Pool
+	logger       *slog.Logger
+	dockerBinary string // optional path to docker binary, defaults to DefaultDockerBinary
 }
 
 var _ vmspool.Provider = (*Provider)(nil)
@@ -54,6 +55,11 @@ func WithPoolName(name string) ProviderOption {
 	return func(p *Provider) { p.pool = name }
 }
 
+// WithProviderDockerBinary sets the path to the docker binary used by the Provider. If not set, DefaultDockerBinary is used.
+func WithProviderDockerBinary(path string) ProviderOption {
+	return func(p *Provider) { p.dockerBinary = path }
+}
+
 // NewProvider returns a Provider that constructs containers with constructor and
 // implements the remaining vmspool.Provider methods via the docker CLI.
 func NewProvider(constructor Constructor, opts ...ProviderOption) *Provider {
@@ -63,6 +69,9 @@ func NewProvider(constructor Constructor, opts ...ProviderOption) *Provider {
 	}
 	for _, opt := range opts {
 		opt(p)
+	}
+	if p.dockerBinary == "" {
+		p.dockerBinary = DefaultDockerBinary
 	}
 	return p
 }
@@ -83,7 +92,7 @@ func (p *Provider) list(ctx context.Context) ([]psEntry, error) {
 	if p.prefix != "" {
 		args = append(args, "--filter", "name="+p.prefix)
 	}
-	out, err := runDockerOut(ctx, args...)
+	out, err := p.runDockerOut(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +147,7 @@ func (p *Provider) List(ctx context.Context) ([]vmspool.VMInfo, error) {
 // container via "docker inspect --size".
 func (p *Provider) Get(ctx context.Context, vmName string) (vmspool.VMDetail, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "docker", "inspect", "--size", "--format", "{{json .}}", vmName) //nolint:gosec // G204: vmName is an internal container name.
+	cmd := exec.CommandContext(ctx, p.dockerBinary, "inspect", "--size", "--format", "{{json .}}", vmName) //nolint:gosec // G204: vmName is an internal container name.
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -188,12 +197,12 @@ func (p *Provider) Delete(ctx context.Context, stopTimeout time.Duration) ([]str
 				args = append(args, "--timeout", strconv.Itoa(int(stopTimeout.Seconds())))
 			}
 			args = append(args, e.Names)
-			if err := runDocker(ctx, args...); err != nil {
+			if err := p.runDocker(ctx, args...); err != nil {
 				p.logger.Error("failed to stop container", "container", e.Names, "err", err)
 				errs.Append(err)
 			}
 		}
-		if err := runDocker(ctx, "rm", "--force", e.Names); err != nil {
+		if err := p.runDocker(ctx, "rm", "--force", e.Names); err != nil {
 			p.logger.Error("failed to remove container", "container", e.Names, "err", err)
 			errs.Append(err)
 			continue
@@ -222,14 +231,14 @@ func parseDockerTime(s string) time.Time {
 	return time.Time{}
 }
 
-func runDocker(ctx context.Context, args ...string) error {
-	_, err := runDockerOut(ctx, args...)
+func (p *Provider) runDocker(ctx context.Context, args ...string) error {
+	_, err := p.runDockerOut(ctx, args...)
 	return err
 }
 
-func runDockerOut(ctx context.Context, args ...string) ([]byte, error) {
+func (p *Provider) runDockerOut(ctx context.Context, args ...string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "docker", args...) //nolint:gosec // G204: args are internal, non-user values.
+	cmd := exec.CommandContext(ctx, p.dockerBinary, args...) //nolint:gosec // G204: args are internal, non-user values.
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
