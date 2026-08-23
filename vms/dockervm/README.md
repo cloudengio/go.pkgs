@@ -7,10 +7,11 @@ import cloudeng.io/vms/dockervm
 Package dockervm implements cloudeng.io/vms.Instance using the Docker CLI.
 
 ## Constants
-### DefaultPollingInterval, DefaultForceStopTimeout
+### DefaultPollingInterval, DefaultForceStopTimeout, DefaultDockerBinary
 ```go
 DefaultPollingInterval = 200 * time.Millisecond
 DefaultForceStopTimeout = 10 * time.Second
+DefaultDockerBinary = "docker"
 
 ```
 
@@ -218,6 +219,12 @@ func WithCreateArgs(args ...string) Option
 WithCreateArgs appends extra arguments to the "docker create" command.
 Useful for setting environment variables, volume mounts, network settings,
 etc.
+
+
+```go
+func WithDockerBinary(binary string) Option
+```
+WithDockerBinary sets the docker binary to use. Defaults to "docker".
 
 
 ```go
