@@ -427,15 +427,17 @@ func TestPreHookSeesGlobalFlagSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var hookFS, runnerFS *subcmd.FlagSet
+	var hookGlobalFS, hookCmdFS, runnerGlobalFS, runnerCmdFS *subcmd.FlagSet
 	var hookVerbosity int
 	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
-		hookFS = subcmd.FlagSetFromContext(ctx)
+		hookGlobalFS = subcmd.GlobalFlagSetFromContext(ctx)
+		hookCmdFS = subcmd.FlagSetFromContext(ctx)
 		hookVerbosity = globalValues.Verbosity
 		return ctx, "capture", nil, nil
 	}
 	runner := func(ctx context.Context, _ any, _ []string) error {
-		runnerFS = subcmd.FlagSetFromContext(ctx)
+		runnerGlobalFS = subcmd.GlobalFlagSetFromContext(ctx)
+		runnerCmdFS = subcmd.FlagSetFromContext(ctx)
 		return nil
 	}
 
@@ -451,17 +453,25 @@ func TestPreHookSeesGlobalFlagSet(t *testing.T) {
 	if err := cs.DispatchWithArgs(ctx, "test", "-v=3", "cmd"); err != nil {
 		t.Fatal(err)
 	}
-	if hookFS != globals {
+	if hookGlobalFS != globals {
 		t.Error("pre-hook did not receive the global FlagSet from the context")
+	}
+	// The command's FlagSet is only added to the context after the pre-hooks
+	// have run; the two FlagSets live under separate context keys.
+	if hookCmdFS != nil {
+		t.Error("pre-hook should not see a command FlagSet in the context")
 	}
 	// The global flags are parsed before dispatch, so their values must be
 	// visible by the time the pre-hook runs.
 	if hookVerbosity != 3 {
 		t.Errorf("pre-hook saw verbosity %d, want 3", hookVerbosity)
 	}
-	// The runner must see the command's own FlagSet, not the global one.
-	if runnerFS != cmdFS {
+	// The runner sees both: its own FlagSet and the global one.
+	if runnerCmdFS != cmdFS {
 		t.Error("runner did not receive the command's FlagSet from the context")
+	}
+	if runnerGlobalFS != globals {
+		t.Error("runner did not receive the global FlagSet from the context")
 	}
 }
 
@@ -471,7 +481,7 @@ func TestPreHookNilGlobalFlagSet(t *testing.T) {
 	sentinel := subcmd.NewFlagSet()
 	hookFS := sentinel
 	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
-		hookFS = subcmd.FlagSetFromContext(ctx)
+		hookFS = subcmd.GlobalFlagSetFromContext(ctx)
 		return ctx, "capture", nil, nil
 	}
 	runner := func(_ context.Context, _ any, _ []string) error { return nil }
@@ -506,7 +516,7 @@ func TestGlobalFlagSetPropagatesToSubcommands(t *testing.T) {
 	var hookFS *subcmd.FlagSet
 	var hookVerbosity int
 	pre := func(ctx context.Context) (context.Context, string, subcmd.PostHook, error) {
-		hookFS = subcmd.FlagSetFromContext(ctx)
+		hookFS = subcmd.GlobalFlagSetFromContext(ctx)
 		hookVerbosity = globalValues.Verbosity
 		return ctx, "capture", nil, nil
 	}

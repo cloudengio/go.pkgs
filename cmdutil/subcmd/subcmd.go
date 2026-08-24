@@ -796,7 +796,7 @@ func (cmds *CommandSet) processChosenCmd(ctx context.Context, cmd *Command, usag
 }
 
 func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHooks []PreHook) (context.Context, []PostHook, error) {
-	ctx = WithFlagSet(ctx, cmds.global) // Make the global FlagSet available to the pre-hooks and any functions they call.
+	ctx = WithGlobalFlagSet(ctx, cmds.global) // Make the global FlagSet available to the pre-hooks and any functions they call.
 	var postHooks []PostHook
 	for _, pre := range preHooks {
 		var (
@@ -863,17 +863,38 @@ func (cmds *CommandSet) SetPreHooks(preHooks ...PreHook) {
 }
 
 type flagsetContextKey struct{}
+type globalFlagSetContextKey struct{}
 
 // WithFlagSet returns a copy of the parent context with the FlagSet added.
-// It is used by subcmd to make the CommandSet's global FlagSet available to a
-// command's Runner and any functions it calls.
+// It is used by subcmd to make the chosen command's FlagSet available to that
+// command's Runner and any functions it calls. The global FlagSet is stored
+// separately, see WithGlobalFlagSet.
 func WithFlagSet(ctx context.Context, fs *FlagSet) context.Context {
 	return context.WithValue(ctx, flagsetContextKey{}, fs)
 }
 
-// FlagSetFromContext returns the global FlagSet from the context if it exists.
+// FlagSetFromContext returns the command's FlagSet from the context if it
+// exists. Use GlobalFlagSetFromContext to obtain the global FlagSet.
 func FlagSetFromContext(ctx context.Context) *FlagSet {
 	fs, ok := ctx.Value(flagsetContextKey{}).(*FlagSet)
+	if !ok {
+		return nil
+	}
+	return fs
+}
+
+// WithGlobalFlagSet returns a copy of the parent context with the global
+// FlagSet added. It is used by subcmd to make the CommandSet's global FlagSet
+// (see CommandSet.WithGlobalFlags) available to a command's pre-hooks and
+// Runner and any functions they call.
+func WithGlobalFlagSet(ctx context.Context, fs *FlagSet) context.Context {
+	return context.WithValue(ctx, globalFlagSetContextKey{}, fs)
+}
+
+// GlobalFlagSetFromContext returns the global FlagSet from the context if it
+// exists. Use FlagSetFromContext to obtain the command's own FlagSet.
+func GlobalFlagSetFromContext(ctx context.Context) *FlagSet {
+	fs, ok := ctx.Value(globalFlagSetContextKey{}).(*FlagSet)
 	if !ok {
 		return nil
 	}
