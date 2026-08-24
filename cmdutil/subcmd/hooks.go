@@ -12,7 +12,9 @@ import (
 // It can modify the context and return a PostHook to be executed after the main
 // command. An id is returned for inclusion in error reporting to allow for easy
 // identification of the source of an error. PostHooks are executed in LIFO order
-// (last registered, first called).
+// (last registered, first called). The context passed to a PreHook carries the
+// CommandSet's global FlagSet, which can be retrieved using
+// GlobalFlagSetFromContext.
 type PreHook func(context.Context) (ctx context.Context, id string, postHook PostHook, err error)
 
 // PostHook represents a function that is called after the main command execution.

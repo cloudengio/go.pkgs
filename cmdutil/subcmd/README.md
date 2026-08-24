@@ -150,8 +150,18 @@ not guarantee correct alignment when spaces and tabs are mixed arbitrarily.
 func WithFlagSet(ctx context.Context, fs *FlagSet) context.Context
 ```
 WithFlagSet returns a copy of the parent context with the FlagSet added.
-It is used by subcmd to make the CommandSet's global FlagSet available to a
-command's Runner and any functions it calls.
+It is used by subcmd to make the chosen command's FlagSet available to that
+command's Runner and any functions it calls. The global FlagSet is stored
+separately, see WithGlobalFlagSet.
+
+### Func WithGlobalFlagSet
+```go
+func WithGlobalFlagSet(ctx context.Context, fs *FlagSet) context.Context
+```
+WithGlobalFlagSet returns a copy of the parent context with the global
+FlagSet added. It is used by subcmd to make the CommandSet's global FlagSet
+(see CommandSet.WithGlobalFlags) available to a command's pre-hooks and
+Runner and any functions they call.
 
 
 
@@ -573,13 +583,21 @@ FlagSet represents the name, description and flag values for a command.
 ```go
 func FlagSetFromContext(ctx context.Context) *FlagSet
 ```
-FlagSetFromContext returns the global FlagSet from the context if it exists.
+FlagSetFromContext returns the command's FlagSet from the context if it
+exists. Use GlobalFlagSetFromContext to obtain the global FlagSet.
 
 
 ```go
 func GlobalFlagSet() *FlagSet
 ```
 GlobalFlagSet creates a new FlagSet that is to be used for global flags.
+
+
+```go
+func GlobalFlagSetFromContext(ctx context.Context) *FlagSet
+```
+GlobalFlagSetFromContext returns the global FlagSet from the context if it
+exists. Use FlagSetFromContext to obtain the command's own FlagSet.
 
 
 ```go
@@ -685,7 +703,9 @@ PreHook represents a function that is called before the main command
 execution. It can modify the context and return a PostHook to be executed
 after the main command. An id is returned for inclusion in error reporting
 to allow for easy identification of the source of an error. PostHooks are
-executed in LIFO order (last registered, first called).
+executed in LIFO order (last registered, first called). The context passed
+to a PreHook carries the CommandSet's global FlagSet, which can be retrieved
+using GlobalFlagSetFromContext.
 
 
 ### Type Runner
