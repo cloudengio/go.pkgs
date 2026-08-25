@@ -50,6 +50,12 @@ func Run(ctx context.Context, r io.Reader, w io.Writer, stderr io.Writer, args .
 		return fmt.Errorf("unmarshaling request: %w", err)
 	}
 
+	if verr := req.CheckVersion(); verr != nil {
+		resp := req.NewResponse(nil, verr)
+		_ = resp.WithPluginSpecific(req.PluginSpecific)
+		return json.NewEncoder(w).Encode(resp)
+	}
+
 	// 2. If a daemon socket is available, forward request to daemon
 	if socketFlag != "" {
 		network := "unix"

@@ -334,6 +334,11 @@ commands:
 func gorun(t *testing.T, file string, args []string) string {
 	allargs := append([]string{"run", filepath.Join("testdata", file)}, args...)
 	cmd := exec.Command("go", allargs...)
+	// go run executes what it builds, so it must build for the host even when
+	// the environment is set up to cross compile.
+	cmd.Env = append(os.Environ(),
+		"GOOS="+runtime.GOOS,
+		"GOARCH="+runtime.GOARCH)
 	t.Log(strings.Join(cmd.Args, " "))
 	out, _ := cmd.CombinedOutput()
 	return string(out)

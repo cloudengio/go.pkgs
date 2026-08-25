@@ -152,3 +152,27 @@ func TestWriteRead(t *testing.T) {
 		t.Errorf("expected contents %q, got %q", want, got)
 	}
 }
+
+func TestExtPluginUnsupportedVersion(t *testing.T) {
+	ctx := t.Context()
+
+	req, err := plugins.NewRequest("test_key", nil)
+	if err != nil {
+		t.Fatalf("NewRequest failed: %v", err)
+	}
+	req.Version = plugins.RequestCurrentVersion + 1
+
+	resp, err := plugins.RunExtPlugin(ctx, pluginPath, req, "--contents=my-secret", "--keyname=test_key")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.Error == nil {
+		t.Fatal("expected an error for an unsupported request version, got nil")
+	}
+	if !errors.Is(resp.Error, plugins.ErrUnsupportedVersion) {
+		t.Errorf("expected error to be ErrUnsupportedVersion, got %v", resp.Error)
+	}
+	if len(resp.Contents) != 0 {
+		t.Errorf("expected no contents, got %q", resp.Contents)
+	}
+}

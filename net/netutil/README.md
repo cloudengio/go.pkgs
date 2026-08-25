@@ -84,6 +84,12 @@ address resolved for that host; any port is preserved unchanged. If the host
 component is empty (e.g. "" or ":80") addr is returned unchanged since there
 is nothing to resolve. If the host cannot be resolved, an error is returned.
 
+### Func TrimIPv6
+```go
+func TrimIPv6(addr string) string
+```
+TrimIPv6 removes brackets from an IPv6 address if they are present.
+
 
 
 

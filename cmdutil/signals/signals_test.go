@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +27,11 @@ func runSubprocess(t *testing.T, args []string) (*exec.Cmd, io.Reader) {
 	cl := []string{"run", filepath.Join("testdata", "signal_main.go")}
 	cl = append(cl, args...)
 	cmd := exec.Command("go", cl...)
+	// go run executes what it builds, so it must build for the host even when
+	// the environment is set up to cross compile.
+	cmd.Env = append(os.Environ(),
+		"GOOS="+runtime.GOOS,
+		"GOARCH="+runtime.GOARCH)
 	cmd.Stdout = wr
 	cmd.Stderr = wr
 	if err := cmd.Start(); err != nil {

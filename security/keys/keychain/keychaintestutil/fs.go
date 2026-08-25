@@ -42,6 +42,7 @@ func (f *FS) ReadFile(name string) ([]byte, error) {
 // ReadFileCtx reads a key from the in-memory store with context.
 func (f *FS) ReadFileCtx(ctx context.Context, name string) ([]byte, error) {
 	req := plugins.Request{
+		Version: plugins.RequestVersion1,
 		ID:      plugins.NextID(),
 		Keyname: name,
 		Write:   false,
@@ -67,6 +68,7 @@ func (f *FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.Fi
 		return plugins.ErrReadOnly
 	}
 	req := plugins.Request{
+		Version:  plugins.RequestVersion1,
 		ID:       plugins.NextID(),
 		Keyname:  name,
 		Write:    true,

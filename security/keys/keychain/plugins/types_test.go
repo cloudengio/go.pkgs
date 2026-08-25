@@ -199,3 +199,42 @@ func TestNewWriteRequest(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestRequestVersion(t *testing.T) {
+	req, err := plugins.NewRequest("key", nil)
+	if err != nil {
+		t.Fatalf("NewRequest failed: %v", err)
+	}
+	if got, want := req.Version, plugins.RequestVersion1; got != want {
+		t.Errorf("NewRequest version: got %d, want %d", got, want)
+	}
+	wreq, err := plugins.NewWriteRequest("key", []byte("contents"), nil)
+	if err != nil {
+		t.Fatalf("NewWriteRequest failed: %v", err)
+	}
+	if got, want := wreq.Version, plugins.RequestVersion1; got != want {
+		t.Errorf("NewWriteRequest version: got %d, want %d", got, want)
+	}
+}
+
+func TestRequestCheckVersion(t *testing.T) {
+	// Supported versions, including zero for clients that predate versioning.
+	for _, v := range []int32{0, plugins.RequestVersion1, plugins.RequestCurrentVersion} {
+		req := plugins.Request{Version: v}
+		if verr := req.CheckVersion(); verr != nil {
+			t.Errorf("version %d: unexpected error: %v", v, verr)
+		}
+	}
+
+	req := plugins.Request{Version: plugins.RequestCurrentVersion + 1}
+	verr := req.CheckVersion()
+	if verr == nil {
+		t.Fatal("expected an error for an unsupported version")
+	}
+	if !errors.Is(verr, plugins.ErrUnsupportedVersion) {
+		t.Errorf("expected error to be ErrUnsupportedVersion, got %v", verr)
+	}
+	if errors.Is(verr, plugins.ErrKeyNotFound) {
+		t.Errorf("unsupported version error should not match ErrKeyNotFound")
+	}
+}

@@ -4,6 +4,35 @@
 import cloudeng.io/security/keys/keychain/plugins
 ```
 
+Package plugins defines the request/response protocol used to communicate
+with an out-of-process keychain plugin, and the client side of that protocol
+(see FS and RunExtPlugin).
+
+Requests are versioned so that a client built against a newer version of
+this package can detect a plugin binary that is too old to understand
+its requests; this matters because the client and the plugin are
+separate binaries that are frequently built and installed independently
+of each other. Requests created by NewRequest and NewWriteRequest carry
+RequestCurrentVersion. A plugin must call Request.CheckVersion on every
+request it decodes and, if a non-nil error is returned, send that error
+back as the response's Error rather than attempting to service the request.
+Responses are not versioned: a plugin only ever replies to a request whose
+version it has accepted.
+
+## Constants
+### RequestVersion1, RequestCurrentVersion
+```go
+// RequestVersion1 is the initial version of the request format.
+RequestVersion1 int32 = 1
+// RequestCurrentVersion is the version of the request format used by
+// requests created by this package. A plugin built against this package
+// must accept requests at this version or lower and reject requests with
+// a higher version, see Request.CheckVersion.
+RequestCurrentVersion = RequestVersion1
+
+```
+
+
 
 ## Variables
 ### ErrKeyExists
@@ -28,6 +57,14 @@ ErrReadOnly = errors.New("read-only FS")
 
 ```
 ErrReadOnly is returned when attempting to write to a read-only FS.
+
+### ErrUnsupportedVersion
+```go
+ErrUnsupportedVersion = NewErrorUnsupportedVersion(0)
+
+```
+ErrUnsupportedVersion can be used as the target of errors.Is to check for an
+unsupported request version error.
 
 
 
@@ -74,6 +111,14 @@ NewErrorKeyNotFound creates a new Error indicating that the specified key
 was not found that is compatible with errors.Is and ErrorKeyNotFound.
 
 
+```go
+func NewErrorUnsupportedVersion(version int32) *Error
+```
+NewErrorUnsupportedVersion creates a new Error indicating that the request's
+version is newer than this implementation supports, that is compatible with
+errors.Is and ErrUnsupportedVersion.
+
+
 
 ### Methods
 
@@ -112,6 +157,11 @@ is passed to the plugin in the request.
 ### Methods
 
 ```go
+func (f *FS) PluginPath() string
+```
+
+
+```go
 func (f FS) ReadFile(name string) ([]byte, error)
 ```
 
@@ -142,6 +192,7 @@ func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.Fil
 ### Type Request
 ```go
 type Request struct {
+	Version        int32           `json:"version,omitempty"`
 	ID             int32           `json:"id,omitempty"`
 	Keyname        string          `json:"keyname"`
 	Write          bool            `json:"write,omitempty"`
@@ -171,6 +222,17 @@ unique for each call to this function.
 
 
 ### Methods
+
+```go
+func (req Request) CheckVersion() *Error
+```
+CheckVersion verifies that the request's version can be handled by this
+implementation of the plugin protocol. Requests with a version at or below
+RequestCurrentVersion are accepted (including a zero version from clients
+that predate versioning) and nil is returned. Requests with a newer version
+return an error compatible with ErrUnsupportedVersion that plugins should
+send back to the client as the response's Error.
+
 
 ```go
 func (req Request) NewResponse(contents []byte, responseError *Error) *Response

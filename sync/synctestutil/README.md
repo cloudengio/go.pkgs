@@ -15,7 +15,7 @@ AssertNoGoroutines is used to detect goroutine leaks.
 Usage is as shown below:
 
     func TestExample(t *testing.T) {
-    	defer synctestutil.AssertNoGoroutines(t, time.Second)()
+    	defer synctestutil.AssertNoGoroutines(t)()
     	...
     }
 
@@ -25,10 +25,15 @@ goroutines and the returned function will compare that initial set to those
 running when it is invoked. Hence, the above example is equivalent to:
 
     func TestExample(t *testing.T) {
-    	fn := synctestutil.AssertNoGoroutines(t, time.Second)
+    	fn := synctestutil.AssertNoGoroutines(t)
     	...
     	fn()
     }
+
+AssertNoGoroutines takes a single snapshot with no grace period, so it
+can spuriously report a leak when the test synchronizes on a WaitGroup:
+Wait can return while the goroutine that satisfied it is still unwinding and
+has not yet exited. Use AssertNoGoroutinesRacy in that case.
 
 ### Func AssertNoGoroutinesRacy
 ```go

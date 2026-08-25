@@ -139,7 +139,9 @@ Get retrieves the contents of a key from memory.
 func (p *Plugin) HandleRequest(_ context.Context, req plugins.Request) plugins.Response
 ```
 HandleRequest processes a single plugins.Request and returns the
-corresponding plugins.Response.
+corresponding plugins.Response. Requests with a version newer than
+plugins.RequestCurrentVersion are rejected with an error compatible with
+plugins.ErrUnsupportedVersion.
 
 
 ```go
