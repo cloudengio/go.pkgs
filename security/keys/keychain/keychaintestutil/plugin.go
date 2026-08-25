@@ -96,9 +96,17 @@ func (p *Plugin) SetDefaultError(err *plugins.Error) {
 }
 
 // HandleRequest processes a single plugins.Request and returns the corresponding plugins.Response.
+// Requests with a version newer than plugins.RequestCurrentVersion are
+// rejected with an error compatible with plugins.ErrUnsupportedVersion.
 func (p *Plugin) HandleRequest(_ context.Context, req plugins.Request) plugins.Response {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if verr := req.CheckVersion(); verr != nil {
+		resp := req.NewResponse(nil, verr)
+		_ = resp.WithPluginSpecific(req.PluginSpecific)
+		return *resp
+	}
 
 	if p.defaultError != nil {
 		resp := req.NewResponse(nil, p.defaultError)

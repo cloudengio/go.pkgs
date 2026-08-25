@@ -434,3 +434,64 @@ func checkPluginFS(ctx context.Context, t *testing.T, binPath string) {
 		t.Errorf("fsReadVal2 = %q, want fs-secret", fsReadVal2)
 	}
 }
+
+func TestPluginUnsupportedVersion(t *testing.T) {
+	ctx := context.Background()
+	p := keychaintestutil.New()
+	p.Set("key1", []byte("val1"))
+
+	req := plugins.Request{
+		Version: plugins.RequestCurrentVersion + 1,
+		ID:      plugins.NextID(),
+		Keyname: "key1",
+	}
+	resp := p.HandleRequest(ctx, req)
+	if resp.Error == nil {
+		t.Fatal("expected an error for an unsupported request version, got nil")
+	}
+	if !errors.Is(resp.Error, plugins.ErrUnsupportedVersion) {
+		t.Errorf("expected error to be ErrUnsupportedVersion, got %v", resp.Error)
+	}
+	if len(resp.Contents) != 0 {
+		t.Errorf("expected no contents, got %q", resp.Contents)
+	}
+
+	// A supported version (including zero for older clients) is handled.
+	for _, v := range []int32{0, plugins.RequestVersion1} {
+		req := plugins.Request{Version: v, ID: plugins.NextID(), Keyname: "key1"}
+		resp := p.HandleRequest(ctx, req)
+		if resp.Error != nil {
+			t.Errorf("version %d: unexpected error: %v", v, resp.Error)
+		}
+		if got, want := string(resp.Contents), "val1"; got != want {
+			t.Errorf("version %d: got %q, want %q", v, got, want)
+		}
+	}
+}
+
+func TestRunUnsupportedVersion(t *testing.T) {
+	ctx := context.Background()
+	req := plugins.Request{
+		Version: plugins.RequestCurrentVersion + 1,
+		ID:      plugins.NextID(),
+		Keyname: "key1",
+	}
+	input, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	if err := keychaintestutil.Run(ctx, bytes.NewReader(input), out, os.Stderr, "--contents=static"); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	var resp plugins.Response
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Error == nil {
+		t.Fatal("expected an error for an unsupported request version, got nil")
+	}
+	if !errors.Is(resp.Error, plugins.ErrUnsupportedVersion) {
+		t.Errorf("expected error to be ErrUnsupportedVersion, got %v", resp.Error)
+	}
+}

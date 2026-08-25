@@ -51,6 +51,16 @@ func run() error {
 		return fmt.Errorf("failed to unmarshal request: %w", err)
 	}
 
+	// 3. Reject requests whose version is newer than this plugin supports.
+	if verr := req.CheckVersion(); verr != nil {
+		output, err := json.Marshal(req.NewResponse(nil, verr))
+		if err != nil {
+			return fmt.Errorf("failed to marshal response: %w", err)
+		}
+		_, err = os.Stdout.Write(output)
+		return err
+	}
+
 	var respErr *plugins.Error
 	if req.Keyname != keynameFlag {
 		respErr = plugins.NewErrorKeyNotFound(req.Keyname)
