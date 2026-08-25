@@ -4,9 +4,11 @@ cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278 h1:zvkZ9WBpBjerUAhl+SLC
 cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278/go.mod h1:6TivTMjXopNNZ0eNsac9MfYij1WC6R0gJcsSIxcunIA=
 cloudeng.io/file v0.0.0-20260824023931-9b6c51abac7f h1:qiFXMWS6oE7nko3cr6vsctYHdxxh1WkxPpwpQ23rxBU=
 cloudeng.io/file v0.0.0-20260824023931-9b6c51abac7f/go.mod h1:l6dNTIeSdz0DLIV5V7dlaMKfzZVhJ5gecMSYlqEdx30=
-cloudeng.io/os v0.0.0-20260816192340-d05f07f415c6 h1:j5kTHsHAYQPcsdRwu5ByDvdY94i2SM0XS9kyrS5GIYk=
-cloudeng.io/os v0.0.0-20260816192340-d05f07f415c6/go.mod h1:KywG7sgIIrXujykkH/b3vWROeOJBHMwZlhpp4670Hgo=
 cloudeng.io/os v0.0.0-20260824023931-9b6c51abac7f h1:tF6YCXBC+Et3/5apwVCA9OUB/qhYmNSspRPEOKqsVlQ=
 cloudeng.io/os v0.0.0-20260824023931-9b6c51abac7f/go.mod h1:xxFKazMCATKYUzgE3bogyzhmLEEl5zJJr17V1XupCCU=
+cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba h1:2+U9tNRu/+O1rHgv2mxRTU80lgUCJSxDFDswbKumBx8=
+cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba/go.mod h1:35kcugrX/RVGQjSfyLMciOCloX34nFfnkQsdks75Ao0=
+golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
+golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
 golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
