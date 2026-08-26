@@ -7,6 +7,7 @@ package cachefs
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -422,17 +423,23 @@ func TestSingleFlightReadFileFS(t *testing.T) {
 	ctx := context.Background()
 	fs := newMockFS()
 	fs.data["concurrency_file"] = []byte("concurrent_data")
-	// Add an artificial delay to ensure goroutines overlap and trigger singleflight
+	// Add an artificial delay to ensure goroutines overlap and trigger singleflight.
 	fs.delay = 50 * time.Millisecond
 
 	sfFS := NewSingleFlightReadFileFS(fs)
 
-	var wg sync.WaitGroup
 	numRoutines := 50
+	ready := make(chan struct{})
+	var started sync.WaitGroup
+	started.Add(numRoutines)
+
+	var wg sync.WaitGroup
 	for range numRoutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			started.Done() // signal: goroutine is live and about to block
+			<-ready        // barrier: wait until all goroutines are released together
 			data, err := sfFS.ReadFileCtx(ctx, "concurrency_file")
 			if err != nil {
 				t.Errorf("ReadFileCtx failed: %v", err)
@@ -442,9 +449,13 @@ func TestSingleFlightReadFileFS(t *testing.T) {
 			}
 		}()
 	}
+	started.Wait()
+	// Yield so goroutines can reach <-ready before we release them.
+	runtime.Gosched()
+	close(ready)
 	wg.Wait()
 
-	// Due to singleflight, the underlying FS should only be hit exactly once
+	// Due to singleflight, the underlying FS should only be hit exactly once.
 	if got, want := fs.getHits("concurrency_file"), 1; got != want {
 		t.Errorf("expected %d hits due to singleflight, got %d", want, got)
 	}
