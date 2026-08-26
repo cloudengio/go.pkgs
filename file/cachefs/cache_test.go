@@ -201,9 +201,7 @@ func TestCacheConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	numRoutines := 50
 	for range numRoutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			data, err := c.ReadFileCtx(ctx, "concurrency_file")
 			if err != nil {
 				t.Errorf("ReadFileCtx failed: %v", err)
@@ -211,7 +209,7 @@ func TestCacheConcurrency(t *testing.T) {
 			if string(data) != "concurrent_data" {
 				t.Errorf("got %q, want %q", data, "concurrent_data")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -435,9 +433,7 @@ func TestSingleFlightReadFileFS(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range numRoutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			started.Done() // signal: goroutine is live and about to block
 			<-ready        // barrier: wait until all goroutines are released together
 			data, err := sfFS.ReadFileCtx(ctx, "concurrency_file")
@@ -447,7 +443,7 @@ func TestSingleFlightReadFileFS(t *testing.T) {
 			if string(data) != "concurrent_data" {
 				t.Errorf("got %q, want %q", data, "concurrent_data")
 			}
-		}()
+		})
 	}
 	started.Wait()
 	// Yield so goroutines can reach <-ready before we release them.

@@ -824,8 +824,8 @@ func (cmds *CommandSet) runPreHooks(ctx context.Context, cmdName string, preHook
 
 // runPostHooks in LIFO order and appends errors to the supplied errors.M.
 func (cmds *CommandSet) runPostHooks(ctx context.Context, cmdName string, postHooks []PostHook, errs *errors.M) error {
-	for i := len(postHooks) - 1; i >= 0; i-- {
-		if id, err := postHooks[i](ctx); err != nil {
+	for _, postHook := range slices.Backward(postHooks) {
+		if id, err := postHook(ctx); err != nil {
 			errs.Append(fmt.Errorf("%v: post-hook failed (%v): %w", cmdName, id, err))
 		}
 	}

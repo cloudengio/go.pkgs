@@ -65,10 +65,10 @@ func (e *extractor) Extract(_ context.Context, depth int, downloaded download.Do
 func issuseCrawlRequests(ctx context.Context, nItems int, input chan<- download.Request, reader file.FS) {
 	defer close(input)
 	for i := range nItems {
-		req := crawl.SimpleRequest{}
-		req.RequestedBy = "issueCrawlRequest"
-		req.FS = reader
-		req.Filenames = []string{fmt.Sprintf("%08v", i)}
+		req := crawl.SimpleRequest{
+			RequestedBy: "issueCrawlRequest",
+			FS:          reader,
+			Filenames:   []string{fmt.Sprintf("%08v", i)}}
 		select {
 		case input <- &req:
 		case <-ctx.Done():

@@ -87,13 +87,13 @@ func TestTailWriterConcurrent(t *testing.T) {
 	w := executil.NewTailWriter(100)
 	done := make(chan bool)
 	go func() {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_, _ = w.Write([]byte("a"))
 		}
 		done <- true
 	}()
 	go func() {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_, _ = w.Write([]byte("b"))
 		}
 		done <- true

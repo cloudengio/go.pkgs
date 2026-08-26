@@ -38,8 +38,7 @@ func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Ty
 	if typ.Kind() != reflect.Struct {
 		return nil
 	}
-	for nf := 0; nf < typ.NumField(); nf++ {
-		field := typ.Field(nf)
+	for field := range typ.Fields() {
 		doc, ok := field.Tag.Lookup(tagName)
 		if ok && doc == "-" {
 			continue

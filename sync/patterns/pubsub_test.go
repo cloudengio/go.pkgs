@@ -330,26 +330,22 @@ func TestPubSubConcurrentSubscribeUnsubscribe(t *testing.T) {
 
 	// Concurrently subscribe.
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sub := ps.Subscribe(context.Background(), 8)
 			mu.Lock()
 			subs = append(subs, sub)
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 
 	// Publish while unsubscribing half the subscribers.
 	var pubWg sync.WaitGroup
-	pubWg.Add(1)
-	go func() {
-		defer pubWg.Done()
+	pubWg.Go(func() {
 		for i := range 10 {
 			ps.Publish(i)
 		}
-	}()
+	})
 
 	for _, sub := range subs[:len(subs)/2] {
 		ps.Unsubscribe(sub)

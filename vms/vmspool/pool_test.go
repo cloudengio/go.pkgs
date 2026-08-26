@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -521,10 +522,8 @@ func assertPrecedes(t *testing.T, events []vmspool.EventKind, before, after vmsp
 		if e != before {
 			continue
 		}
-		for _, e2 := range events[i+1:] {
-			if e2 == after {
-				return
-			}
+		if slices.Contains(events[i+1:], after) {
+			return
 		}
 	}
 	t.Errorf("no occurrence of %s found before %s in %v", before, after, events)

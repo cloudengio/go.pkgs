@@ -95,8 +95,7 @@ func TestByteRanges_MarshalUnmarshalJSON(t *testing.T) {
 		if err == nil {
 			t.Error("UnmarshalJSON() expected error for bad content_size, got nil")
 		}
-		var numErr *strconv.NumError
-		if !errors.As(err, &numErr) {
+		if _, ok := errors.AsType[*strconv.NumError](err); !ok {
 			t.Errorf("UnmarshalJSON() expected strconv.NumError, got %T", err)
 		}
 	})

@@ -19,8 +19,7 @@ func TestInspectContainerWithBinary_InvalidBinary(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error executing nonexistent binary, got nil")
 	}
-	var execErr *exec.Error
-	if !errors.As(err, &execErr) {
+	if _, ok := errors.AsType[*exec.Error](err); !ok {
 		t.Logf("got error: %v", err)
 	}
 }

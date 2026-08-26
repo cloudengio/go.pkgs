@@ -111,7 +111,7 @@ func NewMockFS(opts ...FSOption) file.FS {
 	}
 	if options.numRetries > 0 {
 		return &randAfteRetryFS{
-			randFS:  randFS{local: local{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{}},
+			local: local{FS: fs, scheme: options.scheme}, fsOptions: options, contents: map[string][]byte{},
 			retries: map[string]int{},
 		}
 	}

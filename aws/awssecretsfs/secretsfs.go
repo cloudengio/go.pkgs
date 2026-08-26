@@ -243,8 +243,7 @@ type Client interface {
 func secretExists(ctx context.Context, client Client, nameOrArn string) (bool, string, error) {
 	out, err := client.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{SecretId: aws.String(nameOrArn)})
 	if err != nil {
-		var rnfe *types.ResourceNotFoundException
-		if errors.As(err, &rnfe) {
+		if _, ok := errors.AsType[*types.ResourceNotFoundException](err); ok {
 			return false, "", nil
 		}
 		return false, "", err

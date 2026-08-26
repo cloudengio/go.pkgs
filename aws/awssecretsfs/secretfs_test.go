@@ -247,8 +247,7 @@ func TestWriteFilePermissions(t *testing.T) {
 		})
 		if err != nil {
 			// It may not exist which is fine.
-			var rnf *types.ResourceNotFoundException
-			if !errors.As(err, &rnf) {
+			if _, ok := errors.AsType[*types.ResourceNotFoundException](err); !ok {
 				t.Errorf("failed to delete secret %v: %v", name, err)
 			}
 		}

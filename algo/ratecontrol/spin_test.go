@@ -113,15 +113,13 @@ func TestSpinDetectorConcurrent(t *testing.T) {
 	var detected atomic.Int64
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range ticks {
 				if sd.Tick() {
 					detected.Add(1)
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

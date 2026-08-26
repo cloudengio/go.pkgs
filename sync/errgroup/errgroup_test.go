@@ -145,7 +145,7 @@ func testConcurrency(t *testing.T, concurrency int) {
 		expected = invocations
 	}
 
-	var started int64
+	var started atomic.Int64
 	// Buffered so that a goroutine can signal that it is running without
 	// waiting for the signal to be read.
 	startedCh := make(chan struct{}, invocations)
@@ -157,7 +157,7 @@ func testConcurrency(t *testing.T, concurrency int) {
 	wg.Go(func() {
 		for range invocations {
 			g.Go(func() error {
-				atomic.AddInt64(&started, 1)
+				started.Add(1)
 				startedCh <- struct{}{}
 				<-ctx.Done()
 				return nil
@@ -191,7 +191,7 @@ func testConcurrency(t *testing.T, concurrency int) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	if got, want := atomic.LoadInt64(&started), int64(invocations); got != want {
+	if got, want := started.Load(), int64(invocations); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -212,7 +212,7 @@ func TestGoContext(t *testing.T) {
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, 1)
 
-	var started int64
+	var started atomic.Int64
 	intCh := make(chan int64, 1)
 
 	go func() {
@@ -220,14 +220,14 @@ func TestGoContext(t *testing.T) {
 		// conservative for starting a small # of goroutines that immediately
 		// call select.
 		time.Sleep(time.Second)
-		intCh <- atomic.LoadInt64(&started)
+		intCh <- started.Load()
 		cancel()
 	}()
 
 	invocations := 10
 	for i := range invocations {
 		g.GoContext(ctx, func() error {
-			atomic.AddInt64(&started, 1)
+			started.Add(1)
 			if i == 0 {
 				select {
 				case <-ctx.Done():
@@ -253,7 +253,7 @@ func TestGoContext(t *testing.T) {
 	if got, want := <-intCh, int64(1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := atomic.LoadInt64(&started), int64(2); got != want {
+	if got, want := started.Load(), int64(2); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

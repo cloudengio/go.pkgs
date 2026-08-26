@@ -136,8 +136,7 @@ func TestIndexStoreLoadErrors(t *testing.T) {
 		if !strings.Contains(err.Error(), "failed to unmarshal index file") {
 			t.Errorf("error message mismatch: got %v", err)
 		}
-		var jsonErr *json.SyntaxError
-		if !errors.As(err, &jsonErr) {
+		if _, ok := errors.AsType[*json.SyntaxError](err); !ok {
 			t.Errorf("expected a json.SyntaxError, but it was not found in chain")
 		}
 	})
