@@ -13,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
-	"sync/atomic"
 )
 
 // TracingHandler is an http.Handler that wraps another http.Handler to provide
@@ -89,7 +88,7 @@ func NewTracingHandler(next http.Handler, opts ...TraceHandlerOption) *TracingHa
 
 // ServeHTTP implements http.Handler.
 func (th *TracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := atomic.AddInt64(&traceID, 1)
+	id := traceID.Add(1)
 	grp := slog.Group("http_handler_trace",
 		"traceID", id,
 		"method", r.Method,

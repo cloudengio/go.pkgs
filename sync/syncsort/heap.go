@@ -18,7 +18,7 @@ import (
 // NextItem and the order of calls to NextItem determines the order of
 // items returned by the scanner.
 type Sequencer[T any] struct {
-	next    uint64
+	next    atomic.Uint64
 	inputCh <-chan Item[T]
 	scanCh  chan nextItem[T]
 	heap    streamingHeap[T]
@@ -57,7 +57,7 @@ func NewSequencer[T any](ctx context.Context, inputCh <-chan Item[T]) *Sequencer
 func (s *Sequencer[T]) NextItem(item T) Item[T] {
 	return Item[T]{
 		V: item,
-		s: atomic.AddUint64(&s.next, 1),
+		s: s.next.Add(1),
 	}
 }
 

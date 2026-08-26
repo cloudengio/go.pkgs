@@ -29,6 +29,7 @@
 package cloudpath
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -333,8 +334,8 @@ func (path T) HasSuffix(suffix T) bool {
 		return false
 	}
 	j := len(path) - 1
-	for i := len(suffix) - 1; i >= 0; i-- {
-		if suffix[i] != path[j] {
+	for _, s := range slices.Backward(suffix) {
+		if s != path[j] {
 			return false
 		}
 		j--

@@ -69,9 +69,9 @@ plugins:
 
 func TestDeferredValueForNonMapping(t *testing.T) {
 	// A Deferred that is not a mapping node should return false.
-	d := cmdyaml.Deferred{}
-	d.Kind = yaml.ScalarNode
-	d.Value = "scalar"
+	d := cmdyaml.Deferred{
+		Kind:  yaml.ScalarNode,
+		Value: "scalar"}
 
 	_, ok := d.ValueFor("anything")
 	if ok {

@@ -55,7 +55,7 @@ func TestExpandEmbedded(t *testing.T) {
 		Y string `yaml:"y"`
 	}
 
-	o := outer{inner: inner{X: "$A"}, Y: "$B"}
+	o := outer{X: "$A", Y: "$B"}
 	cmdyaml.Expand(&o, env)
 	if got, want := o.X, "alpha"; got != want {
 		t.Errorf("X: got %q, want %q", got, want)

@@ -61,7 +61,7 @@ func cleanupTestContainers(ctx context.Context, client sdkclient.SDKClient) {
 	if err != nil {
 		return
 	}
-	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for name := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		name = strings.TrimSpace(name)
 		if name == "" || !strings.HasPrefix(name, "vmstest-") {
 			continue

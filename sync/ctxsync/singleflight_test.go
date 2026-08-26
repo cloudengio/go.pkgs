@@ -18,9 +18,9 @@ import (
 func TestSingleFlight_Basic(t *testing.T) {
 	sf := ctxsync.New()
 
-	var calls int32
+	var calls atomic.Int32
 	v, err, shared := sf.Do(context.Background(), "key", func() (any, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		return "success", nil
 	})
 
@@ -33,7 +33,7 @@ func TestSingleFlight_Basic(t *testing.T) {
 	if shared {
 		t.Errorf("expected shared=false")
 	}
-	if got := atomic.LoadInt32(&calls); got != 1 {
+	if got := calls.Load(); got != 1 {
 		t.Errorf("expected 1 call, got %d", got)
 	}
 }
@@ -42,10 +42,9 @@ func TestSingleFlight_Do_SharedCancel(t *testing.T) {
 	sf := ctxsync.New()
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	defer cancel2()
+	ctx2 := t.Context()
 
-	var calls int32
+	var calls atomic.Int32
 	fn1Started := make(chan struct{})
 	fn2Done := make(chan struct{})
 
@@ -56,7 +55,7 @@ func TestSingleFlight_Do_SharedCancel(t *testing.T) {
 		go func() {
 			close(ctx2Ready)
 			v, err, _ := sf.Do(ctx2, "key-do-cancel", func() (any, error) {
-				atomic.AddInt32(&calls, 1)
+				calls.Add(1)
 				return "success2", nil
 			})
 			if err != nil {
@@ -75,7 +74,7 @@ func TestSingleFlight_Do_SharedCancel(t *testing.T) {
 	}()
 
 	v, err, shared := sf.Do(ctx1, "key-do-cancel", func() (any, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		close(fn1Started)
 		<-ctx1.Done()
 		return nil, ctx1.Err()
@@ -92,7 +91,7 @@ func TestSingleFlight_Do_SharedCancel(t *testing.T) {
 	}
 
 	<-fn2Done
-	if got := atomic.LoadInt32(&calls); got != 2 {
+	if got := calls.Load(); got != 2 {
 		t.Errorf("expected 2 calls due to retry, got %d", got)
 	}
 }
@@ -103,7 +102,7 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	ctx2, cancel2 := context.WithCancel(context.Background())
 
-	var calls int32
+	var calls atomic.Int32
 	fn1Started := make(chan struct{})
 	fn2Done := make(chan struct{})
 
@@ -130,7 +129,7 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 	}()
 
 	_, err, _ := sf.Do(ctx1, "key-both-cancel", func() (any, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		close(fn1Started)
 		<-ctx1.Done()
 		return nil, ctx1.Err()
@@ -141,7 +140,7 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 	}
 
 	<-fn2Done
-	if got := atomic.LoadInt32(&calls); got != 1 {
+	if got := calls.Load(); got != 1 {
 		t.Errorf("expected exactly 1 call without retry, got %d", got)
 	}
 }
@@ -149,9 +148,9 @@ func TestSingleFlight_Do_BothCanceled(t *testing.T) {
 func TestSingleFlight_DoChan_Basic(t *testing.T) {
 	sf := ctxsync.New()
 
-	var calls int32
+	var calls atomic.Int32
 	ch := sf.DoChan(context.Background(), "key-chan-basic", func() (any, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		return "success", nil
 	})
 
@@ -165,7 +164,7 @@ func TestSingleFlight_DoChan_Basic(t *testing.T) {
 	if res.Shared {
 		t.Errorf("expected shared=false")
 	}
-	if got := atomic.LoadInt32(&calls); got != 1 {
+	if got := calls.Load(); got != 1 {
 		t.Errorf("expected 1 call, got %d", got)
 	}
 }
@@ -174,10 +173,9 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 	sf := ctxsync.New()
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	defer cancel2()
+	ctx2 := t.Context()
 
-	var calls int32
+	var calls atomic.Int32
 	fn1Started := make(chan struct{})
 	fn2Done := make(chan struct{})
 
@@ -187,7 +185,7 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 		ctx2Ready := make(chan struct{})
 		go func() {
 			ch := sf.DoChan(ctx2, "key-chan", func() (any, error) {
-				atomic.AddInt32(&calls, 1)
+				calls.Add(1)
 				return "success2", nil
 			})
 			close(ctx2Ready)
@@ -207,7 +205,7 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 	}()
 
 	ch := sf.DoChan(ctx1, "key-chan", func() (any, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		close(fn1Started)
 		<-ctx1.Done()
 		return nil, ctx1.Err()
@@ -219,7 +217,7 @@ func TestSingleFlight_DoChan_SharedCancel(t *testing.T) {
 	}
 
 	<-fn2Done
-	if got := atomic.LoadInt32(&calls); got != 2 {
+	if got := calls.Load(); got != 2 {
 		t.Errorf("expected 2 calls due to retry, got %d", got)
 	}
 }
@@ -255,7 +253,7 @@ func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	ctx2, cancel2 := context.WithCancel(context.Background())
 
-	var calls int32
+	var calls atomic.Int32
 	fn1Started := make(chan struct{})
 	fn2Done := make(chan struct{})
 
@@ -283,7 +281,7 @@ func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
 	}()
 
 	ch := sf.DoChan(ctx1, "key-both-cancel-chan", func() (any, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		close(fn1Started)
 		<-ctx1.Done()
 		return nil, ctx1.Err()
@@ -295,7 +293,7 @@ func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
 	}
 
 	<-fn2Done
-	if got := atomic.LoadInt32(&calls); got != 1 {
+	if got := calls.Load(); got != 1 {
 		t.Errorf("expected exactly 1 call without retry, got %d", got)
 	}
 }
@@ -303,41 +301,37 @@ func TestSingleFlight_DoChan_BothCanceled(t *testing.T) {
 func TestSingleFlight_Forget(t *testing.T) {
 	sf := ctxsync.New()
 
-	var calls int32
+	var calls atomic.Int32
 	ch := make(chan struct{})
 	fn1Started := make(chan struct{})
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, _, _ = sf.Do(context.Background(), "key-forget", func() (any, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			close(fn1Started)
 			<-ch
 			return nil, nil
 		})
-	}()
+	})
 
 	<-fn1Started
 	sf.Forget("key-forget")
 
 	fn2Started := make(chan struct{})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, _, _ = sf.Do(context.Background(), "key-forget", func() (any, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			close(fn2Started)
 			return nil, nil
 		})
-	}()
+	})
 
 	<-fn2Started
 	close(ch)
 	wg.Wait()
 
-	if got := atomic.LoadInt32(&calls); got != 2 {
+	if got := calls.Load(); got != 2 {
 		t.Errorf("expected 2 calls because of Forget, got %d", got)
 	}
 }

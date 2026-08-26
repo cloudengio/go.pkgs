@@ -84,11 +84,9 @@ type DirSizeIfc interface {
 // matched implements PathIfc.
 func Regexp(opname string, re string) boolexpr.Operand {
 	return regEx{text: re,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + "=<regexp> matches a regular expression",
-			requires: reflect.TypeFor[PathIfc](),
-		},
+		name:     opname,
+		document: opname + "=<regexp> matches a regular expression",
+		requires: reflect.TypeFor[PathIfc](),
 	}
 }
 
@@ -122,11 +120,9 @@ func (op regEx) String() string {
 func Glob(opname string, pat string, caseInsensitive bool) boolexpr.Operand {
 	return glob{text: pat,
 		caseInsensitive: caseInsensitive,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + "=<glob> matches a glob pattern",
-			requires: reflect.TypeFor[NameIfc](),
-		}}
+		name:            opname,
+		document:        opname + "=<glob> matches a glob pattern",
+		requires:        reflect.TypeFor[NameIfc]()}
 }
 
 type glob struct {
@@ -183,11 +179,9 @@ func (op glob) String() string {
 // d, f and l and FileModeIfc for type x.
 func FileType(opname string, typ string) boolexpr.Operand {
 	return fileType{
-		text: typ,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + fileTypeDoc,
-		}}
+		text:     typ,
+		name:     opname,
+		document: opname + fileTypeDoc}
 }
 
 const fileTypeDoc = "=<type> matches a file type (d, f, l, x), where d is a directory, f a regular file, l a symbolic link and x an executable regular file"
@@ -258,11 +252,9 @@ func (op fileType) Needs(t reflect.Type) bool {
 // It requires that the value being matched implements ModTimeIfc.
 func NewerThanParsed(opname string, value string) boolexpr.Operand {
 	return newerThan{text: value,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + newerThanDoc,
-			requires: reflect.TypeFor[ModTimeIfc](),
-		}}
+		name:     opname,
+		document: opname + newerThanDoc,
+		requires: reflect.TypeFor[ModTimeIfc]()}
 }
 
 // NewerThanTime returns a 'newer than' operand with the specified time.
@@ -272,11 +264,9 @@ func NewerThanParsed(opname string, value string) boolexpr.Operand {
 // It requires that the value bein matched implements Mod
 func NewerThanTime(opname string, when time.Time) boolexpr.Operand {
 	return newerThan{when: when,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + newerThanDoc,
-			requires: reflect.TypeFor[ModTimeIfc](),
-		}}
+		name:     opname,
+		document: opname + newerThanDoc,
+		requires: reflect.TypeFor[ModTimeIfc]()}
 }
 
 const newerThanDoc = "=<time> matches a time that is newer than the specified time in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly formats"
@@ -327,15 +317,11 @@ func DirSize(opname, value string, larger bool) boolexpr.Operand {
 		doc += `=<size> matches a directory size smaller than <size>`
 	}
 	return dirSize{
-		sizeCommon: sizeCommon{
-			text:   value,
-			larger: larger,
-		},
-		commonOperand: commonOperand{
-			name:     opname,
-			document: doc,
-			requires: reflect.TypeFor[DirSizeIfc](),
-		}}
+		text:     value,
+		larger:   larger,
+		name:     opname,
+		document: doc,
+		requires: reflect.TypeFor[DirSizeIfc]()}
 }
 
 func DirSizeLarger(n, v string) boolexpr.Operand {
@@ -402,15 +388,11 @@ func FileSize(opname, value string, larger bool) boolexpr.Operand {
 		doc += `=<size> matches a file size smaller than <size>`
 	}
 	return fileSize{
-		sizeCommon: sizeCommon{
-			text:   value,
-			larger: larger,
-		},
-		commonOperand: commonOperand{
-			name:     opname,
-			document: doc,
-			requires: reflect.TypeFor[FileSizeIfc](),
-		}}
+		text:     value,
+		larger:   larger,
+		name:     opname,
+		document: doc,
+		requires: reflect.TypeFor[FileSizeIfc]()}
 }
 
 func FileSizeLarger(n, v string) boolexpr.Operand {

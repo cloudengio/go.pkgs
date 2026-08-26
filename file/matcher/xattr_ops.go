@@ -56,14 +56,12 @@ func XAttr(opname, value, doc string,
 	prepare XAttrParser,
 	eval func(opVal, val file.XAttr) bool) boolexpr.Operand {
 	return xAttrOp{
-		text: value,
-		prep: prepare,
-		eval: eval,
-		commonOperand: commonOperand{
-			name:     opname,
-			document: opname + doc,
-			requires: reflect.TypeFor[XAttrIfc](),
-		}}
+		text:     value,
+		prep:     prepare,
+		eval:     eval,
+		name:     opname,
+		document: opname + doc,
+		requires: reflect.TypeFor[XAttrIfc]()}
 }
 
 // NewUser returns an operand that compares the user id of the value

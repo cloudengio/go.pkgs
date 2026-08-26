@@ -33,10 +33,10 @@ func TestReserveSpace(t *testing.T) {
 
 	progressCh := make(chan int64, 100)
 	doneCh := make(chan struct{})
-	var written int64
+	var written atomic.Int64
 	go func() {
 		for v := range progressCh {
-			atomic.StoreInt64(&written, v)
+			written.Store(v)
 		}
 		close(doneCh)
 	}()
@@ -46,7 +46,7 @@ func TestReserveSpace(t *testing.T) {
 	}
 
 	<-doneCh
-	if got, want := atomic.LoadInt64(&written), size; got != want {
+	if got, want := written.Load(), size; got != want {
 		t.Errorf("expected %d bytes written, got %d", want, got)
 	}
 }

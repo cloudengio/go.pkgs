@@ -103,8 +103,7 @@ func TestWaitFor_ContextAlreadyCancelled(t *testing.T) {
 }
 
 func TestWaitFor_CheckReceivesContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	var gotCtx context.Context
 	check := func(c context.Context) (bool, error) {

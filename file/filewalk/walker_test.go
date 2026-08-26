@@ -702,8 +702,7 @@ func TestError(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	var other dummyError
-	if errors.As(err, &other) {
+	if _, ok := errors.AsType[dummyError](err); ok {
 		t.Errorf("expected filewalk.Error")
 	}
 }

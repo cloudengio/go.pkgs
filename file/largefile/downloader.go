@@ -143,11 +143,9 @@ func newDownloader(file Reader, opts downloadOptions) *downloader {
 		},
 	}
 	dl.progress = &progressTracker{
-		DownloadStats: DownloadStats{
-			DownloadSize:   dl.size,
-			DownloadBlocks: int64(NumBlocks(dl.size, dl.blockSize)),
-		},
-		ch: dl.progressCh,
+		DownloadSize:   dl.size,
+		DownloadBlocks: int64(NumBlocks(dl.size, dl.blockSize)),
+		ch:             dl.progressCh,
 	}
 	return dl
 }

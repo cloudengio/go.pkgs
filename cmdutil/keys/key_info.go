@@ -91,7 +91,7 @@ func (t Token) FirstN(keep int) string {
 // NewToken creates a new Token instance, cloning the provided value
 // and zeroing the input slice.
 func NewToken(id, user string, value []byte) Token {
-	t := Token{KeySpec: KeySpec{ID: id, User: user}, token: slices.Clone(value)}
+	t := Token{ID: id, User: user, token: slices.Clone(value)}
 	for i := range value {
 		value[i] = 0
 	}
@@ -163,7 +163,7 @@ func (k Info) String() string {
 }
 
 func (k Info) Token() Token {
-	return Token{KeySpec: KeySpec{ID: k.ID, User: k.User}, token: slices.Clone(k.token)}
+	return Token{ID: k.ID, User: k.User, token: slices.Clone(k.token)}
 }
 
 func (k Info) KeySpec() KeySpec {

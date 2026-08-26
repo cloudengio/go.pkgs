@@ -253,7 +253,7 @@ func (t *TracingRoundTripper) addWriteTraceHooks(trace *httptrace.ClientTrace, l
 	}
 }
 
-var traceID int64
+var traceID atomic.Int64
 
 func copyAndReplace(logger *slog.Logger, body io.ReadCloser) ([]byte, io.ReadCloser) {
 	if body == nil {
@@ -289,7 +289,7 @@ func (t *TracingRoundTripper) logAndReplaceBody(ctx context.Context, logger *slo
 
 // RoundTrip implements the http.RoundTripper interface.
 func (t *TracingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	id := atomic.AddInt64(&traceID, 1)
+	id := traceID.Add(1)
 
 	start := time.Now()
 

@@ -265,7 +265,7 @@ func TestExpandEmbedded(t *testing.T) {
 		Port string `use_env:""`
 	}
 	s := derived{
-		base: base{Host: "$EMBED_HOST"},
+		Host: "$EMBED_HOST",
 		Port: "$EMBED_PORT",
 	}
 	var se envfile.StructEnv

@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	traceID int64
+	traceID atomic.Int64
 )
 
 type trace struct {
@@ -30,14 +30,14 @@ func appendRecord(t *trace, r *record) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.id == 0 {
-		t.id = atomic.AddInt64(&traceID, 1)
+		t.id = traceID.Add(1)
 		t.rootID = t.id
 	}
 	t.records = append(t.records, r)
 }
 
 func appendGoroutineTrace(parent, branch *trace, r *record) {
-	branch.id = atomic.AddInt64(&traceID, 1)
+	branch.id = traceID.Add(1)
 	branch.rootID = parent.rootID
 	branch.gocaller = r.callers
 	r.goroutines = append(r.goroutines, branch)

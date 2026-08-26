@@ -28,7 +28,7 @@ type Walker[T any] struct {
 	opts     options
 	handler  Handler[T]
 	errs     *errors.M
-	nSyncOps int64
+	nSyncOps atomic.Int64
 }
 
 // Option represents options accepted by Walker.
@@ -260,7 +260,7 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, depth int, ch
 			return ctx.Err()
 		default:
 			// no concurreny is available fallback to sync.
-			atomic.AddInt64(&w.nSyncOps, 1)
+			w.nSyncOps.Add(1)
 			p := w.fs.Join(path, child.Name())
 			if err := w.walkPrefix(ctx, p, depth, child, nil, limitCh); err != nil {
 				return err
@@ -344,6 +344,6 @@ type Stats struct {
 
 func (w *Walker[T]) Stats() Stats {
 	return Stats{
-		SynchronousScans: atomic.LoadInt64(&w.nSyncOps),
+		SynchronousScans: w.nSyncOps.Load(),
 	}
 }

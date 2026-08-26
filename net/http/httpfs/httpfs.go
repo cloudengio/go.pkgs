@@ -96,16 +96,14 @@ func (fs *FS) Base(p string) string {
 }
 
 func (fs *FS) IsPermissionError(err error) bool {
-	var httpErr *httperror.T
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*httperror.T](err); ok {
 		return httpErr.StatusCode == http.StatusForbidden
 	}
 	return false
 }
 
 func (fs *FS) IsNotExist(err error) bool {
-	var httpErr *httperror.T
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*httperror.T](err); ok {
 		return httpErr.StatusCode == http.StatusNotFound
 	}
 	return false

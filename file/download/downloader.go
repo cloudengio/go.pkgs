@@ -50,7 +50,7 @@ type options struct {
 type downloader struct {
 	options
 	ticker     time.Ticker
-	downloaded int64 // updated using atomic.
+	downloaded atomic.Int64 // updated using atomic.
 
 	progressMu   sync.Mutex
 	progressLast time.Time // GUARDED_BY(progressMu)
@@ -132,7 +132,7 @@ func (dl *downloader) updateDue() bool {
 }
 
 func (dl *downloader) updateProgess(downloaded, outstanding int) {
-	ndownloaded := atomic.AddInt64(&dl.downloaded, int64(downloaded))
+	ndownloaded := dl.downloaded.Add(int64(downloaded))
 	if dl.progressCh != nil && dl.updateDue() {
 		select {
 		case dl.progressCh <- Progress{
