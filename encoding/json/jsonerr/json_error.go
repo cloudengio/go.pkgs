@@ -14,11 +14,22 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 )
 
 type errorFactory func(jsontext.Value) (error, error)
 
-var errorTypes = map[string]errorFactory{}
+var (
+	errorTypesMu sync.RWMutex
+	errorTypes   = map[string]errorFactory{}
+)
+
+func getErrorFactory(typeName string) (errorFactory, bool) {
+	errorTypesMu.RLock()
+	defer errorTypesMu.RUnlock()
+	f, ok := errorTypes[typeName]
+	return f, ok
+}
 
 // TypeNameForError returns the fully qualified type name of err
 // (e.g. "example.com/pkg.MyError"). Returns "" for nil.
@@ -38,6 +49,8 @@ func RegisterErrorType[T any, PT interface {
 	error
 }]() {
 	typeName := TypeNameForError(PT(new(T)))
+	errorTypesMu.Lock()
+	defer errorTypesMu.Unlock()
 	errorTypes[typeName] = func(raw jsontext.Value) (error, error) {
 		v := PT(new(T))
 		if err := json.Unmarshal(raw, v); err != nil {
@@ -51,9 +64,12 @@ func RegisterErrorType[T any, PT interface {
 // transmission over the wire. TypeNameForError(err) is used to set Error.Type,
 // Error.Error is set to err.Error(), and Error.Detail is set to the JSON-encoded
 // representation of err. Error.Type must be registered using RegisterErrorType
-// by the receipient of the marshaled error in order to unmarshal the error back
+// by the recipient of the marshaled error in order to unmarshal the error back
 // into its corresponding concrete type.
 func MarshalError(err error) ([]byte, error) {
+	if err == nil {
+		return json.Marshal(Error{})
+	}
 	typeName := TypeNameForError(err)
 	detail, marshalErr := json.Marshal(err)
 	if marshalErr != nil {
@@ -86,13 +102,15 @@ func DefaultUnknownTypeHandler(err Error) error {
 // UnknownTypeHandler is a function that handles errors of unknown types.
 type UnknownTypeHandler func(err Error) error
 
-// UnmarshalError implements json.UnmarshalerFrom using a custom
-// UnknownTypeHandler for unknown error types.
+// UnmarshalErrorWithHandler implements json.UnmarshalerFrom using a custom
+// UnknownTypeHandler for unknown error types. The unmarshaled error is stored
+// in the Err field.
 type UnmarshalErrorWithHandler struct {
+	Err     error
 	handler UnknownTypeHandler
 }
 
-// NewUnmarshalError creates a new UnmarshalError with the given UnknownTypeHandler.
+// NewUnmarshalError creates a new UnmarshalErrorWithHandler with the given UnknownTypeHandler.
 // If handler is nil, DefaultUnknownTypeHandler is used.
 func NewUnmarshalError(handler UnknownTypeHandler) *UnmarshalErrorWithHandler {
 	if handler == nil {
@@ -105,11 +123,17 @@ func NewUnmarshalError(handler UnknownTypeHandler) *UnmarshalErrorWithHandler {
 // error. The first return value is the decoded application error (or the
 // handler's result for unknown types); the second is any decoding failure.
 func (ue *UnmarshalErrorWithHandler) Unmarshal(data []byte) (error, error) {
+	if string(data) == "null" || len(data) == 0 {
+		return nil, nil
+	}
 	var env Error
 	if err := json.Unmarshal(data, &env); err != nil {
 		return nil, err
 	}
-	factory, ok := errorTypes[env.Type]
+	if env.Type == "" && env.Error == "" && (len(env.Detail) == 0 || string(env.Detail) == "null") {
+		return nil, nil
+	}
+	factory, ok := getErrorFactory(env.Type)
 	if !ok {
 		if ue.handler != nil {
 			return ue.handler(env), nil
@@ -124,21 +148,27 @@ func (ue *UnmarshalErrorWithHandler) UnmarshalJSONFrom(dec *jsontext.Decoder) er
 	if err := env.UnmarshalJSONFrom(dec); err != nil {
 		return err
 	}
-	factory, ok := errorTypes[env.Type]
+	if env.Type == "" && env.Error == "" && (len(env.Detail) == 0 || string(env.Detail) == "null") {
+		ue.Err = nil
+		return nil
+	}
+	factory, ok := getErrorFactory(env.Type)
 	if !ok {
 		if ue.handler != nil {
-			return ue.handler(env)
+			ue.Err = ue.handler(env)
+			return nil
 		}
 		return fmt.Errorf("unknown remote error type %q", env.Type)
 	}
-	err, err2 := factory(env.Detail)
-	if err2 != nil {
-		return err2
+	appErr, decErr := factory(env.Detail)
+	if decErr != nil {
+		return decErr
 	}
-	return err
+	ue.Err = appErr
+	return nil
 }
 
-// Error represents the 'on-the-wire' error representation. All errors are
+// Error represents the 'on-the-wire' error representation. All errors
 // must be converted to this form before being sent over the wire, and converted
 // back to an error on the receiving side. The Type field is used to determine
 // the concrete type of the error on the receiving side, and the Detail field

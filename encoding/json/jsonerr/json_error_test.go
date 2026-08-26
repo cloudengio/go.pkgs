@@ -9,6 +9,7 @@ import (
 	"encoding/json/jsontext"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"cloudeng.io/encoding/json/jsonerr"
@@ -305,7 +306,7 @@ func TestNewUnmarshalErrorCustomHandler(t *testing.T) {
 func TestUnmarshalErrorWithHandlerKnownType(t *testing.T) {
 	// When the type IS registered, the custom handler is NOT invoked.
 	handlerCalled := false
-	handler := func(env jsonerr.Error) error {
+	handler := func(_ jsonerr.Error) error {
 		handlerCalled = true
 		return errors.New("handler should not run")
 	}
@@ -348,4 +349,104 @@ func TestNewUnmarshalErrorNilHandlerUsesDefault(t *testing.T) {
 	if got.Error() != "fallback message" {
 		t.Errorf("Error(): got %q, want \"fallback message\"", got.Error())
 	}
+}
+
+func TestMarshalErrorNil(t *testing.T) {
+	data, err := jsonerr.MarshalError(nil)
+	if err != nil {
+		t.Fatalf("MarshalError(nil): %v", err)
+	}
+	got, decErr := jsonerr.UnmarshalError(data)
+	if decErr != nil {
+		t.Fatalf("UnmarshalError: %v", decErr)
+	}
+	if got != nil {
+		t.Errorf("expected nil error after roundtrip of nil, got %v", got)
+	}
+}
+
+func TestUnmarshalJSONFromWithHandler(t *testing.T) {
+	t.Run("known type", func(t *testing.T) {
+		orig := &testError{Code: 123, Message: "streamed error"}
+		data, err := jsonerr.MarshalError(orig)
+		if err != nil {
+			t.Fatalf("MarshalError: %v", err)
+		}
+
+		ue := jsonerr.NewUnmarshalError(nil)
+		dec := jsontext.NewDecoder(strings.NewReader(string(data)))
+		if err := ue.UnmarshalJSONFrom(dec); err != nil {
+			t.Fatalf("UnmarshalJSONFrom: %v", err)
+		}
+		if ue.Err == nil {
+			t.Fatal("ue.Err is nil, want testError")
+		}
+		var te *testError
+		if !errors.As(ue.Err, &te) {
+			t.Fatalf("errors.As(*testError) = false, want true")
+		}
+		if te.Code != 123 || te.Message != "streamed error" {
+			t.Errorf("got %v, want code 123 / message 'streamed error'", te)
+		}
+	})
+
+	t.Run("nil envelope", func(t *testing.T) {
+		ue := jsonerr.NewUnmarshalError(nil)
+		dec := jsontext.NewDecoder(strings.NewReader(`{"error":"","type":"","detail":null}`))
+		if err := ue.UnmarshalJSONFrom(dec); err != nil {
+			t.Fatalf("UnmarshalJSONFrom: %v", err)
+		}
+		if ue.Err != nil {
+			t.Errorf("expected ue.Err == nil, got %v", ue.Err)
+		}
+	})
+
+	t.Run("custom handler", func(t *testing.T) {
+		handler := func(env jsonerr.Error) error {
+			return &testError{Code: 777, Message: "handled: " + env.Error}
+		}
+		ue := jsonerr.NewUnmarshalError(handler)
+		dec := jsontext.NewDecoder(strings.NewReader(`{"error":"custom err","type":"unknown.Type","detail":null}`))
+		if err := ue.UnmarshalJSONFrom(dec); err != nil {
+			t.Fatalf("UnmarshalJSONFrom: %v", err)
+		}
+		if ue.Err == nil {
+			t.Fatal("expected ue.Err non-nil, got nil")
+		}
+		var te *testError
+		if !errors.As(ue.Err, &te) {
+			t.Fatalf("errors.As(*testError) = false, want true")
+		}
+		if te.Code != 777 || te.Message != "handled: custom err" {
+			t.Errorf("got %v, want code 777 / message 'handled: custom err'", te)
+		}
+	})
+}
+
+type concurrentTestError struct {
+	Val int `json:"val"`
+}
+
+func (e *concurrentTestError) Error() string { return "concurrent error" }
+
+func TestConcurrentRegistry(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			jsonerr.RegisterErrorType[concurrentTestError, *concurrentTestError]()
+		}()
+		go func(val int) {
+			defer wg.Done()
+			orig := &concurrentTestError{Val: val}
+			data, err := jsonerr.MarshalError(orig)
+			if err != nil {
+				t.Errorf("MarshalError: %v", err)
+				return
+			}
+			_, _ = jsonerr.UnmarshalError(data)
+		}(i)
+	}
+	wg.Wait()
 }

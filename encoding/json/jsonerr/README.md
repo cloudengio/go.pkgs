@@ -26,7 +26,7 @@ MarshalError marshals an error into an Error struct suitable for
 transmission over the wire. TypeNameForError(err) is used to set Error.Type,
 Error.Error is set to err.Error(), and Error.Detail is set to the
 JSON-encoded representation of err. Error.Type must be registered using
-RegisterErrorType by the receipient of the marshaled error in order to
+RegisterErrorType by the recipient of the marshaled error in order to
 unmarshal the error back into its corresponding concrete type.
 
 ### Func RegisterErrorType
@@ -64,7 +64,7 @@ type Error struct {
 	Detail jsontext.Value `json:"detail"`
 }
 ```
-Error represents the 'on-the-wire' error representation. All errors are must
+Error represents the 'on-the-wire' error representation. All errors must
 be converted to this form before being sent over the wire, and converted
 back to an error on the receiving side. The Type field is used to determine
 the concrete type of the error on the receiving side, and the Detail field
@@ -94,18 +94,20 @@ UnknownTypeHandler is a function that handles errors of unknown types.
 ### Type UnmarshalErrorWithHandler
 ```go
 type UnmarshalErrorWithHandler struct {
+	Err error
 	// contains filtered or unexported fields
 }
 ```
-UnmarshalError implements json.UnmarshalerFrom using a custom
-UnknownTypeHandler for unknown error types.
+UnmarshalErrorWithHandler implements json.UnmarshalerFrom using a custom
+UnknownTypeHandler for unknown error types. The unmarshaled error is stored
+in the Err field.
 
 ### Functions
 
 ```go
 func NewUnmarshalError(handler UnknownTypeHandler) *UnmarshalErrorWithHandler
 ```
-NewUnmarshalError creates a new UnmarshalError with the given
+NewUnmarshalError creates a new UnmarshalErrorWithHandler with the given
 UnknownTypeHandler. If handler is nil, DefaultUnknownTypeHandler is used.
 
 
