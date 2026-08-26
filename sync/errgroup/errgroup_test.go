@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -130,62 +131,76 @@ func ExampleWithCancel() {
 }
 
 func testConcurrency(t *testing.T, concurrency int) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	g, ctx := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, concurrency)
 
-	var started int64
-	var wg sync.WaitGroup
-	wg.Add(1)
-	intCh := make(chan int64, 1)
-
-	go func() {
-		// This could be flaky, but in practice, 1 seconds should be massively
-		// conservative for starting a small # of goroutines that immediately
-		// call select.
-		time.Sleep(time.Second)
-		intCh <- atomic.LoadInt64(&started)
-		cancel()
-		wg.Done()
-	}()
-
 	invocations := 50
-	for range invocations {
-		g.Go(func() error {
-			atomic.AddInt64(&started, 1)
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(time.Hour):
-			}
-			return nil
-		})
+	// The number of goroutines that are expected to run concurrently; a
+	// concurrency of 0 means no limit and hence all of them.
+	expected := concurrency
+	if concurrency == 0 {
+		expected = invocations
 	}
+
+	var started int64
+	// Buffered so that a goroutine can signal that it is running without
+	// waiting for the signal to be read.
+	startedCh := make(chan struct{}, invocations)
+
+	// Go blocks once the concurrency limit is reached, so the invocations
+	// are issued from a separate goroutine to leave this one free to
+	// synchronize with them below.
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range invocations {
+			g.Go(func() error {
+				atomic.AddInt64(&started, 1)
+				startedCh <- struct{}{}
+				<-ctx.Done()
+				return nil
+			})
+		}
+	})
+
+	// Wait for the expected number of goroutines to signal that they are
+	// running. Each one blocks until the context is canceled below, so this
+	// only completes if they all run concurrently.
+	for range expected {
+		<-startedCh
+	}
+
+	// Every running goroutine is blocked on ctx.Done and none of them has
+	// released its slot, so no further goroutine can start until cancel is
+	// called: another signal here means the limit was exceeded. Yield first
+	// to give any such goroutine the chance to run and signal.
+	runtime.Gosched()
+	select {
+	case <-startedCh:
+		t.Errorf("more than %v goroutines ran concurrently", expected)
+	default:
+	}
+
+	// Release the running goroutines, allowing any remaining invocations to
+	// be issued and to run to completion.
+	cancel()
+	wg.Wait()
 	if err := g.Wait(); err != nil {
 		t.Errorf("unexpected error: %v", err)
-	}
-
-	if concurrency == 0 {
-		// No limit on concurrency, make sure we've started at least
-		// half the requested invocations.
-		if got, want := <-intCh, int64(invocations)/2; got < want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-	} else {
-		if got, want := <-intCh, int64(concurrency); got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
 	}
 
 	if got, want := atomic.LoadInt64(&started), int64(invocations); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
-	wg.Wait()
 }
 
 func TestLimit(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	// The goroutines are synchronized with via WaitGroups, whose Wait can
+	// return while the goroutine that satisfied it is still unwinding, hence
+	// the grace period.
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	testConcurrency(t, 2)
 	// Test with no limit.
 	testConcurrency(t, 0)
