@@ -26,12 +26,12 @@ MarshalError marshals an error into an Error struct suitable for
 transmission over the wire. TypeNameForError(err) is used to set Error.Type,
 Error.Error is set to err.Error(), and Error.Detail is set to the
 JSON-encoded representation of err. Error.Type must be registered using
-RegisterErrorType by the recipient of the marshaled error in order to
-unmarshal the error back into its corresponding concrete type.
+RegisterType by the recipient of the marshaled error in order to unmarshal
+the error back into its corresponding concrete type.
 
-### Func RegisterErrorType
+### Func RegisterType
 ```go
-func RegisterErrorType[T any, PT interface {
+func RegisterType[T any, PT interface {
 	*T
 	error
 }]()

@@ -41,8 +41,8 @@ func (e *otherError) Is(target error) bool {
 }
 
 func init() {
-	jsonerr.RegisterErrorType[testError, *testError]()
-	jsonerr.RegisterErrorType[otherError, *otherError]()
+	jsonerr.RegisterType[testError, *testError]()
+	jsonerr.RegisterType[otherError, *otherError]()
 }
 
 func TestTypeNameForError(t *testing.T) {
@@ -435,7 +435,7 @@ func TestConcurrentRegistry(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			jsonerr.RegisterErrorType[concurrentTestError, *concurrentTestError]()
+			jsonerr.RegisterType[concurrentTestError, *concurrentTestError]()
 		}()
 		go func(val int) {
 			defer wg.Done()
