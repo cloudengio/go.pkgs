@@ -39,7 +39,6 @@ func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Ty
 		return nil
 	}
 	for field := range typ.Fields() {
-		field := field
 		doc, ok := field.Tag.Lookup(tagName)
 		if ok && doc == "-" {
 			continue
