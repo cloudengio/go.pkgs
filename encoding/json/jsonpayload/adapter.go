@@ -11,8 +11,9 @@ import (
 
 // Wrapper adapts any json-marshalable type T to the json.MarshalerTo
 // and json.UnmarshalerFrom interfaces. It is not intended for
-// performance-sensitive code. Also note that it's type name will
-// include the full generic type name, e.g. "cloudeng.io/encoding/json/jsonpayload.Wrapper[example.com/pkg.MyType]".
+// performance-sensitive code. Also note that its type name will
+// include the full generic type name,
+// e.g. "cloudeng.io/encoding/json/jsonpayload.Wrapper[example.com/pkg.MyType]".
 type Wrapper[T any] struct {
 	Value T
 }

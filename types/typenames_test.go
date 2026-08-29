@@ -72,28 +72,85 @@ func TestTypeNamePointerIndirection(t *testing.T) {
 	}
 }
 
-// TestTypeNameUnnamedTypes documents that a composite type with no name of its
-// own is reported as the empty string: there is nothing to qualify. Note that
-// this means all such types share a single name.
+// TestTypeNameUnnamedTypes verifies that a composite type with no name of its
+// own is described in terms of the fully qualified names of the types it is
+// built from, so that distinct types never share a name.
 func TestTypeNameUnnamedTypes(t *testing.T) {
 	for _, tc := range []struct {
-		name, got string
+		name, got, want string
 	}{
-		{"slice", types.TypeName[[]int]()},
-		{"map", types.TypeName[map[string]int]()},
-		{"array", types.TypeName[[3]int]()},
-		{"channel", types.TypeName[chan int]()},
-		{"func", types.TypeName[func() error]()},
-		{"anonymous struct", types.TypeName[struct{ A int }]()},
-		{"any", types.TypeName[any]()},
-		// Only pointer indirection is removed, so the element type of a
-		// composite is not consulted.
-		{"slice of pointers", types.TypeName[[]*myStruct]()},
-		{"pointer to slice", types.TypeName[*[]int]()},
+		{"slice", types.TypeName[[]int](), "[]int"},
+		{"slice of named", types.TypeName[[]myStruct](), "[]" + pkg + ".myStruct"},
+		{"slice of pointers", types.TypeName[[]*myStruct](), "[]*" + pkg + ".myStruct"},
+		{"nested slice", types.TypeName[[][]myInt](), "[][]" + pkg + ".myInt"},
+		{"array", types.TypeName[[3]int](), "[3]int"},
+		{"map", types.TypeName[map[string]int](), "map[string]int"},
+		{"map of named", types.TypeName[map[myInt][]myStruct](),
+			"map[" + pkg + ".myInt][]" + pkg + ".myStruct"},
+		{"channel", types.TypeName[chan int](), "chan int"},
+		{"receive channel", types.TypeName[<-chan myStruct](), "<-chan " + pkg + ".myStruct"},
+		{"send channel", types.TypeName[chan<- int](), "chan<- int"},
+		{"func", types.TypeName[func() error](), "func() error"},
+		{"func with args", types.TypeName[func(int, myStruct) (bool, error)](),
+			"func(int, " + pkg + ".myStruct) (bool, error)"},
+		{"variadic func", types.TypeName[func(...string)](), "func(...string)"},
+		{"empty struct", types.TypeName[struct{}](), "struct {}"},
+		{"anonymous struct", types.TypeName[struct{ A int }](), "struct { A int }"},
+		{"anonymous struct of named", types.TypeName[struct {
+			A myInt
+			B *myStruct
+		}](), "struct { A " + pkg + ".myInt; B *" + pkg + ".myStruct }"},
+		{"any", types.TypeName[any](), "interface {}"},
+		{"anonymous interface", types.TypeName[interface{ Foo(int) error }](),
+			"interface { Foo(int) error }"},
+
+		// Only the outermost pointer is removed, so the element type of a
+		// composite is still reported.
+		{"pointer to slice", types.TypeName[*[]int](), "[]int"},
+		{"pointer inside a slice", types.TypeName[[]**myStruct](), "[]**" + pkg + ".myStruct"},
 	} {
-		if tc.got != "" {
-			t.Errorf("%v: got %q, want the empty string", tc.name, tc.got)
+		if tc.got != tc.want {
+			t.Errorf("%v: got %q, want %q", tc.name, tc.got, tc.want)
 		}
+	}
+}
+
+// TestTypeNameDistinct verifies the property that the structural naming exists
+// to provide: no two distinct types share a name. Sharing one would let
+// unrelated types collide in a registry keyed by type name.
+func TestTypeNameDistinct(t *testing.T) {
+	names := map[string]string{}
+	for _, tc := range []struct{ name, got string }{
+		{"myStruct", types.TypeName[myStruct]()},
+		{"myInt", types.TypeName[myInt]()},
+		{"mySlice", types.TypeName[mySlice]()},
+		{"[]int", types.TypeName[[]int]()},
+		{"[]myStruct", types.TypeName[[]myStruct]()},
+		{"[]*myStruct", types.TypeName[[]*myStruct]()},
+		{"[3]int", types.TypeName[[3]int]()},
+		{"[4]int", types.TypeName[[4]int]()},
+		{"map[string]int", types.TypeName[map[string]int]()},
+		{"map[int]string", types.TypeName[map[int]string]()},
+		{"chan int", types.TypeName[chan int]()},
+		{"<-chan int", types.TypeName[<-chan int]()},
+		{"chan<- int", types.TypeName[chan<- int]()},
+		{"func()", types.TypeName[func()]()},
+		{"func() error", types.TypeName[func() error]()},
+		{"struct{}", types.TypeName[struct{}]()},
+		{"struct{A int}", types.TypeName[struct{ A int }]()},
+		{"struct{B int}", types.TypeName[struct{ B int }]()},
+		{"any", types.TypeName[any]()},
+		{"int", types.TypeName[int]()},
+	} {
+		if tc.got == "" {
+			t.Errorf("%v: got the empty string", tc.name)
+			continue
+		}
+		if prev, ok := names[tc.got]; ok {
+			t.Errorf("%v and %v share the name %q", prev, tc.name, tc.got)
+			continue
+		}
+		names[tc.got] = tc.name
 	}
 }
 
@@ -134,10 +191,12 @@ func TestTypeNameForValue(t *testing.T) {
 		// whatever interface it was passed as.
 		{"error value", errors.New("an error"), "errors.errorString"},
 
-		// As for TypeName, unnamed composite types have no name to report.
-		{"slice", []int{1, 2}, ""},
-		{"map", map[string]int{"a": 1}, ""},
-		{"anonymous struct", struct{ A int }{A: 1}, ""},
+		// As for TypeName, unnamed composite types are described
+		// structurally.
+		{"slice", []int{1, 2}, "[]int"},
+		{"slice of named", []myStruct{{}}, "[]" + pkg + ".myStruct"},
+		{"map", map[string]int{"a": 1}, "map[string]int"},
+		{"anonymous struct", struct{ A int }{A: 1}, "struct { A int }"},
 	} {
 		if got, want := types.TypeNameForValue(tc.v), tc.want; got != want {
 			t.Errorf("%v: got %q, want %q", tc.name, got, want)
@@ -227,6 +286,26 @@ func TestTypeNameCaching(t *testing.T) {
 	for i, g := range got {
 		if g != want {
 			t.Errorf("goroutine %v: got %v, want %v", i, g, want)
+		}
+	}
+}
+
+// TestTypeNameAnonymousInterfaces covers the remaining shapes an unnamed
+// interface can take: several methods, and an unexported method, whose name is
+// qualified by the package that declares it since it is only accessible there.
+func TestTypeNameAnonymousInterfaces(t *testing.T) {
+	for _, tc := range []struct {
+		name, got, want string
+	}{
+		{"two methods", types.TypeName[interface {
+			Foo(int) error
+			Bar()
+		}](), "interface { Bar(); Foo(int) error }"},
+		{"unexported method", types.TypeName[interface{ foo() myInt }](),
+			"interface { " + pkg + ".foo() " + pkg + ".myInt }"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%v: got %q, want %q", tc.name, tc.got, tc.want)
 		}
 	}
 }

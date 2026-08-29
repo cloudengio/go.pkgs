@@ -30,7 +30,6 @@ func (a *myStruct) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 		A int `json:"A"`
 	}
 	if err := json.Unmarshal([]byte(val), &tmp); err != nil {
-		fmt.Printf("UnmarshalJSONFrom: unmarshal failed: %v\n", err)
 		return err
 	}
 	a.A = tmp.A
@@ -49,9 +48,8 @@ func TestEncodeDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal failed: %v", err)
 	}
-	fmt.Printf("Encoded payload: %s\n", buf)
 
-	rd := jsonpayload.NewReader[*myStruct]()
+	rd := jsonpayload.NewReader(&myStruct{})
 	if err := json.Unmarshal(buf, &rd); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}

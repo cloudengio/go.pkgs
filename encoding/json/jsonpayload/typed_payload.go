@@ -8,6 +8,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"reflect"
 
 	"cloudeng.io/types"
 )
@@ -47,17 +48,18 @@ func (w Writer[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
 }
 
 // Reader is a JSON decoder for typed messages. It should be used when the
-// expected type is known at compile time. T is the type decoded into, which
-// is typically a pointer type since UnmarshalJSONFrom is usually implemented
-// on a pointer receiver; the type name expected in the message is that of the
-// value type either way, since TypeName removes pointer indirection.
+// expected type is known at compile time, in which case no registration is
+// required. Value is supplied by the caller and decoded into in place, so
+// that decoding allocates nothing; it must be non-nil. Decoding twice into
+// the same Reader decodes into the same value both times.
 type Reader[T json.UnmarshalerFrom] struct {
 	Value T
 }
 
-// NewReader returns a Reader for messages carrying a T.
-func NewReader[T json.UnmarshalerFrom]() Reader[T] {
-	return Reader[T]{}
+// NewReader returns a Reader that decodes into val. The type argument is
+// inferred from val.
+func NewReader[T json.UnmarshalerFrom](val T) Reader[T] {
+	return Reader[T]{Value: val}
 }
 
 func readToPayload(dec *jsontext.Decoder) (string, error) {
@@ -102,7 +104,7 @@ func readToEndObject(dec *jsontext.Decoder) error {
 	return nil
 }
 
-func (r *Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+func (r Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	typeName, err := readToPayload(dec)
 	if err != nil {
 		return err
@@ -111,10 +113,11 @@ func (r *Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if typeName != tn {
 		return fmt.Errorf("expected type name %q, got %q", tn, typeName)
 	}
-	if val, ok := New(tn); !ok {
-		return fmt.Errorf("no registered type for %q", tn)
-	} else if r.Value, ok = val.(T); !ok {
-		return fmt.Errorf("registered type for %q is not of expected type", tn)
+	// Decoding is into the caller's value, so report a missing one rather
+	// than leaving it to the payload's own decoder to fail, or panic, on a
+	// nil receiver.
+	if rv := reflect.ValueOf(r.Value); !rv.IsValid() || (rv.Kind() == reflect.Pointer && rv.IsNil()) {
+		return fmt.Errorf("no value to decode %q into: Reader.Value is nil", tn)
 	}
 	if err := r.Value.UnmarshalJSONFrom(dec); err != nil {
 		return err
@@ -124,7 +127,8 @@ func (r *Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 
 // ReaderAny is a JSON decoder for typed messages. It should be used when the
 // expected type is not known at compile time. The Value field will be set to
-// the decoded value.
+// the decoded value. All types that may be decoded must be registered with
+// RegisterType.
 type ReaderAny struct {
 	Value json.UnmarshalerFrom
 }
@@ -134,7 +138,7 @@ func (r *ReaderAny) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if err != nil {
 		return err
 	}
-	if val, ok := New(typeName); !ok {
+	if val, ok := newInstance(typeName); !ok {
 		return fmt.Errorf("no registered type for %q", typeName)
 	} else if r.Value, ok = val.(json.UnmarshalerFrom); !ok {
 		return fmt.Errorf("registered type for %q is not of expected type", typeName)

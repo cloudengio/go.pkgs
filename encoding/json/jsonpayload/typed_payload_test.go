@@ -5,6 +5,7 @@
 package jsonpayload_test
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -184,7 +185,7 @@ func TestReaderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[*payload]()
+	rd := jsonpayload.NewReader(&payload{})
 	if err := json.Unmarshal(buf, &rd); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
@@ -203,7 +204,8 @@ func TestReaderTypeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[*payload]()
+	into := &payload{}
+	rd := jsonpayload.NewReader(into)
 	err = json.Unmarshal(buf, &rd)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
@@ -211,25 +213,85 @@ func TestReaderTypeMismatch(t *testing.T) {
 	if got := err.Error(); !strings.Contains(got, "expected type name") {
 		t.Errorf("got %v, want it to mention the expected type name", got)
 	}
-	if rd.Value != nil {
-		t.Errorf("Value was set despite the mismatch: %+v", rd.Value)
+	if got, want := *into, (payload{}); got != want {
+		t.Errorf("the value was written to despite the mismatch: got %+v, want %+v", got, want)
 	}
 }
 
-// TestReaderUnregisteredType verifies the error when a message names a type
-// that was never registered, so there is nothing to construct.
-func TestReaderUnregisteredType(t *testing.T) {
+// TestReaderNeedsNoRegistration verifies that a Reader decodes a type that was
+// never registered: it knows the type at compile time and allocates the value
+// itself, so only ReaderAny depends on the registry.
+func TestReaderNeedsNoRegistration(t *testing.T) {
 	buf, err := json.Marshal(jsonpayload.NewWriter(&notRegistered{A: 1}))
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[*notRegistered]()
-	err = json.Unmarshal(buf, &rd)
-	if err == nil {
-		t.Fatal("expected an error, got nil")
+	rd := jsonpayload.NewReader(&notRegistered{})
+	if err := json.Unmarshal(buf, &rd); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
 	}
-	if got := err.Error(); !strings.Contains(got, "no registered type") {
-		t.Errorf("got %v, want it to mention that no type is registered", got)
+	if rd.Value == nil {
+		t.Fatal("Value was not set")
+	}
+	if got, want := *rd.Value, (notRegistered{A: 1}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+// TestReaderDecodesInPlace verifies that decoding is into the value the
+// caller supplied, allocating nothing and leaving the caller holding the
+// decoded value.
+func TestReaderDecodesInPlace(t *testing.T) {
+	buf, err := json.Marshal(jsonpayload.NewWriter(&payload{A: 42}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	into := &payload{}
+	rd := jsonpayload.Reader[*payload]{Value: into}
+	if err := json.Unmarshal(buf, &rd); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if rd.Value != into {
+		t.Error("Value was replaced rather than decoded into")
+	}
+	if got, want := *into, (payload{A: 42}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+
+	// Decoding again reuses the same value.
+	if err := json.Unmarshal(buf, &rd); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if rd.Value != into {
+		t.Error("the second decode replaced the value")
+	}
+}
+
+// TestReaderNilValue verifies that a Reader with no value to decode into
+// reports that, rather than leaving the payload's own decoder to fail or
+// panic on a nil receiver.
+func TestReaderNilValue(t *testing.T) {
+	buf, err := json.Marshal(jsonpayload.NewWriter(&payload{A: 42}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		rd   jsonpayload.Reader[*payload]
+	}{
+		{"zero value", jsonpayload.Reader[*payload]{}},
+		{"explicit nil", jsonpayload.NewReader[*payload](nil)},
+	} {
+		rd := tc.rd
+		err := json.Unmarshal(buf, &rd)
+		if err == nil {
+			t.Errorf("%v: expected an error, got nil", tc.name)
+			continue
+		}
+		if got := err.Error(); !strings.Contains(got, "is nil") {
+			t.Errorf("%v: got %v, want it to report a nil Value", tc.name, got)
+		}
 	}
 }
 
@@ -240,7 +302,7 @@ func TestReaderPayloadError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[*failUnmarshal]()
+	rd := jsonpayload.NewReader(&failUnmarshal{})
 	err = json.Unmarshal(buf, &rd)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
@@ -270,7 +332,7 @@ var malformedEnvelopes = []struct {
 
 func TestReaderMalformed(t *testing.T) {
 	for _, tc := range malformedEnvelopes {
-		rd := jsonpayload.NewReader[*payload]()
+		rd := jsonpayload.NewReader(&payload{})
 		err := decodeString(&rd, tc.input)
 		if err == nil {
 			t.Errorf("%v: expected an error, got nil", tc.name)
@@ -292,7 +354,7 @@ func TestReaderTrailingContent(t *testing.T) {
 		{"missing end object", prefix, ""},
 		{"extra member", prefix + `,"extra":1}`, "expected '}'"},
 	} {
-		rd := jsonpayload.NewReader[*payload]()
+		rd := jsonpayload.NewReader(&payload{})
 		err := decodeString(&rd, tc.input)
 		if err == nil {
 			t.Errorf("%v: expected an error, got nil", tc.name)
@@ -432,4 +494,24 @@ func TestWriterEncoderError(t *testing.T) {
 			t.Errorf("limit %v: got %v, want it to wrap %v", limit, err, errWriteFailed)
 		}
 	}
+}
+
+// TestReaderValueReceiver verifies that a Reader can be decoded through
+// without taking its address, since it holds nothing that decoding modifies.
+func TestReaderValueReceiver(t *testing.T) {
+	buf, err := json.Marshal(jsonpayload.NewWriter(&payload{A: 42}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	into := &payload{}
+	rd := jsonpayload.NewReader(into)
+	// No &rd: the Reader itself implements json.UnmarshalerFrom.
+	if err := rd.UnmarshalJSONFrom(jsontext.NewDecoder(bytes.NewReader(buf))); err != nil {
+		t.Fatalf("UnmarshalJSONFrom: %v", err)
+	}
+	if got, want := *into, (payload{A: 42}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	var _ json.UnmarshalerFrom = rd
+	var _ json.UnmarshalerFrom = &rd
 }
