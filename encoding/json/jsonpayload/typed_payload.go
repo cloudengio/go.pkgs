@@ -12,21 +12,21 @@ import (
 	"cloudeng.io/types"
 )
 
-// Marshaler is a type constraint for encoding typed messages.
-type Marshaler[T any] interface {
-	*T
-	json.MarshalerTo
+// Writer is a JSON encoder for typed messages. T is the type of the value
+// being encoded, which is typically a pointer type since MarshalJSONTo is
+// usually implemented on a pointer receiver; the type name written to the
+// message is that of the value type either way, since TypeName removes
+// pointer indirection.
+type Writer[T json.MarshalerTo] struct {
+	Value T
 }
 
-type Writer[T any, PT Marshaler[T]] struct {
-	Value PT
+// NewWriter returns a Writer for val. The type argument is inferred from val.
+func NewWriter[T json.MarshalerTo](val T) Writer[T] {
+	return Writer[T]{Value: val}
 }
 
-func NewWriter[T any, PT Marshaler[T]](val PT) Writer[T, PT] {
-	return Writer[T, PT]{Value: val}
-}
-
-func (w Writer[T, PT]) MarshalJSONTo(enc *jsontext.Encoder) error {
+func (w Writer[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
 	}
@@ -46,20 +46,18 @@ func (w Writer[T, PT]) MarshalJSONTo(enc *jsontext.Encoder) error {
 	return enc.WriteToken(jsontext.EndObject)
 }
 
-// JSONUnmarshaler is a type constraint for decoding typed messages.
-type Unmarshaler[T any] interface {
-	*T
-	json.UnmarshalerFrom
-}
-
 // Reader is a JSON decoder for typed messages. It should be used when the
-// expected type is known at compile time.
-type Reader[T any, PT Unmarshaler[T]] struct {
-	Value PT
+// expected type is known at compile time. T is the type decoded into, which
+// is typically a pointer type since UnmarshalJSONFrom is usually implemented
+// on a pointer receiver; the type name expected in the message is that of the
+// value type either way, since TypeName removes pointer indirection.
+type Reader[T json.UnmarshalerFrom] struct {
+	Value T
 }
 
-func NewReader[T any, PT Unmarshaler[T]]() Reader[T, PT] {
-	return Reader[T, PT]{}
+// NewReader returns a Reader for messages carrying a T.
+func NewReader[T json.UnmarshalerFrom]() Reader[T] {
+	return Reader[T]{}
 }
 
 func readToPayload(dec *jsontext.Decoder) (string, error) {
@@ -104,7 +102,7 @@ func readToEndObject(dec *jsontext.Decoder) error {
 	return nil
 }
 
-func (r *Reader[T, PT]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+func (r *Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	typeName, err := readToPayload(dec)
 	if err != nil {
 		return err
@@ -115,7 +113,7 @@ func (r *Reader[T, PT]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	}
 	if val, ok := New(tn); !ok {
 		return fmt.Errorf("no registered type for %q", tn)
-	} else if r.Value, ok = val.(PT); !ok {
+	} else if r.Value, ok = val.(T); !ok {
 		return fmt.Errorf("registered type for %q is not of expected type", tn)
 	}
 	if err := r.Value.UnmarshalJSONFrom(dec); err != nil {

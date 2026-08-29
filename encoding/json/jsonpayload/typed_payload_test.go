@@ -184,7 +184,7 @@ func TestReaderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[payload]()
+	rd := jsonpayload.NewReader[*payload]()
 	if err := json.Unmarshal(buf, &rd); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestReaderTypeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[payload]()
+	rd := jsonpayload.NewReader[*payload]()
 	err = json.Unmarshal(buf, &rd)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
@@ -223,7 +223,7 @@ func TestReaderUnregisteredType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[notRegistered]()
+	rd := jsonpayload.NewReader[*notRegistered]()
 	err = json.Unmarshal(buf, &rd)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
@@ -240,7 +240,7 @@ func TestReaderPayloadError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	rd := jsonpayload.NewReader[failUnmarshal]()
+	rd := jsonpayload.NewReader[*failUnmarshal]()
 	err = json.Unmarshal(buf, &rd)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
@@ -270,7 +270,7 @@ var malformedEnvelopes = []struct {
 
 func TestReaderMalformed(t *testing.T) {
 	for _, tc := range malformedEnvelopes {
-		rd := jsonpayload.NewReader[payload]()
+		rd := jsonpayload.NewReader[*payload]()
 		err := decodeString(&rd, tc.input)
 		if err == nil {
 			t.Errorf("%v: expected an error, got nil", tc.name)
@@ -292,7 +292,7 @@ func TestReaderTrailingContent(t *testing.T) {
 		{"missing end object", prefix, ""},
 		{"extra member", prefix + `,"extra":1}`, "expected '}'"},
 	} {
-		rd := jsonpayload.NewReader[payload]()
+		rd := jsonpayload.NewReader[*payload]()
 		err := decodeString(&rd, tc.input)
 		if err == nil {
 			t.Errorf("%v: expected an error, got nil", tc.name)

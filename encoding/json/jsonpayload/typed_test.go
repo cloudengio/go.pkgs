@@ -51,7 +51,7 @@ func TestEncodeDecode(t *testing.T) {
 	}
 	fmt.Printf("Encoded payload: %s\n", buf)
 
-	rd := jsonpayload.NewReader[myStruct]()
+	rd := jsonpayload.NewReader[*myStruct]()
 	if err := json.Unmarshal(buf, &rd); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}

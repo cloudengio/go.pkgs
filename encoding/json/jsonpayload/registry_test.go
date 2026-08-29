@@ -15,9 +15,6 @@ type regA struct{ A int }
 
 type regB struct{ B string }
 
-// regUnregistered is deliberately never registered.
-type regUnregistered struct{}
-
 func init() {
 	jsonpayload.RegisterType[regA]()
 	jsonpayload.RegisterType[regB]()
