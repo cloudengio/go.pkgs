@@ -151,7 +151,7 @@ type ReadWriter struct {
 }
 
 func (rw ReadWriter) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return Writer{Err: rw.Err}.MarshalJSONTo(enc)
+	return Writer(rw).MarshalJSONTo(enc)
 }
 
 func (rw *ReadWriter) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
