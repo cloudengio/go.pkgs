@@ -5,448 +5,319 @@
 package jsonerr_test
 
 import (
-	"encoding/json"
-	"encoding/json/jsontext"
 	"errors"
+	"fmt"
 	"strings"
-	"sync"
 	"testing"
 
+	"encoding/json/v2"
+
 	"cloudeng.io/encoding/json/jsonerr"
+	"cloudeng.io/encoding/json/jsonpayload"
 )
 
-// testError is a concrete error type for use in tests.
-type testError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+const testPkg = "cloudeng.io/encoding/json/jsonerr_test"
+
+// notFound is an ordinary error type: a struct with an Error method and no
+// JSON methods of its own.
+type notFound struct {
+	Name string `json:"name"`
+	Code int    `json:"code"`
 }
 
-func (e *testError) Error() string { return e.Message }
+func (e *notFound) Error() string { return fmt.Sprintf("%v not found (%v)", e.Name, e.Code) }
 
-func (e *testError) Is(target error) bool {
-	_, ok := target.(*testError)
-	return ok
+func (e *notFound) Is(target error) bool {
+	other, ok := target.(*notFound)
+	return ok && (other.Name == "" || other.Name == e.Name)
 }
 
-// otherError is a second concrete type to verify type isolation.
-type otherError struct {
-	Reason string `json:"reason"`
+// denied is a second registered type, to check that the type name selects the
+// error that is reconstructed.
+type denied struct {
+	User string `json:"user"`
 }
 
-func (e *otherError) Error() string { return e.Reason }
+func (e *denied) Error() string { return "denied: " + e.User }
 
-func (e *otherError) Is(target error) bool {
-	_, ok := target.(*otherError)
-	return ok
+// unregistered is encodable but deliberately never registered.
+type unregistered struct {
+	Why string `json:"why"`
+}
+
+func (e *unregistered) Error() string { return "unregistered: " + e.Why }
+
+// notAnError is registered but is not an error.
+type notAnError struct {
+	A int `json:"a"`
 }
 
 func init() {
-	jsonerr.RegisterType[testError, *testError]()
-	jsonerr.RegisterType[otherError, *otherError]()
+	jsonpayload.RegisterType[notFound]()
+	jsonpayload.RegisterType[denied]()
+	jsonpayload.RegisterType[notAnError]()
 }
 
-func TestTypeNameForError(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		if got := jsonerr.TypeNameForError(nil); got != "" {
-			t.Errorf("nil: got %q, want \"\"", got)
+// TestRoundTripRegistered verifies that a registered error is reconstructed as
+// its original concrete type, so that errors.Is and errors.As work on it.
+func TestRoundTripRegistered(t *testing.T) {
+	orig := &notFound{Name: "widget", Code: 404}
+	buf, err := jsonerr.Marshal(orig)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"error":"widget not found (404)","detail":{"type":"` + testPkg +
+		`.notFound","payload":{"name":"widget","code":404}}}`
+	if got := string(buf); got != want {
+		t.Errorf("\n got %s\nwant %s", got, want)
+	}
+
+	got, err := jsonerr.Unmarshal(buf)
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	var target *notFound
+	if !errors.As(got, &target) {
+		t.Fatalf("errors.As: got %T, want *notFound", got)
+	}
+	if *target != *orig {
+		t.Errorf("got %+v, want %+v", *target, *orig)
+	}
+	if !errors.Is(got, &notFound{}) {
+		t.Error("errors.Is failed for the decoded error")
+	}
+	if got, want := got.Error(), orig.Error(); got != want {
+		t.Errorf("message: got %q, want %q", got, want)
+	}
+}
+
+// TestRoundTripSelectsType verifies that the type name in the message chooses
+// which error is reconstructed.
+func TestRoundTripSelectsType(t *testing.T) {
+	for _, orig := range []error{
+		&notFound{Name: "a", Code: 1},
+		&denied{User: "bob"},
+	} {
+		buf, err := jsonerr.Marshal(orig)
+		if err != nil {
+			t.Errorf("%T: Marshal: %v", orig, err)
+			continue
 		}
-	})
-
-	t.Run("pointer receiver", func(t *testing.T) {
-		got := jsonerr.TypeNameForError(&testError{})
-		if !strings.HasSuffix(got, ".testError") {
-			t.Errorf("got %q, want suffix \".testError\"", got)
+		got, err := jsonerr.Unmarshal(buf)
+		if err != nil {
+			t.Errorf("%T: Unmarshal: %v", orig, err)
+			continue
 		}
-		if !strings.Contains(got, "cloudeng.io/encoding/json/jsonerr_test") {
-			t.Errorf("got %q, want pkg path to contain \"cloudeng.io/encoding/json/jsonerr_test\"", got)
+		if fmt.Sprintf("%T", got) != fmt.Sprintf("%T", orig) {
+			t.Errorf("got %T, want %T", got, orig)
 		}
-	})
-
-	t.Run("typed nil pointer", func(t *testing.T) {
-		var e *testError
-		got := jsonerr.TypeNameForError(e)
-		if !strings.HasSuffix(got, ".testError") {
-			t.Errorf("typed nil: got %q, want suffix \".testError\"", got)
-		}
-	})
-}
-
-func TestMarshalError(t *testing.T) {
-	orig := &testError{Code: 42, Message: "something broke"}
-	data, err := jsonerr.MarshalError(orig)
-	if err != nil {
-		t.Fatalf("MarshalError: %v", err)
-	}
-
-	// Must be valid JSON.
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("result is not valid JSON: %v", err)
-	}
-
-	// Must have "error", "type", and "detail" fields.
-	for _, key := range []string{"error", "type", "detail"} {
-		if _, ok := raw[key]; !ok {
-			t.Errorf("missing field %q in marshaled output", key)
+		if got.Error() != orig.Error() {
+			t.Errorf("message: got %q, want %q", got.Error(), orig.Error())
 		}
 	}
-
-	// The "error" field must be the error message.
-	var msg string
-	if err := json.Unmarshal(raw["error"], &msg); err != nil || msg != orig.Message {
-		t.Errorf("\"error\" field: got %q, want %q", msg, orig.Message)
-	}
 }
 
-func TestRoundtrip(t *testing.T) {
-	orig := &testError{Code: 7, Message: "roundtrip test"}
-
-	data, err := jsonerr.MarshalError(orig)
+// TestUnregisteredTypeDegradesToMessage verifies that an error whose type is
+// not registered here is still usable: the payload is carried but ignored and
+// the message survives. A receiver that registers the type later can decode
+// the same bytes in full.
+func TestUnregisteredTypeDegradesToMessage(t *testing.T) {
+	orig := &unregistered{Why: "nope"}
+	buf, err := jsonerr.Marshal(orig)
 	if err != nil {
-		t.Fatalf("MarshalError: %v", err)
+		t.Fatalf("Marshal: %v", err)
+	}
+	// The payload is still written, so the message is forward compatible.
+	if got, want := string(buf), testPkg+".unregistered"; !strings.Contains(got, want) {
+		t.Errorf("got %s, want it to carry %s", got, want)
 	}
 
-	got, err := jsonerr.UnmarshalError(data)
+	got, err := jsonerr.Unmarshal(buf)
 	if err != nil {
-		t.Fatalf("UnmarshalError: %v", err)
+		t.Fatalf("Unmarshal: %v", err)
 	}
-
-	// errors.Is matches on type regardless of pointer identity.
-	if !errors.Is(got, &testError{}) {
-		t.Error("errors.Is(&testError{}) = false after roundtrip, want true")
+	if got.Error() != orig.Error() {
+		t.Errorf("message: got %q, want %q", got.Error(), orig.Error())
 	}
-
-	// errors.As recovers the concrete type with fields intact.
-	var te *testError
-	if !errors.As(got, &te) {
-		t.Fatalf("errors.As(*testError) = false after roundtrip, want true")
-	}
-	if te.Code != orig.Code {
-		t.Errorf("Code: got %d, want %d", te.Code, orig.Code)
-	}
-	if te.Message != orig.Message {
-		t.Errorf("Message: got %q, want %q", te.Message, orig.Message)
-	}
-
-	// Must not match a different registered type.
-	if errors.Is(got, &otherError{}) {
-		t.Error("errors.Is(&otherError{}) = true, want false")
+	var target *unregistered
+	if errors.As(got, &target) {
+		t.Error("the concrete type should not be recovered for an unregistered type")
 	}
 }
 
-func TestUnmarshalErrorUnknownType(t *testing.T) {
-	data := []byte(`{"error":"oops","type":"no.such.Type","detail":{}}`)
-	got, err := jsonerr.UnmarshalError(data)
+// TestErrorsWithoutEncodableState verifies that an error with no exported
+// state, which cannot be marshaled, is represented by its message rather than
+// being reported as a failure.
+func TestErrorsWithoutEncodableState(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"errors.New", errors.New("plain"), `{"error":"plain"}`},
+		{"fmt.Errorf", fmt.Errorf("bad: %v", 1), `{"error":"bad: 1"}`},
+		// Wrapping hides the wrapped error's state, so only the combined
+		// message survives.
+		{"wrapped", fmt.Errorf("ctx: %w", &notFound{Name: "w", Code: 1}),
+			`{"error":"ctx: w not found (1)"}`},
+	} {
+		buf, err := jsonerr.Marshal(tc.err)
+		if err != nil {
+			t.Errorf("%v: Marshal: %v", tc.name, err)
+			continue
+		}
+		if got := string(buf); got != tc.want {
+			t.Errorf("%v: got %s, want %s", tc.name, got, tc.want)
+		}
+		got, err := jsonerr.Unmarshal(buf)
+		if err != nil {
+			t.Errorf("%v: Unmarshal: %v", tc.name, err)
+			continue
+		}
+		if got.Error() != tc.err.Error() {
+			t.Errorf("%v: message: got %q, want %q", tc.name, got.Error(), tc.err.Error())
+		}
+	}
+}
+
+// TestNil verifies that a nil error round trips as nil.
+func TestNil(t *testing.T) {
+	buf, err := jsonerr.Marshal(nil)
 	if err != nil {
-		t.Fatalf("UnmarshalError: %v", err)
+		t.Fatalf("Marshal: %v", err)
 	}
-	if got == nil {
-		t.Fatal("expected non-nil error for unknown type, got nil")
+	if got, want := string(buf), `{"error":""}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
 	}
-	if errors.Is(got, &testError{}) {
-		t.Error("unknown type decoded as testError, want generic error")
-	}
-}
-
-func TestMarshalJSONTo(t *testing.T) {
-	orig := jsonerr.Error{
-		Error:  "something broke",
-		Type:   "some.pkg.MyError",
-		Detail: jsontext.Value(`{"code":42}`),
-	}
-
-	var buf strings.Builder
-	enc := jsontext.NewEncoder(&buf)
-	if err := orig.MarshalJSONTo(enc); err != nil {
-		t.Fatalf("MarshalJSONTo: %v", err)
-	}
-
-	dec := jsontext.NewDecoder(strings.NewReader(buf.String()))
-	var got jsonerr.Error
-	if err := got.UnmarshalJSONFrom(dec); err != nil {
-		t.Fatalf("UnmarshalJSONFrom: %v", err)
-	}
-
-	if got.Error != orig.Error {
-		t.Errorf("Error: got %q, want %q", got.Error, orig.Error)
-	}
-	if got.Type != orig.Type {
-		t.Errorf("Type: got %q, want %q", got.Type, orig.Type)
-	}
-
-	var detail map[string]any
-	if err := json.Unmarshal(got.Detail, &detail); err != nil {
-		t.Fatalf("Detail is not valid JSON: %v (raw: %q)", err, got.Detail)
-	}
-	if got := detail["code"]; got != float64(42) {
-		t.Errorf("Detail[\"code\"]: got %v, want 42", got)
-	}
-}
-
-func TestMarshalJSONToEmptyDetail(t *testing.T) {
-	orig := jsonerr.Error{Error: "oops", Type: "some.Type"}
-
-	var buf strings.Builder
-	enc := jsontext.NewEncoder(&buf)
-	if err := orig.MarshalJSONTo(enc); err != nil {
-		t.Fatalf("MarshalJSONTo: %v", err)
-	}
-
-	// detail should be null when Detail is empty
-	if !strings.Contains(buf.String(), `"detail":null`) {
-		t.Errorf("expected detail:null in output, got: %s", buf.String())
-	}
-
-	dec := jsontext.NewDecoder(strings.NewReader(buf.String()))
-	var got jsonerr.Error
-	if err := got.UnmarshalJSONFrom(dec); err != nil {
-		t.Fatalf("UnmarshalJSONFrom: %v", err)
-	}
-	if got.Error != orig.Error {
-		t.Errorf("Error: got %q, want %q", got.Error, orig.Error)
-	}
-}
-
-func TestUnmarshalJSONFrom(t *testing.T) {
-	input := `{"error":"msg","type":"some.Type","detail":{"code":3},"extra":"ignored"}`
-
-	dec := jsontext.NewDecoder(strings.NewReader(input))
-	var e jsonerr.Error
-	if err := e.UnmarshalJSONFrom(dec); err != nil {
-		t.Fatalf("UnmarshalJSONFrom: %v", err)
-	}
-
-	if e.Error != "msg" {
-		t.Errorf("Error: got %q, want \"msg\"", e.Error)
-	}
-	if e.Type != "some.Type" {
-		t.Errorf("Type: got %q, want \"some.Type\"", e.Type)
-	}
-	var detail map[string]any
-	if err := json.Unmarshal(e.Detail, &detail); err != nil {
-		t.Fatalf("Detail is not valid JSON: %v (raw: %q)", err, e.Detail)
-	}
-	if got := detail["code"]; got != float64(3) {
-		t.Errorf("Detail[\"code\"]: got %v, want 3", got)
-	}
-}
-
-func TestUnmarshalJSONFromUnknownFieldsSkipped(t *testing.T) {
-	input := `{"unknown1":42,"error":"e","unknown2":{"nested":true},"type":"t","detail":null}`
-	dec := jsontext.NewDecoder(strings.NewReader(input))
-	var e jsonerr.Error
-	if err := e.UnmarshalJSONFrom(dec); err != nil {
-		t.Fatalf("UnmarshalJSONFrom with unknown fields: %v", err)
-	}
-	if e.Error != "e" {
-		t.Errorf("Error: got %q, want \"e\"", e.Error)
-	}
-	if e.Type != "t" {
-		t.Errorf("Type: got %q, want \"t\"", e.Type)
-	}
-}
-
-func TestDefaultUnknownTypeHandler(t *testing.T) {
-	// DefaultUnknownTypeHandler uses errors.New(err.Error), ignoring Type and Detail.
-	env := jsonerr.Error{
-		Error:  "the message",
-		Type:   "some.Unknown.Type",
-		Detail: jsontext.Value(`{"code":99}`),
-	}
-	got := jsonerr.DefaultUnknownTypeHandler(env)
-	if got == nil {
-		t.Fatal("got nil, want non-nil error")
-	}
-	if got.Error() != "the message" {
-		t.Errorf("Error(): got %q, want %q", got.Error(), "the message")
-	}
-	// Must not be a registered concrete type.
-	if errors.Is(got, &testError{}) {
-		t.Error("result matched testError, want generic error")
-	}
-}
-
-func TestNewUnmarshalErrorCustomHandler(t *testing.T) {
-	// A custom handler can inspect Type and Detail to do something different.
-	var received jsonerr.Error
-	handler := func(env jsonerr.Error) error {
-		received = env
-		return &testError{Code: 999, Message: "handled: " + env.Error}
-	}
-	ue := jsonerr.NewUnmarshalError(handler)
-
-	// Encode an unknown type.
-	data := []byte(`{"error":"oops","type":"no.such.Package.NoType","detail":{"extra":true}}`)
-	got, decErr := ue.Unmarshal(data)
-	if decErr != nil {
-		t.Fatalf("Unmarshal decode error: %v", decErr)
-	}
-	if got == nil {
-		t.Fatal("got nil, want non-nil error from handler")
-	}
-
-	// The handler received the full envelope.
-	if received.Type != "no.such.Package.NoType" {
-		t.Errorf("received.Type = %q, want %q", received.Type, "no.such.Package.NoType")
-	}
-
-	// The returned error is whatever the handler produced.
-	var te *testError
-	if !errors.As(got, &te) {
-		t.Fatalf("errors.As(*testError) = false, want true")
-	}
-	if te.Code != 999 {
-		t.Errorf("Code: got %d, want 999", te.Code)
-	}
-	if te.Message != "handled: oops" {
-		t.Errorf("Message: got %q, want %q", te.Message, "handled: oops")
-	}
-}
-
-func TestUnmarshalErrorWithHandlerKnownType(t *testing.T) {
-	// When the type IS registered, the custom handler is NOT invoked.
-	handlerCalled := false
-	handler := func(_ jsonerr.Error) error {
-		handlerCalled = true
-		return errors.New("handler should not run")
-	}
-	ue := jsonerr.NewUnmarshalError(handler)
-
-	orig := &testError{Code: 5, Message: "custom handler test"}
-	data, err := jsonerr.MarshalError(orig)
+	got, err := jsonerr.Unmarshal(buf)
 	if err != nil {
-		t.Fatalf("MarshalError: %v", err)
-	}
-
-	got, decErr := ue.Unmarshal(data)
-	if decErr != nil {
-		t.Fatalf("Unmarshal decode error: %v", decErr)
-	}
-	if handlerCalled {
-		t.Error("handler was called for a known type, want it skipped")
-	}
-
-	var te *testError
-	if !errors.As(got, &te) {
-		t.Fatalf("errors.As(*testError) = false, want true")
-	}
-	if te.Code != orig.Code {
-		t.Errorf("Code: got %d, want %d", te.Code, orig.Code)
-	}
-}
-
-func TestNewUnmarshalErrorNilHandlerUsesDefault(t *testing.T) {
-	// Passing nil handler falls back to DefaultUnknownTypeHandler.
-	ue := jsonerr.NewUnmarshalError(nil)
-	data := []byte(`{"error":"fallback message","type":"unknown.Type","detail":null}`)
-	got, decErr := ue.Unmarshal(data)
-	if decErr != nil {
-		t.Fatalf("Unmarshal decode error: %v", decErr)
-	}
-	if got == nil {
-		t.Fatal("got nil, want non-nil error")
-	}
-	if got.Error() != "fallback message" {
-		t.Errorf("Error(): got %q, want \"fallback message\"", got.Error())
-	}
-}
-
-func TestMarshalErrorNil(t *testing.T) {
-	data, err := jsonerr.MarshalError(nil)
-	if err != nil {
-		t.Fatalf("MarshalError(nil): %v", err)
-	}
-	got, decErr := jsonerr.UnmarshalError(data)
-	if decErr != nil {
-		t.Fatalf("UnmarshalError: %v", decErr)
+		t.Fatalf("Unmarshal: %v", err)
 	}
 	if got != nil {
-		t.Errorf("expected nil error after roundtrip of nil, got %v", got)
+		t.Errorf("got %v, want nil", got)
 	}
 }
 
-func TestUnmarshalJSONFromWithHandler(t *testing.T) {
-	t.Run("known type", func(t *testing.T) {
-		orig := &testError{Code: 123, Message: "streamed error"}
-		data, err := jsonerr.MarshalError(orig)
-		if err != nil {
-			t.Fatalf("MarshalError: %v", err)
-		}
-
-		ue := jsonerr.NewUnmarshalError(nil)
-		dec := jsontext.NewDecoder(strings.NewReader(string(data)))
-		if err := ue.UnmarshalJSONFrom(dec); err != nil {
-			t.Fatalf("UnmarshalJSONFrom: %v", err)
-		}
-		if ue.Err == nil {
-			t.Fatal("ue.Err is nil, want testError")
-		}
-		var te *testError
-		if !errors.As(ue.Err, &te) {
-			t.Fatalf("errors.As(*testError) = false, want true")
-		}
-		if te.Code != 123 || te.Message != "streamed error" {
-			t.Errorf("got %v, want code 123 / message 'streamed error'", te)
+// TestUnmarshalErrors covers the failures that are reported rather than
+// degraded.
+func TestUnmarshalErrors(t *testing.T) {
+	t.Run("malformed", func(t *testing.T) {
+		if _, err := jsonerr.Unmarshal([]byte(`{`)); err == nil {
+			t.Error("expected an error, got nil")
 		}
 	})
 
-	t.Run("nil envelope", func(t *testing.T) {
-		ue := jsonerr.NewUnmarshalError(nil)
-		dec := jsontext.NewDecoder(strings.NewReader(`{"error":"","type":"","detail":null}`))
-		if err := ue.UnmarshalJSONFrom(dec); err != nil {
-			t.Fatalf("UnmarshalJSONFrom: %v", err)
-		}
-		if ue.Err != nil {
-			t.Errorf("expected ue.Err == nil, got %v", ue.Err)
+	t.Run("payload does not match its type", func(t *testing.T) {
+		buf := []byte(`{"error":"x","detail":{"type":"` + testPkg +
+			`.notFound","payload":{"name":[1,2]}}}`)
+		if _, err := jsonerr.Unmarshal(buf); err == nil {
+			t.Error("expected an error, got nil")
+		} else if !strings.Contains(err.Error(), "decode") {
+			t.Errorf("got %v, want it to mention decoding", err)
 		}
 	})
 
-	t.Run("custom handler", func(t *testing.T) {
-		handler := func(env jsonerr.Error) error {
-			return &testError{Code: 777, Message: "handled: " + env.Error}
-		}
-		ue := jsonerr.NewUnmarshalError(handler)
-		dec := jsontext.NewDecoder(strings.NewReader(`{"error":"custom err","type":"unknown.Type","detail":null}`))
-		if err := ue.UnmarshalJSONFrom(dec); err != nil {
-			t.Fatalf("UnmarshalJSONFrom: %v", err)
-		}
-		if ue.Err == nil {
-			t.Fatal("expected ue.Err non-nil, got nil")
-		}
-		var te *testError
-		if !errors.As(ue.Err, &te) {
-			t.Fatalf("errors.As(*testError) = false, want true")
-		}
-		if te.Code != 777 || te.Message != "handled: custom err" {
-			t.Errorf("got %v, want code 777 / message 'handled: custom err'", te)
+	t.Run("registered type is not an error", func(t *testing.T) {
+		buf := []byte(`{"error":"x","detail":{"type":"` + testPkg +
+			`.notAnError","payload":{"a":1}}}`)
+		if _, err := jsonerr.Unmarshal(buf); err == nil {
+			t.Error("expected an error, got nil")
+		} else if !strings.Contains(err.Error(), "is not an error") {
+			t.Errorf("got %v, want it to report a non-error type", err)
 		}
 	})
 }
 
-type concurrentTestError struct {
-	Val int `json:"val"`
-}
-
-func (e *concurrentTestError) Error() string { return "concurrent error" }
-
-func TestConcurrentRegistry(t *testing.T) {
-	var wg sync.WaitGroup
-	for i := range 20 {
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			jsonerr.RegisterType[concurrentTestError, *concurrentTestError]()
-		}()
-		go func(val int) {
-			defer wg.Done()
-			orig := &concurrentTestError{Val: val}
-			data, err := jsonerr.MarshalError(orig)
-			if err != nil {
-				t.Errorf("MarshalError: %v", err)
-				return
-			}
-			_, _ = jsonerr.UnmarshalError(data)
-		}(i)
+// TestWireIsTheRepresentation verifies that Wire is what is actually produced
+// and accepted, so that another package can build or inspect these messages.
+func TestWireIsTheRepresentation(t *testing.T) {
+	orig := &notFound{Name: "widget", Code: 404}
+	buf, err := jsonerr.Marshal(orig)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
 	}
-	wg.Wait()
+
+	// What is produced is the marshaling of the Wire for that error.
+	fromWire, err := json.Marshal(jsonerr.WireForError(orig))
+	if err != nil {
+		t.Fatalf("Marshal(Wire): %v", err)
+	}
+	if got, want := string(buf), string(fromWire); got != want {
+		t.Errorf("\n got %s\nwant %s", got, want)
+	}
+
+	// And a Wire built by hand is accepted.
+	hand := jsonerr.Wire{
+		Message: "widget not found (404)",
+		Detail: &jsonpayload.Wire{
+			Type:    testPkg + ".notFound",
+			Payload: []byte(`{"name":"widget","code":404}`),
+		},
+	}
+	decoded, err := jsonerr.ErrorForWire(hand)
+	if err != nil {
+		t.Fatalf("ErrorForWire: %v", err)
+	}
+	var target *notFound
+	if !errors.As(decoded, &target) {
+		t.Fatalf("got %T, want *notFound", decoded)
+	}
+	if *target != *orig {
+		t.Errorf("got %+v, want %+v", *target, *orig)
+	}
+}
+
+// response carries an error as an ordinary tagged field.
+type response struct {
+	Result string             `json:"result"`
+	Err    jsonerr.ReadWriter `json:"err"`
+}
+
+// TestReadWriterField verifies that an error can be a field of a struct that
+// is itself encoded and decoded as JSON.
+func TestReadWriterField(t *testing.T) {
+	in := response{Result: "partial", Err: jsonerr.ReadWriter{Err: &denied{User: "bob"}}}
+	buf, err := json.Marshal(&in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"result":"partial","err":{"error":"denied: bob","detail":{"type":"` +
+		testPkg + `.denied","payload":{"user":"bob"}}}}`
+	if got := string(buf); got != want {
+		t.Errorf("\n got %s\nwant %s", got, want)
+	}
+
+	var out response
+	if err := json.Unmarshal(buf, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got, want := out.Result, in.Result; got != want {
+		t.Errorf("Result: got %q, want %q", got, want)
+	}
+	var target *denied
+	if !errors.As(out.Err.Err, &target) {
+		t.Fatalf("got %T, want *denied", out.Err.Err)
+	}
+	if got, want := target.User, "bob"; got != want {
+		t.Errorf("User: got %q, want %q", got, want)
+	}
+}
+
+// TestReadWriterFieldNilError verifies that a struct with no error encodes and
+// decodes as one.
+func TestReadWriterFieldNilError(t *testing.T) {
+	buf, err := json.Marshal(&response{Result: "ok"})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if got, want := string(buf), `{"result":"ok","err":{"error":""}}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	var out response
+	if err := json.Unmarshal(buf, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if out.Err.Err != nil {
+		t.Errorf("got %v, want a nil error", out.Err.Err)
+	}
 }

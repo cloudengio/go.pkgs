@@ -4,130 +4,174 @@
 import cloudeng.io/encoding/json/jsonerr
 ```
 
-Package jsonerr provides support for working with errors sent over the
-wire using JSON. It provides a registry for recreating local instances
-of concrete error types that have been received from a remote process.
-The type of an error is represented by its package name and type name (e.g.
-"example.com/pkg.MyError").
+Package jsonerr provides support for sending errors over the wire as JSON.
+
+An encoded error carries two things: a message, which any receiver can use,
+and, when the error has state that can be encoded, a typed payload that
+a receiver which has registered the error's type can decode back into the
+original concrete error. The type of an error is identified by its fully
+qualified name (e.g. "example.com/pkg.MyError") and the payload uses the
+representation defined by cloudeng.io/encoding/json/jsonpayload.
+
+An error type is an ordinary struct with an Error method; it needs no
+JSON methods of its own, since its payload is encoded and decoded by
+the standard struct encoding. Types are registered for decoding with
+jsonpayload.RegisterType:
+
+    type NotFound struct {
+    	Name string `json:"name"`
+    }
+
+    func (e *NotFound) Error() string { return e.Name + " not found" }
+
+    func init() { jsonpayload.RegisterType[NotFound]() }
 
 ## Functions
-### Func DefaultUnknownTypeHandler
+### Func ErrorForWire
 ```go
-func DefaultUnknownTypeHandler(err Error) error
+func ErrorForWire(w Wire) (error, error)
 ```
-DefaultUnknownTypeHandler uses errors.New(err.Error) to create an error.
-The Type and Detail fields are ignored.
+ErrorForWire returns the error represented by w. If w carries a payload
+whose type has been registered with jsonpayload.RegisterType then the
+original concrete error is returned, so that errors.Is and errors.As can
+be used on it. Otherwise an error carrying only the message is returned,
+which means that an unregistered type degrades to its message rather than to
+a failure. A nil error is returned for the zero Wire.
 
-### Func MarshalError
+### Func Marshal
 ```go
-func MarshalError(err error) ([]byte, error)
+func Marshal(err error) ([]byte, error)
 ```
-MarshalError marshals an error into an Error struct suitable for
-transmission over the wire. TypeNameForError(err) is used to set Error.Type,
-Error.Error is set to err.Error(), and Error.Detail is set to the
-JSON-encoded representation of err. Error.Type must be registered using
-RegisterType by the recipient of the marshaled error in order to unmarshal
-the error back into its corresponding concrete type.
+Marshal encodes err as its Wire representation.
 
-### Func RegisterType
+### Func Unmarshal
 ```go
-func RegisterType[T any, PT interface {
-	*T
-	error
-}]()
+func Unmarshal(data []byte) (error, error)
 ```
-
-### Func TypeNameForError
-```go
-func TypeNameForError(err error) string
-```
-TypeNameForError returns the fully qualified type name of err (e.g.
-"example.com/pkg.MyError"). Returns "" for nil.
-
-### Func UnmarshalError
-```go
-func UnmarshalError(data []byte) (error, error)
-```
-UnmarshalError expects data to be a JSON-encoded Error struct. It uses the
-Type field to determine the concrete type of the error, and unmarshals the
-Detail field into that type. If the Type is not registered, it returns an
-error using DefaultUnknownTypeHandler.
+Unmarshal decodes an error encoded by Marshal. The outer error reports a
+failure to decode; the inner one is the error that was encoded.
 
 
 
 ## Types
-### Type Error
+### Type ReadWriter
 ```go
-type Error struct {
-	Error  string         `json:"error"`
-	Type   string         `json:"type"`
-	Detail jsontext.Value `json:"detail"`
+type ReadWriter struct {
+	Err error
 }
 ```
-Error represents the 'on-the-wire' error representation. All errors must
-be converted to this form before being sent over the wire, and converted
-back to an error on the receiving side. The Type field is used to determine
-the concrete type of the error on the receiving side, and the Detail field
-contains the JSON-encoded representation of the error.
+ReadWriter is an error that can be both encoded and decoded, for use as an
+ordinary tagged field of a struct:
+
+    type Response struct {
+    	Result string          `json:"result"`
+    	Err    jsonerr.ReadWriter `json:"err"`
+    }
 
 ### Methods
 
 ```go
-func (e *Error) MarshalJSONTo(enc *jsontext.Encoder) error
+func (rw ReadWriter) MarshalJSONTo(enc *jsontext.Encoder) error
 ```
 
 
 ```go
-func (e *Error) UnmarshalJSONFrom(dec *jsontext.Decoder) error
+func (rw *ReadWriter) UnmarshalJSONFrom(dec *jsontext.Decoder) error
 ```
 
 
 
 
-### Type UnknownTypeHandler
+### Type Reader
 ```go
-type UnknownTypeHandler func(err Error) error
-```
-UnknownTypeHandler is a function that handles errors of unknown types.
-
-
-### Type UnmarshalErrorWithHandler
-```go
-type UnmarshalErrorWithHandler struct {
+type Reader struct {
 	Err error
-	// contains filtered or unexported fields
 }
 ```
-UnmarshalErrorWithHandler implements json.UnmarshalerFrom using a custom
-UnknownTypeHandler for unknown error types. The unmarshaled error is stored
-in the Err field.
+Reader decodes an error encoded by Writer, for use where an error is a field
+of a struct that is itself decoded from JSON.
+
+### Methods
+
+```go
+func (r *Reader) UnmarshalJSONFrom(dec *jsontext.Decoder) error
+```
+
+
+
+
+### Type Wire
+```go
+type Wire struct {
+	Message string            `json:"error"`
+	Detail  *jsonpayload.Wire `json:"detail,omitempty"`
+}
+```
+Wire is the 'on-the-wire' representation of an error and documents the
+format that this package produces and accepts. Message is always present so
+that a receiver can report something useful for an error whose type it does
+not know. Detail is present only when the error's state could be encoded,
+and is the representation used by jsonpayload.
 
 ### Functions
 
 ```go
-func NewUnmarshalError(handler UnknownTypeHandler) *UnmarshalErrorWithHandler
+func WireForError(err error) Wire
 ```
-NewUnmarshalError creates a new UnmarshalErrorWithHandler with the given
-UnknownTypeHandler. If handler is nil, DefaultUnknownTypeHandler is used.
+WireForError returns the Wire representation of err. Encoding the error's
+state is best effort: an error such as one returned by errors.New or
+fmt.Errorf has no exported state to encode, and is represented by its
+message alone rather than being reported as a failure.
 
 
+
+
+### Type Writer
+```go
+type Writer struct {
+	Err error
+}
+```
+Writer encodes an error, for use where an error is a field of a struct that
+is itself encoded as JSON, or is otherwise written to an encoder.
 
 ### Methods
 
 ```go
-func (ue *UnmarshalErrorWithHandler) Unmarshal(data []byte) (error, error)
-```
-Unmarshal decodes data as a JSON-encoded Error and returns the concrete
-Go error. The first return value is the decoded application error (or the
-handler's result for unknown types); the second is any decoding failure.
-
-
-```go
-func (ue *UnmarshalErrorWithHandler) UnmarshalJSONFrom(dec *jsontext.Decoder) error
+func (w Writer) MarshalJSONTo(enc *jsontext.Encoder) error
 ```
 
 
 
+
+
+
+## Examples
+### [ExampleMarshal](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-Marshal)
+ExampleMarshal shows an error being sent and reconstructed as its original
+concrete type, so that errors.As can be used on the far side.
+
+### [ExampleUnmarshal](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-Unmarshal)
+ExampleUnmarshal shows what happens to errors that cannot be reconstructed:
+one whose type is not registered by the receiver, and one that has no state
+to encode in the first place. Both keep their message.
+
+### [ExampleReadWriter](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-ReadWriter)
+ExampleReadWriter shows an error carried as an ordinary tagged field of a
+struct that is both encoded and decoded, which is the usual case for a type
+shared by both ends. Use Writer or Reader instead when only one direction is
+needed, as in ExampleWriter and ExampleReader.
+
+### [ExampleReader](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-Reader)
+ExampleReader shows the other half: a party that only reads errors decoding
+what a Writer produced, recovering the concrete error type because it has
+registered it.
+
+### [ExampleWriter](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-Writer)
+ExampleWriter shows an error being encoded by a party that only writes them,
+such as a server reporting a failure. Writer supplies MarshalJSONTo, so an
+error can be an ordinary tagged field of a struct that is itself encoded as
+JSON.
 
 
 
