@@ -74,7 +74,9 @@ func ExampleUnmarshal() {
 }
 
 // ExampleReadWriter shows an error carried as an ordinary tagged field of a
-// struct that is itself encoded as JSON.
+// struct that is both encoded and decoded, which is the usual case for a type
+// shared by both ends. Use Writer or Reader instead when only one direction
+// is needed, as in ExampleWriter and ExampleReader.
 func ExampleReadWriter() {
 	type Response struct {
 		Result string             `json:"result"`
@@ -101,4 +103,81 @@ func ExampleReadWriter() {
 	// Output:
 	// {"result":"partial","err":{"error":"write timed out after 5s","detail":{"type":"cloudeng.io/encoding/json/jsonerr_test.Timeout","payload":{"op":"write","seconds":5}}}}
 	// partial true write timed out after 5s
+}
+
+// serverResponse is written by a process that only ever reports errors, so it
+// needs no decoder for them.
+type serverResponse struct {
+	Result string         `json:"result"`
+	Err    jsonerr.Writer `json:"err"`
+}
+
+// clientResponse is read by a process that only ever receives errors. It is
+// wire compatible with serverResponse: Writer and Reader are the two halves
+// of the same representation.
+type clientResponse struct {
+	Result string         `json:"result"`
+	Err    jsonerr.Reader `json:"err"`
+}
+
+// ExampleWriter shows an error being encoded by a party that only writes
+// them, such as a server reporting a failure. Writer supplies MarshalJSONTo,
+// so an error can be an ordinary tagged field of a struct that is itself
+// encoded as JSON.
+func ExampleWriter() {
+	out := serverResponse{
+		Result: "partial",
+		Err:    jsonerr.Writer{Err: &Timeout{Op: "write", Seconds: 5}},
+	}
+	buf, err := json.Marshal(&out)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(buf))
+
+	// An absent error is written as an empty message.
+	buf, err = json.Marshal(&serverResponse{Result: "ok"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(buf))
+
+	// Output:
+	// {"result":"partial","err":{"error":"write timed out after 5s","detail":{"type":"cloudeng.io/encoding/json/jsonerr_test.Timeout","payload":{"op":"write","seconds":5}}}}
+	// {"result":"ok","err":{"error":""}}
+}
+
+// ExampleReader shows the other half: a party that only reads errors decoding
+// what a Writer produced, recovering the concrete error type because it has
+// registered it.
+func ExampleReader() {
+	buf, err := json.Marshal(&serverResponse{
+		Result: "partial",
+		Err:    jsonerr.Writer{Err: &Timeout{Op: "write", Seconds: 5}},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var in clientResponse
+	if err := json.Unmarshal(buf, &in); err != nil {
+		log.Fatal(err)
+	}
+	var timeout *Timeout
+	fmt.Println(in.Result, errors.As(in.Err.Err, &timeout), timeout.Op, timeout.Seconds)
+
+	// A response carrying no error decodes to a nil error.
+	buf, err = json.Marshal(&serverResponse{Result: "ok"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	in = clientResponse{}
+	if err := json.Unmarshal(buf, &in); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(in.Result, in.Err.Err == nil)
+
+	// Output:
+	// partial true write 5
+	// ok true
 }

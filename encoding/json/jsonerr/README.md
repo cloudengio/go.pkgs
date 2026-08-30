@@ -158,7 +158,20 @@ to encode in the first place. Both keep their message.
 
 ### [ExampleReadWriter](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-ReadWriter)
 ExampleReadWriter shows an error carried as an ordinary tagged field of a
-struct that is itself encoded as JSON.
+struct that is both encoded and decoded, which is the usual case for a type
+shared by both ends. Use Writer or Reader instead when only one direction is
+needed, as in ExampleWriter and ExampleReader.
+
+### [ExampleReader](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-Reader)
+ExampleReader shows the other half: a party that only reads errors decoding
+what a Writer produced, recovering the concrete error type because it has
+registered it.
+
+### [ExampleWriter](https://pkg.go.dev/cloudeng.io/encoding/json/jsonerr?tab=doc#example-Writer)
+ExampleWriter shows an error being encoded by a party that only writes them,
+such as a server reporting a failure. Writer supplies MarshalJSONTo, so an
+error can be an ordinary tagged field of a struct that is itself encoded as
+JSON.
 
 
 
