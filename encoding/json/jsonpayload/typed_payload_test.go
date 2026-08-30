@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"cloudeng.io/encoding/json/jsonpayload"
+	"cloudeng.io/types"
 )
 
 // testPkg is the path of this external test package, which qualifies the
@@ -514,4 +515,205 @@ func TestReaderValueReceiver(t *testing.T) {
 	}
 	var _ json.UnmarshalerFrom = rd
 	var _ json.UnmarshalerFrom = &rd
+}
+
+// decodeBytes is the standalone decode path: no wrapper, and only one pointer,
+// the one to the value being decoded into.
+func decodeBytes[T jsonpayload.Unmarshaler](buf []byte, val T) error {
+	return jsonpayload.Decode(jsontext.NewDecoder(bytes.NewReader(buf)), val)
+}
+
+// TestDecode covers the standalone decode path that Reader wraps.
+func TestDecode(t *testing.T) {
+	buf, err := json.Marshal(jsonpayload.NewWriter(&payload{A: 42}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	into := &payload{}
+	if err := decodeBytes(buf, into); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got, want := *into, (payload{A: 42}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+
+	// Decoding a type that was never registered works, since the expected
+	// type is known at compile time.
+	buf, err = json.Marshal(jsonpayload.NewWriter(&notRegistered{A: 1}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	unreg := &notRegistered{}
+	if err := decodeBytes(buf, unreg); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got, want := *unreg, (notRegistered{A: 1}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+// TestDecodeErrors covers the failures that are specific to Decode rather than
+// to reading the envelope.
+func TestDecodeErrors(t *testing.T) {
+	buf, err := json.Marshal(jsonpayload.NewWriter(&payload{A: 42}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	t.Run("type mismatch", func(t *testing.T) {
+		into := &otherPayload{}
+		err := decodeBytes(buf, into)
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if got := err.Error(); !strings.Contains(got, "expected type name") {
+			t.Errorf("got %v, want it to mention the expected type name", got)
+		}
+		if got, want := *into, (otherPayload{}); got != want {
+			t.Errorf("the value was written to despite the mismatch: got %+v", got)
+		}
+	})
+
+	t.Run("nil value", func(t *testing.T) {
+		err := decodeBytes(buf, (*payload)(nil))
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if got := err.Error(); !strings.Contains(got, "is nil") {
+			t.Errorf("got %v, want it to report a nil value", got)
+		}
+	})
+
+	t.Run("payload error", func(t *testing.T) {
+		buf, err := json.Marshal(jsonpayload.NewWriter(&failUnmarshal{}))
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if err := decodeBytes(buf, &failUnmarshal{}); !errors.Is(err, errUnmarshalFailed) {
+			t.Errorf("got %v, want it to wrap %v", err, errUnmarshalFailed)
+		}
+	})
+}
+
+func TestDecodeMalformed(t *testing.T) {
+	for _, tc := range malformedEnvelopes {
+		err := jsonpayload.Decode(jsontext.NewDecoder(strings.NewReader(tc.input)), &payload{})
+		if err == nil {
+			t.Errorf("%v: expected an error, got nil", tc.name)
+			continue
+		}
+		if tc.want != "" && !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%v: got %v, want it to contain %q", tc.name, err, tc.want)
+		}
+	}
+}
+
+// TestReaderDelegatesToDecode verifies that the wrapper and the standalone
+// function agree, so that the choice between them is only about how the
+// message is framed.
+func TestReaderDelegatesToDecode(t *testing.T) {
+	buf, err := json.Marshal(jsonpayload.NewWriter(&payload{A: 7}))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	viaDecode := &payload{}
+	if err := decodeBytes(buf, viaDecode); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	viaReader := &payload{}
+	rd := jsonpayload.NewReader(viaReader)
+	if err := json.Unmarshal(buf, &rd); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if *viaDecode != *viaReader {
+		t.Errorf("Decode gave %+v, Reader gave %+v", *viaDecode, *viaReader)
+	}
+}
+
+// TestWriterAny verifies that WriterAny names the value's dynamic type, so
+// that messages held in an interface typed variable are written under their
+// own name rather than the interface's.
+func TestWriterAny(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		v    json.MarshalerTo
+		want string
+	}{
+		{"payload", &payload{A: 42}, `{"type":"` + testPkg + `.payload","payload":{"A":42}}`},
+		{"other payload", &otherPayload{B: "hi"}, `{"type":"` + testPkg + `.otherPayload","payload":{"B":"hi"}}`},
+		{"wrapper", &jsonpayload.Wrapper[wrapped]{Value: wrapped{A: 1, B: "two"}},
+			`{"type":"cloudeng.io/encoding/json/jsonpayload.Wrapper[` + testPkg +
+				`.wrapped]","payload":{"a":1,"b":"two"}}`},
+	} {
+		buf, err := json.Marshal(jsonpayload.NewWriterAny(tc.v))
+		if err != nil {
+			t.Errorf("%v: Marshal: %v", tc.name, err)
+			continue
+		}
+		if got, want := string(buf), tc.want; got != want {
+			t.Errorf("%v:\n got %s\nwant %s", tc.name, got, want)
+		}
+	}
+}
+
+// TestWriterAnyMatchesWriter verifies that the two writers agree when the
+// concrete type is known, so that either may be used to produce a message.
+func TestWriterAnyMatchesWriter(t *testing.T) {
+	val := &payload{A: 42}
+	fromWriter, err := json.Marshal(jsonpayload.NewWriter(val))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	fromWriterAny, err := json.Marshal(jsonpayload.NewWriterAny(val))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !bytes.Equal(fromWriter, fromWriterAny) {
+		t.Errorf("Writer gave %s, WriterAny gave %s", fromWriter, fromWriterAny)
+	}
+}
+
+// TestWriterAnyInterfaceElement is the case WriterAny exists for: a message
+// reached through a variable of interface type. Writer would name the
+// interface, which no reader could resolve back to the message's type.
+func TestWriterAnyInterfaceElement(t *testing.T) {
+	messages := []json.MarshalerTo{&payload{A: 1}, &otherPayload{B: "two"}}
+	want := []string{testPkg + ".payload", testPkg + ".otherPayload"}
+
+	for i, msg := range messages {
+		buf, err := json.Marshal(jsonpayload.NewWriterAny(msg))
+		if err != nil {
+			t.Errorf("%v: Marshal: %v", i, err)
+			continue
+		}
+		// Round trip through ReaderAny, which resolves the name written.
+		var rd jsonpayload.ReaderAny
+		if err := json.Unmarshal(buf, &rd); err != nil {
+			t.Errorf("%v: Unmarshal: %v", i, err)
+			continue
+		}
+		if got := types.TypeNameForValue(rd.Value); got != want[i] {
+			t.Errorf("%v: decoded as %v, want %v", i, got, want[i])
+		}
+	}
+
+	// For contrast, Writer names the static type of its type parameter, which
+	// here is the interface rather than the message.
+	buf, err := json.Marshal(jsonpayload.NewWriter(messages[0]))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if got, want := string(buf), `"type":"encoding/json/v2.MarshalerTo"`; !strings.Contains(got, want) {
+		t.Errorf("got %s, want it to contain %s", got, want)
+	}
+}
+
+func TestWriterAnyNilValue(t *testing.T) {
+	_, err := json.Marshal(jsonpayload.NewWriterAny(nil))
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if got := err.Error(); !strings.Contains(got, "is nil") {
+		t.Errorf("got %v, want it to report a nil value", got)
+	}
 }

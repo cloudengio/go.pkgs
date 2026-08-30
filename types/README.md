@@ -4,7 +4,7 @@
 import cloudeng.io/types
 ```
 
-Package types provides support for working with gp types.
+Package types provides support for working with go types.
 
 ## Functions
 ### Func TypeName

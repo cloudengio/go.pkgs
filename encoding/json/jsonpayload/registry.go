@@ -19,6 +19,10 @@ func RegisterType[T any, PT *T]() {
 	decodeRegistry.RegisterType[T]()
 }
 
-func newInstance(typeName string) (any, bool) {
+// NewInstance returns a newly allocated instance of the type registered
+// under typeName, as a pointer to that type, or false if no type is
+// registered under that name. It allows another package to decode the
+// payload of a message for itself, rather than through the readers here.
+func NewInstance(typeName string) (any, bool) {
 	return decodeRegistry.New(typeName)
 }
