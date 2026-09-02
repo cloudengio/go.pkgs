@@ -3,7 +3,7 @@ module cloudeng.io/file
 go 1.27
 
 require (
-	cloudeng.io/algo v0.0.0-20260825050644-3d0fba22c536
+	cloudeng.io/algo v0.0.0-20260902173116-c569651359a0
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/logging v0.0.0-20260824023931-9b6c51abac7f
