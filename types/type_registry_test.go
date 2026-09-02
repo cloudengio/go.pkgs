@@ -16,11 +16,14 @@ import (
 // type name and constructed as a pointer to a zero value.
 func TestRegistryRegisterAndNew(t *testing.T) {
 	var r types.Registry
-	r.RegisterType[myStruct]()
+	name := r.RegisterType[myStruct]()
+	if got, want := name, pkg+".myStruct"; got != want {
+		t.Errorf("RegisterType returned %q, want %q", got, want)
+	}
 
-	v, ok := r.New(pkg + ".myStruct")
+	v, ok := r.New(name)
 	if !ok {
-		t.Fatalf("%v.myStruct is not registered", pkg)
+		t.Fatalf("%v is not registered", name)
 	}
 	p, ok := v.(*myStruct)
 	if !ok {
@@ -38,21 +41,15 @@ func TestRegistryRegisterAndNew(t *testing.T) {
 // types, each keyed by its own name.
 func TestRegistryMultipleTypes(t *testing.T) {
 	var r types.Registry
-	r.RegisterType[myStruct]()
-	r.RegisterType[myInt]()
-	r.RegisterType[mySlice]()
-	r.RegisterType[myGeneric[int]]()
-	r.RegisterType[[]int]()
-
 	for _, tc := range []struct {
 		name string
 		want any
 	}{
-		{pkg + ".myStruct", &myStruct{}},
-		{pkg + ".myInt", new(myInt)},
-		{pkg + ".mySlice", &mySlice{}},
-		{pkg + ".myGeneric[int]", &myGeneric[int]{}},
-		{"[]int", &[]int{}},
+		{r.RegisterType[myStruct](), &myStruct{}},
+		{r.RegisterType[myInt](), new(myInt)},
+		{r.RegisterType[mySlice](), &mySlice{}},
+		{r.RegisterType[myGeneric[int]](), &myGeneric[int]{}},
+		{r.RegisterType[[]int](), &[]int{}},
 	} {
 		v, ok := r.New(tc.name)
 		if !ok {

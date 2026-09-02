@@ -190,10 +190,11 @@ func (r Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 // ReaderAny is a JSON decoder for typed messages. It should be used when the
 // expected type is not known at compile time. The Value field will be set to
 // the decoded value. All types that may be decoded must be registered with
-// RegisterType.
+// RegisterType. The Type value will be set to the name of the decoded type,
+// if and only if the message was successfully decoded.
 type ReaderAny struct {
-	Type  string
 	Value json.UnmarshalerFrom
+	Type  string
 }
 
 func (r *ReaderAny) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
@@ -262,8 +263,11 @@ func (rw *ReadWriter[T, PT]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 // its type is not known at compile time, for use as a field of a struct that
 // is itself marshaled as JSON. Every type that may be decoded must be
 // registered with RegisterType; Value must be non-nil to encode.
+// The Type value will be set to the name of the decoded type,
+// if and only if the message was successfully decoded.
 type ReadWriterAny struct {
 	Value ReaderWriter
+	Type  string
 }
 
 // NewReadWriterAny returns a ReadWriterAny holding val, for use when encoding.
@@ -290,5 +294,6 @@ func (rw *ReadWriterAny) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 			types.TypeNameForValue(rd.Value))
 	}
 	rw.Value = val
+	rw.Type = rd.Type
 	return nil
 }
