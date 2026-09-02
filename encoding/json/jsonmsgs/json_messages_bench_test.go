@@ -1,4 +1,6 @@
-// Copyright 2026 On Your Behalf Inc. All rights reserved.
+// Copyright 2026 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
 
 package jsonmsgs_test
 
@@ -12,7 +14,7 @@ import (
 )
 
 // loopReader replays data indefinitely, simulating a continuous stream of
-// identical native messages. Not safe for concurrent use; each goroutine
+// identical framed messages. Not safe for concurrent use; each goroutine
 // should have its own instance.
 type loopReader struct {
 	data []byte
@@ -30,9 +32,9 @@ func (r *loopReader) Read(p []byte) (int, error) {
 
 func (r *loopReader) Close() error { return nil }
 
-// encodeNativeMsg encodes a small JSON object as a framed native message and
+// encodeFramedMsg encodes a small JSON object as a framed message and
 // returns the raw bytes (4-byte LE length prefix + JSON).
-func encodeNativeMsg(b *testing.B) []byte {
+func encodeFramedMsg(b *testing.B) []byte {
 	b.Helper()
 	var buf bytes.Buffer
 	nm := jsonmsgs.NewMessager(&buf, io.NopCloser(bytes.NewReader(nil)))
@@ -83,7 +85,7 @@ func BenchmarkMessagerWriteMessage(b *testing.B) {
 }
 
 // BenchmarkMessagerWriteMessageParallel stresses the sync.Pool under
-// concurrent access. Note: io.Discard is used as the writer since NativeMessager
+// concurrent access. Note: io.Discard is used as the writer since Messager
 // does not serialise concurrent writes — this benchmark isolates pool throughput.
 func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
 	nm := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(nil)))
@@ -107,7 +109,7 @@ func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
 // the jsontext namespace slices so Decoder.Reset can reuse them on the next
 // iteration rather than reallocating.
 func BenchmarkMessagerReadMessage(b *testing.B) {
-	msg := encodeNativeMsg(b)
+	msg := encodeFramedMsg(b)
 	nm := jsonmsgs.NewMessager(io.Discard, &loopReader{data: msg})
 	b.ResetTimer()
 	for b.Loop() {
@@ -121,10 +123,10 @@ func BenchmarkMessagerReadMessage(b *testing.B) {
 }
 
 // BenchmarkMessagerReadMessageParallel measures per-goroutine read
-// throughput. Each goroutine owns its NativeMessager and decoder pool to
+// throughput. Each goroutine owns its Messager and decoder pool to
 // avoid cross-goroutine pool contention; the shared msg slice is read-only.
 func BenchmarkMessagerReadMessageParallel(b *testing.B) {
-	msg := encodeNativeMsg(b)
+	msg := encodeFramedMsg(b)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		nm := jsonmsgs.NewMessager(io.Discard, &loopReader{data: msg})

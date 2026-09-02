@@ -1,9 +1,12 @@
-// Copyright 2026 On Your Behalf Inc. All rights reserved.
+// Copyright 2026 cloudeng llc. All rights reserved.
+// Use of this source code is governed by the Apache-2.0
+// license that can be found in the LICENSE file.
 
 package jsonmsgs_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -87,6 +90,8 @@ func TestMessagerMaxSizeEnforced(t *testing.T) {
 
 	if err := nm.WriteMessage(enc); err == nil {
 		t.Fatal("expected WriteMessage to fail for size > maxSize, got nil")
+	} else if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+		t.Errorf("expected error wrapping ErrMessageTooLarge, got: %v", err)
 	}
 
 	// Craft a header with size 100 > maxSize 20.
@@ -97,6 +102,8 @@ func TestMessagerMaxSizeEnforced(t *testing.T) {
 	nmReader := jsonmsgs.NewMessager(io.Discard, io.NopCloser(&fakeStream), jsonmsgs.WithMaxSize(20))
 	if _, err := nmReader.ReadMessage(); err == nil {
 		t.Fatal("expected ReadMessage to fail when length > maxSize, got nil")
+	} else if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+		t.Errorf("expected error wrapping ErrMessageTooLarge, got: %v", err)
 	}
 }
 
@@ -178,4 +185,11 @@ func TestMessagerReleaseDecoderSafety(t *testing.T) {
 		t.Fatalf("ReadMessage: %v", err)
 	}
 	reader.ReleaseDecoder(dec)
+}
+
+func TestMessagerCloseNilReader(t *testing.T) {
+	nm := jsonmsgs.NewMessager(io.Discard, nil)
+	if err := nm.Close(); err != nil {
+		t.Errorf("Close on nil reader returned error: %v", err)
+	}
 }

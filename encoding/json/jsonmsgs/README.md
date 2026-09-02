@@ -4,7 +4,7 @@
 import cloudeng.io/encoding/json/jsonmsgs
 ```
 
-Package jsonmsgs provides support for efficient encoded and decoding
+Package jsonmsgs provides support for efficient encoding and decoding
 arbitrary json messages over a stream, ie. an arbitrary io.Reader or
 io.Writer etc. The message format is simply a 4 byte little endian length
 followed by the encoded json data.
@@ -16,7 +16,7 @@ DefaultMaxNativeMessageSize = 1024 * 1024 // 1MB
 
 
 ```
-DefaultMaxNativeMessageSize is the default maximum size of a native message,
+DefaultMaxNativeMessageSize is the default maximum size of a message,
 in bytes.
 
 
@@ -38,8 +38,8 @@ type Decoder struct {
 	// contains filtered or unexported fields
 }
 ```
-Decoder captures the state to decode a single native message. It is
-created and returned by Messager.ReadMessage and must released by calling
+Decoder captures the state to decode a single message. It is created
+and returned by Messager.ReadMessage and must released by calling
 Messager.ReleaseDecoder after which it cannot be used again.
 
 
@@ -50,7 +50,7 @@ type Encoder struct {
 	// contains filtered or unexported fields
 }
 ```
-Encoder captures the state to encode and send a single native message.
+Encoder captures the state to encode and send a single message.
 It must be obtained using Messager.NewEncoder. It will be reclaimed by
 Messager.WriteMessage after which it cannot be used again.
 
@@ -67,9 +67,9 @@ type Messager struct {
 ```go
 func NewMessager(wr io.Writer, rd io.ReadCloser, opts ...Option) *Messager
 ```
-NewMessager creates a new NativeMessager with the given writer
-and readCloser. If maxSize is not specified via WithMaxSize,
-DefaultMaxNativeMessageSize (1MB) is used.
+NewMessager creates a new Messager with the given writer and readCloser.
+If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize
+(1MB) is used.
 
 
 
@@ -85,7 +85,7 @@ ReadMessage to return.
 ```go
 func (m *Messager) NewEncoder() *Encoder
 ```
-NewEncoder creates a new Encoder for encoding a single native message.
+NewEncoder creates a new Encoder for encoding a single message.
 
 
 ```go
@@ -124,7 +124,7 @@ regardless of error.
 ```go
 type Option func(*options)
 ```
-Option represents an option for configuring a NativeMessager.
+Option represents an option for configuring a Messager.
 
 ### Functions
 
@@ -141,7 +141,7 @@ func WithEncoderOptions(opts jsontext.Options) Option
 ```go
 func WithMaxSize(maxSize uint32) Option
 ```
-WithMaxSize sets the maximum size of a native message in bytes.
+WithMaxSize sets the maximum size of a message in bytes.
 
 
 

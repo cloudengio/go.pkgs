@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package jsonmsgs provides support for efficient encoded and decoding
+// Package jsonmsgs provides support for efficient encoding and decoding
 // arbitrary json messages over a stream, ie. an arbitrary io.Reader or io.Writer
 // etc. The message format is simply a 4 byte little endian length followed by
 // the encoded json data.
@@ -17,7 +17,7 @@ import (
 	"sync"
 )
 
-// DefaultMaxNativeMessageSize is the default maximum size of a native message, in bytes.
+// DefaultMaxNativeMessageSize is the default maximum size of a message, in bytes.
 const DefaultMaxNativeMessageSize = 1024 * 1024 // 1MB
 
 var (
@@ -25,17 +25,17 @@ var (
 )
 
 type options struct {
-	// MaxSize specifies the maximum size of a native message in bytes.
+	// MaxSize specifies the maximum size of a message in bytes.
 	// If MaxSize is 0, the default maximum size of 1MB is used.
 	maxSize        uint32
 	encoderOptions jsontext.Options
 	decoderOptions jsontext.Options
 }
 
-// Option represents an option for configuring a NativeMessager.
+// Option represents an option for configuring a Messager.
 type Option func(*options)
 
-// WithMaxSize sets the maximum size of a native message in bytes.
+// WithMaxSize sets the maximum size of a message in bytes.
 func WithMaxSize(maxSize uint32) Option {
 	return func(opts *options) {
 		opts.maxSize = maxSize
@@ -54,7 +54,7 @@ func WithDecoderOptions(opts jsontext.Options) Option {
 	}
 }
 
-// Encoder captures the state to encode and send a single native message.
+// Encoder captures the state to encode and send a single message.
 // It must be obtained using Messager.NewEncoder. It will be reclaimed by
 // Messager.WriteMessage after which it cannot be used again.
 type Encoder struct {
@@ -62,7 +62,7 @@ type Encoder struct {
 	buffer *bytes.Buffer
 }
 
-// Decoder captures the state to decode a single native message.
+// Decoder captures the state to decode a single message.
 // It is created and returned by Messager.ReadMessage and must released by
 // calling Messager.ReleaseDecoder after which it cannot be used again.
 type Decoder struct {
@@ -81,7 +81,7 @@ type Messager struct {
 	rmu     sync.Mutex
 }
 
-// NewMessager creates a new NativeMessager with the given writer and readCloser.
+// NewMessager creates a new Messager with the given writer and readCloser.
 // If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize (1MB) is used.
 func NewMessager(wr io.Writer, rd io.ReadCloser, opts ...Option) *Messager {
 	var o options
@@ -118,7 +118,7 @@ func NewMessager(wr io.Writer, rd io.ReadCloser, opts ...Option) *Messager {
 	return nm
 }
 
-// NewEncoder creates a new Encoder for encoding a single native message.
+// NewEncoder creates a new Encoder for encoding a single message.
 func (m *Messager) NewEncoder() *Encoder {
 	enc := m.encPool.Get().(*Encoder)
 	enc.buffer.Reset()
@@ -147,8 +147,10 @@ func (m *Messager) ReleaseDecoder(dec *Decoder) {
 // Close closes the underlying reader of the Messager causing a pending
 // ReadMessage to return.
 func (m *Messager) Close() error {
-	err := m.rd.Close()
-	return err
+	if m.rd == nil {
+		return nil
+	}
+	return m.rd.Close()
 }
 
 // WriteMessage writes a message to the underlying writer with a 4-byte little-endian
@@ -163,7 +165,7 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 	}
 	size := len(data) - 4
 	if size > int(m.maxSize) {
-		return fmt.Errorf("native message size %d exceeds maximum %d", size, m.maxSize)
+		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, size, m.maxSize)
 	}
 	data[0] = byte(size)
 	data[1] = byte(size >> 8)
@@ -196,7 +198,7 @@ func (m *Messager) ReadMessage() (*Decoder, error) {
 		uint32(lenBytes[2])<<16 |
 		uint32(lenBytes[3])<<24
 	if length > m.maxSize {
-		return nil, fmt.Errorf("native message size %d exceeds maximum %d", length, m.maxSize)
+		return nil, fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, length, m.maxSize)
 	}
 	dec := m.decPool.Get().(*Decoder)
 	if cap(dec.buffer) < int(length) {
