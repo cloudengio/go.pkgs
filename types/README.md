@@ -53,11 +53,12 @@ that name. Each call returns a distinct instance.
 
 
 ```go
-func (r *Registry) RegisterType[T any, PT *T]()
+func (r *Registry) RegisterType[T any, PT *T]() string
 ```
 RegisterType registers T under the name reported by TypeName[T], replacing
 any type previously registered under that name. New will construct a PT,
-that is a *T, for that name.
+that is a *T, for that name. It returns the name under which the type was
+registered.
 
 
 

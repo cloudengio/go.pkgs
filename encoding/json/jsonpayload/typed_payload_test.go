@@ -368,23 +368,25 @@ func TestReaderTrailingContent(t *testing.T) {
 }
 
 // TestReaderAnyRoundTrip verifies that ReaderAny selects the concrete type
-// named by the message, without the caller knowing it in advance.
+// named by the message, without the caller knowing it in advance, and records
+// the type name in ReaderAny.Type.
 func TestReaderAnyRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		buf  func() ([]byte, error)
-		want any
+		name     string
+		buf      func() ([]byte, error)
+		wantType string
+		want     any
 	}{
 		{"payload", func() ([]byte, error) {
 			return json.Marshal(jsonpayload.NewWriter(&payload{A: 42}))
-		}, &payload{A: 42}},
+		}, testPkg + ".payload", &payload{A: 42}},
 		{"other payload", func() ([]byte, error) {
 			return json.Marshal(jsonpayload.NewWriter(&otherPayload{B: "hello"}))
-		}, &otherPayload{B: "hello"}},
+		}, testPkg + ".otherPayload", &otherPayload{B: "hello"}},
 		{"wrapper", func() ([]byte, error) {
 			return json.Marshal(jsonpayload.NewWriter(
 				&jsonpayload.Wrapper[wrapped]{Value: wrapped{A: 1, B: "two"}}))
-		}, &jsonpayload.Wrapper[wrapped]{Value: wrapped{A: 1, B: "two"}}},
+		}, "cloudeng.io/encoding/json/jsonpayload.Wrapper[" + testPkg + ".wrapped]", &jsonpayload.Wrapper[wrapped]{Value: wrapped{A: 1, B: "two"}}},
 	} {
 		buf, err := tc.buf()
 		if err != nil {
@@ -396,9 +398,22 @@ func TestReaderAnyRoundTrip(t *testing.T) {
 			t.Errorf("%v: Unmarshal: %v", tc.name, err)
 			continue
 		}
+		if got, want := rd.Type, tc.wantType; got != want {
+			t.Errorf("%v: Type: got %q, want %q", tc.name, got, want)
+		}
 		if got, want := fmt.Sprintf("%T%+v", rd.Value, rd.Value), fmt.Sprintf("%T%+v", tc.want, tc.want); got != want {
 			t.Errorf("%v: got %v, want %v", tc.name, got, want)
 		}
+	}
+}
+
+func TestRegisterTypeReturnsName(t *testing.T) {
+	type localType struct {
+		X int
+	}
+	name := jsonpayload.RegisterType[localType]()
+	if !strings.HasSuffix(name, ".localType") {
+		t.Errorf("RegisterType returned %q, want suffix .localType", name)
 	}
 }
 

@@ -27,11 +27,12 @@ itself, rather than through the readers here.
 
 ### Func RegisterType
 ```go
-func RegisterType[T any, PT *T]()
+func RegisterType[T any]() string
 ```
 RegisterType registers T under the name reported by TypeName[T], replacing
 any type previously registered under that name. It is used by ReaderAny to
-construct a new instance of the type when decoding a message.
+construct a new instance of the type when decoding a message. It returns the
+name under which the type was registered.
 
 
 
@@ -95,12 +96,15 @@ func (rw *ReadWriter[T, PT]) UnmarshalJSONFrom(dec *jsontext.Decoder) error
 ```go
 type ReadWriterAny struct {
 	Value ReaderWriter
+	Type  string
 }
 ```
-ReadWriterAny is a typed message that can be both encoded and decoded when
-its type is not known at compile time, for use as a field of a struct
-that is itself marshaled as JSON. Every type that may be decoded must be
-registered with RegisterType; Value must be non-nil to encode.
+ReadWriterAny is a typed message that can be both encoded and decoded
+when its type is not known at compile time, for use as a field of a
+struct that is itself marshaled as JSON. Every type that may be decoded
+must be registered with RegisterType; Value must be non-nil to encode.
+The Type value will be set to the name of the decoded type, if and only if
+the message was successfully decoded.
 
 ### Functions
 
@@ -163,12 +167,14 @@ func (r Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error
 ```go
 type ReaderAny struct {
 	Value json.UnmarshalerFrom
+	Type  string
 }
 ```
 ReaderAny is a JSON decoder for typed messages. It should be used when the
 expected type is not known at compile time. The Value field will be set to
 the decoded value. All types that may be decoded must be registered with
-RegisterType.
+RegisterType. The Type value will be set to the name of the decoded type,
+if and only if the message was successfully decoded.
 
 ### Methods
 

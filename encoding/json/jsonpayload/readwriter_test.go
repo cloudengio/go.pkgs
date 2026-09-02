@@ -81,13 +81,14 @@ func TestReadWriterTypeMismatch(t *testing.T) {
 // resolved through the registry when it is read.
 func TestReadWriterAnyRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		val  jsonpayload.ReaderWriter
-		want string
+		name     string
+		val      jsonpayload.ReaderWriter
+		wantType string
+		want     string
 	}{
-		{"payload", &payload{A: 42}, `{"id":7,"message":{"type":"` + testPkg +
+		{"payload", &payload{A: 42}, testPkg + ".payload", `{"id":7,"message":{"type":"` + testPkg +
 			`.payload","payload":{"A":42}},"trailer":"end"}`},
-		{"other payload", &otherPayload{B: "hi"}, `{"id":7,"message":{"type":"` + testPkg +
+		{"other payload", &otherPayload{B: "hi"}, testPkg + ".otherPayload", `{"id":7,"message":{"type":"` + testPkg +
 			`.otherPayload","payload":{"B":"hi"}},"trailer":"end"}`},
 	} {
 		in := anyEnvelope{ID: 7, Message: jsonpayload.NewReadWriterAny(tc.val), Trailer: "end"}
@@ -110,6 +111,9 @@ func TestReadWriterAnyRoundTrip(t *testing.T) {
 		}
 		if got, want := out.Trailer, in.Trailer; got != want {
 			t.Errorf("%v: Trailer: got %v, want %v", tc.name, got, want)
+		}
+		if got, want := out.Message.Type, tc.wantType; got != want {
+			t.Errorf("%v: Type: got %q, want %q", tc.name, got, want)
 		}
 		// The concrete type is recovered from the message.
 		if got, want := typeOf(out.Message.Value), typeOf(tc.val); got != want {

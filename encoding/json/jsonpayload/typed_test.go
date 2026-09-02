@@ -57,7 +57,7 @@ func TestEncodeDecode(t *testing.T) {
 		t.Fatalf("Decoded value mismatch: got %v, want %v", rd.Value.A, val.A)
 	}
 
-	rda := jsonpayload.ReaderAny{&myStruct{}}
+	rda := jsonpayload.ReaderAny{Value: &myStruct{}}
 	if err := json.Unmarshal(buf, &rda); err != nil {
 		t.Fatalf("Unmarshal into ReaderAny failed: %v", err)
 	}
