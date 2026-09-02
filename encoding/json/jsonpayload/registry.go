@@ -15,8 +15,9 @@ var (
 // RegisterType registers T under the name reported by TypeName[T], replacing
 // any type previously registered under that name. It is used by ReaderAny
 // to construct a new instance of the type when decoding a message.
-func RegisterType[T any, PT *T]() {
-	decodeRegistry.RegisterType[T]()
+// It returns the name under which the type was registered.
+func RegisterType[T any]() string {
+	return decodeRegistry.RegisterType[T]()
 }
 
 // NewInstance returns a newly allocated instance of the type registered

@@ -192,6 +192,7 @@ func (r Reader[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 // the decoded value. All types that may be decoded must be registered with
 // RegisterType.
 type ReaderAny struct {
+	Type  string
 	Value json.UnmarshalerFrom
 }
 
@@ -208,6 +209,7 @@ func (r *ReaderAny) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if err := r.Value.UnmarshalJSONFrom(dec); err != nil {
 		return err
 	}
+	r.Type = typeName
 	return readToEndObject(dec)
 }
 

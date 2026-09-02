@@ -20,12 +20,15 @@ func (r *Registry) sm() *sync.Map {
 
 // RegisterType registers T under the name reported by TypeName[T], replacing
 // any type previously registered under that name. New will construct a PT,
-// that is a *T, for that name.
-func (r *Registry) RegisterType[T any, PT *T]() {
+// that is a *T, for that name. It returns the name under which the type was
+// registered.
+func (r *Registry) RegisterType[T any, PT *T]() string {
 	fn := func() any {
 		return PT(new(T))
 	}
-	r.sm().Store(TypeName[T](), fn)
+	name := TypeName[T]()
+	r.sm().Store(name, fn)
+	return name
 }
 
 // New returns a newly allocated instance of the type registered under
