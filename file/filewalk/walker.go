@@ -268,15 +268,10 @@ func (w *Walker[T]) walkChildren(ctx context.Context, path string, depth int, ch
 			wg.Done()
 			continue
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
 		go func() {
 			_ = w.walkPrefix(ctx, w.fs.Join(path, child.Name()), depth, child, nil, limitCh)
-			wg.Done()
 			limitCh <- struct{}{}
+			wg.Done()
 		}()
 	}
 	wg.Wait()
