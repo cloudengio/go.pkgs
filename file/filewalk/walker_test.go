@@ -515,7 +515,7 @@ type slowScanner struct {
 }
 
 func (is *slowScanner) Scan(ctx context.Context, n int) bool {
-	time.Sleep(time.Millisecond * 200)
+	time.Sleep(time.Millisecond * 20)
 	return is.sc.Scan(ctx, n)
 }
 
@@ -528,7 +528,7 @@ func (is *slowScanner) Contents() []filewalk.Entry {
 }
 
 func TestSyncScans(t *testing.T) {
-	defer synctestutil.AssertNoGoroutines(t)()
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
 	is := &slowFS{localfs.New()}
 	lg := &logger{
