@@ -210,8 +210,11 @@ func (r *ReaderAny) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if err := r.Value.UnmarshalJSONFrom(dec); err != nil {
 		return err
 	}
+	if err := readToEndObject(dec); err != nil {
+		return err
+	}
 	r.Type = typeName
-	return readToEndObject(dec)
+	return nil
 }
 
 // ReaderWriter is a value that can both encode and decode itself as the
