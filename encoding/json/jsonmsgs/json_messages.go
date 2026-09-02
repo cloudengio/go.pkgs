@@ -192,14 +192,6 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 			return fmt.Errorf("failed to write complete message: %w", io.ErrShortWrite)
 		}
 	}
-	/*
-			n, err := m.wr.Write(data)
-			if err != nil {
-				return fmt.Errorf("failed to write complete message: %w", err)
-			}
-		if n != len(data) {
-			return fmt.Errorf("failed to write complete message: wrote %d of %d bytes", n, len(data))
-		}*/
 	return nil
 }
 
