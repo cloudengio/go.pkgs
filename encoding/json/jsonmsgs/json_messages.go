@@ -91,6 +91,12 @@ func NewMessager(wr io.Writer, rd io.ReadCloser, opts ...Option) *Messager {
 	if o.maxSize == 0 {
 		o.maxSize = DefaultMaxNativeMessageSize
 	}
+	if wr == nil {
+		wr = io.Discard
+	}
+	if rd == nil {
+		rd = io.NopCloser(bytes.NewReader(nil))
+	}
 	nm := &Messager{
 		wr:      wr,
 		rd:      rd,
@@ -156,6 +162,9 @@ func (m *Messager) Close() error {
 // WriteMessage writes a message to the underlying writer with a 4-byte little-endian
 // length prefix. The encoder is returned to the pool after use regardless of error.
 func (m *Messager) WriteMessage(enc *Encoder) error {
+	if enc == nil || enc.buffer == nil {
+		return errors.New("nil encoder")
+	}
 	m.wmu.Lock()
 	defer m.wmu.Unlock()
 	defer m.encPool.Put(enc)
@@ -164,20 +173,33 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 		return fmt.Errorf("buffer too small to write length prefix")
 	}
 	size := len(data) - 4
-	if size > int(m.maxSize) {
+	if uint32(size) > m.maxSize {
 		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, size, m.maxSize)
 	}
 	data[0] = byte(size)
 	data[1] = byte(size >> 8)
 	data[2] = byte(size >> 16)
 	data[3] = byte(size >> 24)
-	n, err := m.wr.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to write complete message: %w", err)
+	for off := 0; off < len(data); {
+		n, err := m.wr.Write(data[off:])
+		if n > 0 {
+			off += n
+		}
+		if err != nil {
+			return fmt.Errorf("failed to write complete message: %w", err)
+		}
+		if n == 0 {
+			return fmt.Errorf("failed to write complete message: %w", io.ErrShortWrite)
+		}
 	}
-	if n != len(data) {
-		return fmt.Errorf("failed to write complete message: wrote %d of %d bytes", n, len(data))
-	}
+	/*
+			n, err := m.wr.Write(data)
+			if err != nil {
+				return fmt.Errorf("failed to write complete message: %w", err)
+			}
+		if n != len(data) {
+			return fmt.Errorf("failed to write complete message: wrote %d of %d bytes", n, len(data))
+		}*/
 	return nil
 }
 
