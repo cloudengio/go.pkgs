@@ -8,7 +8,7 @@ require (
 	golang.org/x/sys v0.47.0
 )
 
-require cloudeng.io/algo v0.0.0-20260902173116-c569651359a0
+require cloudeng.io/algo v0.0.0-20260903161432-3e39c500cdbf
 
 require cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba // indirect
 
