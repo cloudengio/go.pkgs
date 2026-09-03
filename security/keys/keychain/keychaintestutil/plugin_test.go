@@ -160,7 +160,7 @@ func TestPluginServeIO(t *testing.T) {
 	// Valid Request
 	req, _ := plugins.NewRequest("secret-key", nil)
 	var inBuf bytes.Buffer
-	if err := plugins.WriteRequest(jsonmsgs.NewMessager(&inBuf, nil), req); err != nil {
+	if err := plugins.WriteRequest(jsonmsgs.NewMessager(nil, &inBuf), req); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestPluginServeIO(t *testing.T) {
 		t.Fatalf("ServeIO: %v", err)
 	}
 
-	resp, err := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(&outBuf)))
+	resp, err := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(&outBuf), nil))
 	if err != nil {
 		t.Fatalf("read response: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestPluginServeIO(t *testing.T) {
 	if err := p.ServeIO(ctx, &inBuf, &outBuf); err != nil {
 		t.Fatalf("ServeIO on invalid json: %v", err)
 	}
-	errResp, err := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(&outBuf)))
+	errResp, err := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(&outBuf), nil))
 	if err != nil {
 		t.Fatalf("read error response: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestServer(t *testing.T) {
 	// Test Run CLI forwarding to server
 	req, _ := plugins.NewRequest("server-key", nil)
 	var inBuf bytes.Buffer
-	_ = plugins.WriteRequest(jsonmsgs.NewMessager(&inBuf, nil), req)
+	_ = plugins.WriteRequest(jsonmsgs.NewMessager(nil, &inBuf), req)
 
 	var outBuf bytes.Buffer
 	var stderr bytes.Buffer
@@ -293,7 +293,7 @@ func TestServer(t *testing.T) {
 		t.Fatalf("Run with --socket: %v", err)
 	}
 
-	resp, err := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(&outBuf)))
+	resp, err := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(&outBuf), nil))
 	if err != nil {
 		t.Fatalf("Decode response: %v", err)
 	}
@@ -308,14 +308,14 @@ func TestRunFlags(t *testing.T) {
 	// 1. Error flag
 	req, _ := plugins.NewRequest("k", nil)
 	var inBuf bytes.Buffer
-	_ = plugins.WriteRequest(jsonmsgs.NewMessager(&inBuf, nil), req)
+	_ = plugins.WriteRequest(jsonmsgs.NewMessager(nil, &inBuf), req)
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
 	if err := keychaintestutil.Run(ctx, &inBuf, &outBuf, &errBuf, "--error=forced failure"); err != nil {
 		t.Fatalf("Run --error: %v", err)
 	}
-	resp, _ := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(&outBuf)))
+	resp, _ := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(&outBuf), nil))
 	if resp.Error == nil || resp.Error.Detail != "forced failure" {
 		t.Errorf("resp.Error = %+v, want forced failure", resp.Error)
 	}
@@ -323,11 +323,11 @@ func TestRunFlags(t *testing.T) {
 	// 2. Static contents flag matching keyname
 	inBuf.Reset()
 	outBuf.Reset()
-	_ = plugins.WriteRequest(jsonmsgs.NewMessager(&inBuf, nil), req)
+	_ = plugins.WriteRequest(jsonmsgs.NewMessager(nil, &inBuf), req)
 	if err := keychaintestutil.Run(ctx, &inBuf, &outBuf, &errBuf, "--contents=static-secret", "--keyname=k"); err != nil {
 		t.Fatalf("Run --contents: %v", err)
 	}
-	resp2, _ := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(&outBuf)))
+	resp2, _ := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(&outBuf), nil))
 	if string(resp2.Contents) != "static-secret" {
 		t.Errorf("resp2.Contents = %q, want static-secret", resp2.Contents)
 	}
@@ -335,11 +335,11 @@ func TestRunFlags(t *testing.T) {
 	// 3. Static contents flag with mismatched keyname
 	inBuf.Reset()
 	outBuf.Reset()
-	_ = plugins.WriteRequest(jsonmsgs.NewMessager(&inBuf, nil), req)
+	_ = plugins.WriteRequest(jsonmsgs.NewMessager(nil, &inBuf), req)
 	if err := keychaintestutil.Run(ctx, &inBuf, &outBuf, &errBuf, "--contents=static-secret", "--keyname=other-key"); err != nil {
 		t.Fatalf("Run --contents mismatched: %v", err)
 	}
-	resp3, _ := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(&outBuf)))
+	resp3, _ := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(&outBuf), nil))
 	if !errors.Is(resp3.Error, plugins.ErrKeyNotFound) {
 		t.Errorf("resp3.Error = %+v, want ErrKeyNotFound", resp3.Error)
 	}
@@ -475,14 +475,14 @@ func TestRunUnsupportedVersion(t *testing.T) {
 		Keyname: "key1",
 	}
 	var inBuf bytes.Buffer
-	if err := plugins.WriteRequest(jsonmsgs.NewMessager(&inBuf, nil), req); err != nil {
+	if err := plugins.WriteRequest(jsonmsgs.NewMessager(nil, &inBuf), req); err != nil {
 		t.Fatal(err)
 	}
 	out := &bytes.Buffer{}
 	if err := keychaintestutil.Run(ctx, &inBuf, out, os.Stderr, "--contents=static"); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	resp, err := plugins.ReadResponse(jsonmsgs.NewMessager(nil, io.NopCloser(out)))
+	resp, err := plugins.ReadResponse(jsonmsgs.NewMessager(io.NopCloser(out), nil))
 	if err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}

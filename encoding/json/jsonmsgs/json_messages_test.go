@@ -22,7 +22,7 @@ func TestMessagerMultipleMessages(t *testing.T) {
 	var buf bytes.Buffer
 	// Set maxSize to 50 bytes. We will write 3 messages of 30 bytes each (90 bytes total).
 	// Under the old io.LimitReader bug, reading the 3rd message would fail with EOF.
-	nmWriter := jsonmsgs.NewMessager(&buf, io.NopCloser(bytes.NewReader(nil)), jsonmsgs.WithMaxSize(50))
+	nmWriter := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), &buf, jsonmsgs.WithMaxSize(50))
 	for i := range 3 {
 		enc := nmWriter.NewEncoder()
 		_ = enc.WriteToken(jsontext.BeginObject)
@@ -34,7 +34,7 @@ func TestMessagerMultipleMessages(t *testing.T) {
 		}
 	}
 
-	nmReader := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(buf.Bytes())), jsonmsgs.WithMaxSize(50))
+	nmReader := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(buf.Bytes())), io.Discard, jsonmsgs.WithMaxSize(50))
 	for i := range 3 {
 		nmd, err := nmReader.ReadMessage()
 		if err != nil {
@@ -81,7 +81,7 @@ func decodeMsg(dec *jsontext.Decoder, want int) error {
 }
 
 func TestMessagerMaxSizeEnforced(t *testing.T) {
-	nm := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(nil)), jsonmsgs.WithMaxSize(20))
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard, jsonmsgs.WithMaxSize(20))
 	enc := nm.NewEncoder()
 	_ = enc.WriteToken(jsontext.BeginObject)
 	_ = enc.WriteToken(jsontext.String("large_field_content_exceeding_twenty_bytes"))
@@ -99,7 +99,7 @@ func TestMessagerMaxSizeEnforced(t *testing.T) {
 	fakeStream.Write([]byte{100, 0, 0, 0})
 	fakeStream.Write(make([]byte, 100))
 
-	nmReader := jsonmsgs.NewMessager(io.Discard, io.NopCloser(&fakeStream), jsonmsgs.WithMaxSize(20))
+	nmReader := jsonmsgs.NewMessager(io.NopCloser(&fakeStream), io.Discard, jsonmsgs.WithMaxSize(20))
 	if _, err := nmReader.ReadMessage(); err == nil {
 		t.Fatal("expected ReadMessage to fail when length > maxSize, got nil")
 	} else if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
@@ -120,7 +120,7 @@ func (s *safeBuffer) Write(p []byte) (n int, err error) {
 
 func TestMessagerConcurrentWrites(t *testing.T) {
 	var sbuf safeBuffer
-	nm := jsonmsgs.NewMessager(&sbuf, io.NopCloser(bytes.NewReader(nil)))
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), &sbuf)
 
 	const numGoroutines = 20
 	const msgsPerGoroutine = 10
@@ -149,7 +149,7 @@ func TestMessagerConcurrentWrites(t *testing.T) {
 	wg.Wait()
 
 	// Read all messages back and verify there was no interleaving/corruption.
-	reader := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(sbuf.buf.Bytes())))
+	reader := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(sbuf.buf.Bytes())), io.Discard)
 	totalMsgs := numGoroutines * msgsPerGoroutine
 	for i := range totalMsgs {
 		dec, err := reader.ReadMessage()
@@ -165,7 +165,7 @@ func TestMessagerConcurrentWrites(t *testing.T) {
 
 func TestMessagerReleaseDecoderSafety(t *testing.T) {
 	var buf bytes.Buffer
-	nm := jsonmsgs.NewMessager(&buf, io.NopCloser(bytes.NewReader(nil)))
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), &buf)
 
 	// Releasing an unpooled decoder should be safely ignored and not corrupt the pool.
 	unpooled := jsonmsgs.NewDecoderForTests(jsontext.NewDecoder(strings.NewReader(`{}`)))
@@ -179,7 +179,7 @@ func TestMessagerReleaseDecoderSafety(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(buf.Bytes())))
+	reader := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(buf.Bytes())), io.Discard)
 	dec, err := reader.ReadMessage()
 	if err != nil {
 		t.Fatalf("ReadMessage: %v", err)
@@ -188,7 +188,7 @@ func TestMessagerReleaseDecoderSafety(t *testing.T) {
 }
 
 func TestMessagerCloseNilReader(t *testing.T) {
-	nm := jsonmsgs.NewMessager(io.Discard, nil)
+	nm := jsonmsgs.NewMessager(nil, io.Discard)
 	if err := nm.Close(); err != nil {
 		t.Errorf("Close on nil reader returned error: %v", err)
 	}

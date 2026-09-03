@@ -83,7 +83,7 @@ type Messager struct {
 
 // NewMessager creates a new Messager with the given writer and readCloser.
 // If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize (1MB) is used.
-func NewMessager(wr io.Writer, rd io.ReadCloser, opts ...Option) *Messager {
+func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 	var o options
 	for _, opt := range opts {
 		opt(&o)

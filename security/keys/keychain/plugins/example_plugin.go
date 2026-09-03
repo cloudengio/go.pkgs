@@ -37,7 +37,7 @@ func main() {
 }
 
 func run() error {
-	msgr := jsonmsgs.NewMessager(os.Stdout, io.NopCloser(os.Stdin))
+	msgr := jsonmsgs.NewMessager(io.NopCloser(os.Stdin), os.Stdout)
 
 	// 1. Read the request from stdin.
 	req, err := plugins.ReadRequest(msgr)

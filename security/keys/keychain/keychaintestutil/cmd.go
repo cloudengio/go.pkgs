@@ -39,7 +39,7 @@ func Run(ctx context.Context, r io.Reader, w io.Writer, stderr io.Writer, args .
 		return err
 	}
 
-	msgr := jsonmsgs.NewMessager(w, io.NopCloser(r))
+	msgr := jsonmsgs.NewMessager(io.NopCloser(r), w)
 
 	// 1. Read request from msgr
 	req, err := plugins.ReadRequest(msgr)

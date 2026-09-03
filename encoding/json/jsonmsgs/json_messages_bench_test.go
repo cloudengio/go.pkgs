@@ -37,7 +37,7 @@ func (r *loopReader) Close() error { return nil }
 func encodeFramedMsg(b *testing.B) []byte {
 	b.Helper()
 	var buf bytes.Buffer
-	nm := jsonmsgs.NewMessager(&buf, io.NopCloser(bytes.NewReader(nil)))
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), &buf)
 	enc := nm.NewEncoder()
 	_ = enc.WriteToken(jsontext.BeginObject)
 	_ = enc.WriteToken(jsontext.String("version"))
@@ -68,7 +68,7 @@ func drainDecoder(b *testing.B, nmd *jsonmsgs.Decoder) {
 }
 
 func BenchmarkMessagerWriteMessage(b *testing.B) {
-	nm := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(nil)))
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard)
 	b.ResetTimer()
 	for b.Loop() {
 		enc := nm.NewEncoder()
@@ -88,7 +88,7 @@ func BenchmarkMessagerWriteMessage(b *testing.B) {
 // concurrent access. Note: io.Discard is used as the writer since Messager
 // does not serialise concurrent writes — this benchmark isolates pool throughput.
 func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
-	nm := jsonmsgs.NewMessager(io.Discard, io.NopCloser(bytes.NewReader(nil)))
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -110,7 +110,7 @@ func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
 // iteration rather than reallocating.
 func BenchmarkMessagerReadMessage(b *testing.B) {
 	msg := encodeFramedMsg(b)
-	nm := jsonmsgs.NewMessager(io.Discard, &loopReader{data: msg})
+	nm := jsonmsgs.NewMessager(&loopReader{data: msg}, io.Discard)
 	b.ResetTimer()
 	for b.Loop() {
 		nmd, err := nm.ReadMessage()
@@ -129,7 +129,7 @@ func BenchmarkMessagerReadMessageParallel(b *testing.B) {
 	msg := encodeFramedMsg(b)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		nm := jsonmsgs.NewMessager(io.Discard, &loopReader{data: msg})
+		nm := jsonmsgs.NewMessager(&loopReader{data: msg}, io.Discard)
 		for pb.Next() {
 			nmd, err := nm.ReadMessage()
 			if err != nil {

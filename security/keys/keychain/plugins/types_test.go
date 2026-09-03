@@ -253,7 +253,7 @@ func TestWriteReadRequest(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	msgr := jsonmsgs.NewMessager(&buf, io.NopCloser(&buf))
+	msgr := jsonmsgs.NewMessager(io.NopCloser(&buf), &buf)
 	if err := plugins.WriteRequest(msgr, req); err != nil {
 		t.Fatalf("WriteRequest failed: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestWriteReadResponse(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	msgr := jsonmsgs.NewMessager(&buf, io.NopCloser(&buf))
+	msgr := jsonmsgs.NewMessager(io.NopCloser(&buf), &buf)
 	if err := plugins.WriteResponse(msgr, *resp); err != nil {
 		t.Fatalf("WriteResponse failed: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestMismatchedMessageType(t *testing.T) {
 	resp := req.NewResponse([]byte("data"), nil)
 
 	var buf bytes.Buffer
-	msgr := jsonmsgs.NewMessager(&buf, io.NopCloser(&buf))
+	msgr := jsonmsgs.NewMessager(io.NopCloser(&buf), &buf)
 	if err := plugins.WriteResponse(msgr, *resp); err != nil {
 		t.Fatalf("WriteResponse failed: %v", err)
 	}
