@@ -48,7 +48,9 @@ func run() error {
 	// 2. Reject requests whose version is newer than this plugin supports.
 	if verr := req.CheckVersion(); verr != nil {
 		resp := req.NewResponse(nil, verr)
-		_ = resp.WithPluginSpecific(req.PluginSpecific)
+		if err := resp.WithPluginSpecific(req.PluginSpecific); err != nil {
+			return fmt.Errorf("failed to create response: %w", err)
+		}
 		return plugins.WriteResponse(msgr, *resp)
 	}
 
