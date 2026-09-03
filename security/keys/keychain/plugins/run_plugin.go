@@ -25,8 +25,8 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	in := &bytes.Buffer{}
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	writeMsgr := jsonmsgs.NewMessager(in, nil)
-	if err := WriteRequest(writeMsgr, req); err != nil {
+	msgr := jsonmsgs.NewMessager(io.NopCloser(stdout), in)
+	if err := WriteRequest(msgr, req); err != nil {
 		rerr := &Error{
 			Message: "failed to create request",
 			Detail:  err.Error(),
@@ -47,8 +47,7 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 		}
 		return Response{Error: rerr}, rerr
 	}
-	readMsgr := jsonmsgs.NewMessager(nil, io.NopCloser(stdout))
-	resp, err := ReadResponse(readMsgr)
+	resp, err := ReadResponse(msgr)
 	if err != nil {
 		rerr := &Error{
 			Message: "failed to decode plugin response",

@@ -142,7 +142,7 @@ func (p *Plugin) HandleRequest(_ context.Context, req plugins.Request) plugins.R
 // ServeIO reads a Request from r, handles it with HandleRequest,
 // and writes the Response to w.
 func (p *Plugin) ServeIO(ctx context.Context, r io.Reader, w io.Writer) error {
-	msgr := jsonmsgs.NewMessager(w, io.NopCloser(r))
+	msgr := jsonmsgs.NewMessager(io.NopCloser(r), w)
 	req, err := plugins.ReadRequest(msgr)
 	if err != nil {
 		resp := plugins.Response{

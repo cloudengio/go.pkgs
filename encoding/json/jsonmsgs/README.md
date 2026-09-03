@@ -65,9 +65,9 @@ type Messager struct {
 ### Functions
 
 ```go
-func NewMessager(wr io.Writer, rd io.ReadCloser, opts ...Option) *Messager
+func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager
 ```
-NewMessager creates a new Messager with the given writer and readCloser.
+NewMessager creates a new Messager with the given readCloser and writer.
 If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize
 (1MB) is used.
 
