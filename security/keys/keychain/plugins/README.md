@@ -74,6 +74,20 @@ unsupported request version error.
 func NextID() int32
 ```
 
+### Func WriteRequest
+```go
+func WriteRequest(msgr *jsonmsgs.Messager, req Request) error
+```
+WriteRequest writes a Request as a framed jsonmsgs message containing a
+jsonpayload typed message.
+
+### Func WriteResponse
+```go
+func WriteResponse(msgr *jsonmsgs.Messager, resp Response) error
+```
+WriteResponse writes a Response as a framed jsonmsgs message containing a
+jsonpayload typed message.
+
 
 
 ## Types
@@ -123,7 +137,7 @@ errors.Is and ErrUnsupportedVersion.
 ### Methods
 
 ```go
-func (e Error) Error() string
+func (e *Error) Error() string
 ```
 
 
@@ -192,12 +206,12 @@ func (f FS) WriteFileCtx(ctx context.Context, name string, data []byte, _ fs.Fil
 ### Type Request
 ```go
 type Request struct {
-	Version        int32           `json:"version,omitempty"`
-	ID             int32           `json:"id,omitempty"`
-	Keyname        string          `json:"keyname"`
-	Write          bool            `json:"write,omitempty"`
-	Contents       []byte          `json:"contents,omitempty"`
-	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
+	Version        int32          `json:"version,omitempty"`
+	ID             int32          `json:"id,omitempty"`
+	Keyname        string         `json:"keyname"`
+	Write          bool           `json:"write,omitempty"`
+	Contents       []byte         `json:"contents,omitempty"`
+	PluginSpecific jsontext.Value `json:"plugin_specific,omitempty"`
 }
 ```
 Request represents the request to the keychain plugin.
@@ -220,6 +234,13 @@ contents, and plugin-specific data. The ID is automatically generated and is
 unique for each call to this function.
 
 
+```go
+func ReadRequest(msgr *jsonmsgs.Messager) (Request, error)
+```
+ReadRequest reads a Request from msgr as a framed jsonmsgs message
+containing a jsonpayload typed message.
+
+
 
 ### Methods
 
@@ -235,9 +256,26 @@ send back to the client as the response's Error.
 
 
 ```go
+func (req *Request) MarshalJSONTo(enc *jsontext.Encoder) error
+```
+
+
+```go
 func (req Request) NewResponse(contents []byte, responseError *Error) *Response
 ```
 NewResponse creates a Response with the given contents and error.
+
+
+```go
+func (req *Request) UnmarshalJSONFrom(dec *jsontext.Decoder) error
+```
+
+
+```go
+func (req Request) UnmarshalPluginSpecific(v any) error
+```
+UnmarshalPluginSpecific unmarshals the plugin-specific data of the Request
+into the provided value v.
 
 
 
@@ -245,16 +283,23 @@ NewResponse creates a Response with the given contents and error.
 ### Type Response
 ```go
 type Response struct {
-	ID             int32           `json:"id,omitempty"`
-	Contents       []byte          `json:"contents,omitempty"`
-	Stderr         string          `json:"-"` // Stderr is the stder output from the plugin and is filled in by RunExtPlugin.
-	Error          *Error          `json:"error,omitempty"`
-	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
+	ID             int32          `json:"id,omitempty"`
+	Contents       []byte         `json:"contents,omitempty"`
+	Stderr         string         `json:"-"` // Stderr is the stder output from the plugin and is filled in by RunExtPlugin.
+	Error          *Error         `json:"error,omitempty"`
+	PluginSpecific jsontext.Value `json:"plugin_specific,omitempty"`
 }
 ```
 Response represents the response from the keychain plugin.
 
 ### Functions
+
+```go
+func ReadResponse(msgr *jsonmsgs.Messager) (Response, error)
+```
+ReadResponse reads a Response from msgr as a framed jsonmsgs message
+containing a jsonpayload typed message.
+
 
 ```go
 func RunExtPlugin(ctx context.Context, binary string, req Request, args ...string) (Response, error)
@@ -266,6 +311,16 @@ path to the plugin executable.
 
 
 ### Methods
+
+```go
+func (resp *Response) MarshalJSONTo(enc *jsontext.Encoder) error
+```
+
+
+```go
+func (resp *Response) UnmarshalJSONFrom(dec *jsontext.Decoder) error
+```
+
 
 ```go
 func (resp Response) UnmarshalPluginSpecific(v any) error

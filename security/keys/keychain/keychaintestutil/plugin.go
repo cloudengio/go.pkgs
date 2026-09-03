@@ -8,10 +8,10 @@ package keychaintestutil
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"sync"
 
+	"cloudeng.io/encoding/json/jsonmsgs"
 	"cloudeng.io/security/keys/keychain/plugins"
 )
 
@@ -139,20 +139,20 @@ func (p *Plugin) HandleRequest(_ context.Context, req plugins.Request) plugins.R
 	return *resp
 }
 
-// ServeIO reads a JSON-encoded Request from r, handles it with HandleRequest,
-// and writes the JSON-encoded Response to w.
+// ServeIO reads a Request from r, handles it with HandleRequest,
+// and writes the Response to w.
 func (p *Plugin) ServeIO(ctx context.Context, r io.Reader, w io.Writer) error {
-	var req plugins.Request
-	dec := json.NewDecoder(r)
-	if err := dec.Decode(&req); err != nil {
+	msgr := jsonmsgs.NewMessager(w, io.NopCloser(r))
+	req, err := plugins.ReadRequest(msgr)
+	if err != nil {
 		resp := plugins.Response{
 			Error: &plugins.Error{
 				Message: "failed to decode request",
 				Detail:  err.Error(),
 			},
 		}
-		return json.NewEncoder(w).Encode(resp)
+		return plugins.WriteResponse(msgr, resp)
 	}
 	resp := p.HandleRequest(ctx, req)
-	return json.NewEncoder(w).Encode(resp)
+	return plugins.WriteResponse(msgr, resp)
 }

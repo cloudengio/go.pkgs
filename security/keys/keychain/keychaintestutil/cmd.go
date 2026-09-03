@@ -6,7 +6,6 @@ package keychaintestutil
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	"cloudeng.io/encoding/json/jsonmsgs"
 	"cloudeng.io/security/keys/keychain/plugins"
 )
 
@@ -30,7 +30,7 @@ func Run(ctx context.Context, r io.Reader, w io.Writer, stderr io.Writer, args .
 
 	fs := flag.NewFlagSet("keychain-test-plugin", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&socketFlag, "socket", os.Getenv(SocketEnvVar), "Socket address of the running keychain test server")
+	fs.StringVar(&socketFlag, "socket", os.Getenv(SocketEnvVar), "Socket path/address of the keychain daemon")
 	fs.StringVar(&errorFlag, "error", "", "Error detail to return in the response")
 	fs.StringVar(&contentsFlag, "contents", "", "Static contents to return in the response")
 	fs.StringVar(&keynameFlag, "keyname", "", "Keyname to match for static responses")
@@ -39,21 +39,18 @@ func Run(ctx context.Context, r io.Reader, w io.Writer, stderr io.Writer, args .
 		return err
 	}
 
-	// 1. Read request from r
-	input, err := io.ReadAll(r)
+	msgr := jsonmsgs.NewMessager(w, io.NopCloser(r))
+
+	// 1. Read request from msgr
+	req, err := plugins.ReadRequest(msgr)
 	if err != nil {
 		return fmt.Errorf("reading request: %w", err)
-	}
-
-	var req plugins.Request
-	if err := json.Unmarshal(input, &req); err != nil {
-		return fmt.Errorf("unmarshaling request: %w", err)
 	}
 
 	if verr := req.CheckVersion(); verr != nil {
 		resp := req.NewResponse(nil, verr)
 		_ = resp.WithPluginSpecific(req.PluginSpecific)
-		return json.NewEncoder(w).Encode(resp)
+		return plugins.WriteResponse(msgr, *resp)
 	}
 
 	// 2. If a daemon socket is available, forward request to daemon
@@ -68,16 +65,16 @@ func Run(ctx context.Context, r io.Reader, w io.Writer, stderr io.Writer, args .
 		}
 		defer conn.Close()
 
-		if _, err := conn.Write(input); err != nil {
+		connMsgr := jsonmsgs.NewMessager(conn, conn)
+		if err := plugins.WriteRequest(connMsgr, req); err != nil {
 			return fmt.Errorf("sending request to server: %w", err)
 		}
 
-		respBytes, err := io.ReadAll(conn)
+		resp, err := plugins.ReadResponse(connMsgr)
 		if err != nil {
 			return fmt.Errorf("reading response from server: %w", err)
 		}
-		_, err = w.Write(respBytes)
-		return err
+		return plugins.WriteResponse(msgr, resp)
 	}
 
 	// 3. Otherwise handle locally
@@ -87,24 +84,24 @@ func Run(ctx context.Context, r io.Reader, w io.Writer, stderr io.Writer, args .
 			Detail:  errorFlag,
 		})
 		_ = resp.WithPluginSpecific(req.PluginSpecific)
-		return json.NewEncoder(w).Encode(resp)
+		return plugins.WriteResponse(msgr, *resp)
 	}
 
 	if contentsFlag != "" || keynameFlag != "" {
 		if keynameFlag != "" && req.Keyname != keynameFlag {
 			resp := req.NewResponse(nil, plugins.NewErrorKeyNotFound(req.Keyname))
 			_ = resp.WithPluginSpecific(req.PluginSpecific)
-			return json.NewEncoder(w).Encode(resp)
+			return plugins.WriteResponse(msgr, *resp)
 		}
 		resp := req.NewResponse([]byte(contentsFlag), nil)
 		_ = resp.WithPluginSpecific(req.PluginSpecific)
-		return json.NewEncoder(w).Encode(resp)
+		return plugins.WriteResponse(msgr, *resp)
 	}
 
 	// Standalone in-memory fallback
 	plugin := New()
 	resp := plugin.HandleRequest(ctx, req)
-	return json.NewEncoder(w).Encode(resp)
+	return plugins.WriteResponse(msgr, resp)
 }
 
 // Main is the main entry point for a keychain test plugin executable.

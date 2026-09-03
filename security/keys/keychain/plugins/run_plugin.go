@@ -7,10 +7,12 @@ package plugins
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"time"
+
+	"cloudeng.io/encoding/json/jsonmsgs"
 )
 
 // RunExtPlugin runs an external keychain plugin with the provided request
@@ -23,8 +25,8 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	in := &bytes.Buffer{}
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	enc := json.NewEncoder(in)
-	if err := enc.Encode(req); err != nil {
+	writeMsgr := jsonmsgs.NewMessager(in, nil)
+	if err := WriteRequest(writeMsgr, req); err != nil {
 		rerr := &Error{
 			Message: "failed to create request",
 			Detail:  err.Error(),
@@ -37,7 +39,6 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 	cmd.Stdin = in
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	var resp Response
 	if err := cmd.Run(); err != nil {
 		rerr := &Error{
 			Message: "failed to run plugin",
@@ -46,7 +47,9 @@ func RunExtPlugin(ctx context.Context, binary string, req Request, args ...strin
 		}
 		return Response{Error: rerr}, rerr
 	}
-	if err := json.NewDecoder(stdout).Decode(&resp); err != nil {
+	readMsgr := jsonmsgs.NewMessager(nil, io.NopCloser(stdout))
+	resp, err := ReadResponse(readMsgr)
+	if err != nil {
 		rerr := &Error{
 			Message: "failed to decode plugin response",
 			Detail:  err.Error(),
