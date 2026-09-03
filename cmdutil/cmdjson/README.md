@@ -33,6 +33,25 @@ func (t *FlexTime) UnmarshalJSON(data []byte) error
 
 
 
+### Type Permissions
+```go
+type Permissions = cmdtypes.Permissions
+```
+Permissions is an alias for cmdtypes.Permissions, which is decoded from JSON
+via its UnmarshalText and UnmarshalJSON methods. It is retained here for the
+convenience of code that already refers to it by this name.
+
+### Functions
+
+```go
+func ParsePermissions(s string) (Permissions, error)
+```
+ParsePermissions parses a permission string in octal, rwx, or symbolic
+format, as per cmdtypes.ParsePermissions.
+
+
+
+
 ### Type RFC3339Time
 ```go
 type RFC3339Time time.Time
