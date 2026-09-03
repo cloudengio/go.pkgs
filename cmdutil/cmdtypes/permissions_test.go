@@ -272,3 +272,135 @@ func TestPermissionsYAMLErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestPermissionsSpecialBitsAgreeAcrossNotations verifies that the setuid,
+// setgid and sticky bits produce the same value whichever notation they are
+// written in. The numeric forms use the traditional UNIX bits (04000, 02000,
+// 01000) while fs.FileMode represents them with bits of its own, so the
+// numeric forms have to be translated rather than used as they stand.
+func TestPermissionsSpecialBitsAgreeAcrossNotations(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		notations []string
+		perm      fs.FileMode // the permission bits alone
+		special   fs.FileMode // the fs.FileMode flags expected
+	}{
+		// Note that the plain octal form is limited to four digits, so the
+		// leading-zero spellings 04755, 02755 and 01777 are not accepted;
+		// 0o4755 and 4755 are.
+		{"setuid", []string{"4755", "0o4755", "rwsr-xr-x", "u=rwxs,go=rx"}, 0755, fs.ModeSetuid},
+		{"setgid", []string{"2755", "0o2755", "rwxr-sr-x"}, 0755, fs.ModeSetgid},
+		{"sticky", []string{"1777", "0o1777", "rwxrwxrwt"}, 0777, fs.ModeSticky},
+		{"none", []string{"0755", "755", "rwxr-xr-x", "u=rwx,go=rx"}, 0755, 0},
+	} {
+		want := tc.perm | tc.special
+		for _, in := range tc.notations {
+			got, err := cmdtypes.ParsePermissions(in)
+			if err != nil {
+				t.Errorf("%v: %v: %v", tc.name, in, err)
+				continue
+			}
+			if got.FileMode() != want {
+				t.Errorf("%v: %v: got %v (%#o), want %v (%#o)",
+					tc.name, in, got.FileMode(), uint32(got.FileMode()), want, uint32(want))
+			}
+			// The permission bits and the flag are both recoverable.
+			if got.FileMode().Perm() != tc.perm {
+				t.Errorf("%v: %v: got perm %04o, want %04o", tc.name, in, got.FileMode().Perm(), tc.perm)
+			}
+			if tc.special != 0 && got.FileMode()&tc.special == 0 {
+				t.Errorf("%v: %v: %v is not set", tc.name, in, tc.special)
+			}
+		}
+	}
+}
+
+// TestPermissionsSpecialBitsRoundTrip verifies that a value carrying a special
+// bit is written in the traditional UNIX form and reads back unchanged.
+// Writing the raw fs.FileMode would produce something like 40000755, which is
+// not a permission string any of the notations can express.
+func TestPermissionsSpecialBitsRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{"rwsr-xr-x", "4755"},
+		{"4755", "4755"},
+		{"rwxr-sr-x", "2755"},
+		{"2755", "2755"},
+		{"rwxrwxrwt", "1777"},
+		{"1777", "1777"},
+		{"rwsr-sr-t", "7755"},
+		{"0755", "0755"},
+	} {
+		p, err := cmdtypes.ParsePermissions(tc.in)
+		if err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		if got := p.String(); got != tc.want {
+			t.Errorf("%v: got %v, want %v", tc.in, got, tc.want)
+		}
+		// Through text, JSON and YAML the value survives unchanged.
+		text, err := p.MarshalText()
+		if err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		var back cmdtypes.Permissions
+		if err := back.UnmarshalText(text); err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		if back != p {
+			t.Errorf("%v: text round trip gave %v, want %v", tc.in, back.FileMode(), p.FileMode())
+		}
+		buf, err := json.Marshal(p)
+		if err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		var fromJSON cmdtypes.Permissions
+		if err := json.Unmarshal(buf, &fromJSON); err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		if fromJSON != p {
+			t.Errorf("%v: json round trip gave %v, want %v", tc.in, fromJSON.FileMode(), p.FileMode())
+		}
+		ybuf, err := yaml.Marshal(p)
+		if err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		var fromYAML cmdtypes.Permissions
+		if err := yaml.Unmarshal(ybuf, &fromYAML); err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		if fromYAML != p {
+			t.Errorf("%v: yaml round trip gave %v, want %v", tc.in, fromYAML.FileMode(), p.FileMode())
+		}
+	}
+}
+
+// TestPermissionsNumericRange verifies that a numeric value that cannot be a
+// set of UNIX permission bits is rejected rather than silently truncated or
+// taken to be an fs.FileMode.
+func TestPermissionsNumericRange(t *testing.T) {
+	for _, in := range []string{"0o10000", "0o40000755", "0xffffffff"} {
+		if got, err := cmdtypes.ParsePermissions(in); err == nil {
+			t.Errorf("%v: expected an error, got %v", in, got.FileMode())
+		} else if !strings.Contains(err.Error(), "out of range") {
+			t.Errorf("%v: got %v, want it to report a range error", in, err)
+		}
+	}
+	// The largest valid value is 7777, all special and permission bits set.
+	got, err := cmdtypes.ParsePermissions("7777")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := fs.FileMode(0777) | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky; got.FileMode() != want {
+		t.Errorf("got %v, want %v", got.FileMode(), want)
+	}
+}

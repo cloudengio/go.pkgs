@@ -378,7 +378,16 @@ IsDefault returns true if the value has not been set.
 func (p *Permissions) Octal() string
 ```
 Octal returns the 4 digit octal representation of the permissions (e.g.
-"0700"), whatever the notation they were supplied in.
+"0700", "4755"), whatever the notation they were supplied in. It is the
+encoding used by cmdtypes.Permissions for text, JSON and YAML, so that a
+value written from a flag reads back as the same value.
+
+
+```go
+func (p *Permissions) Permissions() cmdtypes.Permissions
+```
+Permissions returns the value as a cmdtypes.Permissions, for use where the
+same value is also read from or written to JSON or YAML.
 
 
 ```go

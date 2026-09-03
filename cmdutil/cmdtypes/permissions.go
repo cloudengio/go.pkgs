@@ -20,6 +20,11 @@ import (
 // ("u=rwx,go=", "u=rwx,go=rx"), and is always encoded as the 4 digit octal
 // string, which every one of those formats can be read back from.
 //
+// The setuid, setgid and sticky bits are represented as fs.ModeSetuid,
+// fs.ModeSetgid and fs.ModeSticky, whichever notation they were written in,
+// so that 4755 and rwsr-xr-x yield the same value. They are written out in
+// the traditional UNIX form, ie. in the leading octal digit.
+//
 // Encoding and decoding is implemented by MarshalText and UnmarshalText,
 // which both encoding/json and gopkg.in/yaml.v3 use, so a single type serves
 // both without this package depending on either. YAML additionally routes
@@ -34,15 +39,16 @@ func (p Permissions) FileMode() fs.FileMode {
 }
 
 // String returns the 4 digit octal representation of the permissions
-// (e.g. "0700").
+// (e.g. "0700", "4755"), in the traditional UNIX form in which the leading
+// digit carries the setuid, setgid and sticky bits.
 func (p Permissions) String() string {
-	return fmt.Sprintf("%04o", fs.FileMode(p))
+	return fmt.Sprintf("%04o", unixBits(fs.FileMode(p)))
 }
 
 // MarshalText implements encoding.TextMarshaler, and with it the encoding
 // used for both JSON and YAML.
 func (p Permissions) MarshalText() ([]byte, error) {
-	return fmt.Appendf(nil, "%04o", fs.FileMode(p)), nil
+	return fmt.Appendf(nil, "%04o", unixBits(fs.FileMode(p))), nil
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler, and with it the decoding

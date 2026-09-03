@@ -12,6 +12,53 @@ import (
 	"strings"
 )
 
+// The traditional UNIX permission bits used by chmod and by the numeric
+// notations. fs.FileMode represents the same three flags with bits of its
+// own, so the numeric forms are translated rather than used as they stand.
+const (
+	unixSetuid   = 0o4000
+	unixSetgid   = 0o2000
+	unixSticky   = 0o1000
+	unixPermMask = 0o7777
+)
+
+// modeFromUnixBits converts traditional UNIX permission bits into an
+// fs.FileMode, mapping the setuid, setgid and sticky bits onto the bits that
+// fs.FileMode uses for them, so that a numeric form such as 4755 yields the
+// same value as the equivalent rwx or symbolic form.
+func modeFromUnixBits(v uint64) (fs.FileMode, error) {
+	if v > unixPermMask {
+		return 0, fmt.Errorf("permissions %#o out of range: expected at most %#o", v, uint64(unixPermMask))
+	}
+	mode := fs.FileMode(v) & fs.ModePerm
+	if v&unixSetuid != 0 {
+		mode |= fs.ModeSetuid
+	}
+	if v&unixSetgid != 0 {
+		mode |= fs.ModeSetgid
+	}
+	if v&unixSticky != 0 {
+		mode |= fs.ModeSticky
+	}
+	return mode, nil
+}
+
+// unixBits is the inverse of modeFromUnixBits, returning the traditional UNIX
+// permission bits for mode, which is how permissions are written out.
+func unixBits(mode fs.FileMode) uint32 {
+	v := uint32(mode & fs.ModePerm)
+	if mode&fs.ModeSetuid != 0 {
+		v |= unixSetuid
+	}
+	if mode&fs.ModeSetgid != 0 {
+		v |= unixSetgid
+	}
+	if mode&fs.ModeSticky != 0 {
+		v |= unixSticky
+	}
+	return v
+}
+
 // ParsePermissions parses a permission string in octal ("0700", "700",
 // "0o700", "0x1c0"), rwx ("rwxr-xr-x", "-rwx------", "rwx") or symbolic chmod
 // ("u=rwx,go=", "u=rwx,go=rx") format.
@@ -27,7 +74,11 @@ func ParsePermissions(s string) (Permissions, error) {
 		if err != nil {
 			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
 		}
-		return Permissions(v), nil
+		mode, err := modeFromUnixBits(v)
+		if err != nil {
+			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
+		}
+		return Permissions(mode), nil
 	}
 
 	// 2. Explicit hex prefixes: "0x1c0", "0X1c0"
@@ -36,7 +87,11 @@ func ParsePermissions(s string) (Permissions, error) {
 		if err != nil {
 			return 0, fmt.Errorf("invalid hex permissions %q: %w", s, err)
 		}
-		return Permissions(v), nil
+		mode, err := modeFromUnixBits(v)
+		if err != nil {
+			return 0, fmt.Errorf("invalid hex permissions %q: %w", s, err)
+		}
+		return Permissions(mode), nil
 	}
 
 	// 3. Octal strings: 1 to 4 octal digits (e.g. "700", "755", "0700", "0755", "644", "0644")
@@ -45,7 +100,11 @@ func ParsePermissions(s string) (Permissions, error) {
 		if err != nil {
 			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
 		}
-		return Permissions(v), nil
+		mode, err := modeFromUnixBits(v)
+		if err != nil {
+			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
+		}
+		return Permissions(mode), nil
 	}
 
 	// 4. Standard 9 or 10 character rwx string: "rwxr-xr-x", "-rwx------", "drwxr-xr-x"

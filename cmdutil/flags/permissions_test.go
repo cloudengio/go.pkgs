@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"cloudeng.io/cmdutil/cmdtypes"
 	"cloudeng.io/cmdutil/flags"
 )
 
@@ -140,5 +141,60 @@ func TestPermissionsAsFlag(t *testing.T) {
 	fset.Var(&q, "perm", "file permissions")
 	if err := fset.Parse([]string{"--perm=nonsense"}); err == nil {
 		t.Error("expected an error for an invalid permission, got nil")
+	}
+}
+
+// TestPermissionsSpecialBitsMatchCmdtypes verifies that the flag agrees with
+// cmdtypes.Permissions once the setuid, setgid and sticky bits are involved.
+// Formatting the underlying fs.FileMode would produce values such as 40000755,
+// which is neither the documented 4 digit form nor something ParsePermissions
+// can read back.
+func TestPermissionsSpecialBitsMatchCmdtypes(t *testing.T) {
+	for _, tc := range []struct {
+		in    string
+		octal string
+		mode  fs.FileMode
+	}{
+		{"rwsr-xr-x", "4755", 0755 | fs.ModeSetuid},
+		{"4755", "4755", 0755 | fs.ModeSetuid},
+		{"u=rwxs,go=rx", "4755", 0755 | fs.ModeSetuid},
+		{"rwxr-sr-x", "2755", 0755 | fs.ModeSetgid},
+		{"rwxrwxrwt", "1777", 0777 | fs.ModeSticky},
+		{"rwsr-sr-t", "7755", 0755 | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky},
+		{"0755", "0755", 0755},
+	} {
+		var p flags.Permissions
+		if err := p.Set(tc.in); err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		if got := p.FileMode(); got != tc.mode {
+			t.Errorf("%v: got mode %v, want %v", tc.in, got, tc.mode)
+		}
+		if got := p.Octal(); got != tc.octal {
+			t.Errorf("%v: got %v, want %v", tc.in, got, tc.octal)
+		}
+		// The flag and cmdtypes agree, so a value set on the command line and
+		// then written as JSON or YAML is the same value.
+		want, err := cmdtypes.ParsePermissions(tc.in)
+		if err != nil {
+			t.Errorf("%v: %v", tc.in, err)
+			continue
+		}
+		if got := p.Permissions(); got != want {
+			t.Errorf("%v: got %v, want %v", tc.in, got, want)
+		}
+		if got, cmdtypesGot := p.Octal(), want.String(); got != cmdtypesGot {
+			t.Errorf("%v: flag gave %v, cmdtypes gave %v", tc.in, got, cmdtypesGot)
+		}
+		// What the flag prints is readable back as the same value.
+		back, err := cmdtypes.ParsePermissions(p.Octal())
+		if err != nil {
+			t.Errorf("%v: reparsing %v: %v", tc.in, p.Octal(), err)
+			continue
+		}
+		if back != want {
+			t.Errorf("%v: reparsed %v, want %v", tc.in, back.FileMode(), want.FileMode())
+		}
 	}
 }

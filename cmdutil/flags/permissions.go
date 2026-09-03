@@ -5,7 +5,6 @@
 package flags
 
 import (
-	"fmt"
 	"io/fs"
 
 	"cloudeng.io/cmdutil/cmdtypes"
@@ -18,7 +17,7 @@ import (
 // "u=rwx,go=rx").
 type Permissions struct {
 	opt   string
-	value fs.FileMode
+	value cmdtypes.Permissions
 	set   bool
 }
 
@@ -29,7 +28,7 @@ func (p *Permissions) Set(v string) error {
 		return err
 	}
 	p.opt = v
-	p.value = perm.FileMode()
+	p.value = perm
 	p.set = true
 	return nil
 }
@@ -43,7 +42,7 @@ func (p *Permissions) String() string {
 // Get implements flag.Getter, returning the fs.FileMode represented by the
 // flag.
 func (p *Permissions) Get() any {
-	return p.value
+	return p.value.FileMode()
 }
 
 // IsDefault returns true if the value has not been set.
@@ -53,11 +52,19 @@ func (p *Permissions) IsDefault() bool {
 
 // FileMode returns the fs.FileMode represented by the flag.
 func (p *Permissions) FileMode() fs.FileMode {
+	return p.value.FileMode()
+}
+
+// Permissions returns the value as a cmdtypes.Permissions, for use where the
+// same value is also read from or written to JSON or YAML.
+func (p *Permissions) Permissions() cmdtypes.Permissions {
 	return p.value
 }
 
 // Octal returns the 4 digit octal representation of the permissions
-// (e.g. "0700"), whatever the notation they were supplied in.
+// (e.g. "0700", "4755"), whatever the notation they were supplied in. It is
+// the encoding used by cmdtypes.Permissions for text, JSON and YAML, so that a
+// value written from a flag reads back as the same value.
 func (p *Permissions) Octal() string {
-	return fmt.Sprintf("%04o", p.value)
+	return p.value.String()
 }
