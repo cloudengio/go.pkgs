@@ -59,6 +59,38 @@ func unixBits(mode fs.FileMode) uint32 {
 	return v
 }
 
+// parseNumeric parses the numeric notations: an explicit octal or hex prefix,
+// or one to four bare octal digits. The second result reports whether s is a
+// numeric form at all, so that the other notations are only tried when it is
+// not.
+func parseNumeric(s string) (Permissions, bool, error) {
+	var (
+		v   uint64
+		err error
+	)
+	switch {
+	case strings.HasPrefix(s, "0o"), strings.HasPrefix(s, "0O"):
+		if v, err = strconv.ParseUint(s[2:], 8, 32); err != nil {
+			return 0, true, fmt.Errorf("invalid octal permissions %q: %w", s, err)
+		}
+	case strings.HasPrefix(s, "0x"), strings.HasPrefix(s, "0X"):
+		if v, err = strconv.ParseUint(s[2:], 16, 32); err != nil {
+			return 0, true, fmt.Errorf("invalid hex permissions %q: %w", s, err)
+		}
+	case isOctalString(s):
+		if v, err = strconv.ParseUint(s, 8, 32); err != nil {
+			return 0, true, fmt.Errorf("invalid octal permissions %q: %w", s, err)
+		}
+	default:
+		return 0, false, nil
+	}
+	mode, err := modeFromUnixBits(v)
+	if err != nil {
+		return 0, true, fmt.Errorf("invalid permissions %q: %w", s, err)
+	}
+	return Permissions(mode), true, nil
+}
+
 // ParsePermissions parses a permission string in octal ("0700", "700",
 // "0o700", "0x1c0"), rwx ("rwxr-xr-x", "-rwx------", "rwx") or symbolic chmod
 // ("u=rwx,go=", "u=rwx,go=rx") format.
@@ -68,56 +100,22 @@ func ParsePermissions(s string) (Permissions, error) {
 		return 0, errors.New("empty permissions")
 	}
 
-	// 1. Explicit octal prefixes: "0o700", "0O700"
-	if strings.HasPrefix(s, "0o") || strings.HasPrefix(s, "0O") {
-		v, err := strconv.ParseUint(s[2:], 8, 32)
-		if err != nil {
-			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
-		}
-		mode, err := modeFromUnixBits(v)
-		if err != nil {
-			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
-		}
-		return Permissions(mode), nil
+	// 1. Numeric: "0o700", "0x1c0", "700", "0755", "4755".
+	if p, numeric, err := parseNumeric(s); numeric {
+		return p, err
 	}
 
-	// 2. Explicit hex prefixes: "0x1c0", "0X1c0"
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		v, err := strconv.ParseUint(s[2:], 16, 32)
-		if err != nil {
-			return 0, fmt.Errorf("invalid hex permissions %q: %w", s, err)
-		}
-		mode, err := modeFromUnixBits(v)
-		if err != nil {
-			return 0, fmt.Errorf("invalid hex permissions %q: %w", s, err)
-		}
-		return Permissions(mode), nil
-	}
-
-	// 3. Octal strings: 1 to 4 octal digits (e.g. "700", "755", "0700", "0755", "644", "0644")
-	if isOctalString(s) {
-		v, err := strconv.ParseUint(s, 8, 32)
-		if err != nil {
-			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
-		}
-		mode, err := modeFromUnixBits(v)
-		if err != nil {
-			return 0, fmt.Errorf("invalid octal permissions %q: %w", s, err)
-		}
-		return Permissions(mode), nil
-	}
-
-	// 4. Standard 9 or 10 character rwx string: "rwxr-xr-x", "-rwx------", "drwxr-xr-x"
+	// 2. Standard 9 or 10 character rwx string: "rwxr-xr-x", "-rwx------", "drwxr-xr-x"
 	if mode, ok := parseRWXString(s); ok {
 		return Permissions(mode), nil
 	}
 
-	// 5. 3-character user rwx shorthand: "rwx", "r-x", "rw-"
+	// 3. 3-character user rwx shorthand: "rwx", "r-x", "rw-"
 	if mode, ok := parse3CharRWX(s); ok {
 		return Permissions(mode), nil
 	}
 
-	// 6. Symbolic chmod notation: "u=rwx,go=", "u=rwx,go=rx", "a=rwx", "u+rwx"
+	// 4. Symbolic chmod notation: "u=rwx,go=", "u=rwx,go=rx", "a=rwx", "u+rwx"
 	if mode, err := parseSymbolicPermissions(s); err == nil {
 		return Permissions(mode), nil
 	}

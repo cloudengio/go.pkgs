@@ -63,7 +63,8 @@ func TestPermissionsNumberIsOctal(t *testing.T) {
 	if got, want := p.FileMode(), fs.FileMode(0700); got != want {
 		t.Errorf("got %04o, want %04o", got, want)
 	}
-	if got := p.FileMode(); got == fs.FileMode(700) {
+	// 0o1274 is what a decimal reading of 700 would produce.
+	if got := p.FileMode(); got == fs.FileMode(0o1274) {
 		t.Errorf("got %v, the decimal reading of 700", got)
 	}
 }
