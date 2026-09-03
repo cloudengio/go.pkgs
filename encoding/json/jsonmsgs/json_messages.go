@@ -81,7 +81,7 @@ type Messager struct {
 	rmu     sync.Mutex
 }
 
-// NewMessager creates a new Messager with the given writer and readCloser.
+// NewMessager creates a new Messager with the given readCloser and writer.
 // If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize (1MB) is used.
 func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 	var o options
