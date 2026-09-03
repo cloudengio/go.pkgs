@@ -30,7 +30,7 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260902173116-c569651359a0 // indirect
+	cloudeng.io/algo v0.0.0-20260903161432-3e39c500cdbf // indirect
 	cloudeng.io/os v0.0.0-20260825050644-3d0fba22c536 // indirect
 	cloudeng.io/sys v0.0.0-20260825050644-3d0fba22c536 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect

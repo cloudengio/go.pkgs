@@ -3,7 +3,7 @@ module cloudeng.io/google
 go 1.27
 
 require (
-	cloudeng.io/algo v0.0.0-20260902173116-c569651359a0
+	cloudeng.io/algo v0.0.0-20260903161432-3e39c500cdbf
 	cloudeng.io/file v0.0.0-20260527194618-4cb6d4558850
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.297.0
