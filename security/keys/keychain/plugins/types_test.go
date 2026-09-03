@@ -8,8 +8,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 
+	"cloudeng.io/encoding/json/jsonmsgs"
 	"cloudeng.io/security/keys/keychain/plugins"
 )
 
@@ -236,5 +239,94 @@ func TestRequestCheckVersion(t *testing.T) {
 	}
 	if errors.Is(verr, plugins.ErrKeyNotFound) {
 		t.Errorf("unsupported version error should not match ErrKeyNotFound")
+	}
+}
+
+func TestWriteReadRequest(t *testing.T) {
+	type spec struct {
+		Region string `json:"region"`
+	}
+	s := spec{Region: "us-west-2"}
+	req, err := plugins.NewRequest("my-key", s)
+	if err != nil {
+		t.Fatalf("NewRequest failed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	msgr := jsonmsgs.NewMessager(&buf, io.NopCloser(&buf))
+	if err := plugins.WriteRequest(msgr, req); err != nil {
+		t.Fatalf("WriteRequest failed: %v", err)
+	}
+
+	gotReq, err := plugins.ReadRequest(msgr)
+	if err != nil {
+		t.Fatalf("ReadRequest failed: %v", err)
+	}
+
+	if gotReq.ID != req.ID || gotReq.Keyname != req.Keyname || gotReq.Version != req.Version {
+		t.Errorf("got %+v, want %+v", gotReq, req)
+	}
+
+	var gotSpec spec
+	if err := gotReq.UnmarshalPluginSpecific(&gotSpec); err != nil {
+		t.Fatalf("UnmarshalPluginSpecific failed: %v", err)
+	}
+	if gotSpec != s {
+		t.Errorf("got %v, want %v", gotSpec, s)
+	}
+}
+
+func TestWriteReadResponse(t *testing.T) {
+	type spec struct {
+		Token string `json:"token"`
+	}
+	req, _ := plugins.NewRequest("key", nil)
+	resp := req.NewResponse([]byte("secret-payload"), nil)
+	if err := resp.WithPluginSpecific(spec{Token: "tok-123"}); err != nil {
+		t.Fatalf("WithPluginSpecific failed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	msgr := jsonmsgs.NewMessager(&buf, io.NopCloser(&buf))
+	if err := plugins.WriteResponse(msgr, *resp); err != nil {
+		t.Fatalf("WriteResponse failed: %v", err)
+	}
+
+	gotResp, err := plugins.ReadResponse(msgr)
+	if err != nil {
+		t.Fatalf("ReadResponse failed: %v", err)
+	}
+
+	if gotResp.ID != resp.ID || string(gotResp.Contents) != string(resp.Contents) {
+		t.Errorf("got %+v, want %+v", gotResp, resp)
+	}
+
+	var gotSpec spec
+	if err := gotResp.UnmarshalPluginSpecific(&gotSpec); err != nil {
+		t.Fatalf("UnmarshalPluginSpecific failed: %v", err)
+	}
+	if gotSpec.Token != "tok-123" {
+		t.Errorf("got %v, want tok-123", gotSpec.Token)
+	}
+}
+
+func TestMismatchedMessageType(t *testing.T) {
+	// If sender writes a Response, but receiver calls ReadRequest,
+	// jsonpayload.Decode should reject the mismatched type name.
+	req, _ := plugins.NewRequest("key", nil)
+	resp := req.NewResponse([]byte("data"), nil)
+
+	var buf bytes.Buffer
+	msgr := jsonmsgs.NewMessager(&buf, io.NopCloser(&buf))
+	if err := plugins.WriteResponse(msgr, *resp); err != nil {
+		t.Fatalf("WriteResponse failed: %v", err)
+	}
+
+	_, err := plugins.ReadRequest(msgr)
+	if err == nil {
+		t.Fatal("expected error reading Response as Request, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected type name") {
+		t.Errorf("got error %v, want 'expected type name'", err)
 	}
 }

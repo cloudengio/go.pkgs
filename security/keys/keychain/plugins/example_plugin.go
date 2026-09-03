@@ -8,12 +8,12 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 
+	"cloudeng.io/encoding/json/jsonmsgs"
 	"cloudeng.io/security/keys/keychain/plugins"
 )
 
@@ -37,28 +37,21 @@ func main() {
 }
 
 func run() error {
+	msgr := jsonmsgs.NewMessager(os.Stdout, io.NopCloser(os.Stdin))
+
 	// 1. Read the request from stdin.
-	input, err := io.ReadAll(os.Stdin)
+	req, err := plugins.ReadRequest(msgr)
 	if err != nil {
 		return fmt.Errorf("failed to read from stdin: %w", err)
 	}
 
-	// 2. Unmarshal the request.
-	var req plugins.Request
-	if err := json.Unmarshal(input, &req); err != nil {
-		// If we can't unmarshal, we can't get the request ID to formulate
-		// a valid response.
-		return fmt.Errorf("failed to unmarshal request: %w", err)
-	}
-
-	// 3. Reject requests whose version is newer than this plugin supports.
+	// 2. Reject requests whose version is newer than this plugin supports.
 	if verr := req.CheckVersion(); verr != nil {
-		output, err := json.Marshal(req.NewResponse(nil, verr))
-		if err != nil {
-			return fmt.Errorf("failed to marshal response: %w", err)
+		resp := req.NewResponse(nil, verr)
+		if err := resp.WithPluginSpecific(req.PluginSpecific); err != nil {
+			return fmt.Errorf("failed to create response: %w", err)
 		}
-		_, err = os.Stdout.Write(output)
-		return err
+		return plugins.WriteResponse(msgr, *resp)
 	}
 
 	var respErr *plugins.Error
@@ -89,18 +82,8 @@ func run() error {
 	}
 	resp := req.NewResponse(contents, respErr)
 	if err := resp.WithPluginSpecific(req.PluginSpecific); err != nil {
-		// This would typically be a JSON marshaling error for the pluginSpecific part.
 		return fmt.Errorf("failed to create response: %w", err)
 	}
 
-	// 5. Marshal the response to JSON.
-	output, err := json.Marshal(resp)
-	if err != nil {
-		// This is an internal error and should not happen with valid data.
-		return fmt.Errorf("failed to marshal response: %w", err)
-	}
-
-	// 6. Write the response to stdout.
-	_, err = os.Stdout.Write(output)
-	return err
+	return plugins.WriteResponse(msgr, *resp)
 }

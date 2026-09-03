@@ -19,10 +19,14 @@
 package plugins
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync/atomic"
+
+	"cloudeng.io/encoding/json/jsonmsgs"
+	"cloudeng.io/encoding/json/jsonpayload"
 )
 
 // NewErrorKeyNotFound creates a new Error indicating that the specified key
@@ -73,7 +77,10 @@ type Error struct {
 	// filled in by the client of the plugin.
 }
 
-func (e Error) Error() string {
+func (e *Error) Error() string {
+	if e == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s: %s", e.Message, e.Detail)
 }
 
@@ -89,12 +96,22 @@ func (e *Error) Is(target error) bool {
 
 // Request represents the request to the keychain plugin.
 type Request struct {
-	Version        int32           `json:"version,omitempty"`
-	ID             int32           `json:"id,omitempty"`
-	Keyname        string          `json:"keyname"`
-	Write          bool            `json:"write,omitempty"`
-	Contents       []byte          `json:"contents,omitempty"`
-	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
+	Version        int32          `json:"version,omitempty"`
+	ID             int32          `json:"id,omitempty"`
+	Keyname        string         `json:"keyname"`
+	Write          bool           `json:"write,omitempty"`
+	Contents       []byte         `json:"contents,omitempty"`
+	PluginSpecific jsontext.Value `json:"plugin_specific,omitempty"`
+}
+
+func (req *Request) MarshalJSONTo(enc *jsontext.Encoder) error {
+	type plain Request
+	return json.MarshalEncode(enc, (*plain)(req))
+}
+
+func (req *Request) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	type plain Request
+	return json.UnmarshalDecode(dec, (*plain)(req))
 }
 
 const (
@@ -121,13 +138,37 @@ func (req Request) CheckVersion() *Error {
 	return nil
 }
 
+// UnmarshalPluginSpecific unmarshals the plugin-specific data of the Request
+// into the provided value v.
+func (req Request) UnmarshalPluginSpecific(v any) error {
+	if len(req.PluginSpecific) == 0 {
+		return nil
+	}
+	return json.Unmarshal(req.PluginSpecific, v)
+}
+
 // Response represents the response from the keychain plugin.
 type Response struct {
-	ID             int32           `json:"id,omitempty"`
-	Contents       []byte          `json:"contents,omitempty"`
-	Stderr         string          `json:"-"` // Stderr is the stder output from the plugin and is filled in by RunExtPlugin.
-	Error          *Error          `json:"error,omitempty"`
-	PluginSpecific json.RawMessage `json:"plugin_specific,omitempty"`
+	ID             int32          `json:"id,omitempty"`
+	Contents       []byte         `json:"contents,omitempty"`
+	Stderr         string         `json:"-"` // Stderr is the stder output from the plugin and is filled in by RunExtPlugin.
+	Error          *Error         `json:"error,omitempty"`
+	PluginSpecific jsontext.Value `json:"plugin_specific,omitempty"`
+}
+
+func (resp *Response) MarshalJSONTo(enc *jsontext.Encoder) error {
+	type plain Response
+	return json.MarshalEncode(enc, (*plain)(resp))
+}
+
+func (resp *Response) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	type plain Response
+	return json.UnmarshalDecode(dec, (*plain)(resp))
+}
+
+func init() {
+	jsonpayload.RegisterType[Request]()
+	jsonpayload.RegisterType[Response]()
 }
 
 var nextID int32 = 1
@@ -141,7 +182,7 @@ func NextID() int32 {
 // The ID is automatically generated and is unique for each call to this
 // function.
 func NewRequest(keyname string, pluginSpecific any) (Request, error) {
-	var pluginSpecificJSON json.RawMessage
+	var pluginSpecificJSON jsontext.Value
 	if pluginSpecific != nil {
 		b, err := json.Marshal(pluginSpecific)
 		if err != nil {
@@ -162,7 +203,7 @@ func NewRequest(keyname string, pluginSpecific any) (Request, error) {
 // The ID is automatically generated and is unique for each call to this
 // function.
 func NewWriteRequest(keyname string, contents []byte, pluginSpecific any) (Request, error) {
-	var pluginSpecificJSON json.RawMessage
+	var pluginSpecificJSON jsontext.Value
 	if pluginSpecific != nil {
 		b, err := json.Marshal(pluginSpecific)
 		if err != nil {
@@ -203,7 +244,7 @@ func (resp *Response) WithPluginSpecific(pluginSpecific any) error {
 }
 
 func (resp Response) UnmarshalPluginSpecific(v any) error {
-	if resp.PluginSpecific == nil {
+	if len(resp.PluginSpecific) == 0 {
 		return nil
 	}
 	return json.Unmarshal(resp.PluginSpecific, v)
@@ -216,4 +257,58 @@ func AsError(err error) *Error {
 		return e
 	}
 	return nil
+}
+
+// WriteRequest writes a Request as a framed jsonmsgs message containing a
+// jsonpayload typed message.
+func WriteRequest(msgr *jsonmsgs.Messager, req Request) error {
+	enc := msgr.NewEncoder()
+	wr := jsonpayload.NewWriter(&req)
+	if err := wr.MarshalJSONTo(enc.Encoder); err != nil {
+		msgr.ReleaseEncoder(enc)
+		return err
+	}
+	return msgr.WriteMessage(enc)
+}
+
+// ReadRequest reads a Request from msgr as a framed jsonmsgs message containing a
+// jsonpayload typed message.
+func ReadRequest(msgr *jsonmsgs.Messager) (Request, error) {
+	dec, err := msgr.ReadMessage()
+	if err != nil {
+		return Request{}, err
+	}
+	defer msgr.ReleaseDecoder(dec)
+	var req Request
+	if err := jsonpayload.Decode(dec.Decoder, &req); err != nil {
+		return Request{}, err
+	}
+	return req, nil
+}
+
+// WriteResponse writes a Response as a framed jsonmsgs message containing a
+// jsonpayload typed message.
+func WriteResponse(msgr *jsonmsgs.Messager, resp Response) error {
+	enc := msgr.NewEncoder()
+	wr := jsonpayload.NewWriter(&resp)
+	if err := wr.MarshalJSONTo(enc.Encoder); err != nil {
+		msgr.ReleaseEncoder(enc)
+		return err
+	}
+	return msgr.WriteMessage(enc)
+}
+
+// ReadResponse reads a Response from msgr as a framed jsonmsgs message containing a
+// jsonpayload typed message.
+func ReadResponse(msgr *jsonmsgs.Messager) (Response, error) {
+	dec, err := msgr.ReadMessage()
+	if err != nil {
+		return Response{}, err
+	}
+	defer msgr.ReleaseDecoder(dec)
+	var resp Response
+	if err := jsonpayload.Decode(dec.Decoder, &resp); err != nil {
+		return Response{}, err
+	}
+	return resp, nil
 }

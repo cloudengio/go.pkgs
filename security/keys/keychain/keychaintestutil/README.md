@@ -153,8 +153,8 @@ Keys returns a slice of all key names currently in memory.
 ```go
 func (p *Plugin) ServeIO(ctx context.Context, r io.Reader, w io.Writer) error
 ```
-ServeIO reads a JSON-encoded Request from r, handles it with HandleRequest,
-and writes the JSON-encoded Response to w.
+ServeIO reads a Request from r, handles it with HandleRequest, and writes
+the Response to w.
 
 
 ```go
