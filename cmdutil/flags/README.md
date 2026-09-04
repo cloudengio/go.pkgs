@@ -341,6 +341,70 @@ values.
 
 
 
+### Type Permissions
+```go
+type Permissions struct {
+	// contains filtered or unexported fields
+}
+```
+Permissions represents file permission bits that can be used as a
+flag.Value, accepting the same notations as cmdtypes.Permissions: an octal
+number ("0700", "700", "0o700", "0x1c0"), an rwx string ("rwxr-xr-x",
+"-rwx------", "rwx"), or symbolic chmod notation ("u=rwx,go=",
+"u=rwx,go=rx").
+
+### Methods
+
+```go
+func (p *Permissions) FileMode() fs.FileMode
+```
+FileMode returns the fs.FileMode represented by the flag.
+
+
+```go
+func (p *Permissions) Get() any
+```
+Get implements flag.Getter, returning the fs.FileMode represented by the
+flag.
+
+
+```go
+func (p *Permissions) IsDefault() bool
+```
+IsDefault returns true if the value has not been set.
+
+
+```go
+func (p *Permissions) Octal() string
+```
+Octal returns the 4 digit octal representation of the permissions (e.g.
+"0700", "4755"), whatever the notation they were supplied in. It is the
+encoding used by cmdtypes.Permissions for text, JSON and YAML, so that a
+value written from a flag reads back as the same value.
+
+
+```go
+func (p *Permissions) Permissions() cmdtypes.Permissions
+```
+Permissions returns the value as a cmdtypes.Permissions, for use where the
+same value is also read from or written to JSON or YAML.
+
+
+```go
+func (p *Permissions) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (p *Permissions) String() string
+```
+String implements flag.Value. It returns the permissions as supplied,
+so that a default retains the notation it was written in.
+
+
+
+
 ### Type RangeSpec
 ```go
 type RangeSpec struct {
