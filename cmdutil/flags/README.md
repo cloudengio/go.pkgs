@@ -115,6 +115,61 @@ where a default value should be used if the user does not provide one.
 
 
 ## Types
+### Type ByteSize
+```go
+type ByteSize struct {
+	// contains filtered or unexported fields
+}
+```
+ByteSize represents a quantity of bytes that can be used as a flag.Value,
+accepting the same notations as cmdtypes.ByteSize: a bare number of bytes,
+or a number with a binary (KiB, MiB, GiB, TiB) or decimal (KB, MB, GB,
+TB) suffix, with an optional space and in any case. It is parsed by
+cmdtypes.ByteSize, so a size given on the command line is read the same way
+as one read from JSON or YAML.
+
+### Methods
+
+```go
+func (b *ByteSize) ByteSize() cmdtypes.ByteSize
+```
+ByteSize returns the value as a cmdtypes.ByteSize, for use where the same
+value is also read from or written to JSON or YAML.
+
+
+```go
+func (b *ByteSize) Bytes() int64
+```
+Bytes returns the number of bytes represented by the flag.
+
+
+```go
+func (b *ByteSize) Get() any
+```
+Get implements flag.Getter, returning the number of bytes.
+
+
+```go
+func (b *ByteSize) IsDefault() bool
+```
+IsDefault returns true if the value has not been set.
+
+
+```go
+func (b *ByteSize) Set(v string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (b *ByteSize) String() string
+```
+String implements flag.Value. It returns the size as supplied, so that a
+default retains the units it was written in.
+
+
+
+
 ### Type ColonRangeSpec
 ```go
 type ColonRangeSpec struct {
