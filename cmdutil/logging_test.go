@@ -151,7 +151,7 @@ func TestLogBuildInfo(t *testing.T) {
 		t.Fatalf("expected %d log entries, got %d", want, got)
 	}
 
-	_, _, _, _, ok := cmdutil.VCSInfo()
+	_, _, _, _, _, ok := cmdutil.VCSInfo()
 	expectedMsg := "failed to determine version information"
 	expectedLevel := "WARN"
 	if ok {

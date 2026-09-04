@@ -5,16 +5,44 @@
 package cmdutil
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"time"
 )
 
-// VCSInfo extracts version control system information from the build info
-// if available. The returned values are the revision, last commit time,
-// a boolean indicating whether there were uncommitted changes (dirty)
-// and a boolean indicating whether the information was successfully extracted.
-func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool) {
+// VCSInfo extracts version control system information from the build info,
+// if available. It returns, in order:
+//
+//   - goVersion: the version of Go the executable was built with.
+//   - revision: the vcs.revision recorded at build time.
+//   - lastCommit: the vcs.time recorded at build time, ie. the time of that
+//     revision.
+//   - execModTime: the modification time of the executable file. This is an
+//     approximation of when the executable was built and no more than that:
+//     it is the file's mtime, so it changes if the file is copied, touched or
+//     unpacked from an archive, and it is unrelated to the build info.
+//   - dirty: whether vcs.modified was recorded, ie. whether the tree had
+//     uncommitted changes when it was built.
+//   - ok: whether any vcs setting was found.
+//
+// ok reports only on the vcs settings. goVersion and execModTime are
+// determined independently of them and may be set even when ok is false, as
+// happens for an executable built from a directory that is not a repository,
+// or with -buildvcs=false. The zero values of revision, lastCommit and dirty
+// are not distinguishable from values that were genuinely absent, so ok is
+// what should be tested before reporting them.
+func VCSInfo() (goVersion, revision string, lastCommit, execModTime time.Time, dirty, ok bool) {
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		if fi, err := os.Stat(exe); err == nil {
+			execModTime = fi.ModTime().UTC()
+		}
+	}
 	var info *debug.BuildInfo
 	info, ok = debug.ReadBuildInfo()
 	if !ok {
@@ -40,7 +68,7 @@ func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool
 
 // BuildInfoJSON returns the build information as a JSON raw message
 // or nil if the build information is not available.
-func BuildInfoJSON() json.RawMessage {
+func BuildInfoJSON() jsontext.Value {
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		d, _ := json.Marshal(bi)
 		return d
