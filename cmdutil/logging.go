@@ -206,12 +206,12 @@ func (c LoggingConfig) NewLoggerMust(opts *slog.HandlerOptions, loggingOpts ...L
 
 // LogBuildInfo logs build information using the provided logger.
 func LogBuildInfo(logger *slog.Logger) {
-	goVersion, version, when, buildTime, dirty, ok := VCSInfo()
+	goVersion, version, when, modTime, dirty, ok := VCSInfo()
 	if !ok {
 		logger.Warn("failed to determine version information")
 		return
 	}
-	logger.Info("build info", "go.version", goVersion, "commit", version, "commit.date", when, "build.date", buildTime, "dirty", dirty)
+	logger.Info("build info", "go.version", goVersion, "commit", version, "commit.date", when, "exe.modtime", modTime, "dirty", dirty)
 }
 
 // ReplaceAttrNoTime returns a slog.Attr with the time attribute removed.

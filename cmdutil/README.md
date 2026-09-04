@@ -19,7 +19,7 @@ ErrInterrupt is returned as the cause for HandleInterrupt cancellations.
 ## Functions
 ### Func BuildInfoJSON
 ```go
-func BuildInfoJSON() json.RawMessage
+func BuildInfoJSON() jsontext.Value
 ```
 BuildInfoJSON returns the build information as a JSON raw message or nil if
 the build information is not available.
@@ -123,12 +123,29 @@ This is useful for tests where the time is not deterministic.
 
 ### Func VCSInfo
 ```go
-func VCSInfo() (goVersion, revision string, lastCommit, buildTime time.Time, dirty, ok bool)
+func VCSInfo() (goVersion, revision string, lastCommit, execModTime time.Time, dirty, ok bool)
 ```
-VCSInfo extracts version control system information from the build info
-if available. The returned values are the revision, last commit time,
-build time of the executable, a boolean indicating whether there were uncommitted
-changes (dirty) and a boolean indicating whether the information was successfully extracted.
+VCSInfo extracts version control system information from the build info,
+if available. It returns, in order:
+
+  - goVersion: the version of Go the executable was built with.
+  - revision: the vcs.revision recorded at build time.
+  - lastCommit: the vcs.time recorded at build time, ie. the time of that
+    revision.
+  - execModTime: the modification time of the executable file. This is an
+    approximation of when the executable was built and no more than that:
+    it is the file's mtime, so it changes if the file is copied, touched or
+    unpacked from an archive, and it is unrelated to the build info.
+  - dirty: whether vcs.modified was recorded, ie. whether the tree had
+    uncommitted changes when it was built.
+  - ok: whether any vcs setting was found.
+
+ok reports only on the vcs settings. goVersion and execModTime are
+determined independently of them and may be set even when ok is false, as
+happens for an executable built from a directory that is not a repository,
+or with -buildvcs=false. The zero values of revision, lastCommit and dirty
+are not distinguishable from values that were genuinely absent, so ok is
+what should be tested before reporting them.
 
 ### Func WaitForExit
 ```go
