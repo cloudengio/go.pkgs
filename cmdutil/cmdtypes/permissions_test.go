@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"cloudeng.io/cmdutil/cmdtypes"
-	"gopkg.in/yaml.v3"
 )
 
 func TestPermissionsUnmarshalJSON(t *testing.T) {
@@ -176,104 +175,6 @@ func TestPermissionsText(t *testing.T) {
 	}
 }
 
-// TestPermissionsYAML verifies that the same type decodes from YAML, which
-// routes through UnmarshalText, including unquoted numbers such as 0700 that
-// YAML presents as integer nodes.
-func TestPermissionsYAML(t *testing.T) {
-	type spec struct {
-		Perm cmdtypes.Permissions `yaml:"perm"`
-	}
-	for _, tc := range []struct {
-		yaml string
-		want fs.FileMode
-	}{
-		{"perm: 0700\n", 0700},
-		{"perm: \"0700\"\n", 0700},
-		{"perm: 700\n", 0700},
-		{"perm: 0o700\n", 0700},
-		{"perm: \"rwx------\"\n", 0700},
-		{"perm: \"-rwx------\"\n", 0700},
-		{"perm: \"u=rwx,go=\"\n", 0700},
-		{"perm: 0755\n", 0755},
-		{"perm: \"rwxr-xr-x\"\n", 0755},
-		{"perm: \"u=rwx,go=rx\"\n", 0755},
-		{"perm: \"rw-r--r--\"\n", 0644},
-	} {
-		var got spec
-		if err := yaml.Unmarshal([]byte(tc.yaml), &got); err != nil {
-			t.Errorf("%q: %v", tc.yaml, err)
-			continue
-		}
-		if got, want := got.Perm.FileMode(), tc.want; got != want {
-			t.Errorf("%q: got %04o, want %04o", tc.yaml, got, want)
-		}
-	}
-}
-
-func TestPermissionsYAMLMarshal(t *testing.T) {
-	type spec struct {
-		Perm cmdtypes.Permissions `yaml:"perm"`
-	}
-	buf, err := yaml.Marshal(spec{Perm: cmdtypes.Permissions(0755)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := string(buf), "perm: \"0755\"\n"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	// It reads back unchanged.
-	var got spec
-	if err := yaml.Unmarshal(buf, &got); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := got.Perm.FileMode(), fs.FileMode(0755); got != want {
-		t.Errorf("got %04o, want %04o", got, want)
-	}
-}
-
-// TestPermissionsSameValueBothEncodings verifies that JSON and YAML agree, so
-// that the same configuration can be expressed in either.
-func TestPermissionsSameValueBothEncodings(t *testing.T) {
-	for _, in := range []string{"0700", "700", "rwxr-xr-x", "u=rwx,go=", "rw-r--r--"} {
-		want, err := cmdtypes.ParsePermissions(in)
-		if err != nil {
-			t.Errorf("%v: %v", in, err)
-			continue
-		}
-		var fromJSON, fromYAML cmdtypes.Permissions
-		if err := json.Unmarshal([]byte(`"`+in+`"`), &fromJSON); err != nil {
-			t.Errorf("%v: json: %v", in, err)
-			continue
-		}
-		if err := yaml.Unmarshal([]byte(`"`+in+`"`), &fromYAML); err != nil {
-			t.Errorf("%v: yaml: %v", in, err)
-			continue
-		}
-		if fromJSON != want || fromYAML != want {
-			t.Errorf("%v: json gave %v, yaml gave %v, want %v", in, fromJSON, fromYAML, want)
-		}
-	}
-}
-
-// TestPermissionsYAMLErrors verifies that an unusable value is reported rather
-// than silently left at zero, which would read as no permissions at all.
-func TestPermissionsYAMLErrors(t *testing.T) {
-	type spec struct {
-		Perm cmdtypes.Permissions `yaml:"perm"`
-	}
-	for _, in := range []string{
-		"perm: not-a-permission\n",
-		"perm: \"999\"\n",
-		"perm: []\n",
-		"perm: {a: b}\n",
-	} {
-		var got spec
-		if err := yaml.Unmarshal([]byte(in), &got); err == nil {
-			t.Errorf("%q: expected an error, got %04o", in, got.Perm.FileMode())
-		}
-	}
-}
-
 // TestPermissionsSpecialBitsAgreeAcrossNotations verifies that the setuid,
 // setgid and sticky bits produce the same value whichever notation they are
 // written in. The numeric forms use the traditional UNIX bits (04000, 02000,
@@ -319,7 +220,9 @@ func TestPermissionsSpecialBitsAgreeAcrossNotations(t *testing.T) {
 // TestPermissionsSpecialBitsRoundTrip verifies that a value carrying a special
 // bit is written in the traditional UNIX form and reads back unchanged.
 // Writing the raw fs.FileMode would produce something like 40000755, which is
-// not a permission string any of the notations can express.
+// not a permission string any of the notations can express. The YAML
+// equivalent is in cmdyaml, which is where this package's YAML behaviour is
+// verified.
 func TestPermissionsSpecialBitsRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
@@ -368,19 +271,6 @@ func TestPermissionsSpecialBitsRoundTrip(t *testing.T) {
 		}
 		if fromJSON != p {
 			t.Errorf("%v: json round trip gave %v, want %v", tc.in, fromJSON.FileMode(), p.FileMode())
-		}
-		ybuf, err := yaml.Marshal(p)
-		if err != nil {
-			t.Errorf("%v: %v", tc.in, err)
-			continue
-		}
-		var fromYAML cmdtypes.Permissions
-		if err := yaml.Unmarshal(ybuf, &fromYAML); err != nil {
-			t.Errorf("%v: %v", tc.in, err)
-			continue
-		}
-		if fromYAML != p {
-			t.Errorf("%v: yaml round trip gave %v, want %v", tc.in, fromYAML.FileMode(), p.FileMode())
 		}
 	}
 }

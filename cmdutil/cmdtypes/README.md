@@ -8,7 +8,74 @@ Package cmdtypes provides types that are shared by the configuration and
 command line packages, and that can be encoded and decoded as JSON, YAML and
 text without those packages depending on each other.
 
+## Variables
+### FlexTimeFormats
+```go
+FlexTimeFormats = []string{
+	time.RFC3339,
+	time.DateTime,
+	time.TimeOnly,
+	time.DateOnly,
+}
+
+```
+FlexTimeFormats are the layouts that a FlexTime is decoded from, tried
+in this order. They are time.RFC3339, time.DateTime, time.TimeOnly and
+time.DateOnly.
+
+
+
 ## Types
+### Type FlexTime
+```go
+type FlexTime time.Time
+```
+FlexTime is a time.Time that can be decoded from any of FlexTimeFormats and
+is always encoded as time.RFC3339.
+
+Encoding and decoding is implemented by MarshalText and UnmarshalText,
+which encoding/json, encoding/json/v2 and gopkg.in/yaml.v3 all use, so a
+single type serves all three without this package depending on any of them.
+
+### Functions
+
+```go
+func ParseFlexTime(s string) (FlexTime, error)
+```
+ParseFlexTime parses s as any of FlexTimeFormats.
+
+
+
+### Methods
+
+```go
+func (t FlexTime) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler, and with it the encoding used
+for JSON and YAML.
+
+
+```go
+func (t FlexTime) String() string
+```
+String returns the time in time.RFC3339 format.
+
+
+```go
+func (t FlexTime) Time() time.Time
+```
+Time returns the time.Time represented by t.
+
+
+```go
+func (t *FlexTime) UnmarshalText(text []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler, and with it the decoding
+used for JSON and YAML.
+
+
+
+
 ### Type Permissions
 ```go
 type Permissions fs.FileMode

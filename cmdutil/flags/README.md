@@ -552,16 +552,24 @@ type Time struct {
 	// contains filtered or unexported fields
 }
 ```
-Time represents a time.Time that can be used as a flag.Value. The time can
-be expressed in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly
-formats.
+Time represents a time.Time that can be used as a flag.Value. It accepts
+the same formats as cmdtypes.FlexTime, ie. time.RFC3339, time.DateTime,
+time.TimeOnly or time.DateOnly, and is parsed by it, so that a value given
+on the command line is read the same way as one read from JSON or YAML.
 
 ### Methods
 
 ```go
+func (tf *Time) FlexTime() cmdtypes.FlexTime
+```
+FlexTime returns the value as a cmdtypes.FlexTime, for use where the same
+value is also read from or written to JSON or YAML.
+
+
+```go
 func (tf *Time) Get() any
 ```
-Value implements flag.Getter.
+Get implements flag.Getter, returning the time.Time represented by the flag.
 
 
 ```go
@@ -580,6 +588,12 @@ Set implements flag.Value.
 func (tf *Time) String() string
 ```
 String implements flag.Value.
+
+
+```go
+func (tf *Time) Time() time.Time
+```
+Time returns the time.Time represented by the flag.
 
 
 
