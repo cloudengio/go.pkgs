@@ -82,8 +82,8 @@ for JSON and YAML.
 func (b ByteSize) String() string
 ```
 String returns a human-readable representation of b. It selects the largest
-binary unit (TiB, GiB, MiB, KiB) that divides b evenly, then the largest
-decimal unit (TB, GB, MB, KB), and falls back to "NB" when no unit divides
+decimal unit (TB, GB, MB, KB) that divides b evenly, then the largest binary
+unit (TiB, GiB, MiB, KiB), and falls back to "NB" when no unit divides
 evenly.
 
 
