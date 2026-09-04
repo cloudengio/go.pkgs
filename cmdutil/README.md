@@ -123,12 +123,12 @@ This is useful for tests where the time is not deterministic.
 
 ### Func VCSInfo
 ```go
-func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool)
+func VCSInfo() (goVersion, revision string, lastCommit, buildTime time.Time, dirty, ok bool)
 ```
 VCSInfo extracts version control system information from the build info
 if available. The returned values are the revision, last commit time,
-a boolean indicating whether there were uncommitted changes (dirty) and a
-boolean indicating whether the information was successfully extracted.
+build time of the executable, a boolean indicating whether there were uncommitted
+changes (dirty) and a boolean indicating whether the information was successfully extracted.
 
 ### Func WaitForExit
 ```go

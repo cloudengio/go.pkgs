@@ -6,15 +6,25 @@ package cmdutil
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"time"
 )
 
 // VCSInfo extracts version control system information from the build info
 // if available. The returned values are the revision, last commit time,
-// a boolean indicating whether there were uncommitted changes (dirty)
-// and a boolean indicating whether the information was successfully extracted.
-func VCSInfo() (goVersion, revision string, lastCommit time.Time, dirty, ok bool) {
+// build time of the executable, a boolean indicating whether there were uncommitted
+// changes (dirty) and a boolean indicating whether the information was successfully extracted.
+func VCSInfo() (goVersion, revision string, lastCommit, buildTime time.Time, dirty, ok bool) {
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		if fi, err := os.Stat(exe); err == nil {
+			buildTime = fi.ModTime().UTC()
+		}
+	}
 	var info *debug.BuildInfo
 	info, ok = debug.ReadBuildInfo()
 	if !ok {
