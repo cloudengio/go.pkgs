@@ -8,6 +8,23 @@ Package cmdtypes provides types that are shared by the configuration and
 command line packages, and that can be encoded and decoded as JSON, YAML and
 text without those packages depending on each other.
 
+## Constants
+### Byte, KB, MB, GB, TB, KiB, MiB, GiB, TiB
+```go
+Byte ByteSize = 1
+KB ByteSize = 1_000
+MB = 1_000 * KB
+GB = 1_000 * MB
+TB = 1_000 * GB
+KiB ByteSize = 1_024
+MiB = 1_024 * KiB
+GiB = 1_024 * MiB
+TiB = 1_024 * GiB
+
+```
+
+
+
 ## Variables
 ### FlexTimeFormats
 ```go
@@ -26,6 +43,59 @@ time.DateOnly.
 
 
 ## Types
+### Type ByteSize
+```go
+type ByteSize int64
+```
+ByteSize represents a quantity of bytes. It can be parsed from and
+marshaled to human-readable strings using either binary (KiB, MiB, GiB,
+TiB) or decimal (KB, MB, GB, TB) unit suffixes. A space between the number
+and unit is optional; parsing is case-insensitive. Bare integers are treated
+as bytes. Floating-point values are accepted during parsing (e.g. "1.5GiB").
+
+Encoding and decoding is implemented by MarshalText and UnmarshalText,
+which encoding/json, encoding/json/v2 and gopkg.in/yaml.v3 all use, so a
+single type serves all three without this package depending on any of them.
+
+### Functions
+
+```go
+func ParseByteSize(s string) (ByteSize, error)
+```
+ParseByteSize parses s into a ByteSize. Binary (KiB, MiB, GiB, TiB) and
+decimal (KB, MB, GB, TB) suffixes are supported. A space between the number
+and unit is allowed; parsing is case-insensitive. A bare number is treated
+as bytes. Floating-point values are rounded to the nearest byte.
+
+
+
+### Methods
+
+```go
+func (b ByteSize) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler, and with it the encoding used
+for JSON and YAML.
+
+
+```go
+func (b ByteSize) String() string
+```
+String returns a human-readable representation of b. It selects the largest
+decimal unit (TB, GB, MB, KB) that divides b evenly, then the largest binary
+unit (TiB, GiB, MiB, KiB), and falls back to "NB" when no unit divides
+evenly.
+
+
+```go
+func (b *ByteSize) UnmarshalText(text []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler, and with it the decoding
+used for JSON and YAML.
+
+
+
+
 ### Type FlexTime
 ```go
 type FlexTime time.Time
