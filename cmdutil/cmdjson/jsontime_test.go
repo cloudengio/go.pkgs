@@ -6,23 +6,25 @@ package cmdjson_test
 
 import (
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"testing"
 	"time"
 
 	"cloudeng.io/cmdutil/cmdjson"
+	"cloudeng.io/cmdutil/cmdtypes"
 	"cloudeng.io/cmdutil/cmdyaml"
 	"gopkg.in/yaml.v3"
 )
 
 type jsonTimeStruct struct {
 	When     cmdjson.RFC3339Time `json:"when"`
-	FlexTime cmdjson.FlexTime    `json:"flextime"`
+	FlexTime cmdtypes.FlexTime   `json:"flextime"`
 }
 
 type yamlTimeStruct struct {
 	When     cmdyaml.RFC3339Time `yaml:"when"`
-	FlexTime cmdyaml.FlexTime    `yaml:"flextime"`
+	FlexTime cmdtypes.FlexTime   `yaml:"flextime"`
 }
 
 func TestRFC3339Time(t *testing.T) {
@@ -86,80 +88,6 @@ func TestRFC3339Time(t *testing.T) {
 	})
 }
 
-func TestFlexTime(t *testing.T) {
-	tp := func(f, v string) time.Time {
-		tt, err := time.Parse(f, v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return tt
-	}
-
-	for _, tc := range []struct {
-		in     string
-		format string
-	}{
-		{"2021-10-10", time.DateOnly},
-		{"2021-10-10T03:03:03-07:00", time.RFC3339},
-		{"03:03:05", time.TimeOnly},
-		{"2021-10-10 03:03:05", time.DateTime},
-	} {
-		t.Run(tc.in, func(t *testing.T) {
-			cfg := fmt.Sprintf(`{"flextime":%q}`, tc.in)
-			var s jsonTimeStruct
-			if err := json.Unmarshal([]byte(cfg), &s); err != nil {
-				t.Fatalf("%v: %v", tc.in, err)
-			}
-			if got, want := time.Time(s.FlexTime), tp(tc.format, tc.in); !got.Equal(want) {
-				t.Errorf("got %v, want %v", got, want)
-			}
-			t.Log(s.FlexTime.String())
-		})
-	}
-
-	t.Run("MarshalIsRFC3339", func(t *testing.T) {
-		now := time.Now().Truncate(time.Second)
-		s := jsonTimeStruct{FlexTime: cmdjson.FlexTime(now)}
-		data, err := json.Marshal(&s)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var raw struct {
-			FlexTime string `json:"flextime"`
-		}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := time.Parse(time.RFC3339, raw.FlexTime); err != nil {
-			t.Errorf("marshaled FlexTime %q is not RFC3339: %v", raw.FlexTime, err)
-		}
-	})
-
-	t.Run("UnmarshalNull", func(t *testing.T) {
-		var s jsonTimeStruct
-		if err := json.Unmarshal([]byte(`{"flextime":null}`), &s); err != nil {
-			t.Fatalf("unexpected error for null: %v", err)
-		}
-		if !time.Time(s.FlexTime).IsZero() {
-			t.Errorf("expected zero time for null, got %v", s.FlexTime)
-		}
-	})
-
-	t.Run("InvalidFormat", func(t *testing.T) {
-		var s jsonTimeStruct
-		if err := json.Unmarshal([]byte(`{"flextime":"not-a-time"}`), &s); err == nil {
-			t.Error("expected error for unrecognized time format")
-		}
-	})
-
-	t.Run("UnmarshalNonString", func(t *testing.T) {
-		var s jsonTimeStruct
-		if err := json.Unmarshal([]byte(`{"flextime":12345}`), &s); err == nil {
-			t.Error("expected error for non-string JSON value")
-		}
-	})
-}
-
 // TestJSONToYAMLRoundTrip verifies that times marshaled to JSON can be
 // recovered after being expressed in YAML, and that the values survive the
 // round-trip back to JSON.
@@ -175,7 +103,7 @@ func TestJSONToYAMLRoundTrip(t *testing.T) {
 	// Marshal time values to JSON.
 	jIn := jsonTimeStruct{
 		When:     cmdjson.RFC3339Time(now),
-		FlexTime: cmdjson.FlexTime(now),
+		FlexTime: cmdtypes.FlexTime(now),
 	}
 	jsonBytes, err := json.Marshal(&jIn)
 	if err != nil {
@@ -210,7 +138,7 @@ func TestJSONToYAMLRoundTrip(t *testing.T) {
 	// original JSON bytes — completing the JSON→YAML→JSON cycle.
 	jOut := jsonTimeStruct{
 		When:     cmdjson.RFC3339Time(time.Time(yMid.When)),
-		FlexTime: cmdjson.FlexTime(time.Time(yMid.FlexTime)),
+		FlexTime: cmdtypes.FlexTime(time.Time(yMid.FlexTime)),
 	}
 	jsonBytes2, err := json.Marshal(&jOut)
 	if err != nil {
@@ -240,7 +168,7 @@ func TestYAMLToJSONRoundTrip(t *testing.T) {
 	// Embed those time values in a JSON document.  This is the YAML→JSON step.
 	jMid := jsonTimeStruct{
 		When:     cmdjson.RFC3339Time(time.Time(yIn.When)),
-		FlexTime: cmdjson.FlexTime(time.Time(yIn.FlexTime)),
+		FlexTime: cmdtypes.FlexTime(time.Time(yIn.FlexTime)),
 	}
 	jsonBytes, err := json.Marshal(&jMid)
 	if err != nil {
@@ -267,4 +195,62 @@ func TestYAMLToJSONRoundTrip(t *testing.T) {
 	if got, want := yamlStr2, yamlStr; got != want {
 		t.Errorf("YAML→JSON→YAML mismatch\ngot:  %s\nwant: %s", got, want)
 	}
+}
+
+// TestRFC3339TimeJSONV2 verifies the encoding/json/v2 methods, which write to
+// and read from the token stream directly rather than through an intermediate
+// value. json/v2 prefers MarshalJSONTo and UnmarshalJSONFrom over the v1
+// methods, so these are what it uses.
+func TestRFC3339TimeJSONV2(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	rt := cmdjson.RFC3339Time(now)
+
+	// The v2 encoding is the same as the v1 encoding.
+	v2buf, err := jsonv2.Marshal(rt)
+	if err != nil {
+		t.Fatalf("json/v2 marshal: %v", err)
+	}
+	v1buf, err := json.Marshal(rt)
+	if err != nil {
+		t.Fatalf("json marshal: %v", err)
+	}
+	if got, want := string(v2buf), string(v1buf); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := string(v2buf), fmt.Sprintf("%q", now.Format(time.RFC3339)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// It reads back what either encoder wrote.
+	for _, buf := range [][]byte{v1buf, v2buf} {
+		var back cmdjson.RFC3339Time
+		if err := jsonv2.Unmarshal(buf, &back); err != nil {
+			t.Errorf("%s: %v", buf, err)
+			continue
+		}
+		if got := time.Time(back); !got.Equal(now) {
+			t.Errorf("%s: got %v, want %v", buf, got, now)
+		}
+	}
+
+	// A null leaves the value unchanged, as it does for UnmarshalJSON.
+	unchanged := cmdjson.RFC3339Time(now)
+	if err := jsonv2.Unmarshal([]byte("null"), &unchanged); err != nil {
+		t.Fatalf("null: %v", err)
+	}
+	if got := time.Time(unchanged); !got.Equal(now) {
+		t.Errorf("null: got %v, want it left alone", got)
+	}
+
+	// Anything that is not a string is reported.
+	for _, in := range []string{`12345`, `true`, `[]`, `{}`, `"not-a-time"`} {
+		var back cmdjson.RFC3339Time
+		if err := jsonv2.Unmarshal([]byte(in), &back); err == nil {
+			t.Errorf("%v: expected an error, got %v", in, time.Time(back))
+		}
+	}
+
+	// It satisfies the json/v2 interfaces.
+	var _ jsonv2.MarshalerTo = cmdjson.RFC3339Time{}
+	var _ jsonv2.UnmarshalerFrom = (*cmdjson.RFC3339Time)(nil)
 }

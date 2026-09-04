@@ -154,33 +154,6 @@ mapping node.
 
 
 
-### Type FlexTime
-```go
-type FlexTime time.Time
-```
-FlexTime is a time.Time that can be unmarshaled from time.RFC3339,
-time.DateTime, time.TimeOnly or time.DateOnly formats. It is always
-marshaled to time.RFC3339.
-
-### Methods
-
-```go
-func (t *FlexTime) MarshalYAML() (any, error)
-```
-
-
-```go
-func (t FlexTime) String() string
-```
-
-
-```go
-func (t *FlexTime) UnmarshalYAML(value *yaml.Node) error
-```
-
-
-
-
 ### Type Option
 ```go
 type Option func(*parserOptions)

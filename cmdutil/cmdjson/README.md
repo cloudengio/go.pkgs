@@ -6,33 +6,6 @@ import cloudeng.io/cmdutil/cmdjson
 
 
 ## Types
-### Type FlexTime
-```go
-type FlexTime time.Time
-```
-FlexTime is a time.Time that can be unmarshaled from time.RFC3339,
-time.DateTime, time.TimeOnly or time.DateOnly formats. It is always
-marshaled to time.RFC3339.
-
-### Methods
-
-```go
-func (t FlexTime) MarshalJSON() ([]byte, error)
-```
-
-
-```go
-func (t FlexTime) String() string
-```
-
-
-```go
-func (t *FlexTime) UnmarshalJSON(data []byte) error
-```
-
-
-
-
 ### Type RFC3339Time
 ```go
 type RFC3339Time time.Time
@@ -47,6 +20,13 @@ func (t RFC3339Time) MarshalJSON() ([]byte, error)
 
 
 ```go
+func (t RFC3339Time) MarshalJSONTo(enc *jsontext.Encoder) error
+```
+MarshalJSONTo implements json.MarshalerTo from encoding/json/v2, writing the
+time directly to the encoder rather than through an intermediate value.
+
+
+```go
 func (t RFC3339Time) String() string
 ```
 
@@ -54,6 +34,13 @@ func (t RFC3339Time) String() string
 ```go
 func (t *RFC3339Time) UnmarshalJSON(data []byte) error
 ```
+
+
+```go
+func (t *RFC3339Time) UnmarshalJSONFrom(dec *jsontext.Decoder) error
+```
+UnmarshalJSONFrom implements json.UnmarshalerFrom from encoding/json/v2.
+A null leaves the value unchanged, as it does for UnmarshalJSON.
 
 
 

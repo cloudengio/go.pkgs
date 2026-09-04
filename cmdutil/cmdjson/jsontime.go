@@ -6,6 +6,7 @@ package cmdjson
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"time"
 )
@@ -37,33 +38,29 @@ func (t RFC3339Time) String() string {
 	return time.Time(t).Format(time.RFC3339)
 }
 
-// FlexTime is a time.Time that can be unmarshaled from time.RFC3339,
-// time.DateTime, time.TimeOnly or time.DateOnly formats. It is always
-// marshaled to time.RFC3339.
-type FlexTime time.Time
-
-func (t FlexTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Time(t).Format(time.RFC3339))
+// MarshalJSONTo implements json.MarshalerTo from encoding/json/v2, writing the
+// time directly to the encoder rather than through an intermediate value.
+func (t RFC3339Time) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteToken(jsontext.String(time.Time(t).Format(time.RFC3339)))
 }
 
-func (t *FlexTime) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
-		return nil
-	}
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
+// UnmarshalJSONFrom implements json.UnmarshalerFrom from encoding/json/v2. A
+// null leaves the value unchanged, as it does for UnmarshalJSON.
+func (t *RFC3339Time) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	tok, err := dec.ReadToken()
+	if err != nil {
 		return err
 	}
-	for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
-		tt, err := time.Parse(format, s)
-		if err == nil {
-			*t = FlexTime(tt)
-			return nil
+	switch tok.Kind() {
+	case jsontext.KindNull:
+		return nil
+	case jsontext.KindString:
+		parsed, err := time.Parse(time.RFC3339, tok.String())
+		if err != nil {
+			return err
 		}
+		*t = RFC3339Time(parsed)
+		return nil
 	}
-	return fmt.Errorf("invalid time: %v, use one of time.RFC3339, time.DateTime, time.Date or time.Time only formats", s)
-}
-
-func (t FlexTime) String() string {
-	return time.Time(t).Format(time.RFC3339)
+	return fmt.Errorf("expected a string for a time, got %v", tok.Kind())
 }

@@ -5,30 +5,31 @@
 package flags
 
 import (
-	"fmt"
 	"time"
+
+	"cloudeng.io/cmdutil/cmdtypes"
 )
 
-// Time represents a time.Time that can be used as a flag.Value. The time
-// can be expressed in time.RFC3339, time.DateTime, time.TimeOnly or time.DateOnly
-// formats.
+// Time represents a time.Time that can be used as a flag.Value. It accepts
+// the same formats as cmdtypes.FlexTime, ie. time.RFC3339, time.DateTime,
+// time.TimeOnly or time.DateOnly, and is parsed by it, so that a value given
+// on the command line is read the same way as one read from JSON or YAML.
 type Time struct {
 	opt   string
-	value time.Time
+	value cmdtypes.FlexTime
 	set   bool
 }
 
 // Set implements flag.Value.
 func (tf *Time) Set(v string) error {
-	for _, format := range []string{time.RFC3339, time.DateTime, time.TimeOnly, time.DateOnly} {
-		if t, err := time.Parse(format, v); err == nil {
-			tf.opt = v
-			tf.value = t
-			tf.set = true
-			return nil
-		}
+	parsed, err := cmdtypes.ParseFlexTime(v)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("invalid time: %v, use one of RFC3339, Date and Time, Date or Time only formats", v)
+	tf.opt = v
+	tf.value = parsed
+	tf.set = true
+	return nil
 }
 
 // String implements flag.Value.
@@ -36,8 +37,19 @@ func (tf *Time) String() string {
 	return tf.opt
 }
 
-// Value implements flag.Getter.
+// Get implements flag.Getter, returning the time.Time represented by the flag.
 func (tf *Time) Get() any {
+	return tf.value.Time()
+}
+
+// Time returns the time.Time represented by the flag.
+func (tf *Time) Time() time.Time {
+	return tf.value.Time()
+}
+
+// FlexTime returns the value as a cmdtypes.FlexTime, for use where the same
+// value is also read from or written to JSON or YAML.
+func (tf *Time) FlexTime() cmdtypes.FlexTime {
 	return tf.value
 }
 
