@@ -8,7 +8,6 @@ Package cmdtypes provides types that are shared by the configuration and
 command line packages, and that can be encoded and decoded as JSON, YAML and
 text without those packages depending on each other.
 
-<<<<<<< HEAD
 ## Variables
 ### FlexTimeFormats
 ```go
@@ -20,8 +19,9 @@ FlexTimeFormats = []string{
 }
 
 ```
-FlexTimeFormats are the formats that a FlexTime is decoded from, tried in
-this order.
+FlexTimeFormats are the layouts that a FlexTime is decoded from, tried
+in this order. They are time.RFC3339, time.DateTime, time.TimeOnly and
+time.DateOnly.
 
 
 
@@ -76,9 +76,6 @@ used for JSON and YAML.
 
 
 
-=======
-## Types
->>>>>>> main
 ### Type Permissions
 ```go
 type Permissions fs.FileMode

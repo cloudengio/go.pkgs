@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"cloudeng.io/cmdutil/cmdyaml"
+	"cloudeng.io/cmdutil/cmdtypes"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filetestutil"
 	"cloudeng.io/file/filewalk"
@@ -254,14 +254,14 @@ func newContents(des []dirEntry) []filewalk.Entry {
 }
 
 type commonSpec struct {
-	Name   string           `yaml:"name"`
-	Size   int64            `yaml:"size"`
-	Mode   fs.FileMode      `yaml:"mode"`
-	Time   cmdyaml.FlexTime `yaml:"time"`
-	UID    int64            `yaml:"uid"`
-	GID    int64            `yaml:"gid"`
-	Device uint64           `yaml:"device"`
-	FileID uint64           `yaml:"file_id"`
+	Name   string            `yaml:"name"`
+	Size   int64             `yaml:"size"`
+	Mode   fs.FileMode       `yaml:"mode"`
+	Time   cmdtypes.FlexTime `yaml:"time"`
+	UID    int64             `yaml:"uid"`
+	GID    int64             `yaml:"gid"`
+	Device uint64            `yaml:"device"`
+	FileID uint64            `yaml:"file_id"`
 }
 
 type fileSpec struct {

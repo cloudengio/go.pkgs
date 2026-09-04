@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +165,43 @@ func TestFlexTimeNull(t *testing.T) {
 	}
 	if !v2.Time().IsZero() {
 		t.Errorf("json/v2: got %v, want the zero time", v2.Time())
+	}
+}
+
+// TestFlexTimeErrorMessage verifies that the error names exactly the layouts
+// that are accepted, no more and no fewer. It is read by whoever wrote the
+// value, so a layout it omits is one they cannot discover, and one it names
+// that is not accepted sends them somewhere that does not work.
+//
+// The list is compared as a whole rather than by containment: the layouts are
+// substrings of one another, so "15:04:05" and "2006-01-02" both appear
+// within "2006-01-02 15:04:05" and a containment check would pass even for a
+// message that omitted them.
+func TestFlexTimeErrorMessage(t *testing.T) {
+	const marker = ": use one of the layouts "
+
+	_, err := cmdtypes.ParseFlexTime("not-a-time")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `"not-a-time"`) {
+		t.Fatalf("got %v, want it to quote the offending value", msg)
+	}
+	_, list, ok := strings.Cut(msg, marker)
+	if !ok {
+		t.Fatalf("got %v, want it to contain %q", msg, marker)
+	}
+
+	named := strings.Split(list, ", ")
+	if got, want := named, cmdtypes.FlexTimeFormats; !slices.Equal(got, want) {
+		t.Errorf("the message names %q, want exactly %q", got, want)
+	}
+
+	// Every layout it names is one that is actually accepted.
+	for _, layout := range named {
+		if _, err := cmdtypes.ParseFlexTime(time.Now().Format(layout)); err != nil {
+			t.Errorf("layout %q is named but not accepted: %v", layout, err)
+		}
 	}
 }

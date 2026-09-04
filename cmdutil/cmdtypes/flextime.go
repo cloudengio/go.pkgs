@@ -6,16 +6,28 @@ package cmdtypes
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
-// FlexTimeFormats are the formats that a FlexTime is decoded from, tried in
-// this order.
+// FlexTimeFormats are the layouts that a FlexTime is decoded from, tried in
+// this order. They are time.RFC3339, time.DateTime, time.TimeOnly and
+// time.DateOnly.
 var FlexTimeFormats = []string{
 	time.RFC3339,
 	time.DateTime,
 	time.TimeOnly,
 	time.DateOnly,
+}
+
+// invalidFlexTime reports that s is not one of FlexTimeFormats. The layouts
+// are listed from FlexTimeFormats itself, so the message cannot come to
+// describe formats that are not the ones accepted, and it names the layouts
+// rather than the Go constants since it is read by whoever wrote the value,
+// on a command line or in a configuration file.
+func invalidFlexTime(s string) error {
+	return fmt.Errorf("invalid time %q: use one of the layouts %v",
+		s, strings.Join(FlexTimeFormats, ", "))
 }
 
 // FlexTime is a time.Time that can be decoded from any of FlexTimeFormats and
@@ -33,7 +45,7 @@ func ParseFlexTime(s string) (FlexTime, error) {
 			return FlexTime(t), nil
 		}
 	}
-	return FlexTime{}, fmt.Errorf("invalid time: %v, use one of time.RFC3339, time.DateTime, time.Date or time.Time only formats", s)
+	return FlexTime{}, invalidFlexTime(s)
 }
 
 // Time returns the time.Time represented by t.
