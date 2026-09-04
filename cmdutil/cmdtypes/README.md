@@ -8,6 +8,7 @@ Package cmdtypes provides types that are shared by the configuration and
 command line packages, and that can be encoded and decoded as JSON, YAML and
 text without those packages depending on each other.
 
+<<<<<<< HEAD
 ## Variables
 ### FlexTimeFormats
 ```go
@@ -75,6 +76,9 @@ used for JSON and YAML.
 
 
 
+=======
+## Types
+>>>>>>> main
 ### Type Permissions
 ```go
 type Permissions fs.FileMode
