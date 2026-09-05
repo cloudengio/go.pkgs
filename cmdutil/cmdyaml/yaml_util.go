@@ -553,26 +553,46 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 	return &yaml.TypeError{Errors: newErrors}
 }
 
-// LocateConfigFile searches for a configuration file that matches the given name
-// in path (as expected by filepath.SplitList). The search order is as follows:
-// . 1. If name is an absolute path and the file exists, it is returned, if it does not exist an empty string is returned.
-// . 2. For each directory in path, the following are checked in order:
-// .     a. <dir>/<name>.<yaml|yml>
-// .     b. <dir>/.<name>.<yaml|yml>
-// . 3. If no matching file is found, an empty string is returned.
-// The first file found is returned, or an empty string if none of the above exist.
+// LocateConfigFile searches for the first configuration file that matches the
+// given name in path (as expected by filepath.SplitList). The search order is
+// as follows:
+//  1. If name is an absolute path and the file exists, it is returned, if it
+//     does not exist an empty string is returned. If it exists and an error
+//     other than "file not found" occurs, the filename is returned so that the
+//     caller can attempt to open it and handle the error.
+//  2. For each directory in path, the following are checked in order:
+//     a. dir/name.yaml|yml
+//     b. dir/.name.yaml|yml
+//
+// 3. If no matching file is found, an empty string is returned.
 func LocateConfigFile(name, path string) string {
 	if filepath.IsAbs(name) {
-		if _, err := os.Stat(name); err == nil {
+		fi, err := os.Stat(name)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return ""
+			}
+			// Return the path so callers get the underlying error when they open/read it.
 			return name
 		}
-		return ""
+		if fi.IsDir() {
+			return ""
+		}
+		return name
+	}
+	// Ensure that we don't test for x.yaml.yml or vice versa by stripping any
+	// existing extension and only testing for .yaml and .yml if the name
+	// has no extension, otherwise only test for the given extension.
+	base := name
+	suffixes := []string{".yaml", ".yml"}
+	if ext := filepath.Ext(name); ext == ".yaml" || ext == ".yml" {
+		base = strings.TrimSuffix(name, ext)
+		suffixes = []string{ext}
 	}
 	for _, dir := range filepath.SplitList(path) {
 		for _, prefix := range []string{"", "."} {
-			for _, suffix := range []string{".yaml", ".yml"} {
-				fname := strings.TrimSuffix(name, suffix) + suffix
-				file := filepath.Join(dir, prefix+fname)
+			for _, suffix := range suffixes {
+				file := filepath.Join(dir, prefix+base+suffix)
 				if _, err := os.Stat(file); err == nil {
 					return file
 				}
