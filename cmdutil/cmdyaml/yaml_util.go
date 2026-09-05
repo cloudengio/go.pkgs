@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -550,4 +551,45 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 		}
 	}
 	return &yaml.TypeError{Errors: newErrors}
+}
+
+// LocateConfigFile searches for a configuration file that matches the given name
+// in path (as expected by filepath.SplitList). The search order is as follows:
+// . 1. If name is an absolute path and the file exists, it is returned, if it does not exist an empty string is returned.
+// . 2. For each directory in path, the following are checked in order:
+// .     a. <dir>/<name>.<yaml|yml>
+// .     b. <dir>/.<name>.<yaml|yml>
+// . 3. If no matching file is found, an empty string is returned.
+// The first file found is returned, or an empty string if none of the above exist.
+func LocateConfigFile(name, path string) string {
+	if filepath.IsAbs(name) {
+		if _, err := os.Stat(name); err == nil {
+			return name
+		}
+		return ""
+	}
+	for _, dir := range filepath.SplitList(path) {
+		for _, prefix := range []string{"", "."} {
+			for _, suffix := range []string{".yaml", ".yml"} {
+				fname := strings.TrimSuffix(name, suffix) + suffix
+				file := filepath.Join(dir, prefix+fname)
+				if _, err := os.Stat(file); err == nil {
+					return file
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// WriteConfig writes cfg as YAML to wr. Returns an error if the write fails.
+func WriteConfig(wr io.Writer, cfg any) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if _, err := wr.Write(data); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	return nil
 }

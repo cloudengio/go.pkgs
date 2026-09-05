@@ -32,6 +32,19 @@ ExpandEnv recursively expands environment variables in the fields of the
 provided struct that have a 'yaml' tag. Embedded structs are also processed.
 The provided mapping is used to look up variable values.
 
+### Func LocateConfigFile
+```go
+func LocateConfigFile(name, path string) string
+```
+LocateConfigFile searches for a configuration file that matches the
+given name in path (as expected by filepath.SplitList). The search order
+is as follows: . 1. If name is an absolute path and the file exists,
+it is returned, if it does not exist an empty string is returned. . 2.
+For each directory in path, the following are checked in order: . a.
+<dir>/<name>.<yaml|yml> . b. <dir>/.<name>.<yaml|yml> . 3. If no matching
+file is found, an empty string is returned. The first file found is
+returned, or an empty string if none of the above exist.
+
 ### Func ParseConfigFiles
 ```go
 func ParseConfigFiles(ctx context.Context, cfg any, filenames ...string) error
@@ -70,6 +83,12 @@ func ParseDeferred[T any](d *Deferred) (T, error)
 ```
 ParseDeferred decodes the provided Deferred YAML node into a value of type
 T.
+
+### Func WriteConfig
+```go
+func WriteConfig(wr io.Writer, cfg any) error
+```
+WriteConfig writes cfg as YAML to wr. Returns an error if the write fails.
 
 
 
