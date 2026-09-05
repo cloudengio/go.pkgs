@@ -5,7 +5,9 @@
 package cmdyaml_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"testing"
 
 	"cloudeng.io/cmdutil/cmdyaml"
+	"gopkg.in/yaml.v3"
 )
 
 type testStruct struct {
@@ -1289,4 +1292,331 @@ all:
 	if got := cfg.All; !slices.Equal(got, want) {
 		t.Errorf("All: got %v, want %v", got, want)
 	}
+}
+
+func testLocateConfigFileAbs(t *testing.T) {
+	dir := t.TempDir()
+	absFile := writeTempYAML(t, dir, "config.yaml", "a: 1\n")
+
+	// Existing absolute file.
+	if got := cmdyaml.LocateConfigFile(absFile, ""); got != absFile {
+		t.Errorf("got %q, want %q", got, absFile)
+	}
+
+	// Absolute file that does not exist.
+	missingAbs := filepath.Join(dir, "missing.yaml")
+	if got := cmdyaml.LocateConfigFile(missingAbs, ""); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+
+	// Absolute path that is a directory.
+	if got := cmdyaml.LocateConfigFile(dir, ""); got != "" {
+		t.Errorf("got %q, want empty string for directory", got)
+	}
+
+	// Absolute path with non-NotExist error (permission denied).
+	if os.Getuid() != 0 {
+		sub := filepath.Join(dir, "noperms")
+		if err := os.Mkdir(sub, 0700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		target := filepath.Join(sub, "config.yaml")
+		if err := os.WriteFile(target, []byte("a: 1\n"), 0600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		if err := os.Chmod(sub, 0000); err != nil {
+			t.Fatalf("chmod: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = os.Chmod(sub, 0700)
+		})
+		if got := cmdyaml.LocateConfigFile(target, ""); got != target {
+			t.Errorf("got %q, want %q for permission error", got, target)
+		}
+	}
+}
+
+func testLocateConfigFileRelativePrecedence(t *testing.T) {
+	testCases := []struct {
+		name        string
+		createFiles []string
+		searchName  string
+		wantFile    string
+	}{
+		{
+			name:        "only .yaml",
+			createFiles: []string{"app.yaml"},
+			searchName:  "app",
+			wantFile:    "app.yaml",
+		},
+		{
+			name:        "only .yml",
+			createFiles: []string{"app.yml"},
+			searchName:  "app",
+			wantFile:    "app.yml",
+		},
+		{
+			name:        "only dot .yaml",
+			createFiles: []string{".app.yaml"},
+			searchName:  "app",
+			wantFile:    ".app.yaml",
+		},
+		{
+			name:        "only dot .yml",
+			createFiles: []string{".app.yml"},
+			searchName:  "app",
+			wantFile:    ".app.yml",
+		},
+		{
+			name:        "all four exist, prefer name.yaml",
+			createFiles: []string{"app.yaml", "app.yml", ".app.yaml", ".app.yml"},
+			searchName:  "app",
+			wantFile:    "app.yaml",
+		},
+		{
+			name:        "name.yml and dot .yaml exist, prefer name.yml",
+			createFiles: []string{"app.yml", ".app.yaml"},
+			searchName:  "app",
+			wantFile:    "app.yml",
+		},
+		{
+			name:        "both dot files exist, prefer .name.yaml",
+			createFiles: []string{".app.yaml", ".app.yml"},
+			searchName:  "app",
+			wantFile:    ".app.yaml",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, f := range tc.createFiles {
+				writeTempYAML(t, dir, f, "key: val\n")
+			}
+			want := filepath.Join(dir, tc.wantFile)
+			if got := cmdyaml.LocateConfigFile(tc.searchName, dir); got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func testLocateConfigFileExplicitExt(t *testing.T) {
+	dir := t.TempDir()
+	writeTempYAML(t, dir, "app.yml", "key: val\n")
+	if got := cmdyaml.LocateConfigFile("app.yaml", dir); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+
+	writeTempYAML(t, dir, ".app.yaml", "key: val\n")
+	want := filepath.Join(dir, ".app.yaml")
+	if got := cmdyaml.LocateConfigFile("app.yaml", dir); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	writeTempYAML(t, dir, "app.yaml", "key: val\n")
+	want = filepath.Join(dir, "app.yaml")
+	if got := cmdyaml.LocateConfigFile("app.yaml", dir); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	dirYml := t.TempDir()
+	writeTempYAML(t, dirYml, "app.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFile("app.yml", dirYml); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+
+	writeTempYAML(t, dirYml, ".app.yml", "key: val\n")
+	want = filepath.Join(dirYml, ".app.yml")
+	if got := cmdyaml.LocateConfigFile("app.yml", dirYml); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	writeTempYAML(t, dirYml, "app.yml", "key: val\n")
+	want = filepath.Join(dirYml, "app.yml")
+	if got := cmdyaml.LocateConfigFile("app.yml", dirYml); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	dirOther := t.TempDir()
+	writeTempYAML(t, dirOther, "app.conf.yaml", "key: val\n")
+	want = filepath.Join(dirOther, "app.conf.yaml")
+	if got := cmdyaml.LocateConfigFile("app.conf", dirOther); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	dirOther2 := t.TempDir()
+	writeTempYAML(t, dirOther2, "app.conf.yml", "key: val\n")
+	want = filepath.Join(dirOther2, "app.conf.yml")
+	if got := cmdyaml.LocateConfigFile("app.conf", dirOther2); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testLocateConfigFileSearchPath(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	dir3 := t.TempDir()
+	path := strings.Join([]string{dir1, dir2, dir3}, string(filepath.ListSeparator))
+
+	writeTempYAML(t, dir2, "service.yaml", "k: v\n")
+	want := filepath.Join(dir2, "service.yaml")
+	if got := cmdyaml.LocateConfigFile("service", path); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	writeTempYAML(t, dir1, ".service.yml", "k: v\n")
+	want = filepath.Join(dir1, ".service.yml")
+	if got := cmdyaml.LocateConfigFile("service", path); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	writeTempYAML(t, dir1, "service.yaml", "k: v\n")
+	want = filepath.Join(dir1, "service.yaml")
+	if got := cmdyaml.LocateConfigFile("service", path); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testLocateConfigFileNotFound(t *testing.T) {
+	dir := t.TempDir()
+	if got := cmdyaml.LocateConfigFile("nonexistent", dir); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+	if got := cmdyaml.LocateConfigFile("nonexistent", ""); got != "" {
+		t.Errorf("got %q, want empty string for empty path", got)
+	}
+	if got := cmdyaml.LocateConfigFile("", dir); got != "" {
+		t.Errorf("got %q, want empty string for empty name", got)
+	}
+}
+
+func TestLocateConfigFile(t *testing.T) {
+	t.Run("absolute path", testLocateConfigFileAbs)
+	t.Run("relative path precedence", testLocateConfigFileRelativePrecedence)
+	t.Run("explicit extension", testLocateConfigFileExplicitExt)
+	t.Run("search path ordering", testLocateConfigFileSearchPath)
+	t.Run("not found", testLocateConfigFileNotFound)
+}
+
+type serverConfig struct {
+	Host    string            `yaml:"host"`
+	Port    int               `yaml:"port"`
+	Enabled bool              `yaml:"enabled"`
+	Tags    []string          `yaml:"tags"`
+	Meta    map[string]string `yaml:"meta"`
+}
+
+func testWriteConfigStruct(t *testing.T) {
+	cfg := serverConfig{
+		Host:    "127.0.0.1",
+		Port:    8080,
+		Enabled: true,
+		Tags:    []string{"web", "api"},
+		Meta:    map[string]string{"env": "prod"},
+	}
+
+	assertDecoded := func(t *testing.T, buf []byte) {
+		t.Helper()
+		var decoded serverConfig
+		if err := yaml.Unmarshal(buf, &decoded); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if decoded.Host != cfg.Host {
+			t.Errorf("Host: got %q, want %q", decoded.Host, cfg.Host)
+		}
+		if decoded.Port != cfg.Port {
+			t.Errorf("Port: got %d, want %d", decoded.Port, cfg.Port)
+		}
+		if decoded.Enabled != cfg.Enabled {
+			t.Errorf("Enabled: got %v, want %v", decoded.Enabled, cfg.Enabled)
+		}
+		if !slices.Equal(decoded.Tags, cfg.Tags) {
+			t.Errorf("Tags: got %v, want %v", decoded.Tags, cfg.Tags)
+		}
+		if decoded.Meta["env"] != cfg.Meta["env"] {
+			t.Errorf("Meta: got %v, want %v", decoded.Meta, cfg.Meta)
+		}
+	}
+
+	t.Run("by value", func(t *testing.T) {
+		var buf bytes.Buffer
+		if err := cmdyaml.WriteConfig(&buf, cfg); err != nil {
+			t.Fatalf("WriteConfig failed: %v", err)
+		}
+		assertDecoded(t, buf.Bytes())
+	})
+
+	t.Run("by pointer", func(t *testing.T) {
+		var buf bytes.Buffer
+		if err := cmdyaml.WriteConfig(&buf, &cfg); err != nil {
+			t.Fatalf("WriteConfig failed: %v", err)
+		}
+		assertDecoded(t, buf.Bytes())
+	})
+}
+
+func testWriteConfigMap(t *testing.T) {
+	data := map[string]int{"alpha": 1, "beta": 2}
+	var buf bytes.Buffer
+	if err := cmdyaml.WriteConfig(&buf, data); err != nil {
+		t.Fatalf("WriteConfig failed: %v", err)
+	}
+
+	var decoded map[string]int
+	if err := yaml.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if decoded["alpha"] != 1 || decoded["beta"] != 2 {
+		t.Errorf("got %v, want %v", decoded, data)
+	}
+}
+
+func testWriteConfigErrors(t *testing.T) {
+	t.Run("marshal error", func(t *testing.T) {
+		var buf bytes.Buffer
+		err := cmdyaml.WriteConfig(&buf, badMarshaler{})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "marshal config:") {
+			t.Errorf("error %q does not contain %q", err.Error(), "marshal config:")
+		}
+	})
+
+	t.Run("write error", func(t *testing.T) {
+		expectedErr := errors.New("write failed")
+		fw := failWriter{err: expectedErr}
+		cfg := map[string]string{"key": "value"}
+		err := cmdyaml.WriteConfig(fw, cfg)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "write config:") {
+			t.Errorf("error %q does not contain %q", err.Error(), "write config:")
+		}
+		if !errors.Is(err, expectedErr) {
+			t.Errorf("expected error to wrap expectedErr, got %v", err)
+		}
+	})
+}
+
+func TestWriteConfig(t *testing.T) {
+	t.Run("struct value and pointer", testWriteConfigStruct)
+	t.Run("map", testWriteConfigMap)
+	t.Run("errors", testWriteConfigErrors)
+}
+
+type failWriter struct {
+	err error
+}
+
+func (fw failWriter) Write([]byte) (int, error) {
+	return 0, fw.err
+}
+
+type badMarshaler struct{}
+
+func (badMarshaler) MarshalYAML() (any, error) {
+	return nil, errors.New("cannot marshal")
 }
