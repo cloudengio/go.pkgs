@@ -1,6 +1,6 @@
 module cloudeng.io/aws
 
-go 1.27
+go 1.27.0
 
 require (
 	cloudeng.io/cicd v0.0.0-20260527194618-4cb6d4558850

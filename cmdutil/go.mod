@@ -1,6 +1,6 @@
 module cloudeng.io/cmdutil
 
-go 1.27
+go 1.27.0
 
 require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
@@ -8,6 +8,7 @@ require (
 	cloudeng.io/logging v0.0.0-20260824023931-9b6c51abac7f
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
+	cloudeng.io/types v0.0.0-20260908185204-9b800643baf7
 	gopkg.in/yaml.v3 v3.0.1
 )
 

@@ -70,6 +70,29 @@ supplied. All fields can be quoted if they need to contain a comma.
 Default values may contain shell variables as per flags.ExpandEnv.
 So $HOME/.configdir may be used on both UNIX and Windows for example.
 
+### Func RegisterAndParse
+```go
+func RegisterAndParse[T any](tag string, values *T) error
+```
+RegisterAndParse registers the flags in the supplied struct and parses the
+command line arguments. It uses RegisterFlagsInStruct with the supplied
+tag and no default option values. The following struct can be parsed with
+RegisterAndParse("flags", &myflags{}):
+
+    type myflags struct {
+      Verbose bool `flags:"verbose,false,enable verbose logging"`
+    }
+
+It returns an error if there is a problem registering the flags or parsing
+the command line arguments.
+
+### Func RegisterAndParseMust
+```go
+func RegisterAndParseMust[T any](tag string, values *T)
+```
+RegisterAndParseMust is like RegisterAndParse but panics if there is an
+error.
+
 ### Func RegisterFlagsInStruct
 ```go
 func RegisterFlagsInStruct(fs *flag.FlagSet, tag string, structWithFlags any, valueDefaults map[string]any, usageDefaults map[string]string) error
