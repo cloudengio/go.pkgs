@@ -27,15 +27,8 @@ type forwarder struct {
 
 	mu        sync.Mutex
 	listeners []net.Listener
-	conns     []net.Conn
+	conns     map[net.Conn]struct{}
 	stopped   bool
-}
-
-func (f *forwarder) log() *slog.Logger {
-	if f.logger == nil {
-		return slog.Default()
-	}
-	return f.logger
 }
 
 // forwardAll establishes every configured forward. Each local port is bound
@@ -46,7 +39,7 @@ func (f *forwarder) log() *slog.Logger {
 // stopAll, which is what releases them.
 func (f *forwarder) forwardAll(ctx context.Context) error {
 	for _, spec := range f.forwards {
-		l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", spec.localPort))
+		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", spec.localPort))
 		if err != nil {
 			return err
 		}
@@ -67,7 +60,7 @@ func (f *forwarder) forwardAll(ctx context.Context) error {
 // time the next connection arrives, and if it is the ssh connection that has
 // failed then stopAll ends this loop in any case.
 func (f *forwarder) forward(ctx context.Context, l net.Listener, spec forward) {
-	remoteAddr := fmt.Sprintf("localhost:%d", spec.remotePort)
+	remoteAddr := fmt.Sprintf("127.0.0.1:%d", spec.remotePort)
 	for {
 		local, err := l.Accept()
 		if err != nil {
@@ -77,7 +70,7 @@ func (f *forwarder) forward(ctx context.Context, l net.Listener, spec forward) {
 		}
 		remote, err := f.client.DialContext(ctx, "tcp", remoteAddr)
 		if err != nil {
-			f.log().Warn("pssh: could not forward connection",
+			f.logger.Warn("pssh: could not forward connection",
 				"local.port", spec.localPort, "remote.port", spec.remotePort, "err", err)
 			local.Close()
 			continue
@@ -103,20 +96,40 @@ func (f *forwarder) addConns(local, remote net.Conn) bool {
 	if f.stopped {
 		return false
 	}
-	f.conns = append(f.conns, local, remote)
+	if f.conns == nil {
+		f.conns = make(map[net.Conn]struct{})
+	}
+	f.conns[local] = struct{}{}
+	f.conns[remote] = struct{}{}
 	return true
 }
 
+func (f *forwarder) removeConns(local, remote net.Conn) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.conns, local)
+	delete(f.conns, remote)
+}
+
 func (f *forwarder) runForward(local, remote net.Conn) {
+	defer f.removeConns(local, remote)
+	var once sync.Once
+	closeBoth := func() {
+		once.Do(func() {
+			_ = local.Close()
+			_ = remote.Close()
+		})
+	}
+	defer closeBoth()
+
 	// Copy both ways; closing either end must tear down the other. The copies
 	// end with an error whenever the connection is torn down rather than shut
 	// down cleanly, which is the usual case here and not worth reporting.
 	f.wg.Go(func() {
+		defer closeBoth()
 		_, _ = io.Copy(remote, local)
-		remote.Close()
 	})
 	_, _ = io.Copy(local, remote)
-	local.Close()
 }
 
 // stopAll ends every forward and waits for the goroutines running them to
@@ -128,11 +141,11 @@ func (f *forwarder) stopAll(ctx context.Context) {
 	f.mu.Lock()
 	f.stopped = true
 	for _, l := range f.listeners {
-		l.Close()
+		_ = l.Close()
 	}
 	f.listeners = nil
-	for _, conn := range f.conns {
-		conn.Close()
+	for conn := range f.conns {
+		_ = conn.Close()
 	}
 	f.conns = nil
 	f.mu.Unlock()

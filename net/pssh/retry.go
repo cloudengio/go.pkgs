@@ -118,7 +118,11 @@ func isHostKeyError(err error) bool {
 // PartialSuccessError, are produced by the server half of the package and are
 // never returned to a client.
 func isAuthError(err error) bool {
-	return strings.Contains(err.Error(), "unable to authenticate")
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unable to authenticate") ||
+		strings.Contains(msg, "too many authentication failures") ||
+		strings.Contains(msg, "permission denied (publickey") ||
+		strings.Contains(msg, "authentication failed")
 }
 
 // isNegotiationError reports whether the two ends failed to agree on an
@@ -128,7 +132,8 @@ func isNegotiationError(err error) bool {
 	if errors.As(err, &negotiation) {
 		return true
 	}
-	return strings.Contains(err.Error(), "ssh: no common algorithm")
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no common algorithm")
 }
 
 // isAddrError reports whether err describes an address or network that cannot

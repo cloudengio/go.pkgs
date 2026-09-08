@@ -4,8 +4,8 @@
 import cloudeng.io/net/pssh
 ```
 
-Package pssh provides a persistent ssh connection, namely, one that can will
-be recreated if the connection is lost.
+Package pssh provides a persistent ssh connection, namely, one that will be
+recreated if the connection is lost.
 
 ## Constants
 ### DefaultDialTimeout
@@ -86,7 +86,7 @@ type Client struct {
 Client represents a persistent ssh connection to a server. It is created
 with NewClient, which takes the network and address of the server,
 and optional configuration. The persistent connection is established with
-Connect and terminated with Close.
+ConnectAndWait and terminated with Close.
 
 ### Functions
 
@@ -95,7 +95,7 @@ func NewClient(ctx context.Context, network, addr string, opts ...Option) *Clien
 ```
 NewClient returns an instance of Client with the specified network and
 address, and optional configuration options. A connection is not established
-until Connect is called.
+until ConnectAndWait is called.
 
 
 
@@ -107,7 +107,7 @@ func (c *Client) Close()
 
 
 ```go
-func (c *Client) ConnectAndWait(ctx context.Context, backoff func() ratecontrol.Backoff) (net.Conn, error)
+func (c *Client) ConnectAndWait(ctx context.Context, backoff func() ratecontrol.Backoff) error
 ```
 ConnectAndWait establishes a connection to the server, along with any
 configured port forwards, and maintains it: whenever the connection is lost

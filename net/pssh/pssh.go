@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package pssh provides a persistent ssh connection, namely, one that
-// can will be recreated if the connection is lost.
+// will be recreated if the connection is lost.
 package pssh
 
 import (
@@ -27,7 +27,7 @@ import (
 // Client represents a persistent ssh connection to a server. It is created
 // with NewClient, which takes the network and address of the server, and
 // optional configuration. The persistent connection is established with
-// Connect and terminated with Close.
+// ConnectAndWait and terminated with Close.
 type Client struct {
 	network, addr string
 	closeOnce     sync.Once
@@ -130,7 +130,7 @@ func WithLogger(logger *slog.Logger) Option {
 
 // NewClient returns an instance of Client with the specified network and
 // address, and optional configuration options. A connection is not
-// established until Connect is called.
+// established until ConnectAndWait is called.
 func NewClient(ctx context.Context, network, addr string, opts ...Option) *Client {
 	c := &Client{
 		network: network,
@@ -175,6 +175,8 @@ func existingFiles(files []string) []string {
 	return existing
 }
 
+var knownHostsMu sync.Mutex
+
 // hostKeyCallback returns the callback used to verify the server, honouring
 // WithHostKey, WithKnownHosts and WithAcceptNewHostKeys in that order.
 func (c *Client) hostKeyCallback() (ssh.HostKeyCallback, error) {
@@ -188,6 +190,10 @@ func (c *Client) hostKeyCallback() (ssh.HostKeyCallback, error) {
 	// The file that a newly accepted host is recorded in is the first one
 	// named, whether or not it exists yet.
 	record := files[0]
+
+	if c.opts.acceptNewHost && record == "/etc/ssh/ssh_known_hosts" {
+		return nil, fmt.Errorf("%w: cannot record new host keys to system file %v: specify a user known hosts file with WithKnownHosts", ErrKnownHosts, record)
+	}
 
 	var callback ssh.HostKeyCallback
 	if existing := existingFiles(files); len(existing) > 0 {
@@ -224,7 +230,7 @@ func acceptNewHostKey(callback ssh.HostKeyCallback, record string) ssh.HostKeyCa
 			return err
 		}
 		if err := appendKnownHost(record, hostname, key); err != nil {
-			return fmt.Errorf("recording the host key for %v: %w", hostname, err)
+			return fmt.Errorf("%w: recording host key for %v into %v: %v", ErrKnownHosts, hostname, record, err)
 		}
 		return nil
 	}
@@ -233,12 +239,15 @@ func acceptNewHostKey(callback ssh.HostKeyCallback, record string) ssh.HostKeyCa
 // appendKnownHost records key for hostname in the known hosts file at path,
 // creating it if need be.
 func appendKnownHost(path, hostname string, key ssh.PublicKey) error {
+	knownHostsMu.Lock()
+	defer knownHostsMu.Unlock()
+
 	if dir := filepath.Dir(path); dir != "." {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return err
 		}
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}
@@ -248,32 +257,13 @@ func appendKnownHost(path, hostname string, key ssh.PublicKey) error {
 	// which would otherwise merge the existing last entry with this one.
 	prefix := ""
 	if fi, err := f.Stat(); err == nil && fi.Size() > 0 {
-		if last, err := lastByte(path); err == nil && last != '\n' {
+		var b [1]byte
+		if _, err := f.ReadAt(b[:], fi.Size()-1); err == nil && b[0] != '\n' {
 			prefix = "\n"
 		}
 	}
-	if _, err := f.WriteString(prefix + line + "\n"); err != nil {
-		return err
-	}
-	return f.Close()
-}
-
-// lastByte returns the final byte of the named file, which must not be empty.
-func lastByte(path string) (byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return 0, err
-	}
-	var b [1]byte
-	if _, err := f.ReadAt(b[:], fi.Size()-1); err != nil {
-		return 0, err
-	}
-	return b[0], nil
+	_, err = f.WriteString(prefix + line + "\n")
+	return err
 }
 
 // sshConfigForAgent returns a configuration that authenticates using the keys
@@ -347,32 +337,78 @@ func (c *Client) sshConfigForAgent(user string) (*ssh.ClientConfig, func(), erro
 // server do not carry over into the next outage. A backoff that gives up
 // bounds how long a connection is retried for, and ConnectAndWait then returns
 // the error from the last attempt.
-func (c *Client) ConnectAndWait(ctx context.Context, backoff func() ratecontrol.Backoff) (net.Conn, error) {
-	for {
+func (c *Client) ConnectAndWait(ctx context.Context, backoff func() ratecontrol.Backoff) error {
+	select {
+	case <-c.doneCh:
+		return ErrClientClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
 		select {
-		case <-ctx.Done():
 		case <-c.doneCh:
+			cancel()
+		case <-runCtx.Done():
+		}
+	}()
+
+	errCh := make(chan error, 1)
+	go c.connect(runCtx, backoff, errCh)
+
+	select {
+	case <-c.doneCh:
+		cancel()
+		<-errCh
+		return ErrClientClosed
+	case <-ctx.Done():
+		cancel()
+		<-errCh
+		return ctx.Err()
+	case err := <-errCh:
+		select {
+		case <-c.doneCh:
+			return ErrClientClosed
 		default:
 		}
+		return err
+	}
+}
 
-		errCh := make(chan error, 1)
-		go c.connect(ctx, backoff, errCh)
+func (c *Client) stoppingErr(ctx context.Context) error {
+	select {
+	case <-c.doneCh:
+		return ErrClientClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
+}
 
+func (c *Client) wait(ctx context.Context, client *ssh.Client, pf *forwarder) error {
+	waitDone := make(chan struct{})
+	go func() {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			_ = client.Close()
 		case <-c.doneCh:
-			return nil, ErrClientClosed
-		case err := <-errCh:
-			if err != nil {
-				// unrecoverable error, eg backoff exhausted, authentication
-				// failed etc.
-				return nil, err
-			} else {
-				return nil, nil
-			}
+			_ = client.Close()
+		case <-waitDone:
 		}
+	}()
+	waitErr := client.Wait()
+	close(waitDone)
+	if waitErr != nil {
+		c.opts.logger.Debug("ssh connection closed", "err", waitErr)
 	}
+	pf.stopAll(context.WithoutCancel(ctx))
+	_ = client.Close()
+	return c.stoppingErr(ctx)
 }
 
 func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client, *forwarder, error) {
@@ -401,7 +437,7 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 		logger:   c.opts.logger,
 	}
 	if err := pf.forwardAll(ctx); err != nil {
-		pf.stopAll(ctx)
+		pf.stopAll(context.WithoutCancel(ctx))
 		conn.Close()
 		client.Close()
 		return nil, nil, err
@@ -412,26 +448,37 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 func (c *Client) connect(ctx context.Context, backoffFn func() ratecontrol.Backoff, ch chan<- error) {
 	backoff := backoffFn()
 	for {
+		if err := c.stoppingErr(ctx); err != nil {
+			ch <- err
+			return
+		}
+
 		client, forwarder, err := c.createConnectionAndForwarding(ctx)
 		if err == nil {
-			client.Wait()
-			forwarder.stopAll(ctx)
-			client.Close()
+			if err := c.wait(ctx, client, forwarder); err != nil {
+				ch <- err
+				return
+			}
 			// The connection was established, so the delays accumulated
 			// reaching it no longer describe the state of the server.
 			backoff = backoffFn()
 			continue
+		}
+
+		if err := c.stoppingErr(ctx); err != nil {
+			ch <- err
+			return
 		}
 		if !Retryable(err) {
 			ch <- err
 			return
 		}
 		select {
-		case <-ctx.Done():
-			ch <- ctx.Err()
-			return
 		case <-c.doneCh:
 			ch <- ErrClientClosed
+			return
+		case <-ctx.Done():
+			ch <- ctx.Err()
 			return
 		case _, ok := <-backoff.Next():
 			if !ok {

@@ -7,6 +7,7 @@ package pssh
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func echoThrough(t *testing.T, port int, msg string) string {
 // proves the whole path is established, which dialling alone does not.
 func openEcho(t *testing.T, port int, msg string) (net.Conn, string) {
 	t.Helper()
-	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,6 +101,7 @@ func newForwarder(t *testing.T, forwards ...forward) *forwarder {
 	return &forwarder{
 		client:   dialSSH(t, c, hostSigner, userSigner),
 		forwards: forwards,
+		logger:   slog.New(slog.DiscardHandler),
 	}
 }
 
@@ -153,7 +155,7 @@ func TestForwarderStopReleasesListeners(t *testing.T) {
 	f.stopAll(t.Context())
 
 	for _, port := range ports {
-		l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
 			t.Errorf("port %v was not released: %v", port, err)
 			continue
@@ -196,7 +198,7 @@ func TestForwarderBindFailure(t *testing.T) {
 	}
 
 	f.stopAll(t.Context())
-	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", good))
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", good))
 	if err != nil {
 		t.Errorf("the forward established before the failure was not released: %v", err)
 	} else {
@@ -217,7 +219,7 @@ func TestForwarderUnreachableRemote(t *testing.T) {
 
 	// Nothing is listening on the remote port, so this connection is accepted
 	// locally and then abandoned.
-	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", local))
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", local))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,5 +238,41 @@ func TestForwarderUnreachableRemote(t *testing.T) {
 	echoServerOn(t, remote)
 	if got, want := echoThrough(t, local, "after"), "after"; got != want {
 		t.Errorf("got %v, want %v: the forward did not survive a failed connection", got, want)
+	}
+}
+
+// TestForwarderConnectionsPruned verifies that closed forwarded connections
+// are removed from f.conns rather than retained indefinitely.
+func TestForwarderConnectionsPruned(t *testing.T) {
+	echo := echoServer(t)
+	port := freePort(t)
+	f := newForwarder(t, forward{localPort: port, remotePort: echo})
+	if err := f.forwardAll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer f.stopAll(t.Context())
+
+	// Open and close several connections sequentially.
+	for i := 0; i < 5; i++ {
+		conn, reply := openEcho(t, port, fmt.Sprintf("ping-%d", i))
+		if reply != fmt.Sprintf("ping-%d", i) {
+			t.Fatalf("unexpected reply: %v", reply)
+		}
+		conn.Close()
+	}
+
+	// Wait for goroutines to finish closing and pruning from conns.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		f.mu.Lock()
+		count := len(f.conns)
+		f.mu.Unlock()
+		if count == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected f.conns to be 0 after all connections closed, got %d", count)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

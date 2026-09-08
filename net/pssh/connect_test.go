@@ -132,7 +132,7 @@ func echoEventually(t *testing.T, port int, msg string) {
 }
 
 func echoOnce(port int, msg string) bool {
-	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return false
 	}
@@ -155,7 +155,7 @@ func echoOnce(port int, msg string) bool {
 func connectInBackground(ctx context.Context, c *Client, backoff func() ratecontrol.Backoff) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.ConnectAndWait(ctx, backoff)
+		err := c.ConnectAndWait(ctx, backoff)
 		done <- err
 	}()
 	return done
@@ -315,6 +315,73 @@ func TestConnectAndWaitCloseWhilstRetrying(t *testing.T) {
 	}
 	// Close is idempotent: a second call must not panic on a closed channel.
 	c.Close()
+}
+
+// TestConnectAndWaitCloseWhilstConnected verifies that closing the client
+// whilst actively connected terminates immediately, ends the loop, and
+// releases all forwarded ports.
+func TestConnectAndWaitCloseWhilstConnected(t *testing.T) {
+	userPriv, userSigner := newKey(t)
+	_, hostSigner := newKey(t)
+	serveAgent(t, userPriv)
+	srv := newSSHServer(t, hostSigner, userSigner, "auser")
+
+	local := freePort(t)
+	c := NewClient(t.Context(), "tcp", srv.addr(),
+		WithUser("auser"),
+		WithHostKey(hostSigner.PublicKey()),
+		WithLocalPortForward(local, echoServer(t)))
+
+	done := connectInBackground(t.Context(), c, slowBackoff)
+	srv.waitForConnection(t)
+	echoEventually(t, local, "hello")
+
+	c.Close()
+	if err := waitForResult(t, done); !errors.Is(err, ErrClientClosed) {
+		t.Errorf("got %v, want ErrClientClosed", err)
+	}
+
+	// Port must be released.
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", local))
+	if err != nil {
+		t.Errorf("port %v was not released after client close: %v", local, err)
+	} else {
+		l.Close()
+	}
+}
+
+// TestConnectAndWaitCancelWhilstConnected verifies that cancelling the context
+// whilst actively connected terminates immediately, ends the loop, and
+// releases all forwarded ports.
+func TestConnectAndWaitCancelWhilstConnected(t *testing.T) {
+	userPriv, userSigner := newKey(t)
+	_, hostSigner := newKey(t)
+	serveAgent(t, userPriv)
+	srv := newSSHServer(t, hostSigner, userSigner, "auser")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	local := freePort(t)
+	c := NewClient(ctx, "tcp", srv.addr(),
+		WithUser("auser"),
+		WithHostKey(hostSigner.PublicKey()),
+		WithLocalPortForward(local, echoServer(t)))
+
+	done := connectInBackground(ctx, c, slowBackoff)
+	srv.waitForConnection(t)
+	echoEventually(t, local, "hello")
+
+	cancel()
+	if err := waitForResult(t, done); !errors.Is(err, context.Canceled) {
+		t.Errorf("got %v, want context.Canceled", err)
+	}
+
+	// Port must be released.
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", local))
+	if err != nil {
+		t.Errorf("port %v was not released after cancel: %v", local, err)
+	} else {
+		l.Close()
+	}
 }
 
 func TestNewClientDefaults(t *testing.T) {
