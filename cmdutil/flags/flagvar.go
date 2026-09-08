@@ -16,10 +16,13 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"os"
 	"reflect"
 	"strconv"
 	"time"
 	"unsafe"
+
+	"cloudeng.io/types"
 )
 
 var (
@@ -451,4 +454,34 @@ func WithDefault[T comparable](a, b T) T {
 		return a
 	}
 	return b
+}
+
+// RegisterAndParse registers the flags in the supplied struct and parses the
+// command line arguments. It uses RegisterFlagsInStruct with the supplied
+// tag and no default option values. The following struct can be parsed
+// with RegisterAndParse("flags", &myflags{}):
+//
+//	type myflags {
+//	  Verbose bool `flags:"verbose,false,enable verbose logging"`
+//	}
+//
+// It returns an error if there is a problem registering the flags or parsing
+// the command line arguments.
+func RegisterAndParse[T any](tag string, values *T) error {
+	fs := flag.NewFlagSet(types.TypeName[T](), flag.ExitOnError)
+	if err := RegisterFlagsInStruct(fs, tag, values, nil, nil); err != nil {
+		return fmt.Errorf("error registering flags, fields must be registered using the struct tag 'flags': %v", err)
+	}
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		return fmt.Errorf("error parsing flags: %v", err)
+	}
+	return nil
+}
+
+// RegisterAndParseMust is like RegisterAndParse but panics if there is an
+// error.
+func RegisterAndParseMust[T any](tag string, values *T) {
+	if err := RegisterAndParse(tag, values); err != nil {
+		panic(err)
+	}
 }

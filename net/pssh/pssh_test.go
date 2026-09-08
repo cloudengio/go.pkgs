@@ -8,12 +8,14 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -470,5 +472,44 @@ func TestSSHConfigForAgentErrors(t *testing.T) {
 				t.Error("expected nil results alongside the error")
 			}
 		})
+	}
+}
+
+// TestHostKeyCallbackRefusesSystemFile verifies that accepting new host keys
+// refuses to record into system-wide /etc/ssh/ssh_known_hosts.
+func TestHostKeyCallbackRefusesSystemFile(t *testing.T) {
+	c := NewClient(t.Context(), "tcp", testAddr,
+		WithKnownHosts("/etc/ssh/ssh_known_hosts"),
+		WithAcceptNewHostKeys(true))
+	_, err := c.hostKeyCallback()
+	if err == nil {
+		t.Fatal("expected an error when attempting to accept new host keys to system file")
+	}
+	if !errors.Is(err, ErrKnownHosts) {
+		t.Errorf("got %v, want ErrKnownHosts", err)
+	}
+}
+
+// TestAppendKnownHostConcurrent verifies that concurrent appends do not
+// corrupt the known hosts file.
+func TestAppendKnownHostConcurrent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "known_hosts")
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		_, key := newKey(t)
+		host := fmt.Sprintf("host%d.example.com", i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := appendKnownHost(path, host, key.PublicKey()); err != nil {
+				t.Errorf("append failed: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// The resulting file must be parseable.
+	if _, err := knownhosts.New(path); err != nil {
+		t.Errorf("resulting file corrupted by concurrent writes: %v", err)
 	}
 }
