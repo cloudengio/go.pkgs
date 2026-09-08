@@ -8,13 +8,13 @@ require (
 	cloudeng.io/logging v0.0.0-20260824023931-9b6c51abac7f
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
+	cloudeng.io/types v0.0.0-20260908185204-9b800643baf7
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	cloudeng.io/algo v0.0.0-20260903161432-3e39c500cdbf // indirect
 	cloudeng.io/sys v0.0.0-20260825050644-3d0fba22c536 // indirect
-	cloudeng.io/types v0.0.0-20260908185204-9b800643baf7 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
