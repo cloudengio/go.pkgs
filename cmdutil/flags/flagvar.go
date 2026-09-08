@@ -468,12 +468,12 @@ func WithDefault[T comparable](a, b T) T {
 // It returns an error if there is a problem registering the flags or parsing
 // the command line arguments.
 func RegisterAndParse[T any](tag string, values *T) error {
-	fs := flag.NewFlagSet(types.TypeName[T](), flag.ExitOnError)
+	fs := flag.NewFlagSet(types.TypeName[T](), flag.ContinueOnError)
 	if err := RegisterFlagsInStruct(fs, tag, values, nil, nil); err != nil {
-		return fmt.Errorf("error registering flags, fields must be registered using the struct tag 'flags': %v", err)
+		return fmt.Errorf("registering flags, fields must be registered using the struct tag 'flags': %v", err)
 	}
 	if err := fs.Parse(os.Args[1:]); err != nil {
-		return fmt.Errorf("error parsing flags: %v", err)
+		return fmt.Errorf("parsing flags: %v", err)
 	}
 	return nil
 }

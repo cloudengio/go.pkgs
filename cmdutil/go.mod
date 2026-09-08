@@ -1,6 +1,6 @@
 module cloudeng.io/cmdutil
 
-go 1.27
+go 1.27.0
 
 require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
@@ -14,6 +14,7 @@ require (
 require (
 	cloudeng.io/algo v0.0.0-20260903161432-3e39c500cdbf // indirect
 	cloudeng.io/sys v0.0.0-20260825050644-3d0fba22c536 // indirect
+	cloudeng.io/types v0.0.0-20260908185204-9b800643baf7 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
