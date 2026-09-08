@@ -174,6 +174,10 @@ func TestRetryableClassification(t *testing.T) {
 		{"dns lookup timed out", &net.DNSError{Err: "i/o timeout", IsTimeout: true}, true},
 		{"permission denied", &net.OpError{Op: "dial", Err: syscall.EACCES}, false},
 		{"address family unsupported", &net.OpError{Op: "dial", Err: syscall.EAFNOSUPPORT}, false},
+		{"too many auth failures", errors.New("ssh: disconnect, reason 14: Too many authentication failures for user"), false},
+		{"permission denied publickey", errors.New("permission denied (publickey)"), false},
+		{"no common algorithm", errors.New("ssh: no common algorithm for client/server"), false},
+		{"no common algorithm stripped", errors.New("no common algorithm for host key"), false},
 
 		{"deadline exceeded", context.DeadlineExceeded, true},
 		{"connection reset", &net.OpError{Op: "read", Err: syscall.ECONNRESET}, true},
