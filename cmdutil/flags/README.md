@@ -79,7 +79,7 @@ command line arguments. It uses RegisterFlagsInStruct with the supplied
 tag and no default option values. The following struct can be parsed with
 RegisterAndParse("flags", &myflags{}):
 
-    type myflags {
+    type myflags struct {
       Verbose bool `flags:"verbose,false,enable verbose logging"`
     }
 

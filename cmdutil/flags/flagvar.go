@@ -461,7 +461,7 @@ func WithDefault[T comparable](a, b T) T {
 // tag and no default option values. The following struct can be parsed
 // with RegisterAndParse("flags", &myflags{}):
 //
-//	type myflags {
+//	type myflags struct {
 //	  Verbose bool `flags:"verbose,false,enable verbose logging"`
 //	}
 //
