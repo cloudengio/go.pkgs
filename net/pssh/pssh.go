@@ -121,7 +121,7 @@ func WithUser(user string) Option {
 }
 
 // WithLogger specifies the logger used to report connection events. If it is
-// not specified, the logger the ctxlog.Logger is used.
+// not specified, the logger from ctxlog.Logger is used.
 func WithLogger(logger *slog.Logger) Option {
 	return func(o *options) {
 		o.logger = logger
@@ -238,7 +238,7 @@ func acceptNewHostKey(callback ssh.HostKeyCallback, record string) ssh.HostKeyCa
 
 // appendKnownHost records key for hostname in the known hosts file at path,
 // creating it if need be.
-func appendKnownHost(path, hostname string, key ssh.PublicKey) error {
+func appendKnownHost(path, hostname string, key ssh.PublicKey) (err error) {
 	knownHostsMu.Lock()
 	defer knownHostsMu.Unlock()
 
@@ -251,7 +251,11 @@ func appendKnownHost(path, hostname string, key ssh.PublicKey) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 	line := knownhosts.Line([]string{knownhosts.Normalize(hostname)}, key)
 	// A known hosts file written by other means may lack a final newline,
 	// which would otherwise merge the existing last entry with this one.

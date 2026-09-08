@@ -183,7 +183,7 @@ It can be used multiple times to specify multiple forwards.
 func WithLogger(logger *slog.Logger) Option
 ```
 WithLogger specifies the logger used to report connection events. If it is
-not specified, the logger the ctxlog.Logger is used.
+not specified, the logger from ctxlog.Logger is used.
 
 
 ```go
