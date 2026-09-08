@@ -121,7 +121,7 @@ func WithUser(user string) Option {
 }
 
 // WithLogger specifies the logger used to report connection events. If it is
-// not specified, the logger the ctxlog.Logger is used.
+// not specified, the logger from ctxlog.Logger is used.
 func WithLogger(logger *slog.Logger) Option {
 	return func(o *options) {
 		o.logger = logger
