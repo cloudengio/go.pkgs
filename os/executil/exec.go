@@ -35,10 +35,10 @@ func GoBuildArgs(binary string, args ...string) (string, []string, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("could not find 'go' executable: %v", err)
 	}
-	return gobin, append([]string{"build", "-o", ExecName(binary)}, args...), nil
+	return gobin, append([]string{"build", "-o", binary}, args...), nil
 }
 
-// GoInstallArgs returns the Go executable path and the arguments fo
+// GoInstallArgs returns the Go executable path and the arguments for
 // a Go install command, or an error if the Go executable could not be found.
 // GoInstall("a", "b") might return "/usr/local/go/bin/go", ["install", "a", "b"], nil.
 func GoInstallArgs(args ...string) (string, []string, error) {

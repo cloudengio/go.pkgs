@@ -79,7 +79,7 @@ could not be found. GoBuildArgs("mybinary", "a", "b") might return
 ```go
 func GoInstallArgs(args ...string) (string, []string, error)
 ```
-GoInstallArgs returns the Go executable path and the arguments fo a Go
+GoInstallArgs returns the Go executable path and the arguments for a Go
 install command, or an error if the Go executable could not be found.
 GoInstall("a", "b") might return "/usr/local/go/bin/go", ["install", "a",
 "b"], nil.
