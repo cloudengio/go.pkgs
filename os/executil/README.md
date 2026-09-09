@@ -62,6 +62,27 @@ slice.
 ```go
 func GoBuild(ctx context.Context, binary string, args ...string) (string, error)
 ```
+GoBuild builds the specified Go binary using the provided context and
+arguments. It returns the path to the built binary or an error if the build
+fails.
+
+### Func GoBuildArgs
+```go
+func GoBuildArgs(binary string, args ...string) (string, []string, error)
+```
+GoBuildArgs returns the Go executable path, the arguments for a Go build
+command that outputs the specified binary, or an error if the Go executable
+could not be found. GoBuildArgs("mybinary", "a", "b") might return
+"/usr/local/go/bin/go", ["build", "-o", "mybinary", "a", "b"], nil.
+
+### Func GoInstallArgs
+```go
+func GoInstallArgs(args ...string) (string, []string, error)
+```
+GoInstallArgs returns the Go executable path and the arguments for a Go
+install command, or an error if the Go executable could not be found.
+GoInstall("a", "b") might return "/usr/local/go/bin/go", ["install", "a",
+"b"], nil.
 
 ### Func IsStopped
 ```go
