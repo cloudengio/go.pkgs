@@ -288,15 +288,15 @@ func NewKeyInfoExtension(name string, appendFn func(cmd *subcmd.CommandSetYAML) 
 	return subcmd.NewExtension(name, spec, appendFn)
 }
 
-// KeySpecFlags defines command-line flags for specifying a key's ID and user.
+// KeySpecFlags defines command-line flags for specifying a key's user and ID.
 type KeySpecFlags struct {
-	ID   string `subcmd:"key-id,,key id"`
 	User string `subcmd:"key-user,,key user"`
+	ID   string `subcmd:"key-id,,key id"`
 }
 
 // KeySpec returns a keys.KeySpec constructed from the KeySpecFlags.
 func (f KeySpecFlags) KeySpec() keys.KeySpec {
-	return keys.KeySpec{ID: f.ID, User: f.User}
+	return keys.KeySpec{User: f.User, ID: f.ID}
 }
 
 // keyInfoSubcmdTree is the subcmd extension tree for managing key info items in a

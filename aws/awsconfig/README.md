@@ -84,7 +84,7 @@ LogAWSConfig logs the aws.Config to the slog.Logger in the context.
 
 ### Func NewKeyInfo
 ```go
-func NewKeyInfo(id, user string, token []byte, extra KeyInfoExtra) keys.Info
+func NewKeyInfo(user, id string, token []byte, extra KeyInfoExtra) keys.Info
 ```
 NewKeyInfo creates a new keys.Info appropriate for use with static
 credentials for AWS.

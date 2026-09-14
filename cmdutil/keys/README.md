@@ -178,7 +178,15 @@ Delete removes a key from the store by its user and ID.
 func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool)
 ```
 Get retrieves a key by its user and ID. It returns the key and a boolean
-indicating whether the key was found.
+indicating whether the key was found. If user is not specified, it will call
+GetUnique with the provided ID.
+
+
+```go
+func (ims *InMemoryKeyStore) GetUnique(id string) (Info, bool)
+```
+GetUnique retrieves a key by its ID only if it is unique across all users.
+It returns the key and a boolean indicating whether a unique key was found.
 
 
 ```go
@@ -262,16 +270,16 @@ using the provided file.WriteFileFS.
 ### Type Info
 ```go
 type Info struct {
-	ID   string
 	User string
+	ID   string
 	// contains filtered or unexported fields
 }
 ```
 Info represents a specific key and associated information and is intended
 to be reused and referred to by it's ID. It can be parsed from json or yaml
 representations with the following fields:
-  - key_id: the identifier for the key
   - user: optional user associated with the key
+  - key_id: the identifier for the key
   - token: the token value
   - extra: optional extra information as a json or yaml object
 
@@ -290,13 +298,14 @@ from json or yaml.
 func KeyInfoFromContext(ctx context.Context, user, id string) (Info, bool)
 ```
 KeyInfoFromContext retrieves the KeyInfo for the specified user and key ID
-from the context.
+from the context. If the user is not specified, it will attempt to retrieve
+a unique key with the given ID. An empty ID will result in a failure.
 
 
 ```go
-func NewInfo(id, user string, token []byte) Info
+func NewInfo(user, id string, token []byte) Info
 ```
-NewInfo creates a new Info instance with the specified id, user, token.
+NewInfo creates a new Info instance with the specified user, id, token.
 The token slice is cloned and the input slice is zeroed. Extra information
 can be set using WithExtra and accessed using UnmarshalExtra.
 
@@ -378,8 +387,8 @@ json or yaml.
 ### Type KeySpec
 ```go
 type KeySpec struct {
-	ID   string `yaml:"key_id" json:"key_id"`
 	User string `yaml:"user" json:"user"`
+	ID   string `yaml:"key_id" json:"key_id"`
 }
 ```
 KeySpec represents the id of a key and the user associated with the key,
@@ -475,7 +484,7 @@ value with the ID purely for identification purposes.
 ### Functions
 
 ```go
-func NewToken(id, user string, value []byte) Token
+func NewToken(user, id string, value []byte) Token
 ```
 NewToken creates a new Token instance, cloning the provided value and
 zeroing the input slice.

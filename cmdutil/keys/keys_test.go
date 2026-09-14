@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"reflect"
+	"sync"
 	"testing"
 
 	"cloudeng.io/cmdutil/keys"
@@ -170,7 +171,7 @@ func TestJSONKeyInfo(t *testing.T) {
 }
 
 func TestNewKey(t *testing.T) {
-	k := keys.NewInfo("key1", "user1", []byte("value1"))
+	k := keys.NewInfo("user1", "key1", []byte("value1"))
 	verifyKey(t, k, 1)
 	out := marshalJSON(t, k)
 
@@ -364,7 +365,7 @@ func verifyAppendedKeys(t *testing.T, ks *keys.InMemoryKeyStore, checkExtra bool
 }
 
 func TestExtraWithPrivateFields(t *testing.T) {
-	ki := keys.NewInfo("key1", "user1", []byte("value1"))
+	ki := keys.NewInfo("user1", "key1", []byte("value1"))
 	type extraTypeWithPrivate struct {
 		Scope   string `json:"scope" yaml:"scope"`
 		private int
@@ -421,7 +422,7 @@ extra:
 	verifyExtra(t, kFromJSONtoYAML, extraType{Scope: "operator"})
 
 	// 3. WithExtra (extraAny) -> MarshalYAML -> UnmarshalYAML
-	kWithExtra := keys.NewInfo("extra_any_key", "any_user", []byte("secret_val_3"))
+	kWithExtra := keys.NewInfo("any_user", "extra_any_key", []byte("secret_val_3"))
 	kWithExtra.WithExtra(extraType{Scope: "custom"})
 	yamlBuf2 := marshalYAML(t, &kWithExtra)
 	var kFromAnyToYAML keys.Info
@@ -442,7 +443,7 @@ extra:
 }
 
 func TestTokenRedaction(t *testing.T) {
-	tok := keys.NewToken("idval", "user", []byte("abcdefghijk"))
+	tok := keys.NewToken("user", "idval", []byte("abcdefghijk"))
 
 	// Test FirstN
 	testsFirstN := []struct {
@@ -483,7 +484,7 @@ func TestTokenRedaction(t *testing.T) {
 	}
 
 	// Short token tests (token length <= keep)
-	tokShort := keys.NewToken("short", "user", []byte("abc"))
+	tokShort := keys.NewToken("user", "short", []byte("abc"))
 	if got, want := tokShort.FirstN(3), "***"; got != want {
 		t.Errorf("tokShort.FirstN(3) = %q, want %q", got, want)
 	}
@@ -498,7 +499,7 @@ func TestTokenRedaction(t *testing.T) {
 	}
 
 	// Token shorter than 6 characters with valid keep < len
-	tokMid := keys.NewToken("mid", "user", []byte("abcde"))
+	tokMid := keys.NewToken("user", "mid", []byte("abcde"))
 	if got, want := tokMid.FirstN(2), "ab******"; got != want {
 		t.Errorf("tokMid.FirstN(2) = %q, want %q", got, want)
 	}
@@ -507,7 +508,7 @@ func TestTokenRedaction(t *testing.T) {
 	}
 
 	// Empty token
-	tokEmpty := keys.NewToken("empty", "user", []byte(""))
+	tokEmpty := keys.NewToken("user", "empty", []byte(""))
 	if got, want := tokEmpty.FirstN(3), ""; got != want {
 		t.Errorf("tokEmpty.FirstN(3) = %q, want %q", got, want)
 	}
@@ -518,7 +519,7 @@ func TestTokenRedaction(t *testing.T) {
 
 func TestToken(t *testing.T) {
 	val := []byte("secret")
-	tok := keys.NewToken("idval", "user", val)
+	tok := keys.NewToken("user", "idval", val)
 	if got, want := string(tok.Value()), "secret"; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -555,7 +556,7 @@ func TestToken(t *testing.T) {
 func TestInfo(t *testing.T) {
 	val := []byte("secret")
 	extra := map[string]string{"a": "b"}
-	info := keys.NewInfo("id", "user", val)
+	info := keys.NewInfo("user", "id", val)
 	info.WithExtra(extra)
 
 	if got, want := info.ID, "id"; got != want {
@@ -633,7 +634,7 @@ func TestKeySpecString(t *testing.T) {
 	}
 
 	parsedWithUser := keys.ParseKeySpecValue("id1[user1]")
-	if got, want := parsedWithUser, (keys.KeySpec{ID: "id1", User: "user1"}); got != want {
+	if got, want := parsedWithUser, (keys.KeySpec{User: "user1", ID: "id1"}); got != want {
 		t.Errorf("ParseKeySpecValue(id1[user1]) = %+v, want %+v", got, want)
 	}
 
@@ -662,9 +663,9 @@ func cmpKeySpec(t *testing.T, a, b keys.KeySpec) {
 
 func TestInMemoryKeyStoreMethods(t *testing.T) {
 	ks := keys.NewInMemoryKeyStore()
-	k1 := keys.NewInfo("id1", "user1", []byte("t1"))
-	k2 := keys.NewInfo("id2", "user1", []byte("t1.1"))
-	k3 := keys.NewInfo("id2", "user2", []byte("t2"))
+	k1 := keys.NewInfo("user1", "id1", []byte("t1"))
+	k2 := keys.NewInfo("user1", "id2", []byte("t1.1"))
+	k3 := keys.NewInfo("user2", "id2", []byte("t2"))
 	ks.Add(k3)
 	ks.Add(k2)
 	ks.Add(k1)
@@ -778,7 +779,7 @@ func TestAppendUnmarshal(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ks := keys.NewInMemoryKeyStore()
-			ks.Add(keys.NewInfo("id0", "user0", []byte("t0")))
+			ks.Add(keys.NewInfo("user0", "id0", []byte("t0")))
 
 			for _, data := range tc.data {
 				var err error
@@ -799,8 +800,8 @@ func TestAppendUnmarshal(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	ks := keys.NewInMemoryKeyStore()
-	ks.Add(keys.NewInfo("id1", "user1", []byte("t1")))
-	ks.Add(keys.NewInfo("id2", "user2", []byte("t2")))
+	ks.Add(keys.NewInfo("user1", "id1", []byte("t1")))
+	ks.Add(keys.NewInfo("user2", "id2", []byte("t2")))
 
 	ks.Delete("user1", "id1")
 	if got, want := ks.Len(), 1; got != want {
@@ -824,8 +825,8 @@ func TestWriteFiles(t *testing.T) {
 	ctx := context.Background()
 
 	ks := keys.NewInMemoryKeyStore()
-	ks.Add(keys.NewInfo("key1", "user1", []byte("value1")))
-	ks.Add(keys.NewInfo("key2", "user2", []byte("value2")))
+	ks.Add(keys.NewInfo("user1", "key1", []byte("value1")))
+	ks.Add(keys.NewInfo("user2", "key2", []byte("value2")))
 
 	wfs := &mockWriteFS{data: make(map[string][]byte)}
 	rfs := &mockFS{data: wfs.data}
@@ -878,7 +879,7 @@ func TestAppendRead(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ks := keys.NewInMemoryKeyStore()
-			ks.Add(keys.NewInfo("id0", "user0", []byte("t0")))
+			ks.Add(keys.NewInfo("user0", "id0", []byte("t0")))
 
 			mfs := &mockFS{
 				data: make(map[string][]byte),
@@ -902,4 +903,185 @@ func TestAppendRead(t *testing.T) {
 			verifyAppendedKeys(t, ks, len(tc.data) > 1)
 		})
 	}
+}
+
+// TestGet covers the lookup rules for Get: a specified user is matched
+// exactly, and an unspecified user falls back to GetUnique, ie. it only
+// succeeds if the id is unique across all users.
+func TestGet(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+	k1 := keys.NewInfo("user1", "key1", []byte("t1"))
+	k2 := keys.NewInfo("user2", "key2", []byte("t2"))
+	// key3 is held by two users, so a lookup by id alone is ambiguous.
+	k3a := keys.NewInfo("user1", "key3", []byte("t3a"))
+	k3b := keys.NewInfo("user2", "key3", []byte("t3b"))
+	ks.Add(k1)
+	ks.Add(k2)
+	ks.Add(k3a)
+	ks.Add(k3b)
+
+	// An exact user and id match.
+	got, ok := ks.Get("user1", "key1")
+	if !ok {
+		t.Fatal("expected to find key1/user1")
+	}
+	cmpKeyInfo(t, got, k1)
+
+	// The right id but the wrong user does not fall back to a search by id.
+	if _, ok := ks.Get("user2", "key1"); ok {
+		t.Error("key1 belongs to user1, want not found for user2")
+	}
+
+	// An empty user falls back to a lookup by id alone, succeeding only when
+	// the id is unique.
+	got, ok = ks.Get("", "key2")
+	if !ok {
+		t.Fatal("expected to find the unique key2")
+	}
+	cmpKeyInfo(t, got, k2)
+
+	// An empty user with an ambiguous id fails, even though the key remains
+	// reachable when the user is specified.
+	if _, ok := ks.Get("", "key3"); ok {
+		t.Error("key3 is held by two users, want not found")
+	}
+	got, ok = ks.Get("user1", "key3")
+	if !ok {
+		t.Fatal("expected to find key3/user1")
+	}
+	cmpKeyInfo(t, got, k3a)
+
+	// An empty user with an unknown id fails.
+	if _, ok := ks.Get("", "no-such-key"); ok {
+		t.Error("no-such-key: want not found")
+	}
+
+	// An empty user and an empty id fails.
+	if _, ok := ks.Get("", ""); ok {
+		t.Error("empty user and id: want not found")
+	}
+}
+
+func TestGetUnique(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+
+	// An empty store has no unique key.
+	if _, ok := ks.GetUnique("id1"); ok {
+		t.Error("empty store: got a key, want none")
+	}
+
+	// A single key with that ID is unique, whether or not it has a user.
+	k1 := keys.NewInfo("user1", "id1", []byte("t1"))
+	k2 := keys.NewInfo("", "id2", []byte("t2"))
+	ks.Add(k1)
+	ks.Add(k2)
+	for _, want := range []keys.Info{k1, k2} {
+		got, ok := ks.GetUnique(want.ID)
+		if !ok {
+			t.Errorf("%v: not found", want.ID)
+			continue
+		}
+		cmpKeyInfo(t, got, want)
+	}
+
+	// An ID that no key has is not found.
+	if _, ok := ks.GetUnique("id3"); ok {
+		t.Error("id3: got a key, want none")
+	}
+
+	// An empty ID is never matched, not even by a key with an empty ID.
+	if _, ok := ks.GetUnique(""); ok {
+		t.Error("empty id: got a key, want none")
+	}
+	ks.Add(keys.NewInfo("user1", "", []byte("t0")))
+	if _, ok := ks.GetUnique(""); ok {
+		t.Error("empty id: got a key, want none")
+	}
+	ks.Delete("user1", "")
+
+	// A second key with the same ID, belonging to another user, makes the ID
+	// ambiguous, even though both keys remain individually retrievable.
+	k3 := keys.NewInfo("user2", "id1", []byte("t3"))
+	ks.Add(k3)
+	if _, ok := ks.GetUnique("id1"); ok {
+		t.Error("id1 is held by two users: got a key, want none")
+	}
+	for _, want := range []keys.Info{k1, k3} {
+		got, ok := ks.Get(want.User, want.ID)
+		if !ok {
+			t.Errorf("%v: not found", want.KeySpec())
+			continue
+		}
+		cmpKeyInfo(t, got, want)
+	}
+	// The other ID is unaffected.
+	if _, ok := ks.GetUnique("id2"); !ok {
+		t.Error("id2: not found")
+	}
+
+	// Removing the duplicate makes the ID unique again.
+	ks.Delete("user2", "id1")
+	got, ok := ks.GetUnique("id1")
+	if !ok {
+		t.Fatal("id1: not found after deleting the duplicate")
+	}
+	cmpKeyInfo(t, got, k1)
+
+	// Overwriting a key, ie. adding one with the same user and ID, does not
+	// make its ID ambiguous.
+	ks.Add(keys.NewInfo("user1", "id1", []byte("t1-updated")))
+	got, ok = ks.GetUnique("id1")
+	if !ok {
+		t.Fatal("id1: not found after being overwritten")
+	}
+	if want := "t1-updated"; string(got.Token().Value()) != want {
+		t.Errorf("id1 token: got %v, want %v", string(got.Token().Value()), want)
+	}
+}
+
+// TestGetUniqueUnmarshalled covers lookups by ID on a store populated by
+// unmarshalling, where the keys are not added one at a time.
+func TestGetUniqueUnmarshalled(t *testing.T) {
+	var ks keys.InMemoryKeyStore
+	if err := yaml.Unmarshal([]byte(yamlList), &ks); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	for _, tc := range []struct{ id, token string }{
+		{"key1", "value1"},
+		{"key2", "value2"},
+	} {
+		got, ok := ks.GetUnique(tc.id)
+		if !ok {
+			t.Errorf("%v: not found", tc.id)
+			continue
+		}
+		if want := tc.token; string(got.Token().Value()) != want {
+			t.Errorf("%v token: got %v, want %v", tc.id, string(got.Token().Value()), want)
+		}
+	}
+}
+
+// TestGetUniqueConcurrent covers concurrent use of the store, ie. that
+// GetUnique holds the lock for the whole of its scan.
+func TestGetUniqueConcurrent(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(keys.NewInfo("user1", "id1", []byte("t1")))
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			ks.Add(keys.NewInfo("user1", fmt.Sprintf("id%v", i+2), []byte("t")))
+		}()
+		go func() {
+			defer wg.Done()
+			// id1 is never added or removed by the writers, so it must always
+			// be found.
+			if _, ok := ks.GetUnique("id1"); !ok {
+				t.Error("id1: not found")
+			}
+		}()
+	}
+	wg.Wait()
 }

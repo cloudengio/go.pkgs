@@ -65,7 +65,7 @@ func (ims *InMemoryKeyStore) unmarshalList(asList []keyInfo) {
 	}
 	for _, ki := range asList {
 		info := copyInfo(ki)
-		ims.keys[KeySpec{ID: info.ID, User: info.User}] = info
+		ims.keys[KeySpec{User: info.User, ID: info.ID}] = info
 	}
 }
 
@@ -78,7 +78,7 @@ func (ims *InMemoryKeyStore) unmarshalMap(asMap map[string]keyInfo) {
 	for k, info := range asMap {
 		info.ID = k
 		ki := copyInfo(info)
-		ims.keys[KeySpec{ID: ki.ID, User: ki.User}] = ki
+		ims.keys[KeySpec{User: ki.User, ID: ki.ID}] = ki
 	}
 }
 
@@ -136,7 +136,7 @@ func (ims *InMemoryKeyStore) KeySpecs() []KeySpec {
 	keys := ims.getSortedKeys()
 	owners := make([]KeySpec, len(keys))
 	for i, key := range keys {
-		owners[i] = KeySpec{ID: key.ID, User: key.User}
+		owners[i] = KeySpec{User: key.User, ID: key.ID}
 	}
 	return owners
 }
@@ -149,17 +149,46 @@ func (ims *InMemoryKeyStore) Add(key Info) {
 	if ims.keys == nil {
 		ims.keys = make(map[KeySpec]Info)
 	}
-	ims.keys[KeySpec{ID: key.ID, User: key.User}] = key
+	ims.keys[KeySpec{User: key.User, ID: key.ID}] = key
 }
 
 // Get retrieves a key by its user and ID. It returns the key and a boolean
-// indicating whether the key was found.
+// indicating whether the key was found. If user is not specified, it will
+// call GetUnique with the provided ID.
 func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
+	if len(user) == 0 {
+		return ims.GetUnique(id)
+	}
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
-	ko := KeySpec{ID: id, User: user}
+	ko := KeySpec{User: user, ID: id}
 	if key, ok := ims.keys[ko]; ok {
 		return key, true
+	}
+	return Info{}, false
+}
+
+// GetUnique retrieves a key by its ID only if it is unique across all users.
+// It returns the key and a boolean indicating whether a unique key was found.
+func (ims *InMemoryKeyStore) GetUnique(id string) (Info, bool) {
+	if id == "" {
+		return Info{}, false
+	}
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	var found Info
+	var foundCount int
+	for _, key := range ims.keys {
+		if key.ID == id {
+			found = key
+			foundCount++
+			if foundCount > 1 {
+				return Info{}, false
+			}
+		}
+	}
+	if foundCount == 1 {
+		return found, true
 	}
 	return Info{}, false
 }
@@ -168,7 +197,7 @@ func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 func (ims *InMemoryKeyStore) Delete(user, id string) {
 	ims.mu.Lock()
 	defer ims.mu.Unlock()
-	delete(ims.keys, KeySpec{ID: id, User: user})
+	delete(ims.keys, KeySpec{User: user, ID: id})
 }
 
 func (ims *InMemoryKeyStore) Len() int {
