@@ -153,14 +153,26 @@ func (ims *InMemoryKeyStore) Add(key Info) {
 }
 
 // Get retrieves a key by its user and ID. It returns the key and a boolean
-// indicating whether the key was found. If user is not specified, it will
-// call GetUnique with the provided ID.
+// indicating whether the key was found. If user is not specified it will search
+// for a unique key by ID alone. If there are multiple keys with the same id
+// Get will return false and it is left to the caller to use GetOwned with
+// a user specified.
 func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
-	if len(user) == 0 {
-		return ims.GetUnique(id)
-	}
 	ims.mu.RLock()
 	defer ims.mu.RUnlock()
+	if len(user) == 0 {
+		return ims.getUniqueLocked(id)
+	}
+	return ims.getOwnedLocked(user, id)
+}
+
+// getOwnedLocked is the exact-match lookup shared by Get and GetOwned. It
+// assumes ims.mu is already held (for reading) by the caller and must not
+// acquire it itself: RLock is not reentrant in the presence of a concurrent,
+// blocked Lock call (see sync.RWMutex), so a second, nested RLock call from
+// the same goroutine that already holds one can deadlock against a writer
+// that is waiting for that first RLock to be released.
+func (ims *InMemoryKeyStore) getOwnedLocked(user, id string) (Info, bool) {
 	ko := KeySpec{User: user, ID: id}
 	if key, ok := ims.keys[ko]; ok {
 		return key, true
@@ -168,14 +180,24 @@ func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool) {
 	return Info{}, false
 }
 
-// GetUnique retrieves a key by its ID only if it is unique across all users.
-// It returns the key and a boolean indicating whether a unique key was found.
-func (ims *InMemoryKeyStore) GetUnique(id string) (Info, bool) {
+// GetOwned retrieves a key by its exact user and ID, performing no fallback
+// even when user is empty: by definition only one or zero keys can exist for
+// any specific user (even the empty, "unowned", one) and ID. See Get for a
+// lenient lookup that also matches by ID alone when the ID is unambiguous.
+func (ims *InMemoryKeyStore) GetOwned(user, id string) (Info, bool) {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	return ims.getOwnedLocked(user, id)
+}
+
+// getUniqueLocked is the by-ID-alone lookup shared by Get and GetUnique. Like
+// getOwnedLocked, it assumes ims.mu is already held by the caller and must
+// not acquire it itself. An empty id never matches, not even a key that was
+// itself given an empty id.
+func (ims *InMemoryKeyStore) getUniqueLocked(id string) (Info, bool) {
 	if id == "" {
 		return Info{}, false
 	}
-	ims.mu.RLock()
-	defer ims.mu.RUnlock()
 	var found Info
 	var foundCount int
 	for _, key := range ims.keys {
@@ -191,6 +213,14 @@ func (ims *InMemoryKeyStore) GetUnique(id string) (Info, bool) {
 		return found, true
 	}
 	return Info{}, false
+}
+
+// GetUnique retrieves a key by its ID only if it is unique across all users.
+// It returns the key and a boolean indicating whether a unique key was found.
+func (ims *InMemoryKeyStore) GetUnique(id string) (Info, bool) {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+	return ims.getUniqueLocked(id)
 }
 
 // Delete removes a key from the store by its user and ID.

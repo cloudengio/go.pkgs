@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"cloudeng.io/cmdutil/keys"
 	"gopkg.in/yaml.v3"
@@ -960,6 +961,85 @@ func TestGet(t *testing.T) {
 	if _, ok := ks.Get("", ""); ok {
 		t.Error("empty user and id: want not found")
 	}
+
+	// An empty id never matches, not even a key that was itself given an
+	// empty id, matching GetUnique's own guarantee, which Get's empty-user
+	// fallback shares an implementation with.
+	ks.Add(keys.NewInfo("", "", []byte("empty-id")))
+	if _, ok := ks.Get("", ""); ok {
+		t.Error("empty id: want not found even when such a key exists")
+	}
+	if _, ok := ks.GetUnique(""); ok {
+		t.Error("GetUnique(\"\"): want not found even when such a key exists")
+	}
+}
+
+// TestGetOwned covers the lookup rules for GetOwned: unlike Get, an empty
+// user is never treated as "any user", it is a distinct owner in its own
+// right. GetOwned is what callers that must distinguish "this exact key
+// exists" from "some key with this id exists" should use, eg. a duplicate
+// check before writing a new key.
+func TestGetOwned(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+	owned := keys.NewInfo("user1", "key1", []byte("owned"))
+	unowned := keys.NewInfo("", "key2", []byte("unowned"))
+	// key3 is held by both an explicit user and, separately, with no user at
+	// all: two distinct keys that happen to share an id.
+	ownedShared := keys.NewInfo("user1", "key3", []byte("owned-shared"))
+	unownedShared := keys.NewInfo("", "key3", []byte("unowned-shared"))
+	ks.Add(owned)
+	ks.Add(unowned)
+	ks.Add(ownedShared)
+	ks.Add(unownedShared)
+
+	// An exact user and id match, owned or not.
+	for _, want := range []keys.Info{owned, unowned, ownedShared, unownedShared} {
+		got, ok := ks.GetOwned(want.User, want.ID)
+		if !ok {
+			t.Errorf("%v: not found", want.KeySpec())
+			continue
+		}
+		cmpKeyInfo(t, got, want)
+	}
+
+	// Unlike Get, an empty user with an id that is otherwise unique to one
+	// owner does NOT match that owner's key: only its own, exact, unowned key
+	// counts.
+	if _, ok := ks.GetOwned("", "key1"); ok {
+		t.Error("key1 has no unowned entry: GetOwned(\"\", \"key1\") got a key, want none")
+	}
+	// Confirm Get behaves differently here: it does fall back to the unique
+	// owner in this case.
+	if _, ok := ks.Get("", "key1"); !ok {
+		t.Error("Get(\"\", \"key1\"): want the unique owner to be found")
+	}
+
+	// Unlike Get, an id held by both an owned and an unowned key is not
+	// ambiguous for GetOwned: each is looked up independently by its own
+	// exact owner.
+	if got, ok := ks.GetOwned("", "key3"); !ok {
+		t.Error("GetOwned(\"\", \"key3\"): not found")
+	} else {
+		cmpKeyInfo(t, got, unownedShared)
+	}
+	if got, ok := ks.GetOwned("user1", "key3"); !ok {
+		t.Error("GetOwned(\"user1\", \"key3\"): not found")
+	} else {
+		cmpKeyInfo(t, got, ownedShared)
+	}
+	// Confirm Get is ambiguous here, unlike GetOwned.
+	if _, ok := ks.Get("", "key3"); ok {
+		t.Error("Get(\"\", \"key3\") is ambiguous: got a key, want none")
+	}
+
+	// An id that does not exist at all, and an empty id, are not found either
+	// way.
+	if _, ok := ks.GetOwned("", "no-such-key"); ok {
+		t.Error("no-such-key: want not found")
+	}
+	if _, ok := ks.GetOwned("user1", ""); ok {
+		t.Error("empty id: want not found")
+	}
 }
 
 func TestGetUnique(t *testing.T) {
@@ -1084,4 +1164,59 @@ func TestGetUniqueConcurrent(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestGetOwnedConcurrentNoDeadlock guards against a regression in
+// getOwnedLocked, the exact-match lookup shared by Get and GetOwned: it used
+// to reacquire ims.mu.RLock() itself even though its callers already held
+// it. Per the sync.RWMutex documentation, a second RLock from the same
+// goroutine that already holds one can deadlock against a concurrent, blocked
+// Lock call, since a pending writer blocks new readers to avoid starvation.
+// This runs many concurrent readers (via Get and GetOwned) and writers (via
+// Add) and fails if they do not all complete within a generous deadline; it
+// reliably hung forever against the buggy implementation.
+func TestGetOwnedConcurrentNoDeadlock(t *testing.T) {
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(keys.NewInfo("owner", "id", []byte("t")))
+
+	const iterations = 2000
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				ks.Add(keys.NewInfo(fmt.Sprintf("writer%d", i), fmt.Sprintf("id%d", j), []byte("t")))
+			}
+		}(i)
+	}
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				// owner/id is never added or removed by the writers, so both
+				// lookups must always find it.
+				if _, ok := ks.GetOwned("owner", "id"); !ok {
+					t.Error("GetOwned: owner/id not found")
+					return
+				}
+				if _, ok := ks.Get("owner", "id"); !ok {
+					t.Error("Get: owner/id not found")
+					return
+				}
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("readers/writers did not complete: possible deadlock in Get/GetOwned")
+	}
 }

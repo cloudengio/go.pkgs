@@ -178,8 +178,19 @@ Delete removes a key from the store by its user and ID.
 func (ims *InMemoryKeyStore) Get(user, id string) (Info, bool)
 ```
 Get retrieves a key by its user and ID. It returns the key and a boolean
-indicating whether the key was found. If user is not specified, it will call
-GetUnique with the provided ID.
+indicating whether the key was found. If user is not specified it will
+search for a unique key by ID alone. If there are multiple keys with the
+same id Get will return false and it is left to the caller to use GetOwned
+with a user specified.
+
+
+```go
+func (ims *InMemoryKeyStore) GetOwned(user, id string) (Info, bool)
+```
+GetOwned retrieves a key by its exact user and ID, performing no fallback
+even when user is empty: by definition only one or zero keys can exist for
+any specific user (even the empty, "unowned", one) and ID. See Get for a
+lenient lookup that also matches by ID alone when the ID is unambiguous.
 
 
 ```go

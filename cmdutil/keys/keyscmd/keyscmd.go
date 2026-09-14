@@ -186,7 +186,10 @@ func SafeWriteKeyInfoYAML(ctx context.Context, ki keys.Info, dst string, perm fs
 var ErrKeyInfoNotFound = errors.New("key info not found")
 
 // GetKey retrieves a specific key from the specified item in the file system
-// based on the provided keys.KeySpec. If the key is not found, it returns an error.
+// based on the provided keys.KeySpec. If a user/owner is not specified
+// in spec a unique key by ID alone will be returned, if it exists. If there are
+// multiple keys with the same id GetKey will return false and it is left to the
+// caller to resolve the ambiguity by somehow determining a user.
 func (r *KeyReader) GetKey(ctx context.Context, name string, spec keys.KeySpec) (keys.Info, error) {
 	ims, err := readIMS(ctx, r.fs, name, false)
 	if err != nil {
@@ -224,7 +227,14 @@ func (w *KeyWriter) SetKeys(ctx context.Context, name string, update bool, keys 
 		return err
 	}
 	for _, key := range keys {
-		if _, ok := ims.Get(key.User, key.ID); ok && !update {
+		// GetOwned, not Get, is required here: the duplicate check is about
+		// whether this exact (user, id) key already exists, not about
+		// whether some key with this id exists for any user. Get treats an
+		// empty user as "look up by id across all users", which would both
+		// reject a genuinely new unowned key as a duplicate of another
+		// user's unique key, and fail to notice an existing unowned key once
+		// a second user comes to share its id, silently overwriting it.
+		if _, ok := ims.GetOwned(key.User, key.ID); ok && !update {
 			return fmt.Errorf("secret with user %q and id %q already exists in item %s store: %w", key.User, key.ID, name, ErrUpdateNotAllowed)
 		}
 		ims.Add(key)

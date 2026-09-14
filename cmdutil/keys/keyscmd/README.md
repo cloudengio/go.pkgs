@@ -157,8 +157,10 @@ InMemoryKeyStore format using the provided file.ReadFileFS.
 func (r *KeyReader) GetKey(ctx context.Context, name string, spec keys.KeySpec) (keys.Info, error)
 ```
 GetKey retrieves a specific key from the specified item in the file system
-based on the provided keys.KeySpec. If the key is not found, it returns an
-error.
+based on the provided keys.KeySpec. If a user/owner is not specified in
+spec a unique key by ID alone will be returned, if it exists. If there are
+multiple keys with the same id GetKey will return false and it is left to
+the caller to resolve the ambiguity by somehow determining a user.
 
 
 ```go

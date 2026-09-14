@@ -193,6 +193,114 @@ func TestKeyWriterUpdateAndDelete(t *testing.T) {
 	}
 }
 
+// findKey returns the entry in list whose user and id exactly match spec, or
+// fails the test. Unlike KeyReader.GetKey, it performs no fallback lookup by
+// id alone when spec.User is empty, so it remains a reliable way to inspect
+// the store's actual contents even when several keys share an id.
+func findKey(t *testing.T, list []keys.Info, spec keys.KeySpec) keys.Info {
+	t.Helper()
+	for _, k := range list {
+		if k.User == spec.User && k.ID == spec.ID {
+			return k
+		}
+	}
+	t.Fatalf("no key %v in %v", spec, list)
+	return keys.Info{}
+}
+
+// TestSetKeysUnownedKeyFalseDuplicate covers a duplicate check that must ask
+// "does this exact (user, id) key already exist", not "does some key with
+// this id exist for any user": an unowned key (one with an empty user) being
+// created for the first time must not be rejected merely because a different
+// user already, and uniquely, owns a key with the same id.
+func TestSetKeysUnownedKeyFalseDuplicate(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
+	writer := keyscmd.NewKeyWriter(mfs)
+	reader := keyscmd.NewKeyReader(mfs)
+
+	// bob uniquely owns "shared-id"; no unowned key with that id exists yet.
+	bob := keys.NewInfo("bob", "shared-id", []byte("bobs-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, bob); err != nil {
+		t.Fatalf("SetKeys(bob): %v", err)
+	}
+
+	// Creating a new, unowned key with the same id must succeed: it is not a
+	// duplicate of bob's key.
+	unowned := keys.NewInfo("", "shared-id", []byte("unowned-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, unowned); err != nil {
+		t.Fatalf("SetKeys(unowned) with a unique key owned by another user present: got %v, want success", err)
+	}
+
+	list, err := reader.GetKeys(ctx, "store.yaml")
+	if err != nil {
+		t.Fatalf("GetKeys: %v", err)
+	}
+	if got := findKey(t, list, keys.KeySpec{ID: "shared-id"}); string(got.Token().Value()) != "unowned-key" {
+		t.Errorf("unowned key: got token %q, want %q", got.Token().Value(), "unowned-key")
+	}
+	// bob's key is unaffected.
+	if got := findKey(t, list, keys.KeySpec{User: "bob", ID: "shared-id"}); string(got.Token().Value()) != "bobs-key" {
+		t.Errorf("bob's key: got token %q, want %q", got.Token().Value(), "bobs-key")
+	}
+}
+
+// TestSetKeysUnownedKeyMissedCollision covers the reverse mistake: once a
+// second user's key comes to share an id with an already-existing unowned
+// key, the duplicate check must still recognize the unowned key as existing,
+// rather than treating the id as ambiguous and silently overwriting it.
+func TestSetKeysUnownedKeyMissedCollision(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
+	writer := keyscmd.NewKeyWriter(mfs)
+	reader := keyscmd.NewKeyReader(mfs)
+
+	// An unowned key is created first, with no other owner of "shared-id".
+	unowned := keys.NewInfo("", "shared-id", []byte("unowned-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, unowned); err != nil {
+		t.Fatalf("SetKeys(unowned): %v", err)
+	}
+	// bob later creates his own, distinct key under the same id.
+	bob := keys.NewInfo("bob", "shared-id", []byte("bobs-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, bob); err != nil {
+		t.Fatalf("SetKeys(bob): %v", err)
+	}
+
+	// "shared-id" is now held by two distinct keys (unowned and bob's).
+	// Attempting to (re)create the unowned key without update=true must be
+	// rejected: it already exists and must not be silently clobbered.
+	overwrite := keys.NewInfo("", "shared-id", []byte("clobbered"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, overwrite); err == nil {
+		t.Error("SetKeys(overwrite) without update: got nil error, want ErrUpdateNotAllowed")
+	} else if !errors.Is(err, keyscmd.ErrUpdateNotAllowed) {
+		t.Errorf("SetKeys(overwrite): got %v, want ErrUpdateNotAllowed", err)
+	}
+
+	// The original unowned key, and bob's, must both survive untouched.
+	list, err := reader.GetKeys(ctx, "store.yaml")
+	if err != nil {
+		t.Fatalf("GetKeys: %v", err)
+	}
+	if got := findKey(t, list, keys.KeySpec{ID: "shared-id"}); string(got.Token().Value()) != "unowned-key" {
+		t.Errorf("unowned key was overwritten: got token %q, want %q", got.Token().Value(), "unowned-key")
+	}
+	if got := findKey(t, list, keys.KeySpec{User: "bob", ID: "shared-id"}); string(got.Token().Value()) != "bobs-key" {
+		t.Errorf("bob's key: got token %q, want %q", got.Token().Value(), "bobs-key")
+	}
+
+	// update=true still performs the overwrite explicitly.
+	if err := writer.SetKeys(ctx, "store.yaml", true, overwrite); err != nil {
+		t.Errorf("SetKeys(overwrite, update=true): %v", err)
+	}
+	list, err = reader.GetKeys(ctx, "store.yaml")
+	if err != nil {
+		t.Fatalf("GetKeys: %v", err)
+	}
+	if got := findKey(t, list, keys.KeySpec{ID: "shared-id"}); string(got.Token().Value()) != "clobbered" {
+		t.Errorf("unowned key not updated: got token %q, want %q", got.Token().Value(), "clobbered")
+	}
+}
+
 func TestKeyReaderAndWriterMissingFile(t *testing.T) {
 	ctx := context.Background()
 	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
