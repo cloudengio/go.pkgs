@@ -18,8 +18,8 @@ import (
 // KeySpec represents the id of a key and the user associated with the key, if any.
 // It is used as a key in the InMemoryKeyStore.
 type KeySpec struct {
-	ID   string `yaml:"key_id" json:"key_id"`
 	User string `yaml:"user" json:"user"`
+	ID   string `yaml:"key_id" json:"key_id"`
 }
 
 func (ko KeySpec) String() string {
@@ -38,8 +38,8 @@ func ParseKeySpecValue(s string) KeySpec {
 	if openBracket := strings.Index(s, "["); openBracket >= 0 {
 		if closeBracket := strings.LastIndex(s, "]"); closeBracket > openBracket {
 			return KeySpec{
-				ID:   s[:openBracket],
 				User: s[openBracket+1 : closeBracket],
+				ID:   s[:openBracket],
 			}
 		}
 	}
@@ -90,8 +90,8 @@ func (t Token) FirstN(keep int) string {
 
 // NewToken creates a new Token instance, cloning the provided value
 // and zeroing the input slice.
-func NewToken(id, user string, value []byte) Token {
-	t := Token{ID: id, User: user, token: slices.Clone(value)}
+func NewToken(user, id string, value []byte) Token {
+	t := Token{KeySpec: KeySpec{User: user, ID: id}, token: slices.Clone(value)}
 	for i := range value {
 		value[i] = 0
 	}
@@ -101,8 +101,8 @@ func NewToken(id, user string, value []byte) Token {
 // Info represents a specific key and associated information and is intended
 // to be reused and referred to by it's ID.
 // It can be parsed from json or yaml representations with the following fields:
-//   - key_id: the identifier for the key
 //   - user: optional user associated with the key
+//   - key_id: the identifier for the key
 //   - token: the token value
 //   - extra: optional extra information as a json or yaml object
 //
@@ -115,21 +115,21 @@ func NewToken(id, user string, value []byte) Token {
 // An Info instance can be created/populated using NewInfo or by unmarshaling
 // from json or yaml.
 type Info struct {
-	ID        string
 	User      string
+	ID        string
 	token     []byte
 	extraJSON json.RawMessage
 	extraYAML yaml.Node
 	extraAny  any
 }
 
-// NewInfo creates a new Info instance with the specified id, user, token.
+// NewInfo creates a new Info instance with the specified user, id, token.
 // The token slice is cloned and the input slice is zeroed. Extra information
 // can be set using WithExtra and accessed using UnmarshalExtra.
-func NewInfo(id, user string, token []byte) Info {
+func NewInfo(user, id string, token []byte) Info {
 	i := Info{
-		ID:    id,
 		User:  user,
+		ID:    id,
 		token: slices.Clone(token),
 	}
 	for i := range token {
@@ -149,8 +149,8 @@ func (k *Info) WithExtra(v any) {
 }
 
 type keyInfo struct {
-	ID        string          `yaml:"key_id" json:"key_id"`
 	User      string          `yaml:"user" json:"user"`
+	ID        string          `yaml:"key_id" json:"key_id"`
 	Token     string          `yaml:"token" json:"token"`
 	ExtraJSON json.RawMessage `yaml:"-" json:"extra,omitempty"`
 	ExtraYAML yaml.Node       `yaml:"extra,omitempty" json:"-"`
@@ -163,11 +163,11 @@ func (k Info) String() string {
 }
 
 func (k Info) Token() Token {
-	return Token{ID: k.ID, User: k.User, token: slices.Clone(k.token)}
+	return Token{KeySpec: KeySpec{User: k.User, ID: k.ID}, token: slices.Clone(k.token)}
 }
 
 func (k Info) KeySpec() KeySpec {
-	return KeySpec{ID: k.ID, User: k.User}
+	return KeySpec{User: k.User, ID: k.ID}
 }
 
 func (k Info) extraFromJSON(v any) error {
@@ -191,8 +191,8 @@ func (k *Info) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &kv); err != nil {
 		return err
 	}
-	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
 	k.User = textutil.TrimUnicodeQuotes(kv.User)
+	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
 	k.token = []byte(textutil.TrimUnicodeQuotes(kv.Token))
 	k.extraJSON = kv.ExtraJSON
 	return nil
@@ -205,8 +205,8 @@ func (k *Info) UnmarshalYAML(node *yaml.Node) error {
 	if err := node.Decode(&kv); err != nil {
 		return err
 	}
-	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
 	k.User = textutil.TrimUnicodeQuotes(kv.User)
+	k.ID = textutil.TrimUnicodeQuotes(kv.ID)
 	k.token = []byte(textutil.TrimUnicodeQuotes(kv.Token))
 	k.extraYAML = kv.ExtraYAML
 	return nil
@@ -214,8 +214,8 @@ func (k *Info) UnmarshalYAML(node *yaml.Node) error {
 
 func (k Info) MarshalJSON() ([]byte, error) {
 	kv := keyInfo{
-		ID:    k.ID,
 		User:  k.User,
+		ID:    k.ID,
 		Token: string(k.token),
 	}
 	var err error
@@ -241,16 +241,16 @@ func (k Info) MarshalJSON() ([]byte, error) {
 }
 
 type keyInfoYAMLAny struct {
-	ID    string `yaml:"key_id"`
 	User  string `yaml:"user"`
+	ID    string `yaml:"key_id"`
 	Token string `yaml:"token"`
 	Extra any    `yaml:"extra,omitempty"`
 }
 
 func (k Info) MarshalYAML() (any, error) {
 	kv := keyInfoYAMLAny{
-		ID:    k.ID,
 		User:  k.User,
+		ID:    k.ID,
 		Token: string(k.token),
 	}
 	switch {
@@ -264,8 +264,8 @@ func (k Info) MarshalYAML() (any, error) {
 		// ExtraYAML to be a yaml.Node and not any, otherwise the
 		// yaml package will panic.
 		return keyInfo{
-			ID:        k.ID,
 			User:      k.User,
+			ID:        k.ID,
 			Token:     string(k.token),
 			ExtraYAML: k.extraYAML,
 		}, nil
@@ -275,8 +275,8 @@ func (k Info) MarshalYAML() (any, error) {
 
 func copyInfo(src keyInfo) Info {
 	return Info{
-		ID:        textutil.TrimUnicodeQuotes(src.ID),
 		User:      textutil.TrimUnicodeQuotes(src.User),
+		ID:        textutil.TrimUnicodeQuotes(src.ID),
 		token:     []byte(textutil.TrimUnicodeQuotes(src.Token)),
 		extraJSON: src.ExtraJSON,
 		extraYAML: src.ExtraYAML,

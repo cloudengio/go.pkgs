@@ -52,7 +52,7 @@ func TestLoad(t *testing.T) {
 
 func TestLoadFromKeys(t *testing.T) {
 	ctx := context.Background()
-	k := awsconfig.NewKeyInfo("test", "", []byte("1234"), awsconfig.KeyInfoExtra{
+	k := awsconfig.NewKeyInfo("", "test", []byte("1234"), awsconfig.KeyInfoExtra{
 		AccessKeyID: "access-key",
 		Region:      "us-west-233",
 	})
@@ -81,7 +81,7 @@ func TestLoadFromKeys(t *testing.T) {
 
 func TestLoadFromKeysContext(t *testing.T) {
 	ctx := context.Background()
-	k := awsconfig.NewKeyInfo("test-id", "test-user", []byte("1234"), awsconfig.KeyInfoExtra{
+	k := awsconfig.NewKeyInfo("test-user", "test-id", []byte("1234"), awsconfig.KeyInfoExtra{
 		AccessKeyID: "access-key",
 		Region:      "us-west-233",
 	})

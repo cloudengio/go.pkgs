@@ -28,8 +28,12 @@ func ContextWithoutKeyStore(ctx context.Context) context.Context {
 }
 
 // KeyInfoFromContext retrieves the KeyInfo for the specified user and key ID
-// from the context.
+// from the context. If the user is not specified, it will attempt to retrieve a
+// unique key with the given ID. An empty ID will result in a failure.
 func KeyInfoFromContext(ctx context.Context, user, id string) (Info, bool) {
+	if len(id) == 0 {
+		return Info{}, false
+	}
 	am, ok := ctx.Value(ctxKey{}).(*InMemoryKeyStore)
 	if !ok {
 		return Info{}, false

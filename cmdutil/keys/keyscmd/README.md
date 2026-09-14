@@ -157,8 +157,10 @@ InMemoryKeyStore format using the provided file.ReadFileFS.
 func (r *KeyReader) GetKey(ctx context.Context, name string, spec keys.KeySpec) (keys.Info, error)
 ```
 GetKey retrieves a specific key from the specified item in the file system
-based on the provided keys.KeySpec. If the key is not found, it returns an
-error.
+based on the provided keys.KeySpec. If a user/owner is not specified in
+spec a unique key by ID alone will be returned, if it exists. If there are
+multiple keys with the same id GetKey will return false and it is left to
+the caller to resolve the ambiguity by somehow determining a user.
 
 
 ```go
@@ -173,11 +175,11 @@ returns them as a slice of keys.Info.
 ### Type KeySpecFlags
 ```go
 type KeySpecFlags struct {
-	ID   string `subcmd:"key-id,,key id"`
 	User string `subcmd:"key-user,,key user"`
+	ID   string `subcmd:"key-id,,key id"`
 }
 ```
-KeySpecFlags defines command-line flags for specifying a key's ID and user.
+KeySpecFlags defines command-line flags for specifying a key's user and ID.
 
 ### Methods
 
@@ -236,8 +238,8 @@ same user and ID.
 type SecretConfig struct {
 	Size   int          `yaml:"key-size" doc:"size of the secret in bytes"`
 	Format SecretFormat `yaml:"key-format" doc:"format of the secret, one of raw, hex, base64"`
-	ID     string       `yaml:"key-id" doc:"id of the key"`
 	User   string       `yaml:"key-user" doc:"user/owner associated with the key"`
+	ID     string       `yaml:"key-id" doc:"id of the key"`
 }
 ```
 
@@ -257,8 +259,8 @@ format and returns it as a keys.Info object.
 type SecretConfigFlags struct {
 	Size   int                      `subcmd:"size,32,size of the secret in bytes"`
 	Format flags.Enum[SecretFormat] `subcmd:"format,hex,'format of the secret, one of raw, hex, base64'"`
-	ID     string                   `subcmd:"id,,id of the key"`
 	User   string                   `subcmd:"user,,user/owner associated with the key"`
+	ID     string                   `subcmd:"id,,id of the key"`
 }
 ```
 

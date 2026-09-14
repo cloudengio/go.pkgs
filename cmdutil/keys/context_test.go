@@ -13,7 +13,7 @@ import (
 
 func TestContextFunctions(t *testing.T) {
 	store := keys.NewInMemoryKeyStore()
-	k1 := keys.NewInfo("ctx-key", "ctx-user", []byte("ctx-token"))
+	k1 := keys.NewInfo("ctx-user", "ctx-key", []byte("ctx-token"))
 	store.Add(k1)
 
 	ctx := keys.ContextWithKeyStore(context.Background(), store)
@@ -63,7 +63,7 @@ func TestMoreContextFunctions(t *testing.T) {
 	}
 
 	// ContextWithKey
-	k1 := keys.NewInfo("k1", "u1", []byte("t1"))
+	k1 := keys.NewInfo("u1", "k1", []byte("t1"))
 	ctxWithKey := keys.ContextWithKey(ctx, k1)
 
 	// Should have created a store and added the key
@@ -81,7 +81,7 @@ func TestMoreContextFunctions(t *testing.T) {
 	}
 
 	// Add another key to existing store
-	k2 := keys.NewInfo("k2", "u2", []byte("t2"))
+	k2 := keys.NewInfo("u2", "k2", []byte("t2"))
 	ctxWithKey2 := keys.ContextWithKey(ctxWithKey, k2)
 
 	storeFromCtx2, ok := keys.KeyStoreFromContext(ctxWithKey2)
@@ -99,7 +99,7 @@ func TestMoreContextFunctions(t *testing.T) {
 func TestTokenFromContext(t *testing.T) {
 	ctx := context.Background()
 	ks := keys.NewInMemoryKeyStore()
-	ks.Add(keys.NewInfo("k1", "u1", []byte("t1")))
+	ks.Add(keys.NewInfo("u1", "k1", []byte("t1")))
 	ctx = keys.ContextWithKeyStore(ctx, ks)
 
 	tok, ok := keys.TokenFromContext(ctx, "u1", "k1")
@@ -120,4 +120,82 @@ func TestTokenFromContext(t *testing.T) {
 	if ok {
 		t.Error("expected no token")
 	}
+}
+
+// TestKeyInfoFromContext covers the lookup rules documented on
+// KeyInfoFromContext: an id is required, a specified user is looked up
+// exactly, and an unspecified user falls back to a lookup by id alone,
+// which only succeeds if the id is unique across all users.
+func TestKeyInfoFromContext(t *testing.T) {
+	store := keys.NewInMemoryKeyStore()
+	store.Add(keys.NewInfo("user1", "key1", []byte("t1")))
+	store.Add(keys.NewInfo("user2", "key2", []byte("t2")))
+	// key3 is held by two users, so a lookup by id alone is ambiguous.
+	store.Add(keys.NewInfo("user1", "key3", []byte("t3a")))
+	store.Add(keys.NewInfo("user2", "key3", []byte("t3b")))
+	ctx := keys.ContextWithKeyStore(context.Background(), store)
+
+	t.Run("exact user and id", func(t *testing.T) {
+		info, ok := keys.KeyInfoFromContext(ctx, "user1", "key1")
+		if !ok {
+			t.Fatal("expected to find key1/user1")
+		}
+		if got, want := string(info.Token().Value()), "t1"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("exact user and id not found", func(t *testing.T) {
+		if _, ok := keys.KeyInfoFromContext(ctx, "user1", "key2"); ok {
+			t.Error("key2 belongs to user2, want not found")
+		}
+	})
+
+	t.Run("no user falls back to a unique id lookup", func(t *testing.T) {
+		info, ok := keys.KeyInfoFromContext(ctx, "", "key2")
+		if !ok {
+			t.Fatal("expected to find the unique key2")
+		}
+		if got, want := string(info.Token().Value()), "t2"; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("no user and an ambiguous id fails", func(t *testing.T) {
+		if _, ok := keys.KeyInfoFromContext(ctx, "", "key3"); ok {
+			t.Error("key3 is held by two users, want not found")
+		}
+		// The key remains reachable when the user is specified.
+		if _, ok := keys.KeyInfoFromContext(ctx, "user1", "key3"); !ok {
+			t.Error("key3/user1: expected to find the key")
+		}
+	})
+
+	t.Run("empty id always fails", func(t *testing.T) {
+		if _, ok := keys.KeyInfoFromContext(ctx, "user1", ""); ok {
+			t.Error("empty id with a user: want not found")
+		}
+		if _, ok := keys.KeyInfoFromContext(ctx, "", ""); ok {
+			t.Error("empty id and no user: want not found")
+		}
+		// Even a key stored with an empty id is not returned.
+		store.Add(keys.NewInfo("user1", "", []byte("t-empty")))
+		if _, ok := keys.KeyInfoFromContext(ctx, "user1", ""); ok {
+			t.Error("empty id: want not found even when such a key exists")
+		}
+		store.Delete("user1", "")
+	})
+
+	t.Run("no key store in context", func(t *testing.T) {
+		if _, ok := keys.KeyInfoFromContext(context.Background(), "user1", "key1"); ok {
+			t.Error("no store in context: want not found")
+		}
+	})
+
+	t.Run("key store explicitly removed from context", func(t *testing.T) {
+		removed := keys.ContextWithoutKeyStore(ctx)
+		if _, ok := keys.KeyInfoFromContext(removed, "user1", "key1"); ok {
+			t.Error("store removed from context: want not found")
+		}
+	})
 }

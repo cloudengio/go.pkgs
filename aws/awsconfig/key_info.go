@@ -43,8 +43,8 @@ func ConfigOptionsFromKeyInfo(keyInfo keys.Info) ([]ConfigOption, error) {
 
 // NewKeyInfo creates a new keys.Info appropriate for use with
 // static credentials for AWS.
-func NewKeyInfo(id, user string, token []byte, extra KeyInfoExtra) keys.Info {
-	ki := keys.NewInfo(id, user, token)
+func NewKeyInfo(user, id string, token []byte, extra KeyInfoExtra) keys.Info {
+	ki := keys.NewInfo(user, id, token)
 	ki.WithExtra(extra)
 	return ki
 }

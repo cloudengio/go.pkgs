@@ -80,14 +80,14 @@ func withStdin(t *testing.T, data []byte, fn func()) {
 	fn()
 }
 
-// wantKeyInfo checks that ki has the expected id, user and token value.
-func wantKeyInfo(t *testing.T, ki keys.Info, id, user, token string) {
+// wantKeyInfo checks that ki has the expected user, id and token value.
+func wantKeyInfo(t *testing.T, ki keys.Info, user, id, token string) {
 	t.Helper()
-	if got, want := ki.ID, id; got != want {
-		t.Errorf("ID = %q, want %q", got, want)
-	}
 	if got, want := ki.User, user; got != want {
 		t.Errorf("User = %q, want %q", got, want)
+	}
+	if got, want := ki.ID, id; got != want {
+		t.Errorf("ID = %q, want %q", got, want)
 	}
 	if got, want := string(ki.Token().Value()), token; got != want {
 		t.Errorf("Token = %q, want %q", got, want)
@@ -113,8 +113,8 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	writer := keyscmd.NewKeyWriter(mfs)
 
 	// Set some keys (first-time creation, allowNotExist is true behind the scenes)
-	k1 := keys.NewInfo("k1", "user1", []byte("val1"))
-	k2 := keys.NewInfo("k2", "user2", []byte("val2"))
+	k1 := keys.NewInfo("user1", "k1", []byte("val1"))
+	k2 := keys.NewInfo("user2", "k2", []byte("val2"))
 
 	if err := writer.SetKeys(ctx, "store.yaml", false, k1, k2); err != nil {
 		t.Fatalf("SetKeys: %v", err)
@@ -132,7 +132,7 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	}
 
 	// Retrieve a single key
-	gotK1, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"})
+	gotK1, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{User: "user1", ID: "k1"})
 	if err != nil {
 		t.Fatalf("GetKey k1: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestKeyReaderAndWriter(t *testing.T) {
 	}
 
 	// Non-existent key lookup -> should error with ErrKeyInfoNotFound
-	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "notfound", User: "user"}); err == nil {
+	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{User: "user", ID: "notfound"}); err == nil {
 		t.Errorf("expected error looking up notfound key")
 	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
 		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
@@ -155,7 +155,7 @@ func TestKeyWriterUpdateAndDelete(t *testing.T) {
 	writer := keyscmd.NewKeyWriter(mfs)
 	reader := keyscmd.NewKeyReader(mfs)
 
-	k1 := keys.NewInfo("k1", "user1", []byte("val1"))
+	k1 := keys.NewInfo("user1", "k1", []byte("val1"))
 	if err := writer.SetKeys(ctx, "store.yaml", false, k1); err != nil {
 		t.Fatalf("SetKeys: %v", err)
 	}
@@ -168,11 +168,11 @@ func TestKeyWriterUpdateAndDelete(t *testing.T) {
 	}
 
 	// Add k1 with update=true -> should succeed
-	k1Updated := keys.NewInfo("k1", "user1", []byte("val1_updated"))
+	k1Updated := keys.NewInfo("user1", "k1", []byte("val1_updated"))
 	if err := writer.SetKeys(ctx, "store.yaml", true, k1Updated); err != nil {
 		t.Fatalf("SetKeys with update=true: %v", err)
 	}
-	gotK1Updated, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"})
+	gotK1Updated, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{User: "user1", ID: "k1"})
 	if err != nil {
 		t.Fatalf("GetKey k1 updated: %v", err)
 	}
@@ -181,15 +181,123 @@ func TestKeyWriterUpdateAndDelete(t *testing.T) {
 	}
 
 	// Delete a key
-	if err := writer.DeleteKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err != nil {
+	if err := writer.DeleteKey(ctx, "store.yaml", keys.KeySpec{User: "user1", ID: "k1"}); err != nil {
 		t.Fatalf("DeleteKey k1: %v", err)
 	}
 
 	// Ensure it is deleted
-	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err == nil {
+	if _, err := reader.GetKey(ctx, "store.yaml", keys.KeySpec{User: "user1", ID: "k1"}); err == nil {
 		t.Fatalf("expected error getting deleted key, got nil")
 	} else if !errors.Is(err, keyscmd.ErrKeyInfoNotFound) {
 		t.Errorf("expected ErrKeyInfoNotFound, got %v", err)
+	}
+}
+
+// findKey returns the entry in list whose user and id exactly match spec, or
+// fails the test. Unlike KeyReader.GetKey, it performs no fallback lookup by
+// id alone when spec.User is empty, so it remains a reliable way to inspect
+// the store's actual contents even when several keys share an id.
+func findKey(t *testing.T, list []keys.Info, spec keys.KeySpec) keys.Info {
+	t.Helper()
+	for _, k := range list {
+		if k.User == spec.User && k.ID == spec.ID {
+			return k
+		}
+	}
+	t.Fatalf("no key %v in %v", spec, list)
+	return keys.Info{}
+}
+
+// TestSetKeysUnownedKeyFalseDuplicate covers a duplicate check that must ask
+// "does this exact (user, id) key already exist", not "does some key with
+// this id exist for any user": an unowned key (one with an empty user) being
+// created for the first time must not be rejected merely because a different
+// user already, and uniquely, owns a key with the same id.
+func TestSetKeysUnownedKeyFalseDuplicate(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
+	writer := keyscmd.NewKeyWriter(mfs)
+	reader := keyscmd.NewKeyReader(mfs)
+
+	// bob uniquely owns "shared-id"; no unowned key with that id exists yet.
+	bob := keys.NewInfo("bob", "shared-id", []byte("bobs-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, bob); err != nil {
+		t.Fatalf("SetKeys(bob): %v", err)
+	}
+
+	// Creating a new, unowned key with the same id must succeed: it is not a
+	// duplicate of bob's key.
+	unowned := keys.NewInfo("", "shared-id", []byte("unowned-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, unowned); err != nil {
+		t.Fatalf("SetKeys(unowned) with a unique key owned by another user present: got %v, want success", err)
+	}
+
+	list, err := reader.GetKeys(ctx, "store.yaml")
+	if err != nil {
+		t.Fatalf("GetKeys: %v", err)
+	}
+	if got := findKey(t, list, keys.KeySpec{ID: "shared-id"}); string(got.Token().Value()) != "unowned-key" {
+		t.Errorf("unowned key: got token %q, want %q", got.Token().Value(), "unowned-key")
+	}
+	// bob's key is unaffected.
+	if got := findKey(t, list, keys.KeySpec{User: "bob", ID: "shared-id"}); string(got.Token().Value()) != "bobs-key" {
+		t.Errorf("bob's key: got token %q, want %q", got.Token().Value(), "bobs-key")
+	}
+}
+
+// TestSetKeysUnownedKeyMissedCollision covers the reverse mistake: once a
+// second user's key comes to share an id with an already-existing unowned
+// key, the duplicate check must still recognize the unowned key as existing,
+// rather than treating the id as ambiguous and silently overwriting it.
+func TestSetKeysUnownedKeyMissedCollision(t *testing.T) {
+	ctx := context.Background()
+	mfs := &mockReadWriteFS{data: make(map[string][]byte)}
+	writer := keyscmd.NewKeyWriter(mfs)
+	reader := keyscmd.NewKeyReader(mfs)
+
+	// An unowned key is created first, with no other owner of "shared-id".
+	unowned := keys.NewInfo("", "shared-id", []byte("unowned-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, unowned); err != nil {
+		t.Fatalf("SetKeys(unowned): %v", err)
+	}
+	// bob later creates his own, distinct key under the same id.
+	bob := keys.NewInfo("bob", "shared-id", []byte("bobs-key"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, bob); err != nil {
+		t.Fatalf("SetKeys(bob): %v", err)
+	}
+
+	// "shared-id" is now held by two distinct keys (unowned and bob's).
+	// Attempting to (re)create the unowned key without update=true must be
+	// rejected: it already exists and must not be silently clobbered.
+	overwrite := keys.NewInfo("", "shared-id", []byte("clobbered"))
+	if err := writer.SetKeys(ctx, "store.yaml", false, overwrite); err == nil {
+		t.Error("SetKeys(overwrite) without update: got nil error, want ErrUpdateNotAllowed")
+	} else if !errors.Is(err, keyscmd.ErrUpdateNotAllowed) {
+		t.Errorf("SetKeys(overwrite): got %v, want ErrUpdateNotAllowed", err)
+	}
+
+	// The original unowned key, and bob's, must both survive untouched.
+	list, err := reader.GetKeys(ctx, "store.yaml")
+	if err != nil {
+		t.Fatalf("GetKeys: %v", err)
+	}
+	if got := findKey(t, list, keys.KeySpec{ID: "shared-id"}); string(got.Token().Value()) != "unowned-key" {
+		t.Errorf("unowned key was overwritten: got token %q, want %q", got.Token().Value(), "unowned-key")
+	}
+	if got := findKey(t, list, keys.KeySpec{User: "bob", ID: "shared-id"}); string(got.Token().Value()) != "bobs-key" {
+		t.Errorf("bob's key: got token %q, want %q", got.Token().Value(), "bobs-key")
+	}
+
+	// update=true still performs the overwrite explicitly.
+	if err := writer.SetKeys(ctx, "store.yaml", true, overwrite); err != nil {
+		t.Errorf("SetKeys(overwrite, update=true): %v", err)
+	}
+	list, err = reader.GetKeys(ctx, "store.yaml")
+	if err != nil {
+		t.Fatalf("GetKeys: %v", err)
+	}
+	if got := findKey(t, list, keys.KeySpec{ID: "shared-id"}); string(got.Token().Value()) != "clobbered" {
+		t.Errorf("unowned key not updated: got token %q, want %q", got.Token().Value(), "clobbered")
 	}
 }
 
@@ -205,14 +313,14 @@ func TestKeyReaderAndWriterMissingFile(t *testing.T) {
 
 	// Non-existent file in DeleteKey
 	writer := keyscmd.NewKeyWriter(mfs)
-	if err := writer.DeleteKey(ctx, "nonexistent.yaml", keys.KeySpec{ID: "k1", User: "user1"}); err == nil {
+	if err := writer.DeleteKey(ctx, "nonexistent.yaml", keys.KeySpec{User: "user1", ID: "k1"}); err == nil {
 		t.Errorf("expected error deleting key from nonexistent file")
 	}
 }
 
 func TestSafeWriteReadKeyInfoLocal(t *testing.T) {
 	ctx := context.Background()
-	k2 := keys.NewInfo("k2", "user2", []byte("val2"))
+	k2 := keys.NewInfo("user2", "k2", []byte("val2"))
 
 	// Test SafeWriteKeyInfoJSON and SafeWriteKeyInfoYAML to local file
 	tmpDir := t.TempDir()
@@ -250,13 +358,13 @@ func TestSafeWriteReadKeyInfoLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadKeyInfoFromLocalJSON: %v", err)
 	}
-	wantKeyInfo(t, readJSONKey, "k2", "user2", "val2")
+	wantKeyInfo(t, readJSONKey, "user2", "k2", "val2")
 
 	readYAMLKey, err := keyscmd.ReadKeyInfoFromLocalYAML(ctx, yamlFile)
 	if err != nil {
 		t.Fatalf("ReadKeyInfoFromLocalYAML: %v", err)
 	}
-	wantKeyInfo(t, readYAMLKey, "k2", "user2", "val2")
+	wantKeyInfo(t, readYAMLKey, "user2", "k2", "val2")
 
 	// Read from non-existent file
 	if _, err := keyscmd.ReadKeyInfoFromLocalJSON(ctx, filepath.Join(tmpDir, "notfound.json")); err == nil {
@@ -278,7 +386,7 @@ func TestSafeWriteReadKeyInfoLocal(t *testing.T) {
 
 func TestSafeWriteKeyInfoStdout(t *testing.T) {
 	ctx := context.Background()
-	ki := keys.NewInfo("pipeKey", "pipeUser", []byte("secret_value_12345"))
+	ki := keys.NewInfo("pipeUser", "pipeKey", []byte("secret_value_12345"))
 
 	encodings := []struct {
 		name      string
@@ -302,7 +410,7 @@ func TestSafeWriteKeyInfoStdout(t *testing.T) {
 				if err := enc.unmarshal(out, &got); err != nil {
 					t.Fatalf("%s unmarshal: %v", enc.name, err)
 				}
-				wantKeyInfo(t, got, "pipeKey", "pipeUser", "secret_value_12345")
+				wantKeyInfo(t, got, "pipeUser", "pipeKey", "secret_value_12345")
 			})
 		}
 	}
@@ -310,7 +418,7 @@ func TestSafeWriteKeyInfoStdout(t *testing.T) {
 
 func TestReadKeyInfoStdin(t *testing.T) {
 	ctx := context.Background()
-	ki := keys.NewInfo("stdinKey", "stdinUser", []byte("secret_from_stdin"))
+	ki := keys.NewInfo("stdinUser", "stdinKey", []byte("secret_from_stdin"))
 
 	encodings := []struct {
 		name    string
@@ -334,7 +442,7 @@ func TestReadKeyInfoStdin(t *testing.T) {
 					if err != nil {
 						t.Fatalf("ReadKeyInfoFromLocal%s(%q): %v", enc.name, name, err)
 					}
-					wantKeyInfo(t, readKi, "stdinKey", "stdinUser", "secret_from_stdin")
+					wantKeyInfo(t, readKi, "stdinUser", "stdinKey", "secret_from_stdin")
 				})
 			})
 		}
@@ -515,8 +623,8 @@ func TestSecretConfig(t *testing.T) {
 			sc := keyscmd.SecretConfig{
 				Size:   16,
 				Format: tc.format,
-				ID:     tc.id,
 				User:   "user1",
+				ID:     tc.id,
 			}
 			ki, err := sc.New()
 			if err != nil {
@@ -551,8 +659,8 @@ func TestSecretConfigFlags(t *testing.T) {
 	// SecretConfigFlags conversion
 	flags := keyscmd.SecretConfigFlags{
 		Size: 24,
-		ID:   "from-flags",
 		User: "flags-user",
+		ID:   "from-flags",
 	}
 	if err := flags.Format.Set("hex"); err != nil {
 		t.Fatalf("flags.Format.Set: %v", err)
@@ -561,8 +669,8 @@ func TestSecretConfigFlags(t *testing.T) {
 	want := keyscmd.SecretConfig{
 		Size:   24,
 		Format: keyscmd.SecretFormatHex,
-		ID:     "from-flags",
 		User:   "flags-user",
+		ID:     "from-flags",
 	}
 	if got != want {
 		t.Errorf("SecretConfig() = %+v, want %+v", got, want)
@@ -596,15 +704,15 @@ func TestKeyInfoExtension(t *testing.T) {
 
 func TestKeySpecFlags(t *testing.T) {
 	flags := keyscmd.KeySpecFlags{
-		ID:   "my-id",
 		User: "my-user",
+		ID:   "my-id",
 	}
 	spec := flags.KeySpec()
-	if got, want := spec.ID, "my-id"; got != want {
-		t.Errorf("spec.ID = %q, want %q", got, want)
-	}
 	if got, want := spec.User, "my-user"; got != want {
 		t.Errorf("spec.User = %q, want %q", got, want)
+	}
+	if got, want := spec.ID, "my-id"; got != want {
+		t.Errorf("spec.ID = %q, want %q", got, want)
 	}
 }
 

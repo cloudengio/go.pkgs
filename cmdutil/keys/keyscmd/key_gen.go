@@ -58,24 +58,24 @@ func (SecretFormat) EnumValues() map[string]SecretFormat {
 type SecretConfigFlags struct {
 	Size   int                      `subcmd:"size,32,size of the secret in bytes"`
 	Format flags.Enum[SecretFormat] `subcmd:"format,hex,'format of the secret, one of raw, hex, base64'"`
-	ID     string                   `subcmd:"id,,id of the key"`
 	User   string                   `subcmd:"user,,user/owner associated with the key"`
+	ID     string                   `subcmd:"id,,id of the key"`
 }
 
 func (sf SecretConfigFlags) SecretConfig() SecretConfig {
 	return SecretConfig{
 		Size:   sf.Size,
 		Format: sf.Format.Value,
-		ID:     sf.ID,
 		User:   sf.User,
+		ID:     sf.ID,
 	}
 }
 
 type SecretConfig struct {
 	Size   int          `yaml:"key-size" doc:"size of the secret in bytes"`
 	Format SecretFormat `yaml:"key-format" doc:"format of the secret, one of raw, hex, base64"`
-	ID     string       `yaml:"key-id" doc:"id of the key"`
 	User   string       `yaml:"key-user" doc:"user/owner associated with the key"`
+	ID     string       `yaml:"key-id" doc:"id of the key"`
 }
 
 // NewSecret generates a new random secret of the specified size in bytes and
@@ -90,15 +90,15 @@ func (sc SecretConfig) New() (keys.Info, error) {
 	}
 	switch sc.Format {
 	case SecretFormatRaw:
-		return keys.NewInfo(sc.ID, sc.User, raw), nil
+		return keys.NewInfo(sc.User, sc.ID, raw), nil
 	case SecretFormatHex:
 		encoded := make([]byte, hex.EncodedLen(len(raw)))
 		hex.Encode(encoded, raw)
-		return keys.NewInfo(sc.ID, sc.User, encoded), nil
+		return keys.NewInfo(sc.User, sc.ID, encoded), nil
 	case SecretFormatBase64:
 		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(raw)))
 		base64.StdEncoding.Encode(encoded, raw)
-		return keys.NewInfo(sc.ID, sc.User, encoded), nil
+		return keys.NewInfo(sc.User, sc.ID, encoded), nil
 	default:
 		return keys.Info{}, fmt.Errorf("unsupported secret format: %v", sc.Format)
 	}

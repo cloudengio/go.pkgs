@@ -22,8 +22,7 @@ type item[T any] struct {
 	factory New[T]
 }
 
-// T represents a registry for a specific type T that
-// selected using a string key, which is typically a URI scheme.
+// T represents a registry for a specific type T that is keyed by a string.
 type T[T any] struct {
 	mu    sync.RWMutex
 	items []item[T]
