@@ -1220,3 +1220,272 @@ func TestGetOwnedConcurrentNoDeadlock(t *testing.T) {
 		t.Fatal("readers/writers did not complete: possible deadlock in Get/GetOwned")
 	}
 }
+
+func testCloneNoTokenNoExtra(t *testing.T) {
+	orig := keys.NewInfo("u1", "k1", []byte("secret-token"))
+	cloned := orig.CloneNoToken()
+
+	// ID and User preserved
+	if got, want := cloned.User, "u1"; got != want {
+		t.Errorf("User: got %q, want %q", got, want)
+	}
+	if got, want := cloned.ID, "k1"; got != want {
+		t.Errorf("ID: got %q, want %q", got, want)
+	}
+	if got, want := cloned.KeySpec(), orig.KeySpec(); got != want {
+		t.Errorf("KeySpec: got %+v, want %+v", got, want)
+	}
+	if got, want := cloned.String(), orig.String(); got != want {
+		t.Errorf("String: got %q, want %q", got, want)
+	}
+
+	// Token must be stripped in clone
+	if len(cloned.Token().Value()) != 0 {
+		t.Errorf("cloned token: got %q, want empty", string(cloned.Token().Value()))
+	}
+	// Original token must be preserved
+	if got, want := string(orig.Token().Value()), "secret-token"; got != want {
+		t.Errorf("orig token: got %q, want %q", got, want)
+	}
+
+	// Extra is nil and unmarshal fails
+	if cloned.GetExtra() != nil {
+		t.Errorf("GetExtra: got %v, want nil", cloned.GetExtra())
+	}
+	var extra extraType
+	if err := cloned.UnmarshalExtra(&extra); err == nil {
+		t.Errorf("UnmarshalExtra: expected error on empty extra, got nil")
+	}
+
+	// Clear on empty token shouldn't panic
+	cloned.Token().Clear()
+}
+
+func testCloneNoTokenWithExtra(t *testing.T) {
+	orig := keys.NewInfo("u2", "k2", []byte("secret-val-2"))
+	orig.WithExtra(extraType{Scope: "admin"})
+
+	cloned := orig.CloneNoToken()
+
+	// Metadata and token checks
+	if got, want := cloned.User, "u2"; got != want {
+		t.Errorf("User: got %q, want %q", got, want)
+	}
+	if got, want := cloned.ID, "k2"; got != want {
+		t.Errorf("ID: got %q, want %q", got, want)
+	}
+	if len(cloned.Token().Value()) != 0 {
+		t.Errorf("cloned token: got %q, want empty", string(cloned.Token().Value()))
+	}
+	if got, want := string(orig.Token().Value()), "secret-val-2"; got != want {
+		t.Errorf("orig token: got %q, want %q", got, want)
+	}
+
+	// Verify GetExtra and UnmarshalExtra
+	if got, want := cloned.GetExtra(), (extraType{Scope: "admin"}); got != want {
+		t.Errorf("GetExtra: got %+v, want %+v", got, want)
+	}
+	verifyExtra(t, cloned, extraType{Scope: "admin"})
+
+	// Serialization roundtrip for JSON
+	jsonBuf := marshalJSON(t, &cloned)
+	var fromJSON keys.Info
+	unmarshalJSON(t, jsonBuf, &fromJSON)
+	if len(fromJSON.Token().Value()) != 0 {
+		t.Errorf("fromJSON token: got %q, want empty", string(fromJSON.Token().Value()))
+	}
+	if got, want := fromJSON.User, "u2"; got != want {
+		t.Errorf("fromJSON User: got %q, want %q", got, want)
+	}
+	if got, want := fromJSON.ID, "k2"; got != want {
+		t.Errorf("fromJSON ID: got %q, want %q", got, want)
+	}
+	verifyExtra(t, fromJSON, extraType{Scope: "admin"})
+
+	// Serialization roundtrip for YAML
+	yamlBuf := marshalYAML(t, &cloned)
+	var fromYAML keys.Info
+	unmarshalYAML(t, yamlBuf, &fromYAML)
+	if len(fromYAML.Token().Value()) != 0 {
+		t.Errorf("fromYAML token: got %q, want empty", string(fromYAML.Token().Value()))
+	}
+	if got, want := fromYAML.User, "u2"; got != want {
+		t.Errorf("fromYAML User: got %q, want %q", got, want)
+	}
+	if got, want := fromYAML.ID, "k2"; got != want {
+		t.Errorf("fromYAML ID: got %q, want %q", got, want)
+	}
+	verifyExtra(t, fromYAML, extraType{Scope: "admin"})
+}
+
+func testCloneNoTokenPrivateFields(t *testing.T) {
+	type extraWithPrivate struct {
+		Scope   string `json:"scope" yaml:"scope"`
+		private int
+	}
+	orig := keys.NewInfo("u_priv", "k_priv", []byte("token_priv"))
+	orig.WithExtra(extraWithPrivate{Scope: "audit", private: 42})
+
+	cloned := orig.CloneNoToken()
+	if len(cloned.Token().Value()) != 0 {
+		t.Errorf("cloned token: got %q, want empty", string(cloned.Token().Value()))
+	}
+	var got extraWithPrivate
+	if err := cloned.UnmarshalExtra(&got); err != nil {
+		t.Fatalf("UnmarshalExtra: %v", err)
+	}
+	if got.Scope != "audit" || got.private != 42 {
+		t.Errorf("got %+v, want Scope=audit private=42", got)
+	}
+}
+
+func testCloneNoTokenYAML(t *testing.T) {
+	yamlData := `user: yaml_user
+key_id: yaml_key
+token: "yaml_secret_val"
+extra:
+  scope: operator
+`
+	var orig keys.Info
+	unmarshalYAML(t, []byte(yamlData), &orig)
+	if got, want := string(orig.Token().Value()), "yaml_secret_val"; got != want {
+		t.Fatalf("orig token: got %q, want %q", got, want)
+	}
+
+	cloned := orig.CloneNoToken()
+
+	if got, want := cloned.User, "yaml_user"; got != want {
+		t.Errorf("User: got %q, want %q", got, want)
+	}
+	if got, want := cloned.ID, "yaml_key"; got != want {
+		t.Errorf("ID: got %q, want %q", got, want)
+	}
+	if len(cloned.Token().Value()) != 0 {
+		t.Errorf("cloned token: got %q, want empty", string(cloned.Token().Value()))
+	}
+	if got, want := string(orig.Token().Value()), "yaml_secret_val"; got != want {
+		t.Errorf("orig token: got %q, want %q", got, want)
+	}
+
+	verifyExtra(t, cloned, extraType{Scope: "operator"})
+
+	// Serialization roundtrip for YAML
+	yamlBuf := marshalYAML(t, &cloned)
+	var fromYAML keys.Info
+	unmarshalYAML(t, yamlBuf, &fromYAML)
+	if len(fromYAML.Token().Value()) != 0 {
+		t.Errorf("fromYAML token: got %q, want empty", string(fromYAML.Token().Value()))
+	}
+	verifyExtra(t, fromYAML, extraType{Scope: "operator"})
+
+	// Serialization roundtrip to JSON
+	jsonBuf := marshalJSON(t, &cloned)
+	var fromJSON keys.Info
+	unmarshalJSON(t, jsonBuf, &fromJSON)
+	if len(fromJSON.Token().Value()) != 0 {
+		t.Errorf("fromJSON token: got %q, want empty", string(fromJSON.Token().Value()))
+	}
+	verifyExtra(t, fromJSON, extraType{Scope: "operator"})
+}
+
+func testCloneNoTokenJSON(t *testing.T) {
+	jsonData := `{"user": "json_user", "key_id": "json_key", "token": "json_secret_val", "extra": {"scope": "deployer"}}`
+	var orig keys.Info
+	unmarshalJSON(t, []byte(jsonData), &orig)
+	if got, want := string(orig.Token().Value()), "json_secret_val"; got != want {
+		t.Fatalf("orig token: got %q, want %q", got, want)
+	}
+
+	cloned := orig.CloneNoToken()
+
+	if got, want := cloned.User, "json_user"; got != want {
+		t.Errorf("User: got %q, want %q", got, want)
+	}
+	if got, want := cloned.ID, "json_key"; got != want {
+		t.Errorf("ID: got %q, want %q", got, want)
+	}
+	if len(cloned.Token().Value()) != 0 {
+		t.Errorf("cloned token: got %q, want empty", string(cloned.Token().Value()))
+	}
+	if got, want := string(orig.Token().Value()), "json_secret_val"; got != want {
+		t.Errorf("orig token: got %q, want %q", got, want)
+	}
+
+	verifyExtra(t, cloned, extraType{Scope: "deployer"})
+
+	// Serialization roundtrip for JSON
+	jsonBuf := marshalJSON(t, &cloned)
+	var fromJSON keys.Info
+	unmarshalJSON(t, jsonBuf, &fromJSON)
+	if len(fromJSON.Token().Value()) != 0 {
+		t.Errorf("fromJSON token: got %q, want empty", string(fromJSON.Token().Value()))
+	}
+	verifyExtra(t, fromJSON, extraType{Scope: "deployer"})
+
+	// Serialization roundtrip to YAML
+	yamlBuf := marshalYAML(t, &cloned)
+	var fromYAML keys.Info
+	unmarshalYAML(t, yamlBuf, &fromYAML)
+	if len(fromYAML.Token().Value()) != 0 {
+		t.Errorf("fromYAML token: got %q, want empty", string(fromYAML.Token().Value()))
+	}
+	verifyExtra(t, fromYAML, extraType{Scope: "deployer"})
+}
+
+func testCloneNoTokenStore(t *testing.T) {
+	orig := keys.NewInfo("u_store", "k_store", []byte("store-secret"))
+	orig.WithExtra(extraType{Scope: "stored"})
+
+	cloned := orig.CloneNoToken()
+
+	ks := keys.NewInMemoryKeyStore()
+	ks.Add(cloned)
+
+	got, ok := ks.Get("u_store", "k_store")
+	if !ok {
+		t.Fatal("key not found in store")
+	}
+	if len(got.Token().Value()) != 0 {
+		t.Errorf("stored token: got %q, want empty", string(got.Token().Value()))
+	}
+	verifyExtra(t, got, extraType{Scope: "stored"})
+}
+
+func testCloneNoTokenMutation(t *testing.T) {
+	tokBytes := []byte("original-token-bytes")
+	orig := keys.NewInfo("u_indep", "k_indep", tokBytes)
+	orig.WithExtra(extraType{Scope: "original_scope"})
+
+	cloned := orig.CloneNoToken()
+
+	// Modifying original extra
+	orig.WithExtra(extraType{Scope: "modified_scope"})
+
+	// Cloned extra should remain unchanged
+	verifyExtra(t, cloned, extraType{Scope: "original_scope"})
+
+	// Modifying original fields
+	orig.User = "u_modified"
+	orig.ID = "k_modified"
+	if got, want := cloned.User, "u_indep"; got != want {
+		t.Errorf("cloned User after orig mutation: got %q, want %q", got, want)
+	}
+	if got, want := cloned.ID, "k_indep"; got != want {
+		t.Errorf("cloned ID after orig mutation: got %q, want %q", got, want)
+	}
+
+	// Cloned remains with empty token
+	if len(cloned.Token().Value()) != 0 {
+		t.Errorf("cloned token: got %q, want empty", string(cloned.Token().Value()))
+	}
+}
+
+func TestCloneNoToken(t *testing.T) {
+	t.Run("NoExtra", testCloneNoTokenNoExtra)
+	t.Run("WithExtra_Direct", testCloneNoTokenWithExtra)
+	t.Run("WithExtra_PrivateFields", testCloneNoTokenPrivateFields)
+	t.Run("ExtraFromYAML", testCloneNoTokenYAML)
+	t.Run("ExtraFromJSON", testCloneNoTokenJSON)
+	t.Run("StoreIntegration", testCloneNoTokenStore)
+	t.Run("MutationIndependence", testCloneNoTokenMutation)
+}

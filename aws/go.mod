@@ -7,22 +7,22 @@ require (
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/file v0.0.0-20260909165456-ddaa2de546a0
-	cloudeng.io/logging v0.0.0-20260909165456-ddaa2de546a0
+	cloudeng.io/logging v0.0.0-20260914180154-c85eb1cb5201
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
 	github.com/alexbacchin/ssm-session-client v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
-	github.com/aws/aws-sdk-go-v2/config v1.33.4
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.4
+	github.com/aws/aws-sdk-go-v2/config v1.33.5
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.5
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.2.3
 	github.com/aws/aws-sdk-go-v2/service/dsql v1.22.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.332.0
-	github.com/aws/aws-sdk-go-v2/service/kms v1.60.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.0
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.49.0
+	github.com/aws/aws-sdk-go-v2/service/kms v1.61.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.1
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.0
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.73.0
-	github.com/aws/aws-sdk-go-v2/service/sts v1.50.0
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.0
 	github.com/aws/smithy-go v1.28.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/orlangure/gnomock v0.32.0
@@ -30,9 +30,9 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260909165456-ddaa2de546a0 // indirect
-	cloudeng.io/os v0.0.0-20260909165456-ddaa2de546a0 // indirect
-	cloudeng.io/sys v0.0.0-20260909165456-ddaa2de546a0 // indirect
+	cloudeng.io/algo v0.0.0-20260914180154-c85eb1cb5201 // indirect
+	cloudeng.io/os v0.0.0-20260914180154-c85eb1cb5201 // indirect
+	cloudeng.io/sys v0.0.0-20260914180154-c85eb1cb5201 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.0 // indirect
@@ -94,7 +94,7 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260715232425-e75dac1f907d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260908043556-f8649ddbbfe6 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260911204522-f61a6ca850bd // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
