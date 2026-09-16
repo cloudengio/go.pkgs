@@ -325,6 +325,14 @@ can be set using WithExtra and accessed using UnmarshalExtra.
 ### Methods
 
 ```go
+func (k Info) CloneNoToken() Info
+```
+CloneNoToken returns a copy of the key info without the token. This is
+generally useful for extracting metadata without exposing the sensitive
+token.
+
+
+```go
 func (k Info) GetExtra() any
 ```
 GetExtra returns the extra information for the key.

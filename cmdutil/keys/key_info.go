@@ -5,7 +5,8 @@
 package keys
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"reflect"
 	"slices"
@@ -118,7 +119,7 @@ type Info struct {
 	User      string
 	ID        string
 	token     []byte
-	extraJSON json.RawMessage
+	extraJSON jsontext.Value
 	extraYAML yaml.Node
 	extraAny  any
 }
@@ -149,11 +150,11 @@ func (k *Info) WithExtra(v any) {
 }
 
 type keyInfo struct {
-	User      string          `yaml:"user" json:"user"`
-	ID        string          `yaml:"key_id" json:"key_id"`
-	Token     string          `yaml:"token" json:"token"`
-	ExtraJSON json.RawMessage `yaml:"-" json:"extra,omitempty"`
-	ExtraYAML yaml.Node       `yaml:"extra,omitempty" json:"-"`
+	User      string         `yaml:"user" json:"user"`
+	ID        string         `yaml:"key_id" json:"key_id"`
+	Token     string         `yaml:"token" json:"token"`
+	ExtraJSON jsontext.Value `yaml:"-" json:"extra,omitempty"`
+	ExtraYAML yaml.Node      `yaml:"extra,omitempty" json:"-"`
 }
 
 // String returns a string representation of the KeyInfo with the Token
@@ -320,4 +321,16 @@ func (k Info) UnmarshalExtra(v any) error {
 // GetExtra returns the extra information for the key.
 func (k Info) GetExtra() any {
 	return k.extraAny
+}
+
+// CloneNoToken returns a copy of the key info without the token. This is
+// generally useful for extracting metadata without exposing the sensitive token.
+func (k Info) CloneNoToken() Info {
+	return Info{
+		User:      k.User,
+		ID:        k.ID,
+		extraJSON: slices.Clone(k.extraJSON),
+		extraYAML: k.extraYAML,
+		extraAny:  k.extraAny,
+	}
 }
