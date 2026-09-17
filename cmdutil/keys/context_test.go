@@ -6,7 +6,11 @@ package keys_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"cloudeng.io/cmdutil/keys"
 )
@@ -198,4 +202,273 @@ func TestKeyInfoFromContext(t *testing.T) {
 			t.Error("store removed from context: want not found")
 		}
 	})
+}
+
+// TestKeyInfosFromContext covers the multi-key lookup performed by
+// KeyInfosFromContext: each spec is resolved independently via
+// KeyInfoFromContext, so the same exact/unique/ambiguous rules apply to each
+// one, and the first spec that cannot be resolved fails the whole call.
+func newKeyInfosTestContext() context.Context {
+	store := keys.NewInMemoryKeyStore()
+	store.Add(keys.NewInfo("user1", "key1", []byte("t1")))
+	store.Add(keys.NewInfo("user2", "key2", []byte("t2")))
+	// key3 is held by two users, so a lookup by id alone is ambiguous.
+	store.Add(keys.NewInfo("user1", "key3", []byte("t3a")))
+	store.Add(keys.NewInfo("user2", "key3", []byte("t3b")))
+	return keys.ContextWithKeyStore(context.Background(), store)
+}
+
+func TestKeyInfosFromContext(t *testing.T) {
+	ctx := newKeyInfosTestContext()
+
+	infos, err := keys.KeyInfosFromContext(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if infos == nil {
+		t.Error("got a nil slice, want a non-nil empty one")
+	}
+	if len(infos) != 0 {
+		t.Errorf("got %d infos, want 0", len(infos))
+	}
+}
+
+// TestKeyInfosFromContextResolution covers that each spec is resolved by the
+// same rules as KeyInfoFromContext: an exact user/id match, a fallback to a
+// unique id when the user is unspecified, and the results kept in the order
+// the specs were given.
+func TestKeyInfosFromContextResolution(t *testing.T) {
+	ctx := newKeyInfosTestContext()
+
+	infos, err := keys.KeyInfosFromContext(ctx,
+		keys.KeySpec{User: "user2", ID: "key3"},
+		keys.KeySpec{User: "user1", ID: "key1"},
+		keys.KeySpec{ID: "key2"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(infos) != 3 {
+		t.Fatalf("got %d infos, want 3", len(infos))
+	}
+	got := []string{
+		string(infos[0].Token().Value()),
+		string(infos[1].Token().Value()),
+		string(infos[2].Token().Value()),
+	}
+	want := []string{"t3b", "t1", "t2"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: got %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func testKeyInfosAmbiguous(ctx context.Context, t *testing.T) {
+	infos, err := keys.KeyInfosFromContext(ctx,
+		keys.KeySpec{User: "user1", ID: "key1"},
+		keys.KeySpec{ID: "key3"},
+	)
+	if err == nil {
+		t.Fatal("expected an error for the ambiguous key3 lookup")
+	}
+	if infos != nil {
+		t.Errorf("got %v, want nil infos on error", infos)
+	}
+	if got, want := err.Error(), `ambiguous key "key3": multiple users match this id`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testKeyInfosUnresolvableStops(ctx context.Context, t *testing.T) {
+	// key2 belongs to user2 here, not user1, so this must fail before
+	// key1 -- which resolves fine on its own -- is ever reached, since
+	// KeyInfosFromContext must not partially succeed.
+	_, err := keys.KeyInfosFromContext(ctx,
+		keys.KeySpec{User: "user1", ID: "key2"},
+		keys.KeySpec{User: "user1", ID: "key1"},
+	)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got, want := err.Error(), `key not found for user "user1" and id "key2"`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testKeyInfosNotFound(ctx context.Context, t *testing.T) {
+	_, err := keys.KeyInfosFromContext(ctx, keys.KeySpec{ID: "missing"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got, want := err.Error(), `key "missing" not found`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testKeyInfosEmptyID(ctx context.Context, t *testing.T) {
+	_, err := keys.KeyInfosFromContext(ctx, keys.KeySpec{ID: ""})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got, want := err.Error(), "empty key id"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	_, err = keys.KeyInfosFromContext(ctx, keys.KeySpec{User: "user1", ID: ""})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got, want := err.Error(), `empty key id for user "user1"`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testKeyInfosNoStore(ctx context.Context, t *testing.T) {
+	_, err := keys.KeyInfosFromContext(context.Background(), keys.KeySpec{User: "user1", ID: "key1"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got, want := err.Error(), "no key store in context"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	// Also fails when 0 specs are provided.
+	_, err = keys.KeyInfosFromContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error with 0 specs and no store")
+	}
+	if got, want := err.Error(), "no key store in context"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	removed := keys.ContextWithoutKeyStore(ctx)
+	_, err = keys.KeyInfosFromContext(removed, keys.KeySpec{User: "user1", ID: "key1"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got, want := err.Error(), "no key store in context"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testKeyInfosCanceled(ctx context.Context, t *testing.T) {
+	cancCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err := keys.KeyInfosFromContext(cancCtx, keys.KeySpec{User: "user1", ID: "key1"})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("got %v, want context.Canceled", err)
+	}
+}
+
+// TestKeyInfosFromContextErrors covers error cases in KeyInfosFromContext:
+// ambiguous ids, keys not found, empty ids, missing key store, and canceled contexts.
+func TestKeyInfosFromContextErrors(t *testing.T) {
+	ctx := newKeyInfosTestContext()
+
+	t.Run("an ambiguous id fails even with other resolvable specs", func(t *testing.T) {
+		testKeyInfosAmbiguous(ctx, t)
+	})
+	t.Run("the first unresolvable spec stops the lookup", func(t *testing.T) {
+		testKeyInfosUnresolvableStops(ctx, t)
+	})
+	t.Run("key not found by id alone", func(t *testing.T) {
+		testKeyInfosNotFound(ctx, t)
+	})
+	t.Run("empty key id", func(t *testing.T) {
+		testKeyInfosEmptyID(ctx, t)
+	})
+	t.Run("no key store in context", func(t *testing.T) {
+		testKeyInfosNoStore(ctx, t)
+	})
+	t.Run("canceled context", func(t *testing.T) {
+		testKeyInfosCanceled(ctx, t)
+	})
+}
+
+func TestInMemoryKeyStoreGetSpecs(t *testing.T) {
+	store := keys.NewInMemoryKeyStore()
+	store.Add(keys.NewInfo("u1", "k1", []byte("t1")))
+	store.Add(keys.NewInfo("u2", "k2", []byte("t2")))
+	store.Add(keys.NewInfo("u1", "k3", []byte("t3a")))
+	store.Add(keys.NewInfo("u2", "k3", []byte("t3b")))
+
+	// Empty specs returns non-nil slice and nil error.
+	infos, err := store.GetSpecs()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if infos == nil || len(infos) != 0 {
+		t.Errorf("got %v, want non-nil empty slice", infos)
+	}
+
+	// Successful batch lookup.
+	infos, err = store.GetSpecs(
+		keys.KeySpec{User: "u1", ID: "k1"},
+		keys.KeySpec{ID: "k2"},
+		keys.KeySpec{User: "u2", ID: "k3"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(infos) != 3 {
+		t.Fatalf("got %d infos, want 3", len(infos))
+	}
+
+	// Error clearing: ensure partially matched results are discarded on error.
+	infos, err = store.GetSpecs(
+		keys.KeySpec{User: "u1", ID: "k1"},
+		keys.KeySpec{ID: "k_nonexistent"},
+	)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if infos != nil {
+		t.Errorf("got %v, want nil slice on error", infos)
+	}
+}
+
+func TestInMemoryKeyStoreGetSpecsConcurrent(t *testing.T) {
+	store := keys.NewInMemoryKeyStore()
+	store.Add(keys.NewInfo("u1", "k1", []byte("t1")))
+	store.Add(keys.NewInfo("u2", "k2", []byte("t2")))
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	// Concurrent reader.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for ctx.Err() == nil {
+			infos, err := store.GetSpecs(
+				keys.KeySpec{User: "u1", ID: "k1"},
+				keys.KeySpec{User: "u2", ID: "k2"},
+			)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if len(infos) != 2 {
+				t.Errorf("got %d infos, want 2", len(infos))
+				return
+			}
+		}
+	}()
+
+	// Concurrent writer adding and deleting unrelated keys.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var i int
+		for ctx.Err() == nil {
+			id := fmt.Sprintf("temp_%d", i)
+			store.Add(keys.NewInfo("u_temp", id, []byte("val")))
+			store.Delete("u_temp", id)
+			i++
+		}
+	}()
+
+	wg.Wait()
 }
