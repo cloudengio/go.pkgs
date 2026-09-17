@@ -190,29 +190,73 @@ func (ims *InMemoryKeyStore) GetOwned(user, id string) (Info, bool) {
 	return ims.getOwnedLocked(user, id)
 }
 
+// getUniqueWithStatusLocked returns the matched Info and the match count
+// (0, 1, or 2 for multiple matches). It assumes ims.mu is already held by the caller.
+func (ims *InMemoryKeyStore) getUniqueWithStatusLocked(id string) (Info, int) {
+	if id == "" {
+		return Info{}, 0
+	}
+	var found Info
+	var count int
+	for _, key := range ims.keys {
+		if key.ID == id {
+			found = key
+			count++
+			if count > 1 {
+				return Info{}, 2
+			}
+		}
+	}
+	return found, count
+}
+
 // getUniqueLocked is the by-ID-alone lookup shared by Get and GetUnique. Like
 // getOwnedLocked, it assumes ims.mu is already held by the caller and must
 // not acquire it itself. An empty id never matches, not even a key that was
 // itself given an empty id.
 func (ims *InMemoryKeyStore) getUniqueLocked(id string) (Info, bool) {
-	if id == "" {
-		return Info{}, false
-	}
-	var found Info
-	var foundCount int
-	for _, key := range ims.keys {
-		if key.ID == id {
-			found = key
-			foundCount++
-			if foundCount > 1 {
-				return Info{}, false
+	ki, count := ims.getUniqueWithStatusLocked(id)
+	return ki, count == 1
+}
+
+// GetSpecs retrieves keys for the provided specs under a single read lock,
+// ensuring an atomic view across all requested keys. If any key cannot be
+// found or is ambiguous, or if any spec has an empty ID, an error is returned.
+func (ims *InMemoryKeyStore) GetSpecs(specs ...KeySpec) ([]Info, error) {
+	ims.mu.RLock()
+	defer ims.mu.RUnlock()
+
+	infos := make([]Info, 0, len(specs))
+	for _, spec := range specs {
+		if len(spec.ID) == 0 {
+			clear(infos)
+			if len(spec.User) == 0 {
+				return nil, fmt.Errorf("empty key id")
 			}
+			return nil, fmt.Errorf("empty key id for user %q", spec.User)
 		}
+		if len(spec.User) == 0 {
+			ki, count := ims.getUniqueWithStatusLocked(spec.ID)
+			switch count {
+			case 1:
+				infos = append(infos, ki)
+			case 0:
+				clear(infos)
+				return nil, fmt.Errorf("key %q not found", spec.ID)
+			default:
+				clear(infos)
+				return nil, fmt.Errorf("ambiguous key %q: multiple users match this id", spec.ID)
+			}
+			continue
+		}
+		ki, ok := ims.getOwnedLocked(spec.User, spec.ID)
+		if !ok {
+			clear(infos)
+			return nil, fmt.Errorf("key not found for user %q and id %q", spec.User, spec.ID)
+		}
+		infos = append(infos, ki)
 	}
-	if foundCount == 1 {
-		return found, true
-	}
-	return Info{}, false
+	return infos, nil
 }
 
 // GetUnique retrieves a key by its ID only if it is unique across all users.

@@ -194,6 +194,14 @@ lenient lookup that also matches by ID alone when the ID is unambiguous.
 
 
 ```go
+func (ims *InMemoryKeyStore) GetSpecs(specs ...KeySpec) ([]Info, error)
+```
+GetSpecs retrieves keys for the provided specs under a single read lock,
+ensuring an atomic view across all requested keys. If any key cannot be
+found or is ambiguous, or if any spec has an empty ID, an error is returned.
+
+
+```go
 func (ims *InMemoryKeyStore) GetUnique(id string) (Info, bool)
 ```
 GetUnique retrieves a key by its ID only if it is unique across all users.
@@ -317,7 +325,7 @@ a unique key with the given ID. An empty ID will result in a failure.
 func KeyInfosFromContext(ctx context.Context, specs ...KeySpec) ([]Info, error)
 ```
 KeyInfosFromContext retrieves the KeyInfo for each specified KeySpec from
-the context. If any key is not found, it returns false.
+the context. If any key is not found, it returns an error.
 
 
 ```go
