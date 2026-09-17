@@ -199,3 +199,110 @@ func TestKeyInfoFromContext(t *testing.T) {
 		}
 	})
 }
+
+// TestKeyInfosFromContext covers the multi-key lookup performed by
+// KeyInfosFromContext: each spec is resolved independently via
+// KeyInfoFromContext, so the same exact/unique/ambiguous rules apply to each
+// one, and the first spec that cannot be resolved fails the whole call.
+func newKeyInfosTestContext() context.Context {
+	store := keys.NewInMemoryKeyStore()
+	store.Add(keys.NewInfo("user1", "key1", []byte("t1")))
+	store.Add(keys.NewInfo("user2", "key2", []byte("t2")))
+	// key3 is held by two users, so a lookup by id alone is ambiguous.
+	store.Add(keys.NewInfo("user1", "key3", []byte("t3a")))
+	store.Add(keys.NewInfo("user2", "key3", []byte("t3b")))
+	return keys.ContextWithKeyStore(context.Background(), store)
+}
+
+func TestKeyInfosFromContext(t *testing.T) {
+	ctx := newKeyInfosTestContext()
+
+	infos, err := keys.KeyInfosFromContext(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if infos == nil {
+		t.Error("got a nil slice, want a non-nil empty one")
+	}
+	if len(infos) != 0 {
+		t.Errorf("got %d infos, want 0", len(infos))
+	}
+}
+
+// TestKeyInfosFromContextResolution covers that each spec is resolved by the
+// same rules as KeyInfoFromContext: an exact user/id match, a fallback to a
+// unique id when the user is unspecified, and the results kept in the order
+// the specs were given.
+func TestKeyInfosFromContextResolution(t *testing.T) {
+	ctx := newKeyInfosTestContext()
+
+	infos, err := keys.KeyInfosFromContext(ctx,
+		keys.KeySpec{User: "user2", ID: "key3"},
+		keys.KeySpec{User: "user1", ID: "key1"},
+		keys.KeySpec{ID: "key2"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(infos) != 3 {
+		t.Fatalf("got %d infos, want 3", len(infos))
+	}
+	got := []string{
+		string(infos[0].Token().Value()),
+		string(infos[1].Token().Value()),
+		string(infos[2].Token().Value()),
+	}
+	want := []string{"t3b", "t1", "t2"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: got %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestKeyInfosFromContextErrors covers that a spec which KeyInfoFromContext
+// cannot resolve -- an ambiguous id, or one that simply is not found -- fails
+// the whole call rather than being skipped or partially satisfied, and that
+// the first such spec is where the lookup stops.
+func TestKeyInfosFromContextErrors(t *testing.T) {
+	ctx := newKeyInfosTestContext()
+
+	t.Run("an ambiguous id fails even with other resolvable specs", func(t *testing.T) {
+		infos, err := keys.KeyInfosFromContext(ctx,
+			keys.KeySpec{User: "user1", ID: "key1"},
+			keys.KeySpec{ID: "key3"},
+		)
+		if err == nil {
+			t.Fatal("expected an error for the ambiguous key3 lookup")
+		}
+		if infos != nil {
+			t.Errorf("got %v, want nil infos on error", infos)
+		}
+		if got, want := err.Error(), `key not found for user "" and id "key3"`; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("the first unresolvable spec stops the lookup", func(t *testing.T) {
+		// key2 belongs to user2 here, not user1, so this must fail before
+		// key1 -- which resolves fine on its own -- is ever reached, since
+		// KeyInfosFromContext must not partially succeed.
+		_, err := keys.KeyInfosFromContext(ctx,
+			keys.KeySpec{User: "user1", ID: "key2"},
+			keys.KeySpec{User: "user1", ID: "key1"},
+		)
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if got, want := err.Error(), `key not found for user "user1" and id "key2"`; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("no key store in context", func(t *testing.T) {
+		_, err := keys.KeyInfosFromContext(context.Background(), keys.KeySpec{User: "user1", ID: "key1"})
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+	})
+}

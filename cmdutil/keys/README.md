@@ -314,6 +314,13 @@ a unique key with the given ID. An empty ID will result in a failure.
 
 
 ```go
+func KeyInfosFromContext(ctx context.Context, specs ...KeySpec) ([]Info, error)
+```
+KeyInfosFromContext retrieves the KeyInfo for each specified KeySpec from
+the context. If any key is not found, it returns false.
+
+
+```go
 func NewInfo(user, id string, token []byte) Info
 ```
 NewInfo creates a new Info instance with the specified user, id, token.

@@ -4,7 +4,10 @@
 
 package keys
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type ctxKey struct{}
 
@@ -62,4 +65,18 @@ func ContextWithKey(ctx context.Context, ki Info) context.Context {
 	}
 	ims.Add(ki)
 	return ctx
+}
+
+// KeyInfosFromContext retrieves the KeyInfo for each specified KeySpec from
+// the context. If any key is not found, it returns false.
+func KeyInfosFromContext(ctx context.Context, specs ...KeySpec) ([]Info, error) {
+	infos := make([]Info, 0, len(specs))
+	for _, spec := range specs {
+		ki, ok := KeyInfoFromContext(ctx, spec.User, spec.ID)
+		if !ok {
+			return nil, fmt.Errorf("key not found for user %q and id %q", spec.User, spec.ID)
+		}
+		infos = append(infos, ki)
+	}
+	return infos, nil
 }
