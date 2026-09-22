@@ -147,6 +147,9 @@ Call Stop to free up resources when the Controller is no longer needed.
 The controller attempts to implement a smooth rate of requests and bytes
 over the specified tick intervals.
 
+Note that the tickers that pace requests and bytes are started lazily,
+on first use, rather than when New returns.
+
 ### Functions
 
 ```go
