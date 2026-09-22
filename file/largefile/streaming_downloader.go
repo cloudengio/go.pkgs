@@ -153,6 +153,14 @@ func (dl *StreamingDownloader) generator(ctx context.Context) error {
 				return nil
 			}
 		case <-dl.retryTracker.notify():
+			// Acknowledge the notification now that this case has actually
+			// been chosen, not merely offered: notify is evaluated on every
+			// entry to this select regardless of which case is chosen (see
+			// notify), so consuming it there, rather than here, could
+			// discard a pending retry whenever this case lost the race to
+			// another one that was also ready, such as the outstanding
+			// case above during a burst of writes.
+			dl.retryTracker.ack()
 			dl.mu.Lock()
 			from := max(dl.tracking.From, 0)
 			dl.mu.Unlock()
@@ -239,10 +247,17 @@ func (dl *StreamingDownloader) drainCacheLocked(nextOffset int64) error {
 	return nil
 }
 
+// retryTracker tracks byte ranges that have failed and are waiting to be
+// retried, and notifies a single waiter (the generator) when there is at
+// least one such range. ch is closed for exactly as long as pending is true;
+// set closes it (if not already closed) on the first failure recorded since
+// the last ack, and ack is what reopens it by replacing it with a fresh,
+// unclosed channel. Holding that invariant is what makes notify safe to use
+// as a select operand: see notify.
 type retryTracker struct {
 	sync.RWMutex
 	*ByteRangesTracker
-	ch      chan struct{} // Channel to notify when the byte ranges are updated.
+	ch      chan struct{}
 	pending bool
 }
 
@@ -250,23 +265,54 @@ func (rt *retryTracker) set(from int64) {
 	rt.Lock()
 	defer rt.Unlock()
 	rt.Set(from)
+	if rt.pending {
+		// ch is already closed for a still-unacknowledged notification;
+		// this failure will be picked up by the reissue that follows it,
+		// same as any other range currently marked failed.
+		return
+	}
 	rt.pending = true
-	rt.kickLocked() // Notify that the byte ranges have been updated.
+	// ch may already exist, unclosed, from an earlier notify call made while
+	// pending was false; reuse it rather than replacing it, since ack is the
+	// only place that should ever install a fresh one.
+	if rt.ch == nil {
+		rt.ch = make(chan struct{})
+	}
+	close(rt.ch)
 }
 
+// notify returns a channel that is closed for as long as at least one byte
+// range is waiting to be retried. Unlike a channel that is closed once to
+// deliver a single notification, observing it ready has no side effect: the
+// Go spec requires every channel operand of a select statement to be
+// evaluated on each entry to that statement, whether or not the case it
+// belongs to is the one chosen, so a notify that consumed its own state as
+// part of being evaluated could have that state silently discarded by
+// another, unrelated case winning the same select -- exactly what happened
+// here before this comment was written, see ack. Callers that act on the
+// notification must call ack once this case is actually chosen, which is
+// what clears it; until then, notify keeps reporting the same pending work.
 func (rt *retryTracker) notify() <-chan struct{} {
 	rt.Lock()
 	defer rt.Unlock()
-	if rt.pending {
-		rt.pending = false // Reset the pending flag.
-		closedCh := make(chan struct{})
-		close(closedCh) // Close the channel to notify that the byte ranges have been updated.
-		return closedCh
-	}
 	if rt.ch == nil {
 		rt.ch = make(chan struct{})
 	}
 	return rt.ch
+}
+
+// ack acknowledges that the notification currently reported by notify has
+// been acted upon. It must be called only once the corresponding select case
+// has actually been chosen, not merely offered, since it is what allows
+// notify to report a later failure as a new notification rather than one
+// already being handled. A failure recorded by set concurrently with, or
+// after, this call is unaffected: it is either swept up by the reissue this
+// acknowledgement precedes, or reported by notify afresh.
+func (rt *retryTracker) ack() {
+	rt.Lock()
+	defer rt.Unlock()
+	rt.pending = false
+	rt.ch = nil
 }
 
 func (rt *retryTracker) nextSetAndClear(start int, br *ByteRange) int {
@@ -277,12 +323,4 @@ func (rt *retryTracker) nextSetAndClear(start int, br *ByteRange) int {
 		rt.Clear(br.From)
 	}
 	return n
-}
-
-func (rt *retryTracker) kickLocked() {
-	if rt.ch == nil {
-		return
-	}
-	close(rt.ch) // Close the channel to notify that the byte ranges have been updated.
-	rt.ch = nil
 }
