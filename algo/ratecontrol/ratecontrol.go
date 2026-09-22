@@ -24,10 +24,17 @@ type Limiter interface {
 // Call Stop to free up resources when the Controller is no longer needed.
 // The controller attempts to implement a smooth rate of requests and bytes
 // over the specified tick intervals.
+//
+// Note that the tickers that pace requests and bytes are started lazily, on
+// first use, rather than when New returns.
 type Controller struct {
-	opts         options
-	reqsTicker   *time.Ticker
-	reqsTokens   chan struct{} // token bucket for request bursts
+	opts       options
+	reqsTokens chan struct{} // token bucket for request bursts
+
+	reqsOnce   sync.Once
+	reqsTicker *time.Ticker
+
+	bytesOnce    sync.Once
 	bytesTicker  *time.Ticker
 	bytesPerTick atomic.Int64
 
@@ -47,13 +54,32 @@ func New(opts ...Option) *Controller {
 		fn(&c.opts)
 	}
 	if c.opts.reqsPerTick > 0 {
-		interval := c.opts.reqsInterval / time.Duration(c.opts.reqsPerTick)
-		if interval <= 0 {
-			interval = time.Nanosecond
-		}
+		// The token bucket itself is not time sensitive -- an initial burst
+		// being available immediately is the intended behaviour regardless
+		// of when it is first drawn on -- so it is filled here. Only the
+		// ticker that replenishes it after the burst is spent is started
+		// lazily; see ensureReqsTicker.
 		c.reqsTokens = make(chan struct{}, c.opts.reqsPerTick)
 		for range c.opts.reqsPerTick {
 			c.reqsTokens <- struct{}{}
+		}
+	}
+	if c.opts.bytesPerTick > 0 {
+		c.bytesReset = make(chan struct{})
+	}
+	return c
+}
+
+// ensureReqsTicker starts the ticker that replenishes the request token
+// bucket, the first time it is needed. It is a no-op on every call after the
+// first, and, once Stop has won the race to run reqsOnce's function instead
+// (see Stop), forever after: reqsTicker is then left nil, which Wait never
+// dereferences since it only ever reads from reqsTokens and stopCh.
+func (c *Controller) ensureReqsTicker() {
+	c.reqsOnce.Do(func() {
+		interval := c.opts.reqsInterval / time.Duration(c.opts.reqsPerTick)
+		if interval <= 0 {
+			interval = time.Nanosecond
 		}
 		c.reqsTicker = time.NewTicker(interval)
 		go func() {
@@ -69,12 +95,18 @@ func New(opts ...Option) *Controller {
 				}
 			}
 		}()
-	}
-	if c.opts.bytesPerTick > 0 {
+	})
+}
+
+// ensureBytesTicker starts the ticker that resets the bytes-per-tick budget,
+// the first time it is needed. It is a no-op on every call after the first,
+// and, once Stop has won the race to run bytesOnce's function instead (see
+// Stop), forever after: bytesTicker is then left nil, which callers must
+// check for, see waitBytesPerTick.
+func (c *Controller) ensureBytesTicker() {
+	c.bytesOnce.Do(func() {
 		c.bytesTicker = time.NewTicker(c.opts.bytesInterval)
-		c.bytesReset = make(chan struct{})
-	}
-	return c
+	})
 }
 
 func (c *Controller) remaining(current *atomic.Int64, allowed int) bool {
@@ -87,6 +119,12 @@ func (c *Controller) remaining(current *atomic.Int64, allowed int) bool {
 func (c *Controller) waitBytesPerTick(ctx context.Context) error {
 	if c.remaining(&c.bytesPerTick, c.opts.bytesPerTick) {
 		return nil
+	}
+	c.ensureBytesTicker()
+	if c.bytesTicker == nil {
+		// Stop won the race to start the ticker (see ensureBytesTicker) and
+		// so has already closed stopCh: there is nothing left to wait for.
+		return context.Canceled
 	}
 	// Snapshot the broadcast channel before blocking. If the reset fires
 	// between here and the select, ch will already be closed and the select
@@ -124,6 +162,7 @@ func (c *Controller) Wait(ctx context.Context) error {
 		return nil
 	}
 	if c.opts.reqsPerTick > 0 {
+		c.ensureReqsTicker()
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -168,6 +207,17 @@ func (c *Controller) Backoff() Backoff {
 func (c *Controller) Stop() {
 	c.stopOnce.Do(func() {
 		close(c.stopCh)
+		// If a ticker has not yet been lazily started by ensureReqsTicker /
+		// ensureBytesTicker, running their Once here first wins the race and
+		// permanently prevents either from ever starting: reqsTicker and
+		// bytesTicker are then left nil forever, which Wait and
+		// waitBytesPerTick already accommodate. If a ticker was already
+		// started, or wins a concurrent race against this call instead, this
+		// Do call is a no-op, and sync.Once's happens-before guarantee makes
+		// it safe to read reqsTicker/bytesTicker below regardless of which
+		// goroutine's function actually ran.
+		c.reqsOnce.Do(func() {})
+		c.bytesOnce.Do(func() {})
 		if c.reqsTicker != nil {
 			c.reqsTicker.Stop()
 		}

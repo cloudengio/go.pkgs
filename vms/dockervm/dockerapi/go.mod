@@ -3,7 +3,7 @@ module cloudeng.io/vms/dockervm/dockerapi
 go 1.26.2
 
 require (
-	cloudeng.io/algo v0.0.0-20260914180154-c85eb1cb5201
+	cloudeng.io/algo v0.0.0-20260917173125-352abbdf5da1
 	cloudeng.io/cicd v0.0.0-20260909165456-ddaa2de546a0
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/vms v0.0.0-20260527194618-4cb6d4558850
