@@ -318,7 +318,7 @@ yields NoBackoff.
 ### Type ExponentialBackoffOffset
 ```go
 type ExponentialBackoffOffset struct {
-	ExponentialBackoff
+	*ExponentialBackoff
 }
 ```
 ExponentialBackoffOffset implements an exponential backoff algorithm with a
