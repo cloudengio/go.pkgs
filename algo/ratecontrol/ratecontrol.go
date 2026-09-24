@@ -25,6 +25,23 @@ type Limiter interface {
 // The controller attempts to implement a smooth rate of requests and bytes
 // over the specified tick intervals.
 //
+// A single Controller paces every goroutine that shares it: the limits set by
+// WithRequestsPerTick and WithBytesPerTick are aggregate limits and do not
+// scale with the number of callers.
+//
+// Requests are paced by a token bucket, so the configured number is available
+// as an immediate burst, is replenished over the tick interval, and is taken
+// by callers in whatever order they happen to arrive.
+//
+// The bytes budget is refreshed once per tick interval. A caller proceeds
+// immediately while that budget is unspent, but once it is exhausted callers
+// queue and each tick admits whichever of them has been waiting longest, one
+// per tick. No caller can therefore claim the budget again while another is
+// still waiting: with n callers saturating the limiter, each is admitted every
+// n ticks. Note that the budget gates admission only -- a caller reports what
+// it transferred via BytesTransferred once it is through -- so an admitted
+// request can still overshoot by however much it goes on to transfer.
+//
 // Note that the tickers that pace requests and bytes are started lazily, on
 // first use, rather than when New returns.
 type Controller struct {
@@ -38,8 +55,11 @@ type Controller struct {
 	bytesTicker  *time.Ticker
 	bytesPerTick atomic.Int64
 
-	bytesMu    sync.Mutex
-	bytesReset chan struct{} // closed and replaced on each interval reset to broadcast to all waiters
+	bytesMu sync.Mutex
+	// bytesWaiters is the FIFO queue of callers parked waiting for budget,
+	// longest-waiting first. Each tick admits the head, so admissions rotate
+	// between callers rather than being won by whichever happens to wake first.
+	bytesWaiters []chan struct{}
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -63,9 +83,6 @@ func New(opts ...Option) *Controller {
 		for range c.opts.reqsPerTick {
 			c.reqsTokens <- struct{}{}
 		}
-	}
-	if c.opts.bytesPerTick > 0 {
-		c.bytesReset = make(chan struct{})
 	}
 	return c
 }
@@ -99,14 +116,57 @@ func (c *Controller) ensureReqsTicker() {
 }
 
 // ensureBytesTicker starts the ticker that resets the bytes-per-tick budget,
-// the first time it is needed. It is a no-op on every call after the first,
-// and, once Stop has won the race to run bytesOnce's function instead (see
-// Stop), forever after: bytesTicker is then left nil, which callers must
-// check for, see waitBytesPerTick.
+// along with the goroutine that admits a waiter on each tick, the first time
+// either is needed. It is a no-op on every call after the first, and, once Stop
+// has won the race to run bytesOnce's function instead (see Stop), forever
+// after: bytesTicker is then left nil, which callers must check for, see
+// waitBytesPerTick. It must be called with bytesMu held, so that a caller
+// cannot enqueue itself before the goroutine that will admit it exists.
 func (c *Controller) ensureBytesTicker() {
 	c.bytesOnce.Do(func() {
 		c.bytesTicker = time.NewTicker(c.opts.bytesInterval)
+		go func() {
+			for {
+				select {
+				case <-c.bytesTicker.C:
+					c.refreshBudget()
+				case <-c.stopCh:
+					return
+				}
+			}
+		}()
 	})
+}
+
+// refreshBudget starts a new interval: it resets the budget and admits the
+// caller at the head of the queue, ie. the one that has been waiting longest.
+// Only one caller is admitted per tick because the budget gates admission
+// before the size of a request is known: admitting more would risk overshooting
+// the configured rate by however much they each go on to transfer.
+func (c *Controller) refreshBudget() {
+	c.bytesPerTick.Store(0)
+	c.bytesMu.Lock()
+	defer c.bytesMu.Unlock()
+	if len(c.bytesWaiters) == 0 {
+		return
+	}
+	admitted := c.bytesWaiters[0]
+	c.bytesWaiters = c.bytesWaiters[1:]
+	close(admitted)
+}
+
+// removeWaiter dequeues ready, for a caller that is abandoning its wait. It is
+// a no-op if the caller was admitted concurrently, in which case that
+// admission goes unused and the next tick admits the following waiter.
+func (c *Controller) removeWaiter(ready chan struct{}) {
+	c.bytesMu.Lock()
+	defer c.bytesMu.Unlock()
+	for i, w := range c.bytesWaiters {
+		if w == ready {
+			c.bytesWaiters = append(c.bytesWaiters[:i], c.bytesWaiters[i+1:]...)
+			return
+		}
+	}
 }
 
 func (c *Controller) remaining(current *atomic.Int64, allowed int) bool {
@@ -116,42 +176,57 @@ func (c *Controller) remaining(current *atomic.Int64, allowed int) bool {
 	return current.Load() < int64(allowed)
 }
 
+// waitBytesPerTick blocks until the bytes-per-tick budget allows another
+// request to proceed.
+//
+// The budget is enforced strictly and shared fairly across concurrent callers.
+// A caller that finds the budget exhausted joins a FIFO queue and each tick
+// admits the caller at its head, so the aggregate rate does not scale with the
+// number of callers and no caller can claim the budget repeatedly while another
+// waits: with n callers saturating the limiter, each is admitted every n ticks.
+// Callers already queued take precedence over one arriving here, which is why
+// the fast path below declines to proceed while the queue is occupied even when
+// the budget would otherwise allow it.
+//
+// Note that the budget gates admission only: a caller reports what it
+// transferred via BytesTransferred once it is through, so a single admitted
+// request can still overshoot by however much it goes on to transfer. That is
+// also why a tick admits one caller rather than several, since the size of a
+// request is not known until after it has been admitted.
 func (c *Controller) waitBytesPerTick(ctx context.Context) error {
-	if c.remaining(&c.bytesPerTick, c.opts.bytesPerTick) {
+	if c.opts.bytesPerTick == 0 {
+		return nil
+	}
+	c.bytesMu.Lock()
+	if len(c.bytesWaiters) == 0 && c.remaining(&c.bytesPerTick, c.opts.bytesPerTick) {
+		c.bytesMu.Unlock()
 		return nil
 	}
 	c.ensureBytesTicker()
 	if c.bytesTicker == nil {
 		// Stop won the race to start the ticker (see ensureBytesTicker) and
 		// so has already closed stopCh: there is nothing left to wait for.
+		c.bytesMu.Unlock()
 		return context.Canceled
 	}
-	// Snapshot the broadcast channel before blocking. If the reset fires
-	// between here and the select, ch will already be closed and the select
-	// returns immediately.
-	c.bytesMu.Lock()
-	ch := c.bytesReset
+	// Enqueue under the same lock as the check above, so that a tick cannot
+	// slip between the two and leave this caller waiting out an interval whose
+	// budget it should have been admitted against.
+	ready := make(chan struct{})
+	c.bytesWaiters = append(c.bytesWaiters, ready)
 	c.bytesMu.Unlock()
+
 	select {
+	case <-ready:
+		// Admitted by refreshBudget: this interval's budget is ours.
+		return nil
 	case <-ctx.Done():
+		c.removeWaiter(ready)
 		return ctx.Err()
 	case <-c.stopCh:
+		c.removeWaiter(ready)
 		return context.Canceled
-	case <-c.bytesTicker.C:
-		// Won the tick: reset the counter and wake all other waiters.
-		c.bytesPerTick.Store(0)
-		c.bytesMu.Lock()
-		old := c.bytesReset
-		c.bytesReset = make(chan struct{})
-		c.bytesMu.Unlock()
-		close(old)
-	case <-ch:
-		// Woken by broadcast from the goroutine that won the tick.
 	}
-	// Proceed regardless of the current counter value. Re-checking here would
-	// re-serialize goroutines: the winner's BytesTransferred call can push the
-	// counter back to the limit before other waiters get a chance to check.
-	return nil
 }
 
 // Wait returns when a request can be made. Rate limiting of requests

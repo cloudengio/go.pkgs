@@ -112,6 +112,147 @@ func TestBackoffNextOffset(t *testing.T) {
 	}
 }
 
+// TestBackoffRandomizedOffsetOption covers WithRandomizedOffset, which draws
+// the first delay from (0, initial) instead of using initial itself.
+func TestBackoffRandomizedOffsetOption(t *testing.T) {
+	ctx := context.Background()
+	initial := 20 * time.Millisecond
+
+	// The first delay is drawn from (0, initial), so across several trials at
+	// least one must come in under initial. The chance of every trial landing
+	// in the upper half is 2^-16.
+	shorter := false
+	for range 16 {
+		bo := ratecontrol.NewExponentialBackoff(initial, 3, ratecontrol.WithRandomizedOffset())
+		start := time.Now()
+		done, err := bo.Wait(ctx, nil)
+		if err != nil || done {
+			t.Fatalf("Wait: done=%v, err=%v", done, err)
+		}
+		if time.Since(start) < initial {
+			shorter = true
+			break
+		}
+	}
+	if !shorter {
+		t.Errorf("the first delay was never shorter than %v, want it randomized", initial)
+	}
+
+	// Without the option the first delay is the full initial interval.
+	eb := ratecontrol.NewExponentialBackoff(initial, 3)
+	start := time.Now()
+	done, err := eb.Wait(ctx, nil)
+	if err != nil || done {
+		t.Fatalf("Wait: done=%v, err=%v", done, err)
+	}
+	if elapsed := time.Since(start); elapsed < initial {
+		t.Errorf("first delay %v, want at least %v", elapsed, initial)
+	}
+}
+
+// TestBackoffUnlimitedRetries covers WithUnlimitedRetries: the backoff is never
+// done, however many retries it records.
+func TestBackoffUnlimitedRetries(t *testing.T) {
+	ctx := context.Background()
+	steps := 3
+	eb := ratecontrol.NewExponentialBackoff(time.Millisecond, steps,
+		ratecontrol.WithUnlimitedRetries())
+
+	retries := steps * 3
+	for i := range retries {
+		done, err := eb.Wait(ctx, nil)
+		if err != nil {
+			t.Fatalf("retry %d: %v", i, err)
+		}
+		if done {
+			t.Fatalf("retry %d: Wait returned true, want an unlimited backoff to continue", i)
+		}
+		if eb.Done() {
+			t.Fatalf("retry %d: Done returned true, want an unlimited backoff to continue", i)
+		}
+	}
+	if got, want := eb.Retries(), retries; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// TestBackoffUnlimitedRetriesMaxDelay verifies that an unlimited backoff pins
+// the delay at its maximum, initial * 2^(steps-1), once steps is reached rather
+// than doubling it indefinitely.
+func TestBackoffUnlimitedRetriesMaxDelay(t *testing.T) {
+	ctx := context.Background()
+	initial := 10 * time.Millisecond
+	steps := 3
+	maxDelay := initial * (1 << (steps - 1))
+	eb := ratecontrol.NewExponentialBackoff(initial, steps,
+		ratecontrol.WithUnlimitedRetries())
+
+	// Consume the growing phase: initial, 2*initial, 4*initial.
+	for i := range steps {
+		if done, err := eb.Wait(ctx, nil); err != nil || done {
+			t.Fatalf("retry %d: done=%v, err=%v", i, done, err)
+		}
+	}
+
+	const extra = 3
+	start := time.Now()
+	for i := range extra {
+		if done, err := eb.Wait(ctx, nil); err != nil || done {
+			t.Fatalf("extra retry %d: done=%v, err=%v", i, done, err)
+		}
+	}
+	elapsed := time.Since(start)
+	if minElapsed := extra * maxDelay; elapsed < minElapsed {
+		t.Errorf("elapsed %v, want at least %v (%v per retry)", elapsed, minElapsed, maxDelay)
+	}
+	// Doubling past the cap would spend 2+4+8 = 14 maxDelays here, not 3.
+	if maxElapsed := 3 * extra * maxDelay; elapsed > maxElapsed {
+		t.Errorf("elapsed %v, want less than %v: the delay must stay pinned at %v", elapsed, maxElapsed, maxDelay)
+	}
+}
+
+// TestBackoffUnlimitedRetriesNext verifies that Next never reports completion
+// for an unlimited backoff.
+func TestBackoffUnlimitedRetriesNext(t *testing.T) {
+	eb := ratecontrol.NewExponentialBackoff(time.Millisecond, 2,
+		ratecontrol.WithUnlimitedRetries())
+
+	retries := 6
+	for i := range retries {
+		if _, ok := <-eb.Next(); !ok {
+			t.Fatalf("retry %d: Next returned a closed channel, want an unlimited backoff to continue", i)
+		}
+		if eb.Done() {
+			t.Fatalf("retry %d: Done returned true, want an unlimited backoff to continue", i)
+		}
+	}
+	if got, want := eb.Retries(), retries; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// TestBackoffOffsetOptions verifies that NewExponentialBackoffOffset applies the
+// options it is given in addition to the randomized offset it implies.
+func TestBackoffOffsetOptions(t *testing.T) {
+	ctx := context.Background()
+	bo := ratecontrol.NewExponentialBackoffOffset(time.Millisecond, 2,
+		ratecontrol.WithUnlimitedRetries())
+
+	retries := 5
+	for i := range retries {
+		done, err := bo.Wait(ctx, nil)
+		if err != nil {
+			t.Fatalf("retry %d: %v", i, err)
+		}
+		if done || bo.Done() {
+			t.Fatalf("retry %d: unexpectedly done, want an unlimited backoff to continue", i)
+		}
+	}
+	if got, want := bo.Retries(), retries; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestBackoffNextContextCancel(t *testing.T) {
 	eb := ratecontrol.NewExponentialBackoff(time.Hour, 10)
 	ctx, cancel := context.WithCancel(context.Background())

@@ -43,6 +43,14 @@ func WithRequestsPerTick(tickInterval time.Duration, rpt int) Option {
 // previous tick (ie. no attempt is made to smooth out the rate and for now
 // it's a simple start/stop model). The bytes to be accounted for are
 // reported to the Controller via its BytesTransferred method.
+// Concurrent callers of Wait share this single budget rather than each being
+// allowed bpt per tick, so the aggregate rate does not scale with the number
+// of callers. Once the budget is exhausted they are admitted one per tick, in
+// the order they arrived, so no caller can monopolize the budget while another
+// waits: with n callers saturating the limiter each is admitted every n ticks.
+// Since the budget gates admission and the bytes are only accounted for
+// afterwards, a caller that is admitted can still overshoot by whatever it goes
+// on to transfer.
 // If tickInterval is less than or equal to zero, DefaultTickInterval is used.
 // If bpt is less than or equal to zero, DefaultBytesPerTick is used.
 func WithBytesPerTick(tickInterval time.Duration, bpt int) Option {

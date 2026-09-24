@@ -69,13 +69,52 @@ type Backoff interface {
 
 // ExponentialBackoff implements an exponential backoff algorithm. It starts
 // with the specified initial delay and doubles the delay for each retry up to
-// the specified number of steps.
+// the specified number of steps, ie. the largest delay it uses is
+// initial * 2^(steps-1). See WithRandomizedOffset and WithUnlimitedRetries for
+// the available variations on that behaviour.
 type ExponentialBackoff struct {
-	steps     int
-	retries   int
-	nextDelay time.Duration
-	done      bool
+	steps            int
+	retries          int
+	nextDelay        time.Duration
+	done             bool
+	randomizedOffset bool
+	unlimitedRetries bool
 }
+
+// ExponentialBackoffOption represents an option to NewExponentialBackoff and
+// NewExponentialBackoffOffset.
+type ExponentialBackoffOption func(*exponentialBackoffOptions)
+
+type exponentialBackoffOptions struct {
+	randomizedOffset bool
+	unlimitedRetries bool
+}
+
+// WithRandomizedOffset uses a random duration in (0, initial) for the first
+// delay, with all subsequent delays calculated as usual. It spreads the first
+// retry of many clients that start backing off at the same time over the
+// initial interval, to avoid a thundering herd. It is what
+// NewExponentialBackoffOffset applies.
+func WithRandomizedOffset() ExponentialBackoffOption {
+	return func(o *exponentialBackoffOptions) {
+		o.randomizedOffset = true
+	}
+}
+
+// WithUnlimitedRetries allows the backoff to continue indefinitely: once steps
+// retries have been recorded the delay stops doubling and every retry from then
+// on uses that maximum delay, ie. initial * 2^(steps-1). Wait and Done never
+// return true, so terminating the backoff is left entirely to the caller, eg.
+// by canceling the context passed to Wait.
+func WithUnlimitedRetries() ExponentialBackoffOption {
+	return func(o *exponentialBackoffOptions) {
+		o.unlimitedRetries = true
+	}
+}
+
+// maxDoublableDelay is the largest delay that can be doubled without
+// overflowing a time.Duration.
+const maxDoublableDelay = time.Duration(1 << 62)
 
 // closedTimeChan is returned by Next once a backoff has reached its limit;
 // receiving from it never blocks.
@@ -85,17 +124,52 @@ var closedTimeChan = func() <-chan time.Time {
 	return ch
 }()
 
-// NewExponentialBackoff returns a instance of ExponentialBackoff.
+// NewExponentialBackoff returns a instance of ExponentialBackoff, configured by
+// the supplied options (see WithRandomizedOffset and WithUnlimitedRetries).
 // If initial is less than or equal to zero, DefaultBackoffInterval is used.
 // If steps is less than or equal to zero, DefaultBackoffSteps is used.
-func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff {
+func NewExponentialBackoff(initial time.Duration, steps int, opts ...ExponentialBackoffOption) *ExponentialBackoff {
 	if initial <= 0 {
 		initial = DefaultBackoffInterval
 	}
 	if steps <= 0 {
 		steps = DefaultBackoffSteps
 	}
-	return &ExponentialBackoff{nextDelay: initial, steps: steps}
+	var o exponentialBackoffOptions
+	for _, fn := range opts {
+		fn(&o)
+	}
+	return &ExponentialBackoff{
+		nextDelay:        initial,
+		steps:            steps,
+		randomizedOffset: o.randomizedOffset,
+		unlimitedRetries: o.unlimitedRetries,
+	}
+}
+
+// peekDelay returns the delay to use for the next retry and whether the backoff
+// has reached its limit, without recording the retry: Wait records one only
+// once the delay has elapsed, whereas Next records one as soon as the timer is
+// armed.
+func (eb *ExponentialBackoff) peekDelay() (time.Duration, bool) {
+	if eb.retries >= eb.steps && !eb.unlimitedRetries {
+		eb.done = true
+		return 0, true
+	}
+	if eb.retries == 0 && eb.randomizedOffset && eb.nextDelay > 0 {
+		return randomOffset(eb.nextDelay), false
+	}
+	return eb.nextDelay, false
+}
+
+// advance records a retry and doubles the delay used for the next one, except
+// on the last step so that the delay is left pinned at its maximum for an
+// unlimited backoff.
+func (eb *ExponentialBackoff) advance() {
+	if eb.retries+1 < eb.steps && eb.nextDelay < maxDoublableDelay {
+		eb.nextDelay *= 2
+	}
+	eb.retries++
 }
 
 // Retries implements Backoff.
@@ -105,21 +179,18 @@ func (eb *ExponentialBackoff) Retries() int {
 
 // Wait implements Backoff.
 func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error) {
-	if eb.retries >= eb.steps {
-		eb.done = true
+	delay, done := eb.peekDelay()
+	if done {
 		return true, nil
 	}
-	timer := time.NewTimer(eb.nextDelay)
+	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()
 	case <-timer.C:
 	}
-	if eb.nextDelay < time.Duration(1<<62) {
-		eb.nextDelay *= 2
-	}
-	eb.retries++
+	eb.advance()
 	return false, nil
 }
 
@@ -127,15 +198,11 @@ func (eb *ExponentialBackoff) Wait(ctx context.Context, _ any) (bool, error) {
 // not when it fires, so a caller that abandons the returned channel (eg.
 // because its context was canceled) will still have consumed that retry.
 func (eb *ExponentialBackoff) Next() <-chan time.Time {
-	if eb.retries >= eb.steps {
-		eb.done = true
+	delay, done := eb.peekDelay()
+	if done {
 		return closedTimeChan
 	}
-	delay := eb.nextDelay
-	if eb.nextDelay < time.Duration(1<<62) {
-		eb.nextDelay *= 2
-	}
-	eb.retries++
+	eb.advance()
 	return time.NewTimer(delay).C
 }
 
@@ -170,23 +237,21 @@ func (nb NoBackoff) Done() bool {
 // ExponentialBackoffOffset implements an exponential backoff algorithm with
 // a random offset used for the first delay, all subsequent delays
 // are calculated as in ExponentialBackoff. The first delay is
-// a random value between 0 and the initial delay.
+// a random value between 0 and the initial delay. It is an ExponentialBackoff
+// with WithRandomizedOffset applied.
 type ExponentialBackoffOffset struct {
-	ExponentialBackoff
+	*ExponentialBackoff
 }
 
-// NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset.
+// NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset,
+// ie. NewExponentialBackoff with WithRandomizedOffset applied in addition to
+// any options supplied here.
 // If initial is less than or equal to zero, DefaultBackoffInterval is used.
 // If steps is less than or equal to zero, DefaultBackoffSteps is used.
-func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialBackoffOffset {
-	if initial <= 0 {
-		initial = DefaultBackoffInterval
-	}
-	if steps <= 0 {
-		steps = DefaultBackoffSteps
-	}
+func NewExponentialBackoffOffset(initial time.Duration, steps int, opts ...ExponentialBackoffOption) *ExponentialBackoffOffset {
+	opts = append([]ExponentialBackoffOption{WithRandomizedOffset()}, opts...)
 	return &ExponentialBackoffOffset{
-		ExponentialBackoff: ExponentialBackoff{nextDelay: initial, steps: steps},
+		ExponentialBackoff: NewExponentialBackoff(initial, steps, opts...),
 	}
 }
 
@@ -197,40 +262,4 @@ func randomOffset(limit time.Duration) time.Duration {
 		offset = time.Nanosecond
 	}
 	return offset
-}
-
-func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error) {
-	if eb.retries >= eb.steps {
-		eb.done = true
-		return true, nil
-	}
-	if eb.retries == 0 && eb.nextDelay > 0 {
-		timer := time.NewTimer(randomOffset(eb.nextDelay))
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return true, ctx.Err()
-		case <-timer.C:
-		}
-		if eb.nextDelay < time.Duration(1<<62) {
-			eb.nextDelay *= 2
-		}
-		eb.retries++
-		return false, nil
-	}
-	return eb.ExponentialBackoff.Wait(ctx, v)
-}
-
-// Next implements Backoff, using a random offset for the first delay as
-// per Wait.
-func (eb *ExponentialBackoffOffset) Next() <-chan time.Time {
-	if eb.retries == 0 && eb.retries < eb.steps && eb.nextDelay > 0 {
-		offset := randomOffset(eb.nextDelay)
-		if eb.nextDelay < time.Duration(1<<62) {
-			eb.nextDelay *= 2
-		}
-		eb.retries++
-		return time.NewTimer(offset).C
-	}
-	return eb.ExponentialBackoff.Next()
 }
