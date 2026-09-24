@@ -350,10 +350,11 @@ applied.
 func NewExponentialBackoffOffset(initial time.Duration, steps int, opts ...ExponentialBackoffOption) *ExponentialBackoffOffset
 ```
 NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset,
-ie. NewExponentialBackoff with WithRandomizedOffset applied in addition
-to any options supplied here. If initial is less than or equal to zero,
-DefaultBackoffInterval is used. If steps is less than or equal to zero,
-DefaultBackoffSteps is used.
+ie. NewExponentialBackoff with WithRandomizedOffset(true) applied ahead
+of any options supplied here; since later options win, an explicit
+WithRandomizedOffset(false) overrides it. If initial is less than or equal
+to zero, DefaultBackoffInterval is used. If steps is less than or equal to
+zero, DefaultBackoffSteps is used.
 
 
 
@@ -368,23 +369,28 @@ NewExponentialBackoffOffset.
 ### Functions
 
 ```go
-func WithRandomizedOffset() ExponentialBackoffOption
+func WithRandomizedOffset(v bool) ExponentialBackoffOption
 ```
-WithRandomizedOffset uses a random duration in (0, initial) for the
-first delay, with all subsequent delays calculated as usual. It spreads
-the first retry of many clients that start backing off at the same
-time over the initial interval, to avoid a thundering herd. It is what
-NewExponentialBackoffOffset applies.
+WithRandomizedOffset controls whether a random duration in (0, initial)
+is used for the first delay; all subsequent delays are calculated as usual
+either way. Randomizing it spreads the first retry of many clients that
+start backing off at the same time over the initial interval, so as to
+avoid a thundering herd, and is what NewExponentialBackoffOffset applies.
+It is disabled by default, so passing false is only useful to override an
+option applied earlier, such as that one.
 
 
 ```go
-func WithUnlimitedRetries() ExponentialBackoffOption
+func WithUnlimitedRetries(v bool) ExponentialBackoffOption
 ```
-WithUnlimitedRetries allows the backoff to continue indefinitely:
-once steps retries have been recorded the delay stops doubling and every
-retry from then on uses that maximum delay, ie. initial * 2^(steps-1).
-Wait and Done never return true, so terminating the backoff is left entirely
-to the caller, eg. by canceling the context passed to Wait.
+WithUnlimitedRetries controls whether the backoff continues indefinitely.
+When it does, once steps retries have been recorded the delay stops
+doubling and every retry from then on uses that maximum delay, ie. initial *
+2^(steps-1), and Wait and Done never return true, so terminating the backoff
+is left entirely to the caller, eg. by canceling the context passed to Wait.
+It is disabled by default, ie. the backoff is done once steps retries have
+been recorded, so passing false is only useful to override an option applied
+earlier.
 
 
 
