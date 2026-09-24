@@ -219,17 +219,20 @@ type ExponentialBackoff struct {
 }
 ```
 ExponentialBackoff implements an exponential backoff algorithm. It starts
-with the specified initial delay and doubles the delay for each retry up to
-the specified number of steps.
+with the specified initial delay and doubles the delay for each retry up
+to the specified number of steps, ie. the largest delay it uses is initial
+* 2^(steps-1). See WithRandomizedOffset and WithUnlimitedRetries for the
+available variations on that behaviour.
 
 ### Functions
 
 ```go
-func NewExponentialBackoff(initial time.Duration, steps int) *ExponentialBackoff
+func NewExponentialBackoff(initial time.Duration, steps int, opts ...ExponentialBackoffOption) *ExponentialBackoff
 ```
-NewExponentialBackoff returns a instance of ExponentialBackoff. If initial
-is less than or equal to zero, DefaultBackoffInterval is used. If steps is
-less than or equal to zero, DefaultBackoffSteps is used.
+NewExponentialBackoff returns a instance of ExponentialBackoff, configured
+by the supplied options (see WithRandomizedOffset and WithUnlimitedRetries).
+If initial is less than or equal to zero, DefaultBackoffInterval is used.
+If steps is less than or equal to zero, DefaultBackoffSteps is used.
 
 
 
@@ -321,31 +324,50 @@ type ExponentialBackoffOffset struct {
 ExponentialBackoffOffset implements an exponential backoff algorithm with a
 random offset used for the first delay, all subsequent delays are calculated
 as in ExponentialBackoff. The first delay is a random value between 0 and
-the initial delay.
+the initial delay. It is an ExponentialBackoff with WithRandomizedOffset
+applied.
 
 ### Functions
 
 ```go
-func NewExponentialBackoffOffset(initial time.Duration, steps int) *ExponentialBackoffOffset
+func NewExponentialBackoffOffset(initial time.Duration, steps int, opts ...ExponentialBackoffOption) *ExponentialBackoffOffset
 ```
-NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset.
-If initial is less than or equal to zero, DefaultBackoffInterval is used.
-If steps is less than or equal to zero, DefaultBackoffSteps is used.
+NewExponentialBackoffOffset returns a instance of ExponentialBackoffOffset,
+ie. NewExponentialBackoff with WithRandomizedOffset applied in addition
+to any options supplied here. If initial is less than or equal to zero,
+DefaultBackoffInterval is used. If steps is less than or equal to zero,
+DefaultBackoffSteps is used.
 
 
 
-### Methods
+
+### Type ExponentialBackoffOption
+```go
+type ExponentialBackoffOption func(*exponentialBackoffOptions)
+```
+ExponentialBackoffOption represents an option to NewExponentialBackoff and
+NewExponentialBackoffOffset.
+
+### Functions
 
 ```go
-func (eb *ExponentialBackoffOffset) Next() <-chan time.Time
+func WithRandomizedOffset() ExponentialBackoffOption
 ```
-Next implements Backoff, using a random offset for the first delay as per
-Wait.
+WithRandomizedOffset uses a random duration in (0, initial) for the
+first delay, with all subsequent delays calculated as usual. It spreads
+the first retry of many clients that start backing off at the same
+time over the initial interval, to avoid a thundering herd. It is what
+NewExponentialBackoffOffset applies.
 
 
 ```go
-func (eb *ExponentialBackoffOffset) Wait(ctx context.Context, v any) (bool, error)
+func WithUnlimitedRetries() ExponentialBackoffOption
 ```
+WithUnlimitedRetries allows the backoff to continue indefinitely:
+once steps retries have been recorded the delay stops doubling and every
+retry from then on uses that maximum delay, ie. initial * 2^(steps-1).
+Wait and Done never return true, so terminating the backoff is left entirely
+to the caller, eg. by canceling the context passed to Wait.
 
 
 
