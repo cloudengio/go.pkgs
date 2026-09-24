@@ -147,6 +147,23 @@ Call Stop to free up resources when the Controller is no longer needed.
 The controller attempts to implement a smooth rate of requests and bytes
 over the specified tick intervals.
 
+A single Controller paces every goroutine that shares it: the limits set
+by WithRequestsPerTick and WithBytesPerTick are aggregate limits and do not
+scale with the number of callers.
+
+Requests are paced by a token bucket, so the configured number is available
+as an immediate burst, is replenished over the tick interval, and is taken
+by callers in whatever order they happen to arrive.
+
+The bytes budget is refreshed once per tick interval. A caller proceeds
+immediately while that budget is unspent, but once it is exhausted callers
+queue and each tick admits whichever of them has been waiting longest, one
+per tick. No caller can therefore claim the budget again while another is
+still waiting: with n callers saturating the limiter, each is admitted every
+n ticks. Note that the budget gates admission only -- a caller reports what
+it transferred via BytesTransferred once it is through -- so an admitted
+request can still overshoot by however much it goes on to transfer.
+
 Note that the tickers that pace requests and bytes are started lazily,
 on first use, rather than when New returns.
 
@@ -438,9 +455,16 @@ if the limit is reached without taking into account how long the tick is,
 nor how much excess data was sent over the previous tick (ie. no attempt is
 made to smooth out the rate and for now it's a simple start/stop model).
 The bytes to be accounted for are reported to the Controller via its
-BytesTransferred method. If tickInterval is less than or equal to zero,
-DefaultTickInterval is used. If bpt is less than or equal to zero,
-DefaultBytesPerTick is used.
+BytesTransferred method. Concurrent callers of Wait share this single
+budget rather than each being allowed bpt per tick, so the aggregate rate
+does not scale with the number of callers. Once the budget is exhausted
+they are admitted one per tick, in the order they arrived, so no caller can
+monopolize the budget while another waits: with n callers saturating the
+limiter each is admitted every n ticks. Since the budget gates admission and
+the bytes are only accounted for afterwards, a caller that is admitted can
+still overshoot by whatever it goes on to transfer. If tickInterval is less
+than or equal to zero, DefaultTickInterval is used. If bpt is less than or
+equal to zero, DefaultBytesPerTick is used.
 
 
 ```go

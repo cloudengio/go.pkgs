@@ -102,10 +102,69 @@ func TestDataRateConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	took := time.Since(then)
-	// All 4 goroutines wake on each tick broadcast, so 10 ticks suffice for 10 iterations each.
-	lower, upper := bounds(10*tick, 100*time.Millisecond)
+	// The budget is enforced strictly across the 4 goroutines, so they share
+	// one budget rather than getting one each: a tick admits a single Wait,
+	// whose 10 bytes exhaust the budget again, and the 40 Waits therefore take
+	// 40 ticks rather than the 10 they would take if each goroutine were
+	// allowed its own 10 bytes per tick. That serialization is what makes the
+	// timing deterministic enough to assert tightly here.
+	lower, upper := bounds(40*tick, 200*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
+	}
+}
+
+// TestDataRateFairness verifies that concurrent callers share the
+// bytes-per-tick budget evenly: each tick admits the caller that has been
+// waiting longest, so over many ticks every caller is admitted about the same
+// number of times and none can monopolize the budget. A limiter that instead
+// let waiters race for each tick would hand out a visibly uneven split over
+// this many ticks.
+func TestDataRateFairness(t *testing.T) {
+	ctx := context.Background()
+	tick := 20 * time.Millisecond
+	const goroutines, ticks = 4, 60
+	c := ratecontrol.New(ratecontrol.WithBytesPerTick(tick, 10))
+
+	// Each goroutine records its own count, so the writes are to distinct
+	// elements and are published by wg.Wait before they are read below.
+	counts := make([]int, goroutines)
+	deadline := time.Now().Add(time.Duration(ticks) * tick)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func() {
+			defer wg.Done()
+			for time.Now().Before(deadline) {
+				if err := c.Wait(ctx); err != nil {
+					t.Error(err)
+					return
+				}
+				c.BytesTransferred(10)
+				counts[i]++
+			}
+		}()
+	}
+	wg.Wait()
+
+	lo, hi, total := counts[0], counts[0], 0
+	for _, n := range counts {
+		lo, hi = min(lo, n), max(hi, n)
+		total += n
+	}
+	if total == 0 {
+		t.Fatalf("no requests were admitted: %v", counts)
+	}
+	// Round-robin admission keeps every caller within a turn of the others; the
+	// margin covers the initial requests admitted before the queue forms and
+	// the one in flight per caller when the deadline passes.
+	if spread := hi - lo; spread > 3 {
+		t.Errorf("uneven split of the budget: %v (spread %v), want each caller admitted about equally", counts, spread)
+	}
+	// One admission per tick, so the total tracks the ticks that elapsed rather
+	// than goroutines*ticks: the budget must not scale with the caller count.
+	if maxTotal := ticks + 2*goroutines; total > maxTotal {
+		t.Errorf("admitted %v requests in ~%v ticks, want at most %v", total, ticks, maxTotal)
 	}
 }
 
@@ -316,4 +375,41 @@ func TestStop(t *testing.T) {
 	// Test with no tickers initialized
 	c3 := ratecontrol.New()
 	c3.Stop()
+}
+
+// TestStopReleasesWaiters verifies that Stop releases callers already parked
+// waiting for the bytes-per-tick budget, rather than leaving them blocked until
+// a tick that will never come, and that a caller arriving afterwards is not
+// parked at all.
+func TestStopReleasesWaiters(t *testing.T) {
+	ctx := context.Background()
+	// A tick long enough that only Stop can release the waiters.
+	c := ratecontrol.New(ratecontrol.WithBytesPerTick(time.Hour, 10))
+	c.BytesTransferred(100) // exhaust the budget so that Wait parks
+
+	const waiters = 3
+	errs := make(chan error, waiters)
+	for range waiters {
+		go func() { errs <- c.Wait(ctx) }()
+	}
+	// Give them time to park, so that Stop is releasing parked waiters rather
+	// than being seen by the fast path on the way in.
+	time.Sleep(50 * time.Millisecond)
+	c.Stop()
+
+	for i := range waiters {
+		select {
+		case err := <-errs:
+			if err == nil || err != context.Canceled {
+				t.Errorf("waiter %v: got %v, want %v", i, err, context.Canceled)
+			}
+		case <-time.After(time.Minute):
+			t.Fatalf("waiter %v was not released by Stop", i)
+		}
+	}
+
+	// A caller arriving after Stop must also return rather than park.
+	if err := c.Wait(ctx); err == nil || err != context.Canceled {
+		t.Errorf("got %v, want %v", err, context.Canceled)
+	}
 }
