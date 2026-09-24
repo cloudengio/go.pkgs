@@ -112,8 +112,10 @@ func TestBackoffNextOffset(t *testing.T) {
 	}
 }
 
-// TestBackoffRandomizedOffsetOption covers WithRandomizedOffset, which draws
-// the first delay from (0, initial) instead of using initial itself.
+// TestBackoffRandomizedOffsetOption covers both values of
+// WithRandomizedOffset: true draws the first delay from (0, initial) instead
+// of using initial itself, and false leaves it at initial, including when it
+// overrides the offset that NewExponentialBackoffOffset applies.
 func TestBackoffRandomizedOffsetOption(t *testing.T) {
 	ctx := context.Background()
 	initial := 20 * time.Millisecond
@@ -123,7 +125,7 @@ func TestBackoffRandomizedOffsetOption(t *testing.T) {
 	// in the upper half is 2^-16.
 	shorter := false
 	for range 16 {
-		bo := ratecontrol.NewExponentialBackoff(initial, 3, ratecontrol.WithRandomizedOffset())
+		bo := ratecontrol.NewExponentialBackoff(initial, 3, ratecontrol.WithRandomizedOffset(true))
 		start := time.Now()
 		done, err := bo.Wait(ctx, nil)
 		if err != nil || done {
@@ -138,15 +140,26 @@ func TestBackoffRandomizedOffsetOption(t *testing.T) {
 		t.Errorf("the first delay was never shorter than %v, want it randomized", initial)
 	}
 
-	// Without the option the first delay is the full initial interval.
-	eb := ratecontrol.NewExponentialBackoff(initial, 3)
-	start := time.Now()
-	done, err := eb.Wait(ctx, nil)
-	if err != nil || done {
-		t.Fatalf("Wait: done=%v, err=%v", done, err)
-	}
-	if elapsed := time.Since(start); elapsed < initial {
-		t.Errorf("first delay %v, want at least %v", elapsed, initial)
+	// Whenever the offset is not enabled the first delay is the full initial
+	// interval, whether the option is absent, explicitly false, or false
+	// overriding the offset applied by NewExponentialBackoffOffset.
+	for _, tc := range []struct {
+		name string
+		bo   ratecontrol.Backoff
+	}{
+		{"absent", ratecontrol.NewExponentialBackoff(initial, 3)},
+		{"false", ratecontrol.NewExponentialBackoff(initial, 3, ratecontrol.WithRandomizedOffset(false))},
+		{"false overriding the offset constructor",
+			ratecontrol.NewExponentialBackoffOffset(initial, 3, ratecontrol.WithRandomizedOffset(false))},
+	} {
+		start := time.Now()
+		done, err := tc.bo.Wait(ctx, nil)
+		if err != nil || done {
+			t.Fatalf("%v: Wait: done=%v, err=%v", tc.name, done, err)
+		}
+		if elapsed := time.Since(start); elapsed < initial {
+			t.Errorf("%v: first delay %v, want at least %v", tc.name, elapsed, initial)
+		}
 	}
 }
 
@@ -156,7 +169,7 @@ func TestBackoffUnlimitedRetries(t *testing.T) {
 	ctx := context.Background()
 	steps := 3
 	eb := ratecontrol.NewExponentialBackoff(time.Millisecond, steps,
-		ratecontrol.WithUnlimitedRetries())
+		ratecontrol.WithUnlimitedRetries(true))
 
 	retries := steps * 3
 	for i := range retries {
@@ -185,7 +198,7 @@ func TestBackoffUnlimitedRetriesMaxDelay(t *testing.T) {
 	steps := 3
 	maxDelay := initial * (1 << (steps - 1))
 	eb := ratecontrol.NewExponentialBackoff(initial, steps,
-		ratecontrol.WithUnlimitedRetries())
+		ratecontrol.WithUnlimitedRetries(true))
 
 	// Consume the growing phase: initial, 2*initial, 4*initial.
 	for i := range steps {
@@ -215,7 +228,7 @@ func TestBackoffUnlimitedRetriesMaxDelay(t *testing.T) {
 // for an unlimited backoff.
 func TestBackoffUnlimitedRetriesNext(t *testing.T) {
 	eb := ratecontrol.NewExponentialBackoff(time.Millisecond, 2,
-		ratecontrol.WithUnlimitedRetries())
+		ratecontrol.WithUnlimitedRetries(true))
 
 	retries := 6
 	for i := range retries {
@@ -236,7 +249,7 @@ func TestBackoffUnlimitedRetriesNext(t *testing.T) {
 func TestBackoffOffsetOptions(t *testing.T) {
 	ctx := context.Background()
 	bo := ratecontrol.NewExponentialBackoffOffset(time.Millisecond, 2,
-		ratecontrol.WithUnlimitedRetries())
+		ratecontrol.WithUnlimitedRetries(true))
 
 	retries := 5
 	for i := range retries {

@@ -45,11 +45,25 @@ func waitForRequests(ctx context.Context, t *testing.T, c *ratecontrol.Controlle
 	return time.Since(then)
 }
 
-// tighter lower bound than upper bound since the former
-// will be due to clock granularity issues and the latter to
-// a slow machine which is common on CI systems.
+// bounds returns the range that a measured duration may fall in when the
+// intended duration is d, with b as the tolerance on the lower bound.
+//
+// The lower bound is tight, because timers never fire early: a measurement
+// below it means requests were let through faster than the limiter was
+// configured to allow. That is the failure these tests exist to catch, and
+// every regression that matters here shows up that way -- a budget that is not
+// enforced, or that is handed to each caller instead of shared between them,
+// makes a run shorter rather than longer.
+//
+// The upper bound is deliberately loose, since it can only ever be an upper
+// bound on the machine rather than on the limiter. These tests measure
+// wall-clock time, and one that is loaded, throttled or coalescing timers
+// stretches every wait in the sequence: overruns have been seen at 1.15x the
+// intended duration (TestDataAndReqRate, on CI) and at 2.5x
+// (TestRequestRateConcurrent). It is therefore a liveness check -- the limiter
+// is still making progress -- and not a measure of precision.
 func bounds(d, b time.Duration) (lower, upper time.Duration) {
-	return d - b, d + (2 * b)
+	return d - b, 3 * d
 }
 
 func TestRequestRate(t *testing.T) {
@@ -106,8 +120,9 @@ func TestDataRateConcurrent(t *testing.T) {
 	// one budget rather than getting one each: a tick admits a single Wait,
 	// whose 10 bytes exhaust the budget again, and the 40 Waits therefore take
 	// 40 ticks rather than the 10 they would take if each goroutine were
-	// allowed its own 10 bytes per tick. That serialization is what makes the
-	// timing deterministic enough to assert tightly here.
+	// allowed its own 10 bytes per tick. The lower bound is what pins that
+	// down: were the budget handed to each goroutine, this would finish in
+	// roughly a quarter of the time.
 	lower, upper := bounds(40*tick, 200*time.Millisecond)
 	if got := took; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
@@ -202,21 +217,13 @@ func TestDataAndReqRate(t *testing.T) {
 	tookLonger := waitForRequests(ctx, t, c, 10, 10)
 
 	// burst=1 makes the first Wait immediate; the remaining 9 each block for
-	// reqTick, ie. 9 real seconds strung together from 9 separate ticks.
-	// bounds' small, fixed margin is tuned for the short, few-tick waits
-	// elsewhere in this file; here, scheduling jitter on a loaded or
-	// throttled CI machine accumulates across all 9 waits, so a fixed
-	// margin of the same size is not generous enough (observed in CI:
-	// 10.79s against an intended 8.8s..9.4s). This check is therefore a
-	// coarse sanity check on the ballpark, not a precise timing assertion
-	// -- that role is already served more cheaply by TestRequestRate and
-	// TestRequestRateConcurrent above, whose much shorter absolute
-	// durations keep the same absolute jitter a small fraction of the
-	// total. A 50% margin comfortably covers what was observed in CI plus
-	// headroom, while still catching a limiter that is not limiting at all
-	// (too fast) or one that has stopped making progress (much too slow).
-	nominal := 9 * reqTick
-	lower, upper = nominal-nominal/2, nominal+nominal/2
+	// reqTick, ie. 9 real seconds strung together from 9 separate ticks. The
+	// jitter that bounds' upper bound absorbs accumulates across all 9 of them
+	// here, making this the coarsest of these checks; the tighter assertions on
+	// the request rate are TestRequestRate and TestRequestRateConcurrent above,
+	// whose much shorter durations leave the same absolute jitter a far smaller
+	// fraction of the total.
+	lower, upper = bounds(9*reqTick, 200*time.Millisecond)
 	if got := tookLonger; got < lower || got > upper {
 		t.Errorf("wait delay: %v not in range %v..%v", got, lower, upper)
 	}
