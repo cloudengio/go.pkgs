@@ -126,6 +126,11 @@ type Mock struct {
 	// mid-creation so the test can manipulate pool state before proceeding.
 	CloneBlock chan struct{}
 
+	// StartBlock, if non-nil, causes Start to block until the channel is
+	// closed or the context is cancelled. Used by tests to hold an operation
+	// that starts a VM, such as Pool.Acquire, part way through.
+	StartBlock chan struct{}
+
 	CloneErr   error
 	StartErr   error
 	StopRunErr error

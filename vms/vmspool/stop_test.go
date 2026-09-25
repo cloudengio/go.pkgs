@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -265,5 +266,102 @@ func TestVMStopAlreadyStopped(t *testing.T) {
 	}
 	if !v.Stopped() {
 		t.Error("stopped: got false, want true")
+	}
+}
+
+// TestPoolStopAfterDeleteNoReplenish verifies that StopAndRelease called after
+// Delete does not trigger a second replenishment.
+func TestPoolStopAfterDeleteNoReplenish(t *testing.T) {
+	ctx := context.Background()
+	statusCh := make(chan vmspool.Event, 64)
+
+	factory := vmstestutil.NewMockFactory(true)
+	p := vmspool.New(factory,
+		vmspool.WithSize(1),
+		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourRunning),
+		vmspool.WithStatus(statusCh))
+	if err := p.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	vm, err := p.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	mock := factory.Mocks()[0]
+
+	if err := vm.Delete(ctx); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	// Delete triggered the replacement.
+	waitForEvent(t, statusCh, vmspool.EventReplenished, 5*time.Second)
+	requireSettled(t, p, 1)
+
+	// Set mock state to StateStopped so that mock.Stop() returns (nil, nil),
+	// directly exercising that StopAndRelease does not replenish when setStopped(true)
+	// evaluates to false.
+	mock.SetState(vms.StateStopped)
+
+	// StopAndRelease after Delete must not replenish again.
+	if _, stopErr := vm.StopAndRelease(ctx, time.Second); stopErr != nil {
+		t.Fatalf("StopAndRelease: %v", stopErr)
+	}
+	mock.SetState(vms.StateDeleted)
+
+	time.Sleep(20 * time.Millisecond)
+	requireSettled(t, p, 1)
+
+	if err := p.Close(ctx); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	requireEmpty(t, p, 1)
+	if got, want := len(factory.Mocks()), 2; got != want {
+		t.Errorf("mocks after Delete then StopAndRelease: got %d, want %d: StopAndRelease replenished after Delete", got, want)
+	}
+	allDeleted(t, factory.Mocks())
+}
+
+// TestPoolConcurrentStopAndDelete verifies that concurrent StopAndRelease and
+// Delete calls on the same VM replenish the pool exactly once.
+func TestPoolConcurrentStopAndDelete(t *testing.T) {
+	ctx := context.Background()
+	for range 10 {
+		statusCh := make(chan vmspool.Event, 64)
+		factory := vmstestutil.NewMockFactory(true)
+		p := vmspool.New(factory,
+			vmspool.WithSize(1),
+			vmspool.WithStagingBehaviour(vmspool.StagingBehaviourRunning),
+			vmspool.WithStatus(statusCh))
+		if err := p.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		vm, err := p.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("Acquire: %v", err)
+		}
+
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			_ = vm.Delete(ctx)
+		})
+		wg.Go(func() {
+			_, _ = vm.StopAndRelease(ctx, time.Second)
+		})
+		wg.Wait()
+
+		waitForEvent(t, statusCh, vmspool.EventReplenished, 5*time.Second)
+		time.Sleep(20 * time.Millisecond)
+		requireSettled(t, p, 1)
+
+		if err := p.Close(ctx); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		requireEmpty(t, p, 1)
+		if got, want := len(factory.Mocks()), 2; got != want {
+			t.Errorf("mocks after concurrent StopAndRelease and Delete: got %d, want %d", got, want)
+		}
+		allDeleted(t, factory.Mocks())
 	}
 }

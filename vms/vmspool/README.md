@@ -396,6 +396,15 @@ type Stats struct {
 ```
 Stats is a snapshot of the state of a Pool, see Pool.Stats.
 
+### Methods
+
+```go
+func (s Stats) String() string
+```
+String implements fmt.Stringer.
+
+
+
 
 ### Type VM
 ```go

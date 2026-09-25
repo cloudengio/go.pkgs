@@ -420,6 +420,12 @@ type Stats struct {
 	Pending int
 }
 
+// String implements fmt.Stringer.
+func (s Stats) String() string {
+	return fmt.Sprintf("size=%d available=%d acquired=%d pending=%d",
+		s.Size, s.Available, s.Acquired, s.Pending)
+}
+
 // Stats returns a snapshot of the pool's size and how many of its VMs are
 // available, acquired and pending. It does not wait for any operation in
 // progress, such as a VM being started by Acquire, and is safe to call from any
@@ -443,7 +449,10 @@ func (p *Pool) Stats() Stats {
 	// A VM in ready is also in live, but Close may drain and claim VMs from
 	// ready while a caller is between reading it and here, so clamp rather
 	// than let the difference go negative.
-	available := min(len(p.ready), len(p.live)-acquired)
+	available := 0
+	if !p.closed {
+		available = min(len(p.ready), len(p.live)-acquired)
+	}
 	return Stats{
 		Size:      p.options.size,
 		Available: available,
@@ -891,15 +900,14 @@ func (v *VM) StopAndRelease(ctx context.Context, timeout time.Duration) (runErr,
 // call finds the VM already deleted and does nothing.
 func (v *VM) Delete(ctx context.Context) error {
 	v.pool.notify(EventRelease, nil)
-	wasStopped := v.inst == nil || v.inst.isStopped()
 	claimed, cleanupErr := v.pool.claimAndCleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
 	if cleanupErr != nil {
 		cleanupErr = fmt.Errorf("vmspool: delete: %w", cleanupErr)
 	}
-	// Only the call that claims the VM gives up its slot, so that deleting a VM
-	// more than once, or after Close has deleted it, cannot replenish the pool
-	// beyond its size.
-	if claimed && !wasStopped {
+	// Only replenish if this call claimed the VM AND atomically transitioned
+	// stopped to true. If StopAndRelease already stopped it, setStopped(true)
+	// returns false. If Delete is called twice, claimed is false.
+	if claimed && v.inst != nil && v.inst.setStopped(true) {
 		v.pool.requestReplenish()
 	}
 	v.pool.notify(EventReleased, nil)
