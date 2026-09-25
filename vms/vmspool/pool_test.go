@@ -46,10 +46,13 @@ func newPool(t *testing.T, size int, stagingBehaviour vmspool.StagingBehaviour, 
 		t.Fatalf("pool.Start: %v", err)
 	}
 	waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+	requireSettled(t, p, size)
 	t.Cleanup(func() {
 		if err := p.Close(context.Background()); err != nil {
 			t.Errorf("pool.Close: %v", err)
 		}
+		// Whatever the test did, closing the pool leaves nothing behind.
+		requireEmpty(t, p, size)
 	})
 	return p
 }
@@ -107,6 +110,8 @@ func TestPoolStartAndAquire(t *testing.T) {
 				t.Fatalf("Acquire: %v", err)
 			}
 
+			requireStats(t, pool, vmspool.Stats{Size: 3, Available: 2, Acquired: 1})
+
 			running := 1
 			if tc.behaviour == vmspool.StagingBehaviourRunning {
 				running = 3
@@ -126,6 +131,8 @@ func TestPoolStartAndAquire(t *testing.T) {
 			if got, want := countInState(mocks, tc.wantState), 2; got != want {
 				t.Errorf("running VMs after Acquire: got %d, want %d", got, want)
 			}
+			// The deleted VM's slot is refilled.
+			requireSettled(t, pool, 3)
 		})
 	}
 }
@@ -174,9 +181,11 @@ func TestPoolDelete(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Acquire: %v", err)
 			}
+			requireStats(t, pool, vmspool.Stats{Size: 1, Acquired: 1})
 			if err := vm.Delete(context.Background()); err != nil {
 				t.Fatalf("Delete: %v", err)
 			}
+			requireSettled(t, pool, 1)
 
 			// The original VM should now be deleted.
 			firstMocks := factory.Mocks()
@@ -194,6 +203,7 @@ func TestPoolDelete(t *testing.T) {
 				t.Fatalf("Acquire after replenishment: %v", err)
 			}
 			defer vm2.Delete(context.Background()) //nolint
+			requireStats(t, pool, vmspool.Stats{Size: 1, Acquired: 1})
 
 			// Factory must have created a second mock for the replenishment.
 			if n := len(factory.Mocks()); n != 2 {
@@ -222,11 +232,13 @@ func TestPoolClose(t *testing.T) {
 				t.Fatalf("Start: %v", err)
 			}
 			waitForEvent(t, statusCh, vmspool.EventStartPoolFull, 5*time.Second)
+			requireSettled(t, p, size)
 			if err := p.Close(context.Background()); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
 
 			allInState(t, factory.Mocks(), vms.StateDeleted)
+			requireEmpty(t, p, size)
 		})
 	}
 }
@@ -242,6 +254,8 @@ func TestPoolAcquireCancelled(t *testing.T) {
 		t.Fatalf("first Acquire: %v", err)
 	}
 	defer vm.Delete(context.Background()) //nolint
+	held := vmspool.Stats{Size: 1, Acquired: 1}
+	requireStats(t, pool, held)
 
 	// Now try to acquire with a pre-cancelled context.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -250,6 +264,8 @@ func TestPoolAcquireCancelled(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
+	// A failed Acquire takes nothing from the pool and leaves nothing behind.
+	requireStats(t, pool, held)
 }
 
 // TestPoolConcurrency acquires all pool VMs concurrently and releases them,
@@ -277,6 +293,7 @@ func TestPoolConcurrency(t *testing.T) {
 			t.Errorf("concurrent Acquire[%d]: %v", i, err)
 		}
 	}
+	requireStats(t, pool, vmspool.Stats{Size: size, Acquired: size})
 
 	// Delete all VMs.
 	for _, vm := range vmsAcquired {
@@ -288,6 +305,7 @@ func TestPoolConcurrency(t *testing.T) {
 	}
 
 	// Pool should replenish back to full; acquire all again to confirm.
+	requireSettled(t, pool, size)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for i := range size {
@@ -338,10 +356,14 @@ func TestPoolStartCancelled(t *testing.T) {
 		t.Fatal("Start did not return after context cancellation")
 	}
 
+	// The VM being created when Start was cancelled is not left counted.
+	waitForStats(t, p, vmspool.Stats{Size: 1})
+
 	// Pool was never fully started; Close must still complete cleanly.
 	if err := p.Close(context.Background()); err != nil {
 		t.Errorf("Close after cancelled Start: %v", err)
 	}
+	requireEmpty(t, p, 1)
 }
 
 // TestPoolStartError verifies that Start retries VM creation on failure and
@@ -370,9 +392,13 @@ func TestPoolStartError(t *testing.T) {
 			if err := p.Start(context.Background()); err != nil {
 				t.Fatalf("Start should succeed via retry, got: %v", err)
 			}
+			// The VM whose creation failed was cleaned up rather than left
+			// counted, so only the retry's VM is in the pool.
+			requireSettled(t, p, 1)
 			if err := p.Close(context.Background()); err != nil {
 				t.Errorf("Close: %v", err)
 			}
+			requireEmpty(t, p, 1)
 			mocks := factory.Mocks()
 			if len(mocks) != 2 {
 				t.Fatalf("expected 2 mocks (1 failed + 1 retry), got %d", len(mocks))
@@ -414,9 +440,11 @@ func TestPoolCreateVM_PartialCleanup(t *testing.T) {
 	if err := p.Start(ctx); err != nil {
 		t.Fatalf("Start should succeed via retry, got: %v", err)
 	}
+	requireSettled(t, p, 1)
 	if err := p.Close(ctx); err != nil {
 		t.Errorf("Close: %v", err)
 	}
+	requireEmpty(t, p, 1)
 
 	mocks := factory.Mocks()
 	if len(mocks) != 2 {
@@ -678,6 +706,9 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 		}
 	}
 
+	// The Acquire waiting for a VM has not taken one.
+	requireStats(t, pool, vmspool.Stats{Size: 1, Acquired: 1})
+
 	// Close must succeed. If Acquire holds a lock while blocking on the ready
 	// channel, Close will deadlock trying to acquire that same lock.
 	closeDone := make(chan error, 1)
@@ -693,6 +724,8 @@ func TestPoolCloseUnblocksAcquire(t *testing.T) {
 	case <-time.After(timeout):
 		t.Fatal("Close deadlocked: Acquire is holding a lock while blocking on the ready channel")
 	}
+	// Close deleted the VM that was still held.
+	requireEmpty(t, pool, 1)
 
 	// The blocked Acquire must have been unblocked by Close and returned an error.
 	select {
@@ -751,6 +784,9 @@ func TestPoolReleaseCloseRace(t *testing.T) {
 		if got := mocks[0].DeleteCalls(); got != 1 {
 			t.Fatalf("Delete called %d times, want exactly 1", got)
 		}
+		// Whichever of the two won, the pool is left empty: neither leaves the
+		// VM counted, and Delete's replenishment does not outlive Close.
+		requireEmpty(t, p, 1)
 	}
 }
 
@@ -796,6 +832,8 @@ func TestPoolCloseBeforePoolFull(t *testing.T) {
 	case <-time.After(timeout):
 		t.Fatal("Close deadlocked: async fill goroutine was not cancelled by replenish context")
 	}
+	// The VM whose creation was cancelled is not left counted.
+	requireEmpty(t, pool, 2)
 }
 
 // nilConstructor is a vmspool.Constructor that returns nil for its first New
@@ -837,9 +875,12 @@ func TestPoolNilConstructor(t *testing.T) {
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start should succeed via retry after nil constructor, got: %v", err)
 	}
+	// The nil instance is not counted.
+	requireSettled(t, p, 1)
 	if err := p.Close(context.Background()); err != nil {
 		t.Errorf("Close: %v", err)
 	}
+	requireEmpty(t, p, 1)
 	// nilConstructor consumed one nil call, then the factory produced one real mock.
 	mocks := factory.Mocks()
 	if len(mocks) != 1 {
@@ -865,6 +906,11 @@ func TestPoolOptionsDefaults(t *testing.T) {
 	}
 	defer p.Close(context.Background()) //nolint:errcheck
 
+	// An invalid size falls back to the default.
+	if got, want := p.Stats().Size, vmspool.DefaultPoolSize; got != want {
+		t.Errorf("Size = %d, want %d", got, want)
+	}
+
 	// DefaultPoolSize is 2, so acquiring 2 VMs should be possible.
 	vm1, err := p.Acquire(context.Background())
 	if err != nil {
@@ -878,8 +924,11 @@ func TestPoolOptionsDefaults(t *testing.T) {
 		t.Fatalf("Acquire 2: %v", err)
 	}
 
+	requireStats(t, p, vmspool.Stats{Size: vmspool.DefaultPoolSize, Acquired: 2})
+
 	vm1.Delete(context.Background()) //nolint:errcheck
 	vm2.Delete(context.Background()) //nolint:errcheck
+	requireSettled(t, p, vmspool.DefaultPoolSize)
 }
 
 // TestPoolStartTwice verifies that calling Start multiple times returns an error.
@@ -890,11 +939,14 @@ func TestPoolStartTwice(t *testing.T) {
 		t.Fatalf("first Start: %v", err)
 	}
 	defer p.Close(context.Background()) //nolint:errcheck
+	requireSettled(t, p, 1)
 
 	err := p.Start(context.Background())
 	if err == nil || err.Error() != "vmspool: pool already started" {
 		t.Errorf("expected 'vmspool: pool already started', got %v", err)
 	}
+	// The rejected Start creates nothing.
+	requireSettled(t, p, 1)
 }
 
 // TestStagingBehaviourString verifies the string representation of StagingBehaviour.
@@ -925,6 +977,12 @@ func TestAcquireStartFails(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "start failed") {
 		t.Errorf("expected start failure, got %v", err)
 	}
+	// The VM that failed to start was cleaned up rather than left acquired or
+	// pending, and its slot has been refilled.
+	if got := p.Stats().Acquired; got != 0 {
+		t.Errorf("Acquired = %d after a failed Acquire, want 0", got)
+	}
+	requireSettled(t, p, 1)
 }
 
 // TestAcquireOnClosedPoolEvent verifies the EventAttemptToUseClosedPool event is emitted
@@ -943,12 +1001,14 @@ func TestAcquireOnClosedPoolEvent(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
+	requireEmpty(t, p, 1)
 	_, err := p.Acquire(context.Background())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
 	waitForEvent(t, statusCh, vmspool.EventAttemptToUseClosedPool, 5*time.Second)
+	requireEmpty(t, p, 1)
 }
 
 // TestPoolCloseDeletesAcquiredVM verifies that Close deletes a VM that a caller
@@ -987,6 +1047,13 @@ func TestPoolCloseDeletesAcquiredVM(t *testing.T) {
 			t.Errorf("deleteAcquiredOnClose=%v: acquired VM state = %s, want %s", deleteAcquired, got, want)
 		}
 		waitForEvent(t, statusCh, wantEvent, 5*time.Second)
+		// A VM left with its caller is still acquired, since it has not been
+		// deleted; one that Close deleted is gone.
+		if deleteAcquired {
+			requireEmpty(t, p, 1)
+		} else {
+			requireStats(t, p, vmspool.Stats{Size: 1, Acquired: 1})
+		}
 
 		// Releasing after Close must work either way: the VM is already gone in
 		// the first case and is the caller's to clean up in the second.
@@ -1001,6 +1068,7 @@ func TestPoolCloseDeletesAcquiredVM(t *testing.T) {
 		if got := mocks[0].DeleteCalls(); got != 1 {
 			t.Errorf("deleteAcquiredOnClose=%v: Delete called %d times, want exactly 1", deleteAcquired, got)
 		}
+		requireEmpty(t, p, 1)
 	}
 }
 
@@ -1032,9 +1100,14 @@ func TestPoolCloseDeletesAbandonedVM(t *testing.T) {
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	// The abandoned VM is still owned by the pool, which will delete it on
+	// Close, so it stays counted, as pending, however its creation turns out
+	// while the retry's VM is the one available.
+	requireStats(t, p, vmspool.Stats{Size: 1, Available: 1, Pending: 1})
 	if err := p.Close(context.Background()); err != nil {
 		t.Errorf("Close: %v", err)
 	}
+	requireEmpty(t, p, 1)
 
 	mocks := factory.Mocks()
 	if len(mocks) != 2 {
@@ -1067,7 +1140,12 @@ func TestAttemptCreateVMTimeout(t *testing.T) {
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	// The abandoned VM is still owned by the pool, which will delete it on
+	// Close, so it stays counted, as pending, however its creation turns out
+	// while the retry's VM is the one available.
+	requireStats(t, p, vmspool.Stats{Size: 1, Available: 1, Pending: 1})
 	if err := p.Close(context.Background()); err != nil {
 		t.Errorf("Close: %v", err)
 	}
+	requireEmpty(t, p, 1)
 }
