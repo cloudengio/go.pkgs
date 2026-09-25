@@ -193,3 +193,78 @@ func TestMessagerCloseNilReader(t *testing.T) {
 		t.Errorf("Close on nil reader returned error: %v", err)
 	}
 }
+
+// frame returns payload prefixed with its 4-byte little-endian length.
+func frame(payload string) []byte {
+	n := len(payload)
+	return append([]byte{byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24)}, payload...)
+}
+
+// writeObject writes {"a":1} as a single message and returns the payload bytes.
+func writeObject(t *testing.T, nm *jsonmsgs.Messager, buf *bytes.Buffer) string {
+	t.Helper()
+	buf.Reset()
+	enc := nm.NewEncoder()
+	if err := enc.WriteValue(jsontext.Value(`{"a":1}`)); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := nm.WriteMessage(enc); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+	return string(buf.Bytes()[4:])
+}
+
+func TestMessagerEncoderOptions(t *testing.T) {
+	var buf bytes.Buffer
+
+	plain := jsonmsgs.NewMessager(nil, &buf)
+	if got, want := writeObject(t, plain, &buf), "{\"a\":1}\n"; got != want {
+		t.Errorf("default encoder: got %q, want %q", got, want)
+	}
+
+	indented := jsonmsgs.NewMessager(nil, &buf,
+		jsonmsgs.WithEncoderOptions(jsontext.WithIndent("\t")))
+	// Multiple writes exercise encoder reuse from the pool; the options must
+	// survive the Reset performed by NewEncoder.
+	for i := range 3 {
+		if got, want := writeObject(t, indented, &buf), "{\n\t\"a\": 1\n}\n"; got != want {
+			t.Errorf("indented encoder, write %d: got %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestMessagerDecoderOptions(t *testing.T) {
+	const dup = `{"a":1,"a":2}`
+	var stream []byte
+	for range 3 {
+		stream = append(stream, frame(dup)...)
+	}
+
+	strict := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(stream)), nil)
+	dec, err := strict.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if _, err := dec.ReadValue(); err == nil {
+		t.Errorf("default decoder: expected duplicate name error")
+	}
+	strict.ReleaseDecoder(dec)
+
+	lenient := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(stream)), nil,
+		jsonmsgs.WithDecoderOptions(jsontext.AllowDuplicateNames(true)))
+	// Multiple reads exercise decoder reuse from the pool; the options must
+	// survive the Reset performed by ReadMessage.
+	for i := range 3 {
+		dec, err := lenient.ReadMessage()
+		if err != nil {
+			t.Fatalf("ReadMessage %d: %v", i, err)
+		}
+		val, err := dec.ReadValue()
+		if err != nil {
+			t.Errorf("lenient decoder, read %d: %v", i, err)
+		} else if string(val) != dup {
+			t.Errorf("lenient decoder, read %d: got %q, want %q", i, val, dup)
+		}
+		lenient.ReleaseDecoder(dec)
+	}
+}
