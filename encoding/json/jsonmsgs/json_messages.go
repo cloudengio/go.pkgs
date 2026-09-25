@@ -59,6 +59,7 @@ func WithDecoderOptions(opts jsontext.Options) Option {
 // Messager.WriteMessage after which it cannot be used again.
 type Encoder struct {
 	*jsontext.Encoder
+	opts   jsontext.Options
 	buffer *bytes.Buffer
 }
 
@@ -67,6 +68,7 @@ type Encoder struct {
 // calling Messager.ReleaseDecoder after which it cannot be used again.
 type Decoder struct {
 	*jsontext.Decoder
+	opts   jsontext.Options
 	buf    *bytes.Buffer
 	buffer []byte
 }
@@ -108,6 +110,7 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 			buf.Write([]byte{0, 0, 0, 0})
 			return &Encoder{
 				Encoder: jsontext.NewEncoder(buf, o.encoderOptions),
+				opts:    o.encoderOptions,
 				buffer:  buf,
 			}
 		},
@@ -118,6 +121,7 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 			return &Decoder{
 				Decoder: jsontext.NewDecoder(buf, o.decoderOptions),
 				buf:     buf,
+				opts:    o.decoderOptions,
 			}
 		},
 	}
@@ -129,7 +133,7 @@ func (m *Messager) NewEncoder() *Encoder {
 	enc := m.encPool.Get().(*Encoder)
 	enc.buffer.Reset()
 	enc.buffer.Write([]byte{0, 0, 0, 0})
-	enc.Reset(enc.buffer)
+	enc.Reset(enc.buffer, enc.opts)
 	return enc
 }
 
@@ -225,6 +229,6 @@ func (m *Messager) ReadMessage() (*Decoder, error) {
 		return nil, err
 	}
 	*dec.buf = *bytes.NewBuffer(dec.buffer)
-	dec.Reset(dec.buf)
+	dec.Reset(dec.buf, dec.opts)
 	return dec, nil
 }
