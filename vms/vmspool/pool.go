@@ -17,6 +17,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloudeng.io/algo/ratecontrol"
@@ -70,7 +71,11 @@ type Provider interface {
 type vmsInstance struct {
 	vms.Instance
 	stdout, stderr io.Writer
-	acquired       bool // guarded by Pool.opMutex
+	// acquired records that a caller holds the VM. It is written under
+	// Pool.opMutex, but is atomic so that Pool.Stats can read it without
+	// taking that lock, which Acquire holds while starting a VM and Close holds
+	// for the whole of its shutdown.
+	acquired atomic.Bool
 
 	mu sync.Mutex
 	// stopped records that the VM is not running: either because it is staged
@@ -397,6 +402,65 @@ func (p *Pool) tracked() []*vmsInstance {
 	return insts
 }
 
+// Stats is a snapshot of the state of a Pool, see Pool.Stats.
+type Stats struct {
+	// Size is the number of VMs the pool is configured to hold, see WithSize.
+	Size int
+	// Available is the number of VMs waiting in the pool that Acquire can
+	// return without waiting for one to be created.
+	Available int
+	// Acquired is the number of VMs held by callers that have not yet deleted
+	// them. A VM stopped by VM.StopAndRelease is still counted, since the
+	// caller has yet to call VM.Delete, even though its slot in the pool has
+	// already been given up and is being replenished.
+	Acquired int
+	// Pending is the number of VMs that exist but are neither available nor
+	// acquired: those being created, whether by Start or to replenish the
+	// pool, and those in transit between the pool and a caller.
+	Pending int
+}
+
+// String implements fmt.Stringer.
+func (s Stats) String() string {
+	return fmt.Sprintf("size=%d available=%d acquired=%d pending=%d",
+		s.Size, s.Available, s.Acquired, s.Pending)
+}
+
+// Stats returns a snapshot of the pool's size and how many of its VMs are
+// available, acquired and pending. It does not wait for any operation in
+// progress, such as a VM being started by Acquire, and is safe to call from any
+// goroutine at any time, including before Start and after Close.
+//
+// The counts are read together but the pool keeps changing while they are, so
+// they describe a moment that may already have passed; a VM being handed over
+// by Acquire, say, is counted as Pending until the caller holds it. The counts
+// are consistent with each other, however: none is ever negative, and Available
+// + Acquired + Pending is the number of VMs the pool has created and not yet
+// deleted, which can exceed Size while replacements for stopped VMs are created.
+func (p *Pool) Stats() Stats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	acquired := 0
+	for inst := range p.live {
+		if inst.acquired.Load() {
+			acquired++
+		}
+	}
+	// A VM in ready is also in live, but Close may drain and claim VMs from
+	// ready while a caller is between reading it and here, so clamp rather
+	// than let the difference go negative.
+	available := 0
+	if !p.closed {
+		available = min(len(p.ready), len(p.live)-acquired)
+	}
+	return Stats{
+		Size:      p.options.size,
+		Available: available,
+		Acquired:  acquired,
+		Pending:   len(p.live) - acquired - available,
+	}
+}
+
 func (p *Pool) notify(kind EventKind, err error) {
 	if p.options.statusCh == nil {
 		return
@@ -453,13 +517,21 @@ func (p *Pool) fill(ctx context.Context, size int) error {
 // and an external sweep (such as deleting VMs by name at startup) is the
 // backstop for any VM leaked this way.
 func (p *Pool) cleanupVM(ctx context.Context, inst *vmsInstance, timeout time.Duration) error {
+	_, err := p.claimAndCleanupVM(ctx, inst, timeout)
+	return err
+}
+
+// claimAndCleanupVM is cleanupVM that also reports whether the caller won the
+// claim, and so gave up the instance's slot in the pool, as opposed to finding
+// that another path had already done so.
+func (p *Pool) claimAndCleanupVM(ctx context.Context, inst *vmsInstance, timeout time.Duration) (claimed bool, err error) {
 	if inst == nil || inst.Instance == nil {
-		return nil
+		return false, nil
 	}
 	if !p.claim(inst) {
-		return nil
+		return false, nil
 	}
-	return vms.CleanupVM(ctx, inst.Instance, timeout)
+	return true, vms.CleanupVM(ctx, inst.Instance, timeout)
 }
 
 // cleanupVMOnError is cleanupVM for paths that are already returning an error.
@@ -703,7 +775,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 		// requests its replacement, not its staging state.
 		inst.setStopped(false)
 	}
-	inst.acquired = true
+	inst.acquired.Store(true)
 	p.notify(EventAcquired, nil)
 	return &VM{inst: inst, pool: p}, nil
 }
@@ -753,7 +825,7 @@ drained:
 	// single VM's stop timeout rather than one per VM.
 	var g errgroup.T
 	for _, inst := range p.tracked() {
-		if inst.acquired && !p.options.deleteAcquiredOnClose {
+		if inst.acquired.Load() && !p.options.deleteAcquiredOnClose {
 			p.notify(EventAcquiredVMRetained, nil)
 			continue
 		}
@@ -823,15 +895,19 @@ func (v *VM) StopAndRelease(ctx context.Context, timeout time.Duration) (runErr,
 //
 // Delete asynchronously replenishes the pool unless the VM has already been
 // stopped by StopAndRelease, which released the slot at that point; requesting
-// a second replacement would grow the pool beyond its configured size.
+// a second replacement would grow the pool beyond its configured size. For the
+// same reason only the first call to Delete replenishes the pool: any further
+// call finds the VM already deleted and does nothing.
 func (v *VM) Delete(ctx context.Context) error {
 	v.pool.notify(EventRelease, nil)
-	replenish := v.inst != nil && !v.inst.isStopped()
-	cleanupErr := v.pool.cleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
+	claimed, cleanupErr := v.pool.claimAndCleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
 	if cleanupErr != nil {
 		cleanupErr = fmt.Errorf("vmspool: delete: %w", cleanupErr)
 	}
-	if replenish {
+	// Only replenish if this call claimed the VM AND atomically transitioned
+	// stopped to true. If StopAndRelease already stopped it, setStopped(true)
+	// returns false. If Delete is called twice, claimed is false.
+	if claimed && v.inst != nil && v.inst.setStopped(true) {
 		v.pool.requestReplenish()
 	}
 	v.pool.notify(EventReleased, nil)

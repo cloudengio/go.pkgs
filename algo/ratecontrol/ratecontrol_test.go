@@ -55,15 +55,21 @@ func waitForRequests(ctx context.Context, t *testing.T, c *ratecontrol.Controlle
 // enforced, or that is handed to each caller instead of shared between them,
 // makes a run shorter rather than longer.
 //
-// The upper bound is deliberately loose, since it can only ever be an upper
-// bound on the machine rather than on the limiter. These tests measure
+// The upper bound is deliberately very loose, since it can only ever be an
+// upper bound on the machine rather than on the limiter. These tests measure
 // wall-clock time, and one that is loaded, throttled or coalescing timers
-// stretches every wait in the sequence: overruns have been seen at 1.15x the
-// intended duration (TestDataAndReqRate, on CI) and at 2.5x
-// (TestRequestRateConcurrent). It is therefore a liveness check -- the limiter
-// is still making progress -- and not a measure of precision.
+// stretches every wait in the sequence. The stretching compounds: a caller is
+// admitted at a tick boundary, so one that is stalled for long enough to miss
+// the next boundary waits a whole extra tick, and a starved machine does that
+// repeatedly. Overruns have been seen at 1.15x the intended duration
+// (TestDataAndReqRate, on CI), 2.5x (TestRequestRateConcurrent) and 3.5x
+// (TestControllerConfigNewControllerDataRate), though the limiter itself was
+// measured consuming exactly one tick per Wait when run undisturbed, with and
+// without the race detector. The upper bound is therefore a liveness check --
+// the limiter is still making progress, rather than hung -- and not a measure
+// of precision; the lower bound is what guards the rate.
 func bounds(d, b time.Duration) (lower, upper time.Duration) {
-	return d - b, 3 * d
+	return d - b, max(10*d, d+5*time.Second)
 }
 
 func TestRequestRate(t *testing.T) {

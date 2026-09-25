@@ -279,6 +279,23 @@ called more than once. After Start returns, the pool is ready to accept
 Acquire calls.
 
 
+```go
+func (p *Pool) Stats() Stats
+```
+Stats returns a snapshot of the pool's size and how many of its VMs are
+available, acquired and pending. It does not wait for any operation in
+progress, such as a VM being started by Acquire, and is safe to call from
+any goroutine at any time, including before Start and after Close.
+
+The counts are read together but the pool keeps changing while they are,
+so they describe a moment that may already have passed; a VM being handed
+over by Acquire, say, is counted as Pending until the caller holds it.
+The counts are consistent with each other, however: none is ever negative,
+and Available + Acquired + Pending is the number of VMs the pool has created
+and not yet deleted, which can exceed Size while replacements for stopped
+VMs are created.
+
+
 
 
 ### Type Provider
@@ -358,6 +375,37 @@ needed in this package.
 
 
 
+### Type Stats
+```go
+type Stats struct {
+	// Size is the number of VMs the pool is configured to hold, see WithSize.
+	Size int
+	// Available is the number of VMs waiting in the pool that Acquire can
+	// return without waiting for one to be created.
+	Available int
+	// Acquired is the number of VMs held by callers that have not yet deleted
+	// them. A VM stopped by VM.StopAndRelease is still counted, since the
+	// caller has yet to call VM.Delete, even though its slot in the pool has
+	// already been given up and is being replenished.
+	Acquired int
+	// Pending is the number of VMs that exist but are neither available nor
+	// acquired: those being created, whether by Start or to replenish the
+	// pool, and those in transit between the pool and a caller.
+	Pending int
+}
+```
+Stats is a snapshot of the state of a Pool, see Pool.Stats.
+
+### Methods
+
+```go
+func (s Stats) String() string
+```
+String implements fmt.Stringer.
+
+
+
+
 ### Type VM
 ```go
 type VM struct {
@@ -380,6 +428,8 @@ Close and Delete does not delete it again.
 Delete asynchronously replenishes the pool unless the VM has already been
 stopped by StopAndRelease, which released the slot at that point; requesting
 a second replacement would grow the pool beyond its configured size.
+For the same reason only the first call to Delete replenishes the pool:
+any further call finds the VM already deleted and does nothing.
 
 
 ```go
