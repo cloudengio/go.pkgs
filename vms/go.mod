@@ -3,7 +3,7 @@ module cloudeng.io/vms
 go 1.26.2
 
 require (
-	cloudeng.io/algo v0.0.0-20260924205302-bd172fb4ec86
+	cloudeng.io/algo v0.0.0-20260925200243-4023f51f1ebd
 	cloudeng.io/cicd v0.0.0-20260909165456-ddaa2de546a0
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850

@@ -17,11 +17,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/feature/dsql/auth v1.2.4
 	github.com/aws/aws-sdk-go-v2/service/dsql v1.22.1
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.336.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.1
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.2
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.1
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.75.0
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.77.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1
 	github.com/aws/smithy-go v1.28.2
 	github.com/jackc/pgx/v5 v5.11.0
@@ -30,9 +30,9 @@ require (
 )
 
 require (
-	cloudeng.io/algo v0.0.0-20260924205302-bd172fb4ec86 // indirect
+	cloudeng.io/algo v0.0.0-20260925200243-4023f51f1ebd // indirect
 	cloudeng.io/os v0.0.0-20260923165344-0acebac4c1e9 // indirect
-	cloudeng.io/sys v0.0.0-20260924205302-bd172fb4ec86 // indirect
+	cloudeng.io/sys v0.0.0-20260925200243-4023f51f1ebd // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.1 // indirect
@@ -40,11 +40,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.10.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.78.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
 	github.com/aws/session-manager-plugin v0.0.0-20260615221425-930a08e65d3a // indirect
@@ -94,7 +94,7 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260715232425-e75dac1f907d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
