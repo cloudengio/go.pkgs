@@ -288,8 +288,9 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 		return fmt.Errorf("buffer too small to write length prefix")
 	}
 	size := len(data) - 4
+	usize := uint64(size)
 
-	if (!m.fragmentation && uint32(size) <= m.maxSize) || (m.fragmentation && uint32(size) <= m.fragmentSize) {
+	if (!m.fragmentation && usize <= uint64(m.maxSize)) || (m.fragmentation && usize <= uint64(m.fragmentSize)) {
 		data[0] = byte(size)
 		data[1] = byte(size >> 8)
 		data[2] = byte(size >> 16)
@@ -301,7 +302,7 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, size, m.maxSize)
 	}
 
-	if err := m.checkFragmentedLimit(uint64(size)); err != nil {
+	if err := m.checkFragmentedLimit(usize); err != nil {
 		return err
 	}
 

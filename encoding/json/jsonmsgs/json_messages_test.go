@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1029,4 +1030,30 @@ func TestMessagerMaxFragmentedMessageSize(t *testing.T) {
 			t.Errorf("unexpected error text: %v", errOver)
 		}
 	})
+}
+
+func TestMessagerOversizedBufferDoesNotTruncate(t *testing.T) {
+	if strconv.IntSize < 64 {
+		t.Skip("skipping 64-bit test on 32-bit platform")
+	}
+	for _, frag := range []bool{false, true} {
+		t.Run(fmt.Sprintf("frag_%v", frag), func(t *testing.T) {
+			nm := jsonmsgs.NewMessager(nil, io.Discard,
+				jsonmsgs.WithMaxSize(100),
+				jsonmsgs.WithFragmentation(frag),
+			)
+			enc := nm.NewEncoder()
+			// Set size to 4 GiB + 10 bytes (wraps to 10 if truncated to uint32).
+			oversized := uint64(1<<32) + 10
+			jsonmsgs.SetOversizedEncoderBufferForTests(enc, oversized)
+
+			err := nm.WriteMessage(enc)
+			if err == nil {
+				t.Fatal("expected WriteMessage to fail for buffer > 4 GiB, got nil")
+			}
+			if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+				t.Errorf("got %v, want ErrMessageTooLarge", err)
+			}
+		})
+	}
 }
