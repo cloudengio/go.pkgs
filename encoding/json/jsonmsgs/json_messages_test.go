@@ -96,16 +96,16 @@ func TestMessagerMaxSizeEnforced(t *testing.T) {
 		t.Errorf("expected error wrapping ErrMessageTooLarge, got: %v", err)
 	}
 
-	// With MaxMessageSize set, WriteMessage must fail if total size > maxMessageSize.
+	// With MaxFragmentedMessageSize set, WriteMessage must fail if total size > maxFragmentedMessageSize.
 	nmMaxMsg := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard,
-		jsonmsgs.WithMaxSize(20), jsonmsgs.WithMaxMessageSize(30))
+		jsonmsgs.WithMaxSize(20), jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxFragmentedMessageSize(30))
 	enc2 := nmMaxMsg.NewEncoder()
 	_ = enc2.WriteToken(jsontext.BeginObject)
 	_ = enc2.WriteToken(jsontext.String("large_field_content_exceeding_twenty_bytes"))
 	_ = enc2.WriteToken(jsontext.String("more_data_here"))
 	_ = enc2.WriteToken(jsontext.EndObject)
 	if err := nmMaxMsg.WriteMessage(enc2); err == nil {
-		t.Fatal("expected WriteMessage to fail for size > maxMessageSize, got nil")
+		t.Fatal("expected WriteMessage to fail for size > maxFragmentedMessageSize, got nil")
 	} else if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 		t.Errorf("expected error wrapping ErrMessageTooLarge, got: %v", err)
 	}
@@ -536,10 +536,10 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("total_reassembled_size_exceeds_max_message_size", func(t *testing.T) {
+	t.Run("total_reassembled_size_exceeds_max_fragmented_message_size", func(t *testing.T) {
 		// Frame 1: 15 bytes, FlagMore
 		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 15
-		// Frame 2: 15 bytes (total 30 bytes > maxMessageSize 25)
+		// Frame 2: 15 bytes (total 30 bytes > maxFragmentedMessageSize 25)
 		hdr2 := jsonmsgs.FlagFragment | 15
 
 		var buf bytes.Buffer
@@ -549,13 +549,97 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 		buf.Write(make([]byte, 15))
 
 		r := jsonmsgs.NewMessager(io.NopCloser(&buf), io.Discard,
-			jsonmsgs.WithMaxSize(frameSize), jsonmsgs.WithMaxMessageSize(25), jsonmsgs.WithFragmentation(true))
+			jsonmsgs.WithMaxSize(frameSize), jsonmsgs.WithMaxFragmentedMessageSize(25), jsonmsgs.WithFragmentation(true))
 		if _, err := r.ReadMessage(); err == nil {
-			t.Error("expected error when total size exceeds maxMessageSize, got nil")
+			t.Error("expected error when total size exceeds maxFragmentedMessageSize, got nil")
 		} else if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 			t.Errorf("got %v, want ErrMessageTooLarge", err)
 		}
 	})
+}
+
+// rawHeader returns the 4-byte little-endian encoding of a frame header.
+func rawHeader(hdr uint32) []byte {
+	return []byte{byte(hdr), byte(hdr >> 8), byte(hdr >> 16), byte(hdr >> 24)}
+}
+
+// TestMessagerFlagMoreWithoutFragment verifies that a header with FlagMore but
+// not FlagFragment, which declares continuation fragments for a frame that is
+// not itself a fragment, is rejected, whether or not fragmentation is enabled,
+// before its payload is read.
+func TestMessagerFlagMoreWithoutFragment(t *testing.T) {
+	const frameSize = 20
+	const payload = `{"a":1}xxx`
+	raw := append(rawHeader(jsonmsgs.FlagMore|uint32(len(payload))), payload...)
+
+	for _, fragmentation := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fragmentation=%v", fragmentation), func(t *testing.T) {
+			rd := bytes.NewReader(raw)
+			r := jsonmsgs.NewMessager(io.NopCloser(rd), io.Discard,
+				jsonmsgs.WithMaxSize(frameSize), jsonmsgs.WithFragmentation(fragmentation))
+			dec, err := r.ReadMessage()
+			if err == nil {
+				t.Fatalf("expected an error for FlagMore without FlagFragment, got a message: %v", dec)
+			}
+			if !strings.Contains(err.Error(), "FlagMore set without FlagFragment") {
+				t.Errorf("unexpected error: %v", err)
+			}
+			// Not mistaken for a size or fragmentation-disabled error.
+			if errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+				t.Errorf("got ErrMessageTooLarge, want an invalid header error: %v", err)
+			}
+			// Only the header was consumed: the payload was not read as a message.
+			if got, want := rd.Len(), len(payload); got != want {
+				t.Errorf("%d bytes left unread, want %d: the payload was read", got, want)
+			}
+		})
+	}
+}
+
+// TestMessagerFlagMoreWithoutFragmentBeforeSizeCheck verifies that an
+// oversized length with the invalid flags is reported as the invalid header it
+// is, not as too large.
+func TestMessagerFlagMoreWithoutFragmentBeforeSizeCheck(t *testing.T) {
+	raw := rawHeader(jsonmsgs.FlagMore | jsonmsgs.LengthMask)
+	r := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(raw)), io.Discard, jsonmsgs.WithMaxSize(20))
+	_, err := r.ReadMessage()
+	if err == nil || !strings.Contains(err.Error(), "FlagMore set without FlagFragment") {
+		t.Errorf("got %v, want an invalid header error", err)
+	}
+}
+
+// TestMessagerValidFlagCombinations verifies that the frames a Messager writes
+// itself are unaffected by the header check: unfragmented, and fragmented with
+// both flags set on the first frame.
+func TestMessagerValidFlagCombinations(t *testing.T) {
+	msgs := []string{`{"a":1}`, `{"key":"a value that spans several fragments"}`}
+	var wbuf bytes.Buffer
+	w := jsonmsgs.NewMessager(nil, &wbuf, jsonmsgs.WithMaxSize(20), jsonmsgs.WithFragmentation(true))
+	for _, v := range msgs {
+		enc := w.NewEncoder()
+		if err := enc.WriteValue(jsontext.Value(v)); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.WriteMessage(enc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := jsonmsgs.NewMessager(io.NopCloser(&wbuf), io.Discard,
+		jsonmsgs.WithMaxSize(20), jsonmsgs.WithFragmentation(true))
+	for _, want := range msgs {
+		dec, err := r.ReadMessage()
+		if err != nil {
+			t.Fatalf("ReadMessage: %v", err)
+		}
+		val, err := dec.ReadValue()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(val); got != want {
+			t.Errorf("got %s, want %s", got, want)
+		}
+		r.ReleaseDecoder(dec)
+	}
 }
 
 func TestMessagerWithFragmentSize(t *testing.T) {

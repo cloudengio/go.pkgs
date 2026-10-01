@@ -20,8 +20,8 @@ import (
 // DefaultMaxNativeMessageSize is the default maximum size of a single frame, in bytes.
 const DefaultMaxNativeMessageSize = 1024 * 1024 // 1MB
 
-// DefaultMaxMessageSize is the default maximum total reassembled size of a message, in bytes (100MB).
-const DefaultMaxMessageSize = 100 * 1024 * 1024 // 100MB
+// DefaultMaxFragmentedMessageSize is the default maximum total size of a fragmented/reassembled message, in bytes (16MB).
+const DefaultMaxFragmentedMessageSize = 16 * 1024 * 1024 // 16MB
 
 const (
 	// FlagFragment indicates that the frame is a fragment of a larger message.
@@ -49,12 +49,8 @@ type options struct {
 	// It defaults to MaxSize, but can be configured to be smaller.
 	fragmentSize uint32
 
-	// MaxMessageSize specifies the maximum total size of a reassembled message in bytes.
-	// If MaxMessageSize is 0, DefaultMaxMessageSize (100MB) is used.
-	maxMessageSize uint32
-
 	// maxFragmentedMessageSize specifies the maximum size of a message that can
-	// be fragmented in bytes. If 0, no limit is enforced beyond maxMessageSize.
+	// be fragmented in bytes. If 0, DefaultMaxFragmentedMessageSize (16MB) is used.
 	maxFragmentedMessageSize uint32
 
 	// fragmentation enables automatic message fragmentation.
@@ -87,20 +83,13 @@ func WithFragmentSize(fragmentSize uint32) Option {
 	}
 }
 
-// WithMaxMessageSize sets the maximum total size of a reassembled message in bytes.
-// If 0, DefaultMaxMessageSize (100MB) is used.
-func WithMaxMessageSize(maxSize uint32) Option {
-	return func(opts *options) {
-		opts.maxMessageSize = maxSize
-	}
-}
-
 // WithMaxFragmentedMessageSize sets the maximum total size of a message that can
-// be fragmented in bytes. If set (> 0), WriteMessage returns ErrMessageTooLarge
-// if a message to be fragmented exceeds this size, and ReadMessage returns an
-// error if the total reassembled size exceeds this limit. This prevents deadlocks
-// when writing over buffered channels that could fill up before a complete request
-// is sent.
+// be fragmented in bytes. If 0, DefaultMaxFragmentedMessageSize (16MB) is used.
+// If set (> 0), WriteMessage returns ErrMessageTooLarge if a message to be fragmented
+// exceeds this size, and ReadMessage returns an error if the total reassembled size
+// exceeds this limit. This prevents deadlocks when writing over buffered channels
+// that could fill up before a complete request is sent, as well as protecting
+// receivers from unbounded memory growth.
 func WithMaxFragmentedMessageSize(maxSize uint32) Option {
 	return func(opts *options) {
 		opts.maxFragmentedMessageSize = maxSize
@@ -154,7 +143,6 @@ type Messager struct {
 	wr                       io.Writer
 	maxSize                  uint32
 	fragmentSize             uint32
-	maxMessageSize           uint32
 	maxFragmentedMessageSize uint32
 	fragmentation            bool
 	encPool                  sync.Pool
@@ -182,8 +170,8 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 	if o.fragmentSize == 0 || o.fragmentSize > o.maxSize {
 		o.fragmentSize = o.maxSize
 	}
-	if o.maxMessageSize == 0 {
-		o.maxMessageSize = DefaultMaxMessageSize
+	if o.maxFragmentedMessageSize == 0 {
+		o.maxFragmentedMessageSize = DefaultMaxFragmentedMessageSize
 	}
 	if wr == nil {
 		wr = io.Discard
@@ -196,7 +184,6 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 		rd:                       rd,
 		maxSize:                  o.maxSize,
 		fragmentSize:             o.fragmentSize,
-		maxMessageSize:           o.maxMessageSize,
 		maxFragmentedMessageSize: o.maxFragmentedMessageSize,
 		fragmentation:            o.fragmentation,
 	}
@@ -301,9 +288,6 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 		return fmt.Errorf("buffer too small to write length prefix")
 	}
 	size := len(data) - 4
-	if uint64(size) > uint64(m.maxMessageSize) {
-		return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, size, m.maxMessageSize)
-	}
 
 	if (!m.fragmentation && uint32(size) <= m.maxSize) || (m.fragmentation && uint32(size) <= m.fragmentSize) {
 		data[0] = byte(size)
@@ -386,6 +370,16 @@ func (m *Messager) ReadMessage() (*Decoder, error) {
 	hasMore := (header & FlagMore) != 0
 	length := header & LengthMask
 
+	// FlagMore says that continuation fragments belong to this message, which
+	// only makes sense for a frame that is itself a fragment. Accepting it as
+	// a complete unfragmented message would leave its continuations to be read
+	// as messages of their own, so malformed input could move message
+	// boundaries. Reject it before the payload is read, whether or not
+	// fragmentation is enabled.
+	if hasMore && !isFragment {
+		return nil, fmt.Errorf("jsonmsgs: invalid frame header %#08x: FlagMore set without FlagFragment", header)
+	}
+
 	if length > m.maxSize {
 		return nil, fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, length, m.maxSize)
 	}
@@ -418,11 +412,8 @@ func (m *Messager) ReadMessage() (*Decoder, error) {
 }
 
 func (m *Messager) checkFragmentedLimit(totalLen uint64) error {
-	if m.maxFragmentedMessageSize > 0 && totalLen > uint64(m.maxFragmentedMessageSize) {
+	if totalLen > uint64(m.maxFragmentedMessageSize) {
 		return fmt.Errorf("%w: message size %d exceeds maximum fragmented message size %d", ErrMessageTooLarge, totalLen, m.maxFragmentedMessageSize)
-	}
-	if totalLen > uint64(m.maxMessageSize) {
-		return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, totalLen, m.maxMessageSize)
 	}
 	return nil
 }
@@ -490,11 +481,7 @@ func (m *Messager) appendChunk(dec *Decoder, fragLen uint32) error {
 	currLen := len(dec.buffer)
 	newLen := currLen + int(fragLen)
 	if cap(dec.buffer) < newLen {
-		limit := uint64(m.maxMessageSize)
-		if m.maxFragmentedMessageSize > 0 && uint64(m.maxFragmentedMessageSize) < limit {
-			limit = uint64(m.maxFragmentedMessageSize)
-		}
-		growCap := min(uint64(newLen)*2, limit)
+		growCap := min(uint64(newLen)*2, uint64(m.maxFragmentedMessageSize))
 		newBuf := make([]byte, newLen, growCap)
 		copy(newBuf, dec.buffer)
 		dec.buffer = newBuf

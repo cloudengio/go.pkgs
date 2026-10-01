@@ -23,14 +23,14 @@ LengthMask uint32 = 0x3fffffff
 
 ```
 
-### DefaultMaxMessageSize
+### DefaultMaxFragmentedMessageSize
 ```go
-DefaultMaxMessageSize = 100 * 1024 * 1024 // 100MB
+DefaultMaxFragmentedMessageSize = 16 * 1024 * 1024 // 16MB
 
 
 ```
-DefaultMaxMessageSize is the default maximum total reassembled size of a
-message, in bytes (100MB).
+DefaultMaxFragmentedMessageSize is the default maximum total size of a
+fragmented/reassembled message, in bytes (16MB).
 
 ### DefaultMaxNativeMessageSize
 ```go
@@ -190,19 +190,13 @@ multiple frames.
 ```go
 func WithMaxFragmentedMessageSize(maxSize uint32) Option
 ```
-WithMaxFragmentedMessageSize sets the maximum total size of a message
-that can be fragmented in bytes. If set (> 0), WriteMessage returns
-ErrMessageTooLarge if a message to be fragmented exceeds this size,
-and ReadMessage returns an error if the total reassembled size exceeds this
-limit. This prevents deadlocks when writing over buffered channels that
-could fill up before a complete request is sent.
-
-
-```go
-func WithMaxMessageSize(maxSize uint32) Option
-```
-WithMaxMessageSize sets the maximum total size of a reassembled message in
-bytes. If 0, DefaultMaxMessageSize (100MB) is used.
+WithMaxFragmentedMessageSize sets the maximum total size of a message that
+can be fragmented in bytes. If 0, DefaultMaxFragmentedMessageSize (16MB) is
+used. If set (> 0), WriteMessage returns ErrMessageTooLarge if a message
+to be fragmented exceeds this size, and ReadMessage returns an error if
+the total reassembled size exceeds this limit. This prevents deadlocks when
+writing over buffered channels that could fill up before a complete request
+is sent, as well as protecting receivers from unbounded memory growth.
 
 
 ```go
