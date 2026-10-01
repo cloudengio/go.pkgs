@@ -92,7 +92,8 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager
 NewMessager creates a new Messager with the given readCloser and writer.
 If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize
 (1MB) is used. If fragmentSize is not specified via WithFragmentSize,
-it defaults to maxSize.
+it defaults to maxSize. NewMessager panics if maxSize exceeds LengthMask
+(see WithMaxSize).
 
 
 
@@ -187,6 +188,17 @@ multiple frames.
 
 
 ```go
+func WithMaxFragmentedMessageSize(maxSize uint32) Option
+```
+WithMaxFragmentedMessageSize sets the maximum total size of a message
+that can be fragmented in bytes. If set (> 0), WriteMessage returns
+ErrMessageTooLarge if a message to be fragmented exceeds this size,
+and ReadMessage returns an error if the total reassembled size exceeds this
+limit. This prevents deadlocks when writing over buffered channels that
+could fill up before a complete request is sent.
+
+
+```go
 func WithMaxMessageSize(maxSize uint32) Option
 ```
 WithMaxMessageSize sets the maximum total size of a reassembled message in
@@ -196,7 +208,10 @@ bytes. If 0, DefaultMaxMessageSize (100MB) is used.
 ```go
 func WithMaxSize(maxSize uint32) Option
 ```
-WithMaxSize sets the maximum size of a single frame in bytes.
+WithMaxSize sets the maximum size of a single frame in bytes. maxSize must
+not exceed LengthMask (~1GiB); NewMessager panics otherwise, since bits 30
+and 31 of the frame header are reserved for FlagMore/FlagFragment and cannot
+represent a larger single-frame length.
 
 
 

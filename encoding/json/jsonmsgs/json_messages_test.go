@@ -514,6 +514,28 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("zero_length_fragment_rejected", func(t *testing.T) {
+		// Frame 1: 10 bytes, FlagMore.
+		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 10
+		var buf bytes.Buffer
+		buf.Write([]byte{byte(hdr1), byte(hdr1 >> 8), byte(hdr1 >> 16), byte(hdr1 >> 24)})
+		buf.Write(make([]byte, 10))
+
+		// Frame 2: zero-length fragment with FlagMore still set. A peer could
+		// repeat this frame forever to stall ReadMessage; it must be rejected
+		// as soon as it is seen instead of being accepted and looped on.
+		hdr2 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore
+		buf.Write([]byte{byte(hdr2), byte(hdr2 >> 8), byte(hdr2 >> 16), byte(hdr2 >> 24)})
+
+		r := jsonmsgs.NewMessager(io.NopCloser(&buf), io.Discard,
+			jsonmsgs.WithMaxSize(frameSize), jsonmsgs.WithFragmentation(true))
+		if _, err := r.ReadMessage(); err == nil {
+			t.Error("expected error for zero-length fragment, got nil")
+		} else if !strings.Contains(err.Error(), "zero-length fragment") {
+			t.Errorf("expected zero-length fragment error, got: %v", err)
+		}
+	})
+
 	t.Run("total_reassembled_size_exceeds_max_message_size", func(t *testing.T) {
 		// Frame 1: 15 bytes, FlagMore
 		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 15
@@ -741,4 +763,186 @@ func TestMessagerFragmentSizeOptions(t *testing.T) {
 	} else if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 		t.Errorf("expected ErrMessageTooLarge, got: %v", err)
 	}
+}
+
+func TestNewMessagerPanicsOnOversizedMaxSize(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected NewMessager to panic when maxSize exceeds LengthMask")
+		}
+	}()
+	jsonmsgs.NewMessager(nil, io.Discard, jsonmsgs.WithMaxSize(jsonmsgs.LengthMask+1))
+}
+
+// TestMessagerReleaseDecoderFreesLargeBuffer verifies that ReleaseDecoder
+// actually drops the large reassembly buffer rather than merely clearing
+// one of two aliased references to it.
+func TestMessagerReleaseDecoderFreesLargeBuffer(t *testing.T) {
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard,
+		jsonmsgs.WithMaxSize(1024))
+
+	// cap must exceed both maxSize*4 (4096) and 4MiB to trigger the release.
+	big := make([]byte, 5*1024*1024)
+	dec := jsonmsgs.NewDecoderForTests(jsontext.NewDecoder(bytes.NewReader(nil)))
+	jsonmsgs.SetDecoderBufferForTests(dec, big)
+
+	before := jsonmsgs.DecoderBufPointerForTests(dec)
+	nm.ReleaseDecoder(dec)
+	after := jsonmsgs.DecoderBufPointerForTests(dec)
+
+	if before == after {
+		t.Error("expected ReleaseDecoder to replace dec.buf so the large backing array becomes collectible")
+	}
+	if got := jsonmsgs.BufferCapForTests(dec); got != 0 {
+		t.Errorf("expected dec.buffer to be dropped, got cap %d", got)
+	}
+}
+
+// countingWriter counts the number of Write calls it receives.
+type countingWriter struct {
+	w      io.Writer
+	writes int
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	c.writes++
+	return c.w.Write(p)
+}
+
+// TestMessagerFragmentationSingleWritePerFragment verifies that each
+// fragment (including non-first ones) is written with a single Write call
+// combining its header and payload, rather than two separate calls.
+func TestMessagerFragmentationSingleWritePerFragment(t *testing.T) {
+	var buf bytes.Buffer
+	cw := &countingWriter{w: &buf}
+	const frameSize = 50
+	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), cw,
+		jsonmsgs.WithMaxSize(frameSize), jsonmsgs.WithFragmentation(true))
+
+	enc := nm.NewEncoder()
+	_ = enc.WriteToken(jsontext.BeginObject)
+	_ = enc.WriteToken(jsontext.String("payload"))
+	_ = enc.WriteToken(jsontext.String(strings.Repeat("abcdefghij", 30)))
+	_ = enc.WriteToken(jsontext.EndObject)
+	if err := nm.WriteMessage(enc); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	raw := buf.Bytes()
+	var chunkCount int
+	for off := 0; off < len(raw); {
+		hdr := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
+		chunkLen := int(hdr & jsonmsgs.LengthMask)
+		off += 4 + chunkLen
+		chunkCount++
+	}
+	if chunkCount <= 1 {
+		t.Fatalf("expected a fragmented message, got %d chunks", chunkCount)
+	}
+	if cw.writes != chunkCount {
+		t.Errorf("expected exactly one Write call per fragment (%d), got %d Write calls", chunkCount, cw.writes)
+	}
+}
+
+func TestMessagerMaxFragmentedMessageSize(t *testing.T) {
+	const maxSize = 100
+	const fragSize = 50
+	const maxFragMsgSize = 120
+
+	t.Run("write_enforced", func(t *testing.T) {
+		var buf bytes.Buffer
+		writer := jsonmsgs.NewMessager(nil, &buf,
+			jsonmsgs.WithMaxSize(maxSize),
+			jsonmsgs.WithFragmentSize(fragSize),
+			jsonmsgs.WithFragmentation(true),
+			jsonmsgs.WithMaxFragmentedMessageSize(maxFragMsgSize),
+		)
+
+		// 1. Message <= fragSize is unfragmented and succeeds.
+		encSmall := writer.NewEncoder()
+		_ = encSmall.WriteToken(jsontext.BeginObject)
+		_ = encSmall.WriteToken(jsontext.String("k"))
+		_ = encSmall.WriteToken(jsontext.String("short"))
+		_ = encSmall.WriteToken(jsontext.EndObject)
+		if err := writer.WriteMessage(encSmall); err != nil {
+			t.Fatalf("WriteMessage small: %v", err)
+		}
+
+		// 2. Message > fragSize but <= maxFragMsgSize is fragmented and succeeds.
+		buf.Reset()
+		encMed := writer.NewEncoder()
+		_ = encMed.WriteToken(jsontext.BeginObject)
+		_ = encMed.WriteToken(jsontext.String("k"))
+		_ = encMed.WriteToken(jsontext.String(strings.Repeat("a", 80)))
+		_ = encMed.WriteToken(jsontext.EndObject)
+		if err := writer.WriteMessage(encMed); err != nil {
+			t.Fatalf("WriteMessage medium: %v", err)
+		}
+
+		// 3. Message > maxFragMsgSize must fail with ErrMessageTooLarge.
+		encLarge := writer.NewEncoder()
+		_ = encLarge.WriteToken(jsontext.BeginObject)
+		_ = encLarge.WriteToken(jsontext.String("k"))
+		_ = encLarge.WriteToken(jsontext.String(strings.Repeat("b", 150)))
+		_ = encLarge.WriteToken(jsontext.EndObject)
+		err := writer.WriteMessage(encLarge)
+		if err == nil {
+			t.Fatal("expected WriteMessage to fail for message > maxFragMsgSize, got nil")
+		}
+		if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+			t.Errorf("got %v, want ErrMessageTooLarge", err)
+		}
+		if !strings.Contains(err.Error(), "exceeds maximum fragmented message size") {
+			t.Errorf("unexpected error text: %v", err)
+		}
+	})
+
+	t.Run("read_enforced", func(t *testing.T) {
+		// Valid fragmented message: 2 frames of 50 bytes (total 100 <= 120).
+		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 50
+		hdr2 := jsonmsgs.FlagFragment | 50
+		var bufValid bytes.Buffer
+		bufValid.Write([]byte{byte(hdr1), byte(hdr1 >> 8), byte(hdr1 >> 16), byte(hdr1 >> 24)})
+		bufValid.Write(bytes.Repeat([]byte("a"), 50))
+		bufValid.Write([]byte{byte(hdr2), byte(hdr2 >> 8), byte(hdr2 >> 16), byte(hdr2 >> 24)})
+		bufValid.Write(bytes.Repeat([]byte("a"), 50))
+
+		readerValid := jsonmsgs.NewMessager(io.NopCloser(&bufValid), io.Discard,
+			jsonmsgs.WithMaxSize(maxSize),
+			jsonmsgs.WithFragmentation(true),
+			jsonmsgs.WithMaxFragmentedMessageSize(maxFragMsgSize),
+		)
+		dec, err := readerValid.ReadMessage()
+		if err != nil {
+			t.Fatalf("ReadMessage valid: %v", err)
+		}
+		readerValid.ReleaseDecoder(dec)
+
+		// Oversized fragmented message: 3 frames of 50 bytes (total 150 > 120).
+		hdrMore := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 50
+		hdrLast := jsonmsgs.FlagFragment | 50
+		var bufOver bytes.Buffer
+		for range 2 {
+			bufOver.Write([]byte{byte(hdrMore), byte(hdrMore >> 8), byte(hdrMore >> 16), byte(hdrMore >> 24)})
+			bufOver.Write(bytes.Repeat([]byte("b"), 50))
+		}
+		bufOver.Write([]byte{byte(hdrLast), byte(hdrLast >> 8), byte(hdrLast >> 16), byte(hdrLast >> 24)})
+		bufOver.Write(bytes.Repeat([]byte("b"), 50))
+
+		readerOver := jsonmsgs.NewMessager(io.NopCloser(&bufOver), io.Discard,
+			jsonmsgs.WithMaxSize(maxSize),
+			jsonmsgs.WithFragmentation(true),
+			jsonmsgs.WithMaxFragmentedMessageSize(maxFragMsgSize),
+		)
+		_, errOver := readerOver.ReadMessage()
+		if errOver == nil {
+			t.Fatal("expected ReadMessage to fail when total reassembled size > maxFragMsgSize, got nil")
+		}
+		if !errors.Is(errOver, jsonmsgs.ErrMessageTooLarge) {
+			t.Errorf("got %v, want ErrMessageTooLarge", errOver)
+		}
+		if !strings.Contains(errOver.Error(), "exceeds maximum fragmented message size") {
+			t.Errorf("unexpected error text: %v", errOver)
+		}
+	})
 }

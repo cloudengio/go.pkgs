@@ -53,6 +53,10 @@ type options struct {
 	// If MaxMessageSize is 0, DefaultMaxMessageSize (100MB) is used.
 	maxMessageSize uint32
 
+	// maxFragmentedMessageSize specifies the maximum size of a message that can
+	// be fragmented in bytes. If 0, no limit is enforced beyond maxMessageSize.
+	maxFragmentedMessageSize uint32
+
 	// fragmentation enables automatic message fragmentation.
 	// Defaults to false.
 	fragmentation bool
@@ -64,7 +68,10 @@ type options struct {
 // Option represents an option for configuring a Messager.
 type Option func(*options)
 
-// WithMaxSize sets the maximum size of a single frame in bytes.
+// WithMaxSize sets the maximum size of a single frame in bytes. maxSize
+// must not exceed LengthMask (~1GiB); NewMessager panics otherwise, since
+// bits 30 and 31 of the frame header are reserved for FlagMore/FlagFragment
+// and cannot represent a larger single-frame length.
 func WithMaxSize(maxSize uint32) Option {
 	return func(opts *options) {
 		opts.maxSize = maxSize
@@ -85,6 +92,18 @@ func WithFragmentSize(fragmentSize uint32) Option {
 func WithMaxMessageSize(maxSize uint32) Option {
 	return func(opts *options) {
 		opts.maxMessageSize = maxSize
+	}
+}
+
+// WithMaxFragmentedMessageSize sets the maximum total size of a message that can
+// be fragmented in bytes. If set (> 0), WriteMessage returns ErrMessageTooLarge
+// if a message to be fragmented exceeds this size, and ReadMessage returns an
+// error if the total reassembled size exceeds this limit. This prevents deadlocks
+// when writing over buffered channels that could fill up before a complete request
+// is sent.
+func WithMaxFragmentedMessageSize(maxSize uint32) Option {
+	return func(opts *options) {
+		opts.maxFragmentedMessageSize = maxSize
 	}
 }
 
@@ -131,21 +150,24 @@ type Decoder struct {
 }
 
 type Messager struct {
-	rd             io.ReadCloser
-	wr             io.Writer
-	maxSize        uint32
-	fragmentSize   uint32
-	maxMessageSize uint32
-	fragmentation  bool
-	encPool        sync.Pool
-	decPool        sync.Pool
-	wmu            sync.Mutex
-	rmu            sync.Mutex
+	rd                       io.ReadCloser
+	wr                       io.Writer
+	maxSize                  uint32
+	fragmentSize             uint32
+	maxMessageSize           uint32
+	maxFragmentedMessageSize uint32
+	fragmentation            bool
+	encPool                  sync.Pool
+	decPool                  sync.Pool
+	wmu                      sync.Mutex
+	rmu                      sync.Mutex
+	fragScratch              []byte // scratch buffer for non-first fragment frames; guarded by wmu
 }
 
 // NewMessager creates a new Messager with the given readCloser and writer.
 // If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize (1MB) is used.
 // If fragmentSize is not specified via WithFragmentSize, it defaults to maxSize.
+// NewMessager panics if maxSize exceeds LengthMask (see WithMaxSize).
 func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 	var o options
 	for _, opt := range opts {
@@ -155,7 +177,7 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 		o.maxSize = DefaultMaxNativeMessageSize
 	}
 	if o.maxSize > LengthMask {
-		o.maxSize = LengthMask
+		panic(fmt.Sprintf("jsonmsgs: maxSize %d exceeds LengthMask %d", o.maxSize, LengthMask))
 	}
 	if o.fragmentSize == 0 || o.fragmentSize > o.maxSize {
 		o.fragmentSize = o.maxSize
@@ -170,12 +192,13 @@ func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
 		rd = io.NopCloser(bytes.NewReader(nil))
 	}
 	nm := &Messager{
-		wr:             wr,
-		rd:             rd,
-		maxSize:        o.maxSize,
-		fragmentSize:   o.fragmentSize,
-		maxMessageSize: o.maxMessageSize,
-		fragmentation:  o.fragmentation,
+		wr:                       wr,
+		rd:                       rd,
+		maxSize:                  o.maxSize,
+		fragmentSize:             o.fragmentSize,
+		maxMessageSize:           o.maxMessageSize,
+		maxFragmentedMessageSize: o.maxFragmentedMessageSize,
+		fragmentation:            o.fragmentation,
 	}
 	nm.encPool = sync.Pool{
 		New: func() any {
@@ -226,6 +249,10 @@ func (m *Messager) ReleaseDecoder(dec *Decoder) {
 	}
 	if cap(dec.buffer) > int(m.maxSize)*4 && cap(dec.buffer) > 4*1024*1024 {
 		dec.buffer = nil
+		// dec.buf aliases the old dec.buffer's backing array (bytes.NewBuffer
+		// does not copy), so it must be replaced too, or the large array
+		// stays reachable via dec.buf until this decoder is next reused.
+		dec.buf = bytes.NewBuffer(nil)
 	}
 	m.decPool.Put(dec)
 }
@@ -274,7 +301,7 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 		return fmt.Errorf("buffer too small to write length prefix")
 	}
 	size := len(data) - 4
-	if m.maxMessageSize > 0 && uint32(size) > m.maxMessageSize {
+	if uint64(size) > uint64(m.maxMessageSize) {
 		return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, size, m.maxMessageSize)
 	}
 
@@ -288,6 +315,10 @@ func (m *Messager) WriteMessage(enc *Encoder) error {
 
 	if !m.fragmentation {
 		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, size, m.maxSize)
+	}
+
+	if err := m.checkFragmentedLimit(uint64(size)); err != nil {
+		return err
 	}
 
 	return m.writeFragmentedMessage(data, data[4:])
@@ -310,18 +341,24 @@ func (m *Messager) writeFragmentedMessage(data []byte, payload []byte) error {
 			if err := writeFull(m.wr, data[:4+chunkLen]); err != nil {
 				return err
 			}
+			continue
+		}
+		// Combine the header and payload into a single contiguous write so
+		// that unbuffered writers (e.g. a net.Conn) don't incur two Write
+		// syscalls per fragment.
+		need := 4 + chunkLen
+		if cap(m.fragScratch) < need {
+			m.fragScratch = make([]byte, need)
 		} else {
-			var hdr [4]byte
-			hdr[0] = byte(header)
-			hdr[1] = byte(header >> 8)
-			hdr[2] = byte(header >> 16)
-			hdr[3] = byte(header >> 24)
-			if err := writeFull(m.wr, hdr[:]); err != nil {
-				return err
-			}
-			if err := writeFull(m.wr, payload[off:off+chunkLen]); err != nil {
-				return err
-			}
+			m.fragScratch = m.fragScratch[:need]
+		}
+		m.fragScratch[0] = byte(header)
+		m.fragScratch[1] = byte(header >> 8)
+		m.fragScratch[2] = byte(header >> 16)
+		m.fragScratch[3] = byte(header >> 24)
+		copy(m.fragScratch[4:], payload[off:off+chunkLen])
+		if err := writeFull(m.wr, m.fragScratch); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -380,14 +417,24 @@ func (m *Messager) ReadMessage() (*Decoder, error) {
 	return dec, nil
 }
 
+func (m *Messager) checkFragmentedLimit(totalLen uint64) error {
+	if m.maxFragmentedMessageSize > 0 && totalLen > uint64(m.maxFragmentedMessageSize) {
+		return fmt.Errorf("%w: message size %d exceeds maximum fragmented message size %d", ErrMessageTooLarge, totalLen, m.maxFragmentedMessageSize)
+	}
+	if totalLen > uint64(m.maxMessageSize) {
+		return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, totalLen, m.maxMessageSize)
+	}
+	return nil
+}
+
 func (m *Messager) readFragmentedMessage(dec *Decoder, firstLen uint32, hasMore bool) error {
 	if !m.fragmentation {
 		return fmt.Errorf("%w: received fragmented message when fragmentation is disabled", ErrMessageTooLarge)
 	}
 
-	totalLen := firstLen
-	if m.maxMessageSize > 0 && totalLen > m.maxMessageSize {
-		return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, totalLen, m.maxMessageSize)
+	totalLen := uint64(firstLen)
+	if err := m.checkFragmentedLimit(totalLen); err != nil {
+		return err
 	}
 
 	if cap(dec.buffer) < int(firstLen) {
@@ -405,9 +452,9 @@ func (m *Messager) readFragmentedMessage(dec *Decoder, firstLen uint32, hasMore 
 			return err
 		}
 		hasMore = more
-		totalLen += fragLen
-		if m.maxMessageSize > 0 && totalLen > m.maxMessageSize {
-			return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, totalLen, m.maxMessageSize)
+		totalLen += uint64(fragLen)
+		if err := m.checkFragmentedLimit(totalLen); err != nil {
+			return err
 		}
 		if err := m.appendChunk(dec, fragLen); err != nil {
 			return err
@@ -430,6 +477,9 @@ func (m *Messager) readFragmentHeader() (fragLen uint32, hasMore bool, err error
 		return 0, false, fmt.Errorf("jsonmsgs: expected fragment frame, got unfragmented frame")
 	}
 	fragLen = hdr & LengthMask
+	if fragLen == 0 {
+		return 0, false, fmt.Errorf("jsonmsgs: zero-length fragment")
+	}
 	if fragLen > m.maxSize {
 		return 0, false, fmt.Errorf("%w: fragment size %d exceeds maximum %d", ErrMessageTooLarge, fragLen, m.maxSize)
 	}
@@ -440,10 +490,11 @@ func (m *Messager) appendChunk(dec *Decoder, fragLen uint32) error {
 	currLen := len(dec.buffer)
 	newLen := currLen + int(fragLen)
 	if cap(dec.buffer) < newLen {
-		growCap := newLen * 2
-		if m.maxMessageSize > 0 && uint32(growCap) > m.maxMessageSize {
-			growCap = int(m.maxMessageSize)
+		limit := uint64(m.maxMessageSize)
+		if m.maxFragmentedMessageSize > 0 && uint64(m.maxFragmentedMessageSize) < limit {
+			limit = uint64(m.maxFragmentedMessageSize)
 		}
+		growCap := min(uint64(newLen)*2, limit)
 		newBuf := make([]byte, newLen, growCap)
 		copy(newBuf, dec.buffer)
 		dec.buffer = newBuf
