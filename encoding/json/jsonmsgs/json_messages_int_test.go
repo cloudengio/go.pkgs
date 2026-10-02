@@ -43,7 +43,7 @@ func SetOversizedEncoderBufferForTests(enc *Encoder, size uint64) {
 		cap  int
 	})(unsafe.Pointer(buf))
 	hdr.data = unsafe.Pointer(&backing[0])
-	hdr.len = int(size + 4)
-	hdr.cap = int(size + 4)
+	hdr.len = int(size + 5)
+	hdr.cap = int(size + 5)
 	enc.buffer = buf
 }

@@ -6,20 +6,19 @@ import cloudeng.io/encoding/json/jsonmsgs
 
 Package jsonmsgs provides support for efficient encoding and decoding
 arbitrary json messages over a stream, ie. an arbitrary io.Reader or
-io.Writer etc. The message format is simply a 4 byte little endian length
-followed by the encoded json data.
+io.Writer etc. The message format has a 5-byte header overhead: a 4-byte
+little-endian length (covering the 1-byte flags plus payload) followed by a
+1-byte flags field, followed by the encoded json data.
 
 ## Constants
-### FlagFragment, FlagMore, LengthMask
+### FlagFragment, FlagMore
 ```go
 // FlagFragment indicates that the frame is a fragment of a larger message.
-// It occupies bit 31 of the 4-byte frame header.
-FlagFragment uint32 = 1 << 31
+// It is a bit flag in the 1-byte header flags field.
+FlagFragment byte = 1 << 0
 // FlagMore indicates that more fragments follow for the current message.
-// It occupies bit 30 of the 4-byte frame header.
-FlagMore uint32 = 1 << 30
-// LengthMask masks the 30-bit frame payload length (bits 0..29).
-LengthMask uint32 = 0x3fffffff
+// It is a bit flag in the 1-byte header flags field.
+FlagMore byte = 1 << 1
 
 ```
 
@@ -89,11 +88,10 @@ type Messager struct {
 ```go
 func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager
 ```
-NewMessager creates a new Messager with the given readCloser and writer.
-If maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize
-(1MB) is used. If fragmentSize is not specified via WithFragmentSize,
-it defaults to maxSize. NewMessager panics if maxSize exceeds LengthMask
-(see WithMaxSize).
+NewMessager creates a new Messager with the given readCloser and writer. If
+maxSize is not specified via WithMaxSize, DefaultMaxNativeMessageSize (1MB)
+is used. If fragmentSize is not specified via WithFragmentSize, it defaults
+to maxSize. NewMessager panics if maxSize or fragmentSize is less than 2.
 
 
 
@@ -138,14 +136,15 @@ to be discarded.
 ```go
 func (m *Messager) WriteMessage(enc *Encoder) error
 ```
-WriteMessage writes a message to the underlying writer with a
-4-byte little-endian length prefix. If fragmentation is enabled (via
-WithFragmentation) and the serialized message exceeds the configured
-fragment size (which defaults to MaxSize), it is transparently fragmented
-into multiple frames of at most fragment size bytes. If fragmentation is
-disabled (the default) and the message exceeds MaxSize, ErrMessageTooLarge
-is returned. The encoder is returned to the pool after use regardless of
-error.
+WriteMessage writes a message to the underlying writer with a 5-byte header
+(a 4-byte little-endian length prefix followed by a 1-byte flags field).
+The length prefix encodes 1 + payload size (covering the flags byte and
+the payload). If fragmentation is enabled (via WithFragmentation) and
+the message body exceeds the configured fragment size (which defaults to
+MaxSize), it is transparently fragmented into multiple frames of at most
+fragment size bytes. If fragmentation is disabled (the default) and the
+message exceeds MaxSize, ErrMessageTooLarge is returned. The encoder is
+returned to the pool after use regardless of error.
 
 
 
@@ -171,9 +170,10 @@ func WithEncoderOptions(opts jsontext.Options) Option
 ```go
 func WithFragmentSize(fragmentSize uint32) Option
 ```
-WithFragmentSize sets the maximum size of a fragment frame payload in bytes.
-It defaults to MaxSize, but can be configured to be smaller. If fragmentSize
-is 0 or exceeds MaxSize, it is set to MaxSize.
+WithFragmentSize sets the maximum size of a fragment frame body (1-byte
+flags + chunk payload) in bytes. It defaults to MaxSize, but can be
+configured to be smaller. If fragmentSize is 0 or exceeds MaxSize, it is set
+to MaxSize. NewMessager panics if fragmentSize is less than 2.
 
 
 ```go
@@ -202,10 +202,9 @@ is sent, as well as protecting receivers from unbounded memory growth.
 ```go
 func WithMaxSize(maxSize uint32) Option
 ```
-WithMaxSize sets the maximum size of a single frame in bytes. maxSize must
-not exceed LengthMask (~1GiB); NewMessager panics otherwise, since bits 30
-and 31 of the frame header are reserved for FlagMore/FlagFragment and cannot
-represent a larger single-frame length.
+WithMaxSize sets the maximum size of a single frame body (1-byte flags +
+payload) in bytes. If maxSize is 0, DefaultMaxNativeMessageSize (1MB) is
+used. NewMessager panics if maxSize is less than 2.
 
 
 

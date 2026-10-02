@@ -113,8 +113,8 @@ func TestMessagerMaxSizeEnforced(t *testing.T) {
 
 	// Craft a header with size 100 > maxSize 20.
 	var fakeStream bytes.Buffer
-	fakeStream.Write([]byte{100, 0, 0, 0})
-	fakeStream.Write(make([]byte, 100))
+	fakeStream.Write([]byte{100, 0, 0, 0, 0})
+	fakeStream.Write(make([]byte, 99))
 
 	nmReader := jsonmsgs.NewMessager(io.NopCloser(&fakeStream), io.Discard, jsonmsgs.WithMaxSize(20))
 	if _, err := nmReader.ReadMessage(); err == nil {
@@ -213,8 +213,8 @@ func TestMessagerCloseNilReader(t *testing.T) {
 
 // frame returns payload prefixed with its 4-byte little-endian length.
 func frame(payload string) []byte {
-	n := len(payload)
-	return append([]byte{byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24)}, payload...)
+	n := len(payload) + 1
+	return append([]byte{byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24), 0}, payload...)
 }
 
 // writeObject writes {"a":1} as a single message and returns the payload bytes.
@@ -228,7 +228,7 @@ func writeObject(t *testing.T, nm *jsonmsgs.Messager, buf *bytes.Buffer) string 
 	if err := nm.WriteMessage(enc); err != nil {
 		t.Fatalf("WriteMessage: %v", err)
 	}
-	return string(buf.Bytes()[4:])
+	return string(buf.Bytes()[5:])
 }
 
 func TestMessagerEncoderOptions(t *testing.T) {
@@ -309,23 +309,24 @@ func TestMessagerFragmentation(t *testing.T) {
 	var chunkCount int
 	var totalPayload int
 	for off := 0; off < len(raw); {
-		if off+4 > len(raw) {
+		if off+5 > len(raw) {
 			t.Fatalf("truncated frame header at offset %d", off)
 		}
-		hdr := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
-		isFrag := (hdr & jsonmsgs.FlagFragment) != 0
-		hasMore := (hdr & jsonmsgs.FlagMore) != 0
-		chunkLen := int(hdr & jsonmsgs.LengthMask)
+		frameLen := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
+		flags := raw[off+4]
+		isFrag := (flags & jsonmsgs.FlagFragment) != 0
+		hasMore := (flags & jsonmsgs.FlagMore) != 0
+		chunkLen := int(frameLen - 1)
 
 		if !isFrag {
 			t.Errorf("frame %d: expected FlagFragment bit to be set", chunkCount)
 		}
-		if chunkLen > frameSize {
-			t.Errorf("frame %d: chunkLen %d > frameSize %d", chunkCount, chunkLen, frameSize)
+		if frameLen > frameSize {
+			t.Errorf("frame %d: frameLen %d > frameSize %d", chunkCount, frameLen, frameSize)
 		}
 		totalPayload += chunkLen
 		chunkCount++
-		off += 4 + chunkLen
+		off += 4 + int(frameLen)
 
 		// If this is the last frame, hasMore must be false; otherwise true.
 		if off == len(raw) {
@@ -460,10 +461,10 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 	const frameSize = 20
 
 	t.Run("truncated_mid_fragment", func(t *testing.T) {
-		// Frame with FlagFragment | FlagMore | length 15, but only 5 bytes provided.
-		hdr := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 15
+		// Frame with FlagFragment | FlagMore | frameLen 16 (1 flag + 15 payload), but only 5 bytes provided.
+		hdr := rawHeader(16, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
 		var buf bytes.Buffer
-		buf.Write([]byte{byte(hdr), byte(hdr >> 8), byte(hdr >> 16), byte(hdr >> 24)})
+		buf.Write(hdr)
 		buf.Write(make([]byte, 5))
 
 		r := jsonmsgs.NewMessager(io.NopCloser(&buf), io.Discard,
@@ -474,15 +475,15 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 	})
 
 	t.Run("unfragmented_frame_mid_fragment", func(t *testing.T) {
-		// Frame 1: FlagFragment | FlagMore | 10
-		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 10
+		// Frame 1: FlagFragment | FlagMore | frameLen 11 (1 + 10)
+		hdr1 := rawHeader(11, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
 		var buf bytes.Buffer
-		buf.Write([]byte{byte(hdr1), byte(hdr1 >> 8), byte(hdr1 >> 16), byte(hdr1 >> 24)})
+		buf.Write(hdr1)
 		buf.Write(make([]byte, 10))
 
 		// Frame 2: Missing FlagFragment (unfragmented frame sent mid-fragment)
-		hdr2 := uint32(10)
-		buf.Write([]byte{byte(hdr2), byte(hdr2 >> 8), byte(hdr2 >> 16), byte(hdr2 >> 24)})
+		hdr2 := rawHeader(11, 0)
+		buf.Write(hdr2)
 		buf.Write(make([]byte, 10))
 
 		r := jsonmsgs.NewMessager(io.NopCloser(&buf), io.Discard,
@@ -493,8 +494,7 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 	})
 
 	t.Run("fragment_disabled_on_read", func(t *testing.T) {
-		hdr := jsonmsgs.FlagFragment | 10
-		rawFrame := append([]byte{byte(hdr), byte(hdr >> 8), byte(hdr >> 16), byte(hdr >> 24)}, make([]byte, 10)...)
+		rawFrame := append(rawHeader(11, jsonmsgs.FlagFragment), make([]byte, 10)...)
 
 		// By default (fragmentation disabled), reading a fragment frame must fail.
 		r := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(rawFrame)), io.Discard,
@@ -516,17 +516,15 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 	})
 
 	t.Run("zero_length_fragment_rejected", func(t *testing.T) {
-		// Frame 1: 10 bytes, FlagMore.
-		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 10
+		// Frame 1: 10 bytes payload (frameLen 11), FlagMore.
+		hdr1 := rawHeader(11, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
 		var buf bytes.Buffer
-		buf.Write([]byte{byte(hdr1), byte(hdr1 >> 8), byte(hdr1 >> 16), byte(hdr1 >> 24)})
+		buf.Write(hdr1)
 		buf.Write(make([]byte, 10))
 
-		// Frame 2: zero-length fragment with FlagMore still set. A peer could
-		// repeat this frame forever to stall ReadMessage; it must be rejected
-		// as soon as it is seen instead of being accepted and looped on.
-		hdr2 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore
-		buf.Write([]byte{byte(hdr2), byte(hdr2 >> 8), byte(hdr2 >> 16), byte(hdr2 >> 24)})
+		// Frame 2: zero-length fragment payload (frameLen 1, 1 byte flags + 0 payload) with FlagMore still set.
+		hdr2 := rawHeader(1, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
+		buf.Write(hdr2)
 
 		r := jsonmsgs.NewMessager(io.NopCloser(&buf), io.Discard,
 			jsonmsgs.WithMaxSize(frameSize), jsonmsgs.WithFragmentation(true))
@@ -538,15 +536,15 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 	})
 
 	t.Run("total_reassembled_size_exceeds_max_fragmented_message_size", func(t *testing.T) {
-		// Frame 1: 15 bytes, FlagMore
-		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 15
-		// Frame 2: 15 bytes (total 30 bytes > maxFragmentedMessageSize 25)
-		hdr2 := jsonmsgs.FlagFragment | 15
+		// Frame 1: 15 bytes payload (frameLen 16), FlagMore
+		hdr1 := rawHeader(16, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
+		// Frame 2: 15 bytes payload (frameLen 16) (total payload 30 bytes > maxFragmentedMessageSize 25)
+		hdr2 := rawHeader(16, jsonmsgs.FlagFragment)
 
 		var buf bytes.Buffer
-		buf.Write([]byte{byte(hdr1), byte(hdr1 >> 8), byte(hdr1 >> 16), byte(hdr1 >> 24)})
+		buf.Write(hdr1)
 		buf.Write(make([]byte, 15))
-		buf.Write([]byte{byte(hdr2), byte(hdr2 >> 8), byte(hdr2 >> 16), byte(hdr2 >> 24)})
+		buf.Write(hdr2)
 		buf.Write(make([]byte, 15))
 
 		r := jsonmsgs.NewMessager(io.NopCloser(&buf), io.Discard,
@@ -559,9 +557,9 @@ func TestMessagerFragmentationErrors(t *testing.T) {
 	})
 }
 
-// rawHeader returns the 4-byte little-endian encoding of a frame header.
-func rawHeader(hdr uint32) []byte {
-	return []byte{byte(hdr), byte(hdr >> 8), byte(hdr >> 16), byte(hdr >> 24)}
+// rawHeader returns the 5-byte encoding of a frame header (4-byte length + 1-byte flags).
+func rawHeader(frameLen uint32, flags byte) []byte {
+	return []byte{byte(frameLen), byte(frameLen >> 8), byte(frameLen >> 16), byte(frameLen >> 24), flags}
 }
 
 // TestMessagerFlagMoreWithoutFragment verifies that a header with FlagMore but
@@ -571,7 +569,7 @@ func rawHeader(hdr uint32) []byte {
 func TestMessagerFlagMoreWithoutFragment(t *testing.T) {
 	const frameSize = 20
 	const payload = `{"a":1}xxx`
-	raw := append(rawHeader(jsonmsgs.FlagMore|uint32(len(payload))), payload...)
+	raw := append(rawHeader(uint32(len(payload)+1), jsonmsgs.FlagMore), payload...)
 
 	for _, fragmentation := range []bool{false, true} {
 		t.Run(fmt.Sprintf("fragmentation=%v", fragmentation), func(t *testing.T) {
@@ -601,7 +599,7 @@ func TestMessagerFlagMoreWithoutFragment(t *testing.T) {
 // oversized length with the invalid flags is reported as the invalid header it
 // is, not as too large.
 func TestMessagerFlagMoreWithoutFragmentBeforeSizeCheck(t *testing.T) {
-	raw := rawHeader(jsonmsgs.FlagMore | jsonmsgs.LengthMask)
+	raw := rawHeader(100, jsonmsgs.FlagMore)
 	r := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(raw)), io.Discard, jsonmsgs.WithMaxSize(20))
 	_, err := r.ReadMessage()
 	if err == nil || !strings.Contains(err.Error(), "FlagMore set without FlagFragment") {
@@ -703,8 +701,8 @@ func TestMessagerWithFragmentSize(t *testing.T) {
 		}
 
 		raw := buf.Bytes()
-		hdr := uint32(raw[0]) | uint32(raw[1])<<8 | uint32(raw[2])<<16 | uint32(raw[3])<<24
-		if (hdr & jsonmsgs.FlagFragment) != 0 {
+		flags := raw[4]
+		if (flags & jsonmsgs.FlagFragment) != 0 {
 			t.Errorf("small message should not be fragmented, but FlagFragment was set")
 		}
 
@@ -729,22 +727,23 @@ func verifyFragmentFrames(t *testing.T, raw []byte, fragSize int) {
 	t.Helper()
 	var chunkLens []int
 	for off := 0; off < len(raw); {
-		if off+4 > len(raw) {
+		if off+5 > len(raw) {
 			t.Fatalf("truncated frame header at offset %d", off)
 		}
-		hdr := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
-		isFrag := (hdr & jsonmsgs.FlagFragment) != 0
-		hasMore := (hdr & jsonmsgs.FlagMore) != 0
-		chunkLen := int(hdr & jsonmsgs.LengthMask)
+		frameLen := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
+		flags := raw[off+4]
+		isFrag := (flags & jsonmsgs.FlagFragment) != 0
+		hasMore := (flags & jsonmsgs.FlagMore) != 0
+		chunkLen := int(frameLen - 1)
 
 		if !isFrag {
 			t.Errorf("expected frame to have FlagFragment set")
 		}
-		if chunkLen > fragSize {
-			t.Errorf("chunkLen %d > fragSize %d", chunkLen, fragSize)
+		if frameLen > uint32(fragSize) {
+			t.Errorf("frameLen %d > fragSize %d", frameLen, fragSize)
 		}
 		chunkLens = append(chunkLens, chunkLen)
-		off += 4 + chunkLen
+		off += 4 + int(frameLen)
 
 		if off == len(raw) {
 			if hasMore {
@@ -782,12 +781,11 @@ func TestMessagerFragmentSizeOptions(t *testing.T) {
 
 	raw := buf.Bytes()
 	for off := 0; off < len(raw); {
-		hdr := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
-		chunkLen := int(hdr & jsonmsgs.LengthMask)
-		if chunkLen > 100 {
-			t.Errorf("chunkLen %d exceeded maxSize 100", chunkLen)
+		frameLen := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
+		if frameLen > 100 {
+			t.Errorf("frameLen %d exceeded maxSize 100", frameLen)
 		}
-		off += 4 + chunkLen
+		off += 4 + int(frameLen)
 	}
 
 	// 2. Defaulting: fragmentSize 0 should default to maxSize.
@@ -807,12 +805,11 @@ func TestMessagerFragmentSizeOptions(t *testing.T) {
 	}
 	raw2 := buf.Bytes()
 	for off := 0; off < len(raw2); {
-		hdr := uint32(raw2[off]) | uint32(raw2[off+1])<<8 | uint32(raw2[off+2])<<16 | uint32(raw2[off+3])<<24
-		chunkLen := int(hdr & jsonmsgs.LengthMask)
-		if chunkLen > 80 {
-			t.Errorf("chunkLen %d exceeded maxSize 80", chunkLen)
+		frameLen := uint32(raw2[off]) | uint32(raw2[off+1])<<8 | uint32(raw2[off+2])<<16 | uint32(raw2[off+3])<<24
+		if frameLen > 80 {
+			t.Errorf("frameLen %d exceeded maxSize 80", frameLen)
 		}
-		off += 4 + chunkLen
+		off += 4 + int(frameLen)
 	}
 
 	// 3. With fragmentation disabled (default or WithFragmentation(false)):
@@ -832,8 +829,8 @@ func TestMessagerFragmentSizeOptions(t *testing.T) {
 		t.Fatalf("WriteMessage disabled frag: %v", err)
 	}
 	raw3 := buf.Bytes()
-	hdr3 := uint32(raw3[0]) | uint32(raw3[1])<<8 | uint32(raw3[2])<<16 | uint32(raw3[3])<<24
-	if (hdr3 & jsonmsgs.FlagFragment) != 0 {
+	flags3 := raw3[4]
+	if (flags3 & jsonmsgs.FlagFragment) != 0 {
 		t.Errorf("FlagFragment should not be set when fragmentation is disabled")
 	}
 
@@ -850,13 +847,13 @@ func TestMessagerFragmentSizeOptions(t *testing.T) {
 	}
 }
 
-func TestNewMessagerPanicsOnOversizedMaxSize(t *testing.T) {
+func TestNewMessagerPanicsOnInvalidMaxSize(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("expected NewMessager to panic when maxSize exceeds LengthMask")
+			t.Error("expected NewMessager to panic when maxSize < 2")
 		}
 	}()
-	jsonmsgs.NewMessager(nil, io.Discard, jsonmsgs.WithMaxSize(jsonmsgs.LengthMask+1))
+	jsonmsgs.NewMessager(nil, io.Discard, jsonmsgs.WithMaxSize(1))
 }
 
 // TestMessagerReleaseDecoderFreesLargeBuffer verifies that ReleaseDecoder
@@ -916,9 +913,8 @@ func TestMessagerFragmentationSingleWritePerFragment(t *testing.T) {
 	raw := buf.Bytes()
 	var chunkCount int
 	for off := 0; off < len(raw); {
-		hdr := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
-		chunkLen := int(hdr & jsonmsgs.LengthMask)
-		off += 4 + chunkLen
+		frameLen := uint32(raw[off]) | uint32(raw[off+1])<<8 | uint32(raw[off+2])<<16 | uint32(raw[off+3])<<24
+		off += 4 + int(frameLen)
 		chunkCount++
 	}
 	if chunkCount <= 1 {
@@ -983,13 +979,13 @@ func TestMessagerMaxFragmentedMessageSize(t *testing.T) {
 	})
 
 	t.Run("read_enforced", func(t *testing.T) {
-		// Valid fragmented message: 2 frames of 50 bytes (total 100 <= 120).
-		hdr1 := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 50
-		hdr2 := jsonmsgs.FlagFragment | 50
+		// Valid fragmented message: 2 frames of 50 bytes payload (frameLen 51, total 100 <= 120).
+		hdr1 := rawHeader(51, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
+		hdr2 := rawHeader(51, jsonmsgs.FlagFragment)
 		var bufValid bytes.Buffer
-		bufValid.Write([]byte{byte(hdr1), byte(hdr1 >> 8), byte(hdr1 >> 16), byte(hdr1 >> 24)})
+		bufValid.Write(hdr1)
 		bufValid.Write(bytes.Repeat([]byte("a"), 50))
-		bufValid.Write([]byte{byte(hdr2), byte(hdr2 >> 8), byte(hdr2 >> 16), byte(hdr2 >> 24)})
+		bufValid.Write(hdr2)
 		bufValid.Write(bytes.Repeat([]byte("a"), 50))
 
 		readerValid := jsonmsgs.NewMessager(io.NopCloser(&bufValid), io.Discard,
@@ -1003,15 +999,15 @@ func TestMessagerMaxFragmentedMessageSize(t *testing.T) {
 		}
 		readerValid.ReleaseDecoder(dec)
 
-		// Oversized fragmented message: 3 frames of 50 bytes (total 150 > 120).
-		hdrMore := jsonmsgs.FlagFragment | jsonmsgs.FlagMore | 50
-		hdrLast := jsonmsgs.FlagFragment | 50
+		// Oversized fragmented message: 3 frames of 50 bytes payload (frameLen 51, total 150 > 120).
+		hdrMore := rawHeader(51, jsonmsgs.FlagFragment|jsonmsgs.FlagMore)
+		hdrLast := rawHeader(51, jsonmsgs.FlagFragment)
 		var bufOver bytes.Buffer
 		for range 2 {
-			bufOver.Write([]byte{byte(hdrMore), byte(hdrMore >> 8), byte(hdrMore >> 16), byte(hdrMore >> 24)})
+			bufOver.Write(hdrMore)
 			bufOver.Write(bytes.Repeat([]byte("b"), 50))
 		}
-		bufOver.Write([]byte{byte(hdrLast), byte(hdrLast >> 8), byte(hdrLast >> 16), byte(hdrLast >> 24)})
+		bufOver.Write(hdrLast)
 		bufOver.Write(bytes.Repeat([]byte("b"), 50))
 
 		readerOver := jsonmsgs.NewMessager(io.NopCloser(&bufOver), io.Discard,
