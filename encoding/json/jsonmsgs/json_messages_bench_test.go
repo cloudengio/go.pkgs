@@ -38,7 +38,7 @@ func (r *loopReader) Close() error { return nil }
 func encodeFramedMsg(b *testing.B) []byte {
 	b.Helper()
 	var buf bytes.Buffer
-	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), &buf)
+	nm := jsonmsgs.NewWriter(&buf)
 	enc := nm.NewEncoder()
 	_ = enc.WriteToken(jsontext.BeginObject)
 	_ = enc.WriteToken(jsontext.String("version"))
@@ -69,7 +69,7 @@ func drainDecoder(b *testing.B, nmd *jsonmsgs.Decoder) {
 }
 
 func BenchmarkMessagerWriteMessage(b *testing.B) {
-	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard)
+	nm := jsonmsgs.NewWriter(io.Discard)
 	b.ResetTimer()
 	for b.Loop() {
 		enc := nm.NewEncoder()
@@ -89,7 +89,7 @@ func BenchmarkMessagerWriteMessage(b *testing.B) {
 // concurrent access. Note: io.Discard is used as the writer since Messager
 // does not serialise concurrent writes — this benchmark isolates pool throughput.
 func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
-	nm := jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(nil)), io.Discard)
+	nm := jsonmsgs.NewWriter(io.Discard)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -111,7 +111,7 @@ func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
 // iteration rather than reallocating.
 func BenchmarkMessagerReadMessage(b *testing.B) {
 	msg := encodeFramedMsg(b)
-	nm := jsonmsgs.NewMessager(&loopReader{data: msg}, io.Discard)
+	nm := jsonmsgs.NewReader(&loopReader{data: msg})
 	b.ResetTimer()
 	for b.Loop() {
 		nmd, err := nm.ReadMessage()
@@ -130,7 +130,7 @@ func BenchmarkMessagerReadMessageParallel(b *testing.B) {
 	msg := encodeFramedMsg(b)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		nm := jsonmsgs.NewMessager(&loopReader{data: msg}, io.Discard)
+		nm := jsonmsgs.NewReader(&loopReader{data: msg})
 		for pb.Next() {
 			nmd, err := nm.ReadMessage()
 			if err != nil {
@@ -207,7 +207,7 @@ func BenchmarkMessagerWriteLarge(b *testing.B) {
 				name = kind + "/whole"
 			}
 			b.Run(name, func(b *testing.B) {
-				nm := jsonmsgs.NewMessager(nil, io.Discard, largeOptions(whole)...)
+				nm := jsonmsgs.NewWriter(io.Discard, largeOptions(whole)...)
 				b.SetBytes(int64(len(msg)))
 				b.ReportAllocs()
 				for b.Loop() {
@@ -226,7 +226,7 @@ func BenchmarkMessagerReadLarge(b *testing.B) {
 		for _, whole := range []bool{true, false} {
 			var stream bytes.Buffer
 			opts := largeOptions(whole)
-			if err := jsonmsgs.WriteRawForTests(jsonmsgs.NewMessager(nil, &stream, opts...), msg); err != nil {
+			if err := jsonmsgs.WriteRawForTests(jsonmsgs.NewWriter(&stream, opts...), msg); err != nil {
 				b.Fatal(err)
 			}
 			name := kind + "/fragmented"
@@ -234,7 +234,7 @@ func BenchmarkMessagerReadLarge(b *testing.B) {
 				name = kind + "/whole"
 			}
 			b.Run(name, func(b *testing.B) {
-				nm := jsonmsgs.NewMessager(&loopReader{data: stream.Bytes()}, io.Discard, opts...)
+				nm := jsonmsgs.NewReader(&loopReader{data: stream.Bytes()}, opts...)
 				b.SetBytes(int64(len(msg)))
 				b.ReportAllocs()
 				for b.Loop() {
@@ -261,7 +261,7 @@ const benchHeader = `{"to":7,"op":"x"}`
 // BenchmarkMessagerWriteMessageWithHeader is BenchmarkMessagerWriteMessage for
 // a message with a user header, which is sent as a single fragment.
 func BenchmarkMessagerWriteMessageWithHeader(b *testing.B) {
-	nm := jsonmsgs.NewMessager(nil, io.Discard, headerBenchOptions(false)...)
+	nm := jsonmsgs.NewWriter(io.Discard, headerBenchOptions(false)...)
 	b.ReportAllocs()
 	for b.Loop() {
 		enc := nm.NewEncoder()
@@ -282,13 +282,13 @@ func BenchmarkMessagerWriteMessageWithHeader(b *testing.B) {
 func BenchmarkMessagerReadMessageWithHeader(b *testing.B) {
 	var stream bytes.Buffer
 	opts := headerBenchOptions(false)
-	wr := jsonmsgs.NewMessager(nil, &stream, opts...)
+	wr := jsonmsgs.NewWriter(&stream, opts...)
 	enc := wr.NewEncoder()
 	_ = enc.WriteValue(jsontext.Value(`{"version":0,"payload":{"x":42,"y":7}}`))
 	if err := wr.WriteMessageWithHeader(enc, jsontext.Value(benchHeader)); err != nil {
 		b.Fatal(err)
 	}
-	nm := jsonmsgs.NewMessager(&loopReader{data: stream.Bytes()}, io.Discard, opts...)
+	nm := jsonmsgs.NewReader(&loopReader{data: stream.Bytes()}, opts...)
 	b.ReportAllocs()
 	for b.Loop() {
 		nmd, err := nm.ReadMessage()
@@ -321,14 +321,14 @@ func BenchmarkMessagerForwardLarge(b *testing.B) {
 
 func forwardBench(b *testing.B, msg []byte, opts []jsonmsgs.Option) {
 	var stream bytes.Buffer
-	wr := jsonmsgs.NewMessager(nil, &stream, opts...)
+	wr := jsonmsgs.NewWriter(&stream, opts...)
 	enc := wr.NewEncoder()
 	_ = jsonmsgs.WriteRawIntoEncoderForTests(enc, msg)
 	if err := wr.WriteMessageWithHeader(enc, jsontext.Value(benchHeader)); err != nil {
 		b.Fatal(err)
 	}
-	rd := jsonmsgs.NewMessager(&loopReader{data: stream.Bytes()}, nil, opts...)
-	out := jsonmsgs.NewMessager(nil, io.Discard, opts...)
+	rd := jsonmsgs.NewReader(&loopReader{data: stream.Bytes()}, opts...)
+	out := jsonmsgs.NewWriter(io.Discard, opts...)
 	b.SetBytes(int64(len(msg)))
 	b.ReportAllocs()
 	for b.Loop() {

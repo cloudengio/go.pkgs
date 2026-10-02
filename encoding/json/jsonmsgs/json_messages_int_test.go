@@ -52,7 +52,7 @@ func SetOversizedEncoderBufferForTests(enc *Encoder, size uint64) {
 // that inputs that jsontext.Encoder cannot produce, such as control
 // characters outside of strings or invalid UTF-8, can be exercised. A newline
 // is appended to mimic the encoder, WriteMessage trims it.
-func WriteRawForTests(m *Messager, raw []byte) error {
+func WriteRawForTests(m *Writer, raw []byte) error {
 	enc := m.NewEncoder()
 	enc.buffer.Write(raw)
 	enc.buffer.WriteByte('\n')

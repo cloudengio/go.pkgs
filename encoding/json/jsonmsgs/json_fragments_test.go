@@ -51,16 +51,16 @@ func joinFrames(bodies ...string) []byte {
 	return out
 }
 
-func newWriter(w io.Writer, opts ...jsonmsgs.Option) *jsonmsgs.Messager {
-	return jsonmsgs.NewMessager(nil, w, opts...)
+func newWriter(w io.Writer, opts ...jsonmsgs.Option) *jsonmsgs.Writer {
+	return jsonmsgs.NewWriter(w, opts...)
 }
 
-func newReader(stream []byte, opts ...jsonmsgs.Option) *jsonmsgs.Messager {
-	return jsonmsgs.NewMessager(io.NopCloser(bytes.NewReader(stream)), nil, opts...)
+func newReader(stream []byte, opts ...jsonmsgs.Option) *jsonmsgs.Reader {
+	return jsonmsgs.NewReader(io.NopCloser(bytes.NewReader(stream)), opts...)
 }
 
 // readRaw returns the next message, as bytes.
-func readRaw(m *jsonmsgs.Messager) ([]byte, error) {
+func readRaw(m *jsonmsgs.Reader) ([]byte, error) {
 	dec, err := m.ReadMessage()
 	if err != nil {
 		return nil, err
@@ -285,30 +285,38 @@ func TestFragmentedJSONRoundTrip(t *testing.T) {
 
 func TestReservedPrefix(t *testing.T) {
 	for _, msg := range []string{`{"~":[1,2]}`, `{"~":[0,3],"p":"abc"}`, `{"~":[` + strings.Repeat("1,", 100) + `1]}`} {
-		var buf bytes.Buffer
-		nm := newWriter(&buf)
-		err := jsonmsgs.WriteRawForTests(nm, []byte(msg))
-		if !errors.Is(err, jsonmsgs.ErrInvalidFrame) || buf.Len() != 0 {
-			t.Errorf("%q: got %v, wrote %d bytes, want ErrInvalidFrame and nothing written", msg, err, buf.Len())
+		// Whether or not fragmentation is enabled the message is sent in an
+		// envelope, that the reader unwraps.
+		for _, frag := range []bool{false, true} {
+			var buf bytes.Buffer
+			opts := []jsonmsgs.Option{jsonmsgs.WithFragmentation(frag), jsonmsgs.WithMaxSize(300)}
+			if err := jsonmsgs.WriteRawForTests(newWriter(&buf, opts...), []byte(msg)); err != nil {
+				t.Fatalf("%q, fragmentation %v: %v", msg, frag, err)
+			}
+			if frames := splitFrames(t, buf.Bytes()); !bytes.HasPrefix(frames[0], []byte(`{"~":[0,`)) {
+				t.Errorf("%q was not wrapped: %q", msg, frames[0])
+			}
+			got, err := readRaw(newReader(buf.Bytes(), opts...))
+			if err != nil || string(got) != msg {
+				t.Errorf("%q, fragmentation %v: got %q, %v", msg, frag, got, err)
+			}
 		}
-		// A failure before anything is written does not poison the writer.
-		if err := jsonmsgs.WriteRawForTests(nm, []byte(`{}`)); err != nil {
-			t.Errorf("write after rejected message: %v", err)
-		}
-
-		buf.Reset()
-		opts := []jsonmsgs.Option{jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxSize(50)}
-		nm = newWriter(&buf, opts...)
-		if err := jsonmsgs.WriteRawForTests(nm, []byte(msg)); err != nil {
-			t.Fatalf("%q: %v", msg, err)
-		}
-		if frames := splitFrames(t, buf.Bytes()); !bytes.HasPrefix(frames[0], []byte(`{"~":[0,`)) {
-			t.Errorf("%q was not wrapped: %q", msg, frames[0])
-		}
-		got, err := readRaw(newReader(buf.Bytes(), opts...))
-		if err != nil || string(got) != msg {
-			t.Errorf("%q: got %q, %v", msg, got, err)
-		}
+	}
+	// If it does not fit in an envelope, it is an error unless it can be
+	// fragmented, and nothing is written.
+	big := `{"~":[1,` + strings.Repeat("1,", 200) + `1]}`
+	var buf bytes.Buffer
+	nm := newWriter(&buf, jsonmsgs.WithMaxSize(100))
+	if err := jsonmsgs.WriteRawForTests(nm, []byte(big)); !errors.Is(err, jsonmsgs.ErrMessageTooLarge) || buf.Len() != 0 {
+		t.Errorf("got %v, wrote %d bytes, want ErrMessageTooLarge and nothing written", err, buf.Len())
+	}
+	if err := jsonmsgs.WriteRawForTests(nm, []byte(`{}`)); err != nil {
+		t.Errorf("write after rejected message: %v", err)
+	}
+	// An envelope has to be valid UTF-8.
+	bad := append([]byte(`{"~":[1,`), 0xff, ']', '}')
+	if err := jsonmsgs.WriteRawForTests(newWriter(&buf), bad); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
+		t.Errorf("got %v, want ErrInvalidFrame", err)
 	}
 	// A message that merely resembles the prefix is a message.
 	for _, msg := range []string{`{"~": [1]}`, `{ "~":[1]}`, `{"~":1}`, `{"a":[1]}`, `["~"]`} {
@@ -367,13 +375,13 @@ func (f *failAfter) Write(p []byte) (int, error) {
 func TestWriterPoisoned(t *testing.T) {
 	fw := &failAfter{n: 100}
 	nm := newWriter(fw, jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxSize(40))
-	if err := jsonmsgs.WriteRawForTests(nm, bytes.Repeat([]byte("a"), 1000)); !errors.Is(err, errDisk) {
-		t.Fatalf("got %v, want %v", err, errDisk)
+	if err := jsonmsgs.WriteRawForTests(nm, bytes.Repeat([]byte("a"), 1000)); !errors.Is(err, errDisk) || !errors.Is(err, jsonmsgs.ErrPermanent) {
+		t.Fatalf("got %v, want a permanent %v", err, errDisk)
 	}
 	calls := fw.calls
 	// A message that would fit, whatever the writer would now do.
 	fw.n = 1 << 20
-	if err := jsonmsgs.WriteRawForTests(nm, []byte(`{}`)); !errors.Is(err, errDisk) {
+	if err := jsonmsgs.WriteRawForTests(nm, []byte(`{}`)); !errors.Is(err, errDisk) || !errors.Is(err, jsonmsgs.ErrPermanent) {
 		t.Errorf("got %v, want the earlier error", err)
 	}
 	if fw.calls != calls {
@@ -385,8 +393,8 @@ func TestReaderPoisoned(t *testing.T) {
 	stream := append(joinFrames(`{"~":[0,5],"p":"abc"}`, `{"a":1}`), joinFrames(`{"b":2}`)...)
 	rd := newReader(stream, jsonmsgs.WithFragmentation(true))
 	_, err1 := rd.ReadMessage()
-	if !errors.Is(err1, jsonmsgs.ErrInvalidFrame) {
-		t.Fatalf("got %v", err1)
+	if !errors.Is(err1, jsonmsgs.ErrInvalidFrame) || !errors.Is(err1, jsonmsgs.ErrPermanent) {
+		t.Fatalf("got %v, want a permanent ErrInvalidFrame", err1)
 	}
 	// The frames that follow must not be taken for the start of a message.
 	for range 3 {
@@ -459,6 +467,9 @@ func TestReaderRejects(t *testing.T) {
 			if !errors.Is(err, jsonmsgs.ErrInvalidFrame) && !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 				t.Errorf("got %v, want ErrInvalidFrame or ErrMessageTooLarge", err)
 			}
+			if !errors.Is(err, jsonmsgs.ErrPermanent) {
+				t.Errorf("%v does not match ErrPermanent", err)
+			}
 			if _, err2 := rd.ReadMessage(); err2 != err { //nolint:errorlint
 				t.Errorf("not sticky: got %v, want %v", err2, err)
 			}
@@ -478,6 +489,9 @@ func TestFragmentReaderRejects(t *testing.T) {
 			if !errors.Is(err, jsonmsgs.ErrInvalidFrame) && !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 				t.Fatalf("got %v, want ErrInvalidFrame or ErrMessageTooLarge", err)
 			}
+			if !errors.Is(err, jsonmsgs.ErrPermanent) {
+				t.Errorf("%v does not match ErrPermanent", err)
+			}
 			if _, err2 := rd.ReadFragment(); err2 != err { //nolint:errorlint
 				t.Errorf("not sticky: got %v, want %v", err2, err)
 			}
@@ -485,10 +499,29 @@ func TestFragmentReaderRejects(t *testing.T) {
 	}
 }
 
-func TestReaderRejectsWithoutFragmentation(t *testing.T) {
-	rd := newReader(joinFrames(`{"~":[0,3],"p":"abc"}`))
-	if _, err := rd.ReadMessage(); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
-		t.Errorf("got %v, want ErrInvalidFrame", err)
+func TestReaderWithoutFragmentation(t *testing.T) {
+	// A message in a single envelope is a message ...
+	got, err := readRaw(newReader(joinFrames(`{"~":[0,3],"p":"abc"}`)))
+	if err != nil || string(got) != "abc" {
+		t.Errorf("got %q, %v", got, err)
+	}
+	// ... but one that is in more than one is a fragmented message.
+	for _, via := range []string{"ReadMessage", "ReadFragment"} {
+		rd := newReader(joinFrames(`{"~":[0,6],"p":"abc"}`, `{"~":[1],"p":"def"}`))
+		var err error
+		if via == "ReadMessage" {
+			_, err = rd.ReadMessage()
+		} else {
+			_, err = rd.ReadFragment()
+		}
+		if !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
+			t.Errorf("%s: got %v, want ErrInvalidFrame", via, err)
+		}
+	}
+	// And its size is limited to that of a frame.
+	rd := newReader(joinFrames(`{"~":[0,300],"p":"abc"}`), jsonmsgs.WithMaxSize(100))
+	if _, err := rd.ReadMessage(); !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+		t.Errorf("got %v, want ErrMessageTooLarge", err)
 	}
 }
 

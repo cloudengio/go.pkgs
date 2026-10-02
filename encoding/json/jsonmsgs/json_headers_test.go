@@ -26,7 +26,7 @@ func headerOpts(maxHeader uint32, repeat bool, more ...jsonmsgs.Option) []jsonms
 }
 
 // writeWithHeader writes raw with header.
-func writeWithHeader(m *jsonmsgs.Messager, raw, header string) error {
+func writeWithHeader(m *jsonmsgs.Writer, raw, header string) error {
 	enc := m.NewEncoder()
 	// The raw message is put in the encoder's buffer as WriteRawForTests does.
 	if err := jsonmsgs.WriteRawIntoEncoderForTests(enc, []byte(raw)); err != nil {
@@ -161,7 +161,6 @@ func TestHeaderWriteErrors(t *testing.T) {
 		header string
 		want   error
 	}{
-		{"no fragmentation", []jsonmsgs.Option{jsonmsgs.WithMaxHeaderSize(10)}, `{}`, jsonmsgs.ErrInvalidFrame},
 		{"headers not enabled", []jsonmsgs.Option{jsonmsgs.WithFragmentation(true)}, `{}`, jsonmsgs.ErrInvalidFrame},
 		{"too large", headerOpts(5, false), `{"a":1}`, jsonmsgs.ErrMessageTooLarge},
 		{"empty", headerOpts(5, false), ``, jsonmsgs.ErrInvalidFrame},
@@ -444,6 +443,7 @@ func TestForwardRules(t *testing.T) {
 	t.Run("mid message error poisons", testForwardMidMessageErrorPoisons)
 	t.Run("error between messages does not poison", testForwardErrorBetweenMessagesDoesNotPoison)
 	t.Run("failed first fragment does not leave a message open", testForwardFailedFirstFragmentDoesNotLeaveAMessageOpen)
+	t.Run("nil fragment mid message does not poison", testForwardNilMidMessage)
 	t.Run("nil and no fragmentation", testForwardNilAndNoFragmentation)
 }
 
@@ -453,8 +453,8 @@ func testForwardReadmessageMidMessage(t *testing.T) {
 	if _, err := rd.ReadFragment(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rd.ReadMessage(); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
-		t.Fatalf("got %v, want ErrInvalidFrame", err)
+	if _, err := rd.ReadMessage(); !errors.Is(err, jsonmsgs.ErrInvalidFrame) || errors.Is(err, jsonmsgs.ErrPermanent) {
+		t.Fatalf("got %v, want ErrInvalidFrame that is not permanent", err)
 	}
 	// A mistake by the caller, and not of the stream: carry on.
 	if f, err := rd.ReadFragment(); err != nil || !f.Last {
@@ -506,13 +506,19 @@ func testForwardBadSequences(t *testing.T) {
 		var out bytes.Buffer
 		wr := newWriter(&out, headerOpts(30, false, jsonmsgs.WithMaxSize(1000))...)
 		var err error
-		for _, f := range frags {
+		failed := -1
+		for i, f := range frags {
 			if err = wr.WriteFragment(f); err != nil {
+				failed = i
 				break
 			}
 		}
 		if !errors.Is(err, jsonmsgs.ErrInvalidFrame) && !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 			t.Errorf("%s: got %v", name, err)
+		}
+		// Only an error part way through a message cannot be retried.
+		if got, want := errors.Is(err, jsonmsgs.ErrPermanent), failed > 0; got != want {
+			t.Errorf("%s: permanent is %v, want %v: %v", name, got, want, err)
 		}
 		// Nothing that is not valid is written.
 		for _, f := range splitFrames(t, out.Bytes()) {
@@ -530,8 +536,8 @@ func testForwardMidMessageErrorPoisons(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 5, Payload: []byte("def")})
-	if !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
-		t.Fatalf("got %v", err)
+	if !errors.Is(err, jsonmsgs.ErrInvalidFrame) || !errors.Is(err, jsonmsgs.ErrPermanent) {
+		t.Fatalf("got %v, want a permanent ErrInvalidFrame", err)
 	}
 	if err2 := jsonmsgs.WriteRawForTests(wr, []byte(`{}`)); err2 != err { //nolint:errorlint
 		t.Errorf("got %v, want %v", err2, err)
@@ -541,8 +547,8 @@ func testForwardMidMessageErrorPoisons(t *testing.T) {
 func testForwardErrorBetweenMessagesDoesNotPoison(t *testing.T) {
 	opts := headerOpts(30, false)
 	wr := newWriter(io.Discard, opts...)
-	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 3, Payload: []byte("def")}); err == nil {
-		t.Fatal("expected an error")
+	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 3, Payload: []byte("def")}); err == nil || errors.Is(err, jsonmsgs.ErrPermanent) {
+		t.Fatalf("got %v, want an error that can be retried", err)
 	}
 	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 0, Total: 3, Payload: []byte("def")}); err != nil {
 		t.Fatal(err)
@@ -566,7 +572,11 @@ func testForwardNilAndNoFragmentation(t *testing.T) {
 	if err := wr.WriteFragment(nil); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
 		t.Error(err)
 	}
-	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 0, Total: 3, Payload: []byte("def")}); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
+	// Without fragmentation a message is in a single envelope, or is bare.
+	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 0, Total: 6, Payload: []byte("def")}); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
+		t.Error(err)
+	}
+	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 0, Total: 3, Payload: []byte("def")}); err != nil {
 		t.Error(err)
 	}
 	// Whole messages can be forwarded without fragmentation.
@@ -579,13 +589,16 @@ func testForwardNilAndNoFragmentation(t *testing.T) {
 // and WriteFragment is the same as reading it with ReadMessage: the same
 // messages, headers and errors.
 func FuzzForward(f *testing.F) {
-	f.Add(joinFrames(`{"a":1}`))
-	f.Add(joinFrames(`{"~":[0,6,2],"h":{},"p":"abc"}`, `{"~":[1,2],"h":{},"p":"def"}`))
-	f.Add(joinFrames(`{"~":[0,6],"p":"abc"}`, `{"~":[1],"p":"d\u00e9"}`, `{"a":1}`))
-	f.Fuzz(func(t *testing.T, stream []byte) {
-		opts := headerOpts(32, false, jsonmsgs.WithMaxSize(1<<16), jsonmsgs.WithMaxFragmentedMessageSize(1<<20))
+	for _, frag := range []bool{false, true} {
+		f.Add(joinFrames(`{"a":1}`), frag)
+		f.Add(joinFrames(`{"~":[0,6,2],"h":{},"p":"abc"}`, `{"~":[1,2],"h":{},"p":"def"}`), frag)
+		f.Add(joinFrames(`{"~":[0,6],"p":"abc"}`, `{"~":[1],"p":"d\u00e9"}`, `{"a":1}`), frag)
+		f.Add(joinFrames(`{"~":[0,3,2],"h":{},"p":"abc"}`), frag)
+	}
+	f.Fuzz(func(t *testing.T, stream []byte, frag bool) {
+		opts := headerOpts(32, false, jsonmsgs.WithMaxSize(1<<16), jsonmsgs.WithMaxFragmentedMessageSize(1<<20), jsonmsgs.WithFragmentation(frag))
 		type result struct{ hdr, msg string }
-		collect := func(rd *jsonmsgs.Messager) (rs []result, failed bool) {
+		collect := func(rd *jsonmsgs.Reader) (rs []result, failed bool) {
 			for {
 				dec, err := rd.ReadMessage()
 				if err != nil {
@@ -657,5 +670,68 @@ func TestHeaderDoesNotLeak(t *testing.T) {
 			t.Errorf("message %d: header %q, want %q", i, got, want)
 		}
 		rd.ReleaseDecoder(dec)
+	}
+}
+
+// TestHeaderWithoutFragmentation checks that headers are independent of
+// fragmentation: the message is in a single envelope, that has to fit in a frame.
+func TestHeaderWithoutFragmentation(t *testing.T) {
+	opts := []jsonmsgs.Option{jsonmsgs.WithMaxHeaderSize(16), jsonmsgs.WithMaxSize(100)}
+	var buf bytes.Buffer
+	nm := newWriter(&buf, opts...)
+	if err := writeWithHeader(nm, `{"a":"b"}`, `{"r":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(splitFrames(t, buf.Bytes())[0]), `{"~":[0,9,7],"h":{"r":1},"p":"{\"a\":\"b\"}"}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	dec, err := newReader(buf.Bytes(), opts...).ReadMessage()
+	if err != nil || string(dec.Header()) != `{"r":1}` || string(jsonmsgs.DecoderBytesForTests(dec)) != `{"a":"b"}` {
+		t.Errorf("read back: %v", err)
+	}
+	// Forwarded.
+	if out := relay(t, buf.Bytes(), opts, opts); !bytes.Equal(out, buf.Bytes()) {
+		t.Errorf("forwarded %q", out)
+	}
+	// A message that does not fit in an envelope is too large, and is not split.
+	buf.Reset()
+	if err := writeWithHeader(nm, `"`+strings.Repeat("a", 90)+`"`, `{"r":1}`); !errors.Is(err, jsonmsgs.ErrMessageTooLarge) || buf.Len() != 0 {
+		t.Errorf("got %v, wrote %d bytes", err, buf.Len())
+	}
+	// A header is still limited, and a reader that does not enable them rejects it.
+	if err := writeWithHeader(nm, `{}`, `{"a":"bbbbbbbbbbbbbbbbbb"}`); !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+		t.Errorf("got %v", err)
+	}
+	if err := writeWithHeader(nm, `{}`, `{"r":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newReader(buf.Bytes()).ReadMessage(); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
+		t.Errorf("got %v, want ErrInvalidFrame", err)
+	}
+}
+
+// TestFragmentSizeIgnoredWithoutFragmentation checks that, without
+// fragmentation, an envelope is limited by the maximum size, as a bare frame is.
+func TestFragmentSizeIgnoredWithoutFragmentation(t *testing.T) {
+	var buf bytes.Buffer
+	nm := newWriter(&buf, jsonmsgs.WithMaxHeaderSize(16), jsonmsgs.WithMaxSize(200), jsonmsgs.WithFragmentSize(60))
+	if err := writeWithHeader(nm, `"`+strings.Repeat("a", 100)+`"`, `{"r":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(splitFrames(t, buf.Bytes())); n != 1 {
+		t.Errorf("%d frames", n)
+	}
+}
+
+func testForwardNilMidMessage(t *testing.T) {
+	wr := newWriter(io.Discard, headerOpts(30, false)...)
+	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 0, Total: 6, Payload: []byte("abc")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := wr.WriteFragment(nil); !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
+		t.Fatalf("got %v", err)
+	}
+	if err := wr.WriteFragment(&jsonmsgs.Fragment{Seq: 1, Payload: []byte("def")}); err != nil {
+		t.Fatalf("continuing the message: %v", err)
 	}
 }
