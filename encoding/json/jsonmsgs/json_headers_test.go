@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"runtime"
 	"strings"
@@ -38,6 +39,7 @@ func writeWithHeader(m *jsonmsgs.Writer, raw, header string) error {
 func TestMinFragmentSizeWithHeader(t *testing.T) {
 	for _, tc := range []struct{ maxFrag, maxHdr, want uint32 }{
 		{100, 0, 26}, {100, 10, 44}, {100, 9, 42}, {100, 100, 135}, {1 << 20, 4096, 4096 + 30 - 7 + 1 + 4 + 6 + 6},
+		{100, math.MaxUint32, math.MaxUint32}, {100, math.MaxUint32 - 10, math.MaxUint32},
 	} {
 		if got := jsonmsgs.MinFragmentSizeWithHeader(tc.maxFrag, tc.maxHdr); got != tc.want {
 			t.Errorf("MinFragmentSizeWithHeader(%d, %d) = %d, want %d", tc.maxFrag, tc.maxHdr, got, tc.want)

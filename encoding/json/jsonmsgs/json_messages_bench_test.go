@@ -85,9 +85,9 @@ func BenchmarkMessagerWriteMessage(b *testing.B) {
 	}
 }
 
-// BenchmarkMessagerWriteMessageParallel stresses the sync.Pool under
-// concurrent access. Note: io.Discard is used as the writer since Messager
-// does not serialise concurrent writes — this benchmark isolates pool throughput.
+// BenchmarkMessagerWriteMessageParallel stresses the sync.Pool and mutex serialization
+// under concurrent access. Note: io.Discard is used as the writer to isolate CPU and pool
+// throughput without I/O blocking.
 func BenchmarkMessagerWriteMessageParallel(b *testing.B) {
 	nm := jsonmsgs.NewWriter(io.Discard)
 	b.ResetTimer()
@@ -359,5 +359,86 @@ func BenchmarkMessagerForwardMax(b *testing.B) {
 		}
 		msg = msg[:size]
 		b.Run(kind, func(b *testing.B) { forwardBench(b, msg, headerBenchOptions(false)) })
+	}
+}
+
+// modeBenchmarks are the ways of sending the same message, which is of about
+// 100 KB, compared by BenchmarkMessagerWriteModes and BenchmarkMessagerReadModes:
+// as a bare frame, in a single envelope with a header, and, in frames of 16 KiB,
+// fragmented without a header, with one on the first frame and with one on every
+// frame.
+var modeBenchmarks = []struct {
+	name   string
+	header bool
+	opts   []jsonmsgs.Option
+}{
+	{"bare", false, []jsonmsgs.Option{jsonmsgs.WithMaxSize(1 << 20)}},
+	{"header", true, []jsonmsgs.Option{jsonmsgs.WithMaxSize(1 << 20), jsonmsgs.WithMaxHeaderSize(64)}},
+	{"fragmented", false, []jsonmsgs.Option{jsonmsgs.WithMaxSize(16 << 10), jsonmsgs.WithFragmentation(true)}},
+	{"fragmented-header", true, []jsonmsgs.Option{jsonmsgs.WithMaxSize(16 << 10), jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxHeaderSize(64)}},
+	{"fragmented-repeated-header", true, []jsonmsgs.Option{jsonmsgs.WithMaxSize(16 << 10), jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxHeaderSize(64), jsonmsgs.WithRepeatHeader(true)}},
+}
+
+func modeMessage() []byte {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i := 0; b.Len() < 100_000; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `"k%d":"v%d"`, i, i)
+	}
+	b.WriteByte('}')
+	return b.Bytes()
+}
+
+func writeMode(wr *jsonmsgs.Writer, msg []byte, header bool) error {
+	enc := wr.NewEncoder()
+	_ = jsonmsgs.WriteRawIntoEncoderForTests(enc, msg)
+	if header {
+		return wr.WriteMessageWithHeader(enc, jsontext.Value(benchHeader))
+	}
+	return wr.WriteMessage(enc)
+}
+
+// BenchmarkMessagerWriteModes compares writing the same message bare, with a
+// header and fragmented, see modeBenchmarks.
+func BenchmarkMessagerWriteModes(b *testing.B) {
+	msg := modeMessage()
+	for _, m := range modeBenchmarks {
+		b.Run(m.name, func(b *testing.B) {
+			wr := jsonmsgs.NewWriter(io.Discard, m.opts...)
+			b.SetBytes(int64(len(msg)))
+			b.ReportAllocs()
+			for b.Loop() {
+				if err := writeMode(wr, msg, m.header); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkMessagerReadModes compares reading the same message bare, with a
+// header and fragmented, see modeBenchmarks.
+func BenchmarkMessagerReadModes(b *testing.B) {
+	msg := modeMessage()
+	for _, m := range modeBenchmarks {
+		var stream bytes.Buffer
+		if err := writeMode(jsonmsgs.NewWriter(&stream, m.opts...), msg, m.header); err != nil {
+			b.Fatal(err)
+		}
+		b.Run(m.name, func(b *testing.B) {
+			rd := jsonmsgs.NewReader(&loopReader{data: stream.Bytes()}, m.opts...)
+			b.SetBytes(int64(len(msg)))
+			b.ReportAllocs()
+			for b.Loop() {
+				dec, err := rd.ReadMessage()
+				if err != nil {
+					b.Fatal(err)
+				}
+				rd.ReleaseDecoder(dec)
+			}
+		})
 	}
 }

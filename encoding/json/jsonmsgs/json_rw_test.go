@@ -6,11 +6,15 @@ package jsonmsgs_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json/jsontext"
 	"errors"
 	"io"
+	"math"
+	"runtime"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"cloudeng.io/encoding/json/jsonmsgs"
 )
@@ -177,5 +181,67 @@ func TestPermanentAndRetryableErrors(t *testing.T) {
 	rd = newReader(joinFrames(`{"a":1}`)[:6])
 	if _, err := rd.ReadMessage(); !errors.Is(err, io.ErrUnexpectedEOF) || !errors.Is(err, jsonmsgs.ErrPermanent) {
 		t.Errorf("got %v, want a permanent ErrUnexpectedEOF", err)
+	}
+}
+
+// TestReassembleAllocationBounds verifies that reassembly buffer allocation
+// handles large limits without overflowing or panicking.
+func TestReassembleAllocationBounds(t *testing.T) {
+	frame0 := `{"~":[0,2000000000],"p":"a"}`
+	frame1 := `{"~":[1],"p":"` + strings.Repeat("b", 300) + `"}`
+	stream := joinFrames(frame0, frame1)
+
+	rd := newReader(stream,
+		jsonmsgs.WithFragmentation(true),
+		jsonmsgs.WithMaxFragmentedMessageSize(math.MaxInt32),
+		jsonmsgs.WithMaxSize(1<<29),
+	)
+	_, err := rd.ReadMessage()
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("got %v, want io.ErrUnexpectedEOF", err)
+	}
+}
+
+// TestReassembleDoesNotAllocateAheadOfData verifies that the size that a frame
+// declares, which may be as large as the maximum, does not cause memory to be
+// allocated for the frame until its data arrives.
+func TestReassembleDoesNotAllocateAheadOfData(t *testing.T) {
+	const declared = 1 << 29
+	stream := joinFrames(`{"~":[0,2000000000],"p":"a"}`)
+	stream = binary.LittleEndian.AppendUint32(stream, declared) // and no body
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	rd := newReader(stream,
+		jsonmsgs.WithFragmentation(true),
+		jsonmsgs.WithMaxFragmentedMessageSize(math.MaxInt32),
+		jsonmsgs.WithMaxSize(declared),
+	)
+	_, err := rd.ReadMessage()
+	runtime.ReadMemStats(&after)
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("got %v, want io.ErrUnexpectedEOF", err)
+	}
+	if got := after.TotalAlloc - before.TotalAlloc; got > 4<<20 {
+		t.Errorf("allocated %d bytes for a frame that declared %d and sent none", got, declared)
+	}
+}
+
+// TestReassembleLaterFrames checks messages whose later frames are larger than
+// the chunks that they are read in, and that arrive in pieces.
+func TestReassembleLaterFrames(t *testing.T) {
+	msg := []byte(`{"a":"` + strings.Repeat(`é"x`, 100_000) + `"}`)
+	for _, size := range []uint32{100, 1000, 65_536, 65_537, 200_000, 1 << 20} {
+		var stream bytes.Buffer
+		opts := []jsonmsgs.Option{jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxSize(size)}
+		if err := jsonmsgs.WriteRawForTests(newWriter(&stream, opts...), msg); err != nil {
+			t.Fatal(err)
+		}
+		// Read a byte at a time, so that the data arrives in the smallest pieces.
+		rd := jsonmsgs.NewReader(io.NopCloser(iotest.OneByteReader(bytes.NewReader(stream.Bytes()))), opts...)
+		got, err := readRaw(rd)
+		if err != nil || !bytes.Equal(got, msg) {
+			t.Errorf("frame size %d: %v", size, err)
+		}
 	}
 }

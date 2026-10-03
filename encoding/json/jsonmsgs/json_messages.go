@@ -373,7 +373,11 @@ func MinFragmentSizeWithHeader(maxFragmentedMessageSize, maxHeaderSize uint32) u
 		return uint32(n + len(envelopeMid))
 	}
 	n += len(",") + len(strconv.FormatUint(uint64(maxHeaderSize), 10)) + len(envelopeHdrMid) + len(envelopeHdrEnd)
-	return uint32(n) + maxHeaderSize
+	total := uint64(n) + uint64(maxHeaderSize)
+	if total > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(total)
 }
 
 type options struct {

@@ -10,6 +10,7 @@ import (
 	"encoding/json/jsontext"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"sync"
 )
@@ -99,12 +100,15 @@ func (r *Reader) ReleaseDecoder(dec *Decoder) {
 	if dec == nil || dec.buf == nil {
 		return
 	}
-	if cap(dec.buffer) > int(r.maxSize)*4 && cap(dec.buffer) > maxRetainedBuffer {
+	if cap(dec.buffer) > maxRetainedBuffer && uint64(cap(dec.buffer)) > uint64(r.maxSize)*4 {
 		dec.buffer = nil
 		// dec.buf aliases the old dec.buffer's backing array (bytes.NewBuffer
 		// does not copy), so it must be replaced too, or the large array
 		// stays reachable via dec.buf until this decoder is next reused.
 		dec.buf = bytes.NewBuffer(nil)
+	}
+	if cap(dec.header) > maxRetainedBuffer {
+		dec.header = nil
 	}
 	r.decPool.Put(dec)
 }
@@ -257,20 +261,40 @@ func (r *Reader) reassemble(dec *Decoder) error {
 		if err != nil {
 			return err
 		}
-		// Room for the whole of the next frame, which is at least as large as
-		// what it decodes to, after the message so far, but no more than
-		// that can ever be needed.
-		if need := len(msg) + n; cap(msg) < need {
-			grown := make([]byte, len(msg), min(max(need, 2*cap(msg)), int(st.total)+int(r.maxSize)))
-			copy(grown, msg)
-			msg = grown
-		}
-		body = msg[len(msg) : len(msg)+n]
-		if err := r.readFull(body); err != nil {
+		// The next frame is read into the space after the message so far, and
+		// is at least as large as what it decodes to, but no more than that
+		// can ever be needed.
+		if msg, body, err = r.readAppend(msg, n, st.total+uint64(r.maxSize)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// readAppend reads the n byte body of a frame into the free space after msg,
+// which it returns, with the same length but, possibly, a larger capacity, and
+// the body. Like readBody, it grows msg as the data arrives, and not to hold
+// all n bytes in advance, so that a peer cannot have this process allocate
+// memory by declaring the size of a frame that it does not send. maxCap is the
+// largest capacity that can ever be needed.
+func (r *Reader) readAppend(msg []byte, n int, maxCap uint64) (grown, body []byte, err error) {
+	const firstChunk = 64 * 1024
+	start := len(msg)
+	for got := 0; got < n; {
+		want := min(n-got, max(firstChunk, got))
+		end := start + got + want
+		if cap(msg) < end {
+			newCap := min(max(uint64(end), 2*uint64(cap(msg))), maxCap, uint64(math.MaxInt))
+			bigger := make([]byte, start+got, int(newCap))
+			copy(bigger, msg[:start+got])
+			msg = bigger[:start]
+		}
+		if err := r.readFull(msg[:end][start+got:]); err != nil {
+			return msg, nil, err
+		}
+		got += want
+	}
+	return msg, msg[start : start+n], nil
 }
 
 // ReadFragment reads the next frame and returns it as it is, without

@@ -343,7 +343,7 @@ func decodeUnicodeEscape(b []byte, i int) (rune, int, error) {
 		return bad("unpaired low surrogate")
 	case v >= 0xD800 && v <= 0xDBFF:
 		// The first half of a pair; the second must follow.
-		if i+2 >= len(b) || b[i] != '\\' || b[i+1] != 'u' {
+		if i+6 > len(b) || b[i] != '\\' || b[i+1] != 'u' {
 			return bad("unpaired high surrogate")
 		}
 		lo := hex4(b, i+2)
@@ -355,6 +355,25 @@ func decodeUnicodeEscape(b []byte, i int) (rune, int, error) {
 	return v, i, nil
 }
 
+// plainByte is true for the bytes that stand for themselves in the contents of
+// a JSON string and are a whole character: ASCII other than the control
+// characters, the quote and the backslash.
+var plainByte = func() (t [256]bool) {
+	for i := 0x20; i < utf8.RuneSelf; i++ {
+		t[i] = i != '"' && i != '\\'
+	}
+	return t
+}()
+
+// plainRun returns the index of the first byte of b at or after i that is not
+// a plainByte, or len(b).
+func plainRun(b []byte, i int) int {
+	for i < len(b) && plainByte[b[i]] {
+		i++
+	}
+	return i
+}
+
 // unescapedLen validates the contents of a JSON string, that is the payload of
 // a fragment, as unescapeChunk does, but without decoding it, and returns the
 // number of bytes that it stands for.
@@ -364,6 +383,14 @@ func unescapedLen(b []byte) (int, error) {
 	}
 	n := 0
 	for r := 0; r < len(b); {
+		// Fast path for runs of characters that need no escaping.
+		if j := plainRun(b, r); j > r {
+			n += j - r
+			r = j
+			if r == len(b) {
+				break
+			}
+		}
 		c := b[r]
 		switch {
 		case c < 0x20:

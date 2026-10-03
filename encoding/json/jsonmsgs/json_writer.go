@@ -106,7 +106,7 @@ func (w *Writer) ReleaseEncoder(enc *Encoder) {
 // putEncoder returns enc to the pool, first dropping a buffer that has grown
 // large so that a single large message does not pin its memory in the pool.
 func (w *Writer) putEncoder(enc *Encoder) {
-	if enc.buffer.Cap() > maxRetainedBuffer && enc.buffer.Cap() > int(w.maxSize)*4 {
+	if enc.buffer.Cap() > maxRetainedBuffer && uint64(enc.buffer.Cap()) > uint64(w.maxSize)*4 {
 		enc.buffer = bytes.NewBuffer(make([]byte, 0, 1024))
 	}
 	w.encPool.Put(enc)
