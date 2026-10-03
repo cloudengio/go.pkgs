@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"encoding/json/jsontext"
 	"fmt"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -27,26 +28,20 @@ var escLen = func() (t [utf8.RuneSelf]uint8) {
 	return t
 }()
 
-// appendEscape appends the escape sequence for the ASCII character c, which
-// has an escape sequence, ie. escLen[c] is not 1.
-func appendEscape(dst []byte, c byte) []byte {
-	switch c {
-	case '"', '\\':
-		return append(dst, '\\', c)
-	case '\b':
-		return append(dst, '\\', 'b')
-	case '\f':
-		return append(dst, '\\', 'f')
-	case '\n':
-		return append(dst, '\\', 'n')
-	case '\r':
-		return append(dst, '\\', 'r')
-	case '\t':
-		return append(dst, '\\', 't')
+// escLetter is the character that follows the backslash in the escape sequence
+// of each ASCII character that has a two byte one, and is zero for any other.
+var escLetter = func() (t [utf8.RuneSelf]byte) {
+	for c, l := range map[byte]byte{'"': '"', '\\': '\\', '\b': 'b', '\f': 'f', '\n': 'n', '\r': 'r', '\t': 't'} {
+		t[c] = l
 	}
-	const hex = "0123456789abcdef"
-	return append(dst, '\\', 'u', '0', '0', hex[c>>4], hex[c&0xf])
-}
+	return t
+}()
+
+// shortRun is the length of run of characters that need no escape, in the text
+// to be escaped or unescaped, after which they are processed 8 at a time.
+// Runs in JSON are mostly shorter than this, for which processing the
+// characters one at a time is faster than setting up to do 8 at a time.
+const shortRun = 8
 
 // appendEscaped appends the characters of the valid UTF-8 text src to dst,
 // escaped as the contents of a JSON string, for as long as the escaped form
@@ -56,51 +51,65 @@ func appendEscape(dst []byte, c byte) []byte {
 // remains of room. This is what guarantees that a fragment fits in the
 // budget, see the package documentation.
 //
-// Runs of characters that need no escape are copied in one operation, rather
-// than character by character; start is the beginning of the run not yet
-// copied.
+// The output is written directly to the space that dst has for it, which is
+// room bytes at most, rather than by appending. Characters are written one at
+// a time until there is a run of them that need no escape of more than
+// shortRun, which is then copied 8 at a time.
 func appendEscaped(dst, src []byte, room int) (out []byte, consumed int) {
-	used, i, start := 0, 0, 0
+	if room <= 0 {
+		return dst, 0
+	}
+	dst = slices.Grow(dst, room)
+	o := dst[len(dst) : len(dst)+room]
+	n, i, run := 0, 0, 0
 	for i < len(src) {
-		// Fast path for a run of characters that are themselves, each of which
-		// is a single byte, bounded by what remains of room.
-		if end := min(len(src), i+room-used); i < end {
-			j := asciiPlainRun(src, i, end)
-			used += j - i
-			i = j
-			if i == len(src) {
-				break
-			}
-		}
 		c := src[i]
-		var width, esc int
-		if c < utf8.RuneSelf {
-			width, esc = 1, int(escLen[c])
-		} else {
-			// The text is valid UTF-8, which the caller has checked, so
-			// the width of a character is that of its leading byte.
+		if c >= utf8.RuneSelf {
+			// The text is valid UTF-8, which the caller has checked, so the
+			// width of a character is that of its leading byte.
+			width := 4
 			switch {
 			case c < 0xE0:
 				width = 2
 			case c < 0xF0:
 				width = 3
-			default:
-				width = 4
 			}
-			esc = width
+			if n+width > room {
+				break
+			}
+			n += copy(o[n:], src[i:i+width])
+			i += width
+			run = 0
+			continue
 		}
-		if used+esc > room {
+		e := int(escLen[c])
+		if n+e > room {
 			break
 		}
-		used += esc
-		if c < utf8.RuneSelf && esc != 1 {
-			dst = append(dst, src[start:i]...)
-			dst = appendEscape(dst, c)
-			start = i + 1
+		if e == 1 {
+			o[n] = c
+			n++
+			i++
+			if run++; run >= shortRun {
+				j := asciiWords(src, i, min(len(src), i+room-n))
+				n += copy(o[n:], src[i:j])
+				i, run = j, 0
+			}
+			continue
 		}
-		i += width
+		run = 0
+		i++
+		o[n] = '\\'
+		if l := escLetter[c]; l != 0 {
+			o[n+1] = l
+			n += 2
+			continue
+		}
+		const hex = "0123456789abcdef"
+		o[n+1], o[n+2], o[n+3], o[n+4], o[n+5] = 'u', '0', '0', hex[c>>4], hex[c&0xf]
+		n += 6
 	}
-	return append(dst, src[start:i]...), i
+	return dst[:len(dst)+n], i
 }
 
 // parseUint parses the decimal number that starts at b[i], with no sign and no
@@ -245,21 +254,25 @@ func hex4(b []byte, i int) rune {
 // character that is not escaped, and an escape that is cut short.
 func unescapeChunk(buf []byte, from, to, w int) (int, error) {
 	start := w
+	run := 0
 	for r := from; r < to; {
-		// Everything up to the next control character, quote or backslash is moved
-		// in one operation. A control character or quote is an error, and a
-		// backslash begins an escape.
-		j := plainRun(buf[:to], r)
-		w += copy(buf[w:], buf[r:j])
-		r = j
-		if r == to {
-			break
-		}
 		c := buf[r]
-		if c < 0x20 {
-			return 0, errPayload("unescaped control character")
+		if chunkOK[c] {
+			buf[w] = c
+			w++
+			r++
+			if run++; run >= shortRun {
+				j := plainWords(buf, r, to)
+				w += copy(buf[w:], buf[r:j])
+				r, run = j, 0
+			}
+			continue
 		}
-		if c == '"' {
+		run = 0
+		switch {
+		case c < 0x20:
+			return 0, errPayload("unescaped control character")
+		case c == '"':
 			return 0, errPayload("unescaped quote")
 		}
 		r++
@@ -358,37 +371,17 @@ var chunkOK = func() (t [256]bool) {
 	return t
 }()
 
-// plainRun returns the index of the first byte of b at or after i that is a
-// control character, a quote or a backslash, or len(b). Runs in JSON are
-// usually short, so the first few bytes are checked one at a time and the
-// bytes are checked 8 at a time only for a run that is longer than that.
-func plainRun(b []byte, i int) int {
-	lim := min(len(b), i+8)
-	for i < lim && chunkOK[b[i]] {
-		i++
-	}
-	if i < lim {
-		return i
-	}
-	for i+8 <= len(b) && !special(binary.LittleEndian.Uint64(b[i:])) {
+// plainWords returns i advanced over whole words, of 8 bytes, of b[:end] that
+// have no control character, quote or backslash in them.
+func plainWords(b []byte, i, end int) int {
+	for i+8 <= end && !special(binary.LittleEndian.Uint64(b[i:])) {
 		i += 8
-	}
-	for i < len(b) && chunkOK[b[i]] {
-		i++
 	}
 	return i
 }
 
-// asciiPlainRun is plainRun for runs of single byte characters, ending at end
-// at the latest.
-func asciiPlainRun(b []byte, i, end int) int {
-	lim := min(end, i+8)
-	for i < lim && b[i] < utf8.RuneSelf && escLen[b[i]] == 1 {
-		i++
-	}
-	if i < lim {
-		return i
-	}
+// asciiWords is plainWords for words in which every byte is ASCII.
+func asciiWords(b []byte, i, end int) int {
 	for i+8 <= end {
 		x := binary.LittleEndian.Uint64(b[i:])
 		if x&hi8 != 0 || special(x) {
@@ -396,7 +389,22 @@ func asciiPlainRun(b []byte, i, end int) int {
 		}
 		i += 8
 	}
-	for i < end && b[i] < utf8.RuneSelf && escLen[b[i]] == 1 {
+	return i
+}
+
+// plainRun returns the index of the first byte of b at or after i that is a
+// control character, a quote or a backslash, or len(b). The first shortRun
+// bytes are checked one at a time and the rest 8 at a time.
+func plainRun(b []byte, i int) int {
+	lim := min(len(b), i+shortRun)
+	for i < lim && chunkOK[b[i]] {
+		i++
+	}
+	if i < lim {
+		return i
+	}
+	i = plainWords(b, i, len(b))
+	for i < len(b) && chunkOK[b[i]] {
 		i++
 	}
 	return i

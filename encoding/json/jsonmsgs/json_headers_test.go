@@ -737,3 +737,120 @@ func testForwardNilMidMessage(t *testing.T) {
 		t.Fatalf("continuing the message: %v", err)
 	}
 }
+
+// firstFragment returns the first Fragment of a message with a header, as
+// ReadFragment returns it, and a Writer for forwarding it.
+func firstFragment(t *testing.T, msg []byte, writerHeaderSize uint32) (*jsonmsgs.Fragment, *jsonmsgs.Writer) {
+	t.Helper()
+	opts := headerOpts(16, false, jsonmsgs.WithMaxSize(1000))
+	var in bytes.Buffer
+	if err := writeWithHeader(newWriter(&in, opts...), string(msg), `{"to":1}`); err != nil {
+		t.Fatal(err)
+	}
+	f, err := newReader(in.Bytes(), opts...).ReadFragment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f, newWriter(io.Discard, headerOpts(writerHeaderSize, false, jsonmsgs.WithMaxSize(1000))...)
+}
+
+// TestForwardChecksWhatWasNotVerified checks that WriteFragment relies on what
+// ReadFragment checked only for the payload and header that it checked: a
+// Fragment that has been changed is checked afresh.
+func TestForwardChecksWhatWasNotVerified(t *testing.T) {
+	msg := []byte(`a"b` + strings.Repeat("c", 20))
+	invalid := func(t *testing.T, err error) {
+		t.Helper()
+		if !errors.Is(err, jsonmsgs.ErrInvalidFrame) || errors.Is(err, jsonmsgs.ErrPermanent) {
+			t.Fatalf("got %v, want an ErrInvalidFrame that can be retried", err)
+		}
+	}
+	t.Run("unchanged", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		cp := *f // a copy is as good
+		if err := wr.WriteFragment(&cp); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("replaced payload", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		f.Payload = []byte(`bad"quote`)
+		invalid(t, wr.WriteFragment(f))
+	})
+	t.Run("same payload, in a new slice", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		f.Payload = bytes.Clone(f.Payload)
+		if err := wr.WriteFragment(f); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("resliced payload", func(t *testing.T) {
+		f, wr := firstFragment(t, []byte(`a"`), 16)
+		// The payload is a\" and what remains is a\.
+		f.Payload = f.Payload[:len(f.Payload)-1]
+		invalid(t, wr.WriteFragment(f))
+	})
+	t.Run("replaced header", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		f.Header = []byte(`{`)
+		invalid(t, wr.WriteFragment(f))
+	})
+	t.Run("replaced header of the same length", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		f.Header = []byte(`{"to":x}`)
+		if len(f.Header) != len(`{"to":1}`) {
+			t.Fatal("test header is not of the same length")
+		}
+		invalid(t, wr.WriteFragment(f))
+	})
+	t.Run("resliced header", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		f.Header = f.Header[:len(f.Header)-1]
+		invalid(t, wr.WriteFragment(f))
+	})
+	t.Run("different valid header", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 16)
+		f.Header = []byte(`{"to":2}`)
+		if err := wr.WriteFragment(f); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("header too large for this writer", func(t *testing.T) {
+		f, wr := firstFragment(t, msg, 4)
+		if err := wr.WriteFragment(f); !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+			t.Fatalf("got %v, want ErrMessageTooLarge", err)
+		}
+	})
+	t.Run("headers not enabled for this writer", func(t *testing.T) {
+		f, _ := firstFragment(t, msg, 16)
+		wr := newWriter(io.Discard, jsonmsgs.WithFragmentation(true))
+		invalid(t, wr.WriteFragment(f))
+	})
+	t.Run("hand built", func(t *testing.T) {
+		_, wr := firstFragment(t, msg, 16)
+		invalid(t, wr.WriteFragment(&jsonmsgs.Fragment{Seq: 0, Total: 3, Payload: []byte(`a"b`)}))
+	})
+	t.Run("Len is not trusted", func(t *testing.T) {
+		// Checked afresh, and from what was checked, and not from Len which the
+		// caller may have changed, the message is complete: Last would otherwise
+		// not be what the sequence says.
+		f, wr := firstFragment(t, msg, 16)
+		f.Len = 1
+		if err := wr.WriteFragment(f); err != nil {
+			t.Fatal(err)
+		}
+		if err := jsonmsgs.WriteRawForTests(wr, []byte(`{}`)); err != nil {
+			t.Fatalf("the message was not complete: %v", err)
+		}
+	})
+	t.Run("relies on what was verified", func(t *testing.T) {
+		// Pins the contract that is documented: a payload that is modified in
+		// place is not checked again. This is not something to do.
+		f, _ := firstFragment(t, msg, 16)
+		f.Payload[1] = '"' // a raw quote in place of the backslash
+		wr := newWriter(io.Discard, headerOpts(16, false, jsonmsgs.WithMaxSize(1000))...)
+		if err := wr.WriteFragment(f); err != nil {
+			t.Fatalf("the payload was checked again: %v", err)
+		}
+	})
+}

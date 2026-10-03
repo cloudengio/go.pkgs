@@ -78,5 +78,13 @@ func WriteRawIntoEncoderForTests(enc *Encoder, raw []byte) error {
 // PlainRunForTests exposes plainRun.
 func PlainRunForTests(b []byte, i int) int { return plainRun(b, i) }
 
-// ASCIIPlainRunForTests exposes asciiPlainRun.
-func ASCIIPlainRunForTests(b []byte, i, end int) int { return asciiPlainRun(b, i, end) }
+// PlainWordsForTests exposes plainWords.
+func PlainWordsForTests(b []byte, i, end int) int { return plainWords(b, i, end) }
+
+// ASCIIWordsForTests exposes asciiWords.
+func ASCIIWordsForTests(b []byte, i, end int) int { return asciiWords(b, i, end) }
+
+// AppendEscapedForTests exposes appendEscaped.
+func AppendEscapedForTests(dst, src []byte, room int) ([]byte, int) {
+	return appendEscaped(dst, src, room)
+}

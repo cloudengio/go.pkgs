@@ -399,6 +399,7 @@ type Fragment struct {
 
 	// Payload is the part of the message that the fragment carries, as it is
 	// in the fragment: the contents of a JSON string, ie. escaped, unless Bare.
+	// Neither it nor Header may be modified in place, see Writer.WriteFragment.
 	Payload []byte
 
 	// Len is the number of bytes of the message that Payload stands for once
@@ -408,6 +409,7 @@ type Fragment struct {
 
 	// Last is true if this is the last fragment of the message, or Bare.
 	Last bool
+	// contains filtered or unexported fields
 }
 ```
 Fragment is a frame as read by ReadFragment, and as written by
@@ -660,11 +662,14 @@ func (w *Writer) WriteFragment(f *Fragment) error
 WriteFragment writes a frame, as returned by ReadFragment, as it is,
 see "Forwarding" in the package documentation. It is not refragmented and so
 must fit in the frame size of this Writer. The Header is sent if it is set,
-whether or not it was set in the frame that was read. The frames of a
-message must be written in order, from Seq 0 to the one that is Last,
-with no other message written between them. See "Errors" in the package
-documentation for the errors that can be retried; a nil Fragment is always
-rejected, with ErrInvalidFrame, without any effect.
+whether or not it was set in the frame that was read. A Fragment that is as
+ReadFragment returned it, or a copy of it, has been checked and its Payload
+and Header are not checked again, so they must not be modified in place;
+if they are replaced, or resliced, they are checked. The frames of a message
+must be written in order, from Seq 0 to the one that is Last, with no other
+message written between them. See "Errors" in the package documentation
+for the errors that can be retried; a nil Fragment is always rejected,
+with ErrInvalidFrame, without any effect.
 
 
 ```go

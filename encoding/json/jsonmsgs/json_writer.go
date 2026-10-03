@@ -136,13 +136,14 @@ func (w *Writer) WriteMessageWithHeader(enc *Encoder, header jsontext.Value) err
 }
 
 // checkHeader checks a user header that is to be sent.
-func (w *Writer) checkHeader(h []byte) error {
+// If valid is true, h is already known to be valid JSON.
+func (w *Writer) checkHeader(h []byte, valid bool) error {
 	switch {
 	case w.maxHeaderSize == 0:
 		return fmt.Errorf("%w: headers are not enabled, see WithMaxHeaderSize", ErrInvalidFrame)
 	case uint64(len(h)) > uint64(w.maxHeaderSize):
 		return fmt.Errorf("%w: header size %d exceeds maximum %d", ErrMessageTooLarge, len(h), w.maxHeaderSize)
-	case !jsontext.Value(h).IsValid():
+	case !valid && !jsontext.Value(h).IsValid():
 		return fmt.Errorf("%w: header is not valid JSON", ErrInvalidFrame)
 	}
 	return nil
@@ -162,7 +163,7 @@ func (w *Writer) writeMessage(enc *Encoder, header []byte) error {
 		return fmt.Errorf("%w: a message is being forwarded with WriteFragment", ErrInvalidFrame)
 	}
 	if header != nil {
-		if err := w.checkHeader(header); err != nil {
+		if err := w.checkHeader(header, false); err != nil {
 			return err
 		}
 	}
@@ -323,7 +324,10 @@ func (w *Writer) writeFragments(text, header []byte) error {
 // WriteFragment writes a frame, as returned by ReadFragment, as it is, see
 // "Forwarding" in the package documentation. It is not refragmented and so must
 // fit in the frame size of this Writer. The Header is sent if it is set,
-// whether or not it was set in the frame that was read. The frames of a message
+// whether or not it was set in the frame that was read. A Fragment that is as
+// ReadFragment returned it, or a copy of it, has been checked and its Payload and
+// Header are not checked again, so they must not be modified in place; if they
+// are replaced, or resliced, they are checked. The frames of a message
 // must be written in order, from Seq 0 to the one that is Last, with no other
 // message written between them. See "Errors" in the package documentation for
 // the errors that can be retried; a nil Fragment is always rejected, with
@@ -394,17 +398,23 @@ func (w *Writer) writeBare(buf []byte, limit uint64) error {
 // to buf, a frame with room for its length, and accounts for it in the state
 // of the message that is being written.
 func (w *Writer) writeEnvelope(buf []byte, f *Fragment, limit uint64) ([]byte, error) {
+	// A Fragment that is as ReadFragment returned it has been checked, and the
+	// header and payload are not checked again.
+	checked := f.verified.holds(f)
 	if len(f.Header) != 0 {
-		if err := w.checkHeader(f.Header); err != nil {
+		if err := w.checkHeader(f.Header, checked); err != nil {
 			return buf, err
 		}
 	}
 	if len(f.Payload) == 0 {
 		return buf, fmt.Errorf("%w: empty fragment payload", ErrInvalidFrame)
 	}
-	l, err := unescapedLen(f.Payload)
-	if err != nil {
-		return buf, err
+	l := f.verified.unescaped
+	if !checked {
+		var err error
+		if l, err = unescapedLen(f.Payload); err != nil {
+			return buf, err
+		}
 	}
 	buf = appendFragmentHeader(buf, f.Seq, f.Total, f.Header)
 	buf = append(buf, f.Payload...)
@@ -415,7 +425,7 @@ func (w *Writer) writeEnvelope(buf []byte, f *Fragment, limit uint64) ([]byte, e
 	if err := w.wst.begin(f.Seq, f.Total, f.Header, w.maxMessage()); err != nil {
 		return buf, err
 	}
-	_, err = w.wst.add(l)
+	_, err := w.wst.add(l)
 	return buf, err
 }
 

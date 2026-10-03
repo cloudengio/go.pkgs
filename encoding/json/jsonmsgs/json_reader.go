@@ -360,5 +360,6 @@ func (r *Reader) readFragment() (*Fragment, error) {
 		return nil, err
 	}
 	f.Seq, f.Total, f.Header, f.Payload, f.Len, f.Last = fh.seq, fh.total, fh.hdr, payload, l, last
+	f.verified = newVerified(payload, fh.hdr, l)
 	return f, nil
 }

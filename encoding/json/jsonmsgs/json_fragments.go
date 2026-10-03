@@ -94,6 +94,7 @@ type Fragment struct {
 
 	// Payload is the part of the message that the fragment carries, as it is
 	// in the fragment: the contents of a JSON string, ie. escaped, unless Bare.
+	// Neither it nor Header may be modified in place, see Writer.WriteFragment.
 	Payload []byte
 
 	// Len is the number of bytes of the message that Payload stands for once
@@ -103,4 +104,38 @@ type Fragment struct {
 
 	// Last is true if this is the last fragment of the message, or Bare.
 	Last bool
+
+	// verified is what ReadFragment checked, see WriteFragment.
+	verified verified
+}
+
+// verified records the payload and header that ReadFragment checked, and the
+// number of bytes that the payload stands for, so that WriteFragment, which
+// would otherwise check them again, can rely on that for a Fragment that has not
+// been changed. A slice has no identity, so a payload or header is the same as
+// the one that was checked if it starts at the same byte and has the same
+// length: one that has been replaced, or cut short, is checked afresh.
+type verified struct {
+	payload, header       *byte
+	payloadLen, headerLen int
+	unescaped             int
+	ok                    bool
+}
+
+func firstByte(b []byte) *byte {
+	if len(b) == 0 {
+		return nil
+	}
+	return &b[0]
+}
+
+func newVerified(payload, header []byte, unescaped int) verified {
+	return verified{firstByte(payload), firstByte(header), len(payload), len(header), unescaped, true}
+}
+
+// holds reports whether f has the payload and header that were checked.
+func (v *verified) holds(f *Fragment) bool {
+	return v.ok && !f.Bare &&
+		firstByte(f.Payload) == v.payload && len(f.Payload) == v.payloadLen &&
+		firstByte(f.Header) == v.header && len(f.Header) == v.headerLen
 }
