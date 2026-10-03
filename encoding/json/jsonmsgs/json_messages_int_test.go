@@ -74,3 +74,9 @@ func WriteRawIntoEncoderForTests(enc *Encoder, raw []byte) error {
 	enc.buffer.WriteByte('\n')
 	return nil
 }
+
+// PlainRunForTests exposes plainRun.
+func PlainRunForTests(b []byte, i int) int { return plainRun(b, i) }
+
+// ASCIIPlainRunForTests exposes asciiPlainRun.
+func ASCIIPlainRunForTests(b []byte, i, end int) int { return asciiPlainRun(b, i, end) }

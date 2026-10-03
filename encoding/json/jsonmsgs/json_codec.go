@@ -6,6 +6,7 @@ package jsonmsgs
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json/jsontext"
 	"fmt"
 	"unicode/utf8"
@@ -64,10 +65,7 @@ func appendEscaped(dst, src []byte, room int) (out []byte, consumed int) {
 		// Fast path for a run of characters that are themselves, each of which
 		// is a single byte, bounded by what remains of room.
 		if end := min(len(src), i+room-used); i < end {
-			j := i
-			for j < end && src[j] < utf8.RuneSelf && escLen[src[j]] == 1 {
-				j++
-			}
+			j := asciiPlainRun(src, i, end)
 			used += j - i
 			i = j
 			if i == len(src) {
@@ -247,60 +245,22 @@ func hex4(b []byte, i int) rune {
 // character that is not escaped, and an escape that is cut short.
 func unescapeChunk(buf []byte, from, to, w int) (int, error) {
 	start := w
-	// The common case, no escapes: validate and move.
-	plain := true
-	for _, c := range buf[from:to] {
+	for r := from; r < to; {
+		// Everything up to the next control character, quote or backslash is moved
+		// in one operation. A control character or quote is an error, and a
+		// backslash begins an escape.
+		j := plainRun(buf[:to], r)
+		w += copy(buf[w:], buf[r:j])
+		r = j
+		if r == to {
+			break
+		}
+		c := buf[r]
 		if c < 0x20 {
 			return 0, errPayload("unescaped control character")
 		}
-		if c == '\\' {
-			plain = false
-		}
-		// A quote is escaped, and so preceded by a backslash, or is an error.
-		if c == '"' && plain {
-			return 0, errPayload("unescaped quote")
-		}
-	}
-	if plain {
-		w += copy(buf[w:], buf[from:to])
-	} else {
-		var err error
-		if w, err = unescapeEscapes(buf, from, to, w); err != nil {
-			return 0, err
-		}
-	}
-	if !utf8.Valid(buf[start:w]) {
-		return 0, errPayload("not valid UTF-8")
-	}
-	return w, nil
-}
-
-func errPayload(what string) error {
-	return fmt.Errorf("%w: malformed fragment payload: %s", ErrInvalidFrame, what)
-}
-
-// simpleEscapes maps the character following a backslash to the character it
-// stands for, for the escapes that are a single character, and is zero for
-// any other.
-var simpleEscapes = func() (t [256]byte) {
-	for k, v := range map[byte]byte{'"': '"', '\\': '\\', '/': '/', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'} {
-		t[k] = v
-	}
-	return t
-}()
-
-// unescapeEscapes is unescapeChunk for a payload that contains a backslash.
-func unescapeEscapes(buf []byte, from, to, w int) (int, error) {
-	for r := from; r < to; {
-		c := buf[r]
 		if c == '"' {
 			return 0, errPayload("unescaped quote")
-		}
-		if c != '\\' {
-			buf[w] = c
-			w++
-			r++
-			continue
 		}
 		r++
 		if r >= to {
@@ -322,8 +282,25 @@ func unescapeEscapes(buf []byte, from, to, w int) (int, error) {
 		w += utf8.EncodeRune(buf[w:], v)
 		r = next
 	}
+	if !utf8.Valid(buf[start:w]) {
+		return 0, errPayload("not valid UTF-8")
+	}
 	return w, nil
 }
+
+func errPayload(what string) error {
+	return fmt.Errorf("%w: malformed fragment payload: %s", ErrInvalidFrame, what)
+}
+
+// simpleEscapes maps the character following a backslash to the character it
+// stands for, for the escapes that are a single character, and is zero for
+// any other.
+var simpleEscapes = func() (t [256]byte) {
+	for k, v := range map[byte]byte{'"': '"', '\\': '\\', '/': '/', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'} {
+		t[k] = v
+	}
+	return t
+}()
 
 // decodeUnicodeEscape decodes the hex digits of a \u escape that begin at b[i],
 // ie. just after the u, and, if they are the first half of a surrogate pair,
@@ -355,20 +332,71 @@ func decodeUnicodeEscape(b []byte, i int) (rune, int, error) {
 	return v, i, nil
 }
 
-// plainByte is true for the bytes that stand for themselves in the contents of
-// a JSON string and are a whole character: ASCII other than the control
-// characters, the quote and the backslash.
-var plainByte = func() (t [256]bool) {
-	for i := 0x20; i < utf8.RuneSelf; i++ {
+const (
+	lo8 = 0x0101010101010101
+	hi8 = 0x8080808080808080
+)
+
+// special reports whether any of the 8 bytes of x is a control character, a
+// quote or a backslash, which is to say whether it needs attention when it is
+// the contents of a JSON string.
+func special(x uint64) bool {
+	ctl := (x - 0x20*lo8) &^ x & hi8
+	q := x ^ ('"' * lo8)
+	q = (q - lo8) &^ q & hi8
+	bs := x ^ ('\\' * lo8)
+	bs = (bs - lo8) &^ bs & hi8
+	return ctl|q|bs != 0
+}
+
+// chunkOK is true for the bytes that stand for themselves in the contents of a
+// JSON string: all but the control characters, the quote and the backslash.
+var chunkOK = func() (t [256]bool) {
+	for i := 0x20; i < len(t); i++ {
 		t[i] = i != '"' && i != '\\'
 	}
 	return t
 }()
 
-// plainRun returns the index of the first byte of b at or after i that is not
-// a plainByte, or len(b).
+// plainRun returns the index of the first byte of b at or after i that is a
+// control character, a quote or a backslash, or len(b). Runs in JSON are
+// usually short, so the first few bytes are checked one at a time and the
+// bytes are checked 8 at a time only for a run that is longer than that.
 func plainRun(b []byte, i int) int {
-	for i < len(b) && plainByte[b[i]] {
+	lim := min(len(b), i+8)
+	for i < lim && chunkOK[b[i]] {
+		i++
+	}
+	if i < lim {
+		return i
+	}
+	for i+8 <= len(b) && !special(binary.LittleEndian.Uint64(b[i:])) {
+		i += 8
+	}
+	for i < len(b) && chunkOK[b[i]] {
+		i++
+	}
+	return i
+}
+
+// asciiPlainRun is plainRun for runs of single byte characters, ending at end
+// at the latest.
+func asciiPlainRun(b []byte, i, end int) int {
+	lim := min(end, i+8)
+	for i < lim && b[i] < utf8.RuneSelf && escLen[b[i]] == 1 {
+		i++
+	}
+	if i < lim {
+		return i
+	}
+	for i+8 <= end {
+		x := binary.LittleEndian.Uint64(b[i:])
+		if x&hi8 != 0 || special(x) {
+			break
+		}
+		i += 8
+	}
+	for i < end && b[i] < utf8.RuneSelf && escLen[b[i]] == 1 {
 		i++
 	}
 	return i
@@ -397,10 +425,6 @@ func unescapedLen(b []byte) (int, error) {
 			return 0, errPayload("unescaped control character")
 		case c == '"':
 			return 0, errPayload("unescaped quote")
-		case c != '\\':
-			n++
-			r++
-			continue
 		}
 		r++
 		if r >= len(b) {
