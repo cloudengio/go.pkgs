@@ -47,3 +47,54 @@ func SetOversizedEncoderBufferForTests(enc *Encoder, size uint64) {
 	hdr.cap = int(size + 4)
 	enc.buffer = buf
 }
+
+// WriteRawForTests writes raw, which need not be valid JSON, as a message so
+// that inputs that jsontext.Encoder cannot produce, such as control
+// characters outside of strings or invalid UTF-8, can be exercised. A newline
+// is appended to mimic the encoder, WriteMessage trims it.
+func WriteRawForTests(m *Writer, raw []byte) error {
+	enc := m.NewEncoder()
+	enc.buffer.Write(raw)
+	enc.buffer.WriteByte('\n')
+	return m.WriteMessage(enc)
+}
+
+// DecoderBytesForTests returns the message held by dec.
+func DecoderBytesForTests(dec *Decoder) []byte {
+	return dec.buffer
+}
+
+// MaxEscapedLenForTests is the length of the longest escape sequence.
+const MaxEscapedLenForTests = maxEscapedLen
+
+// WriteRawIntoEncoderForTests puts raw into enc in the way that
+// WriteRawForTests does, without writing it.
+func WriteRawIntoEncoderForTests(enc *Encoder, raw []byte) error {
+	enc.buffer.Write(raw)
+	enc.buffer.WriteByte('\n')
+	return nil
+}
+
+// PlainRunForTests exposes plainRun.
+func PlainRunForTests(b []byte, i int) int { return plainRun(b, i) }
+
+// PlainWordsForTests exposes plainWords.
+func PlainWordsForTests(b []byte, i, end int) int { return plainWords(b, i, end) }
+
+// ASCIIWordsForTests exposes asciiWords.
+func ASCIIWordsForTests(b []byte, i, end int) int { return asciiWords(b, i, end) }
+
+// AppendEscapedForTests exposes appendEscaped.
+func AppendEscapedForTests(dst, src []byte, room int) ([]byte, int) {
+	return appendEscaped(dst, src, room)
+}
+
+// ReadAppendForTests exposes readAppend.
+func ReadAppendForTests(r *Reader, msg []byte, n int, maxCap uint64) ([]byte, []byte, error) {
+	return r.readAppend(msg, n, maxCap)
+}
+
+// ReaderFragStateHdrCapForTests returns the capacity of r's fragState header.
+func ReaderFragStateHdrCapForTests(r *Reader) int {
+	return cap(r.rst.hdr)
+}
