@@ -278,6 +278,9 @@ func (r *Reader) reassemble(dec *Decoder) error {
 // memory by declaring the size of a frame that it does not send. maxCap is the
 // largest capacity that can ever be needed.
 func (r *Reader) readAppend(msg []byte, n int, maxCap uint64) (grown, body []byte, err error) {
+	if uint64(len(msg))+uint64(n) > uint64(math.MaxInt) {
+		return msg, nil, ErrMessageTooLarge
+	}
 	const firstChunk = 64 * 1024
 	start := len(msg)
 	for got := 0; got < n; {

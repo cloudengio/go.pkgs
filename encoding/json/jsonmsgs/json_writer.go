@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"strconv"
 	"sync"
@@ -271,7 +272,11 @@ func (w *Writer) writeFragments(text, header []byte) error {
 		return fmt.Errorf("%w: a message must be valid UTF-8 to be sent in an envelope", ErrInvalidFrame)
 	}
 	total := uint64(len(text))
-	budget := int(w.frameLimit())
+	limit := w.frameLimit()
+	if limit > uint64(math.MaxInt)-4 {
+		return fmt.Errorf("%w: frame limit %d exceeds maximum allocatable size", ErrMessageTooLarge, limit)
+	}
+	budget := int(limit)
 	buf := slices.Grow(w.fragBuf[:0], 4+budget)
 	defer func() {
 		// Keep the buffer for the next message unless it is large.

@@ -245,3 +245,72 @@ func TestReassembleLaterFrames(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxSizeBoundPanics(t *testing.T) {
+	// math.MaxInt32 - 4 is the maximum valid maxSize.
+	_ = jsonmsgs.NewReader(nil, jsonmsgs.WithMaxSize(math.MaxInt32-4))
+	_ = jsonmsgs.NewWriter(nil, jsonmsgs.WithMaxSize(math.MaxInt32-4))
+
+	// Values exceeding math.MaxInt32 - 4 must panic.
+	for _, invalid := range []uint32{math.MaxInt32 - 3, math.MaxInt32} {
+		assertPanics(t, func() {
+			jsonmsgs.NewReader(nil, jsonmsgs.WithMaxSize(invalid))
+		})
+		assertPanics(t, func() {
+			jsonmsgs.NewWriter(nil, jsonmsgs.WithMaxSize(invalid))
+		})
+	}
+}
+
+func assertPanics(t *testing.T, f func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic, got none")
+		}
+	}()
+	f()
+}
+
+func TestFragStateHeaderRetention(t *testing.T) {
+	const bigHeaderSize = 5 * 1024 * 1024
+	hdr := `{"big":"` + strings.Repeat("x", bigHeaderSize-16) + `"}`
+	body := `{"~":[0,1,` + strings.Repeat("0", 0) + string(rune('0'+len(hdr)/1000000)) // ensure valid header length format
+	_ = body
+
+	opts := []jsonmsgs.Option{
+		jsonmsgs.WithFragmentation(true),
+		jsonmsgs.WithMaxHeaderSize(bigHeaderSize + 1024),
+		jsonmsgs.WithMaxSize(bigHeaderSize + 2048),
+	}
+	var buf bytes.Buffer
+	wr := newWriter(&buf, opts...)
+	if err := writeWithHeader(wr, `{"a":1}`, hdr); err != nil {
+		t.Fatal(err)
+	}
+
+	rd := newReader(buf.Bytes(), opts...)
+	dec, err := rd.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(dec.Header()) != hdr {
+		t.Errorf("header mismatch")
+	}
+	rd.ReleaseDecoder(dec)
+
+	// Verify that the reader's internal fragState header buffer was dropped.
+	if got := jsonmsgs.ReaderFragStateHdrCapForTests(rd); got != 0 {
+		t.Errorf("expected rst.hdr to be cleared when exceeding maxRetainedBuffer, got cap %d", got)
+	}
+}
+
+func TestReadAppendOverflow(t *testing.T) {
+	rd := jsonmsgs.NewReader(nil)
+	msg := make([]byte, 100)
+	// Passing n such that len(msg) + n overflows math.MaxInt must return ErrMessageTooLarge.
+	_, _, err := jsonmsgs.ReadAppendForTests(rd, msg, math.MaxInt, 1000)
+	if !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
+		t.Errorf("got %v, want ErrMessageTooLarge", err)
+	}
+}

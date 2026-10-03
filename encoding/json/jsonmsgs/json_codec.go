@@ -91,7 +91,7 @@ func appendEscaped(dst, src []byte, room int) (out []byte, consumed int) {
 			n++
 			i++
 			if run++; run >= shortRun {
-				j := asciiWords(src, i, min(len(src), i+room-n))
+				j := asciiWords(src, i, i+min(len(src)-i, room-n))
 				n += copy(o[n:], src[i:j])
 				i, run = j, 0
 			}

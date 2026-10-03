@@ -424,7 +424,7 @@ type Option func(*options)
 // DefaultMaxNativeMessageSize is used. A Reader's should be at least as large as
 // the largest frame a peer will send; the limit of a browser on frames to the
 // host is much larger than that on frames from it. NewReader and NewWriter
-// panic if maxSize is less than 2 or exceeds math.MaxInt32.
+// panic if maxSize is less than 2 or exceeds math.MaxInt32-4.
 func WithMaxSize(maxSize uint32) Option {
 	return func(opts *options) {
 		opts.maxSize = maxSize
@@ -530,8 +530,9 @@ func resolveOptions(opts []Option) options {
 	if o.maxSize == 0 {
 		o.maxSize = DefaultMaxNativeMessageSize
 	}
-	if o.maxSize < 2 || o.maxSize > math.MaxInt32 {
-		panic(fmt.Sprintf("jsonmsgs: maxSize %d must be between 2 and %d", o.maxSize, math.MaxInt32))
+	const maxFrameSize = math.MaxInt32 - 4
+	if o.maxSize < 2 || o.maxSize > maxFrameSize {
+		panic(fmt.Sprintf("jsonmsgs: maxSize %d must be between 2 and %d", o.maxSize, maxFrameSize))
 	}
 	if o.fragmentSize == 0 || o.fragmentSize > o.maxSize {
 		o.fragmentSize = o.maxSize

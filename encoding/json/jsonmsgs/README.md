@@ -540,7 +540,7 @@ for example, must be smaller by the size of the envelope. If maxSize is 0,
 DefaultMaxNativeMessageSize is used. A Reader's should be at least as large
 as the largest frame a peer will send; the limit of a browser on frames to
 the host is much larger than that on frames from it. NewReader and NewWriter
-panic if maxSize is less than 2 or exceeds math.MaxInt32.
+panic if maxSize is less than 2 or exceeds math.MaxInt32-4.
 
 
 ```go

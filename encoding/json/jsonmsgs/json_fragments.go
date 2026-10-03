@@ -37,6 +37,9 @@ func (s *fragState) begin(seq, total uint64, hdr []byte, maxTotal uint64) error 
 			return fmt.Errorf("%w: message size %d exceeds maximum message size %d", ErrMessageTooLarge, total, maxTotal)
 		}
 		s.active, s.next, s.got, s.total = true, 0, 0, total
+		if cap(s.hdr) > maxRetainedBuffer {
+			s.hdr = nil
+		}
 		s.hdr = append(s.hdr[:0], hdr...)
 		return nil
 	}
@@ -62,6 +65,9 @@ func (s *fragState) add(n int) (last bool, err error) {
 	}
 	if s.got == s.total {
 		s.active = false
+		if cap(s.hdr) > maxRetainedBuffer {
+			s.hdr = nil
+		}
 		return true, nil
 	}
 	return false, nil

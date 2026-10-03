@@ -88,3 +88,13 @@ func ASCIIWordsForTests(b []byte, i, end int) int { return asciiWords(b, i, end)
 func AppendEscapedForTests(dst, src []byte, room int) ([]byte, int) {
 	return appendEscaped(dst, src, room)
 }
+
+// ReadAppendForTests exposes readAppend.
+func ReadAppendForTests(r *Reader, msg []byte, n int, maxCap uint64) ([]byte, []byte, error) {
+	return r.readAppend(msg, n, maxCap)
+}
+
+// ReaderFragStateHdrCapForTests returns the capacity of r's fragState header.
+func ReaderFragStateHdrCapForTests(r *Reader) int {
+	return cap(r.rst.hdr)
+}
