@@ -15,27 +15,35 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 	"unicode/utf8"
 )
 
 // Writer writes messages to a stream, fragmenting them if need be, see the
 // package documentation, and Option for the options that apply to it. A Writer
 // is safe for concurrent use: a message is written whole by any one call and
-// calls are serialized.
+// calls are serialized. Close stops it writing, and closes the io.Writer if it
+// is an io.Closer.
 type Writer struct {
 	wr                       io.Writer
 	maxSize                  uint32
 	fragmentSize             uint32
 	maxFragmentedMessageSize uint32
 	maxHeaderSize            uint32
-	repeatHeader             bool
+	retain                   int // the capacity above which a buffer is not kept
 	fragmentation            bool
 	encPool                  sync.Pool
+	closed                   atomic.Bool // Close has been called
+	closeOnce                sync.Once
+	closeErr                 error          // the error from closing wr, set by closeOnce
+	deadliner                writeDeadliner // the connection that writes are timed out on, or nil
+	writeTimeout             time.Duration
 
 	wmu     sync.Mutex
-	werr    error     // the error that failed a write, returned by all later writes; guarded by wmu
-	fragBuf []byte    // the frame being built by writeFragments and writeFragment; guarded by wmu
-	wst     fragState // the message being forwarded by WriteFragment; guarded by wmu
+	werr    error  // the error that failed a write, returned by all later writes; guarded by wmu
+	fragBuf []byte // the frame being built by writeFragments and writeFragment; guarded by wmu
+	scratch []byte // the message being refragmented by WriteFragments; guarded by wmu
 }
 
 // NewWriter creates a new Writer that writes to wr, which may be nil to discard
@@ -56,10 +64,12 @@ func NewWriter(wr io.Writer, opts ...Option) *Writer {
 		fragmentSize:             o.fragmentSize,
 		maxFragmentedMessageSize: o.maxFragmentedMessageSize,
 		maxHeaderSize:            o.maxHeaderSize,
-		repeatHeader:             o.repeatHeader,
+		retain:                   o.retain,
 		fragmentation:            o.fragmentation,
 	}
-	w.wst.single = !o.fragmentation
+	if d, ok := wr.(writeDeadliner); ok && o.writeTimeout > 0 {
+		w.deadliner, w.writeTimeout = d, o.writeTimeout
+	}
 	w.encPool = sync.Pool{
 		New: func() any {
 			buf := bytes.NewBuffer(make([]byte, 0, 1024))
@@ -107,7 +117,7 @@ func (w *Writer) ReleaseEncoder(enc *Encoder) {
 // putEncoder returns enc to the pool, first dropping a buffer that has grown
 // large so that a single large message does not pin its memory in the pool.
 func (w *Writer) putEncoder(enc *Encoder) {
-	if enc.buffer.Cap() > maxRetainedBuffer && uint64(enc.buffer.Cap()) > uint64(w.maxSize)*4 {
+	if enc.buffer.Cap() > w.retain {
 		enc.buffer = bytes.NewBuffer(make([]byte, 0, 1024))
 	}
 	w.encPool.Put(enc)
@@ -157,11 +167,8 @@ func (w *Writer) writeMessage(enc *Encoder, header []byte) error {
 	w.wmu.Lock()
 	defer w.wmu.Unlock()
 	defer w.putEncoder(enc)
-	if w.werr != nil {
-		return w.werr
-	}
-	if w.wst.active {
-		return fmt.Errorf("%w: a message is being forwarded with WriteFragment", ErrInvalidFrame)
+	if err := w.usable(); err != nil {
+		return err
 	}
 	if header != nil {
 		if err := w.checkHeader(header, false); err != nil {
@@ -248,11 +255,69 @@ func (w *Writer) checkRawSize(n uint64) error {
 	return nil
 }
 
+// writeDeadliner is implemented by a net.Conn, and anything else with a write
+// deadline.
+type writeDeadliner interface {
+	SetWriteDeadline(t time.Time) error
+}
+
+// errClosed is returned by writes after Close, and is permanent.
+var errClosed = permanent(ErrClosed)
+
+// usable returns the error that all writes return, if there is one: that which
+// failed an earlier write, or that the Writer was closed.
+func (w *Writer) usable() error {
+	if w.werr != nil {
+		return w.werr
+	}
+	if w.closed.Load() {
+		return errClosed
+	}
+	return nil
+}
+
+// Close closes the underlying writer if it is an io.Closer, such as a net.Conn,
+// which causes a write that is blocked on it to return, with an error, and
+// stops the Writer from writing: all later writes return an error that wraps
+// ErrClosed and matches ErrPermanent, as does a message that is part way through
+// being written, which is then not completed. Close does not wait for a write
+// that is in progress. It returns the error from closing the underlying writer,
+// if any, and closes it only once, however many times it is called, from any
+// number of goroutines. An underlying writer that is not an io.Closer is left
+// as it is.
+func (w *Writer) Close() error {
+	w.closeOnce.Do(func() {
+		w.closed.Store(true)
+		if c, ok := w.wr.(io.Closer); ok {
+			w.closeErr = c.Close()
+		}
+	})
+	return w.closeErr
+}
+
+// write writes data, within the write timeout if there is one.
+func (w *Writer) write(data []byte) error {
+	if w.closed.Load() {
+		// A message that is part way through is not completed.
+		return ErrClosed
+	}
+	if w.deadliner == nil {
+		return writeFull(w.wr, data)
+	}
+	if err := w.deadliner.SetWriteDeadline(time.Now().Add(w.writeTimeout)); err != nil {
+		return fmt.Errorf("failed to set the write deadline: %w", err)
+	}
+	// The deadline is for this frame only, and is not left to affect anything
+	// else that writes to the connection.
+	defer func() { _ = w.deadliner.SetWriteDeadline(time.Time{}) }()
+	return writeFull(w.wr, data)
+}
+
 // writeFrame writes data, which is a frame with room for its length at its
 // start, and size bytes of body, as a single frame.
 func (w *Writer) writeFrame(data []byte, size uint64) error {
 	binary.LittleEndian.PutUint32(data, uint32(size))
-	if err := writeFull(w.wr, data); err != nil {
+	if err := w.write(data); err != nil {
 		// Part of the frame may have been written.
 		w.werr = permanent(err)
 		return w.werr
@@ -280,7 +345,7 @@ func (w *Writer) writeFragments(text, header []byte) error {
 	buf := slices.Grow(w.fragBuf[:0], 4+budget)
 	defer func() {
 		// Keep the buffer for the next message unless it is large.
-		if cap(buf) <= maxRetainedBuffer {
+		if cap(buf) <= w.retain {
 			w.fragBuf = buf
 		} else {
 			w.fragBuf = nil
@@ -291,7 +356,7 @@ func (w *Writer) writeFragments(text, header []byte) error {
 		// Room for the length, then the header of this fragment, exactly.
 		buf = append(buf[:0], 0, 0, 0, 0)
 		var h []byte
-		if seq == 0 || w.repeatHeader {
+		if seq == 0 {
 			h = header
 		}
 		buf = appendFragmentHeader(buf, seq, total, h)
@@ -326,112 +391,196 @@ func (w *Writer) writeFragments(text, header []byte) error {
 	return nil
 }
 
-// WriteFragment writes a frame, as returned by ReadFragment, as it is, see
-// "Forwarding" in the package documentation. It is not refragmented and so must
-// fit in the frame size of this Writer. The Header is sent if it is set,
-// whether or not it was set in the frame that was read. A Fragment that is as
-// ReadFragment returned it, or a copy of it, has been checked and its Payload and
-// Header are not checked again, so they must not be modified in place; if they
-// are replaced, or resliced, they are checked. The frames of a message
-// must be written in order, from Seq 0 to the one that is Last, with no other
-// message written between them. See "Errors" in the package documentation for
-// the errors that can be retried; a nil Fragment is always rejected, with
-// ErrInvalidFrame, without any effect.
-func (w *Writer) WriteFragment(f *Fragment) error {
-	if f == nil {
-		return fmt.Errorf("%w: nil fragment", ErrInvalidFrame)
+// WriteFragments writes the message in f, as read by Reader.ReadFragments, to
+// the underlying writer, see "Forwarding" in the package documentation. It is
+// not checked again, other than that its user header is acceptable to this
+// Writer, since it was checked when it was read. It is written in frames of at
+// most the size of this Writer's, as WriteMessage would: the frames that it was
+// read from are used as they are, other than that they are put together, to send
+// fewer frames, if they are smaller than this Writer's, and that any that are
+// larger are split. A message that was not Bare and is written with
+// fragmentation not enabled must fit in a single frame. The user header is sent
+// with the first frame if there is one. f is not modified, and may be written again. See "Errors" in
+// the package documentation for the errors that can be retried.
+func (w *Writer) WriteFragments(f *Fragments) error {
+	if f == nil || !f.valid() {
+		return fmt.Errorf("%w: no fragments", ErrInvalidFrame)
 	}
 	w.wmu.Lock()
 	defer w.wmu.Unlock()
-	if w.werr != nil {
-		return w.werr
+	if err := w.usable(); err != nil {
+		return err
 	}
-	midMessage := w.wst.active
-	err := w.writeFragment(f)
-	if err != nil && w.werr == nil {
-		if midMessage {
-			// The peer has the start of a message, that can no longer be completed.
-			err = permanent(err)
-			w.werr = err
-		} else {
-			w.wst.active = false
+	if uint64(f.total) > w.maxMessage() {
+		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, f.total, w.maxMessage())
+	}
+	if len(f.header) != 0 {
+		// It was checked when it was read, or set.
+		if err := w.checkHeader(f.header, true); err != nil {
+			return err
 		}
+	}
+	if f.bare {
+		return w.writeBareFragments(f)
+	}
+	return w.writeEnvelopes(f)
+}
+
+// writeBareFragments writes a message that was read as a single frame that was
+// not an envelope, as a frame of its own if it has no user header and fits, and
+// otherwise as WriteMessage does.
+func (w *Writer) writeBareFragments(f *Fragments) error {
+	msg := f.payload
+	if len(f.header) == 0 && uint64(len(msg)) <= w.frameLimit() {
+		buf := w.fragBuf[:0]
+		buf = append(buf, 0, 0, 0, 0)
+		buf = append(buf, msg...)
+		w.keepFragBuf(buf)
+		return w.writeFrame(buf, uint64(len(msg)))
+	}
+	if !w.fragmentation && len(f.header) == 0 {
+		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, len(msg), w.maxSize)
+	}
+	// A message with a user header is in an envelope, whatever its size.
+	return w.writeFragments(msg, f.header)
+}
+
+// keepFragBuf keeps buf, which was built from fragBuf, for the next frame unless
+// it is large.
+func (w *Writer) keepFragBuf(buf []byte) {
+	if cap(buf) <= w.retain {
+		w.fragBuf = buf
+	} else {
+		w.fragBuf = nil
+	}
+}
+
+// writeEnvelopes writes a message read as envelopes, using their payloads as
+// they are where they fit.
+func (w *Writer) writeEnvelopes(f *Fragments) error {
+	p := &repacker{w: w, f: f, limit: int(w.frameLimit()), buf: w.fragBuf[:0]}
+	defer func() {
+		w.keepFragBuf(p.buf)
+		if cap(w.scratch) > w.retain {
+			w.scratch = nil
+		}
+	}()
+	p.begin()
+	if !w.fragmentation && p.room < len(f.payload) {
+		// Without fragmentation a message must be in a single envelope, which is
+		// known before anything is written.
+		return fmt.Errorf("%w: message of %d bytes does not fit in an envelope of at most %d bytes", ErrMessageTooLarge, f.total, p.limit)
+	}
+	start := 0
+	for _, end := range f.ends {
+		if err := p.add(f.payload[start:end]); err != nil {
+			return p.fail(err)
+		}
+		start = end
+	}
+	if p.used() > 0 {
+		return p.fail(p.flush())
+	}
+	return nil
+}
+
+// repacker builds the frames of a message that has been read from frames, to be
+// written in frames that may be larger or smaller.
+type repacker struct {
+	w       *Writer
+	f       *Fragments
+	limit   int    // the size of the largest frame
+	buf     []byte // the frame being built, with room at its start for its length
+	seq     uint64 // the sequence number of the frame being built
+	hdrEnd  int    // the end of what precedes the payload in buf
+	room    int    // the room in the frame being built for the payload
+	written bool   // a frame has been written
+}
+
+// begin starts the frame that is next, as seq.
+func (p *repacker) begin() {
+	p.buf = append(p.buf[:0], 0, 0, 0, 0)
+	var header []byte
+	if p.seq == 0 {
+		header = p.f.header
+	}
+	p.buf = appendFragmentHeader(p.buf, p.seq, uint64(p.f.total), header)
+	p.hdrEnd = len(p.buf)
+	p.room = p.limit - (len(p.buf) - 4) - len(envelopeSuffix)
+}
+
+// used is the length of the payload in the frame being built.
+func (p *repacker) used() int {
+	return len(p.buf) - p.hdrEnd
+}
+
+// flush writes the frame being built and starts the next.
+func (p *repacker) flush() error {
+	p.buf = append(p.buf, envelopeSuffix...)
+	if err := p.w.writeFrame(p.buf, uint64(len(p.buf)-4)); err != nil {
+		return err
+	}
+	p.written = true
+	p.seq++
+	p.begin()
+	return nil
+}
+
+// fail returns err, and if part of the message has been written, which can not
+// then be completed, makes it permanent.
+func (p *repacker) fail(err error) error {
+	if err != nil && p.written && p.w.werr == nil {
+		err = permanent(err)
+		p.w.werr = err
 	}
 	return err
 }
 
-func (w *Writer) writeFragment(f *Fragment) error {
-	buf := w.fragBuf[:0]
-	buf = append(buf, 0, 0, 0, 0)
-	defer func() {
-		if cap(buf) <= maxRetainedBuffer {
-			w.fragBuf = buf
-		} else {
-			w.fragBuf = nil
-		}
-	}()
-	limit := w.frameLimit()
-	if f.Bare {
-		buf = append(buf, f.Payload...)
-		return w.writeBare(buf, limit)
+// add adds the escaped payload of a frame, that was valid when it was read, to
+// the frame being built, or, if it does not fit, to the next, or, if it is
+// larger than a frame, splits it.
+func (p *repacker) add(chunk []byte) error {
+	if len(chunk) <= p.room-p.used() {
+		p.buf = append(p.buf, chunk...)
+		return nil
 	}
-	var err error
-	if buf, err = w.writeEnvelope(buf, f, limit); err != nil {
+	if p.used() > 0 {
+		if err := p.flush(); err != nil {
+			return err
+		}
+		if len(chunk) <= p.room {
+			p.buf = append(p.buf, chunk...)
+			return nil
+		}
+	}
+	return p.split(chunk)
+}
+
+// split fills frames with as much as will fit of the payload, which is first
+// unescaped and then escaped again to fit exactly, leaving the last partly
+// filled for what follows.
+func (p *repacker) split(chunk []byte) error {
+	msg, err := Unescape(p.w.scratch[:0], chunk)
+	p.w.scratch = msg
+	if err != nil {
 		return err
 	}
-	return w.writeFrame(buf, uint64(len(buf)-4))
-}
-
-// writeBare writes buf, a frame with room for its length, as a message that is
-// not a fragment.
-func (w *Writer) writeBare(buf []byte, limit uint64) error {
-	size := uint64(len(buf) - 4)
-	switch {
-	case w.wst.active:
-		return fmt.Errorf("%w: a message that is not a fragment was written part way through one", ErrInvalidFrame)
-	case size == 0:
-		return fmt.Errorf("%w: empty message", ErrInvalidFrame)
-	case size > limit:
-		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, size, limit)
-	case bytes.HasPrefix(buf[4:], []byte(envelopePrefix)):
-		return fmt.Errorf("%w: a message may not begin with %s", ErrInvalidFrame, envelopePrefix)
-	}
-	return w.writeFrame(buf, size)
-}
-
-// writeEnvelope checks the fragment f and, if it is acceptable, appends it
-// to buf, a frame with room for its length, and accounts for it in the state
-// of the message that is being written.
-func (w *Writer) writeEnvelope(buf []byte, f *Fragment, limit uint64) ([]byte, error) {
-	// A Fragment that is as ReadFragment returned it has been checked, and the
-	// header and payload are not checked again.
-	checked := f.verified.holds(f)
-	if len(f.Header) != 0 {
-		if err := w.checkHeader(f.Header, checked); err != nil {
-			return buf, err
+	for off := 0; off < len(msg); {
+		var n int
+		p.buf, n = appendEscaped(p.buf, msg[off:], p.room-p.used())
+		if n == 0 {
+			// Not possible given MinFragmentSizeWithHeader, since each frame is
+			// empty when it is begun.
+			return fmt.Errorf("%w: no progress splitting a frame at offset %d with frame size %d", ErrInvalidFrame, off, p.limit)
+		}
+		off += n
+		if off < len(msg) {
+			if err := p.flush(); err != nil {
+				return err
+			}
 		}
 	}
-	if len(f.Payload) == 0 {
-		return buf, fmt.Errorf("%w: empty fragment payload", ErrInvalidFrame)
-	}
-	l := f.verified.unescaped
-	if !checked {
-		var err error
-		if l, err = unescapedLen(f.Payload); err != nil {
-			return buf, err
-		}
-	}
-	buf = appendFragmentHeader(buf, f.Seq, f.Total, f.Header)
-	buf = append(buf, f.Payload...)
-	buf = append(buf, envelopeSuffix...)
-	if size := uint64(len(buf) - 4); size > limit {
-		return buf, fmt.Errorf("%w: fragment size %d exceeds maximum %d", ErrMessageTooLarge, size, limit)
-	}
-	if err := w.wst.begin(f.Seq, f.Total, f.Header, w.maxMessage()); err != nil {
-		return buf, err
-	}
-	_, err := w.wst.add(l)
-	return buf, err
+	return nil
 }
 
 func writeFull(w io.Writer, data []byte) error {

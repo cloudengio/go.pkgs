@@ -9,7 +9,9 @@ import (
 	"encoding/json/jsontext"
 	"fmt"
 	"io"
+	"net"
 	"testing"
+	"time"
 
 	"cloudeng.io/encoding/json/jsonmsgs"
 )
@@ -250,10 +252,8 @@ func BenchmarkMessagerReadLarge(b *testing.B) {
 }
 
 // headerBenchOptions are the options for the benchmarks that use user headers.
-func headerBenchOptions(repeat bool) []jsonmsgs.Option {
-	return []jsonmsgs.Option{
-		jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxHeaderSize(64), jsonmsgs.WithRepeatHeader(repeat),
-	}
+func headerBenchOptions(more ...jsonmsgs.Option) []jsonmsgs.Option {
+	return append([]jsonmsgs.Option{jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxHeaderSize(64)}, more...)
 }
 
 const benchHeader = `{"to":7,"op":"x"}`
@@ -261,7 +261,7 @@ const benchHeader = `{"to":7,"op":"x"}`
 // BenchmarkMessagerWriteMessageWithHeader is BenchmarkMessagerWriteMessage for
 // a message with a user header, which is sent as a single fragment.
 func BenchmarkMessagerWriteMessageWithHeader(b *testing.B) {
-	nm := jsonmsgs.NewWriter(io.Discard, headerBenchOptions(false)...)
+	nm := jsonmsgs.NewWriter(io.Discard, headerBenchOptions()...)
 	b.ReportAllocs()
 	for b.Loop() {
 		enc := nm.NewEncoder()
@@ -281,7 +281,7 @@ func BenchmarkMessagerWriteMessageWithHeader(b *testing.B) {
 // message with a user header.
 func BenchmarkMessagerReadMessageWithHeader(b *testing.B) {
 	var stream bytes.Buffer
-	opts := headerBenchOptions(false)
+	opts := headerBenchOptions()
 	wr := jsonmsgs.NewWriter(&stream, opts...)
 	enc := wr.NewEncoder()
 	_ = enc.WriteValue(jsontext.Value(`{"version":0,"payload":{"x":42,"y":7}}`))
@@ -300,47 +300,56 @@ func BenchmarkMessagerReadMessageWithHeader(b *testing.B) {
 	}
 }
 
-// BenchmarkMessagerForwardLarge measures forwarding, with ReadFragment and
-// WriteFragment, a message of 1 MB that is in frames of 64 KiB, which is to
-// say the cost of a router that neither reassembles nor decodes. The
-// reassembling alternative, for comparison, is the ReadLarge benchmark.
+// forwardCases are the ways of forwarding a message that is read from frames of
+// 64 KiB: to frames of the same size, which are used as they are, to larger
+// frames, that frames are put together to fill, and to smaller, that they are
+// split to fit.
+var forwardCases = []struct {
+	name string
+	size uint32
+}{
+	{"same", 64 << 10},
+	{"coalesced", 1 << 20},
+	{"split", 16 << 10},
+}
+
+// BenchmarkMessagerForwardLarge measures forwarding, with ReadFragments and
+// WriteFragments, a message of 1 MB that is in frames of 64 KiB, which is to
+// say the cost of a router that does not decode it. The alternative of
+// reassembling and decoding it is the ReadLarge benchmark.
 func BenchmarkMessagerForwardLarge(b *testing.B) {
 	for _, kind := range largeKinds {
 		msg := largeMessage(kind)
-		for _, repeat := range []bool{false, true} {
-			name := kind + "/header"
-			if repeat {
-				name = kind + "/repeated-header"
-			}
-			b.Run(name, func(b *testing.B) {
-				forwardBench(b, msg, append(headerBenchOptions(repeat), jsonmsgs.WithMaxSize(64<<10)))
+		for _, c := range forwardCases {
+			b.Run(kind+"/"+c.name, func(b *testing.B) {
+				forwardBench(b, msg, headerBenchOptions(jsonmsgs.WithMaxSize(64<<10)), headerBenchOptions(jsonmsgs.WithMaxSize(c.size)))
 			})
 		}
 	}
 }
 
-func forwardBench(b *testing.B, msg []byte, opts []jsonmsgs.Option) {
+// forwardBench measures reading the message, as it is written using ropts, and
+// writing it using wopts.
+func forwardBench(b *testing.B, msg []byte, ropts, wopts []jsonmsgs.Option) {
 	var stream bytes.Buffer
-	wr := jsonmsgs.NewWriter(&stream, opts...)
+	wr := jsonmsgs.NewWriter(&stream, ropts...)
 	enc := wr.NewEncoder()
 	_ = jsonmsgs.WriteRawIntoEncoderForTests(enc, msg)
 	if err := wr.WriteMessageWithHeader(enc, jsontext.Value(benchHeader)); err != nil {
 		b.Fatal(err)
 	}
-	rd := jsonmsgs.NewReader(&loopReader{data: stream.Bytes()}, opts...)
-	out := jsonmsgs.NewWriter(io.Discard, opts...)
+	rd := jsonmsgs.NewReader(&loopReader{data: stream.Bytes()}, ropts...)
+	out := jsonmsgs.NewWriter(io.Discard, wopts...)
 	b.SetBytes(int64(len(msg)))
 	b.ReportAllocs()
+	var fr *jsonmsgs.Fragments
 	for b.Loop() {
-		for last := false; !last; {
-			f, err := rd.ReadFragment()
-			if err != nil {
-				b.Fatal(err)
-			}
-			if err := out.WriteFragment(f); err != nil {
-				b.Fatal(err)
-			}
-			last = f.Last
+		var err error
+		if fr, err = rd.ReadFragments(fr); err != nil {
+			b.Fatal(err)
+		}
+		if err := out.WriteFragments(fr); err != nil {
+			b.Fatal(err)
 		}
 	}
 }
@@ -348,8 +357,9 @@ func forwardBench(b *testing.B, msg []byte, opts []jsonmsgs.Option) {
 // BenchmarkMessagerForwardMax is BenchmarkMessagerForwardLarge for the largest
 // message that the default options allow, DefaultMaxFragmentedMessageSize less
 // room for the header, which is in frames of the default size,
-// DefaultMaxNativeMessageSize. The content, a repetition of that used above,
-// need not be valid JSON for it to be forwarded.
+// DefaultMaxNativeMessageSize, forwarded to frames of that size and to frames
+// of 64 KiB. The content, a repetition of that used above, need not be valid
+// JSON for it to be forwarded.
 func BenchmarkMessagerForwardMax(b *testing.B) {
 	const size = jsonmsgs.DefaultMaxFragmentedMessageSize - 100
 	for _, kind := range largeKinds {
@@ -358,15 +368,18 @@ func BenchmarkMessagerForwardMax(b *testing.B) {
 			msg = append(msg, unit...)
 		}
 		msg = msg[:size]
-		b.Run(kind, func(b *testing.B) { forwardBench(b, msg, headerBenchOptions(false)) })
+		for _, to := range []uint32{jsonmsgs.DefaultMaxNativeMessageSize, 64 << 10} {
+			b.Run(fmt.Sprintf("%s/%d", kind, to), func(b *testing.B) {
+				forwardBench(b, msg, headerBenchOptions(), headerBenchOptions(jsonmsgs.WithMaxSize(to)))
+			})
+		}
 	}
 }
 
 // modeBenchmarks are the ways of sending the same message, which is of about
 // 100 KB, compared by BenchmarkMessagerWriteModes and BenchmarkMessagerReadModes:
 // as a bare frame, in a single envelope with a header, and, in frames of 16 KiB,
-// fragmented without a header, with one on the first frame and with one on every
-// frame.
+// fragmented without a header and with one on the first frame.
 var modeBenchmarks = []struct {
 	name   string
 	header bool
@@ -376,7 +389,6 @@ var modeBenchmarks = []struct {
 	{"header", true, []jsonmsgs.Option{jsonmsgs.WithMaxSize(1 << 20), jsonmsgs.WithMaxHeaderSize(64)}},
 	{"fragmented", false, []jsonmsgs.Option{jsonmsgs.WithMaxSize(16 << 10), jsonmsgs.WithFragmentation(true)}},
 	{"fragmented-header", true, []jsonmsgs.Option{jsonmsgs.WithMaxSize(16 << 10), jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxHeaderSize(64)}},
-	{"fragmented-repeated-header", true, []jsonmsgs.Option{jsonmsgs.WithMaxSize(16 << 10), jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxHeaderSize(64), jsonmsgs.WithRepeatHeader(true)}},
 }
 
 func modeMessage() []byte {
@@ -440,5 +452,60 @@ func BenchmarkMessagerReadModes(b *testing.B) {
 				rd.ReleaseDecoder(dec)
 			}
 		})
+	}
+}
+
+// BenchmarkMessagerWriteTimeout measures the cost of a write timeout, which sets
+// and clears the write deadline of the connection for each frame, writing to a
+// connection that is read by another goroutine. It is for messages of 100 bytes
+// and of 1 MB, which is in 16 frames of 64 KiB.
+func BenchmarkMessagerWriteTimeout(b *testing.B) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		b.Skip("no loopback:", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				_, _ = io.Copy(io.Discard, c)
+			}()
+		}
+	}()
+	sizes := []struct {
+		name string
+		msg  []byte
+		opts []jsonmsgs.Option
+	}{
+		{"small", []byte(`{"x":42,"y":7,"z":"hello world"}`), nil},
+		{"1MB", largeMessage("numeric"), []jsonmsgs.Option{jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxSize(64 << 10)}},
+	}
+	for _, s := range sizes {
+		for _, timeout := range []time.Duration{0, time.Minute} {
+			name := s.name + "/no-timeout"
+			if timeout > 0 {
+				name = s.name + "/timeout"
+			}
+			b.Run(name, func(b *testing.B) {
+				conn, err := net.Dial("tcp", ln.Addr().String())
+				if err != nil {
+					b.Fatal(err)
+				}
+				defer conn.Close()
+				wr := jsonmsgs.NewWriter(conn, append(s.opts, jsonmsgs.WithWriteTimeout(timeout))...)
+				b.SetBytes(int64(len(s.msg)))
+				b.ReportAllocs()
+				for b.Loop() {
+					if err := jsonmsgs.WriteRawForTests(wr, s.msg); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
 	}
 }

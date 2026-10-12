@@ -486,14 +486,14 @@ func TestReaderRejects(t *testing.T) {
 	}
 }
 
-// TestFragmentReaderRejects checks that ReadFragment rejects what ReadMessage does.
+// TestFragmentReaderRejects checks that ReadFragments rejects what ReadMessage does.
 func TestFragmentReaderRejects(t *testing.T) {
 	for _, tc := range rejectCases {
 		t.Run(tc.name, func(t *testing.T) {
 			rd := newReader(joinFrames(tc.frames...), jsonmsgs.WithFragmentation(true), jsonmsgs.WithMaxFragmentedMessageSize(1_000_000))
 			var err error
 			for err == nil {
-				_, err = rd.ReadFragment()
+				_, err = rd.ReadFragments(nil)
 			}
 			if !errors.Is(err, jsonmsgs.ErrInvalidFrame) && !errors.Is(err, jsonmsgs.ErrMessageTooLarge) {
 				t.Fatalf("got %v, want ErrInvalidFrame or ErrMessageTooLarge", err)
@@ -501,7 +501,7 @@ func TestFragmentReaderRejects(t *testing.T) {
 			if !errors.Is(err, jsonmsgs.ErrPermanent) {
 				t.Errorf("%v does not match ErrPermanent", err)
 			}
-			if _, err2 := rd.ReadFragment(); err2 != err { //nolint:errorlint
+			if _, err2 := rd.ReadFragments(nil); err2 != err { //nolint:errorlint
 				t.Errorf("not sticky: got %v, want %v", err2, err)
 			}
 		})
@@ -521,7 +521,7 @@ func TestReaderWithoutFragmentation(t *testing.T) {
 		if via == "ReadMessage" {
 			_, err = rd.ReadMessage()
 		} else {
-			_, err = rd.ReadFragment()
+			_, err = rd.ReadFragments(nil)
 		}
 		if !errors.Is(err, jsonmsgs.ErrInvalidFrame) {
 			t.Errorf("%s: got %v, want ErrInvalidFrame", via, err)
@@ -595,7 +595,8 @@ func TestReaderUnescapeMatchesStdlib(t *testing.T) {
 }
 
 // TestReaderAllocatesAsDataArrives checks that the size that a frame declares
-// does not cause memory to be allocated before the data arrives.
+// does not cause memory to be allocated before the data arrives. The total that
+// a message declares does, up to the maximum, see TestReassembleAllocation.
 func TestReaderAllocatesAsDataArrives(t *testing.T) {
 	const declared = 1 << 30
 	hdr := binary.LittleEndian.AppendUint32(nil, declared)
@@ -611,20 +612,6 @@ func TestReaderAllocatesAsDataArrives(t *testing.T) {
 	}
 	if got := after.TotalAlloc - before.TotalAlloc; got > 4<<20 {
 		t.Errorf("allocated %d bytes for a frame that declared %d and delivered %d", got, declared, len(stream)-4)
-	}
-
-	// The same for the total declared by a fragment.
-	stream = joinFrames(`{"~":[0,16000000],"p":"abc"}`)
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-	rd = newReader(stream, jsonmsgs.WithFragmentation(true))
-	_, err = rd.ReadMessage()
-	runtime.ReadMemStats(&after)
-	if !errors.Is(err, io.ErrUnexpectedEOF) {
-		t.Fatalf("got %v", err)
-	}
-	if got := after.TotalAlloc - before.TotalAlloc; got > 4<<20 {
-		t.Errorf("allocated %d bytes for a fragment that declared 16000000", got)
 	}
 }
 
@@ -731,18 +718,14 @@ func TestInteropNode(t *testing.T) {
 	for i := 1; i < len(msgs); i += 2 {
 		headers[i] = fmt.Sprintf(`{"to":%d,"via":["a","b"]}`, i)
 	}
-	for _, repeatIn := range []bool{false, true} {
-		for _, repeatOut := range []bool{false, true} {
-			runNodeInterop(t, node, budget, msgs, headers, repeatIn, repeatOut)
-		}
-	}
+	runNodeInterop(t, node, budget, msgs, headers)
 }
 
 // runNodeInterop sends msgs, with headers, from this package through the
 // JavaScript implementation and back.
-func runNodeInterop(t *testing.T, node string, budget int, msgs, headers []string, repeatIn, repeatOut bool) {
+func runNodeInterop(t *testing.T, node string, budget int, msgs, headers []string) {
 	t.Helper()
-	opts := headerOpts(40, repeatIn, jsonmsgs.WithMaxSize(uint32(budget)))
+	opts := headerOpts(40, jsonmsgs.WithMaxSize(uint32(budget)))
 	var in bytes.Buffer
 	nm := newWriter(&in, opts...)
 	for i, m := range msgs {
@@ -756,11 +739,7 @@ func runNodeInterop(t *testing.T, node string, budget int, msgs, headers []strin
 			t.Fatal(err)
 		}
 	}
-	args := []string{"testdata/fragments.js", fmt.Sprint(budget)}
-	if repeatOut {
-		args = append(args, "repeat")
-	}
-	cmd := exec.Command(node, args...)
+	cmd := exec.Command(node, "testdata/fragments.js", fmt.Sprint(budget)) //nolint:gosec
 	cmd.Stdin = &in
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
@@ -776,10 +755,10 @@ func runNodeInterop(t *testing.T, node string, budget int, msgs, headers []strin
 	for i, m := range msgs {
 		dec, err := rd.ReadMessage()
 		if err != nil {
-			t.Fatalf("repeat %v/%v: message %d: %v", repeatIn, repeatOut, i, err)
+			t.Fatalf("message %d: %v", i, err)
 		}
 		if got := string(jsonmsgs.DecoderBytesForTests(dec)); got != m || string(dec.Header()) != headers[i] {
-			t.Fatalf("repeat %v/%v: message %d: got %q header %q, want %q header %q", repeatIn, repeatOut, i, got, dec.Header(), m, headers[i])
+			t.Fatalf("message %d: got %q header %q, want %q header %q", i, got, dec.Header(), m, headers[i])
 		}
 	}
 }

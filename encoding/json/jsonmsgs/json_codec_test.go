@@ -7,6 +7,7 @@ package jsonmsgs_test
 import (
 	"bytes"
 	stdjson "encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"testing"
@@ -193,6 +194,69 @@ func TestAppendEscapedFits(t *testing.T) {
 			if n != wantN || !bytes.Equal(got, append(bytes.Clone(prefix), want...)) {
 				t.Fatalf("room %d, %q: got %q, %d; want %q, %d", room, src, got, n, want, wantN)
 			}
+		}
+	}
+}
+
+func TestUnescape(t *testing.T) {
+	r := rand.New(rand.NewPCG(19, 20)) //nolint:gosec
+	for i := range 300 {
+		text := longRunText(r, 1+r.IntN(1500))
+		if i%3 == 0 {
+			text = randomText(r, 1+r.IntN(100))
+		}
+		quoted, err := stdjson.Marshal(string(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload := quoted[1 : len(quoted)-1]
+		saved := bytes.Clone(payload)
+
+		// Appended to what is there, which is not changed.
+		prefix := []byte("keep this")
+		got, err := jsonmsgs.Unescape(bytes.Clone(prefix), payload)
+		if err != nil || !bytes.Equal(got, append(bytes.Clone(prefix), text...)) {
+			t.Fatalf("%d: got %q, %v, want %q", i, got, err, text)
+		}
+		if !bytes.Equal(payload, saved) {
+			t.Fatalf("%d: the payload was modified", i)
+		}
+		// And to nothing.
+		if got, err := jsonmsgs.Unescape(nil, payload); err != nil || !bytes.Equal(got, text) {
+			t.Fatalf("%d: got %q, %v", i, got, err)
+		}
+	}
+}
+
+func TestUnescapeForms(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{``, ``},
+		{`abc`, `abc`},
+		{`Aé世`, "Aé世"},
+		{`😀x`, "😀x"},
+		{`\/\"\\\b\f\n\r\t`, "/\"\\\b\f\n\r\t"},
+		{`a\u0000b`, "a\x00b"},
+		{"é世😀\x7f ", "é世😀\x7f "},
+	} {
+		got, err := jsonmsgs.Unescape(nil, []byte(tc.in))
+		if err != nil || string(got) != tc.want {
+			t.Errorf("%q: got %q, %v, want %q", tc.in, got, err, tc.want)
+		}
+	}
+}
+
+func TestUnescapeErrors(t *testing.T) {
+	for _, in := range []string{
+		`a"b`, `a"nb`, "a\nb", "a\x01nb", `a\`, `a\x`, `\u12`, `\u12g4`, `\ud83d`, `\ud83dx`, `\ude00`,
+		"a\xffb", "\xc0\x80", `\ud83dA`,
+	} {
+		prefix := []byte("keep")
+		got, err := jsonmsgs.Unescape(prefix, []byte(in))
+		if !errors.Is(err, jsonmsgs.ErrInvalidFrame) || errors.Is(err, jsonmsgs.ErrPermanent) {
+			t.Errorf("%q: got %v, want an ErrInvalidFrame that is not permanent", in, err)
+		}
+		if string(got) != "keep" {
+			t.Errorf("%q: got %q, want the length of dst unchanged", in, got)
 		}
 	}
 }
