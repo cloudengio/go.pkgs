@@ -163,8 +163,16 @@ func parseFragmentHeader(body []byte, maxHeader uint32) (fh fragmentHeader, err 
 			return bad("invalid total")
 		}
 	}
-	if fh.hdr, i, err = parseUserHeader(body, i, maxHeader); err != nil {
-		return fragmentHeader{}, err
+	if seq == 0 {
+		if fh.hdr, i, err = parseUserHeader(body, i, maxHeader); err != nil {
+			return fragmentHeader{}, err
+		}
+	} else {
+		// Only the first fragment has a user header.
+		if !bytes.HasPrefix(body[i:], []byte(envelopeMid)) {
+			return bad("invalid header")
+		}
+		i += len(envelopeMid)
 	}
 	// A payload is at least one byte, then the closing "}.
 	if len(body)-i < 1+len(envelopeSuffix) || !bytes.HasSuffix(body, []byte(envelopeSuffix)) {

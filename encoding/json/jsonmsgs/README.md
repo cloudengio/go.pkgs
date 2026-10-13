@@ -64,22 +64,27 @@ and which it is is determined by its first bytes:
     length   = the number of bytes in body, as 4 bytes, little endian
     body     = bare | envelope
     bare     = a complete JSON value that does not begin with `{"~":[`
-    envelope = `{"~":[` <seq> [ `,` <total> ] [ `,` <hlen> ] `]` [ `,"h":` <header> ] `,"p":"` <payload> `"}`
+    envelope = first | later
+    first    = `{"~":[0,` <total> [ `,` <hlen> ] `]` [ `,"h":` <header> ] `,"p":"` <payload> `"}`
+    later    = `{"~":[` <seq> `],"p":"` <payload> `"}`
 
 A bare message is the message and nothing else. An envelope is a JSON object
 of exactly the form above, in that order, with no white space, and with up
-to three members: "~", an array of numbers that describes the envelope,
-"h", the user header, if there is one, and "p", the payload. The names in
-the grammar are not members: they stand for the elements of the "~" array,
-in order, and for the values of "h" and "p":
+to three members: "~", an array of numbers that describes the envelope, "h",
+the user header, if there is one, and "p", the payload. The names in the
+grammar are not members: they stand for the elements of the "~" array, in
+order, and for the values of "h" and "p". The first envelope of a message,
+which has a sequence number of 0, is the only one with a total and a user
+header:
 
     seq      "~" element: the sequence number of the envelope within its
              message, from 0
-    total    "~" element, only if seq is 0: the length in bytes of the whole
-             message
-    hlen     "~" element, only if there is a user header: its length in bytes
-    header   the value of "h", only if there is a user header: a JSON value,
-             see "User header"
+    total    "~" element, of the first envelope only: the length in bytes of
+             the whole message
+    hlen     "~" element, of the first envelope only, and only if there is a
+             user header: its length in bytes
+    header   the value of "h", of the first envelope only, and only if there is
+             a user header: a JSON value, see "User header"
     payload  the value of "p": a chunk of the message, as the contents of a
              JSON string, escaped as described under "Escaping"; it is never
              empty, and, if it is that of the first envelope and is total
@@ -91,8 +96,8 @@ follow, no message identifier and no version: the last envelope of a message
 is the one that brings the bytes received up to total, a single message is
 in flight in each direction at a time, and a future version of this format
 would use a key other than "~". An envelope costs 17 bytes plus the digits
-of total on the first envelope of a message and 15 bytes plus the digits
-of seq on the others, plus the user header and its length if there is one,
+of total on the first envelope of a message and 15 bytes plus the digits of
+seq on the others, plus the user header and its length if the first has one,
 which is of no consequence when a frame is of the order of a megabyte;
 it is the encoding of the payload that determines the size of a message.
 
@@ -173,29 +178,38 @@ with its length in bytes as the last element of the "~" array:
     {"~":[0,61,17],"h":{"to":7,"op":"x"},"p":"{\"key\":\"a value long enough"}
     {"~":[1],"p":"\",\"n\":[1,2,3]}"}
 
-When fragmentation is enabled the header is part of the envelope that
-carries the first chunk of the message, and not an envelope of its own,
-and is optionally repeated in subsequent envelopes, see WithRepeatHeader,
-as {"~":[1,17],"h":{"to":7,"op":"x"},"p":"…"}. If fragmentation is not
+The header is part of the first envelope of the message, the one that
+carries the first chunk of it, and not an envelope of its own, and is
+on no other, since a single message is in flight in each direction and
+so the first is all that is needed to route it. If fragmentation is not
 enabled the message is sent in a single envelope which, with its overhead,
 the user header and the escaped payload, must fit in the maximum size,
 see WithMaxSize.
 
 User headers are disabled unless WithMaxHeaderSize is set, and a header
-received when they are disabled is an error.
+received when they are disabled, or on any but the first envelope of a
+message, is an error.
 
 # Forwarding
 
-A router, or proxy, that moves messages between connections needs neither to
-hold the whole of a message nor to decode it. ReadFragment returns a frame
-as it is, a Fragment, with the sequence number, the total on the first, the
-user header and the payload still escaped, along with the number of bytes
-that it stands for once unescaped and whether it is the last of its message.
-WriteFragment writes a received message using a Writer. This requires that
-the next hop fragment size is at least as large as that of the received
-message. In the case where the next hop has a smaller max fragment size than
-the receiver, the only option is for the proxy to buffer the whole message
-in order to refragment it according to the next hop's maximum fragment size.
+A router, or proxy, that moves messages between connections does not need
+to decode a message, only to look at its user header and pass it on,
+and the frames that it is received in need not be those that it is sent in.
+Reader.ReadFragments reads all of the frames of a message, and checks them,
+into a Fragments, without reassembling or decoding the message: the
+payloads of the frames are kept as they are, escaped, one after the other.
+Writer.WriteFragments writes a Fragments to another stream refragmenting
+if necessary, either to re-fragment them into smaller frames or merge
+them into larger ones. If the frame sizes are identical the payloads are
+written as they were read, without any re-escaping. All of the frames of
+a message are held in memory, as they would be for ReadMessage, up to the
+maximum fragmented message size. Fragments.Header returns the user header,
+with which a message can be routed. A router that is the destination of a
+message, and does not forward it, can decode it using Fragments.Reader,
+which decodes the payloads as they are read, or Unescape for a payload.
+A router that responds to a message addressed to it creates the response,
+and its header, with Fragments.Set, which marshals them, and writes it with
+Writer.WriteFragments as it does the messages that it forwards.
 
 # Reading
 
@@ -216,14 +230,10 @@ ErrInvalidFrame for a message to be written, is found before anything is
 read or written, leaves the Reader or Writer as it was, and may be retried,
 with another message for example.
 
-When forwarding, an error writing a frame that is not the first of its
-message is also permanent, since the peer has been sent the start of a
-message that can no longer be completed, but an error in the first frame of
-a message, or in a bare frame, can be retried with a corrected Fragment.
-Reading with ReadMessage part way through a message that is being read with
-ReadFragment, or writing with WriteMessage part way through one that is
-being written with WriteFragment, fails with ErrInvalidFrame, which can be
-retried once the message is complete.
+An error from Writer.WriteFragments is permanent if part of the message has
+been written before it is found, which cannot be completed, and otherwise,
+as for WriteMessage, can be retried, perhaps by writing to a Writer that
+accepts the header or has a larger frame size.
 
 # Browser extension
 
@@ -248,10 +258,10 @@ an independent implementation:
       return JSON.parse(text);
     }
 
-The user header, if any, is m.h of the first envelope, and of the others
-if the host repeats it. A sender in JavaScript puts it in the object,
-between "~" and "p", and adds its length in bytes, JSON.stringify(h) encoded
-as UTF-8, to the "~" array of each envelope that carries it.
+The user header, if any, is m.h of the first envelope. A sender in
+JavaScript puts it in the object, between "~" and "p", and adds its length
+in bytes, JSON.stringify(h) encoded as UTF-8, to the "~" array of the first
+envelope.
 
 An extension sees only the parsed JSON of a frame and so can tell an
 envelope from an ordinary message only by its structure, as above,
@@ -286,10 +296,19 @@ be 10^6 or 2^20 bytes. The limit applies to the length of the frame, ie.
 to the length of the message when it is not fragmented, and to the length of
 each fragment, including its header and its escaped payload, when it is.
 
+### DefaultMaxRetainedBuffer
+```go
+DefaultMaxRetainedBuffer = 4 * 1024 * 1024
+
+```
+DefaultMaxRetainedBuffer is the default capacity, in bytes, above which a
+buffer is dropped rather than kept for reuse, see WithMaxRetainedBuffer,
+unless 4 times the maximum size is larger.
+
 
 
 ## Variables
-### ErrMessageTooLarge, ErrInvalidFrame, ErrPermanent
+### ErrMessageTooLarge, ErrInvalidFrame, ErrPermanent, ErrClosed
 ```go
 // ErrMessageTooLarge is returned, or wrapped by the error returned, when a
 // message or frame exceeds the limits in effect.
@@ -308,9 +327,12 @@ ErrInvalidFrame = errors.New("jsonmsgs: invalid frame")
 // ErrInvalidFrame, ErrMessageTooLarge or an error from the underlying reader
 // or writer, and has the same text. An error that does not match
 // ErrPermanent leaves the Reader or Writer as it was and the call may be
-// retried, with a different message or Fragment, or later. io.EOF, returned
+// retried, with a different message or Fragments, or later. io.EOF, returned
 // between messages, is neither.
 ErrPermanent = errors.New("jsonmsgs: permanent error")
+// ErrClosed is wrapped by the error that a Writer returns, which matches
+// ErrPermanent, for a write after it has been closed.
+ErrClosed = errors.New("jsonmsgs: closed")
 
 ```
 
@@ -336,6 +358,21 @@ MinFragmentSizeWithHeader is MinFragmentSize for a Writer that sends user
 headers of up to maxHeaderSize bytes, see WithMaxHeaderSize. The largest
 header a fragment needs is that of the first, which has a user header of
 that size as well as the total.
+
+### Func Unescape
+```go
+func Unescape(dst, payload []byte) ([]byte, error)
+```
+Unescape appends the bytes of the message that payload stands for to dst
+and returns the extended slice. payload is the contents of a JSON string,
+as the Payload of Fragments is, and is decoded as described under "Escaping"
+in the package documentation, accepting every form of escape that a JSON
+encoder may produce. This is for code that needs to look at the message
+that Fragments carry, for example to route on it; the Payload of Fragments
+that are Bare is already the message and is not escaped. An error that wraps
+ErrInvalidFrame is returned if payload is not the valid contents of a JSON
+string, or is not valid UTF-8 once decoded, in which case the length of dst
+is unchanged. payload is not modified.
 
 
 
@@ -375,48 +412,103 @@ It must be obtained using Writer.NewEncoder. It will be reclaimed by
 Writer.WriteMessage after which it cannot be used again.
 
 
-### Type Fragment
+### Type Fragments
 ```go
-type Fragment struct {
-	// Bare is true for a message that was sent as a frame of its own, with no
-	// envelope, in which case Payload is the message and Header is nil.
-	Bare bool
-
-	// Seq is the sequence number of the fragment within its message, which
-	// starts at 0.
-	Seq uint64
-
-	// Total is the size in bytes of the whole message, once unescaped and
-	// reassembled, and is set on the first fragment, Seq 0, only, as that is
-	// the only one that carries it. It is the size of the message if Bare.
-	Total uint64
-
-	// Header is the user header, as sent by WriteMessageWithHeader, a JSON
-	// value that is nil if the fragment does not carry one. It is on the
-	// first fragment of a message and, if the sender sets WithRepeatHeader, on
-	// every other.
-	Header []byte
-
-	// Payload is the part of the message that the fragment carries, as it is
-	// in the fragment: the contents of a JSON string, ie. escaped, unless Bare.
-	// Neither it nor Header may be modified in place, see Writer.WriteFragment.
-	Payload []byte
-
-	// Len is the number of bytes of the message that Payload stands for once
-	// unescaped. It is set by ReadFragment, and ignored by WriteFragment which
-	// works it out.
-	Len int
-
-	// Last is true if this is the last fragment of the message, or Bare.
-	Last bool
+type Fragments struct {
 	// contains filtered or unexported fields
 }
 ```
-Fragment is a frame as read by ReadFragment, and as written by
-WriteFragment: a fragment of a message, or a whole message that was sent as
-a frame of its own, that has not been reassembled or, if it is a fragment,
-unescaped. This allows a frame to be routed, and forwarded, without
-buffering the message that it is a part of.
+Fragments are the frames that make up a single message, as read by
+Reader.ReadFragments and written by Writer.WriteFragments. Fragments is
+intended for use by message routers that do not need access to the body of
+the message, just the metadata.
+
+### Functions
+
+```go
+func NewFragments(header, message any) (*Fragments, error)
+```
+NewFragments returns Fragments for a message that is created, rather than
+read, see Set.
+
+
+
+### Methods
+
+```go
+func (f *Fragments) Bare() bool
+```
+Bare reports whether Payload is the message itself, and not escaped,
+as it is if the message was read from a frame that was not an envelope,
+or was created using Set.
+
+
+```go
+func (f *Fragments) Frames() int
+```
+Frames returns the number of frames that the message was read from.
+
+
+```go
+func (f *Fragments) Header() jsontext.Value
+```
+Header returns the user header that was sent with the message,
+see Writer.WriteMessageWithHeader, or nil if it was sent without one.
+It is valid until f is next used.
+
+
+```go
+func (f *Fragments) Len() int
+```
+Len returns the size in bytes of the message once the frames are reassembled
+and unescaped, ie. the size that Unescape of Payload gives, or that of
+Payload if the message is Bare.
+
+
+```go
+func (f *Fragments) Payload() []byte
+```
+Payload returns the payloads of the frames one after the other, which
+are the contents of JSON strings that Unescape decodes to the message.
+If the message is Bare it is the message, and is not escaped. It must not be
+modified, and is valid until f is next used.
+
+
+```go
+func (f *Fragments) Reader() io.Reader
+```
+Reader returns an io.Reader for the message, with the escapes in the
+payloads decoded as they are read, which is for a router that is the
+destination of a message and not merely forwarding it, to decode the
+message, using a jsontext.Decoder or the standard library's, for example,
+without first assembling it in memory. Frames are decoded one at a time,
+into the buffer that Read is given if it is large enough and otherwise
+into one that the Reader keeps, which is no larger than a frame. A message
+that is Bare is read as it is. The Reader is valid until f is next used,
+and several may be in use at a time, but each by one goroutine.
+
+
+```go
+func (f *Fragments) Set(header, message any) error
+```
+Set replaces what f holds with the user header to send with a message,
+if there is one, and the message, that it marshals as JSON, so that a
+router, say, can respond to a message that is addressed to it using
+Writer.WriteFragments, as it forwards the messages that are not,
+without encoding the message itself. Each is marshalled as the standard
+library's json.Marshal does, other than that the characters <, > and &
+are not escaped, and so can be of any type that it can marshal, including
+a jsontext.Value or json.RawMessage that holds JSON, but not a []byte,
+which is marshalled as a base64 string. The header is nil if there is none.
+As both are of type any, the order of header and message is not checked
+by the compiler. It is an error, that wraps ErrInvalidFrame and the error
+from marshalling, if either cannot be marshalled, or if the message is nil.
+If there is an error f is empty. The message is not checked against the
+limits of a Writer, which are those of WriteFragments. f is reused,
+like the Fragments that are passed to ReadFragments, and can be written,
+as can any other, to any number of Writers.
+
+
 
 
 ### Type Messager
@@ -424,6 +516,7 @@ buffering the message that it is a part of.
 type Messager struct {
 	*Reader
 	*Writer
+	// contains filtered or unexported fields
 }
 ```
 Messager is a Reader and a Writer, for convenience when the same options
@@ -443,6 +536,17 @@ see NewReader and NewWriter.
 
 
 
+### Methods
+
+```go
+func (m *Messager) Close() error
+```
+Close closes the Reader and the Writer, see their Close methods, and returns
+the errors from both. If they read and write the same object, such as a
+net.Conn, it is closed once.
+
+
+
 
 ### Type Option
 ```go
@@ -450,10 +554,11 @@ type Option func(*options)
 ```
 Option represents an option for configuring a Reader or a Writer, which
 ignore the options that do not apply to them: a Reader uses WithMaxSize,
-WithMaxFragmentedMessageSize, WithFragmentation, WithMaxHeaderSize
-and WithDecoderOptions; a Writer uses WithMaxSize, WithFragmentSize,
 WithMaxFragmentedMessageSize, WithFragmentation, WithMaxHeaderSize,
-WithRepeatHeader and WithEncoderOptions.
+WithMaxRetainedBuffer and WithDecoderOptions; a Writer uses WithMaxSize,
+WithFragmentSize, WithMaxFragmentedMessageSize, WithFragmentation,
+WithMaxHeaderSize, WithMaxRetainedBuffer, WithWriteTimeout and
+WithEncoderOptions.
 
 ### Functions
 
@@ -530,6 +635,21 @@ NewReader and NewWriter panic if maxHeaderSize exceeds math.MaxInt32.
 
 
 ```go
+func WithMaxRetainedBuffer(maxRetained uint32) Option
+```
+WithMaxRetainedBuffer sets the capacity, in bytes, above which a buffer is
+dropped, rather than kept for reuse, when it has been used for a message:
+the buffers of the Decoders, Encoders and Fragments that are released or
+reused, and those that a Reader or Writer keeps for frames. It stops one
+very large message from pinning that memory for the life of the Reader or
+Writer, at the cost of allocating the buffer again for the next. If 0,
+the default, it is DefaultMaxRetainedBuffer or, if it is larger, 4 times the
+maximum size, see WithMaxSize, so that a Reader or Writer for large frames
+does not drop the buffer for each frame. A message larger than the limit is
+allocated for, as it is read or written, in any case.
+
+
+```go
 func WithMaxSize(maxSize uint32) Option
 ```
 WithMaxSize sets the maximum size of a single frame in bytes: no frame
@@ -544,13 +664,19 @@ panic if maxSize is less than 2 or exceeds math.MaxInt32-4.
 
 
 ```go
-func WithRepeatHeader(repeat bool) Option
+func WithWriteTimeout(timeout time.Duration) Option
 ```
-WithRepeatHeader sends the user header of a message on each of its fragments
-rather than only on the first, so that a receiver can route a fragment
-without having seen the first. It costs the size of the header, and of its
-length, in each fragment. It has no effect if fragmentation is not enabled,
-since a message is then in a single envelope.
+WithWriteTimeout sets the time that a Writer allows for each of the
+frames of a message to be written, if the io.Writer that it writes to is a
+net.Conn, or anything else that has a SetWriteDeadline method, as a net.Conn
+does: before a frame is written the write deadline of the connection is set
+to timeout from then, and afterwards cleared. A write that does not complete
+in that time fails, with an error that wraps os.ErrDeadlineExceeded and is
+a net.Error that is a timeout, which is permanent, since part of the frame
+may have been written. A message of many frames may take longer than the
+timeout. It is ignored if the io.Writer is something else, or if timeout is
+not greater than 0, the default, when writes have no limit but any that the
+connection has.
 
 
 
@@ -583,19 +709,24 @@ individual options.
 func (r *Reader) Close() error
 ```
 Close closes the underlying reader of the Reader causing a pending
-ReadMessage to return.
+ReadMessage to return. It returns the error from closing the underlying
+reader, if any, and closes it only once, however many times it is called,
+from any number of goroutines.
 
 
 ```go
-func (r *Reader) ReadFragment() (*Fragment, error)
+func (r *Reader) ReadFragments(into *Fragments) (*Fragments, error)
 ```
-ReadFragment reads the next frame and returns it as it is, without
-reassembling or unescaping a fragmented message, so that it can be routed
-using its Header and forwarded using Writer.WriteFragment, see "Forwarding"
-in the package documentation. It returns io.EOF if the stream ends between
-messages, and otherwise the errors that ReadMessage does. The Fragment,
-and the slices it holds, are valid only until the next call to ReadFragment,
-and must not be retained or modified.
+ReadFragments reads all of the frames of the next message, and checks them,
+without reassembling or decoding the message, so that it can be routed using
+its Header and forwarded using Writer.WriteFragments, see "Forwarding" in
+the package documentation. They are read into into, which is reused, and
+returned, or into a new Fragments if it is nil. Whatever it held is lost,
+and what is returned is valid until it is next used. The memory for the
+message is allocated when its first frame has been read, from the size
+that it declares, which cannot exceed the maximum fragmented message size.
+It returns io.EOF if the stream ends between messages, and otherwise the
+errors that ReadMessage does.
 
 
 ```go
@@ -627,7 +758,8 @@ type Writer struct {
 Writer writes messages to a stream, fragmenting them if need be, see the
 package documentation, and Option for the options that apply to it. A Writer
 is safe for concurrent use: a message is written whole by any one call and
-calls are serialized.
+calls are serialized. Close stops it writing, and closes the io.Writer if it
+is an io.Closer.
 
 ### Functions
 
@@ -641,6 +773,20 @@ individual options.
 
 
 ### Methods
+
+```go
+func (w *Writer) Close() error
+```
+Close closes the underlying writer if it is an io.Closer, such as a
+net.Conn, which causes a write that is blocked on it to return, with an
+error, and stops the Writer from writing: all later writes return an error
+that wraps ErrClosed and matches ErrPermanent, as does a message that is
+part way through being written, which is then not completed. Close does not
+wait for a write that is in progress. It returns the error from closing the
+underlying writer, if any, and closes it only once, however many times it is
+called, from any number of goroutines. An underlying writer that is not an
+io.Closer is left as it is.
+
 
 ```go
 func (w *Writer) NewEncoder() *Encoder
@@ -657,19 +803,20 @@ to be discarded.
 
 
 ```go
-func (w *Writer) WriteFragment(f *Fragment) error
+func (w *Writer) WriteFragments(f *Fragments) error
 ```
-WriteFragment writes a frame, as returned by ReadFragment, as it is,
-see "Forwarding" in the package documentation. It is not refragmented and so
-must fit in the frame size of this Writer. The Header is sent if it is set,
-whether or not it was set in the frame that was read. A Fragment that is as
-ReadFragment returned it, or a copy of it, has been checked and its Payload
-and Header are not checked again, so they must not be modified in place;
-if they are replaced, or resliced, they are checked. The frames of a message
-must be written in order, from Seq 0 to the one that is Last, with no other
-message written between them. See "Errors" in the package documentation
-for the errors that can be retried; a nil Fragment is always rejected,
-with ErrInvalidFrame, without any effect.
+WriteFragments writes the message in f, as read by Reader.ReadFragments,
+to the underlying writer, see "Forwarding" in the package documentation.
+It is not checked again, other than that its user header is acceptable to
+this Writer, since it was checked when it was read. It is written in frames
+of at most the size of this Writer's, as WriteMessage would: the frames
+that it was read from are used as they are, other than that they are put
+together, to send fewer frames, if they are smaller than this Writer's,
+and that any that are larger are split. A message that was not Bare and is
+written with fragmentation not enabled must fit in a single frame. The user
+header is sent with the first frame if there is one. f is not modified,
+and may be written again. See "Errors" in the package documentation for the
+errors that can be retried.
 
 
 ```go

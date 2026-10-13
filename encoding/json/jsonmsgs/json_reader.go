@@ -24,15 +24,17 @@ type Reader struct {
 	maxSize                  uint32
 	maxFragmentedMessageSize uint32
 	maxHeaderSize            uint32
+	retain                   int // the capacity above which a buffer is not kept
 	fragmentation            bool
 	decPool                  sync.Pool
 
-	rmu   sync.Mutex
-	rerr  error     // the error that failed a read, returned by all later reads; guarded by rmu
-	hdr   [4]byte   // scratch for frame lengths, here so that it does not escape to the heap; guarded by rmu
-	rst   fragState // the message being read; guarded by rmu
-	fbody []byte    // the frame returned by ReadFragment; guarded by rmu
-	frag  Fragment  // returned by ReadFragment; guarded by rmu
+	rmu       sync.Mutex
+	rerr      error     // the error that failed a read, returned by all later reads; guarded by rmu
+	hdr       [4]byte   // scratch for frame lengths, here so that it does not escape to the heap; guarded by rmu
+	rst       fragState // the message being read; guarded by rmu
+	fbody     []byte    // the frame being read by ReadFragments; guarded by rmu
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // NewReader creates a new Reader that reads from rd, which may be nil for a
@@ -48,6 +50,7 @@ func NewReader(rd io.ReadCloser, opts ...Option) *Reader {
 		maxSize:                  o.maxSize,
 		maxFragmentedMessageSize: o.maxFragmentedMessageSize,
 		maxHeaderSize:            o.maxHeaderSize,
+		retain:                   o.retain,
 		fragmentation:            o.fragmentation,
 	}
 	r.rst.single = !o.fragmentation
@@ -100,26 +103,30 @@ func (r *Reader) ReleaseDecoder(dec *Decoder) {
 	if dec == nil || dec.buf == nil {
 		return
 	}
-	if cap(dec.buffer) > maxRetainedBuffer && uint64(cap(dec.buffer)) > uint64(r.maxSize)*4 {
+	if cap(dec.buffer) > r.retain {
 		dec.buffer = nil
 		// dec.buf aliases the old dec.buffer's backing array (bytes.NewBuffer
 		// does not copy), so it must be replaced too, or the large array
 		// stays reachable via dec.buf until this decoder is next reused.
 		dec.buf = bytes.NewBuffer(nil)
 	}
-	if cap(dec.header) > maxRetainedBuffer {
+	if cap(dec.header) > r.retain {
 		dec.header = nil
 	}
 	r.decPool.Put(dec)
 }
 
 // Close closes the underlying reader of the Reader causing a pending
-// ReadMessage to return.
+// ReadMessage to return. It returns the error from closing the underlying
+// reader, if any, and closes it only once, however many times it is called,
+// from any number of goroutines.
 func (r *Reader) Close() error {
-	if r.rd == nil {
-		return nil
-	}
-	return r.rd.Close()
+	r.closeOnce.Do(func() {
+		if r.rd != nil {
+			r.closeErr = r.rd.Close()
+		}
+	})
+	return r.closeErr
 }
 
 // ReadMessage reads the next message, reassembling it if it was fragmented, and
@@ -133,9 +140,6 @@ func (r *Reader) ReadMessage() (*Decoder, error) {
 	defer r.rmu.Unlock()
 	if r.rerr != nil {
 		return nil, r.rerr
-	}
-	if r.rst.active {
-		return nil, fmt.Errorf("%w: a message is being forwarded with ReadFragment", ErrInvalidFrame)
 	}
 	dec, err := r.readMessage()
 	if err != nil {
@@ -229,22 +233,27 @@ func (r *Reader) readMessage() (*Decoder, error) {
 // the frame in dec.buffer and leaves the message in dec.buffer. Each fragment
 // is read into the free space after those already assembled and unescaped
 // where it lies, so that no fragment is copied. The user header, if any, is
-// copied out first since unescaping overwrites it.
+// copied out first since unescaping overwrites it. Once the size of the message
+// is known, and has been checked against the maximum, the buffer is allocated
+// once for all of it and for a frame of the size of the first, rather than
+// grown, and copied, as the frames arrive.
 func (r *Reader) reassemble(dec *Decoder) error {
 	st := &r.rst
 	msg := dec.buffer[:0]
 	defer func() { dec.buffer = msg }()
 	body := dec.buffer
+	firstFrame := len(body)
 	for last := false; !last; {
 		fh, err := parseFragmentHeader(body, r.maxHeaderSize)
 		if err != nil {
 			return err
 		}
-		if err := st.begin(fh.seq, fh.total, fh.hdr, r.maxMessage()); err != nil {
+		if err := st.begin(fh.seq, fh.total, r.maxMessage()); err != nil {
 			return err
 		}
 		if fh.seq == 0 {
-			dec.header = append(dec.header[:0], st.hdr...)
+			// Copied before the payload is unescaped over it.
+			dec.header = append(dec.header[:0], fh.hdr...)
 		}
 		w, err := unescapeChunk(body, fh.payloadAt, len(body)-len(envelopeSuffix), 0)
 		if err != nil {
@@ -256,6 +265,9 @@ func (r *Reader) reassemble(dec *Decoder) error {
 		msg = msg[:len(msg)+w]
 		if last {
 			break
+		}
+		if fh.seq == 0 {
+			msg = preallocate(msg, st.total+uint64(firstFrame))
 		}
 		n, err := r.readFrameLen(false)
 		if err != nil {
@@ -269,6 +281,18 @@ func (r *Reader) reassemble(dec *Decoder) error {
 		}
 	}
 	return nil
+}
+
+// preallocate returns msg with a capacity of at least capacity bytes, which is
+// limited to what can be allocated.
+func preallocate(msg []byte, capacity uint64) []byte {
+	capacity = min(capacity, uint64(math.MaxInt))
+	if uint64(cap(msg)) >= capacity {
+		return msg
+	}
+	bigger := make([]byte, len(msg), int(capacity))
+	copy(bigger, msg)
+	return bigger
 }
 
 // readAppend reads the n byte body of a frame into the free space after msg,
@@ -300,69 +324,96 @@ func (r *Reader) readAppend(msg []byte, n int, maxCap uint64) (grown, body []byt
 	return msg, msg[start : start+n], nil
 }
 
-// ReadFragment reads the next frame and returns it as it is, without
-// reassembling or unescaping a fragmented message, so that it can be routed
-// using its Header and forwarded using Writer.WriteFragment, see "Forwarding" in
-// the package documentation. It returns io.EOF if the stream ends between
-// messages, and otherwise the errors that ReadMessage does. The Fragment, and
-// the slices it holds, are valid only until the next call to ReadFragment, and
-// must not be retained or modified.
-func (r *Reader) ReadFragment() (*Fragment, error) {
+// payloadCapacity is the capacity for the escaped payloads of a message of total
+// bytes: a quarter more, which is enough for the escapes in most JSON.
+func payloadCapacity(total uint64) int {
+	return int(min(total+total/4, uint64(math.MaxInt)))
+}
+
+// ReadFragments reads all of the frames of the next message, and checks them,
+// without reassembling or decoding the message, so that it can be routed using
+// its Header and forwarded using Writer.WriteFragments, see "Forwarding" in the
+// package documentation. They are read into into, which is reused, and
+// returned, or into a new Fragments if it is nil. Whatever it held is lost, and
+// what is returned is valid until it is next used. The memory for the message is
+// allocated when its first frame has been read, from the size that it declares,
+// which cannot exceed the maximum fragmented message size. It returns io.EOF if the
+// stream ends between messages, and otherwise the errors that ReadMessage does.
+func (r *Reader) ReadFragments(into *Fragments) (*Fragments, error) {
 	r.rmu.Lock()
 	defer r.rmu.Unlock()
 	if r.rerr != nil {
 		return nil, r.rerr
 	}
-	f, err := r.readFragment()
-	if err != nil {
+	if into == nil {
+		into = &Fragments{}
+	}
+	into.reset(r.retain)
+	if err := r.readFragments(into); err != nil {
+		into.reset(r.retain)
 		if err != io.EOF { //nolint:errorlint // io.EOF is returned unwrapped, and only by the first read.
 			err = permanent(err)
 			r.rerr = err
 		}
 		return nil, err
 	}
-	return f, nil
+	return into, nil
 }
 
-func (r *Reader) readFragment() (*Fragment, error) {
-	if cap(r.fbody) > maxRetainedBuffer {
+func (r *Reader) readFragments(into *Fragments) error {
+	n, err := r.readFrameLen(true)
+	if err != nil {
+		return err
+	}
+	if cap(r.fbody) > r.retain {
 		r.fbody = nil
 	}
-	n, err := r.readFrameLen(!r.rst.active)
-	if err != nil {
-		return nil, err
+	if r.fbody, err = r.readBody(r.fbody, n); err != nil {
+		return err
 	}
-	r.fbody, err = r.readBody(r.fbody, n)
-	if err != nil {
-		return nil, err
+	if !bytes.HasPrefix(r.fbody, []byte(envelopePrefix)) {
+		into.bare, into.total = true, n
+		into.payload = append(into.payload, r.fbody...)
+		into.ends = append(into.ends, n)
+		return nil
 	}
-	body := r.fbody
-	f := &r.frag
-	*f = Fragment{}
-	if !bytes.HasPrefix(body, []byte(envelopePrefix)) {
-		if r.rst.active {
-			return nil, fmt.Errorf("%w: a message that is not a fragment arrived part way through one", ErrInvalidFrame)
+	st := &r.rst
+	for last := false; !last; {
+		fh, err := parseFragmentHeader(r.fbody, r.maxHeaderSize)
+		if err != nil {
+			return err
 		}
-		f.Bare, f.Payload, f.Total, f.Len, f.Last = true, body, uint64(n), n, true
-		return f, nil
+		if err := st.begin(fh.seq, fh.total, r.maxMessage()); err != nil {
+			return err
+		}
+		if fh.seq == 0 {
+			into.total = int(fh.total)
+			into.header = append(into.header, fh.hdr...)
+			// The size of the message is known, and has been checked against the
+			// maximum, so that the payloads are put in a buffer that is allocated
+			// once, with room for the escapes that typical JSON has, rather than
+			// in one that is grown, and copied, as they arrive.
+			into.payload = slices.Grow(into.payload[:0], payloadCapacity(fh.total))
+		}
+		payload := r.fbody[fh.payloadAt : len(r.fbody)-len(envelopeSuffix)]
+		l, err := unescapedLen(payload)
+		if err != nil {
+			return err
+		}
+		if last, err = st.add(l); err != nil {
+			return err
+		}
+		into.payload = append(into.payload, payload...)
+		into.ends = append(into.ends, len(into.payload))
+		if last {
+			break
+		}
+		if n, err = r.readFrameLen(false); err != nil {
+			return err
+		}
+		if r.fbody, err = r.readBody(r.fbody, n); err != nil {
+			return err
+		}
 	}
-	fh, err := parseFragmentHeader(body, r.maxHeaderSize)
-	if err != nil {
-		return nil, err
-	}
-	if err := r.rst.begin(fh.seq, fh.total, fh.hdr, r.maxMessage()); err != nil {
-		return nil, err
-	}
-	payload := body[fh.payloadAt : len(body)-len(envelopeSuffix)]
-	l, err := unescapedLen(payload)
-	if err != nil {
-		return nil, err
-	}
-	last, err := r.rst.add(l)
-	if err != nil {
-		return nil, err
-	}
-	f.Seq, f.Total, f.Header, f.Payload, f.Len, f.Last = fh.seq, fh.total, fh.hdr, payload, l, last
-	f.verified = newVerified(payload, fh.hdr, l)
-	return f, nil
+	return nil
 }

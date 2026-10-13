@@ -94,7 +94,29 @@ func ReadAppendForTests(r *Reader, msg []byte, n int, maxCap uint64) ([]byte, []
 	return r.readAppend(msg, n, maxCap)
 }
 
-// ReaderFragStateHdrCapForTests returns the capacity of r's fragState header.
-func ReaderFragStateHdrCapForTests(r *Reader) int {
-	return cap(r.rst.hdr)
+// DecoderHeaderCapForTests returns the capacity of dec's user header buffer.
+func DecoderHeaderCapForTests(dec *Decoder) int {
+	return cap(dec.header)
+}
+
+// FragmentsHeaderCapForTests returns the capacity of f's user header buffer.
+func FragmentsHeaderCapForTests(f *Fragments) int {
+	return cap(f.header)
+}
+
+// NewFragmentsForTests returns Fragments that have not been read, so that those
+// that can not be were are possible, for error handling that is unreachable
+// otherwise.
+func NewFragmentsForTests(bare bool, total int, header, payload []byte, ends []int) *Fragments {
+	return &Fragments{bare: bare, total: total, header: header, payload: payload, ends: ends}
+}
+
+// FragmentsPayloadCapForTests returns the capacity of f's payload buffer.
+func FragmentsPayloadCapForTests(f *Fragments) int {
+	return cap(f.payload)
+}
+
+// WriterBufferCapForTests returns the capacity of the buffer that w keeps for frames.
+func WriterBufferCapForTests(w *Writer) int {
+	return cap(w.fragBuf)
 }

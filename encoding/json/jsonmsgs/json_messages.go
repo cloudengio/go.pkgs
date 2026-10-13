@@ -62,22 +62,26 @@
 //	length   = the number of bytes in body, as 4 bytes, little endian
 //	body     = bare | envelope
 //	bare     = a complete JSON value that does not begin with `{"~":[`
-//	envelope = `{"~":[` <seq> [ `,` <total> ] [ `,` <hlen> ] `]` [ `,"h":` <header> ] `,"p":"` <payload> `"}`
+//	envelope = first | later
+//	first    = `{"~":[0,` <total> [ `,` <hlen> ] `]` [ `,"h":` <header> ] `,"p":"` <payload> `"}`
+//	later    = `{"~":[` <seq> `],"p":"` <payload> `"}`
 //
 // A bare message is the message and nothing else. An envelope is a JSON object
 // of exactly the form above, in that order, with no white space, and with up to
 // three members: "~", an array of numbers that describes the envelope, "h", the
 // user header, if there is one, and "p", the payload. The names in the grammar
 // are not members: they stand for the elements of the "~" array, in order, and
-// for the values of "h" and "p":
+// for the values of "h" and "p". The first envelope of a message, which has a
+// sequence number of 0, is the only one with a total and a user header:
 //
 //	seq      "~" element: the sequence number of the envelope within its
 //	         message, from 0
-//	total    "~" element, only if seq is 0: the length in bytes of the whole
-//	         message
-//	hlen     "~" element, only if there is a user header: its length in bytes
-//	header   the value of "h", only if there is a user header: a JSON value,
-//	         see "User header"
+//	total    "~" element, of the first envelope only: the length in bytes of
+//	         the whole message
+//	hlen     "~" element, of the first envelope only, and only if there is a
+//	         user header: its length in bytes
+//	header   the value of "h", of the first envelope only, and only if there is
+//	         a user header: a JSON value, see "User header"
 //	payload  the value of "p": a chunk of the message, as the contents of a
 //	         JSON string, escaped as described under "Escaping"; it is never
 //	         empty, and, if it is that of the first envelope and is total
@@ -90,7 +94,7 @@
 // flight in each direction at a time, and a future version of this format
 // would use a key other than "~". An envelope costs 17 bytes plus the digits
 // of total on the first envelope of a message and 15 bytes plus the digits of
-// seq on the others, plus the user header and its length if there is one,
+// seq on the others, plus the user header and its length if the first has one,
 // which is of no consequence when a frame is of the order of a megabyte; it is
 // the encoding of the payload that determines the size of a message.
 //
@@ -171,30 +175,38 @@
 //	{"~":[0,61,17],"h":{"to":7,"op":"x"},"p":"{\"key\":\"a value long enough"}
 //	{"~":[1],"p":"\",\"n\":[1,2,3]}"}
 //
-// When fragmentation is enabled the header is part of the envelope that carries
-// the first chunk of the message, and not an envelope of its own, and is
-// optionally repeated in subsequent envelopes, see WithRepeatHeader, as
-// {"~":[1,17],"h":{"to":7,"op":"x"},"p":"…"}. If fragmentation is not enabled
-// the message is sent in a single envelope which, with its overhead, the user
+// The header is part of the first envelope of the message, the one that carries
+// the first chunk of it, and not an envelope of its own, and is on no other,
+// since a single message is in flight in each direction and so the first
+// is all that is needed to route it. If fragmentation is not enabled the
+// message is sent in a single envelope which, with its overhead, the user
 // header and the escaped payload, must fit in the maximum size, see
 // WithMaxSize.
 //
 // User headers are disabled unless WithMaxHeaderSize is set, and a header
-// received when they are disabled is an error.
+// received when they are disabled, or on any but the first envelope of a
+// message, is an error.
 //
 // # Forwarding
 //
-// A router, or proxy, that moves messages between connections needs neither to
-// hold the whole of a message nor to decode it. ReadFragment returns a frame
-// as it is, a Fragment, with the sequence number, the total on the first, the
-// user header and the payload still escaped, along with the number of bytes
-// that it stands for once unescaped and whether it is the last of its message.
-// WriteFragment writes a received message using a Writer. This requires
-// that the next hop fragment size is at least as large as that of the
-// received message. In the case where the next hop has a smaller max fragment
-// size than the receiver, the only option is for the proxy to buffer the
-// whole message in order to refragment it according to the next hop's maximum
-// fragment size.
+// A router, or proxy, that moves messages between connections does not need to
+// decode a message, only to look at its user header and pass it on, and the
+// frames that it is received in need not be those that it is sent in.
+// Reader.ReadFragments reads all of the frames of a message, and checks them,
+// into a Fragments, without reassembling or decoding the message: the payloads
+// of the frames are kept as they are, escaped, one after the other.
+// Writer.WriteFragments writes a Fragments to another stream refragmenting
+// if necessary, either to re-fragment them into smaller frames or merge them
+// into larger ones. If the frame sizes are identical the payloads are
+// written as they were read, without any re-escaping. All of the frames of
+// a message are held in memory, as they would be for ReadMessage, up to the
+// maximum fragmented message size. Fragments.Header returns the user header,
+// with which a message can be routed. A router that is the destination of a
+// message, and does not forward it, can decode it using Fragments.Reader, which
+// decodes the payloads as they are read, or Unescape for a payload. A router
+// that responds to a message addressed to it creates the response, and its
+// header, with Fragments.Set, which marshals them, and writes it with
+// Writer.WriteFragments as it does the messages that it forwards.
 //
 // # Reading
 //
@@ -215,14 +227,10 @@
 // the Reader or Writer as it was, and may be retried, with another message for
 // example.
 //
-// When forwarding, an error writing a frame that is not the first of its
-// message is also permanent, since the peer has been sent the start of a message
-// that can no longer be completed, but an error in the first frame of a message,
-// or in a bare frame, can be retried with a corrected Fragment. Reading with
-// ReadMessage part way through a message that is being read with ReadFragment,
-// or writing with WriteMessage part way through one that is being written with
-// WriteFragment, fails with ErrInvalidFrame, which can be retried once the
-// message is complete.
+// An error from Writer.WriteFragments is permanent if part of the message has
+// been written before it is found, which cannot be completed, and otherwise,
+// as for WriteMessage, can be retried, perhaps by writing to a Writer that
+// accepts the header or has a larger frame size.
 //
 // # Browser extension
 //
@@ -247,10 +255,9 @@
 //	  return JSON.parse(text);
 //	}
 //
-// The user header, if any, is m.h of the first envelope, and of the others if
-// the host repeats it. A sender in JavaScript puts it in the object, between
-// "~" and "p", and adds its length in bytes, JSON.stringify(h) encoded as
-// UTF-8, to the "~" array of each envelope that carries it.
+// The user header, if any, is m.h of the first envelope. A sender in JavaScript
+// puts it in the object, between "~" and "p", and adds its length in bytes,
+// JSON.stringify(h) encoded as UTF-8, to the "~" array of the first envelope.
 //
 // An extension sees only the parsed JSON of a frame and so can tell an envelope
 // from an ordinary message only by its structure, as above, whereas the Go
@@ -270,7 +277,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 	"strconv"
+	"time"
 )
 
 // DefaultMaxNativeMessageSize is the default maximum size of a single frame,
@@ -285,11 +294,10 @@ const DefaultMaxNativeMessageSize = 1_000_000
 // fragmented/reassembled message, in bytes (16MB).
 const DefaultMaxFragmentedMessageSize = 16 * 1024 * 1024 // 16MB
 
-// maxRetainedBuffer is the capacity above which a buffer is dropped, rather
-// than kept for reuse, when it is returned to a pool or finished with, so that
-// one very large message does not pin that memory for the life of the Reader
-// or Writer.
-const maxRetainedBuffer = 4 * 1024 * 1024
+// DefaultMaxRetainedBuffer is the default capacity, in bytes, above which a
+// buffer is dropped rather than kept for reuse, see WithMaxRetainedBuffer,
+// unless 4 times the maximum size is larger.
+const DefaultMaxRetainedBuffer = 4 * 1024 * 1024
 
 // The pieces of an envelope, see the package documentation. An envelope is
 // envelopePrefix, or envelopeFirst for the first which includes its sequence
@@ -332,9 +340,13 @@ var (
 	// ErrInvalidFrame, ErrMessageTooLarge or an error from the underlying reader
 	// or writer, and has the same text. An error that does not match
 	// ErrPermanent leaves the Reader or Writer as it was and the call may be
-	// retried, with a different message or Fragment, or later. io.EOF, returned
+	// retried, with a different message or Fragments, or later. io.EOF, returned
 	// between messages, is neither.
 	ErrPermanent = errors.New("jsonmsgs: permanent error")
+
+	// ErrClosed is wrapped by the error that a Writer returns, which matches
+	// ErrPermanent, for a write after it has been closed.
+	ErrClosed = errors.New("jsonmsgs: closed")
 )
 
 // permanentError marks the error that it wraps as one that matches
@@ -393,12 +405,21 @@ type options struct {
 	// be fragmented in bytes. If 0, DefaultMaxFragmentedMessageSize (16MB) is used.
 	maxFragmentedMessageSize uint32
 
+	// maxRetainedBuffer is the capacity above which a buffer is dropped rather
+	// than kept for reuse. 0, the default, is DefaultMaxRetainedBuffer, or 4
+	// times maxSize if that is larger.
+	maxRetainedBuffer uint32
+
+	// writeTimeout is the time that a Writer allows for each frame to be written
+	// to a connection. 0, the default, is no limit.
+	writeTimeout time.Duration
+
+	// retain is maxRetainedBuffer, resolved, in bytes.
+	retain int
+
 	// maxHeaderSize is the largest user header, in bytes, that may be sent or
 	// received. 0, the default, disables user headers.
 	maxHeaderSize uint32
-
-	// repeatHeader sends the user header on every fragment of a message.
-	repeatHeader bool
 
 	// fragmentation enables automatic message fragmentation.
 	// Defaults to false.
@@ -410,10 +431,10 @@ type options struct {
 
 // Option represents an option for configuring a Reader or a Writer, which
 // ignore the options that do not apply to them: a Reader uses WithMaxSize,
-// WithMaxFragmentedMessageSize, WithFragmentation, WithMaxHeaderSize and
-// WithDecoderOptions; a Writer uses WithMaxSize, WithFragmentSize,
 // WithMaxFragmentedMessageSize, WithFragmentation, WithMaxHeaderSize,
-// WithRepeatHeader and WithEncoderOptions.
+// WithMaxRetainedBuffer and WithDecoderOptions; a Writer uses WithMaxSize, WithFragmentSize,
+// WithMaxFragmentedMessageSize, WithFragmentation, WithMaxHeaderSize,
+// WithMaxRetainedBuffer, WithWriteTimeout and WithEncoderOptions.
 type Option func(*options)
 
 // WithMaxSize sets the maximum size of a single frame in bytes: no frame
@@ -479,6 +500,38 @@ func WithFragmentation(enable bool) Option {
 	}
 }
 
+// WithMaxRetainedBuffer sets the capacity, in bytes, above which a buffer is
+// dropped, rather than kept for reuse, when it has been used for a message: the
+// buffers of the Decoders, Encoders and Fragments that are released or reused,
+// and those that a Reader or Writer keeps for frames. It stops one very large
+// message from pinning that memory for the life of the Reader or Writer, at the
+// cost of allocating the buffer again for the next. If 0, the default, it is
+// DefaultMaxRetainedBuffer or, if it is larger, 4 times the maximum size, see
+// WithMaxSize, so that a Reader or Writer for large frames does not drop the
+// buffer for each frame. A message larger than the limit is allocated for, as
+// it is read or written, in any case.
+func WithMaxRetainedBuffer(maxRetained uint32) Option {
+	return func(opts *options) {
+		opts.maxRetainedBuffer = maxRetained
+	}
+}
+
+// WithWriteTimeout sets the time that a Writer allows for each of the frames of a
+// message to be written, if the io.Writer that it writes to is a net.Conn, or
+// anything else that has a SetWriteDeadline method, as a net.Conn does: before a
+// frame is written the write deadline of the connection is set to timeout from
+// then, and afterwards cleared. A write that does not complete in that time
+// fails, with an error that wraps os.ErrDeadlineExceeded and is a net.Error that
+// is a timeout, which is permanent, since part of the frame may have been
+// written. A message of many frames may take longer than the timeout. It is
+// ignored if the io.Writer is something else, or if timeout is not greater than
+// 0, the default, when writes have no limit but any that the connection has.
+func WithWriteTimeout(timeout time.Duration) Option {
+	return func(opts *options) {
+		opts.writeTimeout = timeout
+	}
+}
+
 // WithMaxHeaderSize enables user headers, see WriteMessageWithHeader, of up to
 // maxHeaderSize bytes, which is also the largest accepted by a Reader: a frame
 // with a header is an error unless this option is set.
@@ -490,17 +543,6 @@ func WithFragmentation(enable bool) Option {
 func WithMaxHeaderSize(maxHeaderSize uint32) Option {
 	return func(opts *options) {
 		opts.maxHeaderSize = maxHeaderSize
-	}
-}
-
-// WithRepeatHeader sends the user header of a message on each of its
-// fragments rather than only on the first, so that a receiver can route a
-// fragment without having seen the first. It costs the size of the header, and
-// of its length, in each fragment. It has no effect if fragmentation is not
-// enabled, since a message is then in a single envelope.
-func WithRepeatHeader(repeat bool) Option {
-	return func(opts *options) {
-		opts.repeatHeader = repeat
 	}
 }
 
@@ -546,6 +588,11 @@ func resolveOptions(opts []Option) options {
 	if o.maxHeaderSize > math.MaxInt32 {
 		panic(fmt.Sprintf("jsonmsgs: maxHeaderSize %d must not exceed %d", o.maxHeaderSize, math.MaxInt32))
 	}
+	if o.maxRetainedBuffer != 0 {
+		o.retain = int(min(uint64(o.maxRetainedBuffer), uint64(math.MaxInt)))
+	} else {
+		o.retain = int(min(max(uint64(DefaultMaxRetainedBuffer), 4*uint64(o.maxSize)), uint64(math.MaxInt)))
+	}
 	return o
 }
 
@@ -557,10 +604,43 @@ func resolveOptions(opts []Option) options {
 type Messager struct {
 	*Reader
 	*Writer
+	shared bool // the Reader and Writer read and write the same object
 }
 
 // NewMessager creates a Messager that reads from rd and writes to wr, see
 // NewReader and NewWriter.
 func NewMessager(rd io.ReadCloser, wr io.Writer, opts ...Option) *Messager {
-	return &Messager{NewReader(rd, opts...), NewWriter(wr, opts...)}
+	return &Messager{NewReader(rd, opts...), NewWriter(wr, opts...), sameObject(rd, wr)}
+}
+
+// Close closes the Reader and the Writer, see their Close methods, and returns
+// the errors from both. If they read and write the same object, such as a
+// net.Conn, it is closed once.
+func (m *Messager) Close() error {
+	rerr := m.Reader.Close()
+	if m.shared {
+		// Closed by the Reader. The Writer is stopped, without closing it again.
+		m.Writer.closeOnce.Do(func() { m.closed.Store(true) })
+		return rerr
+	}
+	return errors.Join(rerr, m.Writer.Close())
+}
+
+// sameObject reports whether a and b are the same value, of a type that can be
+// compared, such as a pointer to the connection that is read and written.
+func sameObject(a, b any) (same bool) {
+	if a == nil || b == nil {
+		return false
+	}
+	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+	if ta != tb || !ta.Comparable() {
+		return false
+	}
+	// A comparable type can hold what is not, in an interface.
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
 }

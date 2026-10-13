@@ -7,13 +7,13 @@
 // write it, that is using JSON.parse and JSON.stringify and nothing else, and
 // used to test the Go implementation against an independent one.
 //
-// Usage: node fragments.js <budget> [repeat] < frames > frames
+// Usage: node fragments.js <budget> < frames > frames
 //
 // Reads frames (4 byte little endian length followed by one JSON value) from
 // stdin, reassembles the messages they carry, and writes each message back to
 // stdout, fragmenting it into frames of at most <budget> bytes if need be. A
-// message that has a user header, the "h" member, is written with it, on
-// every fragment if "repeat" is given and on the first otherwise.
+// message that has a user header, the "h" member of its first frame, is
+// written with it, on its first frame.
 
 "use strict";
 
@@ -34,7 +34,7 @@ class Reassembler {
     }
     if (h[0] !== this.parts.length) throw new Error("bad sequence number");
     if (h[0] === 0) { this.total = h[1]; this.header = m.h; }
-    else if (m.h !== undefined && JSON.stringify(m.h) !== JSON.stringify(this.header)) throw new Error("header changed");
+    else if (m.h !== undefined) throw new Error("user header on a later frame");
     this.parts.push(m.p);
     this.got += Buffer.byteLength(m.p);
     if (this.got > this.total) throw new Error("too much data");
@@ -47,7 +47,7 @@ class Reassembler {
 
 // fragment returns the frame bodies that carry text, and header if it is not
 // undefined, in frames of at most budget bytes.
-function fragment(text, budget, header, repeat) {
+function fragment(text, budget, header) {
   const total = Buffer.byteLength(text);
   const hasHeader = header !== undefined;
   const hlen = hasHeader ? Buffer.byteLength(JSON.stringify(header)) : 0;
@@ -55,7 +55,7 @@ function fragment(text, budget, header, repeat) {
   const out = [];
   const cps = Array.from(text);  // iterates by code point, never splitting a surrogate pair
   for (let i = 0, seq = 0; i < cps.length; seq++) {
-    const withHeader = hasHeader && (seq === 0 || repeat);
+    const withHeader = hasHeader && seq === 0;
     const hdr = seq === 0 ? [0, total] : [seq];
     if (withHeader) hdr.push(hlen);
     const env = (p) => withHeader ? {"~": hdr, h: header, p} : {"~": hdr, p};
@@ -82,7 +82,6 @@ function frameOf(text) {
 
 function main() {
   const budget = parseInt(process.argv[2], 10);
-  const repeat = process.argv[3] === "repeat";
   const chunks = [];
   process.stdin.on("data", (c) => chunks.push(c));
   process.stdin.on("end", () => {
@@ -95,7 +94,7 @@ function main() {
       off += 4 + n;
       const msg = re.onFrame(text);
       if (msg === undefined) continue;
-      for (const f of fragment(msg.text, budget, msg.header, repeat)) out.push(frameOf(f));
+      for (const f of fragment(msg.text, budget, msg.header)) out.push(frameOf(f));
     }
     process.stdout.write(Buffer.concat(out));
   });
