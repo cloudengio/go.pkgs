@@ -746,12 +746,32 @@ func TestWriterCloseConcurrent(t *testing.T) {
 	}
 }
 
+func TestReaderClose(t *testing.T) {
+	cr := &closeRecorder{err: errors.New("read error")}
+	rd := jsonmsgs.NewReader(cr)
+	if err := rd.Close(); err == nil || err.Error() != "read error" {
+		t.Errorf("got %v", err)
+	}
+	if err := rd.Close(); err == nil || err.Error() != "read error" {
+		t.Errorf("second Close: got %v", err)
+	}
+	if n := cr.timesClosed(); n != 1 {
+		t.Errorf("closed %d times, want 1", n)
+	}
+	if err := jsonmsgs.NewReader(nil).Close(); err != nil {
+		t.Errorf("nil Reader Close: got %v", err)
+	}
+}
+
 func TestMessagerClose(t *testing.T) {
-	// One object that is read and written is closed once.
+	// One object that is read and written is closed once, even on repeated Close.
 	both := &closeRecorder{err: errors.New("close failed")}
 	nm := jsonmsgs.NewMessager(both, both)
 	if err := nm.Close(); err == nil || err.Error() != "close failed" {
 		t.Errorf("got %v", err)
+	}
+	if err := nm.Close(); err == nil || err.Error() != "close failed" {
+		t.Errorf("second Close: got %v", err)
 	}
 	if n := both.timesClosed(); n != 1 {
 		t.Errorf("closed %d times", n)

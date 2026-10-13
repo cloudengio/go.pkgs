@@ -427,21 +427,24 @@ func (w *Writer) WriteFragments(f *Fragments) error {
 }
 
 // writeBareFragments writes a message that was read as a single frame that was
-// not an envelope, as a frame of its own if it has no user header and fits, and
-// otherwise as WriteMessage does.
+// not an envelope, as a frame of its own if it has no user header, does not
+// begin with the envelope prefix, and fits, and otherwise as WriteMessage does.
 func (w *Writer) writeBareFragments(f *Fragments) error {
 	msg := f.payload
-	if len(f.header) == 0 && uint64(len(msg)) <= w.frameLimit() {
-		buf := w.fragBuf[:0]
-		buf = append(buf, 0, 0, 0, 0)
-		buf = append(buf, msg...)
-		w.keepFragBuf(buf)
-		return w.writeFrame(buf, uint64(len(msg)))
+	if len(f.header) == 0 && !bytes.HasPrefix(msg, []byte(envelopePrefix)) {
+		if uint64(len(msg)) <= w.frameLimit() {
+			buf := w.fragBuf[:0]
+			buf = append(buf, 0, 0, 0, 0)
+			buf = append(buf, msg...)
+			w.keepFragBuf(buf)
+			return w.writeFrame(buf, uint64(len(msg)))
+		}
+		if !w.fragmentation {
+			return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, len(msg), w.maxSize)
+		}
 	}
-	if !w.fragmentation && len(f.header) == 0 {
-		return fmt.Errorf("%w: message size %d exceeds maximum %d", ErrMessageTooLarge, len(msg), w.maxSize)
-	}
-	// A message with a user header is in an envelope, whatever its size.
+	// A message with a user header, or one that begins with the envelope prefix,
+	// is sent in an envelope, whatever its size.
 	return w.writeFragments(msg, f.header)
 }
 
@@ -609,12 +612,12 @@ func appendFragmentHeader(buf []byte, seq, total uint64, header []byte) []byte {
 		buf = append(buf, envelopePrefix...)
 		buf = strconv.AppendUint(buf, seq, 10)
 	}
-	if len(header) == 0 {
-		return append(buf, envelopeMid...)
+	if seq == 0 && len(header) > 0 {
+		buf = append(buf, ',')
+		buf = strconv.AppendUint(buf, uint64(len(header)), 10)
+		buf = append(buf, envelopeHdrMid...)
+		buf = append(buf, header...)
+		return append(buf, envelopeHdrEnd...)
 	}
-	buf = append(buf, ',')
-	buf = strconv.AppendUint(buf, uint64(len(header)), 10)
-	buf = append(buf, envelopeHdrMid...)
-	buf = append(buf, header...)
-	return append(buf, envelopeHdrEnd...)
+	return append(buf, envelopeMid...)
 }

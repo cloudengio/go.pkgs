@@ -620,7 +620,7 @@ func (m *Messager) Close() error {
 	rerr := m.Reader.Close()
 	if m.shared {
 		// Closed by the Reader. The Writer is stopped, without closing it again.
-		m.closeOnce.Do(func() { m.closed.Store(true) })
+		m.Writer.closeOnce.Do(func() { m.closed.Store(true) })
 		return rerr
 	}
 	return errors.Join(rerr, m.Writer.Close())

@@ -224,6 +224,31 @@ func TestFragmentsAccessors(t *testing.T) {
 	checkFragmentsEmptied(t, rd, fr)
 }
 
+func TestFragmentsNilAccessors(t *testing.T) {
+	var fr *jsonmsgs.Fragments
+	if fr.Header() != nil {
+		t.Errorf("Header() = %v, want nil", fr.Header())
+	}
+	if fr.Len() != 0 {
+		t.Errorf("Len() = %d, want 0", fr.Len())
+	}
+	if fr.Bare() {
+		t.Errorf("Bare() = true, want false")
+	}
+	if fr.Frames() != 0 {
+		t.Errorf("Frames() = %d, want 0", fr.Frames())
+	}
+	if fr.Payload() != nil {
+		t.Errorf("Payload() = %v, want nil", fr.Payload())
+	}
+	r := fr.Reader()
+	buf := make([]byte, 10)
+	n, err := r.Read(buf)
+	if n != 0 || err != io.EOF {
+		t.Errorf("Reader().Read() = (%d, %v), want (0, io.EOF)", n, err)
+	}
+}
+
 // checkFragmentsEmptied checks that the end of the stream leaves nothing in fr.
 func checkFragmentsEmptied(t *testing.T, rd *jsonmsgs.Reader, fr *jsonmsgs.Fragments) {
 	t.Helper()

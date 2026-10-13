@@ -101,6 +101,47 @@ func TestFragmentsSetNoHeader(t *testing.T) {
 	}
 }
 
+// TestFragmentsSetEnvelopePrefix checks that a bare message starting with the envelope
+// prefix is sent in an envelope and can be read back cleanly.
+func TestFragmentsSetEnvelopePrefix(t *testing.T) {
+	msg := stdjson.RawMessage(`{"~":[1,2,3]}`)
+	fr, err := jsonmsgs.NewFragments(nil, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, frag := range []bool{true, false} {
+		var out bytes.Buffer
+		wr := newWriter(&out, jsonmsgs.WithFragmentation(frag), jsonmsgs.WithMaxSize(1000))
+		if err := wr.WriteFragments(fr); err != nil {
+			t.Fatalf("frag %v: %v", frag, err)
+		}
+		frames := splitFrames(t, out.Bytes())
+		if len(frames) != 1 || !bytes.HasPrefix(frames[0], []byte(`{"~":[`)) {
+			t.Fatalf("frag %v: expected envelope frame, got %q", frag, frames)
+		}
+		rd := newReader(out.Bytes(), jsonmsgs.WithFragmentation(frag), jsonmsgs.WithMaxSize(1000))
+		dec, err := rd.ReadMessage()
+		if err != nil {
+			t.Fatalf("frag %v: ReadMessage: %v", frag, err)
+		}
+		got := jsonmsgs.DecoderBytesForTests(dec)
+		if string(got) != string(msg) {
+			t.Fatalf("frag %v: got %q, want %q", frag, got, msg)
+		}
+		rd.ReleaseDecoder(dec)
+
+		rd = newReader(out.Bytes(), jsonmsgs.WithFragmentation(frag), jsonmsgs.WithMaxSize(1000))
+		frRead, err := rd.ReadFragments(nil)
+		if err != nil {
+			t.Fatalf("frag %v: ReadFragments: %v", frag, err)
+		}
+		payload := readAllWith(t, frRead.Reader(), 10)
+		if string(payload) != string(msg) {
+			t.Fatalf("frag %v: ReadFragments payload got %q, want %q", frag, payload, msg)
+		}
+	}
+}
+
 func TestFragmentsSetTypes(t *testing.T) {
 	for name, tc := range map[string]struct {
 		message, header  any
@@ -136,6 +177,8 @@ func TestFragmentsSetErrors(t *testing.T) {
 		as              bool
 	}{
 		"no message":              {nil, route{}, false},
+		"empty message":           {stdjson.RawMessage(""), nil, false},
+		"empty header":            {"x", stdjson.RawMessage(""), false},
 		"message not marshalable": {make(chan int), nil, true},
 		"header not marshalable":  {"x", func() {}, true},
 		"invalid raw message":     {stdjson.RawMessage(`{`), nil, false},

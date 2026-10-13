@@ -99,7 +99,7 @@ func (f *Fragments) valid() bool {
 // Writer.WriteMessageWithHeader, or nil if it was sent without one. It is valid
 // until f is next used.
 func (f *Fragments) Header() jsontext.Value {
-	if len(f.header) == 0 {
+	if f == nil || len(f.header) == 0 {
 		return nil
 	}
 	return f.header
@@ -109,6 +109,9 @@ func (f *Fragments) Header() jsontext.Value {
 // and unescaped, ie. the size that Unescape of Payload gives, or that of
 // Payload if the message is Bare.
 func (f *Fragments) Len() int {
+	if f == nil {
+		return 0
+	}
 	return f.total
 }
 
@@ -116,11 +119,17 @@ func (f *Fragments) Len() int {
 // if the message was read from a frame that was not an envelope, or was created
 // using Set.
 func (f *Fragments) Bare() bool {
+	if f == nil {
+		return false
+	}
 	return f.bare
 }
 
 // Frames returns the number of frames that the message was read from.
 func (f *Fragments) Frames() int {
+	if f == nil {
+		return 0
+	}
 	return len(f.ends)
 }
 
@@ -129,6 +138,9 @@ func (f *Fragments) Frames() int {
 // is Bare it is the message, and is not escaped. It must not be modified, and is
 // valid until f is next used.
 func (f *Fragments) Payload() []byte {
+	if f == nil {
+		return nil
+	}
 	return f.payload
 }
 
@@ -167,10 +179,18 @@ func (f *Fragments) Set(header, message any) error {
 		f.reset(DefaultMaxRetainedBuffer)
 		return fmt.Errorf("%w: marshalling the message: %w", ErrInvalidFrame, err)
 	}
+	if len(f.payload) == 0 {
+		f.reset(DefaultMaxRetainedBuffer)
+		return fmt.Errorf("%w: empty message", ErrInvalidFrame)
+	}
 	if header != nil {
 		if f.header, err = marshalJSON(f.header, header); err != nil {
 			f.reset(DefaultMaxRetainedBuffer)
 			return fmt.Errorf("%w: marshalling the header: %w", ErrInvalidFrame, err)
+		}
+		if len(f.header) == 0 {
+			f.reset(DefaultMaxRetainedBuffer)
+			return fmt.Errorf("%w: empty header", ErrInvalidFrame)
 		}
 	}
 	// A type that marshals itself can return what is not valid UTF-8.
@@ -204,6 +224,9 @@ func marshalJSON(dst []byte, v any) ([]byte, error) {
 // is. The Reader is valid until f is next used, and several may be in use at a
 // time, but each by one goroutine.
 func (f *Fragments) Reader() io.Reader {
+	if f == nil {
+		return bytes.NewReader(nil)
+	}
 	return &fragmentsReader{f: f}
 }
 

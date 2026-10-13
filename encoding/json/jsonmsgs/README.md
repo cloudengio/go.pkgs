@@ -709,7 +709,9 @@ individual options.
 func (r *Reader) Close() error
 ```
 Close closes the underlying reader of the Reader causing a pending
-ReadMessage to return.
+ReadMessage to return. It returns the error from closing the underlying
+reader, if any, and closes it only once, however many times it is called,
+from any number of goroutines.
 
 
 ```go

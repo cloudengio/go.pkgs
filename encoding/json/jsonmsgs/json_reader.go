@@ -28,11 +28,13 @@ type Reader struct {
 	fragmentation            bool
 	decPool                  sync.Pool
 
-	rmu   sync.Mutex
-	rerr  error     // the error that failed a read, returned by all later reads; guarded by rmu
-	hdr   [4]byte   // scratch for frame lengths, here so that it does not escape to the heap; guarded by rmu
-	rst   fragState // the message being read; guarded by rmu
-	fbody []byte    // the frame being read by ReadFragments; guarded by rmu
+	rmu       sync.Mutex
+	rerr      error     // the error that failed a read, returned by all later reads; guarded by rmu
+	hdr       [4]byte   // scratch for frame lengths, here so that it does not escape to the heap; guarded by rmu
+	rst       fragState // the message being read; guarded by rmu
+	fbody     []byte    // the frame being read by ReadFragments; guarded by rmu
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // NewReader creates a new Reader that reads from rd, which may be nil for a
@@ -115,12 +117,16 @@ func (r *Reader) ReleaseDecoder(dec *Decoder) {
 }
 
 // Close closes the underlying reader of the Reader causing a pending
-// ReadMessage to return.
+// ReadMessage to return. It returns the error from closing the underlying
+// reader, if any, and closes it only once, however many times it is called,
+// from any number of goroutines.
 func (r *Reader) Close() error {
-	if r.rd == nil {
-		return nil
-	}
-	return r.rd.Close()
+	r.closeOnce.Do(func() {
+		if r.rd != nil {
+			r.closeErr = r.rd.Close()
+		}
+	})
+	return r.closeErr
 }
 
 // ReadMessage reads the next message, reassembling it if it was fragmented, and
@@ -397,8 +403,6 @@ func (r *Reader) readFragments(into *Fragments) error {
 		if last, err = st.add(l); err != nil {
 			return err
 		}
-		// Appended as the data arrives, so that the size that a frame declares
-		// does not cause memory to be allocated.
 		into.payload = append(into.payload, payload...)
 		into.ends = append(into.ends, len(into.payload))
 		if last {
