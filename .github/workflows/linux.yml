@@ -16,7 +16,7 @@ jobs:
       runner: |
         [ "self-hosted", "linux", "arm64" ]
       go-versions: |
-        [ "1.26.x" ]
+        [ ">=1.27.2" ]
       with-webapp: true
       pebble-version: "v2.8.0"
       with-lint: true

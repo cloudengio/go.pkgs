@@ -1,5 +1,5 @@
 module cloudeng.io/debug
 
-go 1.25.5
+go 1.26.0
 
-require github.com/google/pprof v0.0.0-20260926063103-aaccee046517
+require github.com/google/pprof v0.0.0-20261012231050-2af12c3f4d87
