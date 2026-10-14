@@ -43,6 +43,19 @@ paths separated by os.PathListSeparator. It returns a copy of pathList with
 any of the specified paths that do not already exist in pathList appended to
 the end of the returned string.
 
+### Func ChdirLocked
+```go
+func ChdirLocked(dir string) (func() error, error)
+```
+ChdirLocked wraps os.Chdir with a global lock to ensure that changes to
+the current working directory are thread-safe since a process has only
+one working directory at a time. It returns a function that, when called,
+restores the original working directory and releases the lock, and returns
+the error, if any, from changing back to it; the lock is released whether
+or not that fails. The function may be called more than once, but only the
+first call has any effect, and returns that error: a later call returns nil
+and does not release a lock that another caller has since acquired.
+
 ### Func ExecName
 ```go
 func ExecName(path string) string
