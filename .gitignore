@@ -24,3 +24,7 @@ go.work.sum
 .graphifyignore
 graphify-out/
 code_review.md
+.agents/
+.mcp.json
+CLAUDE.md
+GEMINI.md
