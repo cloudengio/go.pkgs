@@ -70,12 +70,14 @@ func anyClean(err error, clean []error) bool {
 		return true
 	}
 	for _, c := range clean {
-		if errors.Is(err, c) {
+		if c != nil && errors.Is(err, c) {
 			return true
 		}
 	}
 	return false
 }
+
+const maxErrorDepth = 100
 
 // allClean reports whether every error in err's tree is a clean shutdown
 // error. The standard library offers no way to enumerate an error tree --
@@ -83,30 +85,51 @@ func anyClean(err error, clean []error) bool {
 // unwrap shapes that it recognises are handled here: Unwrap() []error, as
 // implemented by errors.Join and similar aggregates, and Unwrap() error, as
 // implemented by fmt.Errorf("...: %w", err).
-//
-// Each node is tested with anyClean before its children are visited, rather
-// than testing the leaves alone, so that an error which is itself a failure
-// is reported as such even if it unwraps to nothing.
 func allClean(err error, clean []error) bool {
+	return allCleanDepth(err, clean, 0)
+}
+
+func allCleanDepth(err error, clean []error, depth int) bool {
 	if err == nil {
 		return true
 	}
-	if !anyClean(err, clean) {
-		// Nothing in this subtree is clean, so it cannot all be clean.
+	if depth > maxErrorDepth {
+		// Guard against cyclic error chains causing stack overflow.
 		return false
 	}
 	if u, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, e := range u.Unwrap() {
-			if !allClean(e, clean) {
-				return false
+		errs := u.Unwrap()
+		nonNil := 0
+		for _, e := range errs {
+			if e != nil {
+				nonNil++
+				if !allCleanDepth(e, clean, depth+1) {
+					return false
+				}
 			}
 		}
-		return true
+		if nonNil > 0 {
+			return true
+		}
 	}
 	if u, ok := err.(interface{ Unwrap() error }); ok {
-		return allClean(u.Unwrap(), clean)
+		if child := u.Unwrap(); child != nil {
+			return allCleanDepth(child, clean, depth+1)
+		}
 	}
-	return true
+	return isNodeClean(err, clean)
+}
+
+func isNodeClean(err error, clean []error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, ErrInterrupt) {
+		return true
+	}
+	for _, c := range clean {
+		if c != nil && errors.Is(err, c) {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleSignals will asynchronously invoke the supplied function when the

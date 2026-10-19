@@ -250,3 +250,46 @@ func appendTo(errs ...error) error {
 	}
 	return m.Err()
 }
+
+// TestIsCleanShutdownEdgeCases covers Go 1.20 multi-wrap %w, nil sentinels,
+// and cyclic error references.
+func TestIsCleanShutdownEdgeCases(t *testing.T) {
+	failure := errors.New("crashed")
+
+	// 1. Go 1.20 multiple %w verbs
+	multiWrapFail := fmt.Errorf("%w: %w", context.Canceled, failure)
+	if cmdutil.IsCleanShutdown(multiWrapFail, false) {
+		t.Error("all-clean: got true, want false for multi-wrap with failure")
+	}
+	if !cmdutil.IsCleanShutdown(multiWrapFail, true) {
+		t.Error("cancelIsEnough: got false, want true for multi-wrap with cancellation")
+	}
+
+	multiWrapClean := fmt.Errorf("%w: %w", context.Canceled, cmdutil.ErrInterrupt)
+	if !cmdutil.IsCleanShutdown(multiWrapClean, false) {
+		t.Error("all-clean: got false, want true for clean multi-wrap")
+	}
+
+	// 2. Nil sentinels in clean variadic
+	if !cmdutil.IsCleanShutdown(context.Canceled, false, nil) {
+		t.Error("all-clean: got false, want true with nil sentinel")
+	}
+	if cmdutil.IsCleanShutdown(failure, false, nil) {
+		t.Error("all-clean: got true, want false for failure with nil sentinel")
+	}
+
+	// 3. Cyclic error references must not stack overflow or hang
+	c1 := &cyclicErr{}
+	c2 := &cyclicErr{next: c1}
+	c1.next = c2
+	if cmdutil.IsCleanShutdown(c1, false) {
+		t.Error("all-clean: got true, want false for cyclic error")
+	}
+}
+
+type cyclicErr struct {
+	next error
+}
+
+func (c *cyclicErr) Error() string { return "cyclic" }
+func (c *cyclicErr) Unwrap() error { return c.next }
