@@ -1373,6 +1373,14 @@ func testLocateConfigFileRelativePrecedence(t *testing.T) {
 			searchName:  "app",
 			wantFile:    "app.yaml",
 		},
+		// An undotted name outranks a dotted one whichever suffix each has, ie.
+		// the prefix is tried before the suffix either way around.
+		{
+			name:        "name.yaml and dot .yml exist, prefer name.yaml",
+			createFiles: []string{"app.yaml", ".app.yml"},
+			searchName:  "app",
+			wantFile:    "app.yaml",
+		},
 		{
 			name:        "name.yml and dot .yaml exist, prefer name.yml",
 			createFiles: []string{"app.yml", ".app.yaml"},

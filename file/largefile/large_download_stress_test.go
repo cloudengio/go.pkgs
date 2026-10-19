@@ -292,7 +292,7 @@ func compareRestartStats(t *testing.T, i int, curr, prevStats largefile.Download
 	}
 }
 
-func TestCacheRestart(t *testing.T) { //nolint:gocyclo
+func TestCacheRestart(t *testing.T) { //nolint:gocyclo,gocognit
 	ctx := context.Background()
 	tmpDirAllCached := t.TempDir()
 	cacheFilePath := filepath.Join(tmpDirAllCached, "cache.dat")
