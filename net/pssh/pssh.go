@@ -367,11 +367,11 @@ func (c *Client) ConnectAndWait(ctx context.Context, backoff func() ratecontrol.
 	select {
 	case <-c.doneCh:
 		cancel()
-		<-errCh
+		<-errCh //nolint:errcheck
 		return ErrClientClosed
 	case <-ctx.Done():
 		cancel()
-		<-errCh
+		<-errCh //nolint:errcheck
 		return ctx.Err()
 	case err := <-errCh:
 		select {
