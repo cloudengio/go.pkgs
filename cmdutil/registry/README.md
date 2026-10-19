@@ -48,8 +48,7 @@ type T[T any] struct {
 	// contains filtered or unexported fields
 }
 ```
-T represents a registry for a specific type T that selected using a string
-key, which is typically a URI scheme.
+T represents a registry for a specific type T that is keyed by a string.
 
 ### Methods
 

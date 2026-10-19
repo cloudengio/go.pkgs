@@ -79,6 +79,37 @@ func HandleSignals(fn func(), signals ...os.Signal)
 HandleSignals will asynchronously invoke the supplied function when the
 specified signals are received.
 
+### Func IsCleanShutdown
+```go
+func IsCleanShutdown(err error, cancelIsEnough bool, clean ...error) bool
+```
+IsCleanShutdown reports whether err is the result of a clean, user-initiated
+shutdown, ie. one triggered by a signal handled via HandleInterrupt or
+HandleSignals, or by cancelling the command's context, rather than by a
+failure. It is intended for the top level of a CLI, to decide between
+exiting quietly and reporting an error:
+
+    if err := cli.Dispatch(ctx); err != nil {
+    	if cmdutil.IsCleanShutdown(err, false) {
+    		return
+    	}
+    	cmdutil.Exitf("error: %v", err)
+    }
+
+context.Canceled and ErrInterrupt always count as clean, as does any
+error supplied in clean, which lets a command add its own benign shutdown
+sentinels, eg. http.ErrServerClosed or a client's own 'closed' error.
+
+cancelIsEnough selects between the two readings of an error that aggregates
+several others. When true, err is clean if any error in its tree is clean,
+which suits a command whose shutdown path cannot report anything but a
+cancellation. When false, every error in the tree must be clean. The latter
+is what a command that collects errors across concurrent components needs:
+such a command typically aggregates ctx.Err() alongside whatever its
+components returned, so a run that was both cancelled and genuinely broken
+holds context.Canceled next to the real failure, and reporting it as clean
+would exit quietly on a real error.
+
 ### Func IsDir
 ```go
 func IsDir(path string) bool
@@ -283,6 +314,11 @@ LoggingConfig is ignored and the WriteCloser passed here is used instead.
 
 
 ## Examples
+### [ExampleIsCleanShutdown](https://pkg.go.dev/cloudeng.io/cmdutil?tab=doc#example-IsCleanShutdown)
+ExampleIsCleanShutdown illustrates the decision a CLI makes at its top level
+once its context has been cancelled, and the difference the cancelIsEnough
+flag makes to a command that aggregates errors from several components.
+
 ### [ExampleLoggingFlags](https://pkg.go.dev/cloudeng.io/cmdutil?tab=doc#example-LoggingFlags)
 
 

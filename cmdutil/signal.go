@@ -27,6 +27,88 @@ func HandleInterrupt(ctx context.Context) (context.Context, context.CancelCauseF
 	return ctx, cancel
 }
 
+// IsCleanShutdown reports whether err is the result of a clean,
+// user-initiated shutdown, ie. one triggered by a signal handled via
+// HandleInterrupt or HandleSignals, or by cancelling the command's context,
+// rather than by a failure. It is intended for the top level of a CLI, to
+// decide between exiting quietly and reporting an error:
+//
+//	if err := cli.Dispatch(ctx); err != nil {
+//		if cmdutil.IsCleanShutdown(err, false) {
+//			return
+//		}
+//		cmdutil.Exitf("error: %v", err)
+//	}
+//
+// context.Canceled and ErrInterrupt always count as clean, as does any error
+// supplied in clean, which lets a command add its own benign shutdown
+// sentinels, eg. http.ErrServerClosed or a client's own 'closed' error.
+//
+// cancelIsEnough selects between the two readings of an error that aggregates
+// several others. When true, err is clean if any error in its tree is clean,
+// which suits a command whose shutdown path cannot report anything but a
+// cancellation. When false, every error in the tree must be clean. The latter
+// is what a command that collects errors across concurrent components needs:
+// such a command typically aggregates ctx.Err() alongside whatever its
+// components returned, so a run that was both cancelled and genuinely broken
+// holds context.Canceled next to the real failure, and reporting it as clean
+// would exit quietly on a real error.
+func IsCleanShutdown(err error, cancelIsEnough bool, clean ...error) bool {
+	if err == nil {
+		return true
+	}
+	if cancelIsEnough {
+		return anyClean(err, clean)
+	}
+	return allClean(err, clean)
+}
+
+// anyClean reports whether any error in err's tree is a clean shutdown error,
+// ie. it answers the question that errors.Is is built for.
+func anyClean(err error, clean []error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, ErrInterrupt) {
+		return true
+	}
+	for _, c := range clean {
+		if errors.Is(err, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// allClean reports whether every error in err's tree is a clean shutdown
+// error. The standard library offers no way to enumerate an error tree --
+// errors.Is and errors.As both answer "does any node match" -- so the two
+// unwrap shapes that it recognises are handled here: Unwrap() []error, as
+// implemented by errors.Join and similar aggregates, and Unwrap() error, as
+// implemented by fmt.Errorf("...: %w", err).
+//
+// Each node is tested with anyClean before its children are visited, rather
+// than testing the leaves alone, so that an error which is itself a failure
+// is reported as such even if it unwraps to nothing.
+func allClean(err error, clean []error) bool {
+	if err == nil {
+		return true
+	}
+	if !anyClean(err, clean) {
+		// Nothing in this subtree is clean, so it cannot all be clean.
+		return false
+	}
+	if u, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range u.Unwrap() {
+			if !allClean(e, clean) {
+				return false
+			}
+		}
+		return true
+	}
+	if u, ok := err.(interface{ Unwrap() error }); ok {
+		return allClean(u.Unwrap(), clean)
+	}
+	return true
+}
+
 // HandleSignals will asynchronously invoke the supplied function when the
 // specified signals are received.
 func HandleSignals(fn func(), signals ...os.Signal) {
