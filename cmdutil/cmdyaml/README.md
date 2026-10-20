@@ -24,19 +24,6 @@ The byte size units, as per cmdtypes.
 
 
 ## Functions
-### Func ConfigFilePathInDir
-```go
-func ConfigFilePathInDir(appDir string) string
-```
-ConfigFilePathInDir returns the search path for configuration files for
-the given application directory. It includes the current directory, the
-user's configuration directory, and platform-specific system configuration
-directories. appDir is the name of the application used for constructing
-platform-specific configuration paths such as $HOME/.config/appDir on
-Unix-like systems. On MacOS, $HOME/Library/Application Support/appDir is
-searched before $HOME/.config/appDir. The returned path is suitable for use
-with LocateConfigFilePath.
-
 ### Func Expand
 ```go
 func Expand(cfg any, mapping func(string) string)
@@ -50,9 +37,12 @@ The provided mapping is used to look up variable values.
 func LocateConfigFileInDir(name, appDir string) string
 ```
 LocateConfigFileInDir searches for a config file with the given name using
-the search path returned by ConfigFilePathInDir. If name is an absolute
+the search path returned by cmdutil.ConfigFilePath. If name is an absolute
 path, it is used directly. If no matching file is found, an empty string is
 returned.
+
+It is cmdutil.LocateConfigFileInDir restricted to the suffixes that Suffixes
+returns.
 
 ### Func LocateConfigFilePath
 ```go
@@ -70,6 +60,9 @@ is as follows:
 
 3. If no matching file is found, an empty string is returned.
 
+It is cmdutil.LocateConfigFilePath restricted to the suffixes that Suffixes
+returns.
+
 ### Func LocateConfigFilesInDir
 ```go
 func LocateConfigFilesInDir(appDir string, name ...string) ([]string, []string)
@@ -78,6 +71,9 @@ LocateConfigFilesInDir searches for multiple config files with the given
 names in the current directory, the user's configuration directory,
 and additional platform-specific locations. It returns a slice of found file
 paths and a slice of missing file names.
+
+It is cmdutil.LocateConfigFilesInDir restricted to the suffixes that
+Suffixes returns.
 
 ### Func ParseConfigFiles
 ```go
@@ -117,6 +113,15 @@ func ParseDeferred[T any](d *Deferred) (T, error)
 ```
 ParseDeferred decodes the provided Deferred YAML node into a value of type
 T.
+
+### Func Suffixes
+```go
+func Suffixes() []string
+```
+Suffixes returns the filename suffixes that this package's configuration
+file functions search for, in order of preference. It exists so that a
+caller using the cmdutil functions directly, eg. to search for a yaml file
+alongside one of some other kind, can ask for the same ones.
 
 ### Func WriteConfig
 ```go
