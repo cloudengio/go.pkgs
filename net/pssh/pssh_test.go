@@ -544,7 +544,7 @@ func TestKnownHostsMultipleServerKeyTypes(t *testing.T) {
 
 	clientConn, serverConn := connPair(t)
 	serverCfg := &ssh.ServerConfig{
-		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+		PublicKeyCallback: func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			if bytes.Equal(key.Marshal(), userSigner.PublicKey().Marshal()) {
 				return &ssh.Permissions{}, nil
 			}
