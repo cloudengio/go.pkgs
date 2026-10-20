@@ -12,15 +12,28 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
+	"cloudeng.io/cmdutil"
 	"cloudeng.io/file"
 	"cloudeng.io/file/localfs"
 	"gopkg.in/yaml.v3"
 )
+
+// suffixes are the filename suffixes that this package's configuration file
+// functions search for, in order of preference.
+var suffixes = []string{".yaml", ".yml"}
+
+// Suffixes returns the filename suffixes that this package's configuration
+// file functions search for, in order of preference. It exists so that a
+// caller using the cmdutil functions directly, eg. to search for a yaml file
+// alongside one of some other kind, can ask for the same ones.
+func Suffixes() []string {
+	return slices.Clone(suffixes)
+}
 
 // Option configures a Parser.
 type Option func(*parserOptions)
@@ -565,84 +578,33 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 //     b. dir/.name.yaml|yml
 //
 // 3. If no matching file is found, an empty string is returned.
+//
+// It is cmdutil.LocateConfigFilePath restricted to the suffixes that
+// Suffixes returns.
 func LocateConfigFilePath(name, path string) string {
-	if filepath.IsAbs(name) {
-		fi, err := os.Stat(name)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return ""
-			}
-			// Return the path so callers get the underlying error when they open/read it.
-			return name
-		}
-		if fi.IsDir() {
-			return ""
-		}
-		return name
-	}
-	// Ensure that we don't test for x.yaml.yml or vice versa by stripping any
-	// existing extension and only testing for .yaml and .yml if the name
-	// has no extension, otherwise only test for the given extension.
-	base := name
-	suffixes := []string{".yaml", ".yml"}
-	if ext := filepath.Ext(name); ext == ".yaml" || ext == ".yml" {
-		base = strings.TrimSuffix(name, ext)
-		suffixes = []string{ext}
-	}
-	for _, dir := range filepath.SplitList(path) {
-		for _, prefix := range []string{"", "."} {
-			for _, suffix := range suffixes {
-				file := filepath.Join(dir, prefix+base+suffix)
-				if _, err := os.Stat(file); err == nil {
-					return file
-				}
-			}
-		}
-	}
-	return ""
+	return cmdutil.LocateConfigFilePath(name, path, suffixes...)
 }
 
 // LocateConfigFileInDir searches for a config file with the given name using
-// the search path returned by ConfigFilePathInDir.
+// the search path returned by cmdutil.ConfigFilePath.
 // If name is an absolute path, it is used directly.
 // If no matching file is found, an empty string is returned.
+//
+// It is cmdutil.LocateConfigFileInDir restricted to the suffixes that
+// Suffixes returns.
 func LocateConfigFileInDir(name, appDir string) string {
-	path := ConfigFilePathInDir(appDir)
-	return LocateConfigFilePath(name, path)
+	return cmdutil.LocateConfigFileInDir(name, appDir, suffixes...)
 }
 
 // LocateConfigFilesInDir searches for multiple config files with the given
 // names in the current directory, the user's configuration directory, and
 // additional platform-specific locations. It returns a slice of found file
 // paths and a slice of missing file names.
+//
+// It is cmdutil.LocateConfigFilesInDir restricted to the suffixes that
+// Suffixes returns.
 func LocateConfigFilesInDir(appDir string, name ...string) ([]string, []string) {
-	var files, missing []string
-	for _, n := range name {
-		if f := LocateConfigFileInDir(n, appDir); f != "" {
-			files = append(files, f)
-		} else {
-			missing = append(missing, n)
-		}
-	}
-	return files, missing
-}
-
-// ConfigFilePathInDir returns the search path for configuration files for the given
-// application directory. It includes the current directory, the user's
-// configuration directory, and platform-specific system configuration
-// directories. appDir is the name of the application used for constructing
-// platform-specific configuration paths such as
-// $HOME/.config/appDir on Unix-like systems. On MacOS,
-// $HOME/Library/Application Support/appDir is searched before $HOME/.config/appDir.
-// The returned path is suitable for use with LocateConfigFilePath.
-func ConfigFilePathInDir(appDir string) string {
-	path := "."
-	configdir, err := os.UserConfigDir()
-	if err == nil {
-		path = strings.Join([]string{path, filepath.Join(configdir, appDir)}, string(os.PathListSeparator))
-	}
-	path = withSystemConfigDir(path, appDir)
-	return path
+	return cmdutil.LocateConfigFilesInDir(appDir, suffixes, name...)
 }
 
 // WriteConfig writes cfg as YAML to wr. Returns an error if the write fails.
