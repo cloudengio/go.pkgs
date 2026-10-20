@@ -8,6 +8,26 @@ Package envfile parses files containing shell-style environment variable
 definitions of the form NAME=VALUE, as commonly used in .env files.
 
 ## Functions
+### Func ChainMapping
+```go
+func ChainMapping(mappings ...func(string) string) func(string) string
+```
+ChainMapping returns a mapping function that calls each of the supplied
+mapping functions in turn and returns the first non-empty value any of
+them yields, hence earlier mappings take precedence over later ones. It is
+typically used to fall back from an envfile to the process environment,
+or to layer a local envfile over shared defaults:
+
+    os.Expand(s, envfile.ChainMapping(local.Mapping, shared.Mapping, os.Getenv))
+
+Note that a mapping which returns an empty value is indistinguishable from
+one that has no value for the name, so a variable defined as empty by an
+earlier mapping does not prevent a later one from supplying a value for it.
+
+Nil mappings are skipped, so an absent source can be passed as nil. With no
+mappings, or with none that yield a value, the returned function returns ""
+for every name; it is never nil and is always safe to call.
+
 ### Func Parse
 ```go
 func Parse(r io.Reader) (map[string]string, error)
@@ -178,6 +198,11 @@ MergeFile is a convenience wrapper around Merge that opens and reads a file.
 
 
 
+
+
+
+## Examples
+### [ExampleChainMapping](https://pkg.go.dev/cloudeng.io/cmdutil/envfile?tab=doc#example-ChainMapping)
 
 
 

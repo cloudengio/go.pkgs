@@ -268,3 +268,121 @@ TMPL="$BUCKET/$REGION"
 	// app-logs/us-west-2
 	// https://us-west-2.example.com/app-logs
 }
+
+func TestChainMapping(t *testing.T) {
+	local := envfile.NewVariables(env("A", "local-a", "EMPTY", ""))
+	shared := envfile.NewVariables(env("A", "shared-a", "B", "shared-b", "EMPTY", "shared-empty"))
+	last := func(string) string { return "last" }
+
+	for _, tc := range []struct {
+		name     string
+		mappings []func(string) string
+		lookups  map[string]string
+	}{
+		{
+			"no mappings at all yields no values",
+			nil,
+			map[string]string{"A": "", "": ""},
+		},
+		{
+			"a single mapping behaves as itself",
+			[]func(string) string{local.Mapping},
+			map[string]string{"A": "local-a", "B": ""},
+		},
+		{
+			"earlier mappings take precedence",
+			[]func(string) string{local.Mapping, shared.Mapping},
+			map[string]string{"A": "local-a", "B": "shared-b"},
+		},
+		{
+			"reversing the order reverses the precedence",
+			[]func(string) string{shared.Mapping, local.Mapping},
+			map[string]string{"A": "shared-a", "B": "shared-b"},
+		},
+		{
+			// An empty value cannot be told apart from an absent one, so it
+			// does not stop a later mapping from supplying a value.
+			"an empty value does not take precedence",
+			[]func(string) string{local.Mapping, shared.Mapping},
+			map[string]string{"EMPTY": "shared-empty"},
+		},
+		{
+			"nil mappings are skipped",
+			[]func(string) string{nil, local.Mapping, nil, shared.Mapping, nil},
+			map[string]string{"A": "local-a", "B": "shared-b", "C": ""},
+		},
+		{
+			"only nil mappings yields no values",
+			[]func(string) string{nil, nil},
+			map[string]string{"A": ""},
+		},
+		{
+			// Nil and zero-value Variables chain without special casing.
+			"an empty source is simply skipped over",
+			[]func(string) string{(*envfile.Variables)(nil).Mapping, (&envfile.Variables{}).Mapping, local.Mapping},
+			map[string]string{"A": "local-a"},
+		},
+		{
+			"a later mapping is not consulted once a value is found",
+			[]func(string) string{local.Mapping, last},
+			map[string]string{"A": "local-a", "EMPTY": "last", "C": "last"},
+		},
+	} {
+		mapping := envfile.ChainMapping(tc.mappings...)
+		if mapping == nil {
+			t.Errorf("%v: ChainMapping returned nil", tc.name)
+			continue
+		}
+		for name, want := range tc.lookups {
+			if got := mapping(name); got != want {
+				t.Errorf("%v: %q: got %q, want %q", tc.name, name, got, want)
+			}
+		}
+	}
+}
+
+func TestChainMappingExpand(t *testing.T) {
+	local := envfile.NewVariables(env("REGION", "us-west-2"))
+	shared := envfile.NewVariables(env("REGION", "us-east-1", "BUCKET", "app-logs"))
+	mapping := envfile.ChainMapping(local.Mapping, shared.Mapping)
+
+	// The chained mapping is usable wherever a single one is.
+	got := os.Expand("https://$REGION.example.com/${BUCKET}/$MISSING", mapping)
+	if want := "https://us-west-2.example.com/app-logs/"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func ExampleChainMapping() {
+	const shared = `
+REGION=us-east-1
+BUCKET=app-logs
+`
+	const local = `
+# only overrides the region
+REGION=us-west-2
+`
+	sharedVars, err := envfile.Read(strings.NewReader(shared))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	localVars, err := envfile.Read(strings.NewReader(local))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// The local envfile takes precedence; names it does not define fall back
+	// to the shared one. A third source, such as os.Getenv, could be added
+	// after it.
+	mapping := envfile.ChainMapping(localVars.Mapping, sharedVars.Mapping)
+	fmt.Println(mapping("REGION"))
+	fmt.Println(mapping("BUCKET"))
+	fmt.Println(os.Expand("s3://${BUCKET}.${REGION}/", mapping))
+
+	// Output:
+	// us-west-2
+	// app-logs
+	// s3://app-logs.us-west-2/
+}
