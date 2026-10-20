@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1294,23 +1295,23 @@ all:
 	}
 }
 
-func testLocateConfigFileAbs(t *testing.T) {
+func testLocateConfigFilePathAbs(t *testing.T) {
 	dir := t.TempDir()
 	absFile := writeTempYAML(t, dir, "config.yaml", "a: 1\n")
 
 	// Existing absolute file.
-	if got := cmdyaml.LocateConfigFile(absFile, ""); got != absFile {
+	if got := cmdyaml.LocateConfigFilePath(absFile, ""); got != absFile {
 		t.Errorf("got %q, want %q", got, absFile)
 	}
 
 	// Absolute file that does not exist.
 	missingAbs := filepath.Join(dir, "missing.yaml")
-	if got := cmdyaml.LocateConfigFile(missingAbs, ""); got != "" {
+	if got := cmdyaml.LocateConfigFilePath(missingAbs, ""); got != "" {
 		t.Errorf("got %q, want empty string", got)
 	}
 
 	// Absolute path that is a directory.
-	if got := cmdyaml.LocateConfigFile(dir, ""); got != "" {
+	if got := cmdyaml.LocateConfigFilePath(dir, ""); got != "" {
 		t.Errorf("got %q, want empty string for directory", got)
 	}
 
@@ -1330,13 +1331,13 @@ func testLocateConfigFileAbs(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.Chmod(sub, 0700)
 		})
-		if got := cmdyaml.LocateConfigFile(target, ""); got != target {
+		if got := cmdyaml.LocateConfigFilePath(target, ""); got != target {
 			t.Errorf("got %q, want %q for permission error", got, target)
 		}
 	}
 }
 
-func testLocateConfigFileRelativePrecedence(t *testing.T) {
+func testLocateConfigFilePathRelativePrecedence(t *testing.T) {
 	testCases := []struct {
 		name        string
 		createFiles []string
@@ -1402,66 +1403,66 @@ func testLocateConfigFileRelativePrecedence(t *testing.T) {
 				writeTempYAML(t, dir, f, "key: val\n")
 			}
 			want := filepath.Join(dir, tc.wantFile)
-			if got := cmdyaml.LocateConfigFile(tc.searchName, dir); got != want {
+			if got := cmdyaml.LocateConfigFilePath(tc.searchName, dir); got != want {
 				t.Errorf("got %q, want %q", got, want)
 			}
 		})
 	}
 }
 
-func testLocateConfigFileExplicitExt(t *testing.T) {
+func testLocateConfigFilePathExplicitExt(t *testing.T) {
 	dir := t.TempDir()
 	writeTempYAML(t, dir, "app.yml", "key: val\n")
-	if got := cmdyaml.LocateConfigFile("app.yaml", dir); got != "" {
+	if got := cmdyaml.LocateConfigFilePath("app.yaml", dir); got != "" {
 		t.Errorf("got %q, want empty string", got)
 	}
 
 	writeTempYAML(t, dir, ".app.yaml", "key: val\n")
 	want := filepath.Join(dir, ".app.yaml")
-	if got := cmdyaml.LocateConfigFile("app.yaml", dir); got != want {
+	if got := cmdyaml.LocateConfigFilePath("app.yaml", dir); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	writeTempYAML(t, dir, "app.yaml", "key: val\n")
 	want = filepath.Join(dir, "app.yaml")
-	if got := cmdyaml.LocateConfigFile("app.yaml", dir); got != want {
+	if got := cmdyaml.LocateConfigFilePath("app.yaml", dir); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	dirYml := t.TempDir()
 	writeTempYAML(t, dirYml, "app.yaml", "key: val\n")
-	if got := cmdyaml.LocateConfigFile("app.yml", dirYml); got != "" {
+	if got := cmdyaml.LocateConfigFilePath("app.yml", dirYml); got != "" {
 		t.Errorf("got %q, want empty string", got)
 	}
 
 	writeTempYAML(t, dirYml, ".app.yml", "key: val\n")
 	want = filepath.Join(dirYml, ".app.yml")
-	if got := cmdyaml.LocateConfigFile("app.yml", dirYml); got != want {
+	if got := cmdyaml.LocateConfigFilePath("app.yml", dirYml); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	writeTempYAML(t, dirYml, "app.yml", "key: val\n")
 	want = filepath.Join(dirYml, "app.yml")
-	if got := cmdyaml.LocateConfigFile("app.yml", dirYml); got != want {
+	if got := cmdyaml.LocateConfigFilePath("app.yml", dirYml); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	dirOther := t.TempDir()
 	writeTempYAML(t, dirOther, "app.conf.yaml", "key: val\n")
 	want = filepath.Join(dirOther, "app.conf.yaml")
-	if got := cmdyaml.LocateConfigFile("app.conf", dirOther); got != want {
+	if got := cmdyaml.LocateConfigFilePath("app.conf", dirOther); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	dirOther2 := t.TempDir()
 	writeTempYAML(t, dirOther2, "app.conf.yml", "key: val\n")
 	want = filepath.Join(dirOther2, "app.conf.yml")
-	if got := cmdyaml.LocateConfigFile("app.conf", dirOther2); got != want {
+	if got := cmdyaml.LocateConfigFilePath("app.conf", dirOther2); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-func testLocateConfigFileSearchPath(t *testing.T) {
+func testLocateConfigFilePathSearchPath(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
 	dir3 := t.TempDir()
@@ -1469,42 +1470,291 @@ func testLocateConfigFileSearchPath(t *testing.T) {
 
 	writeTempYAML(t, dir2, "service.yaml", "k: v\n")
 	want := filepath.Join(dir2, "service.yaml")
-	if got := cmdyaml.LocateConfigFile("service", path); got != want {
+	if got := cmdyaml.LocateConfigFilePath("service", path); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	writeTempYAML(t, dir1, ".service.yml", "k: v\n")
 	want = filepath.Join(dir1, ".service.yml")
-	if got := cmdyaml.LocateConfigFile("service", path); got != want {
+	if got := cmdyaml.LocateConfigFilePath("service", path); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	writeTempYAML(t, dir1, "service.yaml", "k: v\n")
 	want = filepath.Join(dir1, "service.yaml")
-	if got := cmdyaml.LocateConfigFile("service", path); got != want {
+	if got := cmdyaml.LocateConfigFilePath("service", path); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-func testLocateConfigFileNotFound(t *testing.T) {
+func testLocateConfigFilePathNotFound(t *testing.T) {
 	dir := t.TempDir()
-	if got := cmdyaml.LocateConfigFile("nonexistent", dir); got != "" {
+	if got := cmdyaml.LocateConfigFilePath("nonexistent", dir); got != "" {
 		t.Errorf("got %q, want empty string", got)
 	}
-	if got := cmdyaml.LocateConfigFile("nonexistent", ""); got != "" {
+	if got := cmdyaml.LocateConfigFilePath("nonexistent", ""); got != "" {
 		t.Errorf("got %q, want empty string for empty path", got)
 	}
-	if got := cmdyaml.LocateConfigFile("", dir); got != "" {
+	if got := cmdyaml.LocateConfigFilePath("", dir); got != "" {
 		t.Errorf("got %q, want empty string for empty name", got)
 	}
 }
 
-func TestLocateConfigFile(t *testing.T) {
-	t.Run("absolute path", testLocateConfigFileAbs)
-	t.Run("relative path precedence", testLocateConfigFileRelativePrecedence)
-	t.Run("explicit extension", testLocateConfigFileExplicitExt)
-	t.Run("search path ordering", testLocateConfigFileSearchPath)
-	t.Run("not found", testLocateConfigFileNotFound)
+func TestLocateConfigFilePath(t *testing.T) {
+	t.Run("absolute path", testLocateConfigFilePathAbs)
+	t.Run("relative path precedence", testLocateConfigFilePathRelativePrecedence)
+	t.Run("explicit extension", testLocateConfigFilePathExplicitExt)
+	t.Run("search path ordering", testLocateConfigFilePathSearchPath)
+	t.Run("not found", testLocateConfigFilePathNotFound)
+}
+
+// redirectConfigDir points both of the directories that LocateConfigFile
+// searches at temporary ones: the working directory, and the user
+// configuration directory, via whichever environment variable
+// os.UserConfigDir consults on this platform. It returns the two, the second
+// already created.
+// configDirs holds the directories that LocateConfigFileInDir searches, in
+// search order, for the appDir passed to redirectConfigDir.
+type configDirs struct {
+	// cwd is the working directory, which LocateConfigFileInDir searches as
+	// ".", so matches found there are relative.
+	cwd string
+	// user is os.UserConfigDir()/appDir, ie.
+	// $HOME/Library/Application Support/appDir on macOS.
+	user string
+	// system is $HOME/.config/appDir on unix (darwin included) and is empty
+	// on platforms where no such directory is searched.
+	system string
+}
+
+// redirectConfigDir points every directory that LocateConfigFileInDir
+// searches at a temporary one: the working directory, the user configuration
+// directory (via whichever environment variable os.UserConfigDir consults on
+// this platform) and, on unix, $HOME/.config. On unix XDG_CONFIG_HOME is
+// pointed at a directory of its own so that the user configuration directory
+// is distinct from $HOME/.config even where os.UserConfigDir would otherwise
+// return the latter; macOS ignores XDG_CONFIG_HOME. The returned directories
+// have all been created.
+func redirectConfigDir(t *testing.T, appDir string) configDirs {
+	t.Helper()
+	dirs := configDirs{cwd: t.TempDir()}
+	home := t.TempDir()
+	t.Chdir(dirs.cwd)
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", home)
+	case "plan9":
+		t.Setenv("home", home)
+	default: // darwin, ios and unix
+		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+		dirs.system = filepath.Join(home, ".config", appDir)
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Skipf("os.UserConfigDir: %v", err)
+	}
+	if !strings.HasPrefix(configDir, home) {
+		t.Skipf("os.UserConfigDir returned %v, which this test cannot redirect on %v", configDir, runtime.GOOS)
+	}
+	dirs.user = filepath.Join(configDir, appDir)
+	for _, dir := range []string{dirs.user, dirs.system} {
+		if dir == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dirs
+}
+
+func testLocateConfigFileInDirNotFound(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	if got := cmdyaml.LocateConfigFileInDir("cfg", "app"); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+	// A file in the user configuration directory itself, rather than in its
+	// appDir subdirectory, is not found.
+	writeTempYAML(t, filepath.Dir(dirs.user), "cfg.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFileInDir("cfg", "app"); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+}
+
+func testLocateConfigFileInDirWorkingDir(t *testing.T) {
+	// The working directory is searched as ".", so matches there are relative.
+	t.Run("plain", func(t *testing.T) {
+		dirs := redirectConfigDir(t, "app")
+		writeTempYAML(t, dirs.cwd, "cfg.yml", "key: val\n")
+		if got, want := cmdyaml.LocateConfigFileInDir("cfg", "app"), "cfg.yml"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("dot prefixed", func(t *testing.T) {
+		dirs := redirectConfigDir(t, "app")
+		writeTempYAML(t, dirs.cwd, ".cfg.yaml", "key: val\n")
+		if got, want := cmdyaml.LocateConfigFileInDir("cfg", "app"), ".cfg.yaml"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("wins over the configuration directories", func(t *testing.T) {
+		dirs := redirectConfigDir(t, "app")
+		writeTempYAML(t, dirs.cwd, "cfg.yaml", "key: val\n")
+		writeTempYAML(t, dirs.user, "cfg.yaml", "key: val\n")
+		if dirs.system != "" {
+			writeTempYAML(t, dirs.system, "cfg.yaml", "key: val\n")
+		}
+		if got, want := cmdyaml.LocateConfigFileInDir("cfg", "app"), "cfg.yaml"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+}
+
+func testLocateConfigFileInDirUserConfigDir(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	want := writeTempYAML(t, dirs.user, "cfg.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFileInDir("cfg", "app"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// The undotted name outranks the dot prefixed one within the directory.
+	writeTempYAML(t, dirs.user, ".cfg.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFileInDir("cfg", "app"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testLocateConfigFileInDirSystemConfigDir(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	if dirs.system == "" {
+		t.Skipf("no system configuration directory is searched on %v", runtime.GOOS)
+	}
+	want := writeTempYAML(t, dirs.system, "cfg.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFileInDir("cfg", "app"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// $HOME/.config/appDir is searched last: on macOS the documented order is
+	// $HOME/Library/Application Support/appDir and then $HOME/.config/appDir.
+	want = writeTempYAML(t, dirs.user, "cfg.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFileInDir("cfg", "app"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func testLocateConfigFileInDirAbs(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	want := writeTempYAML(t, dirs.user, "abs.yaml", "key: val\n")
+	if got := cmdyaml.LocateConfigFileInDir(want, "app"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// An absolute name is used as is: no extension is appended to it and none
+	// of the configuration directories are searched.
+	if got := cmdyaml.LocateConfigFileInDir(filepath.Join(dirs.user, "missing.yaml"), "app"); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+	if got := cmdyaml.LocateConfigFileInDir(filepath.Join(dirs.user, "abs"), "app"); got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+}
+
+// TestLocateConfigFileInDir covers the convenience wrapper, which searches the
+// working directory, os.UserConfigDir()/appDir and, on unix,
+// $HOME/.config/appDir, in that order. Note that os.UserConfigDir is
+// $HOME/Library/Application Support on macOS, not $HOME/.config.
+func TestLocateConfigFileInDir(t *testing.T) {
+	t.Run("not found", testLocateConfigFileInDirNotFound)
+	t.Run("working directory", testLocateConfigFileInDirWorkingDir)
+	t.Run("user configuration directory", testLocateConfigFileInDirUserConfigDir)
+	t.Run("system configuration directory", testLocateConfigFileInDirSystemConfigDir)
+	t.Run("absolute name", testLocateConfigFileInDirAbs)
+}
+
+func testLocateConfigFilesInDirFound(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	writeTempYAML(t, dirs.cwd, "one.yaml", "key: val\n")
+	two := writeTempYAML(t, dirs.user, "two.yml", "key: val\n")
+	abs := writeTempYAML(t, dirs.user, "abs.yaml", "key: val\n")
+
+	// Each name is resolved exactly as LocateConfigFileInDir resolves it on
+	// its own: relative for a match in the working directory, absolute for
+	// one in a configuration directory, and used as is when already absolute.
+	names := []string{"two", "one", abs}
+	want := []string{two, "one.yaml", abs}
+	if dirs.system != "" {
+		three := writeTempYAML(t, dirs.system, "three.yaml", "key: val\n")
+		names = append(names, "three")
+		want = append(want, three)
+	}
+
+	// The files are returned in the order the names were supplied, not in
+	// search path order.
+	files, missing := cmdyaml.LocateConfigFilesInDir("app", names...)
+	if !slices.Equal(files, want) {
+		t.Errorf("got %v, want %v", files, want)
+	}
+	if len(missing) != 0 {
+		t.Errorf("got %v, want no missing names", missing)
+	}
+}
+
+func testLocateConfigFilesInDirMissing(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	one := writeTempYAML(t, dirs.user, "one.yaml", "key: val\n")
+
+	// A name that resolves to nothing is reported as supplied, in the order
+	// supplied, and leaves no gap in the list of files.
+	files, missing := cmdyaml.LocateConfigFilesInDir("app", "nope", "one", "nada")
+	if want := []string{one}; !slices.Equal(files, want) {
+		t.Errorf("got %v, want %v", files, want)
+	}
+	if want := []string{"nope", "nada"}; !slices.Equal(missing, want) {
+		t.Errorf("got %v, want %v", missing, want)
+	}
+}
+
+func testLocateConfigFilesInDirNone(t *testing.T) {
+	redirectConfigDir(t, "app")
+
+	// No names at all yields nothing found and nothing missing.
+	files, missing := cmdyaml.LocateConfigFilesInDir("app")
+	if len(files) != 0 || len(missing) != 0 {
+		t.Errorf("got %v and %v, want both empty", files, missing)
+	}
+
+	files, missing = cmdyaml.LocateConfigFilesInDir("app", "nope")
+	if len(files) != 0 {
+		t.Errorf("got %v, want no files", files)
+	}
+	if want := []string{"nope"}; !slices.Equal(missing, want) {
+		t.Errorf("got %v, want %v", missing, want)
+	}
+}
+
+func testLocateConfigFilesInDirRepeated(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+	one := writeTempYAML(t, dirs.user, "one.yaml", "key: val\n")
+
+	// A name supplied more than once is reported once per occurrence;
+	// de-duplication is left to the caller.
+	files, missing := cmdyaml.LocateConfigFilesInDir("app", "one", "one", "nope", "nope")
+	if want := []string{one, one}; !slices.Equal(files, want) {
+		t.Errorf("got %v, want %v", files, want)
+	}
+	if want := []string{"nope", "nope"}; !slices.Equal(missing, want) {
+		t.Errorf("got %v, want %v", missing, want)
+	}
+}
+
+// TestLocateConfigFilesInDir covers the variadic form, which resolves each
+// name with LocateConfigFileInDir and partitions the results into the files
+// it found and the names it did not.
+func TestLocateConfigFilesInDir(t *testing.T) {
+	t.Run("all found", testLocateConfigFilesInDirFound)
+	t.Run("some missing", testLocateConfigFilesInDirMissing)
+	t.Run("none found", testLocateConfigFilesInDirNone)
+	t.Run("repeated names", testLocateConfigFilesInDirRepeated)
 }
 
 type serverConfig struct {
