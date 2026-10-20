@@ -83,6 +83,102 @@ The struct must be passed as a non-nil pointer.
 
 
 
+### Type Variables
+```go
+type Variables struct {
+	// contains filtered or unexported fields
+}
+```
+Variables holds the environment variable definitions read from one or more
+envfiles. Its Mapping method has the signature expected for the mapping
+argument of os.Expand, and of the many APIs that accept such a function,
+so the definitions in an envfile can be used to expand $VAR and ${VAR}
+references anywhere one is called for:
+
+    os.Expand(s, vars.Mapping)
+
+Note that Parse, and hence Read, does not itself expand references that
+appear within an envfile's own values; use Expand, or Mapping, to resolve
+those.
+
+The read-only methods are safe to call on a nil or zero-value Variables,
+which behaves as one with no definitions. Merge and MergeFile require a
+non-nil receiver.
+
+### Functions
+
+```go
+func NewVariables(vars map[string]string) *Variables
+```
+NewVariables returns a Variables containing a copy of vars.
+
+
+```go
+func Read(r io.Reader) (*Variables, error)
+```
+Read reads environment variable definitions from r, as parsed by Parse,
+and returns them as a Variables.
+
+
+```go
+func ReadFile(filename string) (*Variables, error)
+```
+ReadFile is a convenience wrapper around Read that opens and reads a file.
+
+
+
+### Methods
+
+```go
+func (v *Variables) All() map[string]string
+```
+All returns a copy of the definitions held by v.
+
+
+```go
+func (v *Variables) Expand(s string) string
+```
+Expand is shorthand for os.Expand(s, v.Mapping) and hence replaces
+references to undefined variables with "" and expands s in a single pass,
+leaving any references in the values it substitutes unexpanded.
+
+
+```go
+func (v *Variables) Len() int
+```
+Len returns the number of variables defined.
+
+
+```go
+func (v *Variables) Lookup(name string) (string, bool)
+```
+Lookup returns the value defined for name and whether it is defined.
+
+
+```go
+func (v *Variables) Mapping(name string) string
+```
+Mapping returns the value defined for name, or "" if name is not defined.
+Its signature matches the mapping argument of os.Expand. Use Lookup to
+distinguish a variable defined as empty from one that is not defined.
+
+
+```go
+func (v *Variables) Merge(r io.Reader) error
+```
+Merge reads further definitions from r and merges them into v, with the
+values read from r overwriting any already defined for the same name.
+If r cannot be parsed v is left unchanged.
+
+
+```go
+func (v *Variables) MergeFile(filename string) error
+```
+MergeFile is a convenience wrapper around Merge that opens and reads a file.
+
+
+
+
 
 
 
