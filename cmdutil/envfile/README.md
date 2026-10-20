@@ -8,6 +8,26 @@ Package envfile parses files containing shell-style environment variable
 definitions of the form NAME=VALUE, as commonly used in .env files.
 
 ## Functions
+### Func ChainMapping
+```go
+func ChainMapping(mappings ...func(string) string) func(string) string
+```
+ChainMapping returns a mapping function that calls each of the supplied
+mapping functions in turn and returns the first non-empty value any of
+them yields, hence earlier mappings take precedence over later ones. It is
+typically used to fall back from an envfile to the process environment,
+or to layer a local envfile over shared defaults:
+
+    os.Expand(s, envfile.ChainMapping(local.Mapping, shared.Mapping, os.Getenv))
+
+Note that a mapping which returns an empty value is indistinguishable from
+one that has no value for the name, so a variable defined as empty by an
+earlier mapping does not prevent a later one from supplying a value for it.
+
+Nil mappings are skipped, so an absent source can be passed as nil. With no
+mappings, or with none that yield a value, the returned function returns ""
+for every name; it is never nil and is always safe to call.
+
 ### Func Parse
 ```go
 func Parse(r io.Reader) (map[string]string, error)
@@ -82,6 +102,107 @@ The struct must be passed as a non-nil pointer.
 
 
 
+
+### Type Variables
+```go
+type Variables struct {
+	// contains filtered or unexported fields
+}
+```
+Variables holds the environment variable definitions read from one or more
+envfiles. Its Mapping method has the signature expected for the mapping
+argument of os.Expand, and of the many APIs that accept such a function,
+so the definitions in an envfile can be used to expand $VAR and ${VAR}
+references anywhere one is called for:
+
+    os.Expand(s, vars.Mapping)
+
+Note that Parse, and hence Read, does not itself expand references that
+appear within an envfile's own values; use Expand, or Mapping, to resolve
+those.
+
+The read-only methods are safe to call on a nil or zero-value Variables,
+which behaves as one with no definitions. Merge and MergeFile require a
+non-nil receiver.
+
+### Functions
+
+```go
+func NewVariables(vars map[string]string) *Variables
+```
+NewVariables returns a Variables containing a copy of vars.
+
+
+```go
+func Read(r io.Reader) (*Variables, error)
+```
+Read reads environment variable definitions from r, as parsed by Parse,
+and returns them as a Variables.
+
+
+```go
+func ReadFile(filename string) (*Variables, error)
+```
+ReadFile is a convenience wrapper around Read that opens and reads a file.
+
+
+
+### Methods
+
+```go
+func (v *Variables) All() map[string]string
+```
+All returns a copy of the definitions held by v.
+
+
+```go
+func (v *Variables) Expand(s string) string
+```
+Expand is shorthand for os.Expand(s, v.Mapping) and hence replaces
+references to undefined variables with "" and expands s in a single pass,
+leaving any references in the values it substitutes unexpanded.
+
+
+```go
+func (v *Variables) Len() int
+```
+Len returns the number of variables defined.
+
+
+```go
+func (v *Variables) Lookup(name string) (string, bool)
+```
+Lookup returns the value defined for name and whether it is defined.
+
+
+```go
+func (v *Variables) Mapping(name string) string
+```
+Mapping returns the value defined for name, or "" if name is not defined.
+Its signature matches the mapping argument of os.Expand. Use Lookup to
+distinguish a variable defined as empty from one that is not defined.
+
+
+```go
+func (v *Variables) Merge(r io.Reader) error
+```
+Merge reads further definitions from r and merges them into v, with the
+values read from r overwriting any already defined for the same name.
+If r cannot be parsed v is left unchanged.
+
+
+```go
+func (v *Variables) MergeFile(filename string) error
+```
+MergeFile is a convenience wrapper around Merge that opens and reads a file.
+
+
+
+
+
+
+## Examples
+### [ExampleChainMapping](https://pkg.go.dev/cloudeng.io/cmdutil/envfile?tab=doc#example-ChainMapping)
 
 
 
