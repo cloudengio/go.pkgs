@@ -7,13 +7,16 @@
 package pssh
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -33,6 +36,10 @@ type Client struct {
 	closeOnce     sync.Once
 	doneCh        chan struct{}
 	opts          options
+
+	mu          sync.Mutex
+	authKey     ssh.PublicKey
+	authComment string
 }
 
 type forward struct {
@@ -48,6 +55,7 @@ type options struct {
 	acceptNewHost bool
 	localForwards []forward
 	logger        *slog.Logger
+	onConnect     func(*Client)
 }
 
 type Option func(*options)
@@ -128,6 +136,30 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithOnConnect registers a callback that is invoked each time an ssh
+// connection and its configured port forwards have been established.
+func WithOnConnect(fn func(*Client)) Option {
+	return func(o *options) {
+		o.onConnect = fn
+	}
+}
+
+func (c *Client) setAuthKey(key ssh.PublicKey, comment string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.authKey = key
+	c.authComment = comment
+}
+
+// AuthKey returns the public key and comment (such as the key's filename or
+// identifier in the ssh agent) that was used to authenticate the current or
+// most recent connection. It returns nil, "" if no connection has authenticated.
+func (c *Client) AuthKey() (ssh.PublicKey, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.authKey, c.authComment
+}
+
 // NewClient returns an instance of Client with the specified network and
 // address, and optional configuration options. A connection is not
 // established until ConnectAndWait is called.
@@ -177,11 +209,51 @@ func existingFiles(files []string) []string {
 
 var knownHostsMu sync.Mutex
 
+type dummyPublicKey struct{}
+
+func (dummyPublicKey) Type() string                        { return "invalid" }
+func (dummyPublicKey) Marshal() []byte                     { return nil }
+func (dummyPublicKey) Verify([]byte, *ssh.Signature) error { return errors.New("invalid") }
+
+func algorithmsForKeyType(keyType string) []string {
+	if keyType == ssh.KeyAlgoRSA {
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	}
+	return []string{keyType}
+}
+
+func orderHostKeyAlgorithms(defaultAlgos []string, preferredTypes ...string) []string {
+	if len(preferredTypes) == 0 {
+		return defaultAlgos
+	}
+	var ordered []string
+	for _, kt := range preferredTypes {
+		for _, algo := range algorithmsForKeyType(kt) {
+			if slices.Contains(defaultAlgos, algo) && !slices.Contains(ordered, algo) {
+				ordered = append(ordered, algo)
+			}
+		}
+	}
+	for _, algo := range defaultAlgos {
+		if !slices.Contains(ordered, algo) {
+			ordered = append(ordered, algo)
+		}
+	}
+	return ordered
+}
+
 // hostKeyCallback returns the callback used to verify the server, honouring
 // WithHostKey, WithKnownHosts and WithAcceptNewHostKeys in that order.
 func (c *Client) hostKeyCallback() (ssh.HostKeyCallback, error) {
+	cb, _, err := c.hostKeyCallbackAndAlgorithms()
+	return cb, err
+}
+
+func (c *Client) hostKeyCallbackAndAlgorithms() (ssh.HostKeyCallback, []string, error) {
+	defaultAlgos := ssh.SupportedAlgorithms().HostKeys
 	if c.opts.hostKey != nil {
-		return ssh.FixedHostKey(c.opts.hostKey), nil
+		algos := orderHostKeyAlgorithms(defaultAlgos, c.opts.hostKey.Type())
+		return ssh.FixedHostKey(c.opts.hostKey), algos, nil
 	}
 	files := c.opts.knownHosts
 	if len(files) == 0 {
@@ -192,28 +264,37 @@ func (c *Client) hostKeyCallback() (ssh.HostKeyCallback, error) {
 	record := files[0]
 
 	if c.opts.acceptNewHost && record == "/etc/ssh/ssh_known_hosts" {
-		return nil, fmt.Errorf("%w: cannot record new host keys to system file %v: specify a user known hosts file with WithKnownHosts", ErrKnownHosts, record)
+		return nil, nil, fmt.Errorf("%w: cannot record new host keys to system file %v: specify a user known hosts file with WithKnownHosts", ErrKnownHosts, record)
 	}
 
 	var callback ssh.HostKeyCallback
+	var preferredTypes []string
 	if existing := existingFiles(files); len(existing) > 0 {
 		var err error
 		if callback, err = knownhosts.New(existing...); err != nil {
-			return nil, fmt.Errorf("%w: reading %v: %v", ErrKnownHosts, existing, err)
+			return nil, nil, fmt.Errorf("%w: reading %v: %v", ErrKnownHosts, existing, err)
+		}
+		probeErr := callback(c.addr, &net.TCPAddr{IP: net.IPv4zero, Port: 22}, dummyPublicKey{})
+		var keyErr *knownhosts.KeyError
+		if errors.As(probeErr, &keyErr) {
+			for _, wk := range keyErr.Want {
+				preferredTypes = append(preferredTypes, wk.Key.Type())
+			}
 		}
 	} else {
 		if !c.opts.acceptNewHost {
-			return nil, fmt.Errorf("%w: none of %v exist and new host keys are not accepted: use WithKnownHosts or WithAcceptNewHostKeys", ErrKnownHosts, files)
+			return nil, nil, fmt.Errorf("%w: none of %v exist and new host keys are not accepted: use WithKnownHosts or WithAcceptNewHostKeys", ErrKnownHosts, files)
 		}
 		// Every host is unknown, which acceptNewHostKey below records.
 		callback = func(string, net.Addr, ssh.PublicKey) error {
 			return &knownhosts.KeyError{}
 		}
 	}
+	algos := orderHostKeyAlgorithms(defaultAlgos, preferredTypes...)
 	if !c.opts.acceptNewHost {
-		return callback, nil
+		return callback, algos, nil
 	}
-	return acceptNewHostKey(callback, record), nil
+	return acceptNewHostKey(callback, record), algos, nil
 }
 
 // acceptNewHostKey wraps callback so that a host which is not yet known is
@@ -288,8 +369,60 @@ func appendKnownHost(path, hostname string, key ssh.PublicKey) (err error) {
 // this offers the server every key the agent holds, so an agent holding more
 // keys than the server's MaxAuthTries permits can be refused before the usable
 // key is reached.
+type recordingSigner struct {
+	ssh.Signer
+	comment string
+	onSign  func(ssh.PublicKey, string)
+}
+
+func (r *recordingSigner) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
+	sig, err := r.Signer.Sign(rand, data)
+	if err == nil && r.onSign != nil {
+		r.onSign(r.PublicKey(), r.comment)
+	}
+	return sig, err
+}
+
+func (r *recordingSigner) SignWithAlgorithm(rand io.Reader, data []byte, algorithm string) (*ssh.Signature, error) {
+	if as, ok := r.Signer.(ssh.AlgorithmSigner); ok {
+		sig, err := as.SignWithAlgorithm(rand, data, algorithm)
+		if err == nil && r.onSign != nil {
+			r.onSign(r.PublicKey(), r.comment)
+		}
+		return sig, err
+	}
+	return r.Sign(rand, data)
+}
+
+func (c *Client) agentSigners(ag agent.Agent) func() ([]ssh.Signer, error) {
+	return func() ([]ssh.Signer, error) {
+		signers, err := ag.Signers()
+		if err != nil {
+			return nil, err
+		}
+		keys, _ := ag.List()
+		out := make([]ssh.Signer, len(signers))
+		for i, s := range signers {
+			var comment string
+			pub := s.PublicKey().Marshal()
+			for _, k := range keys {
+				if bytes.Equal(k.Marshal(), pub) {
+					comment = k.Comment
+					break
+				}
+			}
+			out[i] = &recordingSigner{
+				Signer:  s,
+				comment: comment,
+				onSign:  c.setAuthKey,
+			}
+		}
+		return out, nil
+	}
+}
+
 func (c *Client) sshConfigForAgent(user string) (*ssh.ClientConfig, func(), error) {
-	hostKeyCallback, err := c.hostKeyCallback()
+	hostKeyCallback, hostKeyAlgos, err := c.hostKeyCallbackAndAlgorithms()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -315,15 +448,10 @@ func (c *Client) sshConfigForAgent(user string) (*ssh.ClientConfig, func(), erro
 		},
 		User: user,
 		Auth: []ssh.AuthMethod{
-			ssh.PublicKeysCallback(agent.NewClient(conn).Signers),
+			ssh.PublicKeysCallback(c.agentSigners(agent.NewClient(conn))),
 		},
-		HostKeyCallback: hostKeyCallback,
-		// ssh(1) orders this by the key types it already has recorded for the
-		// host, so that it is not offered a key type it cannot match. Doing
-		// the same here needs the recorded types, which knownhosts does not
-		// expose, so a host recorded under one type but offering another is
-		// reported as a mismatch rather than as an unknown host.
-		HostKeyAlgorithms: algorithms.HostKeys,
+		HostKeyCallback:   hostKeyCallback,
+		HostKeyAlgorithms: hostKeyAlgos,
 	}
 	return config, func() { conn.Close() }, nil
 }
@@ -429,6 +557,7 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 	if err != nil {
 		return nil, nil, err
 	}
+	c.setAuthKey(nil, "")
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, config)
 	if err != nil {
 		conn.Close()
@@ -445,6 +574,9 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 		conn.Close()
 		client.Close()
 		return nil, nil, err
+	}
+	if c.opts.onConnect != nil {
+		c.opts.onConnect(c)
 	}
 	return client, pf, nil
 }

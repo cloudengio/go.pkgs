@@ -6,7 +6,9 @@ package pssh
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -511,5 +513,119 @@ func TestAppendKnownHostConcurrent(t *testing.T) {
 	// The resulting file must be parseable.
 	if _, err := knownhosts.New(path); err != nil {
 		t.Errorf("resulting file corrupted by concurrent writes: %v", err)
+	}
+}
+
+// TestKnownHostsMultipleServerKeyTypes verifies that when a server offers
+// multiple host key algorithms (e.g. ecdsa-sha2-nistp256 and ssh-ed25519) and
+// known_hosts records only ssh-ed25519, HostKeyAlgorithms is ordered so the
+// recorded key type is negotiated rather than failing with a key mismatch.
+func TestKnownHostsMultipleServerKeyTypes(t *testing.T) {
+	userPriv, userSigner := newKey(t)
+	_, edHostSigner := newKey(t)
+	ecdsaPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecdsaHostSigner, err := ssh.NewSignerFromKey(ecdsaPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serveAgent(t, userPriv)
+
+	// Record only the ed25519 key in known_hosts.
+	file := knownHostsFile(t, edHostSigner.PublicKey())
+	c := NewClient(t.Context(), "tcp", testAddr, WithUser("auser"), WithKnownHosts(file))
+	config, closeAgent, err := c.sshConfigForAgent(c.opts.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeAgent()
+
+	clientConn, serverConn := connPair(t)
+	serverCfg := &ssh.ServerConfig{
+		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			if bytes.Equal(key.Marshal(), userSigner.PublicKey().Marshal()) {
+				return &ssh.Permissions{}, nil
+			}
+			return nil, errors.New("unknown key")
+		},
+	}
+	serverCfg.AddHostKey(ecdsaHostSigner)
+	serverCfg.AddHostKey(edHostSigner)
+	serverCh := make(chan error, 1)
+	go func() {
+		defer close(serverCh)
+		_, chans, reqs, err := ssh.NewServerConn(serverConn, serverCfg)
+		if err != nil {
+			serverCh <- err
+			return
+		}
+		go ssh.DiscardRequests(reqs)
+		go serveChannels(chans)
+		serverCh <- nil
+	}()
+
+	cconn, _, _, err := ssh.NewClientConn(clientConn, testAddr, config)
+	if err != nil {
+		t.Fatalf("handshake failed: %v", err)
+	}
+	defer cconn.Close()
+	if err := <-serverCh; err != nil {
+		t.Fatalf("server handshake failed: %v", err)
+	}
+}
+
+// TestAuthKey verifies that AuthKey returns the public key and agent comment
+// of the key used to authenticate the connection.
+func TestAuthKey(t *testing.T) {
+	otherPriv, _ := newKey(t)
+	chosenPriv, chosenSigner := newKey(t)
+	_, hostSigner := newKey(t)
+
+	keyring := agent.NewKeyring()
+	if err := keyring.Add(agent.AddedKey{PrivateKey: otherPriv, Comment: "other-key"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := keyring.Add(agent.AddedKey{PrivateKey: chosenPriv, Comment: "chosen-key"}); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp("", "pssh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	l, err := net.Listen("unix", filepath.Join(dir, "s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go agent.ServeAgent(keyring, conn) //nolint:errcheck
+		}
+	}()
+	t.Setenv("SSH_AUTH_SOCK", filepath.Join(dir, "s"))
+
+	c := NewClient(t.Context(), "tcp", testAddr, WithUser("auser"), WithHostKey(hostSigner.PublicKey()))
+	if key, comment := c.AuthKey(); key != nil || comment != "" {
+		t.Fatalf("expected nil key and empty comment before handshake, got %v, %q", key, comment)
+	}
+	if err := handshake(t, c, hostSigner, chosenSigner); err != nil {
+		t.Fatal(err)
+	}
+	gotKey, gotComment := c.AuthKey()
+	if gotKey == nil {
+		t.Fatal("expected non-nil AuthKey after handshake")
+	}
+	if !bytes.Equal(gotKey.Marshal(), chosenSigner.PublicKey().Marshal()) {
+		t.Errorf("AuthKey returned wrong public key")
+	}
+	if got, want := gotComment, "chosen-key"; got != want {
+		t.Errorf("AuthKey comment: got %q, want %q", got, want)
 	}
 }
