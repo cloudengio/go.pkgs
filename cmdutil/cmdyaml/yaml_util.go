@@ -553,7 +553,7 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 	return &yaml.TypeError{Errors: newErrors}
 }
 
-// LocateConfigFile searches for the first configuration file that matches the
+// LocateConfigFilePath searches for the first configuration file that matches the
 // given name in path (as expected by filepath.SplitList). The search order is
 // as follows:
 //  1. If name is an absolute path and the file exists, it is returned, if it
@@ -565,7 +565,7 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 //     b. dir/.name.yaml|yml
 //
 // 3. If no matching file is found, an empty string is returned.
-func LocateConfigFile(name, path string) string {
+func LocateConfigFilePath(name, path string) string {
 	if filepath.IsAbs(name) {
 		fi, err := os.Stat(name)
 		if err != nil {
@@ -600,6 +600,49 @@ func LocateConfigFile(name, path string) string {
 		}
 	}
 	return ""
+}
+
+// LocateConfigFileInDir searches for a config file with the given name using
+// the search path returned by ConfigFilePathInDir.
+// If name is an absolute path, it is used directly.
+// If no matching file is found, an empty string is returned.
+func LocateConfigFileInDir(name, appDir string) string {
+	path := ConfigFilePathInDir(appDir)
+	return LocateConfigFilePath(name, path)
+}
+
+// LocateConfigFilesInDir searches for multiple config files with the given
+// names in the current directory, the user's configuration directory, and
+// additional platform-specific locations. It returns a slice of found file
+// paths and a slice of missing file names.
+func LocateConfigFilesInDir(appDir string, name ...string) ([]string, []string) {
+	var files, missing []string
+	for _, n := range name {
+		if f := LocateConfigFileInDir(n, appDir); f != "" {
+			files = append(files, f)
+		} else {
+			missing = append(missing, n)
+		}
+	}
+	return files, missing
+}
+
+// ConfigFilePathInDir returns the search path for configuration files for the given
+// application directory. It includes the current directory, the user's
+// configuration directory, and platform-specific system configuration
+// directories. appDir is the name of the application used for constructing
+// platform-specific configuration paths such as
+// $HOME/.config/appDir on Unix-like systems. On MacOS,
+// $HOME/Library/Application Support/appDir is searched before $HOME/.config/appDir.
+// The returned path is suitable for use with LocateConfigFilePath.
+func ConfigFilePathInDir(appDir string) string {
+	path := "."
+	configdir, err := os.UserConfigDir()
+	if err == nil {
+		path = strings.Join([]string{path, filepath.Join(configdir, appDir)}, string(os.PathListSeparator))
+	}
+	path = withSystemConfigDir(path, appDir)
+	return path
 }
 
 // WriteConfig writes cfg as YAML to wr. Returns an error if the write fails.

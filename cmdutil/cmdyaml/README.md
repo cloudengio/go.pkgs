@@ -24,6 +24,19 @@ The byte size units, as per cmdtypes.
 
 
 ## Functions
+### Func ConfigFilePathInDir
+```go
+func ConfigFilePathInDir(appDir string) string
+```
+ConfigFilePathInDir returns the search path for configuration files for
+the given application directory. It includes the current directory, the
+user's configuration directory, and platform-specific system configuration
+directories. appDir is the name of the application used for constructing
+platform-specific configuration paths such as $HOME/.config/appDir on
+Unix-like systems. On MacOS, $HOME/Library/Application Support/appDir is
+searched before $HOME/.config/appDir. The returned path is suitable for use
+with LocateConfigFilePath.
+
 ### Func Expand
 ```go
 func Expand(cfg any, mapping func(string) string)
@@ -32,13 +45,22 @@ ExpandEnv recursively expands environment variables in the fields of the
 provided struct that have a 'yaml' tag. Embedded structs are also processed.
 The provided mapping is used to look up variable values.
 
-### Func LocateConfigFile
+### Func LocateConfigFileInDir
 ```go
-func LocateConfigFile(name, path string) string
+func LocateConfigFileInDir(name, appDir string) string
 ```
-LocateConfigFile searches for the first configuration file that matches the
-given name in path (as expected by filepath.SplitList). The search order is
-as follows:
+LocateConfigFileInDir searches for a config file with the given name using
+the search path returned by ConfigFilePathInDir. If name is an absolute
+path, it is used directly. If no matching file is found, an empty string is
+returned.
+
+### Func LocateConfigFilePath
+```go
+func LocateConfigFilePath(name, path string) string
+```
+LocateConfigFilePath searches for the first configuration file that matches
+the given name in path (as expected by filepath.SplitList). The search order
+is as follows:
  1. If name is an absolute path and the file exists, it is returned, if it
     does not exist an empty string is returned. If it exists and an error
     other than "file not found" occurs, the filename is returned so that the
@@ -47,6 +69,15 @@ as follows:
     dir/name.yaml|yml b. dir/.name.yaml|yml
 
 3. If no matching file is found, an empty string is returned.
+
+### Func LocateConfigFilesInDir
+```go
+func LocateConfigFilesInDir(appDir string, name ...string) ([]string, []string)
+```
+LocateConfigFilesInDir searches for multiple config files with the given
+names in the current directory, the user's configuration directory,
+and additional platform-specific locations. It returns a slice of found file
+paths and a slice of missing file names.
 
 ### Func ParseConfigFiles
 ```go
