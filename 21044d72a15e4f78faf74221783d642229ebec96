@@ -1,0 +1,18 @@
+  * -- Overview
+Introduces netutil.Dialer to recover from EHOSTUNREACH errors on multihomed systems by retrying connections across local network interfaces, and adopts it in pssh. Additionally adds connection attempt failure callbacks and logging to pssh.Client.
+
+  * -- Key Changes
+  * net/netutil:
+  * Introduce Dialer, embedding net.Dialer, which retries connection attempts from each suitable local network interface upon encountering syscall.EHOSTUNREACH.
+  * Enforce a shared timeout budget across interface retry attempts.
+  * Add unit tests for route discovery, address filtering, interface cycling, and timeout behavior.
+  * net/pssh:
+  * Switch transport dialer to netutil.Dialer to handle multi-interface routing failures.
+  * Add WithOnAttemptFailed option to report failed connection attempts and their retryability to callers.
+  * Add fallback warning logging for retryable connection attempt failures when no callback is configured.
+  * Add tests for attempt failure callbacks, logging behavior, and recovery timeouts.
+  * net:
+  * Update cloudeng.io/algo and cloudeng.io/sys dependencies in go.mod.
+
+  * -- Breaking Changes
+None
