@@ -442,3 +442,175 @@ func TestDefaultKnownHostsFiles(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// attemptRecorder records the calls made to the callback registered by
+// WithOnAttemptFailed, which is invoked from the goroutine maintaining the
+// connection.
+type attemptRecorder struct {
+	mu        sync.Mutex
+	errs      []error
+	retryable []bool
+}
+
+func (r *attemptRecorder) record(err error, retryable bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.errs = append(r.errs, err)
+	r.retryable = append(r.retryable, retryable)
+}
+
+func (r *attemptRecorder) calls() ([]error, []bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.errs), slices.Clone(r.retryable)
+}
+
+// TestOnAttemptFailedRetryable verifies that an attempt which failed for a
+// reason that retrying could resolve is reported, since its error is never
+// returned: without it the caller has no account of why the connection it is
+// waiting for has not been made.
+func TestOnAttemptFailedRetryable(t *testing.T) {
+	userPriv, _ := newKey(t)
+	_, hostSigner := newKey(t)
+	serveAgent(t, userPriv)
+
+	var recorder attemptRecorder
+	var logged bytes.Buffer
+
+	// Nothing is listening, so every attempt is refused, which is retryable.
+	c := NewClient(t.Context(), "tcp", fmt.Sprintf("127.0.0.1:%d", freePort(t)),
+		WithUser("auser"),
+		WithHostKey(hostSigner.PublicKey()),
+		WithLogger(slog.New(slog.NewTextHandler(&logged, nil))),
+		WithOnAttemptFailed(recorder.record))
+
+	backoff := func() ratecontrol.Backoff {
+		return ratecontrol.NewExponentialBackoff(time.Millisecond, 3)
+	}
+	if err := waitForResult(t, connectInBackground(t.Context(), c, backoff)); err == nil {
+		t.Fatal("expected an error")
+	}
+
+	errs, retryable := recorder.calls()
+	if len(errs) == 0 {
+		t.Fatal("no failed attempt was reported")
+	}
+	for i, err := range errs {
+		if !errors.Is(err, syscall.ECONNREFUSED) {
+			t.Errorf("attempt %v: %v does not wrap the connection failure", i, err)
+		}
+		if !retryable[i] {
+			t.Errorf("attempt %v: %v reported as not retryable", i, err)
+		}
+	}
+
+	// Registering a callback takes over the reporting, so the failure is not
+	// also logged: that would report every one of them twice.
+	if got := logged.String(); strings.Contains(got, "connection attempt failed") {
+		t.Errorf("a failure reported to the callback was also logged:\n%s", got)
+	}
+}
+
+// TestAttemptFailedLoggedWithoutCallback verifies that a retryable failure is
+// logged when no callback is registered to report it. Its error is never
+// returned, so without this there would be no account of it at all.
+func TestAttemptFailedLoggedWithoutCallback(t *testing.T) {
+	userPriv, _ := newKey(t)
+	_, hostSigner := newKey(t)
+	serveAgent(t, userPriv)
+
+	var logged bytes.Buffer
+	c := NewClient(t.Context(), "tcp", fmt.Sprintf("127.0.0.1:%d", freePort(t)),
+		WithUser("auser"),
+		WithHostKey(hostSigner.PublicKey()),
+		WithLogger(slog.New(slog.NewTextHandler(&logged, nil))))
+
+	backoff := func() ratecontrol.Backoff {
+		return ratecontrol.NewExponentialBackoff(time.Millisecond, 3)
+	}
+	if err := waitForResult(t, connectInBackground(t.Context(), c, backoff)); err == nil {
+		t.Fatal("expected an error")
+	}
+
+	for _, want := range []string{
+		"level=WARN",
+		"pssh: connection attempt failed",
+		"retryable=true",
+		"connection refused",
+	} {
+		if got := logged.String(); !strings.Contains(got, want) {
+			t.Errorf("logged %q does not contain %q", got, want)
+		}
+	}
+}
+
+// TestOnAttemptFailedPermanent verifies that an attempt which failed for a
+// reason that retrying cannot resolve is reported too, and that it is not
+// also logged: that error is returned to the caller, whose account of it that
+// is.
+func TestOnAttemptFailedPermanent(t *testing.T) {
+	userPriv, userSigner := newKey(t)
+	_, hostSigner := newKey(t)
+	_, otherSigner := newKey(t)
+	serveAgent(t, userPriv)
+	srv := newSSHServer(t, hostSigner, userSigner, "auser")
+
+	var recorder attemptRecorder
+	var logged bytes.Buffer
+
+	// The server presents a host key other than the one pinned here.
+	c := NewClient(t.Context(), "tcp", srv.addr(),
+		WithUser("auser"),
+		WithHostKey(otherSigner.PublicKey()),
+		WithLogger(slog.New(slog.NewTextHandler(&logged, nil))),
+		WithOnAttemptFailed(recorder.record))
+
+	err := waitForResult(t, connectInBackground(t.Context(), c, slowBackoff))
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+
+	errs, retryable := recorder.calls()
+	if len(errs) != 1 {
+		t.Fatalf("got %v reported attempts, want 1: %v", len(errs), errs)
+	}
+	if got, want := errs[0].Error(), "host key mismatch"; !strings.Contains(got, want) {
+		t.Errorf("error %q does not contain %q", got, want)
+	}
+	if retryable[0] {
+		t.Error("a host key mismatch was reported as retryable")
+	}
+	if got := logged.String(); strings.Contains(got, "connection attempt failed") {
+		t.Errorf("an error that is returned to the caller was also logged:\n%s", got)
+	}
+}
+
+// TestOnAttemptFailedNotCalledWhenStopping verifies that an attempt abandoned
+// because the caller asked to stop is not reported as a failed attempt.
+func TestOnAttemptFailedNotCalledWhenStopping(t *testing.T) {
+	userPriv, _ := newKey(t)
+	_, hostSigner := newKey(t)
+	serveAgent(t, userPriv)
+
+	var recorder attemptRecorder
+	ctx, cancel := context.WithCancel(t.Context())
+	c := NewClient(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", freePort(t)),
+		WithUser("auser"),
+		WithHostKey(hostSigner.PublicKey()),
+		WithOnAttemptFailed(recorder.record))
+
+	done := connectInBackground(ctx, c, fastBackoff)
+	cancel()
+	if err := waitForResult(t, done); !errors.Is(err, context.Canceled) {
+		t.Errorf("got %v, want context.Canceled", err)
+	}
+
+	errs, _ := recorder.calls()
+	for _, err := range errs {
+		// Refused connections may legitimately have been reported before the
+		// cancellation took effect; the cancellation itself must not be.
+		if errors.Is(err, context.Canceled) || errors.Is(err, ErrClientClosed) {
+			t.Errorf("%v was reported as a failed attempt", err)
+		}
+	}
+}
