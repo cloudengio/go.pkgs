@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"syscall"
 )
 
@@ -32,9 +33,16 @@ import (
 // error from the original attempt is returned rather than the last one,
 // since it describes the path the system was configured to use.
 //
-// The zero value is a usable Dialer, and a Dialer with its LocalAddr set is
-// left alone entirely: a caller that has chosen a source address has already
-// said which path to use, so there is nothing to recover from.
+// The recovery is opt-in: RecoverNoRouteToHost must be set for any of it to
+// happen. A host that cannot be reached is usually simply not reachable, and
+// trying every interface then only delays the error and obscures it; the
+// recovery is for a system attached to one subnet more than once, which the
+// caller knows about and this type cannot detect. The zero value is a usable
+// Dialer that dials exactly as its embedded net.Dialer does.
+//
+// A Dialer with its LocalAddr set is left alone even when the recovery is
+// enabled: a caller that has chosen a source address has already said which
+// path to use, so there is nothing to recover from.
 //
 // Timeout bounds the original attempt and then, separately, all of the
 // retries together, so a dial takes at most about twice it rather than it
@@ -49,22 +57,29 @@ import (
 // elsewhere would only obscure that.
 type Dialer struct {
 	net.Dialer
+
+	// RecoverNoRouteToHost enables retrying a connection that failed with
+	// EHOSTUNREACH by way of each local interface in turn, as described
+	// above. It is off by default.
+	RecoverNoRouteToHost bool
 }
 
 // Dial connects to the address on the named network, as per
-// net.Dialer.Dial, recovering from EHOSTUNREACH as described for Dialer.
+// net.Dialer.Dial, recovering from EHOSTUNREACH as described for Dialer when
+// RecoverNoRouteToHost is set.
 func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 	return d.DialContext(context.Background(), network, address)
 }
 
 // DialContext connects to the address on the named network, as per
 // net.Dialer.DialContext, recovering from EHOSTUNREACH as described for
-// Dialer.
+// Dialer when RecoverNoRouteToHost is set.
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	conn, err := d.Dialer.DialContext(ctx, network, address)
 	if err == nil || !isNoRouteToHost(err) {
 		return conn, err
 	}
+
 	if !d.canRetryFrom(network) {
 		return nil, err
 	}
@@ -77,10 +92,12 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	return nil, err
 }
 
-// canRetryFrom reports whether binding the source address of a connection on
-// this network is something this Dialer may do.
+// canRetryFrom reports whether recovering a connection on this network is
+// something this Dialer may do.
 func (d *Dialer) canRetryFrom(network string) bool {
-	return d.LocalAddr == nil && localAddrForNetwork(network, net.IPv4zero) != nil
+	return d.RecoverNoRouteToHost &&
+		d.LocalAddr == nil &&
+		localAddrForNetwork(network, net.IPv4zero) != nil
 }
 
 // dialFromInterfaces attempts to connect from each suitable local address in
@@ -102,12 +119,45 @@ func (d *Dialer) dialFromInterfaces(ctx context.Context, network, address string
 		return nil, false
 	}
 	want4, want6 := targetFamilies(address)
+	if conn, ok := d.dialBoundToInterface(ctx, network, address, ifaces, want4, want6); ok {
+		return conn, true
+	}
+	return d.dialFromSourceAddr(ctx, network, address, ifaces, want4, want6, exclude)
+}
+
+// dialBoundToInterface attempts to connect with the socket bound to each
+// interface that has an address of a family the target has.
+func (d *Dialer) dialBoundToInterface(ctx context.Context, network, address string, ifaces []net.Interface, want4, want6 bool) (net.Conn, bool) {
+	for _, ifc := range ifaces {
+		if !hasUsableFamily(ifc, want4, want6) {
+			continue
+		}
+		bind := bindToInterface(ifc)
+		if bind == nil {
+			return nil, false // This platform cannot bind an interface at all.
+		}
+		nd := d.Dialer
+		bindSocket(&nd, bind)
+		if conn, err := nd.DialContext(ctx, network, address); err == nil {
+			return conn, true
+		}
+		if ctx.Err() != nil {
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+// dialFromSourceAddr attempts to connect from each suitable local address in
+// turn, skipping exclude, which is the address the system has already been
+// shown not to reach the host from.
+func (d *Dialer) dialFromSourceAddr(ctx context.Context, network, address string, ifaces []net.Interface, want4, want6 bool, exclude net.IP) (net.Conn, bool) {
 	for _, ifc := range ifaces {
 		for _, ip := range usableAddrs(ifc) {
 			if exclude != nil && ip.Equal(exclude) {
 				continue
 			}
-			if is4 := ip.To4() != nil; (is4 && !want4) || (!is4 && !want6) {
+			if !wantedFamily(ip, want4, want6) {
 				continue
 			}
 			nd := d.Dialer
@@ -121,6 +171,58 @@ func (d *Dialer) dialFromInterfaces(ctx context.Context, network, address string
 		}
 	}
 	return nil, false
+}
+
+// bindSocket adds bind to the dialer's socket controls, keeping any the
+// caller set. A net.Dialer ignores Control when ControlContext is set, so a
+// bind added to the one it ignores would silently not happen.
+func bindSocket(d *net.Dialer, bind func(network, address string, c syscall.RawConn) error) {
+	switch {
+	case d.ControlContext != nil:
+		caller := d.ControlContext
+		d.ControlContext = func(ctx context.Context, network, address string, c syscall.RawConn) error {
+			if err := caller(ctx, network, address, c); err != nil {
+				return err
+			}
+			return bind(network, address, c)
+		}
+	case d.Control != nil:
+		caller := d.Control
+		d.Control = func(network, address string, c syscall.RawConn) error {
+			if err := caller(network, address, c); err != nil {
+				return err
+			}
+			return bind(network, address, c)
+		}
+	default:
+		d.Control = bind
+	}
+}
+
+// hasUsableFamily reports whether ifc has an address that a connection to a
+// target of these families can be sourced from.
+func hasUsableFamily(ifc net.Interface, want4, want6 bool) bool {
+	for _, ip := range usableAddrs(ifc) {
+		if wantedFamily(ip, want4, want6) {
+			return true
+		}
+	}
+	return false
+}
+
+// wantedFamily reports whether ip is of a family that the target has an
+// address in.
+func wantedFamily(ip net.IP, want4, want6 bool) bool {
+	if ip.To4() != nil {
+		return want4
+	}
+	return want6
+}
+
+// isIPv6Network reports whether a network, as the socket controls receive it
+// and so already resolved to a family, is ipv6.
+func isIPv6Network(network string) bool {
+	return strings.HasSuffix(network, "6")
 }
 
 // usableAddrs returns the addresses of ifc that a connection to another host

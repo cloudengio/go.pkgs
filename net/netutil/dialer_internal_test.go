@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
+	"slices"
 	"syscall"
 	"testing"
 	"time"
@@ -112,21 +114,33 @@ func TestProbeNetworkFor(t *testing.T) {
 }
 
 func TestCanRetryFrom(t *testing.T) {
-	var d Dialer
+	// The recovery is opt-in: a host that cannot be reached is usually not
+	// reachable, and trying every interface then only delays the error.
+	var off Dialer
 	for _, network := range []string{"tcp", "tcp4", "tcp6", "udp"} {
-		if !d.canRetryFrom(network) {
-			t.Errorf("%v: the zero value should recover", network)
+		if off.canRetryFrom(network) {
+			t.Errorf("%v: the zero value should dial as a net.Dialer does", network)
+		}
+	}
+
+	on := Dialer{RecoverNoRouteToHost: true}
+	for _, network := range []string{"tcp", "tcp4", "tcp6", "udp"} {
+		if !on.canRetryFrom(network) {
+			t.Errorf("%v: should recover once asked to", network)
 		}
 	}
 	for _, network := range []string{"unix", "unixgram", "ip:icmp", ""} {
-		if d.canRetryFrom(network) {
+		if on.canRetryFrom(network) {
 			t.Errorf("%v: there is no source address to choose", network)
 		}
 	}
 
 	// A caller that chose a source address has already said which path to
-	// use, so it is left alone.
-	chosen := Dialer{net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP("10.1.2.3")}}}
+	// use, so it is left alone even when the recovery is asked for.
+	chosen := Dialer{
+		Dialer:               net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP("10.1.2.3")}},
+		RecoverNoRouteToHost: true,
+	}
 	if chosen.canRetryFrom("tcp") {
 		t.Error("an explicit LocalAddr should not be overridden")
 	}
@@ -212,24 +226,11 @@ func TestDialFromInterfaces(t *testing.T) {
 		t.Skip("no interface has an address a connection can be sourced from")
 	}
 
-	// Listening on every interface so that the connection can be made from
-	// any of them, and dialling a non-loopback address of this machine so
+	// Listening on every interface so that the connection can be made by way
+	// of any of them, and dialling a non-loopback address of this machine so
 	// that the recovery path, which skips loopback, can reach it.
-	ln, err := net.Listen("tcp", ":0") //nolint:gosec // G102: the recovery path skips loopback, so it has to be reachable on a real interface.
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	ln, port := listenOnEveryInterface(t)
 	defer ln.Close()
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			conn.Close()
-		}
-	}()
-	port := ln.Addr().(*net.TCPAddr).Port
 	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", port))
 
 	var d Dialer
@@ -245,16 +246,172 @@ func TestDialFromInterfaces(t *testing.T) {
 		t.Errorf("connected from %v, which is not one of %v", local.IP, addrs)
 	}
 
-	// The excluded address is the one already shown not to work, so it must
-	// not be used again, whether or not another one succeeds.
+	// Binding the interface is tried for every interface, including the one
+	// the system would have chosen: a socket bound to an interface and one
+	// left to the system do not take the same path through the routing table,
+	// so excluding it would skip an attempt that can succeed where the
+	// unbound one did not. The exclusion applies to the source address
+	// fallback, which TestDialFromSourceAddrExcludes covers.
 	conn, ok = d.dialFromInterfaces(t.Context(), "tcp", target, local.IP)
 	if !ok {
-		return // No other interface can reach it, which is not a failure.
+		t.Fatalf("no interface could reach %v", target)
+	}
+	conn.Close()
+}
+
+func TestDialBoundToInterface(t *testing.T) {
+	addrs := globalUnicastAddrs(t)
+	if len(addrs) == 0 {
+		t.Skip("no interface has an address a connection can be sourced from")
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		t.Skipf("net.Interfaces: %v", err)
+	}
+	if bindToInterface(ifaces[0]) == nil {
+		t.Skipf("%v cannot bind a socket to an interface", runtime.GOOS)
+	}
+
+	ln, port := listenOnEveryInterface(t)
+	defer ln.Close()
+	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", port))
+
+	// A control the caller set must still be called: the bind is added to it
+	// rather than replacing it.
+	var controlled int
+	d := Dialer{Dialer: net.Dialer{
+		Control: func(string, string, syscall.RawConn) error {
+			controlled++
+			return nil
+		},
+	}}
+	conn, ok := d.dialBoundToInterface(t.Context(), "tcp", target, ifaces, true, false)
+	if !ok {
+		t.Fatalf("no interface could reach %v", target)
 	}
 	defer conn.Close()
-	if excluded := conn.LocalAddr().(*net.TCPAddr).IP; excluded.Equal(local.IP) {
-		t.Errorf("connected from %v, which was excluded", excluded)
+	if controlled == 0 {
+		t.Error("the caller's Control was not called")
 	}
+	if !containsIP(addrs, conn.LocalAddr().(*net.TCPAddr).IP) {
+		t.Errorf("connected from %v, which is not an interface address", conn.LocalAddr())
+	}
+}
+
+func TestDialFromSourceAddrExcludes(t *testing.T) {
+	addrs := globalUnicastAddrs(t)
+	if len(addrs) == 0 {
+		t.Skip("no interface has an address a connection can be sourced from")
+	}
+	ln, port := listenOnEveryInterface(t)
+	defer ln.Close()
+	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", port))
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		t.Skipf("net.Interfaces: %v", err)
+	}
+
+	var d Dialer
+	conn, ok := d.dialFromSourceAddr(t.Context(), "tcp", target, ifaces, true, false, nil)
+	if !ok {
+		t.Fatalf("no address could reach %v", target)
+	}
+	used := conn.LocalAddr().(*net.TCPAddr).IP
+	conn.Close()
+
+	// The excluded address is the one the system has already been shown not
+	// to reach the host from, so it is not worth binding again.
+	conn, ok = d.dialFromSourceAddr(t.Context(), "tcp", target, ifaces, true, false, used)
+	if !ok {
+		return // No other address can reach it, which is not a failure.
+	}
+	defer conn.Close()
+	if got := conn.LocalAddr().(*net.TCPAddr).IP; got.Equal(used) {
+		t.Errorf("connected from %v, which was excluded", got)
+	}
+}
+
+func TestBindSocket(t *testing.T) {
+	var calls []string
+	bind := func(string, string, syscall.RawConn) error {
+		calls = append(calls, "bind")
+		return nil
+	}
+
+	// With no control of its own, the bind becomes one.
+	var plain net.Dialer
+	bindSocket(&plain, bind)
+	if plain.Control == nil {
+		t.Fatal("no Control was set")
+	}
+	if err := plain.Control("tcp4", "a", nil); err != nil {
+		t.Errorf("Control: %v", err)
+	}
+
+	// With a Control, both are called and the caller's goes first.
+	calls = nil
+	withControl := net.Dialer{Control: func(string, string, syscall.RawConn) error {
+		calls = append(calls, "caller")
+		return nil
+	}}
+	bindSocket(&withControl, bind)
+	if err := withControl.Control("tcp4", "a", nil); err != nil {
+		t.Errorf("Control: %v", err)
+	}
+	if !slices.Equal(calls, []string{"caller", "bind"}) {
+		t.Errorf("got %v, want the caller's control and then the bind", calls)
+	}
+
+	// A net.Dialer ignores Control when ControlContext is set, so the bind
+	// has to be added to that one or it would never happen.
+	calls = nil
+	withContext := net.Dialer{ControlContext: func(context.Context, string, string, syscall.RawConn) error {
+		calls = append(calls, "caller")
+		return nil
+	}}
+	bindSocket(&withContext, bind)
+	if withContext.Control != nil {
+		t.Error("Control was set, which a dialer with a ControlContext ignores")
+	}
+	if err := withContext.ControlContext(t.Context(), "tcp4", "a", nil); err != nil {
+		t.Errorf("ControlContext: %v", err)
+	}
+	if !slices.Equal(calls, []string{"caller", "bind"}) {
+		t.Errorf("got %v, want the caller's control and then the bind", calls)
+	}
+
+	// A control that fails stops the socket being bound, and says so.
+	calls = nil
+	failing := net.Dialer{Control: func(string, string, syscall.RawConn) error {
+		return errors.New("refused")
+	}}
+	bindSocket(&failing, bind)
+	if err := failing.Control("tcp4", "a", nil); err == nil || err.Error() != "refused" {
+		t.Errorf("got %v, want the caller's error", err)
+	}
+	if len(calls) != 0 {
+		t.Errorf("the socket was bound after the caller's control failed: %v", calls)
+	}
+}
+
+// listenOnEveryInterface returns a listener reachable on any interface, so
+// that a connection made by way of any of them arrives, and its port.
+func listenOnEveryInterface(t *testing.T) (net.Listener, int) {
+	t.Helper()
+	ln, err := net.Listen("tcp", ":0") //nolint:gosec // G102: the recovery path skips loopback, so it has to be reachable on a real interface.
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+	return ln, ln.Addr().(*net.TCPAddr).Port
 }
 
 func TestDialFromInterfacesCancelled(t *testing.T) {
@@ -289,7 +446,7 @@ func TestDialFromInterfacesSharedBudget(t *testing.T) {
 	// attempts must share the budget rather than each being allowed it: the
 	// point of the bound is that a dial does not take Timeout once per
 	// interface.
-	d := Dialer{net.Dialer{Timeout: 250 * time.Millisecond}}
+	d := Dialer{Dialer: net.Dialer{Timeout: 250 * time.Millisecond}}
 	start := time.Now()
 	conn, ok := d.dialFromInterfaces(t.Context(), "tcp", "192.0.2.1:9", nil)
 	if ok {

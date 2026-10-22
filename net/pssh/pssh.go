@@ -49,15 +49,16 @@ type forward struct {
 }
 
 type options struct {
-	dialTimeout   time.Duration
-	user          string
-	hostKey       ssh.PublicKey
-	knownHosts    []string
-	acceptNewHost bool
-	localForwards []forward
-	logger        *slog.Logger
-	onConnect     func(*Client)
-	onAttempt     func(error, bool)
+	dialTimeout    time.Duration
+	user           string
+	hostKey        ssh.PublicKey
+	knownHosts     []string
+	acceptNewHost  bool
+	localForwards  []forward
+	logger         *slog.Logger
+	onConnect      func(*Client)
+	onAttempt      func(error, bool)
+	recoverNoRoute bool
 }
 
 type Option func(*options)
@@ -143,6 +144,21 @@ func WithLogger(logger *slog.Logger) Option {
 func WithOnConnect(fn func(*Client)) Option {
 	return func(o *options) {
 		o.onConnect = fn
+	}
+}
+
+// WithInterfaceRecovery enables retrying a connection that failed because
+// the route to the host could not reach it, by way of each local interface in
+// turn. See netutil.Dialer, which does the work and describes when it helps.
+//
+// It is off by default, and is worth enabling only for a host on a subnet
+// that this system is attached to more than once, such as a machine on the
+// same LAN over both wired ethernet and wi-fi. Anywhere else a host that
+// cannot be reached is simply not reachable, and trying every interface only
+// delays the error that says so.
+func WithInterfaceRecovery(enable bool) Option {
+	return func(o *options) {
+		o.recoverNoRoute = enable
 	}
 }
 
@@ -582,13 +598,15 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 	// redialled on every reconnection so that a restarted agent is picked up.
 	defer closeAgent()
 
-	// netutil.Dialer rather than net.Dialer so that a host on a subnet this
-	// system is attached to more than once is still reached when the route
-	// the kernel picks for it cannot: see its documentation. It dials
-	// identically in every other respect.
-	dialer := netutil.Dialer{Dialer: net.Dialer{Timeout: c.opts.dialTimeout}}
+	// netutil.Dialer dials identically to a net.Dialer unless the recovery
+	// is asked for, in which case a host on a subnet this system is attached
+	// to more than once is still reached when the route the kernel picks for
+	// it cannot: see WithInterfaceRecovery and netutil.Dialer.
+	dialer := netutil.Dialer{
+		Dialer:               net.Dialer{Timeout: c.opts.dialTimeout},
+		RecoverNoRouteToHost: c.opts.recoverNoRoute,
+	}
 	conn, err := dialer.DialContext(ctx, c.network, c.addr)
-	fmt.Printf(".... %v ... %v ... %v\n", c.network, c.addr, err)
 	if err != nil {
 		return nil, nil, err
 	}
