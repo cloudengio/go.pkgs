@@ -614,3 +614,34 @@ func TestOnAttemptFailedNotCalledWhenStopping(t *testing.T) {
 		}
 	}
 }
+
+// TestDialTimeoutWithRecovery verifies that dialling through
+// netutil.Dialer, which retries an unreachable route from each local
+// interface in turn, still honours the configured dial timeout rather than
+// taking it once per interface.
+func TestDialTimeoutWithRecovery(t *testing.T) {
+	userPriv, _ := newKey(t)
+	_, hostSigner := newKey(t)
+	serveAgent(t, userPriv)
+
+	// An address reserved for documentation, so it is either unroutable or
+	// routed nowhere: the first costs nothing and provokes the retries, the
+	// second costs the timeout and does not.
+	c := NewClient(t.Context(), "tcp", "192.0.2.1:22",
+		WithUser("auser"),
+		WithHostKey(hostSigner.PublicKey()),
+		WithDialTimeout(250*time.Millisecond))
+
+	backoff := func() ratecontrol.Backoff {
+		return ratecontrol.NewExponentialBackoff(time.Millisecond, 1)
+	}
+	start := time.Now()
+	if err := waitForResult(t, connectInBackground(t.Context(), c, backoff)); err == nil {
+		t.Skip("192.0.2.1 is reachable on this network")
+	}
+	// Generous enough not to be flaky, tight enough to catch the timeout
+	// being spent once per local address on a machine with several.
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Errorf("took %v for a 250ms dial timeout", elapsed)
+	}
+}

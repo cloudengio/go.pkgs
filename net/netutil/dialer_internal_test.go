@@ -15,6 +15,7 @@ import (
 	"os"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // hostUnreachable is the error the system returns for a route that cannot
@@ -276,4 +277,28 @@ func containsIP(ips []net.IP, want net.IP) bool {
 		}
 	}
 	return false
+}
+
+func TestDialFromInterfacesSharedBudget(t *testing.T) {
+	if len(globalUnicastAddrs(t)) == 0 {
+		t.Skip("no interface has an address a connection can be sourced from")
+	}
+
+	// An address reserved for documentation, so it is either unroutable or
+	// routed nowhere. Whichever it is, every local address is tried, and the
+	// attempts must share the budget rather than each being allowed it: the
+	// point of the bound is that a dial does not take Timeout once per
+	// interface.
+	d := Dialer{net.Dialer{Timeout: 250 * time.Millisecond}}
+	start := time.Now()
+	conn, ok := d.dialFromInterfaces(t.Context(), "tcp", "192.0.2.1:9", nil)
+	if ok {
+		conn.Close()
+		t.Skip("192.0.2.1 is reachable on this network")
+	}
+	// Generous enough not to be flaky, tight enough to catch the budget
+	// being applied per address on a machine with several of them.
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("took %v for a 250ms budget", elapsed)
+	}
 }

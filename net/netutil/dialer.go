@@ -36,6 +36,13 @@ import (
 // left alone entirely: a caller that has chosen a source address has already
 // said which path to use, so there is nothing to recover from.
 //
+// Timeout bounds the original attempt and then, separately, all of the
+// retries together, so a dial takes at most about twice it rather than it
+// once per local address. Deadline, being absolute, bounds everything as it
+// would for a net.Dialer. Note that a route which cannot reach the host
+// fails at once, without consuming either, which is why cycling through the
+// interfaces of a multihomed system is cheap.
+//
 // Only EHOSTUNREACH is recovered from. It means the route that was used
 // cannot reach the host, which is what another route may fix. A refused
 // connection or a timeout says the route reached something, and trying from
@@ -81,6 +88,15 @@ func (d *Dialer) canRetryFrom(network string) bool {
 // errors from the attempts are discarded: the caller has the error that
 // describes the configured path, which is the more useful of them.
 func (d *Dialer) dialFromInterfaces(ctx context.Context, network, address string, exclude net.IP) (net.Conn, bool) {
+	// The attempts share one budget rather than each being allowed the whole
+	// Timeout, so that recovering cannot multiply the time a caller asked a
+	// dial to take by the number of local addresses. A Deadline needs no such
+	// treatment: it is absolute, so it already bounds them all.
+	if d.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d.Timeout)
+		defer cancel()
+	}
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, false

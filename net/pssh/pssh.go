@@ -22,6 +22,7 @@ import (
 
 	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/logging/ctxlog"
+	"cloudeng.io/net/netutil"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -581,7 +582,11 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 	// redialled on every reconnection so that a restarted agent is picked up.
 	defer closeAgent()
 
-	dialer := net.Dialer{Timeout: c.opts.dialTimeout}
+	// netutil.Dialer rather than net.Dialer so that a host on a subnet this
+	// system is attached to more than once is still reached when the route
+	// the kernel picks for it cannot: see its documentation. It dials
+	// identically in every other respect.
+	dialer := netutil.Dialer{Dialer: net.Dialer{Timeout: c.opts.dialTimeout}}
 	conn, err := dialer.DialContext(ctx, c.network, c.addr)
 	fmt.Printf(".... %v ... %v ... %v\n", c.network, c.addr, err)
 	if err != nil {
