@@ -8,11 +8,8 @@ require (
 	golang.org/x/sys v0.49.0
 )
 
-require cloudeng.io/algo v0.0.0-20261003213953-73a5dea936b2
+require cloudeng.io/algo v0.0.0-20261020215554-f8f4678915d5
 
-require (
-	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba // indirect
-	golang.org/x/sync v0.24.0 // indirect
-)
+require cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba // indirect
 
 replace cloudeng.io/errors => ../errors

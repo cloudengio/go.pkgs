@@ -229,7 +229,7 @@ func TestCrawler(t *testing.T) {
 
 	for _, depth := range []int{0, 1, 4} {
 		t.Run(fmt.Sprintf("depth-%v", depth), func(t *testing.T) {
-			defer synctestutil.AssertNoGoroutines(t)()
+			defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 			readFS := filetestutil.NewMockFS(filetestutil.FSWithRandomContents(src, 1024))
 			crawled, nDownloads, nOutlinks := runCrawl(ctx, t, readFS, nItems, depth, fanOut)
 			checkCrawlResults(ctx, t, readFS, crawled, nDownloads, nOutlinks, nItems, depth, fanOut)

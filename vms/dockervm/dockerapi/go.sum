@@ -4,8 +4,8 @@ cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuu
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
 cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba h1:2+U9tNRu/+O1rHgv2mxRTU80lgUCJSxDFDswbKumBx8=
 cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba/go.mod h1:35kcugrX/RVGQjSfyLMciOCloX34nFfnkQsdks75Ao0=
-github.com/Microsoft/go-winio v0.6.3 h1:M/52tsoyTfwaxajLnXZm7PqkbMGRH8iSWP+8fcg9MQ4=
-github.com/Microsoft/go-winio v0.6.3/go.mod h1:ma0QpxizD4fyyzJ1C7MIblymTD2Nxz5Mho/3CepwIZg=
+github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyUc+g=
+github.com/Microsoft/go-winio v0.6.4/go.mod h1:1xl5JXG4ze/m74GH6Dc4Mwxfc3VL5siRVQjIAlHH07U=
 github.com/caarlos0/env/v11 v11.4.1 h1:fYwH0sWEsBSMPG7t4e/PEfTFzrWrpjyygXyUnWiSwEw=
 github.com/caarlos0/env/v11 v11.4.1/go.mod h1:qupehSf/Y0TUTsxKywqRt/vJjN5nz6vauiYEUUr8P4U=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
