@@ -22,6 +22,7 @@ import (
 
 	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/logging/ctxlog"
+	"cloudeng.io/net/netutil"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -56,6 +57,7 @@ type options struct {
 	localForwards []forward
 	logger        *slog.Logger
 	onConnect     func(*Client)
+	onAttempt     func(error, bool)
 }
 
 type Option func(*options)
@@ -141,6 +143,34 @@ func WithLogger(logger *slog.Logger) Option {
 func WithOnConnect(fn func(*Client)) Option {
 	return func(o *options) {
 		o.onConnect = fn
+	}
+}
+
+// WithOnAttemptFailed registers a callback that is invoked each time an
+// attempt to establish the connection fails, with the error that it failed
+// with and whether retrying can resolve that error, as per Retryable. It is
+// not invoked when an attempt is abandoned because the context was cancelled
+// or the client was closed, since that is not a failure of the attempt.
+//
+// It exists because an attempt that will be retried is otherwise not visible
+// to the caller: its error is not returned, as the connection is still being
+// maintained, and only the error from an attempt that cannot be retried is.
+// A caller that reports on a connection it is waiting for needs the former to
+// say why it is still waiting.
+//
+// Note that retryable describes the error and not what will happen next: a
+// retryable error is the last one when the backoff allows no further attempt,
+// in which case ConnectAndWait returns it wrapped as an exhausted backoff.
+//
+// Registering a callback takes over the reporting of these failures:
+// a retryable failure is logged only when there is no callback, so that it is
+// not reported twice.
+//
+// The callback is invoked from the goroutine maintaining the connection and
+// so must not block.
+func WithOnAttemptFailed(fn func(err error, retryable bool)) Option {
+	return func(o *options) {
+		o.onAttempt = fn
 	}
 }
 
@@ -552,8 +582,13 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 	// redialled on every reconnection so that a restarted agent is picked up.
 	defer closeAgent()
 
-	dialer := net.Dialer{Timeout: c.opts.dialTimeout}
+	// netutil.Dialer rather than net.Dialer so that a host on a subnet this
+	// system is attached to more than once is still reached when the route
+	// the kernel picks for it cannot: see its documentation. It dials
+	// identically in every other respect.
+	dialer := netutil.Dialer{Dialer: net.Dialer{Timeout: c.opts.dialTimeout}}
 	conn, err := dialer.DialContext(ctx, c.network, c.addr)
+	fmt.Printf(".... %v ... %v ... %v\n", c.network, c.addr, err)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -605,7 +640,9 @@ func (c *Client) connect(ctx context.Context, backoffFn func() ratecontrol.Backo
 			ch <- err
 			return
 		}
-		if !Retryable(err) {
+		retryable := Retryable(err)
+		c.attemptFailed(err, retryable)
+		if !retryable {
 			ch <- err
 			return
 		}
@@ -622,6 +659,26 @@ func (c *Client) connect(ctx context.Context, backoffFn func() ratecontrol.Backo
 				return
 			}
 		}
+	}
+}
+
+// attemptFailed reports a failed attempt to establish the connection.
+//
+// A retryable error is never returned by ConnectAndWait, since the connection
+// is still being maintained, so something has to account for it: the callback
+// registered by WithOnAttemptFailed if there is one, and this logging if
+// there is not. Doing both would report every failure twice, and a caller
+// that registered a callback has taken on reporting them.
+//
+// A non-retryable error is not logged either way: ConnectAndWait returns it,
+// which makes it the caller's to report.
+func (c *Client) attemptFailed(err error, retryable bool) {
+	if c.opts.onAttempt != nil {
+		c.opts.onAttempt(err, retryable)
+		return
+	}
+	if retryable {
+		c.opts.logger.Warn("pssh: connection attempt failed", "err", err, "retryable", retryable)
 	}
 }
 

@@ -102,6 +102,15 @@ until ConnectAndWait is called.
 ### Methods
 
 ```go
+func (c *Client) AuthKey() (ssh.PublicKey, string)
+```
+AuthKey returns the public key and comment (such as the key's filename or
+identifier in the ssh agent) that was used to authenticate the current
+or most recent connection. It returns nil, "" if no connection has
+authenticated.
+
+
+```go
 func (c *Client) Close()
 ```
 
@@ -184,6 +193,40 @@ func WithLogger(logger *slog.Logger) Option
 ```
 WithLogger specifies the logger used to report connection events. If it is
 not specified, the logger from ctxlog.Logger is used.
+
+
+```go
+func WithOnAttemptFailed(fn func(err error, retryable bool)) Option
+```
+WithOnAttemptFailed registers a callback that is invoked each time an
+attempt to establish the connection fails, with the error that it failed
+with and whether retrying can resolve that error, as per Retryable. It is
+not invoked when an attempt is abandoned because the context was cancelled
+or the client was closed, since that is not a failure of the attempt.
+
+It exists because an attempt that will be retried is otherwise not visible
+to the caller: its error is not returned, as the connection is still being
+maintained, and only the error from an attempt that cannot be retried is.
+A caller that reports on a connection it is waiting for needs the former to
+say why it is still waiting.
+
+Note that retryable describes the error and not what will happen next: a
+retryable error is the last one when the backoff allows no further attempt,
+in which case ConnectAndWait returns it wrapped as an exhausted backoff.
+
+Registering a callback takes over the reporting of these failures:
+a retryable failure is logged only when there is no callback, so that it is
+not reported twice.
+
+The callback is invoked from the goroutine maintaining the connection and so
+must not block.
+
+
+```go
+func WithOnConnect(fn func(*Client)) Option
+```
+WithOnConnect registers a callback that is invoked each time an ssh
+connection and its configured port forwards have been established.
 
 
 ```go
