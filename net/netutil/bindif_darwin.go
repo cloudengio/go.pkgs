@@ -9,10 +9,17 @@ package netutil
 import (
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
 )
+
+// isIPv6Network reports whether a network, as the socket controls receive it
+// and so already resolved to a family, is ipv6.
+func isIPv6Network(network string) bool {
+	return strings.HasSuffix(network, "6")
+}
 
 // bindToInterface binds the socket with IP_BOUND_IF, or IPV6_BOUND_IF for an
 // ipv6 connection.

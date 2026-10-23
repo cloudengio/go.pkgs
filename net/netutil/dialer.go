@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"strings"
 	"syscall"
 )
 
@@ -217,12 +216,6 @@ func wantedFamily(ip net.IP, want4, want6 bool) bool {
 		return want4
 	}
 	return want6
-}
-
-// isIPv6Network reports whether a network, as the socket controls receive it
-// and so already resolved to a family, is ipv6.
-func isIPv6Network(network string) bool {
-	return strings.HasSuffix(network, "6")
 }
 
 // usableAddrs returns the addresses of ifc that a connection to another host
