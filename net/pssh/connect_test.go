@@ -630,7 +630,10 @@ func TestDialTimeoutWithRecovery(t *testing.T) {
 	c := NewClient(t.Context(), "tcp", "192.0.2.1:22",
 		WithUser("auser"),
 		WithHostKey(hostSigner.PublicKey()),
-		WithDialTimeout(250*time.Millisecond))
+		WithDialTimeout(250*time.Millisecond),
+		// The recovery is off by default, so it has to be asked for to be
+		// what this test bounds.
+		WithInterfaceRecovery(true))
 
 	backoff := func() ratecontrol.Backoff {
 		return ratecontrol.NewExponentialBackoff(time.Millisecond, 1)
@@ -643,5 +646,23 @@ func TestDialTimeoutWithRecovery(t *testing.T) {
 	// being spent once per local address on a machine with several.
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Errorf("took %v for a 250ms dial timeout", elapsed)
+	}
+}
+
+// TestWithInterfaceRecovery verifies that the recovery netutil.Dialer offers
+// is off unless it is asked for, since it is only of use to a host on a
+// subnet this system is attached to more than once.
+func TestWithInterfaceRecovery(t *testing.T) {
+	c := NewClient(t.Context(), "tcp", testAddr)
+	if c.opts.recoverNoRoute {
+		t.Error("the recovery should be off by default")
+	}
+	c = NewClient(t.Context(), "tcp", testAddr, WithInterfaceRecovery(true))
+	if !c.opts.recoverNoRoute {
+		t.Error("WithInterfaceRecovery(true) did not enable the recovery")
+	}
+	c = NewClient(t.Context(), "tcp", testAddr, WithInterfaceRecovery(true), WithInterfaceRecovery(false))
+	if c.opts.recoverNoRoute {
+		t.Error("the last option should win")
 	}
 }

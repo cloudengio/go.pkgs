@@ -63,6 +63,31 @@ func TestDialer(t *testing.T) {
 	_ = conn.Close()
 }
 
+func TestDialerRecoveryIsOptIn(t *testing.T) {
+	addr := echoListener(t)
+
+	// The zero value dials as a net.Dialer does, and says so: the field that
+	// enables the recovery is off until a caller sets it.
+	var d netutil.Dialer
+	if d.RecoverNoRouteToHost {
+		t.Error("the recovery should be off by default")
+	}
+	conn, err := d.DialContext(t.Context(), "tcp", addr)
+	if err != nil {
+		t.Fatalf("DialContext: %v", err)
+	}
+	_ = conn.Close()
+
+	// Enabling it changes nothing for a connection that succeeds, which is
+	// every connection but the one it is for.
+	d.RecoverNoRouteToHost = true
+	conn, err = d.DialContext(t.Context(), "tcp", addr)
+	if err != nil {
+		t.Fatalf("DialContext: %v", err)
+	}
+	_ = conn.Close()
+}
+
 func TestDialerEmbeddedFields(t *testing.T) {
 	addr := echoListener(t)
 
