@@ -1,0 +1,31 @@
+--- Overview
+Makes the EHOSTUNREACH recovery in netutil.Dialer opt-in, and makes it more effective by binding the socket to each interface before falling back to choosing a source address. pssh gets a new option to turn it on.
+
+--- Key Changes
+
+net/netutil
+  * New Dialer.RecoverNoRouteToHost field turns the recovery on. It is off by default, so the zero value dials exactly as net.Dialer does.
+  * Recovery first dials with the socket bound to each interface that has an address in a family the target uses:
+    * darwin: IP_BOUND_IF / IPV6_BOUND_IF, which picks macOS's scoped routes.
+    * linux: SO_BINDTODEVICE.
+    * other platforms: no binding; recovery goes straight to the source-address fallback.
+  * The source-address fallback moves into dialFromSourceAddr and still skips the excluded address.
+  * bindSocket adds the bind after any Control or ControlContext the caller set; it never replaces them. When ControlContext is set, the bind goes there, because net.Dialer ignores Control in that case.
+  * New helpers: hasUsableFamily, wantedFamily, isIPv6Network.
+  * Tests:
+    * New coverage for opt-in behaviour, interface binding, source-address exclusion and bindSocket chaining.
+    * New shared listenOnEveryInterface test helper.
+    * Struct literals now use keyed fields.
+
+net/pssh
+  * New WithInterfaceRecovery(bool) option, passed through to netutil.Dialer.RecoverNoRouteToHost. It is off by default.
+  * Removed a leftover debug fmt.Printf from createConnectionAndForwarding.
+  * Tests: TestDialTimeoutWithRecovery now turns recovery on explicitly, and a new TestWithInterfaceRecovery was added.
+
+net/go.mod
+  * golang.org/x/sys is now a direct dependency.
+  * Bumped cloudeng.io/file and cloudeng.io/sys.
+
+--- Breaking Changes
+  * Behaviour: the zero-value netutil.Dialer and pssh clients no longer retry EHOSTUNREACH through other interfaces. Callers that need it must set RecoverNoRouteToHost: true or use WithInterfaceRecovery(true).
+  * Source: unkeyed composite literals such as netutil.Dialer{net.Dialer{...}} no longer compile because the struct has a new field. Use netutil.Dialer{Dialer: net.Dialer{...}}.
