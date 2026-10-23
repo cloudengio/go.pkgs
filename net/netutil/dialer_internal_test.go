@@ -259,6 +259,28 @@ func TestDialFromInterfaces(t *testing.T) {
 	conn.Close()
 }
 
+// targetsPerFamily returns an address of the listener for one usable local
+// address of each family this machine has, so that both are exercised
+// wherever both exist. Which family comes first differs between machines,
+// which is how a hardcoded family in these tests passed here and failed on a
+// macos runner whose first usable address is an ipv6 one.
+func targetsPerFamily(t *testing.T, port int) []string {
+	t.Helper()
+	var targets []string
+	var seen4, seen6 bool
+	for _, ip := range globalUnicastAddrs(t) {
+		if is4 := ip.To4() != nil; is4 && !seen4 {
+			seen4 = true
+		} else if !is4 && !seen6 {
+			seen6 = true
+		} else {
+			continue
+		}
+		targets = append(targets, net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port)))
+	}
+	return targets
+}
+
 func TestDialBoundToInterface(t *testing.T) {
 	addrs := globalUnicastAddrs(t)
 	if len(addrs) == 0 {
@@ -274,27 +296,31 @@ func TestDialBoundToInterface(t *testing.T) {
 
 	ln, port := listenOnEveryInterface(t)
 	defer ln.Close()
-	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", port))
 
-	// A control the caller set must still be called: the bind is added to it
-	// rather than replacing it.
-	var controlled int
-	d := Dialer{Dialer: net.Dialer{
-		Control: func(string, string, syscall.RawConn) error {
-			controlled++
-			return nil
-		},
-	}}
-	conn, ok := d.dialBoundToInterface(t.Context(), "tcp", target, ifaces, true, false)
-	if !ok {
-		t.Fatalf("no interface could reach %v", target)
-	}
-	defer conn.Close()
-	if controlled == 0 {
-		t.Error("the caller's Control was not called")
-	}
-	if !containsIP(addrs, conn.LocalAddr().(*net.TCPAddr).IP) {
-		t.Errorf("connected from %v, which is not an interface address", conn.LocalAddr())
+	for _, target := range targetsPerFamily(t, port) {
+		t.Run(target, func(t *testing.T) {
+			// A control the caller set must still be called: the bind is
+			// added to it rather than replacing it.
+			var controlled int
+			d := Dialer{Dialer: net.Dialer{
+				Control: func(string, string, syscall.RawConn) error {
+					controlled++
+					return nil
+				},
+			}}
+			want4, want6 := targetFamilies(target)
+			conn, ok := d.dialBoundToInterface(t.Context(), "tcp", target, ifaces, want4, want6)
+			if !ok {
+				t.Fatalf("no interface could reach %v", target)
+			}
+			defer conn.Close()
+			if controlled == 0 {
+				t.Error("the caller's Control was not called")
+			}
+			if !containsIP(addrs, conn.LocalAddr().(*net.TCPAddr).IP) {
+				t.Errorf("connected from %v, which is not an interface address", conn.LocalAddr())
+			}
+		})
 	}
 }
 
@@ -305,29 +331,34 @@ func TestDialFromSourceAddrExcludes(t *testing.T) {
 	}
 	ln, port := listenOnEveryInterface(t)
 	defer ln.Close()
-	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", port))
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		t.Skipf("net.Interfaces: %v", err)
 	}
 
-	var d Dialer
-	conn, ok := d.dialFromSourceAddr(t.Context(), "tcp", target, ifaces, true, false, nil)
-	if !ok {
-		t.Fatalf("no address could reach %v", target)
-	}
-	used := conn.LocalAddr().(*net.TCPAddr).IP
-	conn.Close()
+	for _, target := range targetsPerFamily(t, port) {
+		t.Run(target, func(t *testing.T) {
+			want4, want6 := targetFamilies(target)
+			var d Dialer
+			conn, ok := d.dialFromSourceAddr(t.Context(), "tcp", target, ifaces, want4, want6, nil)
+			if !ok {
+				t.Fatalf("no address could reach %v", target)
+			}
+			used := conn.LocalAddr().(*net.TCPAddr).IP
+			conn.Close()
 
-	// The excluded address is the one the system has already been shown not
-	// to reach the host from, so it is not worth binding again.
-	conn, ok = d.dialFromSourceAddr(t.Context(), "tcp", target, ifaces, true, false, used)
-	if !ok {
-		return // No other address can reach it, which is not a failure.
-	}
-	defer conn.Close()
-	if got := conn.LocalAddr().(*net.TCPAddr).IP; got.Equal(used) {
-		t.Errorf("connected from %v, which was excluded", got)
+			// The excluded address is the one the system has already been
+			// shown not to reach the host from, so it is not worth binding
+			// again.
+			conn, ok = d.dialFromSourceAddr(t.Context(), "tcp", target, ifaces, want4, want6, used)
+			if !ok {
+				return // No other address can reach it, which is not a failure.
+			}
+			defer conn.Close()
+			if got := conn.LocalAddr().(*net.TCPAddr).IP; got.Equal(used) {
+				t.Errorf("connected from %v, which was excluded", got)
+			}
+		})
 	}
 }
 
