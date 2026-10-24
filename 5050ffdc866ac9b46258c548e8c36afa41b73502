@@ -1,0 +1,40 @@
+--- Overview
+Moves config file location out of cmdutil into a new cmdutil/cmdconfig package and adds FilesFlag, a flag that takes multiple YAML, .env and JSON files. Also adds YAML loading, environment-variable expansion and subcmd hooks that load the config and set up logging for commands.
+
+--- Key Changes
+cmdutil/cmdconfig (new)
+  * Moved and renamed the locate functions: ConfigFilePath -> SearchPath, LocateConfigFilePath -> LocateFilePath, LocateConfigFileInDir -> LocateFile, LocateConfigFilesInDir -> LocateFiles. Added LocateFilesPath.
+  * FilesFlag: a repeatable flag that takes comma-separated files and sorts them by suffix into YAML, .env or JSON. Files set on the command line replace the defaults. It supports SetDefault, SetDefaults and DefaultValues.
+  * FilesFlag.Locate(Spec) returns a Located:
+    * Precedence is flag, then environment variable (Spec.EnvVars), then defaults.
+    * Files from the flag or env var must exist; missing defaults are skipped.
+    * Spec.FirstOnly returns only the first file found for the listed types.
+    * Spec.Path can override the search path.
+
+cmdutil
+  * Added generic ContextWithValue / ContextValue[T], which key context values by their type.
+
+cmdutil/cmdyaml
+  * Load / LoadFiles: merge the located .env files, then strictly parse the YAML files. $VAR references are expanded from the process environment first, then from the env files.
+  * The existing LocateConfig* wrappers now call cmdconfig.
+
+cmdutil/envfile
+  * ExpandingMapping: an os.Expand mapping where the environment wins over file variables. References inside file values are expanded recursively, up to a depth limit. Unresolved references stay as ${NAME}.
+
+cmdutil/flags
+  * RegisterFlagsInStruct uses a field's DefaultValues() result when the tag has no default.
+  * Defaults go to the field's SetDefault(string) error method if it has one, otherwise to Set.
+
+cmdutil/subcmd
+  * ConfigHook[T]: a PreHook that loads config through cmdyaml.Load.
+    * Optionally requires a YAML file.
+    * Calls Validate() on the config if it was read from a file.
+    * Errors name the file to edit.
+    * Stores the result in the context through Store.
+  * LoggerHook: a PreHook that builds a logger from the global flags, adds it to the context and closes it after the command runs.
+
+--- Breaking Changes
+  * Removed cmdutil.ConfigFilePath, cmdutil.LocateConfigFilePath, cmdutil.LocateConfigFileInDir and cmdutil.LocateConfigFilesInDir. Use the renamed versions in cloudeng.io/cmdutil/cmdconfig.
+  * flags.RegisterFlagsInStruct behaves differently for flag.Value fields that already have a DefaultValues() or SetDefault(string) error method. Those fields now get a default even when the tag leaves it empty, and defaults go to SetDefault instead of Set.
+
+ Generated with Claude Code (https://claude.com/claude-code)
