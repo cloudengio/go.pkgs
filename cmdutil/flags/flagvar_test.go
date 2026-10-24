@@ -626,3 +626,99 @@ func TestWithDefault(t *testing.T) {
 	assert(flags.WithDefault(2, 1), 2)
 	assert(flags.WithDefault(int64(0), 2), int64(2))
 }
+
+// computedVar is a flag variable whose default is computed.
+type computedVar string
+
+func (c *computedVar) Set(v string) error {
+	*c = computedVar(v)
+	return nil
+}
+
+func (c *computedVar) String() string { return string(*c) }
+
+func (c *computedVar) DefaultValues() string { return "computed,default" }
+
+func TestDefaultValuesMethod(t *testing.T) {
+	var s struct {
+		Computed computedVar `flag:"computed,,uses DefaultValues"`
+		Literal  computedVar `flag:"literal,'from tag',the tag wins"`
+		Plain    myFlagVar   `flag:"plain,,has no DefaultValues"`
+	}
+	fs := &flag.FlagSet{}
+	sm, err := flags.RegisterFlagsInStructWithSetMap(fs, "flag", &s, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Computed, computedVar("computed,default"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := fs.Lookup("computed").DefValue, "computed,default"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if _, ok := sm.IsSet(&s.Computed); !ok {
+		t.Error("a default from DefaultValues should be reported as set")
+	}
+	// A literal in the tag takes precedence.
+	if got, want := s.Literal, computedVar("from tag"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Without the method, and without a literal, nothing is set.
+	if got, want := s.Plain, myFlagVar(0); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if _, ok := sm.IsSet(&s.Plain); ok {
+		t.Error("expected plain to be unset")
+	}
+	// The flag can still be overridden.
+	if err := fs.Parse([]string{"--computed=x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Computed, computedVar("x"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// defaultAwareVar records whether its value is a default or was set by the user.
+type defaultAwareVar struct {
+	value     string
+	isDefault bool
+}
+
+func (d *defaultAwareVar) Set(v string) error {
+	d.value, d.isDefault = v, false
+	return nil
+}
+
+func (d *defaultAwareVar) SetDefault(v string) error {
+	d.value, d.isDefault = v, true
+	return nil
+}
+
+func (d *defaultAwareVar) String() string { return d.value }
+
+func (d *defaultAwareVar) DefaultValues() string { return "from,method" }
+
+func TestSetDefaultMethod(t *testing.T) {
+	var s struct {
+		FromTag    defaultAwareVar `flag:"tag,'a,b',from the tag"`
+		FromMethod defaultAwareVar `flag:"method,,from the method"`
+	}
+	fs := &flag.FlagSet{}
+	if err := flags.RegisterFlagsInStruct(fs, "flag", &s, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !s.FromTag.isDefault || s.FromTag.value != "a,b" {
+		t.Errorf("got %+v, want the default a,b", s.FromTag)
+	}
+	if !s.FromMethod.isDefault || s.FromMethod.value != "from,method" {
+		t.Errorf("got %+v, want the default from,method", s.FromMethod)
+	}
+	// A value from the command line is not a default.
+	if err := fs.Parse([]string{"--tag=x"}); err != nil {
+		t.Fatal(err)
+	}
+	if s.FromTag.isDefault || s.FromTag.value != "x" {
+		t.Errorf("got %+v, want x as a value", s.FromTag)
+	}
+}

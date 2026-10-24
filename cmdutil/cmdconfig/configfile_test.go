@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package cmdutil_test
+package cmdconfig_test
 
 import (
 	"os"
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"cloudeng.io/cmdutil"
+	"cloudeng.io/cmdutil/cmdconfig"
 )
 
 // yamlSuffixes are the suffixes used by cmdyaml.LocateConfigFilePath and are
@@ -34,10 +34,10 @@ func testLocateConfigFilePathAbs(t *testing.T) {
 
 	// An absolute name is used as is: no suffix is appended to it and path is
 	// not consulted.
-	if got := cmdutil.LocateConfigFilePath(existing, "", yamlSuffixes...); got != existing {
+	if got := cmdconfig.LocateFilePath(existing, "", yamlSuffixes...); got != existing {
 		t.Errorf("got %q, want %q", got, existing)
 	}
-	if got := cmdutil.LocateConfigFilePath(existing, dir); got != existing {
+	if got := cmdconfig.LocateFilePath(existing, dir); got != existing {
 		t.Errorf("got %q, want %q", got, existing)
 	}
 	for _, name := range []string{
@@ -45,7 +45,7 @@ func testLocateConfigFilePathAbs(t *testing.T) {
 		filepath.Join(dir, "config"),       // exists only with a suffix
 		dir,                                // a directory, not a file
 	} {
-		if got := cmdutil.LocateConfigFilePath(name, dir, yamlSuffixes...); got != "" {
+		if got := cmdconfig.LocateFilePath(name, dir, yamlSuffixes...); got != "" {
 			t.Errorf("%v: got %q, want an empty string", name, got)
 		}
 	}
@@ -157,7 +157,7 @@ func testLocateConfigFilePathSuffixes(t *testing.T) {
 		if want != "" {
 			want = filepath.Join(dir, want)
 		}
-		if got := cmdutil.LocateConfigFilePath(tc.locate, dir, tc.suffixes...); got != want {
+		if got := cmdconfig.LocateFilePath(tc.locate, dir, tc.suffixes...); got != want {
 			t.Errorf("%v: got %q, want %q", tc.name, got, want)
 		}
 	}
@@ -171,19 +171,19 @@ func testLocateConfigFilePathSearchPath(t *testing.T) {
 	// or an undotted name in a later one.
 	writeConfigFile(t, dir2, "service.json")
 	want := filepath.Join(dir2, "service.json")
-	if got := cmdutil.LocateConfigFilePath("service", path, ".json", ".jsonc"); got != want {
+	if got := cmdconfig.LocateFilePath("service", path, ".json", ".jsonc"); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	writeConfigFile(t, dir1, ".service.jsonc")
 	want = filepath.Join(dir1, ".service.jsonc")
-	if got := cmdutil.LocateConfigFilePath("service", path, ".json", ".jsonc"); got != want {
+	if got := cmdconfig.LocateFilePath("service", path, ".json", ".jsonc"); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	writeConfigFile(t, dir1, "service.jsonc")
 	want = filepath.Join(dir1, "service.jsonc")
-	if got := cmdutil.LocateConfigFilePath("service", path, ".json", ".jsonc"); got != want {
+	if got := cmdconfig.LocateFilePath("service", path, ".json", ".jsonc"); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -195,7 +195,7 @@ func testLocateConfigFilePathNotFound(t *testing.T) {
 		{"nonexistent", ""},
 		{"", dir},
 	} {
-		if got := cmdutil.LocateConfigFilePath(tc.name, tc.path, yamlSuffixes...); got != "" {
+		if got := cmdconfig.LocateFilePath(tc.name, tc.path, yamlSuffixes...); got != "" {
 			t.Errorf("(%q, %q): got %q, want an empty string", tc.name, tc.path, got)
 		}
 	}
@@ -208,10 +208,10 @@ func TestLocateConfigFilePath(t *testing.T) {
 	t.Run("not found", testLocateConfigFilePathNotFound)
 }
 
-// configDirs holds the directories that ConfigFilePath includes, in search
+// configDirs holds the directories that SearchPath includes, in search
 // order, for the appDir passed to redirectConfigDir.
 type configDirs struct {
-	// cwd is the working directory, which ConfigFilePath includes as ".", so
+	// cwd is the working directory, which SearchPath includes as ".", so
 	// matches found there are relative.
 	cwd string
 	// user is os.UserConfigDir()/appDir, ie.
@@ -223,7 +223,7 @@ type configDirs struct {
 	xdg string
 }
 
-// redirectConfigDir points every directory that ConfigFilePath includes at a
+// redirectConfigDir points every directory that SearchPath includes at a
 // temporary one: the working directory, the user configuration directory (via
 // whichever environment variable os.UserConfigDir consults on this platform)
 // and, on unix, $HOME/.config. On unix XDG_CONFIG_HOME is pointed at a
@@ -275,14 +275,14 @@ func testConfigFilePathEntries(t *testing.T) {
 	if dirs.xdg != "" {
 		want = append(want, dirs.xdg)
 	}
-	got := filepath.SplitList(cmdutil.ConfigFilePath("app"))
+	got := filepath.SplitList(cmdconfig.SearchPath("app"))
 	if !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
 	// appDir is appended literally, so a different application gets a
 	// different search path.
-	if other := filepath.SplitList(cmdutil.ConfigFilePath("other")); slices.Equal(other, got) {
+	if other := filepath.SplitList(cmdconfig.SearchPath("other")); slices.Equal(other, got) {
 		t.Errorf("the search paths for %q and %q are identical: %v", "app", "other", got)
 	}
 }
@@ -297,7 +297,7 @@ func testConfigFilePathNoDuplicates(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
-	dirs := filepath.SplitList(cmdutil.ConfigFilePath("app"))
+	dirs := filepath.SplitList(cmdconfig.SearchPath("app"))
 	seen := map[string]bool{}
 	for _, dir := range dirs {
 		if seen[dir] {
@@ -330,7 +330,7 @@ func testConfigFilePathNoUserConfigDir(t *testing.T) {
 	}
 	// The error is not surfaced; the search path falls back to the working
 	// directory alone.
-	if got, want := cmdutil.ConfigFilePath("app"), "."; got != want {
+	if got, want := cmdconfig.SearchPath("app"), "."; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -339,21 +339,21 @@ func testConfigFilePathLocates(t *testing.T) {
 	dirs := redirectConfigDir(t, "app")
 	want := writeConfigFile(t, dirs.user, "cfg.yaml")
 
-	// The returned path is intended for use with LocateConfigFilePath.
-	path := cmdutil.ConfigFilePath("app")
-	if got := cmdutil.LocateConfigFilePath("cfg", path, yamlSuffixes...); got != want {
+	// The returned path is intended for use with LocateFilePath.
+	path := cmdconfig.SearchPath("app")
+	if got := cmdconfig.LocateFilePath("cfg", path, yamlSuffixes...); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	// The working directory is searched first, and matches there are
 	// relative.
 	writeConfigFile(t, dirs.cwd, "cfg.yml")
-	if got, want := cmdutil.LocateConfigFilePath("cfg", path, yamlSuffixes...), "cfg.yml"; got != want {
+	if got, want := cmdconfig.LocateFilePath("cfg", path, yamlSuffixes...), "cfg.yml"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-// TestConfigFilePath covers the search path that LocateConfigFilePath is
+// TestConfigFilePath covers the search path that LocateFilePath is
 // typically used with. Note that os.UserConfigDir is
 // $HOME/Library/Application Support on macOS, not $HOME/.config, so on that
 // platform both appear in the path.
@@ -368,38 +368,38 @@ func testLocateConfigFileInDir(t *testing.T) {
 	dirs := redirectConfigDir(t, "app")
 
 	// Nothing to find.
-	if got := cmdutil.LocateConfigFileInDir("cfg", "app", yamlSuffixes...); len(got) != 0 {
+	if got := cmdconfig.LocateFile("cfg", "app", yamlSuffixes...); len(got) != 0 {
 		t.Errorf("got %q, want no file", got)
 	}
 
 	// The user configuration directory is searched, and a match there is
 	// returned as an absolute path.
 	want := writeConfigFile(t, dirs.user, "cfg.yaml")
-	if got := cmdutil.LocateConfigFileInDir("cfg", "app", yamlSuffixes...); got != want {
+	if got := cmdconfig.LocateFile("cfg", "app", yamlSuffixes...); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	// The working directory is searched first, and a match there is relative.
 	writeConfigFile(t, dirs.cwd, "cfg.yml")
-	if got, want := cmdutil.LocateConfigFileInDir("cfg", "app", yamlSuffixes...), "cfg.yml"; got != want {
+	if got, want := cmdconfig.LocateFile("cfg", "app", yamlSuffixes...), "cfg.yml"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	// The suffixes are the caller's to choose, and with none the name is used
 	// as it is.
 	writeConfigFile(t, dirs.cwd, "vars.env")
-	if got, want := cmdutil.LocateConfigFileInDir("vars", "app", ".env"), "vars.env"; got != want {
+	if got, want := cmdconfig.LocateFile("vars", "app", ".env"), "vars.env"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	if got := cmdutil.LocateConfigFileInDir("vars", "app"); len(got) != 0 {
+	if got := cmdconfig.LocateFile("vars", "app"); len(got) != 0 {
 		t.Errorf("got %q, want no file: vars has no suffix to match", got)
 	}
-	if got, want := cmdutil.LocateConfigFileInDir("vars.env", "app"), "vars.env"; got != want {
+	if got, want := cmdconfig.LocateFile("vars.env", "app"), "vars.env"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
 	// An absolute name is used directly.
-	if got := cmdutil.LocateConfigFileInDir(want, "app", yamlSuffixes...); got != want {
+	if got := cmdconfig.LocateFile(want, "app", yamlSuffixes...); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -411,7 +411,7 @@ func testLocateConfigFilesInDir(t *testing.T) {
 
 	// The files are returned in the order their names were supplied, and the
 	// names that were not found are reported separately.
-	files, missing := cmdutil.LocateConfigFilesInDir("app", yamlSuffixes, "two", "nope", "one")
+	files, missing := cmdconfig.LocateFiles("app", yamlSuffixes, "two", "nope", "one")
 	if got, want := files, []string{filepath.Join(dirs.user, "two.yml"), "one.yaml"}; !slices.Equal(got, want) {
 		t.Errorf("files = %v, want %v", got, want)
 	}
@@ -420,7 +420,7 @@ func testLocateConfigFilesInDir(t *testing.T) {
 	}
 
 	// A repeated name is resolved each time it appears.
-	files, missing = cmdutil.LocateConfigFilesInDir("app", yamlSuffixes, "one", "one", "nope", "nope")
+	files, missing = cmdconfig.LocateFiles("app", yamlSuffixes, "one", "one", "nope", "nope")
 	if got, want := files, []string{"one.yaml", "one.yaml"}; !slices.Equal(got, want) {
 		t.Errorf("files = %v, want %v", got, want)
 	}
@@ -429,19 +429,19 @@ func testLocateConfigFilesInDir(t *testing.T) {
 	}
 
 	// No names at all yields nothing, as does a name with no suffix to match.
-	files, missing = cmdutil.LocateConfigFilesInDir("app", yamlSuffixes)
+	files, missing = cmdconfig.LocateFiles("app", yamlSuffixes)
 	if len(files) != 0 || len(missing) != 0 {
 		t.Errorf("files = %v, missing = %v, want both empty", files, missing)
 	}
-	files, missing = cmdutil.LocateConfigFilesInDir("app", nil, "one")
+	files, missing = cmdconfig.LocateFiles("app", nil, "one")
 	if got, want := missing, []string{"one"}; len(files) != 0 || !slices.Equal(got, want) {
 		t.Errorf("files = %v, missing = %v, want no files and %v", files, got, want)
 	}
 }
 
 // TestLocateConfigFileInDir covers the convenience wrappers that apply
-// LocateConfigFilePath to the search path returned by ConfigFilePath, and
-// which cmdyaml's wrappers of the same names delegate to.
+// LocateFilePath to the search path returned by SearchPath, and which
+// cmdyaml's wrappers delegate to.
 func TestLocateConfigFileInDir(t *testing.T) {
 	t.Run("single name", testLocateConfigFileInDir)
 	t.Run("several names", testLocateConfigFilesInDir)

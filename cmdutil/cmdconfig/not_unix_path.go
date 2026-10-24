@@ -4,7 +4,7 @@
 
 //go:build !unix
 
-package cmdutil
+package cmdconfig
 
 // withXDGConfigDir is a no-op on systems that are not unix: os.UserConfigDir
 // already reports the only user configuration directory they define.
