@@ -70,6 +70,13 @@ supplied. All fields can be quoted if they need to contain a comma.
 Default values may contain shell variables as per flags.ExpandEnv.
 So $HOME/.configdir may be used on both UNIX and Windows for example.
 
+A struct tag can only hold a literal. If <default-value> is empty and the
+flag variable has a 'DefaultValues() string' method, as a flag.Value can,
+then RegisterFlagsInStruct uses its result as the default instead.
+A default, from either source, is passed to the flag variable's
+'SetDefault(string) error' method if it has one, so that it can tell a
+default from a value that was set by the user, and to Set otherwise.
+
 ### Func RegisterAndParse
 ```go
 func RegisterAndParse[T any](tag string, values *T) error
