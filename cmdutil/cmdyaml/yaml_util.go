@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"cloudeng.io/cmdutil"
+	"cloudeng.io/cmdutil/cmdconfig"
 	"cloudeng.io/file"
 	"cloudeng.io/file/localfs"
 	"gopkg.in/yaml.v3"
@@ -579,21 +579,21 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 //
 // 3. If no matching file is found, an empty string is returned.
 //
-// It is cmdutil.LocateConfigFilePath restricted to the suffixes that
+// It is cmdconfig.LocateFilePath restricted to the suffixes that
 // Suffixes returns.
 func LocateConfigFilePath(name, path string) string {
-	return cmdutil.LocateConfigFilePath(name, path, suffixes...)
+	return cmdconfig.LocateFilePath(name, path, suffixes...)
 }
 
 // LocateConfigFileInDir searches for a config file with the given name using
-// the search path returned by cmdutil.ConfigFilePath.
+// the search path returned by cmdconfig.SearchPath.
 // If name is an absolute path, it is used directly.
 // If no matching file is found, an empty string is returned.
 //
-// It is cmdutil.LocateConfigFileInDir restricted to the suffixes that
+// It is cmdconfig.LocateFile restricted to the suffixes that
 // Suffixes returns.
 func LocateConfigFileInDir(name, appDir string) string {
-	return cmdutil.LocateConfigFileInDir(name, appDir, suffixes...)
+	return cmdconfig.LocateFile(name, appDir, suffixes...)
 }
 
 // LocateConfigFilesInDir searches for multiple config files with the given
@@ -601,10 +601,10 @@ func LocateConfigFileInDir(name, appDir string) string {
 // additional platform-specific locations. It returns a slice of found file
 // paths and a slice of missing file names.
 //
-// It is cmdutil.LocateConfigFilesInDir restricted to the suffixes that
+// It is cmdconfig.LocateFiles restricted to the suffixes that
 // Suffixes returns.
 func LocateConfigFilesInDir(appDir string, name ...string) ([]string, []string) {
-	return cmdutil.LocateConfigFilesInDir(appDir, suffixes, name...)
+	return cmdconfig.LocateFiles(appDir, suffixes, name...)
 }
 
 // WriteConfig writes cfg as YAML to wr. Returns an error if the write fails.

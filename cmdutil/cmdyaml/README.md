@@ -32,17 +32,41 @@ ExpandEnv recursively expands environment variables in the fields of the
 provided struct that have a 'yaml' tag. Embedded structs are also processed.
 The provided mapping is used to look up variable values.
 
+### Func Load
+```go
+func Load(ctx context.Context, cfg any, ff *cmdconfig.FilesFlag, spec cmdconfig.Spec, opts ...Option) (*cmdconfig.Located, error)
+```
+Load locates the files held by ff, as per spec, and parses the YAML files
+among them into cfg. Parsing is strict, see WithStrictFields, and $VAR and
+${VAR} references in the YAML are expanded from the process environment and,
+for any variable that it does not define, from the environment variables
+files, see envfile.ExpandingMapping; where several define a variable the
+later file takes precedence. opts are applied after, and so can override,
+those. The files that were located are returned, even if there was an error
+parsing them, so that they can be reported, but not if there was an error
+locating them.
+
+It is not an error for there to be no YAML file, in which case cfg is not
+modified: a caller for which one is required should check the result.
+
+### Func LoadFiles
+```go
+func LoadFiles(ctx context.Context, cfg any, loc *cmdconfig.Located, opts ...Option) error
+```
+LoadFiles is like Load for files that have already been located. Callers can
+add to or edit the files in loc first, for example to add a YAML file that
+is not named by a FilesFlag.
+
 ### Func LocateConfigFileInDir
 ```go
 func LocateConfigFileInDir(name, appDir string) string
 ```
 LocateConfigFileInDir searches for a config file with the given name using
-the search path returned by cmdutil.ConfigFilePath. If name is an absolute
+the search path returned by cmdconfig.SearchPath. If name is an absolute
 path, it is used directly. If no matching file is found, an empty string is
 returned.
 
-It is cmdutil.LocateConfigFileInDir restricted to the suffixes that Suffixes
-returns.
+It is cmdconfig.LocateFile restricted to the suffixes that Suffixes returns.
 
 ### Func LocateConfigFilePath
 ```go
@@ -60,7 +84,7 @@ is as follows:
 
 3. If no matching file is found, an empty string is returned.
 
-It is cmdutil.LocateConfigFilePath restricted to the suffixes that Suffixes
+It is cmdconfig.LocateFilePath restricted to the suffixes that Suffixes
 returns.
 
 ### Func LocateConfigFilesInDir
@@ -72,8 +96,8 @@ names in the current directory, the user's configuration directory,
 and additional platform-specific locations. It returns a slice of found file
 paths and a slice of missing file names.
 
-It is cmdutil.LocateConfigFilesInDir restricted to the suffixes that
-Suffixes returns.
+It is cmdconfig.LocateFiles restricted to the suffixes that Suffixes
+returns.
 
 ### Func ParseConfigFiles
 ```go

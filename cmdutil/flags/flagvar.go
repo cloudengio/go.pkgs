@@ -109,6 +109,13 @@ func parseField(t, field string, allowEmpty, expectMore bool) (value, remaining 
 //
 // Default values may contain shell variables as per flags.ExpandEnv.
 // So $HOME/.configdir may be used on both UNIX and Windows for example.
+//
+// A struct tag can only hold a literal. If <default-value> is empty and the
+// flag variable has a 'DefaultValues() string' method, as a flag.Value can,
+// then RegisterFlagsInStruct uses its result as the default instead.
+// A default, from either source, is passed to the flag variable's
+// 'SetDefault(string) error' method if it has one, so that it can tell a
+// default from a value that was set by the user, and to Set otherwise.
 func ParseFlagTag(t string) (name, value, usage string, err error) {
 	if len(t) == 0 {
 		err = fmt.Errorf("empty or missing tag")
@@ -124,6 +131,28 @@ func ParseFlagTag(t string) (name, value, usage string, err error) {
 	}
 	usage, _, err = parseField(remaining, "<usage>", false, false)
 	return
+}
+
+// parseFieldTag is ParseFlagTag, except that an empty default value is
+// replaced by that from the DefaultValues method of the field, if it has one.
+func parseFieldTag(fieldName, tags string, fieldValue reflect.Value) (name, value, description string, err error) {
+	name, value, description, err = ParseFlagTag(tags)
+	if err != nil {
+		return "", "", "", fmt.Errorf("field %v: failed to parse tag: %v", fieldName, tags)
+	}
+	if value == "" {
+		value = defaultValues(fieldValue)
+	}
+	return name, value, description, nil
+}
+
+// defaultValues returns the result of the DefaultValues method of the flag
+// variable, if it has one, and otherwise an empty string.
+func defaultValues(fieldValue reflect.Value) string {
+	if dv, ok := fieldValue.Addr().Interface().(interface{ DefaultValues() string }); ok {
+		return dv.DefaultValues()
+	}
+	return ""
 }
 
 func defaultLiteralValue(typeName string) any {
@@ -277,19 +306,23 @@ func createVarFlag(fs *flag.FlagSet, fieldValue reflect.Value, name, value, desc
 	}
 	dv := addr.Interface().(flag.Value)
 	fs.Var(dv, name, description)
-	set := false
+	isSet := false
 	if len(value) > 0 {
-		if err := dv.Set(value); err != nil {
+		set := dv.Set
+		if sd, ok := dv.(interface{ SetDefault(string) error }); ok {
+			set = sd.SetDefault
+		}
+		if err := set(value); err != nil {
 			return false, fmt.Errorf("failed to set initial default value for flag.Value: %v", err)
 		}
-		set = true
+		isSet = true
 	}
 	if ud, ok := usageDefaults[name]; ok {
 		fs.Lookup(name).DefValue = ud
 	} else {
 		fs.Lookup(name).DefValue = value
 	}
-	return set, nil
+	return isSet, nil
 }
 
 func createFlagsBasedOnValue(fs *flag.FlagSet, initialValue any, fieldType reflect.StructField, fieldValue reflect.Value, name, description string) bool {
@@ -385,9 +418,9 @@ func (reg *registrar) registerFlagsInStruct(structWithFlags any) error {
 			continue
 		}
 
-		name, value, description, err := ParseFlagTag(tags)
+		name, value, description, err := parseFieldTag(fieldType.Name, tags, fieldValue)
 		if err != nil {
-			return fmt.Errorf("field %v: failed to parse tag: %v", fieldType.Name, tags)
+			return err
 		}
 		if reg.fs.Lookup(name) != nil {
 			return fmt.Errorf("flag %v already defined for this flag.FlagSet", name)

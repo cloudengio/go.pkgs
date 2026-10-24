@@ -4,7 +4,7 @@
 
 //go:build unix
 
-package cmdutil
+package cmdconfig
 
 import (
 	"os"
