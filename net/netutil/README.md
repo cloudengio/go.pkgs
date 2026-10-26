@@ -97,6 +97,11 @@ TrimIPv6 removes brackets from an IPv6 address if they are present.
 ```go
 type Dialer struct {
 	net.Dialer
+
+	// RecoverNoRouteToHost enables retrying a connection that failed with
+	// EHOSTUNREACH by way of each local interface in turn, as described
+	// above. It is off by default.
+	RecoverNoRouteToHost bool
 }
 ```
 Dialer is a net.Dialer that recovers from a host which is unreachable over
@@ -120,9 +125,23 @@ first connection to succeed is returned. If none does, the error from the
 original attempt is returned rather than the last one, since it describes
 the path the system was configured to use.
 
-The zero value is a usable Dialer, and a Dialer with its LocalAddr set is
-left alone entirely: a caller that has chosen a source address has already
-said which path to use, so there is nothing to recover from.
+The recovery is opt-in: RecoverNoRouteToHost must be set for any of it to
+happen. A host that cannot be reached is usually simply not reachable,
+and trying every interface then only delays the error and obscures it;
+the recovery is for a system attached to one subnet more than once,
+which the caller knows about and this type cannot detect. The zero value is
+a usable Dialer that dials exactly as its embedded net.Dialer does.
+
+A Dialer with its LocalAddr set is left alone even when the recovery is
+enabled: a caller that has chosen a source address has already said which
+path to use, so there is nothing to recover from.
+
+Timeout bounds the original attempt and then, separately, all of the retries
+together, so a dial takes at most about twice it rather than it once per
+local address. Deadline, being absolute, bounds everything as it would for
+a net.Dialer. Note that a route which cannot reach the host fails at once,
+without consuming either, which is why cycling through the interfaces of a
+multihomed system is cheap.
 
 Only EHOSTUNREACH is recovered from. It means the route that was used cannot
 reach the host, which is what another route may fix. A refused connection or
@@ -135,15 +154,16 @@ only obscure that.
 func (d *Dialer) Dial(network, address string) (net.Conn, error)
 ```
 Dial connects to the address on the named network, as per net.Dialer.Dial,
-recovering from EHOSTUNREACH as described for Dialer.
+recovering from EHOSTUNREACH as described for Dialer when
+RecoverNoRouteToHost is set.
 
 
 ```go
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error)
 ```
 DialContext connects to the address on the named network, as per
-net.Dialer.DialContext, recovering from EHOSTUNREACH as described for
-Dialer.
+net.Dialer.DialContext, recovering from EHOSTUNREACH as described for Dialer
+when RecoverNoRouteToHost is set.
 
 
 

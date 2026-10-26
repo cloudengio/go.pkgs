@@ -4,4 +4,4 @@ go 1.27.0
 
 replace cloudeng.io/types => ../types
 
-require cloudeng.io/types v0.0.0-20261020215554-f8f4678915d5
+require cloudeng.io/types v0.0.0-20261026191912-bcd1dece5d6c

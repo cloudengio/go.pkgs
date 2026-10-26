@@ -1,7 +1,7 @@
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
-cloudeng.io/logging v0.0.0-20261020215554-f8f4678915d5 h1:V0WSsWm8+CaYGGKbAO7Na91fzeEPWRb46DKpVxzNxKs=
-cloudeng.io/logging v0.0.0-20261020215554-f8f4678915d5/go.mod h1:jMLEVhrVlzxya9df5e1q14kPxxOMnBxEejhV8QpMMKU=
+cloudeng.io/logging v0.0.0-20261026191912-bcd1dece5d6c h1:Pad8dLc1MznGk79gOKhhogN4MCm1fjBCQqQjc9bNPgY=
+cloudeng.io/logging v0.0.0-20261026191912-bcd1dece5d6c/go.mod h1:jMLEVhrVlzxya9df5e1q14kPxxOMnBxEejhV8QpMMKU=
 golang.org/x/crypto v0.58.0 h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=
 golang.org/x/crypto v0.58.0/go.mod h1:Xh+kl5A+M0gMiWDytH2Hhr5Z7WbNCpv/eB/EFgfSk+w=
 golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=

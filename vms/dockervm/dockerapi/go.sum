@@ -1,5 +1,5 @@
-cloudeng.io/cicd v0.0.0-20260909165456-ddaa2de546a0 h1:LApiJ0KQWDjTbjw1atKolFINozj7cZJgONSD+m11X2I=
-cloudeng.io/cicd v0.0.0-20260909165456-ddaa2de546a0/go.mod h1:pI98u5ytMFakWkLK2yrVvHyRlzcyYArBYA4xKR1vPj8=
+cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c h1:TL29FcfnHXIrvG8K5l2R2nw7rcS049eSxsDpwXjvtBo=
+cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c/go.mod h1:pI98u5ytMFakWkLK2yrVvHyRlzcyYArBYA4xKR1vPj8=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
 cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba h1:2+U9tNRu/+O1rHgv2mxRTU80lgUCJSxDFDswbKumBx8=
