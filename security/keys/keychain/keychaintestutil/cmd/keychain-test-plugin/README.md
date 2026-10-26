@@ -10,6 +10,6 @@
     -keyname string
       	Keyname to match for static responses
     -socket string
-      	Socket address of the running keychain test server
+      	Socket path/address of the keychain daemon
 
 
