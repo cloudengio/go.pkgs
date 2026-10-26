@@ -2,9 +2,10 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package subcmd_test
+package cmdconfig_test
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"os"
@@ -46,7 +47,7 @@ func runHooks(t *testing.T, dir string, required bool, args ...string) (hookConf
 	var got hookConfig
 	var loc *cmdconfig.Located
 	var runCtx context.Context
-	hook := subcmd.ConfigHook[hookConfig]{
+	hook := cmdconfig.ConfigHook[hookConfig]{
 		Files:    &globals.Config,
 		Spec:     cmdconfig.Spec{AppDir: "hookstest"},
 		Initial:  hookConfig{Name: "initial"},
@@ -132,5 +133,82 @@ func TestConfigHookErrors(t *testing.T) {
 	cfg, loc, _, err := runHooks(t, dir, false)
 	if err != nil || cfg.Name != "initial" || len(loc.YAML) != 0 {
 		t.Errorf("got %+v, %+v, %v", cfg, loc, err)
+	}
+}
+
+type validatedField struct{ Bad bool }
+
+func (v validatedField) Validate() error {
+	if v.Bad {
+		return os.ErrInvalid
+	}
+	return nil
+}
+
+type fieldsConfig struct {
+	Field validatedField `yaml:"field"`
+}
+
+func TestConfigHookValidateFields(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile(filepath.Join(dir, "fields.yaml"), []byte("field:\n  bad: true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	run := func(validateFields bool) (context.Context, error) {
+		var ff cmdconfig.FilesFlag
+		ff.SetDefaults("fields.yaml")
+		ctx, _, _, err := cmdconfig.ConfigHook[fieldsConfig]{
+			Files:          &ff,
+			Spec:           cmdconfig.Spec{AppDir: "hookstest"},
+			ValidateFields: validateFields,
+		}.Run(context.Background())
+		return ctx, err
+	}
+	// The walk is opt-in.
+	ctx, err := run(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The configuration and the files are always added to the context.
+	if cfg, ok := cmdutil.ContextValue[fieldsConfig](ctx); !ok || !cfg.Field.Bad {
+		t.Errorf("got %+v, %v", cfg, ok)
+	}
+	if loc, ok := cmdutil.ContextValue[*cmdconfig.Located](ctx); !ok || len(loc.YAML) != 1 {
+		t.Errorf("got %+v, %v", loc, ok)
+	}
+	if _, err = run(true); err == nil || !strings.Contains(err.Error(), "field: invalid argument") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestConfigExtension(t *testing.T) {
+	const spec = `name: tool
+summary: a tool
+commands:
+  - name: run
+    summary: run the tool
+  {{range subcmdExtension "config"}}{{.}}
+  {{end}}
+`
+	var out bytes.Buffer
+	cc := cmdconfig.ConfigCommands[hookConfig]{Output: &out, Summary: "tool options\n"}
+	cmdSet := subcmd.MustFromYAMLTemplate(spec, cmdconfig.ConfigExtension(cc))
+	cmdSet.MustAddExtensions()
+	cmdSet.Set("run").MustRunner(func(context.Context, any, []string) error { return nil }, &struct{}{})
+
+	ctx := cmdutil.ContextWithValue(context.Background(), hookConfig{Name: "shown"})
+	if err := cmdSet.DispatchWithArgs(ctx, "tool", "config", "show"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "name: shown") {
+		t.Errorf("got %q", out.String())
+	}
+	out.Reset()
+	if err := cmdSet.DispatchWithArgs(ctx, "tool", "config", "describe"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "tool options") {
+		t.Errorf("got %q", out.String())
 	}
 }

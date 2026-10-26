@@ -1,7 +1,7 @@
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
-cloudeng.io/sys v0.0.0-20261020215554-f8f4678915d5 h1:GrsvwmlxEnL0vadXWYJOwpqyCHSnx1gfUPdapNax+28=
-cloudeng.io/sys v0.0.0-20261020215554-f8f4678915d5/go.mod h1:zhfXn7rPBXaxpsWlmQ+Dish8DrMcVOocgXMNPS5BEQo=
+cloudeng.io/sys v0.0.0-20261024235640-5050ffdc866a h1:q0kLZDYN44BPOJnaEabQH/eySuIc5/0ybaXXxzBw8oc=
+cloudeng.io/sys v0.0.0-20261024235640-5050ffdc866a/go.mod h1:zhfXn7rPBXaxpsWlmQ+Dish8DrMcVOocgXMNPS5BEQo=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e h1:88FLgbskFkcsZSgh3jncYqYBg1J2eLHGzmdp74APrCQ=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e/go.mod h1:tUOArMXLISe8OY+lHimWwdHMev5N7MwQGczQgTYZb3Y=
 github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 h1:m2xcjRABtG288vnlV3U/PKh/HnPURxZp50RKNUwBxM8=

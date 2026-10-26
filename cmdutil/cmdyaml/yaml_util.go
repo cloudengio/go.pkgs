@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 
-	"cloudeng.io/cmdutil/cmdconfig"
 	"cloudeng.io/file"
 	"cloudeng.io/file/localfs"
 	"gopkg.in/yaml.v3"
@@ -64,6 +63,16 @@ func WithExpandMapping(fn func(string) string) Option {
 	}
 }
 
+// WithUnresolvedEmpty causes a reference that is expanded using the mapping
+// of WithExpandMapping, and for which it returns an empty string, to be
+// replaced by it, ie. to expand to nothing, as os.Expand does, rather than
+// being left in the spec as ${NAME}.
+func WithUnresolvedEmpty() Option {
+	return func(opts *parserOptions) {
+		opts.unresolvedEmpty = true
+	}
+}
+
 // WithFS sets the file system used by ParseFiles. Defaults to the local OS
 // file system rooted at the current working directory.
 func WithFS(fs file.ReadFileFS) Option {
@@ -91,6 +100,7 @@ type parserOptions struct {
 	seqMergeKey      string
 	fs               file.ReadFileFS
 	expandEnv        func(string) string
+	unresolvedEmpty  bool
 }
 
 // Parser parses and merges YAML configurations into a destination struct,
@@ -110,6 +120,14 @@ func NewParser(opts ...Option) *Parser {
 		p.fs = localfs.New()
 	}
 	return p
+}
+
+// expand expands the references in spec using the mapping, if there is one.
+func (p *Parser) expand(spec []byte) []byte {
+	if p.expandEnv != nil && p.unresolvedEmpty {
+		return []byte(os.Expand(string(spec), p.expandEnv))
+	}
+	return expandEnvPreserving(spec, p.expandEnv)
 }
 
 func expandEnvPreserving(spec []byte, mapping func(string) string) []byte {
@@ -134,7 +152,7 @@ func (p *Parser) Parse(cfg any, specs ...[]byte) error {
 	}
 	ps := newParseState(p.strict, p.variablesMapName, p.seqMergeKey)
 	for _, spec := range specs {
-		spec = expandEnvPreserving(spec, p.expandEnv)
+		spec = p.expand(spec)
 		if err := ps.parse("", spec, cfg); err != nil {
 			return err
 		}
@@ -159,7 +177,7 @@ func (p *Parser) ParseFiles(ctx context.Context, cfg any, filenames ...string) e
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filename, err)
 		}
-		spec = expandEnvPreserving(spec, p.expandEnv)
+		spec = p.expand(spec)
 		if err := ps.parse(filename, spec, cfg); err != nil {
 			return err
 		}
@@ -564,47 +582,6 @@ func yamlTypeErrorWithSource(filename string, lineAdjustment int, specLines [][]
 		}
 	}
 	return &yaml.TypeError{Errors: newErrors}
-}
-
-// LocateConfigFilePath searches for the first configuration file that matches the
-// given name in path (as expected by filepath.SplitList). The search order is
-// as follows:
-//  1. If name is an absolute path and the file exists, it is returned, if it
-//     does not exist an empty string is returned. If it exists and an error
-//     other than "file not found" occurs, the filename is returned so that the
-//     caller can attempt to open it and handle the error.
-//  2. For each directory in path, the following are checked in order:
-//     a. dir/name.yaml|yml
-//     b. dir/.name.yaml|yml
-//
-// 3. If no matching file is found, an empty string is returned.
-//
-// It is cmdconfig.LocateFilePath restricted to the suffixes that
-// Suffixes returns.
-func LocateConfigFilePath(name, path string) string {
-	return cmdconfig.LocateFilePath(name, path, suffixes...)
-}
-
-// LocateConfigFileInDir searches for a config file with the given name using
-// the search path returned by cmdconfig.SearchPath.
-// If name is an absolute path, it is used directly.
-// If no matching file is found, an empty string is returned.
-//
-// It is cmdconfig.LocateFile restricted to the suffixes that
-// Suffixes returns.
-func LocateConfigFileInDir(name, appDir string) string {
-	return cmdconfig.LocateFile(name, appDir, suffixes...)
-}
-
-// LocateConfigFilesInDir searches for multiple config files with the given
-// names in the current directory, the user's configuration directory, and
-// additional platform-specific locations. It returns a slice of found file
-// paths and a slice of missing file names.
-//
-// It is cmdconfig.LocateFiles restricted to the suffixes that
-// Suffixes returns.
-func LocateConfigFilesInDir(appDir string, name ...string) ([]string, []string) {
-	return cmdconfig.LocateFiles(appDir, suffixes, name...)
 }
 
 // WriteConfig writes cfg as YAML to wr. Returns an error if the write fails.

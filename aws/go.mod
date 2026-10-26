@@ -6,7 +6,7 @@ require (
 	cloudeng.io/cicd v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/file v0.0.0-20260909165456-ddaa2de546a0
+	cloudeng.io/file v0.0.0-20261024235640-5050ffdc866a
 	cloudeng.io/logging v0.0.0-20260923165344-0acebac4c1e9
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
@@ -32,7 +32,7 @@ require (
 require (
 	cloudeng.io/algo v0.0.0-20261020215554-f8f4678915d5 // indirect
 	cloudeng.io/os v0.0.0-20260923165344-0acebac4c1e9 // indirect
-	cloudeng.io/sys v0.0.0-20261020215554-f8f4678915d5 // indirect
+	cloudeng.io/sys v0.0.0-20261024235640-5050ffdc866a // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.23 // indirect

@@ -273,3 +273,19 @@ func TestFilesFlagLocatePath(t *testing.T) {
 		t.Errorf("got %+v, %v", loc, err)
 	}
 }
+
+func TestSearchPathFor(t *testing.T) {
+	dirs := redirectConfigDir(t, "user-name")
+	if dirs.xdg == "" {
+		t.Skip("no XDG directory on this platform")
+	}
+	xdg := filepath.Join(filepath.Dir(dirs.xdg), "xdg-name")
+	want := []string{".", dirs.user, xdg}
+	if got := filepath.SplitList(cmdconfig.SearchPathFor("user-name", "xdg-name")); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// With the same name for both it is SearchPath.
+	if got, want := cmdconfig.SearchPathFor("app", "app"), cmdconfig.SearchPath("app"); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

@@ -15,8 +15,8 @@ import (
 	"cloudeng.io/cmdutil/cmdconfig"
 )
 
-// yamlSuffixes are the suffixes used by cmdyaml.LocateConfigFilePath and are
-// used here as a representative set.
+// yamlSuffixes are the suffixes of YAML files and are used here as a
+// representative set.
 var yamlSuffixes = []string{".yaml", ".yml"}
 
 func writeConfigFile(t *testing.T, dir, name string) string {
