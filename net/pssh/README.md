@@ -173,6 +173,20 @@ WithKnownHosts.
 
 
 ```go
+func WithInterfaceRecovery(enable bool) Option
+```
+WithInterfaceRecovery enables retrying a connection that failed because
+the route to the host could not reach it, by way of each local interface in
+turn. See netutil.Dialer, which does the work and describes when it helps.
+
+It is off by default, and is worth enabling only for a host on a subnet that
+this system is attached to more than once, such as a machine on the same
+LAN over both wired ethernet and wi-fi. Anywhere else a host that cannot be
+reached is simply not reachable, and trying every interface only delays the
+error that says so.
+
+
+```go
 func WithKnownHosts(files ...string) Option
 ```
 WithKnownHosts specifies the known hosts files used to verify the server,
