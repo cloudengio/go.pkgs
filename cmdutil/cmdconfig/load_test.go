@@ -42,7 +42,7 @@ func TestLoad(t *testing.T) {
 	var ff cmdconfig.FilesFlag
 	ff.SetDefaults("shared.yaml", "app.yaml", "one.env", "two.env", "absent.yaml")
 	var cfg config
-	loc, err := cmdconfig.Load(context.Background(), &cfg, &ff, cmdconfig.Spec{AppDir: "loadtest"})
+	loc, err := cmdconfig.Load(context.Background(), &cfg, &ff, cmdconfig.Spec{Path: cmdconfig.SearchPath("loadtest")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestLoadErrors(t *testing.T) {
 	type config struct {
 		Name string `yaml:"name"`
 	}
-	spec := cmdconfig.Spec{AppDir: "loadtest"}
+	spec := cmdconfig.Spec{Path: cmdconfig.SearchPath("loadtest")}
 	load := func(files string) (*cmdconfig.Located, error) {
 		var ff cmdconfig.FilesFlag
 		if err := ff.Set(files); err != nil {
@@ -123,7 +123,7 @@ func TestLoadUnresolvedEmpty(t *testing.T) {
 	var cfg struct {
 		Name string `yaml:"name"`
 	}
-	spec := cmdconfig.Spec{AppDir: "loadtest"}
+	spec := cmdconfig.Spec{Path: cmdconfig.SearchPath("loadtest")}
 	if _, err := cmdconfig.Load(context.Background(), &cfg, &ff, spec); err != nil || cfg.Name != "a${LOAD_TEST_UNDEFINED}b" {
 		t.Fatalf("by default an unresolved reference is preserved: got %q, %v", cfg.Name, err)
 	}
@@ -148,7 +148,7 @@ func TestLoadSetDefaults(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "one.yaml", "name: from-file\n")
-	spec := cmdconfig.Spec{AppDir: "loadtest"}
+	spec := cmdconfig.Spec{Path: cmdconfig.SearchPath("loadtest")}
 
 	var withFile defaulted
 	var ff cmdconfig.FilesFlag

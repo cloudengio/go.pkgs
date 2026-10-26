@@ -157,7 +157,7 @@ func TestFilesFlagLocate(t *testing.T) {
 	writeConfigFile(t, dirs.user, "shared.yaml")
 	writeConfigFile(t, dirs.cwd, "app.yaml")
 	vars := writeConfigFile(t, dirs.user, "vars.env")
-	spec := cmdconfig.Spec{AppDir: "app"}
+	spec := cmdconfig.Spec{Path: cmdconfig.SearchPath("app")}
 
 	// Defaults: all those that exist, in order; the missing are not an error.
 	var f cmdconfig.FilesFlag
@@ -194,7 +194,7 @@ func TestFilesFlagLocate(t *testing.T) {
 func TestFilesFlagLocateSpecified(t *testing.T) {
 	dirs := redirectConfigDir(t, "app")
 	writeConfigFile(t, dirs.cwd, "app.yaml")
-	spec := cmdconfig.Spec{AppDir: "app"}
+	spec := cmdconfig.Spec{Path: cmdconfig.SearchPath("app")}
 	var f cmdconfig.FilesFlag
 	// Files that are set must exist.
 	if err := f.Set("app.yaml,nope.yaml"); err != nil {
@@ -225,7 +225,7 @@ func TestFilesFlagLocateEnvVar(t *testing.T) {
 	writeConfigFile(t, dirs.user, "fromenv.yaml")
 	writeConfigFile(t, dirs.user, "fromflag.yaml")
 	spec := cmdconfig.Spec{
-		AppDir:  "app",
+		Path:    cmdconfig.SearchPath("app"),
 		EnvVars: map[cmdconfig.FileType]string{cmdconfig.FileTypeYAML: "CMDCONFIG_TEST_CONFIG"},
 	}
 	var f cmdconfig.FilesFlag
@@ -266,8 +266,7 @@ func TestFilesFlagLocatePath(t *testing.T) {
 	writeConfigFile(t, second, "cfg.yaml")
 	var f cmdconfig.FilesFlag
 	f.SetDefaults("cfg.yaml")
-	// The path is used rather than one derived from AppDir.
-	spec := cmdconfig.Spec{AppDir: "ignored", Path: strings.Join([]string{first, second}, string(filepath.ListSeparator))}
+	spec := cmdconfig.Spec{Path: strings.Join([]string{first, second}, string(filepath.ListSeparator))}
 	loc, err := f.Locate(spec)
 	if err != nil || !slices.Equal(loc.YAML, []string{filepath.Join(second, "cfg.yaml")}) || loc.SearchPath != spec.Path {
 		t.Errorf("got %+v, %v", loc, err)
@@ -287,5 +286,17 @@ func TestSearchPathFor(t *testing.T) {
 	// With the same name for both it is SearchPath.
 	if got, want := cmdconfig.SearchPathFor("app", "app"), cmdconfig.SearchPath("app"); got != want {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestFilesFlagLocateDefaultPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeConfigFile(t, dir, "cfg.yaml")
+	var f cmdconfig.FilesFlag
+	f.SetDefaults("cfg.yaml")
+	loc, err := f.Locate(cmdconfig.Spec{})
+	if err != nil || !slices.Equal(loc.YAML, []string{"cfg.yaml"}) || loc.SearchPath != "." {
+		t.Errorf("got %+v, %v", loc, err)
 	}
 }

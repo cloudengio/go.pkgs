@@ -343,11 +343,9 @@ func (f *FilesFlag) LocateFilesPath(typ FileType, ignoreDefault bool, path strin
 
 // Spec specifies how the files of a FilesFlag are located.
 type Spec struct {
-	// AppDir is the application directory that the files are searched for
-	// in, see SearchPath.
-	AppDir string
-	// Path, if set, is the search path, in the form expected by
-	// filepath.SplitList, to use instead of that derived from AppDir.
+	// Path is the search path for the files, in the form expected by
+	// filepath.SplitList, see SearchPath and SearchPathFor. It defaults to the
+	// current directory.
 	Path string
 	// EnvVars names, per type of file, an environment variable whose value is
 	// a comma-separated list of files, which are used in place of the defaults
@@ -390,7 +388,7 @@ func (l *Located) Files(typ FileType) []string {
 func (f *FilesFlag) Locate(spec Spec) (*Located, error) {
 	path := spec.Path
 	if path == "" {
-		path = SearchPath(spec.AppDir)
+		path = "."
 	}
 	loc := &Located{SearchPath: path}
 	for _, typ := range []FileType{FileTypeYAML, FileTypeEnv, FileTypeJSON} {
