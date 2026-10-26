@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	cloudeng.io/encoding v0.0.0-20261026191912-bcd1dece5d6c
 	cloudeng.io/file v0.0.0-20261026191912-bcd1dece5d6c
-	cloudeng.io/os v0.0.0-20261020215554-f8f4678915d5
+	cloudeng.io/os v0.0.0-20261026191912-bcd1dece5d6c
 )
 
 require (
