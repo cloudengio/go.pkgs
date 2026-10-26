@@ -49,7 +49,7 @@ func runHooks(t *testing.T, dir string, required bool, args ...string) (hookConf
 	var runCtx context.Context
 	hook := cmdconfig.ConfigHook[hookConfig]{
 		Files:    &globals.Config,
-		Spec:     cmdconfig.Spec{AppDir: "hookstest"},
+		Spec:     cmdconfig.Spec{Path: cmdconfig.SearchPath("hookstest")},
 		Initial:  hookConfig{Name: "initial"},
 		Required: required,
 		Store: func(ctx context.Context, cfg hookConfig, l *cmdconfig.Located) context.Context {
@@ -160,7 +160,7 @@ func TestConfigHookValidateFields(t *testing.T) {
 		ff.SetDefaults("fields.yaml")
 		ctx, _, _, err := cmdconfig.ConfigHook[fieldsConfig]{
 			Files:          &ff,
-			Spec:           cmdconfig.Spec{AppDir: "hookstest"},
+			Spec:           cmdconfig.Spec{Path: cmdconfig.SearchPath("hookstest")},
 			ValidateFields: validateFields,
 		}.Run(context.Background())
 		return ctx, err
