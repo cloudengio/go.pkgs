@@ -1,0 +1,13 @@
+--- Overview
+Removes the AppDir field from cmdconfig.Spec, leaving Path as the only way to set the search path. When Path is empty, the search path now defaults to the current directory.
+
+--- Key Changes
+cmdutil/cmdconfig
+  * Spec: removed AppDir. Path is now the only search-path setting.
+  * FilesFlag.Locate: an empty Spec.Path now defaults to "." instead of SearchPath(spec.AppDir).
+  * Updated the Spec docs in configfile.go and README.md to match.
+  * Tests: switched from Spec{AppDir: x} to Spec{Path: cmdconfig.SearchPath(x)}. Added TestFilesFlagLocateDefaultPath to check the current-directory default.
+
+--- Breaking Changes
+  * cmdconfig.Spec.AppDir is removed. Callers should use Spec{Path: cmdconfig.SearchPath(appDir)} instead.
+  * A Spec with no Path now searches only the current directory. It no longer searches the per-app directories that SearchPath provided.
