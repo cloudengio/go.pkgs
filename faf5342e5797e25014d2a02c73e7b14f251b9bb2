@@ -1,0 +1,33 @@
+--- Overview
+This PR moves config loading and the config pre-hook into cmdconfig, which removes the import of cmdconfig from cmdyaml. It also adds reusable config show and config describe subcommands, field-level validation and SetDefaults support, so client tools need less duplicated code.
+
+--- Key Changes
+cmdutil/cmdconfig
+  * Load and LoadFiles moved here from cmdyaml. Both now call cfg.SetDefaults() if the method exists, whether or not any files were found. It is not called if parsing fails.
+  * ConfigHook[T] moved here from subcmd. It now always adds the config T and the *Located files to the context with cmdutil.ContextWithValue; Store is optional. A new ValidateFields option runs cmdyaml.ValidateFields before the config's own Validate.
+  * New ConfigCommands[T] with Show and Describe runners:
+    * Show prints the config as YAML, preceded by comments naming the files it came from.
+    * Describe prints docs built from the doc struct tags, plus any extra Describers.
+  * New ConfigExtension[T] and ConfigExtensionName ("config") add the config show and config describe subcommands to a YAML command tree with {{range subcmdExtension "config"}}.
+  * New SearchPathFor(userDir, xdgDir) lets the user config directory and the XDG directory use different names. SearchPath now calls it with the same name for both.
+
+cmdutil/cmdyaml
+  * New ValidateFields(cfg) walks the struct, including pointers, interfaces, slices, arrays, maps and inlined fields. It calls Validate on each field that has one and prefixes any error with the field's YAML path (e.g. tls_config.hosts[2]: ...).
+  * New WithUnresolvedEmpty() option makes references that resolve to an empty value expand to nothing, as os.Expand does, instead of being left as ${NAME}.
+  * Removed LocateConfigFilePath, LocateConfigFileInDir and LocateConfigFilesInDir, and their tests.
+  * No longer imports cmdconfig.
+
+cmdutil/subcmd
+  * ConfigHook removed (moved to cmdconfig). LoggerHook moved, unchanged, into its own file, logger_hook.go.
+
+cmdutil/go.mod
+  * Bumped cloudeng.io/file, cloudeng.io/types and cloudeng.io/sys.
+
+--- Breaking Changes
+  * cmdyaml.Load and cmdyaml.LoadFiles are now cmdconfig.Load and cmdconfig.LoadFiles, and take cmdyaml.Option.
+  * subcmd.ConfigHook is now cmdconfig.ConfigHook.
+  * Removed cmdyaml.LocateConfigFilePath, LocateConfigFileInDir and LocateConfigFilesInDir. Use cmdconfig.LocateFilePath, LocateFile and LocateFiles with cmdyaml.Suffixes() instead.
+  * Load and LoadFiles now call SetDefaults() on the config if it has that method, even when there are no YAML files. Before, the config was left unchanged when there were none.
+  * ConfigHook.Run now always stores the config T and the *Located files in the context.
+
+ Generated with Claude Code (https://claude.com/claude-code)
