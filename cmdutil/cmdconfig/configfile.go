@@ -31,11 +31,18 @@ import (
 // A directory is included whether or not it exists; locating a file in one
 // that does not is simply a miss.
 func SearchPath(appDir string) string {
+	return SearchPathFor(appDir, appDir)
+}
+
+// SearchPathFor is like SearchPath for an application that uses a different
+// directory name in the user's configuration directory, userDir, than in
+// $HOME/.config, xdgDir.
+func SearchPathFor(userDir, xdgDir string) string {
 	dirs := []string{"."}
 	if configDir, err := os.UserConfigDir(); err == nil {
-		dirs = append(dirs, filepath.Join(configDir, appDir))
+		dirs = append(dirs, filepath.Join(configDir, userDir))
 	}
-	dirs = withXDGConfigDir(dirs, appDir)
+	dirs = withXDGConfigDir(dirs, xdgDir)
 	return strings.Join(dedup(dirs), string(os.PathListSeparator))
 }
 

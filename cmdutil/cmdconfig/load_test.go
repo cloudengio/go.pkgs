@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package cmdyaml_test
+package cmdconfig_test
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func TestLoad(t *testing.T) {
 	var ff cmdconfig.FilesFlag
 	ff.SetDefaults("shared.yaml", "app.yaml", "one.env", "two.env", "absent.yaml")
 	var cfg config
-	loc, err := cmdyaml.Load(context.Background(), &cfg, &ff, cmdconfig.Spec{AppDir: "loadtest"})
+	loc, err := cmdconfig.Load(context.Background(), &cfg, &ff, cmdconfig.Spec{AppDir: "loadtest"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestLoadErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		var cfg config
-		return cmdyaml.Load(context.Background(), &cfg, &ff, spec)
+		return cmdconfig.Load(context.Background(), &cfg, &ff, spec)
 	}
 	// A file that was set and does not exist.
 	if _, err := load("missing.yaml"); err == nil || !strings.Contains(err.Error(), "missing.yaml") {
@@ -89,7 +89,7 @@ func TestLoadErrors(t *testing.T) {
 	// No YAML at all is not an error.
 	var ff cmdconfig.FilesFlag
 	var cfg config
-	loc, err := cmdyaml.Load(context.Background(), &cfg, &ff, spec)
+	loc, err := cmdconfig.Load(context.Background(), &cfg, &ff, spec)
 	if err != nil || len(loc.YAML) != 0 || cfg.Name != "" {
 		t.Errorf("unexpected: %v, %v, %+v", loc, err, cfg)
 	}
@@ -106,10 +106,78 @@ func TestLoadFiles(t *testing.T) {
 	}
 	loc := &cmdconfig.Located{YAML: []string{one}, Env: []string{vars}}
 	loc.YAML = append(loc.YAML, two)
-	if err := cmdyaml.LoadFiles(context.Background(), &cfg, loc); err != nil {
+	if err := cmdconfig.LoadFiles(context.Background(), &cfg, loc); err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Name != "named" || cfg.Other != 2 {
 		t.Errorf("got %+v", cfg)
+	}
+}
+
+func TestLoadUnresolvedEmpty(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "one.yaml", "name: a${LOAD_TEST_UNDEFINED}b\n")
+	var ff cmdconfig.FilesFlag
+	ff.SetDefaults("one.yaml")
+	var cfg struct {
+		Name string `yaml:"name"`
+	}
+	spec := cmdconfig.Spec{AppDir: "loadtest"}
+	if _, err := cmdconfig.Load(context.Background(), &cfg, &ff, spec); err != nil || cfg.Name != "a${LOAD_TEST_UNDEFINED}b" {
+		t.Fatalf("by default an unresolved reference is preserved: got %q, %v", cfg.Name, err)
+	}
+	if _, err := cmdconfig.Load(context.Background(), &cfg, &ff, spec, cmdyaml.WithUnresolvedEmpty()); err != nil || cfg.Name != "ab" {
+		t.Fatalf("got %q, %v", cfg.Name, err)
+	}
+}
+
+type defaulted struct {
+	Name  string `yaml:"name"`
+	Extra string `yaml:"extra"`
+}
+
+func (d *defaulted) SetDefaults() {
+	if d.Name == "" {
+		d.Name = "default-name"
+	}
+	d.Extra = d.Name + "-extra"
+}
+
+func TestLoadSetDefaults(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "one.yaml", "name: from-file\n")
+	spec := cmdconfig.Spec{AppDir: "loadtest"}
+
+	var withFile defaulted
+	var ff cmdconfig.FilesFlag
+	ff.SetDefaults("one.yaml")
+	if _, err := cmdconfig.Load(context.Background(), &withFile, &ff, spec); err != nil {
+		t.Fatal(err)
+	}
+	if withFile.Name != "from-file" || withFile.Extra != "from-file-extra" {
+		t.Errorf("got %+v", withFile)
+	}
+
+	// Defaults are applied when there are no files too.
+	var none defaulted
+	var empty cmdconfig.FilesFlag
+	if _, err := cmdconfig.Load(context.Background(), &none, &empty, spec); err != nil {
+		t.Fatal(err)
+	}
+	if none.Name != "default-name" || none.Extra != "default-name-extra" {
+		t.Errorf("got %+v", none)
+	}
+
+	// ... but not when a file cannot be parsed.
+	writeFile(t, dir, "bad.yaml", "unknown_field: 1\n")
+	var bad defaulted
+	var ffBad cmdconfig.FilesFlag
+	if err := ffBad.Set("bad.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cmdconfig.Load(context.Background(), &bad, &ffBad, spec); err == nil || bad.Name != "" {
+		t.Errorf("got %+v, %v", bad, err)
 	}
 }
