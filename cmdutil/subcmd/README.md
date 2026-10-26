@@ -444,45 +444,6 @@ func (c *CommandSetYAML) String() string
 
 
 
-### Type ConfigHook
-```go
-type ConfigHook[T any] struct {
-	// ID identifies the hook in error reporting, it defaults to
-	// "withConfigPrehook".
-	ID string
-	// Files is the flag that holds the names of the files.
-	Files *cmdconfig.FilesFlag
-	// Spec determines how the files are located.
-	Spec cmdconfig.Spec
-	// Initial is the value of the configuration before the files are parsed
-	// into it, and the value that is used if there are none.
-	Initial T
-	// Required causes it to be an error for there to be no YAML file.
-	Required bool
-	// ParseOptions are passed to cmdyaml.Load.
-	ParseOptions []cmdyaml.Option
-	// Store is called with the configuration, and the files it was located
-	// in, to add them to the context for the commands.
-	Store func(ctx context.Context, cfg T, loc *cmdconfig.Located) context.Context
-}
-```
-ConfigHook is a PreHook, see its Run method, that loads the configuration of
-a command from the files named by a FilesFlag, registered as a global flag,
-and the environment variables files that go with them.
-
-### Methods
-
-```go
-func (h ConfigHook[T]) Run(ctx context.Context) (context.Context, string, PostHook, error)
-```
-Run locates and parses the files, as cmdyaml.Load does, calls the Validate
-method of the configuration, if it has one and it was read from a file,
-and calls Store. Errors from parsing and validating say which files they are
-in and that they need to be edited. It implements PreHook.
-
-
-
-
 ### Type CurrentCommand
 ```go
 type CurrentCommand struct {

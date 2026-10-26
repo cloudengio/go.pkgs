@@ -5,7 +5,37 @@ import cloudeng.io/cmdutil/cmdconfig
 ```
 
 
+## Constants
+### ConfigExtensionName
+```go
+ConfigExtensionName = "config"
+
+```
+ConfigExtensionName is the name of the extension returned by
+ConfigExtension, for use in the YAML template of a command tree:
+
+    {{range subcmdExtension "config"}}{{.}}
+    {{end}}
+
+
+
 ## Functions
+### Func ConfigExtension
+```go
+func ConfigExtension[T any](cc ConfigCommands[T]) subcmd.Extension
+```
+ConfigExtension returns an Extension that adds the 'config show' and 'config
+describe' commands, implemented by cc, to a command tree. It is used with
+ConfigHook, which makes the configuration available to Show.
+
+### Func LoadFiles
+```go
+func LoadFiles(ctx context.Context, cfg any, loc *Located, opts ...cmdyaml.Option) error
+```
+LoadFiles is like Load for files that have already been located. Callers can
+add to or edit the files in loc first, for example to add a YAML file that
+is not named by a FilesFlag.
+
 ### Func LocateFile
 ```go
 func LocateFile(name, appDir string, suffixes ...string) string
@@ -80,9 +110,99 @@ once rather than twice.
 A directory is included whether or not it exists; locating a file in one
 that does not is simply a miss.
 
+### Func SearchPathFor
+```go
+func SearchPathFor(userDir, xdgDir string) string
+```
+SearchPathFor is like SearchPath for an application that uses a different
+directory name in the user's configuration directory, userDir, than in
+$HOME/.config, xdgDir.
+
 
 
 ## Types
+### Type ConfigCommands
+```go
+type ConfigCommands[T any] struct {
+	// Summary is written at the top of the output of Describe.
+	Summary string
+	// Describers are called by Describe, in order, after the documentation
+	// for T, to write further documentation to the output.
+	Describers []func(io.Writer) error
+	// Output is where the output is written, os.Stdout if nil.
+	Output io.Writer
+}
+```
+ConfigCommands implements commands to show, and to document, the YAML
+configuration of type T. The methods are subcmd.Runners; see ConfigExtension
+for adding them to a command set.
+
+### Methods
+
+```go
+func (c ConfigCommands[T]) Describe(_ context.Context, _ any, _ []string) error
+```
+Describe writes the documentation for the configuration type T, from its
+'doc' struct tags, see structdoc.Describe, followed by whatever Describers
+write.
+
+
+```go
+func (c ConfigCommands[T]) Show(ctx context.Context, _ any, _ []string) error
+```
+Show writes the configuration of type T carried by ctx, using
+cmdutil.ContextWithValue, as YAML preceded by comments naming the files that
+it was read from if the context carries the *Located for them.
+
+
+
+
+### Type ConfigHook
+```go
+type ConfigHook[T any] struct {
+	// ID identifies the hook in error reporting, it defaults to
+	// "withConfigPrehook".
+	ID string
+	// Files is the flag that holds the names of the files.
+	Files *FilesFlag
+	// Spec determines how the files are located.
+	Spec Spec
+	// Initial is the value of the configuration before the files are parsed
+	// into it, and the value that is used if there are none.
+	Initial T
+	// Required causes it to be an error for there to be no YAML file.
+	Required bool
+	// ParseOptions are passed to Load.
+	ParseOptions []cmdyaml.Option
+	// ValidateFields causes cmdyaml.ValidateFields to be called, before the
+	// Validate method of the configuration, if it has one.
+	ValidateFields bool
+	// Store, if not nil, is called with the configuration, and the files it was
+	// located in, to add anything else the commands need to the context. The
+	// configuration, as a T, and the files, as a *Located, are always
+	// added, see cmdutil.ContextWithValue.
+	Store func(ctx context.Context, cfg T, loc *Located) context.Context
+}
+```
+ConfigHook is a PreHook, see its Run method, that loads the configuration of
+a command from the files named by a FilesFlag, registered as a global flag,
+and the environment variables files that go with them.
+
+### Methods
+
+```go
+func (h ConfigHook[T]) Run(ctx context.Context) (context.Context, string, subcmd.PostHook, error)
+```
+Run locates and parses the files, as Load does, and validates the
+configuration if it was read from a file: the fields, if ValidateFields
+is set, and then the configuration itself if it has a Validate method.
+It adds the configuration and the files to the context and calls Store.
+Errors from parsing and validating say which files they are in and that they
+need to be edited. It implements PreHook.
+
+
+
+
 ### Type FileType
 ```go
 type FileType int
@@ -208,6 +328,29 @@ type Located struct {
 }
 ```
 Located is the result of locating the files of a FilesFlag.
+
+### Functions
+
+```go
+func Load(ctx context.Context, cfg any, ff *FilesFlag, spec Spec, opts ...cmdyaml.Option) (*Located, error)
+```
+Load locates the files held by ff, as per spec, and parses the YAML files
+among them into cfg. Parsing is strict, see WithStrictFields, and $VAR and
+${VAR} references in the YAML are expanded from the process environment and,
+for any variable that it does not define, from the environment variables
+files, see envfile.ExpandingMapping; where several define a variable the
+later file takes precedence. opts are applied after, and so can override,
+those. The files that were located are returned, even if there was an error
+parsing them, so that they can be reported, but not if there was an error
+locating them.
+
+Once any files have been parsed, or if there are none, the SetDefaults
+method of cfg, if it has one, is called, so that it can fill in whatever
+the files did not set, whether or not there were any. It is not an error for
+there to be no YAML file: a caller for which one is required should check
+the result.
+
+
 
 ### Methods
 
