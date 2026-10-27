@@ -1,0 +1,17 @@
+--- Overview
+Adds two mappings to cmdutil/envfile for use with ChainMapping/os.Expand. One supplies default values. The other records variables that nothing else defines, so they can be reported as errors.
+
+--- Key Changes
+  * cmdutil/envfile
+    * DefaultsMapping(defaults map[string]string): returns a mapping that looks names up in a copy of defaults. Put it after the other mappings in a chain so it only fills gaps.
+    * Unresolved: put its Mapping method last in a chain. It records each name it is asked for once, in first-seen order, and returns "".
+      * Names() returns the recorded names.
+      * Err() returns an errors.M holding one *UnresolvedError per name, or nil if none were recorded.
+      * The zero value is ready to use and safe for concurrent use.
+    * UnresolvedError{Name}: an error type that errors.As can match.
+    * README updated, with tests covering copy semantics, ordering, deduplication, error matching and concurrent use.
+
+--- Breaking Changes
+None
+
+ Generated with Claude Code (https://claude.com/claude-code)
