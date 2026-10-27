@@ -38,14 +38,12 @@ func Load(ctx context.Context, cfg any, ff *FilesFlag, spec Spec, opts ...cmdyam
 // can add to or edit the files in loc first, for example to add a YAML file
 // that is not named by a FilesFlag.
 func LoadFiles(ctx context.Context, cfg any, loc *Located, opts ...cmdyaml.Option) error {
-	vars := &envfile.Variables{}
-	for _, file := range loc.Env {
-		if err := vars.MergeFile(file); err != nil {
-			return fmt.Errorf("read environment variables from %v: %w", file, err)
-		}
+	mapping, err := loc.ExpandMapping()
+	if err != nil {
+		return err
 	}
 	if len(loc.YAML) > 0 {
-		opts = append([]cmdyaml.Option{cmdyaml.WithStrictFields(true), cmdyaml.WithExpandMapping(envfile.ExpandingMapping(vars))}, opts...)
+		opts = append([]cmdyaml.Option{cmdyaml.WithStrictFields(true), cmdyaml.WithExpandMapping(mapping)}, opts...)
 		if err := cmdyaml.NewParser(opts...).ParseFiles(ctx, cfg, loc.YAML...); err != nil {
 			return err
 		}
@@ -54,4 +52,28 @@ func LoadFiles(ctx context.Context, cfg any, loc *Located, opts ...cmdyaml.Optio
 		d.SetDefaults()
 	}
 	return nil
+}
+
+// ExpandMapping returns the mapping, with the signature expected by
+// os.Expand, that Load and LoadFiles expand references in the YAML files
+// with: from the process environment and then from the environment variables
+// files in l, see envfile.ExpandingMapping, followed by then, see
+// envfile.ChainMapping. It is for a caller that needs to extend that mapping,
+// for example with defaults, or to record the variables that are not defined,
+// and passes the result to them via cmdyaml.WithExpandMapping:
+//
+//	var unresolved envfile.Unresolved
+//	mapping, err := loc.ExpandMapping(envfile.DefaultsMapping(defaults), unresolved.Mapping)
+//	...
+//	err = cmdconfig.LoadFiles(ctx, &cfg, loc, cmdyaml.WithUnresolvedEmpty(), cmdyaml.WithExpandMapping(mapping))
+//	...
+//	if err := unresolved.Err(); err != nil { ... }
+func (l *Located) ExpandMapping(then ...func(string) string) (func(string) string, error) {
+	vars := &envfile.Variables{}
+	for _, file := range l.Env {
+		if err := vars.MergeFile(file); err != nil {
+			return nil, fmt.Errorf("read environment variables from %v: %w", file, err)
+		}
+	}
+	return envfile.ChainMapping(append([]func(string) string{envfile.ExpandingMapping(vars)}, then...)...), nil
 }
