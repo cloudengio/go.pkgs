@@ -30,6 +30,8 @@ import (
 //
 // A directory is included whether or not it exists; locating a file in one
 // that does not is simply a miss.
+//
+// See SearchPathUserDirs for a path that leaves the current directory out.
 func SearchPath(appDir string) string {
 	return SearchPathFor(appDir, appDir)
 }
@@ -38,11 +40,43 @@ func SearchPath(appDir string) string {
 // directory name in the user's configuration directory, userDir, than in
 // $HOME/.config, xdgDir.
 func SearchPathFor(userDir, xdgDir string) string {
-	dirs := []string{"."}
+	return joinSearchPath(append([]string{"."}, userConfigDirs(userDir, xdgDir)...))
+}
+
+// SearchPathUserDirs is SearchPath without the current directory: it contains
+// the directories that belong to the user, ie. items 2 and 3 of the list in
+// SearchPath, and nothing else.
+//
+// It is for a command that is run in arbitrary directories, where a
+// configuration file in the current one is more likely to belong to whatever
+// is being worked on, or to another application, than to the command itself;
+// reading it means at best ignoring its contents and at worst failing to parse
+// them. Such a command can still be pointed at a file in the current directory
+// by being given its name, which it resolves against SearchPath instead.
+//
+// The result is empty when the user has no configuration directory at all,
+// which takes os.UserConfigDir failing and, on unix, $HOME being unset. Both
+// Spec and LocateFilePath read an empty path as the current directory, so a
+// command that must not fall back to it has to say so itself.
+func SearchPathUserDirs(appDir string) string {
+	return joinSearchPath(userConfigDirs(appDir, appDir))
+}
+
+// userConfigDirs returns the configuration directories that belong to the
+// user, ie. a search path without the current directory in it, for an
+// application named userDir in the user's configuration directory and xdgDir
+// in $HOME/.config.
+func userConfigDirs(userDir, xdgDir string) []string {
+	var dirs []string
 	if configDir, err := os.UserConfigDir(); err == nil {
 		dirs = append(dirs, filepath.Join(configDir, userDir))
 	}
-	dirs = withXDGConfigDir(dirs, xdgDir)
+	return withXDGConfigDir(dirs, xdgDir)
+}
+
+// joinSearchPath returns dirs in the form expected by filepath.SplitList,
+// with any directory that has already appeared removed.
+func joinSearchPath(dirs []string) string {
 	return strings.Join(dedup(dirs), string(os.PathListSeparator))
 }
 

@@ -353,6 +353,54 @@ func testConfigFilePathLocates(t *testing.T) {
 	}
 }
 
+// testConfigFilePathUserDirs covers SearchPathUserDirs: the same path with the
+// working directory left out, for a command that is run in directories whose
+// configuration files are not its own.
+func testConfigFilePathUserDirs(t *testing.T) {
+	dirs := redirectConfigDir(t, "app")
+
+	want := []string{dirs.user}
+	if dirs.xdg != "" {
+		want = append(want, dirs.xdg)
+	}
+	path := cmdconfig.SearchPathUserDirs("app")
+	if got := filepath.SplitList(path); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// A file in the working directory is not found, however exactly it is
+	// named, whilst one in a user directory is.
+	writeConfigFile(t, dirs.cwd, "cfg.yaml")
+	if got := cmdconfig.LocateFilePath("cfg", path, yamlSuffixes...); got != "" {
+		t.Errorf("the working directory was searched: found %v", got)
+	}
+	want2 := writeConfigFile(t, dirs.user, "cfg.yaml")
+	if got := cmdconfig.LocateFilePath("cfg", path, yamlSuffixes...); got != want2 {
+		t.Errorf("got %q, want %q", got, want2)
+	}
+}
+
+// testConfigFilePathUserDirsNone covers the one case in which
+// SearchPathUserDirs has nothing to return: a user with no configuration
+// directory of any kind.
+func testConfigFilePathUserDirsNone(t *testing.T) {
+	t.Chdir(t.TempDir())
+	// Leave os.UserConfigDir with nothing to work from, as
+	// testConfigFilePathNoUserConfigDir does.
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+	t.Setenv("AppData", "")
+	t.Setenv("home", "")
+	if dir, err := os.UserConfigDir(); err == nil {
+		t.Skipf("os.UserConfigDir still resolves to %v on %v", dir, runtime.GOOS)
+	}
+	// Unlike SearchPath, the working directory is not fallen back to: there is
+	// no directory to search at all.
+	if got, want := cmdconfig.SearchPathUserDirs("app"), ""; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // TestConfigFilePath covers the search path that LocateFilePath is
 // typically used with. Note that os.UserConfigDir is
 // $HOME/Library/Application Support on macOS, not $HOME/.config, so on that
@@ -362,6 +410,8 @@ func TestConfigFilePath(t *testing.T) {
 	t.Run("no duplicate directories", testConfigFilePathNoDuplicates)
 	t.Run("no user configuration directory", testConfigFilePathNoUserConfigDir)
 	t.Run("locates a file", testConfigFilePathLocates)
+	t.Run("user directories only", testConfigFilePathUserDirs)
+	t.Run("user directories only, with none", testConfigFilePathUserDirsNone)
 }
 
 func testLocateConfigFileInDir(t *testing.T) {
