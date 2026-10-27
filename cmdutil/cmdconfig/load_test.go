@@ -14,6 +14,7 @@ import (
 
 	"cloudeng.io/cmdutil/cmdconfig"
 	"cloudeng.io/cmdutil/cmdyaml"
+	"cloudeng.io/cmdutil/envfile"
 )
 
 func writeFile(t *testing.T, dir, name, contents string) string {
@@ -129,6 +130,39 @@ func TestLoadUnresolvedEmpty(t *testing.T) {
 	}
 	if _, err := cmdconfig.Load(context.Background(), &cfg, &ff, spec, cmdyaml.WithUnresolvedEmpty()); err != nil || cfg.Name != "ab" {
 		t.Fatalf("got %q, %v", cfg.Name, err)
+	}
+}
+
+func TestLocatedExpandMapping(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOAD_TEST_FROM_ENV", "env")
+	one := writeFile(t, dir, "one.yaml", "name: ${LOAD_TEST_FROM_ENV} ${LOAD_TEST_FROM_FILE} ${LOAD_TEST_DEFAULTED} ${LOAD_TEST_UNDEFINED}\n")
+	vars := writeFile(t, dir, "vars.env", "LOAD_TEST_FROM_FILE=file\nLOAD_TEST_DEFAULTED=file-not-default\n")
+	loc := &cmdconfig.Located{YAML: []string{one}, Env: []string{vars}}
+
+	var unresolved envfile.Unresolved
+	mapping, err := loc.ExpandMapping(
+		envfile.DefaultsMapping(map[string]string{"LOAD_TEST_DEFAULTED": "default", "LOAD_TEST_UNDEFINED": ""}),
+		unresolved.Mapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Name string `yaml:"name"`
+	}
+	if err := cmdconfig.LoadFiles(context.Background(), &cfg, loc, cmdyaml.WithUnresolvedEmpty(), cmdyaml.WithExpandMapping(mapping)); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.Name, "env file file-not-default"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := unresolved.Names(), []string{"LOAD_TEST_UNDEFINED"}; !slices.Equal(got, want) {
+		t.Errorf("unresolved: got %v, want %v", got, want)
+	}
+
+	loc.Env = append(loc.Env, filepath.Join(dir, "missing.env"))
+	if _, err := loc.ExpandMapping(); err == nil || !strings.Contains(err.Error(), "missing.env") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

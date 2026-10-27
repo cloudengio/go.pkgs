@@ -13,7 +13,7 @@ require (
 	cloudeng.io/sys v0.0.0-20261026191912-bcd1dece5d6c
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
 	cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
 )
