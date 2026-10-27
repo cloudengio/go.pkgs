@@ -377,6 +377,25 @@ the result.
 ### Methods
 
 ```go
+func (l *Located) ExpandMapping(then ...func(string) string) (func(string) string, error)
+```
+ExpandMapping returns the mapping, with the signature expected by os.Expand,
+that Load and LoadFiles expand references in the YAML files with: from the
+process environment and then from the environment variables files in l, see
+envfile.ExpandingMapping, followed by then, see envfile.ChainMapping. It is
+for a caller that needs to extend that mapping, for example with defaults,
+or to record the variables that are not defined, and passes the result to
+them via cmdyaml.WithExpandMapping:
+
+    var unresolved envfile.Unresolved
+    mapping, err := loc.ExpandMapping(envfile.DefaultsMapping(defaults), unresolved.Mapping)
+    ...
+    err = cmdconfig.LoadFiles(ctx, &cfg, loc, cmdyaml.WithUnresolvedEmpty(), cmdyaml.WithExpandMapping(mapping))
+    ...
+    if err := unresolved.Err(); err != nil { ... }
+
+
+```go
 func (l *Located) Files(typ FileType) []string
 ```
 Files returns the files of the specified type.
