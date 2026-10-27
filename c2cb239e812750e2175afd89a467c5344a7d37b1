@@ -1,0 +1,18 @@
+--- Overview
+Adds cmdconfig.SearchPathUserDirs, a version of SearchPath that leaves out the current directory. It's meant for commands that run in arbitrary directories, where a config file in the working directory probably belongs to something else.
+
+--- Key Changes
+cmdutil/cmdconfig
+  * New SearchPathUserDirs(appDir string) string returns only the user-owned config directories: os.UserConfigDir()/<appDir> and $HOME/.config/<appDir>.
+  * The result is empty when the user has no config directory. Spec and LocateFilePath read an empty path as the current directory, so a caller that must not fall back to it has to check for that itself.
+  * SearchPathFor is refactored onto two new internal helpers: userConfigDirs, which builds the user directories, and joinSearchPath, which removes duplicates and joins with os.PathListSeparator. Its behaviour is unchanged.
+  * SearchPath docs and the README now point to SearchPathUserDirs.
+
+Tests
+  * One test checks that the path holds only the user and XDG directories, that a file in the working directory is not found, and that a file in the user directory is.
+  * Another checks that an empty string comes back when os.UserConfigDir cannot resolve. It is skipped on platforms where it still resolves.
+
+--- Breaking Changes
+None
+
+ Generated with Claude Code (https://claude.com/claude-code)
