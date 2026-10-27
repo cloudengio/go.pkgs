@@ -28,6 +28,22 @@ Nil mappings are skipped, so an absent source can be passed as nil. With no
 mappings, or with none that yield a value, the returned function returns ""
 for every name; it is never nil and is always safe to call.
 
+### Func DefaultsMapping
+```go
+func DefaultsMapping(defaults map[string]string) func(string) string
+```
+DefaultsMapping returns a mapping, with the signature expected by os.Expand,
+that takes its values from defaults, which it copies. It is intended to come
+after the other mappings in a chain, see ChainMapping, so that it supplies a
+value only for a variable that none of them defines:
+
+    mapping := envfile.ChainMapping(
+    	envfile.ExpandingMapping(vars),
+    	envfile.DefaultsMapping(map[string]string{"REGION": "us-west-2"}),
+    	unresolved.Mapping)
+
+As with any mapping, a default that is empty is indistinguishable from none.
+
 ### Func ExpandingMapping
 ```go
 func ExpandingMapping(vars *Variables) func(string) string
@@ -129,6 +145,63 @@ Both tags use the same ${VAR} / $VAR syntax as os.Expand. Non-string fields
 are silently skipped regardless of tags.
 
 The struct must be passed as a non-nil pointer.
+
+
+
+
+### Type Unresolved
+```go
+type Unresolved struct {
+	// contains filtered or unexported fields
+}
+```
+Unresolved records the variables that could not be expanded. Its Mapping
+method is intended to be the last in a chain of mappings, see ChainMapping,
+so that it is called only for a variable that none of the others defines,
+which it records, and resolves to nothing. Once the expansion is done,
+Err reports whether any were recorded, and Names returns them. The zero
+value is ready for use, and it is safe for concurrent use.
+
+### Methods
+
+```go
+func (u *Unresolved) Err() error
+```
+Err returns nil if no variable was recorded, or an error that contains an
+*UnresolvedError for each that was, see errors.M.
+
+
+```go
+func (u *Unresolved) Mapping(name string) string
+```
+Mapping records name, once, however often it is called for it, and returns
+"".
+
+
+```go
+func (u *Unresolved) Names() []string
+```
+Names returns the names of the variables recorded, in the order in which
+they were first recorded.
+
+
+
+
+### Type UnresolvedError
+```go
+type UnresolvedError struct {
+	Name string
+}
+```
+UnresolvedError is the error recorded by Unresolved for a variable that
+could not be expanded.
+
+### Methods
+
+```go
+func (e *UnresolvedError) Error() string
+```
+Error implements error.
 
 
 
