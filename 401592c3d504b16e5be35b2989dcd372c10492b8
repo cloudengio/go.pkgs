@@ -1,0 +1,18 @@
+--- Overview
+Adds Located.ExpandMapping to cmdconfig. It returns the variable-expansion mapping that Load and LoadFiles use, so callers can add defaults or record unresolved variables. LoadFiles now uses this method instead of building the mapping inline.
+
+--- Key Changes
+  * cmdutil/cmdconfig
+    * New (*Located).ExpandMapping(then ...func(string) string) (func(string) string, error):
+      * Merges the env files in l.Env.
+      * Resolves variables from the process environment first, then from those files (envfile.ExpandingMapping).
+      * Chains any extra then mappings after that using envfile.ChainMapping, for example envfile.DefaultsMapping or envfile.Unresolved.Mapping.
+    * LoadFiles now gets its default mapping from loc.ExpandMapping(). Behavior and error wrapping (read environment variables from <file>: ...) are the same as before.
+    * The README documents the new method with an example: pass the result to LoadFiles via cmdyaml.WithExpandMapping, together with cmdyaml.WithUnresolvedEmpty().
+  * Tests
+    * New TestLocatedExpandMapping. It checks that values are resolved in order (process env, then env file, then defaults), that unresolved names are recorded, and that a missing env file produces an error.
+
+--- Breaking Changes
+None
+
+ Generated with Claude Code (https://claude.com/claude-code)
