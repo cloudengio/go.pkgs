@@ -73,7 +73,7 @@ func TestPoolStopReplenishes(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory,
+	p := vmspool.New(factory, testPoolName,
 		vmspool.WithSize(1),
 		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourRunning),
 		vmspool.WithStatus(statusCh))
@@ -97,7 +97,7 @@ func TestPoolStopReplenishes(t *testing.T) {
 	// The stopped VM is still held by the caller, so is still acquired, but
 	// its slot has been refilled: the pool momentarily holds one more VM than
 	// its size.
-	requireStats(t, p, vmspool.Stats{Size: 1, Available: 1, Acquired: 1})
+	requireStats(t, p, vmspool.Stats{Available: 1, Acquired: 1})
 
 	if err := vm.Delete(ctx); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -109,7 +109,7 @@ func TestPoolStopReplenishes(t *testing.T) {
 	if err := p.Close(ctx); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	requireEmpty(t, p, 1)
+	requireEmpty(t, p)
 	if got, want := len(factory.Mocks()), 2; got != want {
 		t.Errorf("mocks after Delete: got %d, want %d: Delete replenished a pool already replenished by StopAndRelease", got, want)
 	}
@@ -123,7 +123,7 @@ func TestPoolStopIdempotentReplenish(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory,
+	p := vmspool.New(factory, testPoolName,
 		vmspool.WithSize(1),
 		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourRunning),
 		vmspool.WithStatus(statusCh))
@@ -141,7 +141,7 @@ func TestPoolStopIdempotentReplenish(t *testing.T) {
 	}
 	waitForEvent(t, statusCh, vmspool.EventReplenished, 5*time.Second)
 	// Three stops gave up the slot once, not three times.
-	requireStats(t, p, vmspool.Stats{Size: 1, Available: 1, Acquired: 1})
+	requireStats(t, p, vmspool.Stats{Available: 1, Acquired: 1})
 	if err := vm.Delete(ctx); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestPoolStopIdempotentReplenish(t *testing.T) {
 	if err := p.Close(ctx); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	requireEmpty(t, p, 1)
+	requireEmpty(t, p)
 	if got, want := len(factory.Mocks()), 2; got != want {
 		t.Errorf("mocks after 3 StopAndRelease calls: got %d, want %d", got, want)
 	}
@@ -168,7 +168,7 @@ func TestPoolStagedStoppedVMReplenishesOnDelete(t *testing.T) {
 		t.Run(behaviour.String(), func(t *testing.T) {
 			statusCh := make(chan vmspool.Event, 64)
 			factory := vmstestutil.NewMockFactory(true)
-			p := vmspool.New(factory,
+			p := vmspool.New(factory, testPoolName,
 				vmspool.WithSize(1),
 				vmspool.WithStagingBehaviour(behaviour),
 				vmspool.WithStatus(statusCh))
@@ -187,7 +187,7 @@ func TestPoolStagedStoppedVMReplenishesOnDelete(t *testing.T) {
 			if err := p.Close(ctx); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
-			requireEmpty(t, p, 1)
+			requireEmpty(t, p)
 			if got, want := len(factory.Mocks()), 2; got != want {
 				t.Errorf("mocks after Release: got %d, want %d", got, want)
 			}
@@ -276,7 +276,7 @@ func TestPoolStopAfterDeleteNoReplenish(t *testing.T) {
 	statusCh := make(chan vmspool.Event, 64)
 
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory,
+	p := vmspool.New(factory, testPoolName,
 		vmspool.WithSize(1),
 		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourRunning),
 		vmspool.WithStatus(statusCh))
@@ -315,7 +315,7 @@ func TestPoolStopAfterDeleteNoReplenish(t *testing.T) {
 	if err := p.Close(ctx); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	requireEmpty(t, p, 1)
+	requireEmpty(t, p)
 	if got, want := len(factory.Mocks()), 2; got != want {
 		t.Errorf("mocks after Delete then StopAndRelease: got %d, want %d: StopAndRelease replenished after Delete", got, want)
 	}
@@ -329,7 +329,7 @@ func TestPoolConcurrentStopAndDelete(t *testing.T) {
 	for range 10 {
 		statusCh := make(chan vmspool.Event, 64)
 		factory := vmstestutil.NewMockFactory(true)
-		p := vmspool.New(factory,
+		p := vmspool.New(factory, testPoolName,
 			vmspool.WithSize(1),
 			vmspool.WithStagingBehaviour(vmspool.StagingBehaviourRunning),
 			vmspool.WithStatus(statusCh))
@@ -358,7 +358,7 @@ func TestPoolConcurrentStopAndDelete(t *testing.T) {
 		if err := p.Close(ctx); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
-		requireEmpty(t, p, 1)
+		requireEmpty(t, p)
 		if got, want := len(factory.Mocks()), 2; got != want {
 			t.Errorf("mocks after concurrent StopAndRelease and Delete: got %d, want %d", got, want)
 		}

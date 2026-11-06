@@ -23,6 +23,17 @@ DefaultStopTimeout = time.Minute
 
 
 
+## Variables
+### ErrNoProvider
+```go
+ErrNoProvider = errors.New("no VM provider configured")
+
+```
+ErrNoProvider should be returned by any operation that requires a VM
+provider when no appropriate provider has been configured.
+
+
+
 ## Functions
 ### Func DefaultCreateBackoff
 ```go
@@ -35,6 +46,167 @@ minutes, which is also the timeout allowed for a single creation attempt.
 
 
 ## Types
+### Type CompletedVM
+```go
+type CompletedVM interface {
+	// GetVM returns the VM the work ran on, or nil if it had none, in which
+	// case there is nothing for the queue to release.
+	GetVM() *VM
+	// GetLogger returns the logger to report this event with. The logger
+	// is likely preconfigured with per-vm, per-job fields.
+	GetLogger(*slog.Logger) *slog.Logger
+}
+```
+CompletedVM represents the operations available on a completed VM.
+
+
+### Type CompletionEvent
+```go
+type CompletionEvent struct {
+	VM      CompletedVM
+	Err     error  // The error that occurred during the execution of the VM, if any.
+	Outcome string // The outcome of the work performed by the VM, used to categorize the completion event.
+	// contains filtered or unexported fields
+}
+```
+CompletionEvent represents a single occurrence of a completed VM any error
+that occurred related to the execution of the VM, as opposed to the outcome
+of the work the VM was performing which is captured in the Outcome field.
+
+
+### Type CompletionOutcomeOption
+```go
+type CompletionOutcomeOption func(*CompletionQueue)
+```
+CompletionOutcomeOption represents an option for configuring a completion
+outcome in the queue.
+
+### Functions
+
+```go
+func WithCompletionOutcome(name string, capacity int, expiration time.Duration) CompletionOutcomeOption
+```
+WithCompletionOutcome configures a completion outcome in the queue with the
+given name, capacity, and expiration duration.
+
+
+
+
+### Type CompletionQueue
+```go
+type CompletionQueue struct {
+	// contains filtered or unexported fields
+}
+```
+CompletionQueue parks finished work, and the VM that ran it, for a period of
+time before the VM is deleted, so that it can be inspected after the fact.
+Work is queued by outcome, each outcome configured with its own capacity and
+retention by WithCompletionOutcome, so that a failure can be kept for longer
+than a success, which is usually what is wanted.
+
+A single completion queue may be shared across multiple VM pools; it reports
+the VMs it is holding both in total and per pool, so that each pool can
+account for the VMs it created that the queue has yet to release.
+
+### Functions
+
+```go
+func NewCompletionQueue(ctx context.Context, opts ...CompletionOutcomeOption) *CompletionQueue
+```
+NewCompletionQueue returns a queue with one sub-queue per outcome configured
+by WithCompletionOutcome, each holding at most that outcome's capacity of
+events and retaining each for that outcome's expiration before deleting the
+VM it was holding. An event whose Outcome names no configured sub-queue is
+discarded by Push, so a queue created with no options holds nothing.
+
+The queue's goroutines are governed by ctx, so cancelling it ends them;
+Close copes with a queue whose context has already been cancelled, which is
+what happens on an interrupt.
+
+
+
+### Methods
+
+```go
+func (q *CompletionQueue) Close(ctx context.Context) error
+```
+Close drains every outcome's queue and deletes the VMs they were holding.
+It is idempotent, since a queue shared by several pools is closed by each of
+them: a later call returns the result of the first.
+
+
+```go
+func (q *CompletionQueue) ContainsVM(vmID string) bool
+```
+ContainsVM reports whether the VM with the given ID is currently parked in
+the queue, for a caller reporting on a VM that it can no longer find in its
+pool.
+
+
+```go
+func (q *CompletionQueue) NumEvents() int
+```
+NumEvents returns the number of VMs the queue is holding across all of its
+outcomes. An event that was pushed without a VM is not counted: there is
+nothing for the queue to release and nothing for a caller to report.
+
+
+```go
+func (q *CompletionQueue) NumEventsPerPool(poolName string) int
+```
+NumEventsPerPool returns the number of VMs the queue is holding that came
+from the named pool, counted as NumEvents counts them.
+
+
+```go
+func (q *CompletionQueue) Out(outcome string) <-chan CompletionEvent
+```
+Out returns the channel of events for the requested outcome, or nil if no
+such outcome was configured.
+
+
+```go
+func (q *CompletionQueue) Push(event CompletionEvent)
+```
+Push adds a completion event to the queue for its specified outcome.
+An event whose Outcome names no configured outcome is discarded, as is
+one pushed to a closed queue or to one whose context has been cancelled:
+in each case nothing would ever release the VM, which is left to the pool
+that created it to delete.
+
+
+```go
+func (q *CompletionQueue) Remove(poolName, vmID string)
+```
+Remove stops tracking the VM, for a caller that has taken responsibility for
+it, such as one draining the queue. Removing a VM the queue is not holding
+does nothing.
+
+
+```go
+func (q *CompletionQueue) Subscribe(ctx context.Context) (<-chan struct{}, func())
+```
+Subscribe returns a channel that is signalled whenever the set of VMs
+in the queue changes, and a function that must be called to release the
+subscription.
+
+
+```go
+func (q *CompletionQueue) VMIDs() []string
+```
+VMIDs returns a copy of the set of VM IDs currently parked in the queue,
+in no particular order.
+
+
+```go
+func (q *CompletionQueue) VMIDsForPool(pool string) []string
+```
+VMIDsForPool returns a copy of the set of VM IDs currently parked in the
+queue for the specified pool.
+
+
+
+
 ### Type Config
 ```go
 type Config struct {
@@ -234,10 +406,13 @@ Pool manages a fixed-size set of suspended virtual machine instances.
 ### Functions
 
 ```go
-func New(provider Provider, opts ...Option) *Pool
+func New(provider Provider, name string, opts ...Option) *Pool
 ```
-New returns a Pool that will maintain size suspended VMs using provider.
-Call Start to fill the pool before calling Acquire.
+New returns a Pool, named name, that will maintain size suspended VMs using
+provider. The name identifies the pool to an application that runs more than
+one and is reported by the VMs it hands out, see VM.PoolName; it is not used
+to name the VMs themselves, which the provider names. Call Start to fill the
+pool before calling Acquire.
 
 
 
@@ -267,6 +442,21 @@ still running. Such attempts fail with 'unexpected VM state' errors that
 are included in the returned error, and those VMs are instead deleted by the
 creation goroutines' own cleanup once they observe the cancellation or the
 closed pool. Deletion itself is not bounded by ctx.
+
+
+```go
+func (p *Pool) Name() string
+```
+Name returns the name the pool was created with, which identifies it to
+an application that runs more than one, and which its VMs report through
+VM.PoolName.
+
+
+```go
+func (p *Pool) Size() int
+```
+Size returns the number of VMs the pool is configured to hold, see WithSize.
+It is fixed when the pool is created, so it is not part of Stats.
 
 
 ```go
@@ -301,15 +491,25 @@ VMs are created.
 ### Type Provider
 ```go
 type Provider interface {
+	// Name returns the name of the provider, typically the infrastructure
+	// used to implement the pool such as 'tart' or 'docker'.
+	Name() string
+
+	// Details returns provider-specific details about the infrastructure.
+	Details() ProviderDetails
+
 	// New returns a new, uninitialized VM instance. Each call must return a
 	// distinct vms.Instance. ctx governs any work done to construct the
 	// instance. It returns an error if the instance could not be created.
 	New(ctx context.Context) (vms.Instance, error)
+
 	// List returns lightweight summaries of the VMs currently present for this
 	// provider's pool.
 	List(ctx context.Context) ([]VMInfo, error)
+
 	// Get returns the full details of a single VM by name.
 	Get(ctx context.Context, vmName string) (VMDetail, error)
+
 	// Delete stops (if running) and deletes every VM belonging to this
 	// provider's pool, returning the names deleted. It continues past individual
 	// failures.
@@ -320,6 +520,18 @@ Provider creates and manages the VMs for a Pool. In addition to constructing
 new instances it can enumerate, inspect and delete the VMs it has created,
 which pools and cleanup tooling use for status reporting and reclaiming
 orphaned VMs.
+
+
+### Type ProviderDetails
+```go
+type ProviderDetails interface {
+	// Image returns the image the provider's VMs are created from, or an empty
+	// string if the provider has no single image or does not know it.
+	Image() string
+}
+```
+ProviderDetails defines an interface for provider-specific details about the
+infrastructure implementing the VM provider.
 
 
 ### Type StagingBehaviour
@@ -378,8 +590,6 @@ needed in this package.
 ### Type Stats
 ```go
 type Stats struct {
-	// Size is the number of VMs the pool is configured to hold, see WithSize.
-	Size int
 	// Available is the number of VMs waiting in the pool that Acquire can
 	// return without waiting for one to be created.
 	Available int
@@ -443,6 +653,18 @@ func (v *VM) ID() string
 ```
 ID returns the unique identifier of the VM instance. It may be empty if the
 VM is invalid.
+
+
+```go
+func (v *VM) PoolName() string
+```
+PoolName returns the name of the pool to which the VM belongs.
+
+
+```go
+func (v *VM) Provider() Provider
+```
+Provider returns the provider used to create and manage the VM.
 
 
 ```go

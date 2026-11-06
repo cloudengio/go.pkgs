@@ -17,7 +17,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"cloudeng.io/algo/ratecontrol"
@@ -28,84 +27,9 @@ import (
 	"cloudeng.io/vms"
 )
 
-// VMInfo is a backend-neutral summary of a VM managed by a Provider. It holds
-// only the lightweight fields that are cheap to obtain in bulk via
-// Provider.List.
-type VMInfo struct {
-	Name     string
-	Pool     string
-	State    string // backend-specific state string, e.g. "running", "stopped"
-	Running  bool
-	Accessed time.Time // best-effort last activity time; may be creation time if last access is unavailable
-}
-
-// VMDetail extends VMInfo with the fuller, potentially more expensive per-VM
-// details returned by Provider.Get, such as the resources allocated to the VM.
-type VMDetail struct {
-	VMInfo
-	DiskGiB  int // size of the VM's disk in GiB
-	NumCores int // number of CPU cores allocated to the VM
-	MemGiB   int // amount of RAM allocated to the VM in GiB
-}
-
-// Provider creates and manages the VMs for a Pool. In addition to constructing
-// new instances it can enumerate, inspect and delete the VMs it has created,
-// which pools and cleanup tooling use for status reporting and reclaiming
-// orphaned VMs.
-type Provider interface {
-	// New returns a new, uninitialized VM instance. Each call must return a
-	// distinct vms.Instance. ctx governs any work done to construct the
-	// instance. It returns an error if the instance could not be created.
-	New(ctx context.Context) (vms.Instance, error)
-	// List returns lightweight summaries of the VMs currently present for this
-	// provider's pool.
-	List(ctx context.Context) ([]VMInfo, error)
-	// Get returns the full details of a single VM by name.
-	Get(ctx context.Context, vmName string) (VMDetail, error)
-	// Delete stops (if running) and deletes every VM belonging to this
-	// provider's pool, returning the names deleted. It continues past individual
-	// failures.
-	Delete(ctx context.Context, stopTimeout time.Duration) ([]string, error)
-}
-
-type vmsInstance struct {
-	vms.Instance
-	stdout, stderr io.Writer
-	// acquired records that a caller holds the VM. It is written under
-	// Pool.opMutex, but is atomic so that Pool.Stats can read it without
-	// taking that lock, which Acquire holds while starting a VM and Close holds
-	// for the whole of its shutdown.
-	acquired atomic.Bool
-
-	mu sync.Mutex
-	// stopped records that the VM is not running: either because it is staged
-	// stopped or suspended in the pool, or because the caller that acquired it
-	// has stopped it. It determines whether Acquire must start the VM before
-	// handing it over, and which of VM.StopAndRelease and VM.Delete requests
-	// the replacement VM. GUARDED by mu.
-	stopped bool
-}
-
-// setStopped records whether the VM is running and reports whether this call
-// changed the flag. Only the caller that wins the transition to stopped
-// requests replenishment, so repeated calls to VM.StopAndRelease cannot grow
-// the pool beyond its configured size.
-func (inst *vmsInstance) setStopped(stopped bool) bool {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	changed := inst.stopped != stopped
-	inst.stopped = stopped
-	return changed
-}
-
-func (inst *vmsInstance) isStopped() bool {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	return inst.stopped
-}
-
 // Pool manages a fixed-size set of suspended virtual machine instances.
 type Pool struct {
+	name     string
 	options  options
 	provider Provider
 	ready    chan *vmsInstance // suspended VMs waiting to be acquired
@@ -338,9 +262,12 @@ func WithStdoutStderr(stdout, stderr func(id string) io.Writer) Option {
 	}
 }
 
-// New returns a Pool that will maintain size suspended VMs using provider.
+// New returns a Pool, named name, that will maintain size suspended VMs using
+// provider. The name identifies the pool to an application that runs more than
+// one and is reported by the VMs it hands out, see VM.PoolName; it is not used
+// to name the VMs themselves, which the provider names.
 // Call Start to fill the pool before calling Acquire.
-func New(provider Provider, opts ...Option) *Pool {
+func New(provider Provider, name string, opts ...Option) *Pool {
 	var options options
 	options.size = DefaultPoolSize
 	options.cleanupTimeout = DefaultCleanupTimeout
@@ -360,6 +287,7 @@ func New(provider Provider, opts ...Option) *Pool {
 	return &Pool{
 		options:  options,
 		provider: provider,
+		name:     name,
 		ready:    make(chan *vmsInstance, options.size),
 		done:     make(chan struct{}),
 		live:     map[*vmsInstance]struct{}{},
@@ -404,8 +332,6 @@ func (p *Pool) tracked() []*vmsInstance {
 
 // Stats is a snapshot of the state of a Pool, see Pool.Stats.
 type Stats struct {
-	// Size is the number of VMs the pool is configured to hold, see WithSize.
-	Size int
 	// Available is the number of VMs waiting in the pool that Acquire can
 	// return without waiting for one to be created.
 	Available int
@@ -422,8 +348,8 @@ type Stats struct {
 
 // String implements fmt.Stringer.
 func (s Stats) String() string {
-	return fmt.Sprintf("size=%d available=%d acquired=%d pending=%d",
-		s.Size, s.Available, s.Acquired, s.Pending)
+	return fmt.Sprintf("available=%d acquired=%d pending=%d",
+		s.Available, s.Acquired, s.Pending)
 }
 
 // Stats returns a snapshot of the pool's size and how many of its VMs are
@@ -454,11 +380,22 @@ func (p *Pool) Stats() Stats {
 		available = min(len(p.ready), len(p.live)-acquired)
 	}
 	return Stats{
-		Size:      p.options.size,
 		Available: available,
 		Acquired:  acquired,
 		Pending:   len(p.live) - acquired - available,
 	}
+}
+
+// Size returns the number of VMs the pool is configured to hold, see WithSize.
+// It is fixed when the pool is created, so it is not part of Stats.
+func (p *Pool) Size() int {
+	return p.options.size
+}
+
+// Name returns the name the pool was created with. All VMS from this pool return
+// this value via their PoolName method.
+func (p *Pool) Name() string {
+	return p.name
 }
 
 func (p *Pool) notify(kind EventKind, err error) {
@@ -849,75 +786,6 @@ drained:
 		})
 	}
 	errs.Append(g.Wait())
+
 	return errs.Err()
-}
-
-// VM is a running virtual machine instance acquired from a Pool.
-// Use Exec to run commands and Delete when done.
-type VM struct {
-	inst *vmsInstance
-	pool *Pool
-}
-
-// Exec runs cmd with args inside the VM, writing output to stdout and stderr.
-func (v *VM) Exec(ctx context.Context, stdout, stderr io.Writer, cmd string, args ...string) error {
-	if v.inst == nil || v.inst.Instance == nil {
-		return fmt.Errorf("vmspool: invalid VM instance")
-	}
-	return v.inst.Exec(ctx, stdout, stderr, cmd, args...)
-}
-
-// StopAndRelease stops the VM and releases its slot in the pool, returning any
-// error from the last command run in the VM and any error from stopping it.
-// It is idempotent.
-//
-// A stopped VM is never handed out again, so the first successful stop
-// asynchronously replenishes the pool rather than leaving the slot idle: the
-// replacement is created while the caller is still finishing with the stopped
-// VM (collecting logs, say). The VM itself is not deleted; the caller must
-// still call Delete when done with it, which will not request a second
-// replacement.
-func (v *VM) StopAndRelease(ctx context.Context, timeout time.Duration) (runErr, stopErr error) {
-	if v.inst == nil || v.inst.Instance == nil {
-		return nil, fmt.Errorf("vmspool: invalid VM instance")
-	}
-	runErr, stopErr = v.inst.Stop(ctx, timeout)
-	if stopErr == nil && v.inst.setStopped(true) {
-		v.pool.requestReplenish()
-	}
-	return runErr, stopErr
-}
-
-// Delete deletes the VM, stopping it first if it is still running. It must be
-// called exactly once per acquired VM. If the pool has been closed and deletes
-// acquired VMs on close (the default), the VM has already been deleted by Close
-// and Delete does not delete it again.
-//
-// Delete asynchronously replenishes the pool unless the VM has already been
-// stopped by StopAndRelease, which released the slot at that point; requesting
-// a second replacement would grow the pool beyond its configured size. For the
-// same reason only the first call to Delete replenishes the pool: any further
-// call finds the VM already deleted and does nothing.
-func (v *VM) Delete(ctx context.Context) error {
-	v.pool.notify(EventRelease, nil)
-	claimed, cleanupErr := v.pool.claimAndCleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
-	if cleanupErr != nil {
-		cleanupErr = fmt.Errorf("vmspool: delete: %w", cleanupErr)
-	}
-	// Only replenish if this call claimed the VM AND atomically transitioned
-	// stopped to true. If StopAndRelease already stopped it, setStopped(true)
-	// returns false. If Delete is called twice, claimed is false.
-	if claimed && v.inst != nil && v.inst.setStopped(true) {
-		v.pool.requestReplenish()
-	}
-	v.pool.notify(EventReleased, nil)
-	return cleanupErr
-}
-
-// ID returns the unique identifier of the VM instance. It may be empty if the VM is invalid.
-func (v *VM) ID() string {
-	if v.inst == nil || v.inst.Instance == nil {
-		return ""
-	}
-	return v.inst.ID()
 }
