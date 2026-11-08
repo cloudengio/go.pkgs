@@ -136,14 +136,6 @@ them: a later call returns the result of the first.
 
 
 ```go
-func (q *CompletionQueue) ContainsVM(vmID string) bool
-```
-ContainsVM reports whether the VM with the given ID is currently parked in
-the queue, for a caller reporting on a VM that it can no longer find in its
-pool.
-
-
-```go
 func (q *CompletionQueue) NumEvents() int
 ```
 NumEvents returns the number of VMs the queue is holding across all of its
@@ -162,7 +154,7 @@ from the named pool, counted as NumEvents counts them.
 func (q *CompletionQueue) Out(outcome string) <-chan CompletionEvent
 ```
 Out returns the channel of events for the requested outcome, or nil if no
-such outcome was configured.
+such outcome was configured or the queue is closed.
 
 
 ```go
@@ -332,6 +324,22 @@ treated as DefaultCleanupTimeout.
 
 
 ```go
+func WithCompletionQueue(q *CompletionQueue) Option
+```
+WithCompletionQueue attaches a completion queue to the pool, which the
+VMs it hands out report through VM.CompletionQueue. It is how work
+running on a VM finds the queue to park that VM in when it is done,
+without the queue being plumbed through alongside the VM, and how an
+application reports on the VMs of this pool that the queue is still holding,
+see CompletionQueue.NumEventsPerPool.
+
+A single queue may be attached to any number of pools. The pool neither
+pushes to the queue nor closes it: parking finished work is the caller's
+decision, and the queue, which outlives any one pool that shares it,
+is closed by whoever created it.
+
+
+```go
 func WithCreateBackoff(cfg ratecontrol.ExponentialBackoffConfig) Option
 ```
 WithCreateBackoff sets the backoff applied between attempts to create
@@ -445,11 +453,18 @@ closed pool. Deletion itself is not bounded by ctx.
 
 
 ```go
+func (p *Pool) CompletionQueue() *CompletionQueue
+```
+CompletionQueue returns the queue that finished work from this pool is
+parked in, or nil if the pool has none, see WithCompletionQueue. All VMs
+from this pool return this value via their CompletionQueue method.
+
+
+```go
 func (p *Pool) Name() string
 ```
-Name returns the name the pool was created with, which identifies it to
-an application that runs more than one, and which its VMs report through
-VM.PoolName.
+Name returns the name the pool was created with. All VMS from this pool
+return this value via their PoolName method.
 
 
 ```go
@@ -626,6 +641,15 @@ VM is a running virtual machine instance acquired from a Pool. Use Exec to
 run commands and Delete when done.
 
 ### Methods
+
+```go
+func (v *VM) CompletionQueue() *CompletionQueue
+```
+CompletionQueue returns the completion queue configured for the pool the
+VM came from, or nil if that pool has none, see WithCompletionQueue.
+It is how work that has finished with a VM reaches the queue to park it in,
+given nothing but the VM itself.
+
 
 ```go
 func (v *VM) Delete(ctx context.Context) error

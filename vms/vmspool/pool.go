@@ -63,6 +63,7 @@ type options struct {
 	createStdout          func(id string) io.Writer
 	createStderr          func(id string) io.Writer
 	deleteAcquiredOnClose bool
+	completion            *CompletionQueue
 }
 
 const (
@@ -161,6 +162,23 @@ func WithStopTimeout(timeout time.Duration) Option {
 func WithStatus(ch chan<- Event) Option {
 	return func(o *options) {
 		o.statusCh = ch
+	}
+}
+
+// WithCompletionQueue attaches a completion queue to the pool, which the VMs it
+// hands out report through VM.CompletionQueue. It is how work running on a VM
+// finds the queue to park that VM in when it is done, without the queue being
+// plumbed through alongside the VM, and how an application reports on the VMs
+// of this pool that the queue is still holding, see
+// CompletionQueue.NumEventsPerPool.
+//
+// A single queue may be attached to any number of pools. The pool neither
+// pushes to the queue nor closes it: parking finished work is the caller's
+// decision, and the queue, which outlives any one pool that shares it, is
+// closed by whoever created it.
+func WithCompletionQueue(q *CompletionQueue) Option {
+	return func(o *options) {
+		o.completion = q
 	}
 }
 
@@ -396,6 +414,13 @@ func (p *Pool) Size() int {
 // this value via their PoolName method.
 func (p *Pool) Name() string {
 	return p.name
+}
+
+// CompletionQueue returns the queue that finished work from this pool is parked
+// in, or nil if the pool has none, see WithCompletionQueue. All VMs from this
+// pool return this value via their CompletionQueue method.
+func (p *Pool) CompletionQueue() *CompletionQueue {
+	return p.options.completion
 }
 
 func (p *Pool) notify(kind EventKind, err error) {

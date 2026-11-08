@@ -24,6 +24,11 @@ type PoolTestConfig struct {
 	// Some subtests intentionally use a size-1 pool for deterministic behavior.
 	PoolSize int
 
+	// PoolName is the name given to the pools created by the tests, which the
+	// VMs they hand out report through VM.PoolName. Defaults to
+	// DefaultTestPoolName.
+	PoolName string
+
 	// ExecCmd is a command that should succeed inside an acquired VM. If empty
 	// the Exec subtest is skipped.
 	ExecCmd          string
@@ -49,6 +54,17 @@ func (c PoolTestConfig) poolSize() int {
 	return 2
 }
 
+// DefaultTestPoolName is the pool name used by the pool tests when
+// PoolTestConfig.PoolName is empty.
+const DefaultTestPoolName = "vmstestutil-pool"
+
+func (c PoolTestConfig) poolName() string {
+	if c.PoolName != "" {
+		return c.PoolName
+	}
+	return DefaultTestPoolName
+}
+
 func (c PoolTestConfig) timeout() time.Duration {
 	if c.Timeout > 0 {
 		return c.Timeout
@@ -67,7 +83,7 @@ func startPool(t cicd.TestingT, cfg PoolTestConfig) *vmspool.Pool {
 		vmspool.WithStatus(statusCh),
 		vmspool.WithStagingBehaviour(cfg.StagingBehaviour),
 	}
-	p := vmspool.New(cfg.Constructor, opts...)
+	p := vmspool.New(cfg.Constructor, cfg.poolName(), opts...)
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 
 	t.Cleanup(func() {
@@ -81,6 +97,26 @@ func startPool(t cicd.TestingT, cfg PoolTestConfig) *vmspool.Pool {
 	}
 	waitForPoolEvent(t, statusCh, vmspool.EventStartPoolFull, cfg.timeout())
 	return p
+}
+
+// requireProvenance verifies that an acquired VM reports the pool it came from
+// and the provider that created it, which is all an application that runs
+// several pools has to go on when it reports on the work a VM ran.
+func requireProvenance(t cicd.TestingT, vm *vmspool.VM, p *vmspool.Pool, cfg PoolTestConfig) {
+	t.Helper()
+	if got, want := vm.PoolName(), cfg.poolName(); got != want {
+		t.Errorf("VM.PoolName: got %q, want %q", got, want)
+	}
+	if got, want := vm.PoolName(), p.Name(); got != want {
+		t.Errorf("VM.PoolName: got %q, want the pool's own name %q", got, want)
+	}
+	provider := vm.Provider()
+	if provider == nil {
+		t.Fatal("VM.Provider: got nil, want the pool's provider")
+	}
+	if got, want := provider.Name(), cfg.Constructor.Name(); got != want {
+		t.Errorf("VM.Provider().Name: got %q, want %q", got, want)
+	}
 }
 
 // waitForPoolEvent blocks until an event of the given kind is received on
@@ -111,7 +147,7 @@ func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:as
 		vmspool.WithStatus(statusCh),
 		vmspool.WithStagingBehaviour(cfg.StagingBehaviour),
 	}
-	p := vmspool.New(cfg.Constructor, opts...)
+	p := vmspool.New(cfg.Constructor, cfg.poolName(), opts...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout())
 	defer cancel()
@@ -126,6 +162,7 @@ func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:as
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
+	requireProvenance(t, vm, p, cfg)
 
 	stdout := bytes.NewBuffer(make([]byte, 0, 1024))
 	stderr := bytes.NewBuffer(make([]byte, 0, 1024))
@@ -177,7 +214,7 @@ func TestPoolAcquireExecRelease(t cicd.TestingT, cfg PoolTestConfig) { //cicd:as
 func TestPoolContextCancellation(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	// Use a size-1 pool so one Acquire drains it.
 	statusCh := make(chan vmspool.Event, 16)
-	p := vmspool.New(cfg.Constructor,
+	p := vmspool.New(cfg.Constructor, cfg.poolName(),
 		vmspool.WithSize(1),
 		vmspool.WithStatus(statusCh),
 		vmspool.WithStagingBehaviour(cfg.StagingBehaviour),
@@ -214,7 +251,7 @@ func TestPoolContextCancellation(t cicd.TestingT, cfg PoolTestConfig) { //cicd:a
 // TestPoolClose verifies that Close prevents further Acquire calls.
 func TestPoolClose(t cicd.TestingT, cfg PoolTestConfig) { //cicd:astest
 	statusCh := make(chan vmspool.Event, 16)
-	p := vmspool.New(cfg.Constructor,
+	p := vmspool.New(cfg.Constructor, cfg.poolName(),
 		vmspool.WithSize(1),
 		vmspool.WithStatus(statusCh),
 		vmspool.WithStagingBehaviour(cfg.StagingBehaviour),

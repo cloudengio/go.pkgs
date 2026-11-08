@@ -76,6 +76,13 @@ func acquireVM(t *testing.T, factory *vmstestutil.MockFactory, size int) *vmspoo
 	return vm
 }
 
+// holdsVM reports whether the queue is holding the VM with the given ID, which
+// is what a caller reporting on a VM it can no longer find in its pool asks of
+// the set the queue publishes.
+func holdsVM(q *vmspool.CompletionQueue, vmID string) bool {
+	return slices.Contains(q.VMIDs(), vmID)
+}
+
 // awaitSignal waits for the queue to report that the set of VMs it holds has
 // changed.
 func awaitSignal(t *testing.T, ch <-chan struct{}, msg string) {
@@ -84,6 +91,64 @@ func awaitSignal(t *testing.T, ch <-chan struct{}, msg string) {
 	case <-ch:
 	case <-time.After(5 * time.Second):
 		t.Fatalf("no notification: %v", msg)
+	}
+}
+
+// TestCompletionQueueFromVM covers how work finds the queue to park the VM it
+// ran on: the pool reports the queue it was configured with, and so does every
+// VM that pool hands out, since a job that has finished has nothing but its VM
+// to go on.
+func TestCompletionQueueFromVM(t *testing.T) {
+	ctx := quietContext(t)
+	q := newQueue(ctx, time.Hour)
+	// Closing the queue is what deletes the VM parked below, and it runs before
+	// the pool's own cleanup, which requires that the pool was left empty.
+	defer closeWithin(t, q, 30*time.Second)
+
+	factory := vmstestutil.NewMockFactory(true)
+	p := newPool(t, 1, vmspool.StagingBehaviourSuspended, factory, vmspool.WithCompletionQueue(q))
+	if got := p.CompletionQueue(); got != q {
+		t.Errorf("Pool.CompletionQueue: got %v, want the configured queue %v", got, q)
+	}
+
+	vm, err := p.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	cq := vm.CompletionQueue()
+	if cq != q {
+		t.Fatalf("VM.CompletionQueue: got %v, want the pool's queue %v", cq, q)
+	}
+	// The VM is parked through the queue it reported, which is the whole point
+	// of reporting it.
+	cq.Push(vmspool.CompletionEvent{VM: completed{vm: vm}, Outcome: outcomeSuccess})
+	if got, want := q.NumEventsPerPool(vm.PoolName()), 1; got != want {
+		t.Errorf("NumEventsPerPool(%q): got %v, want %v", vm.PoolName(), got, want)
+	}
+	if !holdsVM(q, vm.ID()) {
+		t.Errorf("the queue does not report holding %v", vm.ID())
+	}
+}
+
+// TestCompletionQueueUnset covers a pool configured without a queue, which is
+// an application that deletes each VM as it finishes with it. Its VMs report no
+// queue rather than a dead one, so that work can tell that there is nowhere to
+// park them.
+func TestCompletionQueueUnset(t *testing.T) {
+	ctx := quietContext(t)
+	p := newPool(t, 1, vmspool.StagingBehaviourSuspended, vmstestutil.NewMockFactory(true))
+	if got := p.CompletionQueue(); got != nil {
+		t.Errorf("Pool.CompletionQueue: got %v, want nil", got)
+	}
+	vm, err := p.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if got := vm.CompletionQueue(); got != nil {
+		t.Errorf("VM.CompletionQueue: got %v, want nil", got)
+	}
+	if err := vm.Delete(ctx); err != nil {
+		t.Errorf("Delete: %v", err)
 	}
 }
 
@@ -120,7 +185,7 @@ func TestCompletionQueueOutcomes(t *testing.T) {
 	if got, want := q.NumEvents(), 0; got != want {
 		t.Errorf("NumEvents: got %v, want %v", got, want)
 	}
-	if q.ContainsVM(vm.ID()) {
+	if holdsVM(q, vm.ID()) {
 		t.Errorf("the queue reports holding %v, which it dropped", vm.ID())
 	}
 	if err := vm.Delete(ctx); err != nil {
@@ -175,7 +240,7 @@ func TestCompletionQueueTracking(t *testing.T) {
 		t.Errorf("VMIDsForPool(%q): got %v, want %v", p.Name(), got, vmIDs)
 	}
 	for _, id := range vmIDs {
-		if !q.ContainsVM(id) {
+		if !holdsVM(q, id) {
 			t.Errorf("the queue does not report holding %v", id)
 		}
 	}
@@ -201,7 +266,7 @@ func TestCompletionQueueOtherPool(t *testing.T) {
 	if got := q.VMIDsForPool("another-pool"); got != nil {
 		t.Errorf("VMIDsForPool: got %v, want nil", got)
 	}
-	if q.ContainsVM("another-pool-vm") {
+	if holdsVM(q, "another-pool-vm") {
 		t.Error("the queue reports holding a VM it was never given")
 	}
 }
@@ -223,7 +288,7 @@ func TestCompletionQueueRemove(t *testing.T) {
 
 	q.Remove(p.Name(), vmIDs[0])
 	awaitSignal(t, signal, "remove")
-	if q.ContainsVM(vmIDs[0]) {
+	if holdsVM(q, vmIDs[0]) {
 		t.Errorf("the queue still reports holding %v after Remove", vmIDs[0])
 	}
 	if got, want := q.NumEvents(), 1; got != want {
@@ -304,7 +369,7 @@ func TestCompletionQueueExpiry(t *testing.T) {
 	awaitSignal(t, signal, "push")
 
 	awaitSignal(t, signal, "expiry")
-	if q.ContainsVM(id) {
+	if holdsVM(q, id) {
 		t.Errorf("the queue still reports holding %v after it expired", id)
 	}
 	if got, want := q.NumEvents(), 0; got != want {
@@ -341,7 +406,7 @@ func TestCompletionQueueClose(t *testing.T) {
 
 	closeWithin(t, q, 30*time.Second)
 
-	if q.ContainsVM(vm.ID()) {
+	if holdsVM(q, vm.ID()) {
 		t.Errorf("the queue still reports holding %v after it was closed", vm.ID())
 	}
 	if got, want := factory.Mocks()[0].State(ctx), vms.StateDeleted; got != want {

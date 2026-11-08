@@ -238,15 +238,6 @@ func (q *CompletionQueue) VMIDs() []string {
 	return out
 }
 
-// ContainsVM reports whether the VM with the given ID is currently parked in
-// the queue, for a caller reporting on a VM that it can no longer find in its
-// pool.
-func (q *CompletionQueue) ContainsVM(vmID string) bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return q.vmIDs[vmID]
-}
-
 // VMIDsForPool returns a copy of the set of VM IDs currently parked in the
 // queue for the specified pool.
 func (q *CompletionQueue) VMIDsForPool(pool string) []string {

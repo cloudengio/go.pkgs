@@ -39,13 +39,15 @@ func shortCreateBackoff() ratecontrol.ExponentialBackoffConfig {
 }
 
 // newPool creates a pool and waits for it be full.
-func newPool(t *testing.T, size int, stagingBehaviour vmspool.StagingBehaviour, factory *vmstestutil.MockFactory) *vmspool.Pool {
+func newPool(t *testing.T, size int, stagingBehaviour vmspool.StagingBehaviour, factory *vmstestutil.MockFactory, opts ...vmspool.Option) *vmspool.Pool {
 	t.Helper()
 	statusCh := make(chan vmspool.Event, size*4)
 	p := vmspool.New(factory, testPoolName,
-		vmspool.WithSize(size),
-		vmspool.WithStagingBehaviour(stagingBehaviour),
-		vmspool.WithStatus(statusCh))
+		append([]vmspool.Option{
+			vmspool.WithSize(size),
+			vmspool.WithStagingBehaviour(stagingBehaviour),
+			vmspool.WithStatus(statusCh),
+		}, opts...)...)
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("pool.Start: %v", err)
 	}

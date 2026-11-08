@@ -235,19 +235,56 @@ func (m *Mock) SetProperties(props vms.Properties) {
 
 var _ vms.Instance = (*Mock)(nil)
 
+const (
+	// MockProviderName is the provider name a MockFactory reports, standing
+	// where a real provider names its infrastructure ("tart", "docker").
+	MockProviderName = "mock"
+
+	// DefaultMockImage is the image a MockFactory reports through Details when
+	// it was not given one with SetImage.
+	DefaultMockImage = "mock-image"
+)
+
 // MockFactory creates and tracks Mock instances for pool and integration tests.
 // Use Inject to pre-supply configured mocks; otherwise MockFactory.New creates
 // plain NewMock instances on demand.
 type MockFactory struct {
 	suspendable bool
 	mu          sync.Mutex
+	image       string
 	mocks       []*Mock
 	pending     []*Mock // pre-configured mocks to hand out first
 }
 
 // NewMockFactory returns an empty MockFactory.
 func NewMockFactory(suspendable bool) *MockFactory {
-	return &MockFactory{suspendable: suspendable}
+	return &MockFactory{suspendable: suspendable, image: DefaultMockImage}
+}
+
+// Name implements vmspool.Provider.
+func (f *MockFactory) Name() string { return MockProviderName }
+
+// mockDetails reports the image a MockFactory was configured with, standing for
+// the provider-specific detail a real provider exposes about its VMs.
+type mockDetails struct {
+	image string
+}
+
+func (d mockDetails) Image() string { return d.image }
+
+// SetImage sets the image reported by Details.
+func (f *MockFactory) SetImage(image string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.image = image
+}
+
+// Details implements vmspool.Provider, reporting the image set by SetImage, or
+// DefaultMockImage if none was.
+func (f *MockFactory) Details() vmspool.ProviderDetails {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return mockDetails{image: f.image}
 }
 
 var mockIDCounter atomic.Int32

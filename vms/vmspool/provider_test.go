@@ -85,6 +85,9 @@ func TestVMNoPool(t *testing.T) {
 	if got := vm.ID(); got != "" {
 		t.Errorf("ID: got %q, want %q", got, "")
 	}
+	if got := vm.CompletionQueue(); got != nil {
+		t.Errorf("CompletionQueue: got %v, want nil", got)
+	}
 }
 
 // TestTestVMPoolName covers the pool name reported by the VMs the stop tests

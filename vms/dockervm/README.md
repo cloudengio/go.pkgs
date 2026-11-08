@@ -15,6 +15,13 @@ DefaultDockerBinary = "docker"
 
 ```
 
+### ProviderName
+```go
+ProviderName = "docker"
+
+```
+ProviderName is the name reported by Provider.Name.
+
 
 
 ## Functions
@@ -290,6 +297,15 @@ failures.
 
 
 ```go
+func (p *Provider) Details() vmspool.ProviderDetails
+```
+Details implements vmspool.Provider, reporting the image set by
+WithProviderImage. A Provider builds its containers through a
+caller-supplied Constructor and so cannot discover the image itself;
+the image is empty when the option was not used.
+
+
+```go
 func (p *Provider) Get(ctx context.Context, vmName string) (vmspool.VMDetail, error)
 ```
 Get implements vmspool.Provider, returning the resources allocated to a
@@ -300,6 +316,12 @@ single container via "docker inspect --size".
 func (p *Provider) List(ctx context.Context) ([]vmspool.VMInfo, error)
 ```
 List implements vmspool.Provider.
+
+
+```go
+func (p *Provider) Name() string
+```
+Name implements vmspool.Provider.
 
 
 ```go
@@ -338,6 +360,15 @@ func WithProviderDockerBinary(path string) ProviderOption
 ```
 WithProviderDockerBinary sets the path to the docker binary used by the
 Provider. If not set, DefaultDockerBinary is used.
+
+
+```go
+func WithProviderImage(image string) ProviderOption
+```
+WithProviderImage records the image the Provider's Constructor creates
+containers from, which Details reports to callers that display what a
+pool is running. It has no effect on the containers themselves, which the
+Constructor builds.
 
 
 

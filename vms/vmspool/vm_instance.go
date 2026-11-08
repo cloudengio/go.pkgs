@@ -136,3 +136,14 @@ func (v *VM) Provider() Provider {
 	}
 	return v.pool.provider
 }
+
+// CompletionQueue returns the completion queue configured for the pool the VM
+// came from, or nil if that pool has none, see WithCompletionQueue. It is how
+// work that has finished with a VM reaches the queue to park it in, given
+// nothing but the VM itself.
+func (v *VM) CompletionQueue() *CompletionQueue {
+	if v.pool == nil {
+		return nil
+	}
+	return v.pool.options.completion
+}
