@@ -1,0 +1,22 @@
+--- Overview
+Extends vmspool with a completion queue and an extended provider interface, and updates the Docker provider, test utilities and documentation to match.
+
+--- Key Changes
+vms/vmspool
+  * Add completion queue (completion_queue.go) with tests.
+  * Add provider support (provider.go) with tests.
+  * Add vm_instance.go and substantially reduce pool.go.
+  * Update pool, stats and stop tests, and regenerate the README.
+
+vms/dockervm
+  * Extend provider.go for the new provider interface.
+  * Update dockerapi pool init tests and the README.
+
+vms/vmstestutil
+  * Update the mock and shared pool tests, and the README.
+
+vms
+  * Update the top-level README.
+
+--- Breaking Changes
+Likely: the provider interface is extended, so external vmspool provider implementations may need updating. This is inferred from the diffstat only, so confirm against the final API.
