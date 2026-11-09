@@ -244,7 +244,7 @@ type EventKind int
 EventKind identifies the type of pool event sent to a status channel.
 
 ### Constants
-### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventVMCreateStarted, EventVMCreated, EventVMCreateFailed, EventReplenishStarted, EventReplenished, EventReplenishFailed, EventStartPoolFull, EventOrphanedVMDeleted, EventAcquiredVMRetained
+### EventAcquireWaiting, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRelease, EventReleased, EventVMCreateStarted, EventVMCreated, EventVMCreateFailed, EventReplenishStarted, EventReplenished, EventReplenishFailed, EventStartPoolFull, EventOrphanedVMDeleted, EventAcquiredVMRetained, EventRefreshFailed
 ```go
 const (
 	// EventAcquireWaiting is emitted when Acquire is called and blocks
@@ -311,6 +311,12 @@ const (
 	// leaves in place because WithDeleteAcquiredOnClose(false) was set. The
 	// caller that holds the VM is responsible for deleting it.
 	EventAcquiredVMRetained
+
+	// EventRefreshFailed is emitted by Refresh for each VM it took out of the
+	// pool but could not delete. Err is set and names the VM. The pool is
+	// replenished for that VM regardless, so it keeps its size, but the VM
+	// itself may be left behind for an external sweep to find.
+	EventRefreshFailed
 )
 ```
 
@@ -485,6 +491,25 @@ return this value via their PoolName method.
 
 
 ```go
+func (p *Pool) Refresh(ctx context.Context) int
+```
+Refresh takes the VMs that are currently available out of the pool and
+deletes them, leaving the pool to create replacements, which is how a pool
+picks up a new base image without being restarted. It returns the number of
+VMs removed.
+
+VMs that are held by a caller are left alone: they are in use, and the work
+using them did not ask for a different image. Nor does Refresh wait for
+the replacements, which take as long as creating any VM does, or for the
+deletions themselves: it returns as soon as the VMs it is replacing can no
+longer be handed out. A VM that cannot be deleted is reported through the
+status channel as EventRefreshFailed.
+
+Refresh returns 0 for a pool with nothing available to replace, including a
+closed one.
+
+
+```go
 func (p *Pool) Size() int
 ```
 Size returns the number of VMs the pool is configured to hold, see WithSize.
@@ -526,6 +551,11 @@ type Provider interface {
 	// Name returns the name of the provider, typically the infrastructure
 	// used to implement the pool such as 'tart' or 'docker'.
 	Name() string
+
+	// DefaultResources returns the default resource allocation for new VMs
+	// created by this provider, these may be overridden when creating individual
+	// VMs.
+	DefaultResources() VMResources
 
 	// Details returns provider-specific details about the infrastructure.
 	Details() ProviderDetails
@@ -730,9 +760,7 @@ replacement.
 ```go
 type VMDetail struct {
 	VMInfo
-	DiskGiB  int // size of the VM's disk in GiB
-	NumCores int // number of CPU cores allocated to the VM
-	MemGiB   int // amount of RAM allocated to the VM in GiB
+	VMResources
 }
 ```
 VMDetail extends VMInfo with the fuller, potentially more expensive per-VM
@@ -752,6 +780,21 @@ type VMInfo struct {
 VMInfo is a backend-neutral summary of a VM managed by a Provider.
 It holds only the lightweight fields that are cheap to obtain in bulk via
 Provider.List.
+
+
+### Type VMResources
+```go
+type VMResources struct {
+	DiskGiB  int `yaml:"disk_gib" doc:"size of the VM's disk in GiB; 0 leaves the image's own size"`
+	NumCores int `yaml:"num_cores" doc:"number of CPU cores allocated to the VM; 0 leaves the image's own number"`
+	MemGiB   int `yaml:"mem_gib" doc:"amount of RAM allocated to the VM in GiB; 0 leaves the image's own amount"`
+}
+```
+VMResources describes the resources allocated to a VM. It carries
+serialisation tags so that an application can embed it directly in the
+configuration of a provider, rather than restating the same three figures;
+a zero figure means unspecified, which a provider reports as unknown and
+leaves to the image it creates VMs from.
 
 
 

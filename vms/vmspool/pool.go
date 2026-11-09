@@ -742,6 +742,66 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	return &VM{inst: inst, pool: p}, nil
 }
 
+// refreshAcquireTimeout bounds how long Refresh waits for each of the VMs it
+// is taking out of circulation. A VM that cannot be acquired that quickly was
+// taken by somebody else in the meantime, which is not a failure: it is in
+// use, and Refresh leaves the VMs that are in use alone.
+const refreshAcquireTimeout = 500 * time.Millisecond
+
+// Refresh takes the VMs that are currently available out of the pool and
+// deletes them, leaving the pool to create replacements, which is how a pool
+// picks up a new base image without being restarted. It returns the number of
+// VMs removed.
+//
+// VMs that are held by a caller are left alone: they are in use, and the work
+// using them did not ask for a different image. Nor does Refresh wait for the
+// replacements, which take as long as creating any VM does, or for the
+// deletions themselves: it returns as soon as the VMs it is replacing can no
+// longer be handed out. A VM that cannot be deleted is reported through the
+// status channel as EventRefreshFailed.
+//
+// Refresh returns 0 for a pool with nothing available to replace, including a
+// closed one.
+func (p *Pool) Refresh(ctx context.Context) int {
+	stats := p.Stats()
+	if stats.Available == 0 {
+		return 0
+	}
+	// Acquiring the available VMs is what takes them out of circulation: a VM
+	// held here cannot be handed to anybody else whilst it is being deleted.
+	var acquired []*VM
+	for range stats.Available {
+		acqCtx, cancel := context.WithTimeout(ctx, refreshAcquireTimeout)
+		vm, err := p.Acquire(acqCtx)
+		cancel()
+		if err != nil {
+			break
+		}
+		acquired = append(acquired, vm)
+	}
+	if len(acquired) == 0 {
+		return 0
+	}
+	go p.deleteAll(acquired)
+	return len(acquired)
+}
+
+// deleteAll deletes the VMs taken out of the pool by Refresh, which also
+// replenishes the pool for each of them. Deletion is detached from the context
+// that asked for the refresh: the VMs have already been taken out of
+// circulation, and leaving one that has been undeleted would strand it.
+func (p *Pool) deleteAll(acquired []*VM) {
+	var wg sync.WaitGroup
+	for _, vm := range acquired {
+		wg.Go(func() {
+			if err := vm.Delete(context.Background()); err != nil {
+				p.notify(EventRefreshFailed, fmt.Errorf("vmspool: refresh: delete %v: %w", vm.ID(), err))
+			}
+		})
+	}
+	wg.Wait()
+}
+
 // Close stops accepting new acquires, waits for all replenishment goroutines
 // to finish, then deletes every VM the pool created whose deletion has not
 // already been performed, or claimed, by another path (such as a concurrent

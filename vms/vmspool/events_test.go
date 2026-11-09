@@ -13,12 +13,12 @@ import (
 // TestEventKindString guards against an EventKind being added, or inserted
 // between existing ones, without a corresponding name.
 func TestEventKindString(t *testing.T) {
-	for e := vmspool.EventAcquireWaiting; e <= vmspool.EventAcquiredVMRetained; e++ {
+	for e := vmspool.EventAcquireWaiting; e <= vmspool.EventRefreshFailed; e++ {
 		if got := e.String(); got == "" || got == "Unknown" {
 			t.Errorf("EventKind(%d): missing name: got %q", int(e), got)
 		}
 	}
-	for _, e := range []vmspool.EventKind{-1, vmspool.EventAcquiredVMRetained + 1} {
+	for _, e := range []vmspool.EventKind{-1, vmspool.EventRefreshFailed + 1} {
 		if got, want := e.String(), "Unknown"; got != want {
 			t.Errorf("EventKind(%d): got %v, want %v", int(e), got, want)
 		}

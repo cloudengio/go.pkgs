@@ -257,6 +257,13 @@ const (
 	DefaultMockImage = "mock-image"
 )
 
+// DefaultMockResources are the resources a MockFactory reports through
+// DefaultResources, and for each of its VMs, when it was not given others with
+// SetResources. A mock VM has no resources of its own, so these stand in for
+// them: unremarkable figures that look like a plausible small VM, so that an
+// application displaying a mock pool has something to show.
+var DefaultMockResources = vmspool.VMResources{NumCores: 2, MemGiB: 4, DiskGiB: 20}
+
 // MockFactory creates and tracks Mock instances for pool and integration tests.
 // Use Inject to pre-supply configured mocks; otherwise MockFactory.New creates
 // plain NewMock instances on demand.
@@ -264,17 +271,38 @@ type MockFactory struct {
 	suspendable bool
 	mu          sync.Mutex
 	image       string
+	resources   vmspool.VMResources
 	mocks       []*Mock
 	pending     []*Mock // pre-configured mocks to hand out first
 }
 
 // NewMockFactory returns an empty MockFactory.
 func NewMockFactory(suspendable bool) *MockFactory {
-	return &MockFactory{suspendable: suspendable, image: DefaultMockImage}
+	return &MockFactory{
+		suspendable: suspendable,
+		image:       DefaultMockImage,
+		resources:   DefaultMockResources,
+	}
 }
 
 // Name implements vmspool.Provider.
 func (f *MockFactory) Name() string { return MockProviderName }
+
+// SetResources sets the resources reported by DefaultResources and by Get for
+// each of the factory's VMs.
+func (f *MockFactory) SetResources(resources vmspool.VMResources) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resources = resources
+}
+
+// DefaultResources implements vmspool.Provider, reporting the resources set by
+// SetResources, or DefaultMockResources if none were.
+func (f *MockFactory) DefaultResources() vmspool.VMResources {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.resources
+}
 
 // mockDetails reports the image a MockFactory was configured with, standing for
 // the provider-specific detail a real provider exposes about its VMs.
@@ -352,7 +380,13 @@ func (f *MockFactory) Get(ctx context.Context, name string) (vmspool.VMDetail, e
 	defer f.mu.Unlock()
 	for _, m := range f.mocks {
 		if m.ID() == name {
-			return vmspool.VMDetail{VMInfo: mockVMInfo(ctx, m)}, nil
+			// A mock VM has no resources of its own, so it reports the
+			// factory's, as a real provider's VM reports what it was created
+			// with.
+			return vmspool.VMDetail{
+				VMInfo:      mockVMInfo(ctx, m),
+				VMResources: f.resources,
+			}, nil
 		}
 	}
 	return vmspool.VMDetail{}, fmt.Errorf("no such vm: %s", name)
