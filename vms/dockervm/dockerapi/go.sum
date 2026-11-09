@@ -2,6 +2,8 @@ cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c h1:TL29FcfnHXIrvG8K5l2R2nw7r
 cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c/go.mod h1:pI98u5ytMFakWkLK2yrVvHyRlzcyYArBYA4xKR1vPj8=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuutJnWWZX1lzAzlT/Y0IA=
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
+cloudeng.io/logging v0.0.0-20261027225206-401592c3d504 h1:wJPXv/0IdDsoih6+5S6a4ai4/txiBtCqPfZVj+hRmLA=
+cloudeng.io/logging v0.0.0-20261027225206-401592c3d504/go.mod h1:jMLEVhrVlzxya9df5e1q14kPxxOMnBxEejhV8QpMMKU=
 cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba h1:2+U9tNRu/+O1rHgv2mxRTU80lgUCJSxDFDswbKumBx8=
 cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba/go.mod h1:35kcugrX/RVGQjSfyLMciOCloX34nFfnkQsdks75Ao0=
 github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyUc+g=

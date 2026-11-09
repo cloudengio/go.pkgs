@@ -34,6 +34,18 @@ func (c *dockerAPIConstructor) New(ctx context.Context) (vms.Instance, error) {
 	return dockerapi.New(ctx, c.image, name, dockerapi.WithLogger(logger))
 }
 
+func (c *dockerAPIConstructor) Name() string { return "dockerapi" }
+
+type apiDetails struct {
+	image string
+}
+
+func (d apiDetails) Image() string { return d.image }
+
+func (c *dockerAPIConstructor) Details() vmspool.ProviderDetails {
+	return apiDetails{image: c.image}
+}
+
 // List, Get and Delete satisfy vmspool.Provider. The pool/instance test harness
 // does not exercise them, so they are minimal stubs.
 func (c *dockerAPIConstructor) List(context.Context) ([]vmspool.VMInfo, error) { return nil, nil }

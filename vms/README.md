@@ -83,13 +83,14 @@ Action represents an operation that causes a state transition.
 ### Constants
 ### ActionNone, ActionClone, ActionStart, ActionStop, ActionSuspend, ActionDelete
 ```go
-ActionNone Action = iota
-ActionClone
-ActionStart
-ActionStop
-ActionSuspend
-ActionDelete
-
+const (
+	ActionNone Action = iota
+	ActionClone
+	ActionStart
+	ActionStop
+	ActionSuspend
+	ActionDelete
+)
 ```
 
 
@@ -188,18 +189,19 @@ State represents the state of a virtual machine instance.
 ### Constants
 ### StateInitial, StateCloning, StateStarting, StateRunning, StateStopping, StateStopped, StateSuspending, StateSuspended, StateDeleting, StateDeleted, StateErrorUnknown
 ```go
-StateInitial State = iota
-StateCloning
-StateStarting
-StateRunning
-StateStopping
-StateStopped
-StateSuspending
-StateSuspended
-StateDeleting
-StateDeleted
-StateErrorUnknown
-
+const (
+	StateInitial State = iota
+	StateCloning
+	StateStarting
+	StateRunning
+	StateStopping
+	StateStopped
+	StateSuspending
+	StateSuspended
+	StateDeleting
+	StateDeleted
+	StateErrorUnknown
+)
 ```
 
 
