@@ -3,7 +3,7 @@ module cloudeng.io/vms/dockervm/dockerapi
 go 1.26.2
 
 require (
-	cloudeng.io/algo v0.0.0-20261026191912-bcd1dece5d6c
+	cloudeng.io/algo v0.0.0-20261027225206-401592c3d504
 	cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/vms v0.0.0-20260527194618-4cb6d4558850
@@ -15,6 +15,7 @@ require (
 
 require (
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278 // indirect
+	cloudeng.io/logging v0.0.0-20261027225206-401592c3d504 // indirect
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/caarlos0/env/v11 v11.4.1 // indirect

@@ -6,12 +6,12 @@ require (
 	cloudeng.io/algo v0.0.0-20261027225206-401592c3d504
 	cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
+	cloudeng.io/logging v0.0.0-20261027225206-401592c3d504
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 )
 
 require (
-	cloudeng.io/logging v0.0.0-20261027225206-401592c3d504 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 )
