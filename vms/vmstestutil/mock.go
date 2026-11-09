@@ -44,6 +44,11 @@ type Mock struct {
 	// that starts a VM, such as Pool.Acquire, part way through.
 	StartBlock chan struct{}
 
+	// DeleteBlock, if non-nil, causes Delete to block until the channel is
+	// closed or the context is cancelled. Used by tests to simulate slow
+	// or concurrent deletions.
+	DeleteBlock chan struct{}
+
 	CloneErr   error
 	StartErr   error
 	StopRunErr error
@@ -160,7 +165,14 @@ func (m *Mock) Suspend(_ context.Context) error {
 	return nil
 }
 
-func (m *Mock) Delete(_ context.Context) error {
+func (m *Mock) Delete(ctx context.Context) error {
+	if m.DeleteBlock != nil {
+		select {
+		case <-m.DeleteBlock:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.deleteCalls++

@@ -497,3 +497,99 @@ func TestCompletionQueuePushAfterCancel(t *testing.T) {
 		t.Errorf("Delete: %v", err)
 	}
 }
+
+// TestCompletionQueueAsyncExpirationDoesNotBlockOthers verifies that when an
+// expiring VM's deletion is slow (e.g. blocked), other events can still be
+// delivered through Out and other VMs can still expire without being blocked.
+func TestCompletionQueueAsyncExpirationDoesNotBlockOthers(t *testing.T) {
+	ctx := quietContext(t)
+	factory := vmstestutil.NewMockFactory(true)
+	q := newQueue(ctx, time.Millisecond)
+
+	signal, release := q.Subscribe(ctx)
+	defer release()
+
+	// Create first VM whose Delete will block.
+	deleteBlock := make(chan struct{})
+	slowMock := vmstestutil.NewMock("slow-vm")
+	slowMock.DeleteBlock = deleteBlock
+	factory.Inject(slowMock)
+
+	vm1 := acquireVM(t, factory, 1)
+	id1 := vm1.ID()
+
+	// Push vm1 to expire.
+	q.Push(vmspool.CompletionEvent{VM: completed{vm: vm1}, Outcome: outcomeSuccess})
+	awaitSignal(t, signal, "push vm1")
+	awaitSignal(t, signal, "expiry vm1")
+
+	// Even though vm1 is still blocked in Delete, the queue should have unrecorded it
+	// and should not block subsequent operations or other VMs.
+	if holdsVM(q, id1) {
+		t.Errorf("the queue still reports holding %v after it expired", id1)
+	}
+
+	// Create and push a second VM whose Delete does not block.
+	vm2 := acquireVM(t, factory, 1)
+	id2 := vm2.ID()
+	q.Push(vmspool.CompletionEvent{VM: completed{vm: vm2}, Outcome: outcomeSuccess})
+	awaitSignal(t, signal, "push vm2")
+	awaitSignal(t, signal, "expiry vm2")
+
+	if holdsVM(q, id2) {
+		t.Errorf("the queue still reports holding %v after it expired", id2)
+	}
+
+	// Unblock vm1 Delete so Close can finish.
+	close(deleteBlock)
+	closeWithin(t, q, 30*time.Second)
+}
+
+// TestCompletionQueueCloseWaitsForAsyncDeletions verifies that Close waits for
+// in-flight asynchronous expiration deletions before returning.
+func TestCompletionQueueCloseWaitsForAsyncDeletions(t *testing.T) {
+	ctx := quietContext(t)
+	factory := vmstestutil.NewMockFactory(true)
+	q := newQueue(ctx, time.Millisecond)
+
+	signal, release := q.Subscribe(ctx)
+	defer release()
+
+	deleteBlock := make(chan struct{})
+	mock := vmstestutil.NewMock("expiring-vm")
+	mock.DeleteBlock = deleteBlock
+	factory.Inject(mock)
+
+	vm := acquireVM(t, factory, 1)
+	q.Push(vmspool.CompletionEvent{VM: completed{vm: vm}, Outcome: outcomeSuccess})
+	awaitSignal(t, signal, "push")
+	awaitSignal(t, signal, "expiry")
+
+	// Close runs in a goroutine while deletion is blocked.
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- q.Close(context.Background())
+	}()
+
+	// Verify Close has not returned yet because it is waiting for the deletion goroutine.
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close returned before asynchronous deletion completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Unblock Delete; Close should now complete.
+	close(deleteBlock)
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return after unblocking deletion")
+	}
+
+	if got, want := mock.State(ctx), vms.StateDeleted; got != want {
+		t.Errorf("mock state: got %v, want %v", got, want)
+	}
+}

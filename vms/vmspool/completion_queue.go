@@ -15,6 +15,7 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/logging/ctxlog"
+	"cloudeng.io/sync/ctxsync"
 	"cloudeng.io/sync/patterns"
 )
 
@@ -69,6 +70,9 @@ type CompletionQueue struct {
 	outcomeQueues map[string]*outcomeQueue
 	vmIDs         map[string]bool
 	vmIDsByPool   map[string][]string
+
+	// wg tracks in-flight asynchronous VM deletions triggered on expiration.
+	wg ctxsync.WaitGroup
 }
 
 type outcomeQueue struct {
@@ -160,9 +164,9 @@ func (q *CompletionQueue) unrecordVM(e CompletionEvent) {
 }
 
 // expiration reports whether an event has been held for long enough, and
-// deletes the VM it was holding if it has. It runs on the FIFO's own goroutine,
-// serialized with delivery, so an outcome's queue delivers nothing while one of
-// its expired VMs is being deleted.
+// deletes the VM it was holding if it has. It runs on the FIFO's own goroutine;
+// deletion runs asynchronously in a tracked goroutine so that a slow deletion
+// does not block delivery of other events or expiration of other VMs.
 func (q *CompletionQueue) expiration(e CompletionEvent) bool {
 	if time.Now().After(e.expirationTime) {
 		logger := q.logger
@@ -176,9 +180,13 @@ func (q *CompletionQueue) expiration(e CompletionEvent) bool {
 		}
 		q.unrecordVM(e)
 		if vm := eventVM(e); vm != nil {
-			if err := vm.Delete(context.Background()); err != nil {
-				logger.Error("failed to delete VM", "deletion_err", err)
-			}
+			q.wg.Go(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), DefaultStopTimeout)
+				defer cancel()
+				if err := vm.Delete(ctx); err != nil {
+					logger.Error("failed to delete VM", "deletion_err", err)
+				}
+			})
 		}
 		return true
 	}
@@ -314,6 +322,7 @@ func (q *CompletionQueue) Close(ctx context.Context) error {
 		for i, cq := range queues {
 			errs.Append(q.closeCQ(ctx, fmt.Sprintf("releasing vm from outcome queue %q", names[i]), cq.cq))
 		}
+		q.wg.Wait(ctx)
 		q.closeErr = errs.Err()
 	})
 	return q.closeErr

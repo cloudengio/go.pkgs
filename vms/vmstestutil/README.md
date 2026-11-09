@@ -8,19 +8,20 @@ import cloudeng.io/vms/vmstestutil
 ## Constants
 ### MockProviderName, DefaultMockImage
 ```go
-// MockProviderName is the provider name a MockFactory reports, standing
-// where a real provider names its infrastructure ("tart", "docker").
-MockProviderName = "mock"
-// DefaultMockImage is the image a MockFactory reports through Details when
-// it was not given one with SetImage.
-DefaultMockImage = "mock-image"
+const (
+	// MockProviderName is the provider name a MockFactory reports, standing
+	// where a real provider names its infrastructure ("tart", "docker").
+	MockProviderName = "mock"
 
+	// DefaultMockImage is the image a MockFactory reports through Details when
+	// it was not given one with SetImage.
+	DefaultMockImage = "mock-image"
+)
 ```
 
 ### DefaultTestPoolName
 ```go
-DefaultTestPoolName = "vmstestutil-pool"
-
+const DefaultTestPoolName = "vmstestutil-pool"
 ```
 DefaultTestPoolName is the pool name used by the pool tests when
 PoolTestConfig.PoolName is empty.
@@ -153,6 +154,11 @@ type Mock struct {
 	// that starts a VM, such as Pool.Acquire, part way through.
 	StartBlock chan struct{}
 
+	// DeleteBlock, if non-nil, causes Delete to block until the channel is
+	// closed or the context is cancelled. Used by tests to simulate slow
+	// or concurrent deletions.
+	DeleteBlock chan struct{}
+
 	CloneErr   error
 	StartErr   error
 	StopRunErr error
@@ -183,7 +189,7 @@ func (m *Mock) Clone(ctx context.Context) error
 
 
 ```go
-func (m *Mock) Delete(_ context.Context) error
+func (m *Mock) Delete(ctx context.Context) error
 ```
 
 

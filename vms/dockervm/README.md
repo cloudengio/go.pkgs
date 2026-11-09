@@ -9,16 +9,16 @@ Package dockervm implements cloudeng.io/vms.Instance using the Docker CLI.
 ## Constants
 ### DefaultPollingInterval, DefaultForceStopTimeout, DefaultDockerBinary
 ```go
-DefaultPollingInterval = 200 * time.Millisecond
-DefaultForceStopTimeout = 10 * time.Second
-DefaultDockerBinary = "docker"
-
+const (
+	DefaultPollingInterval  = 200 * time.Millisecond
+	DefaultForceStopTimeout = 10 * time.Second
+	DefaultDockerBinary     = "docker"
+)
 ```
 
 ### ProviderName
 ```go
-ProviderName = "docker"
-
+const ProviderName = "docker"
 ```
 ProviderName is the name reported by Provider.Name.
 
