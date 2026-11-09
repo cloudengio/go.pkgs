@@ -164,3 +164,21 @@ func TestPoolRefreshDeleteFailure(t *testing.T) {
 	}
 	requireEmpty(t, p)
 }
+
+// TestPoolRefreshDoesNotStartStoppedVMs verifies that refreshing available VMs
+// in a pool with StagingBehaviourStopped deletes them directly without starting
+// them.
+func TestPoolRefreshDoesNotStartStoppedVMs(t *testing.T) {
+	ctx := context.Background()
+	factory := vmstestutil.NewMockFactory(false)
+	p := newPool(t, 2, vmspool.StagingBehaviourStopped, factory)
+
+	for _, m := range factory.Mocks() {
+		m.StartErr = errors.New("start must not be called during refresh of stopped VMs")
+	}
+
+	if got, want := p.Refresh(ctx), 2; got != want {
+		t.Fatalf("Refresh: got %v, want %v", got, want)
+	}
+	requireSettled(t, p, 2)
+}

@@ -742,12 +742,6 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	return &VM{inst: inst, pool: p}, nil
 }
 
-// refreshAcquireTimeout bounds how long Refresh waits for each of the VMs it
-// is taking out of circulation. A VM that cannot be acquired that quickly was
-// taken by somebody else in the meantime, which is not a failure: it is in
-// use, and Refresh leaves the VMs that are in use alone.
-const refreshAcquireTimeout = 500 * time.Millisecond
-
 // Refresh takes the VMs that are currently available out of the pool and
 // deletes them, leaving the pool to create replacements, which is how a pool
 // picks up a new base image without being restarted. It returns the number of
@@ -763,39 +757,62 @@ const refreshAcquireTimeout = 500 * time.Millisecond
 // Refresh returns 0 for a pool with nothing available to replace, including a
 // closed one.
 func (p *Pool) Refresh(ctx context.Context) int {
+	if ctx.Err() != nil || p.isClosed() {
+		return 0
+	}
 	stats := p.Stats()
 	if stats.Available == 0 {
 		return 0
 	}
-	// Acquiring the available VMs is what takes them out of circulation: a VM
-	// held here cannot be handed to anybody else whilst it is being deleted.
-	var acquired []*VM
+	// Draining available VMs directly from ready takes them out of circulation
+	// without starting stopped or suspended VMs, and without competing with
+	// other callers waiting on ready.
+	toRefresh := make([]*vmsInstance, 0, stats.Available)
+drained:
 	for range stats.Available {
-		acqCtx, cancel := context.WithTimeout(ctx, refreshAcquireTimeout)
-		vm, err := p.Acquire(acqCtx)
-		cancel()
-		if err != nil {
-			break
+		select {
+		case inst := <-p.ready:
+			toRefresh = append(toRefresh, inst)
+		default:
+			break drained
 		}
-		acquired = append(acquired, vm)
 	}
-	if len(acquired) == 0 {
+	if len(toRefresh) == 0 {
 		return 0
 	}
-	go p.deleteAll(acquired)
-	return len(acquired)
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		for _, inst := range toRefresh {
+			_ = p.cleanupVM(context.Background(), inst, p.options.stopTimeout)
+		}
+		return 0
+	}
+	p.wg.Go(func() {
+		p.deleteAllInstances(toRefresh)
+	})
+	p.mu.Unlock()
+	return len(toRefresh)
 }
 
-// deleteAll deletes the VMs taken out of the pool by Refresh, which also
-// replenishes the pool for each of them. Deletion is detached from the context
-// that asked for the refresh: the VMs have already been taken out of
+// deleteAllInstances deletes the VMs taken out of the pool by Refresh, which
+// also replenishes the pool for each of them. Deletion is detached from the
+// context that asked for the refresh: the VMs have already been taken out of
 // circulation, and leaving one that has been undeleted would strand it.
-func (p *Pool) deleteAll(acquired []*VM) {
+// Deletions run with cleanupTimeout to prevent a hung provider from leaking
+// goroutines indefinitely.
+func (p *Pool) deleteAllInstances(instances []*vmsInstance) {
 	var wg sync.WaitGroup
-	for _, vm := range acquired {
+	for _, inst := range instances {
 		wg.Go(func() {
-			if err := vm.Delete(context.Background()); err != nil {
-				p.notify(EventRefreshFailed, fmt.Errorf("vmspool: refresh: delete %v: %w", vm.ID(), err))
+			delCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
+			defer cancel()
+			claimed, err := p.claimAndCleanupVM(delCtx, inst, p.options.stopTimeout)
+			if claimed {
+				p.requestReplenish()
+			}
+			if err != nil {
+				p.notify(EventRefreshFailed, fmt.Errorf("vmspool: refresh: delete %v: %w", inst.ID(), err))
 			}
 		})
 	}
