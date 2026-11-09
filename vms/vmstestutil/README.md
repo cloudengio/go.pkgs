@@ -5,6 +5,29 @@ import cloudeng.io/vms/vmstestutil
 ```
 
 
+## Constants
+### MockProviderName, DefaultMockImage
+```go
+const (
+	// MockProviderName is the provider name a MockFactory reports, standing
+	// where a real provider names its infrastructure ("tart", "docker").
+	MockProviderName = "mock"
+
+	// DefaultMockImage is the image a MockFactory reports through Details when
+	// it was not given one with SetImage.
+	DefaultMockImage = "mock-image"
+)
+```
+
+### DefaultTestPoolName
+```go
+const DefaultTestPoolName = "vmstestutil-pool"
+```
+DefaultTestPoolName is the pool name used by the pool tests when
+PoolTestConfig.PoolName is empty.
+
+
+
 ## Functions
 ### Func TestInstanceCloneStartStopDelete
 ```go
@@ -131,6 +154,11 @@ type Mock struct {
 	// that starts a VM, such as Pool.Acquire, part way through.
 	StartBlock chan struct{}
 
+	// DeleteBlock, if non-nil, causes Delete to block until the channel is
+	// closed or the context is cancelled. Used by tests to simulate slow
+	// or concurrent deletions.
+	DeleteBlock chan struct{}
+
 	CloneErr   error
 	StartErr   error
 	StopRunErr error
@@ -161,7 +189,7 @@ func (m *Mock) Clone(ctx context.Context) error
 
 
 ```go
-func (m *Mock) Delete(_ context.Context) error
+func (m *Mock) Delete(ctx context.Context) error
 ```
 
 
@@ -264,6 +292,13 @@ resources, so there is nothing to reclaim.
 
 
 ```go
+func (f *MockFactory) Details() vmspool.ProviderDetails
+```
+Details implements vmspool.Provider, reporting the image set by SetImage,
+or DefaultMockImage if none was.
+
+
+```go
 func (f *MockFactory) Get(ctx context.Context, name string) (vmspool.VMDetail, error)
 ```
 Get implements vmspool.Provider, returning details for a previously-created
@@ -291,8 +326,20 @@ Mocks returns a snapshot of all Mock instances produced so far.
 
 
 ```go
+func (f *MockFactory) Name() string
+```
+Name implements vmspool.Provider.
+
+
+```go
 func (f *MockFactory) New(context.Context) (vms.Instance, error)
 ```
+
+
+```go
+func (f *MockFactory) SetImage(image string)
+```
+SetImage sets the image reported by Details.
 
 
 
@@ -306,6 +353,11 @@ type PoolTestConfig struct {
 	// PoolSize is the default pool size used across all tests. Defaults to 2.
 	// Some subtests intentionally use a size-1 pool for deterministic behavior.
 	PoolSize int
+
+	// PoolName is the name given to the pools created by the tests, which the
+	// VMs they hand out report through VM.PoolName. Defaults to
+	// DefaultTestPoolName.
+	PoolName string
 
 	// ExecCmd is a command that should succeed inside an acquired VM. If empty
 	// the Exec subtest is skipped.

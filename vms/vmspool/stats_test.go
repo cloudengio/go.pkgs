@@ -47,11 +47,9 @@ func requireStats(t *testing.T, p *vmspool.Pool, want vmspool.Stats) {
 // operations have failed, or returns "" if it breaks none of them.
 func statsViolation(s vmspool.Stats, size int) string {
 	switch {
-	case s.Size != size:
-		return "Size is not the configured size"
 	case s.Available < 0 || s.Acquired < 0 || s.Pending < 0:
 		return "a count is negative"
-	case s.Available > s.Size:
+	case s.Available > size:
 		return "more VMs are available than the pool can hold"
 	}
 	return ""
@@ -61,14 +59,14 @@ func statsViolation(s vmspool.Stats, size int) string {
 // and every slot filled: all VMs available, none acquired or being created.
 func requireSettled(t *testing.T, p *vmspool.Pool, size int) {
 	t.Helper()
-	waitForStats(t, p, vmspool.Stats{Size: size, Available: size})
+	waitForStats(t, p, vmspool.Stats{Available: size})
 }
 
-// requireEmpty verifies that a closed pool of the given size holds no VMs at
-// all: every one it created, in whatever state, has been deleted.
-func requireEmpty(t *testing.T, p *vmspool.Pool, size int) {
+// requireEmpty verifies that a closed pool holds no VMs at all: every one it
+// created, in whatever state, has been deleted.
+func requireEmpty(t *testing.T, p *vmspool.Pool) {
 	t.Helper()
-	requireStats(t, p, vmspool.Stats{Size: size})
+	requireStats(t, p, vmspool.Stats{})
 }
 
 // TestPoolStatsLifecycle follows the counts through the steps of a VM's life
@@ -77,41 +75,44 @@ func TestPoolStatsLifecycle(t *testing.T) {
 	ctx := context.Background()
 	const size = 3
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory, vmspool.WithSize(size))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(size))
 
-	// Nothing exists until Start, but the size is known.
-	requireStats(t, p, vmspool.Stats{Size: size})
+	// Nothing exists until Start, though the pool knows what it will hold.
+	requireStats(t, p, vmspool.Stats{})
+	if got, want := p.Size(), size; got != want {
+		t.Errorf("Size: got %v, want %v", got, want)
+	}
 
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = p.Close(ctx) })
 	// Start returns once one VM is ready; the rest are created behind it.
-	waitForStats(t, p, vmspool.Stats{Size: size, Available: size})
+	waitForStats(t, p, vmspool.Stats{Available: size})
 
 	vm1, err := p.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: size, Available: size - 1, Acquired: 1})
+	requireStats(t, p, vmspool.Stats{Available: size - 1, Acquired: 1})
 
 	vm2, err := p.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: size, Available: size - 2, Acquired: 2})
+	requireStats(t, p, vmspool.Stats{Available: size - 2, Acquired: 2})
 
 	// Deleting a VM gives up its slot, which is refilled, so that the pool
 	// returns to its size once the replacement has been created.
 	if err := vm1.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
-	waitForStats(t, p, vmspool.Stats{Size: size, Available: size - 1, Acquired: 1})
+	waitForStats(t, p, vmspool.Stats{Available: size - 1, Acquired: 1})
 
 	if err := vm2.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
-	waitForStats(t, p, vmspool.Stats{Size: size, Available: size})
+	waitForStats(t, p, vmspool.Stats{Available: size})
 }
 
 // TestPoolStatsPending verifies that a VM which is still being created is
@@ -126,7 +127,7 @@ func TestPoolStatsPending(t *testing.T) {
 	blocked.CloneBlock = cloneBlock
 
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(1), vmspool.WithStatus(statusCh))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -137,21 +138,21 @@ func TestPoolStatsPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: 1, Acquired: 1})
+	requireStats(t, p, vmspool.Stats{Acquired: 1})
 
 	// The replacement's creation is held up in Clone.
 	factory.Inject(blocked)
 	if err := vm.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
-	waitForStats(t, p, vmspool.Stats{Size: 1, Pending: 1})
+	waitForStats(t, p, vmspool.Stats{Pending: 1})
 
 	// It stays pending for as long as creation does, and is not counted twice.
 	time.Sleep(20 * time.Millisecond)
-	requireStats(t, p, vmspool.Stats{Size: 1, Pending: 1})
+	requireStats(t, p, vmspool.Stats{Pending: 1})
 
 	close(cloneBlock)
-	waitForStats(t, p, vmspool.Stats{Size: 1, Available: 1})
+	waitForStats(t, p, vmspool.Stats{Available: 1})
 }
 
 // TestPoolStatsStopAndRelease verifies the accounting for a VM stopped by
@@ -161,12 +162,12 @@ func TestPoolStatsPending(t *testing.T) {
 func TestPoolStatsStopAndRelease(t *testing.T) {
 	ctx := context.Background()
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory, vmspool.WithSize(1))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(1))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = p.Close(ctx) })
-	waitForStats(t, p, vmspool.Stats{Size: 1, Available: 1})
+	waitForStats(t, p, vmspool.Stats{Available: 1})
 
 	vm, err := p.Acquire(ctx)
 	if err != nil {
@@ -175,15 +176,15 @@ func TestPoolStatsStopAndRelease(t *testing.T) {
 	if _, stopErr := vm.StopAndRelease(ctx, time.Second); stopErr != nil {
 		t.Fatal(stopErr)
 	}
-	waitForStats(t, p, vmspool.Stats{Size: 1, Available: 1, Acquired: 1})
+	waitForStats(t, p, vmspool.Stats{Available: 1, Acquired: 1})
 
 	// Deleting the stopped VM does not request a second replacement.
 	if err := vm.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: 1, Available: 1})
+	requireStats(t, p, vmspool.Stats{Available: 1})
 	time.Sleep(20 * time.Millisecond)
-	requireStats(t, p, vmspool.Stats{Size: 1, Available: 1})
+	requireStats(t, p, vmspool.Stats{Available: 1})
 }
 
 // TestPoolStatsClose verifies that Close leaves nothing counted, including a
@@ -191,22 +192,22 @@ func TestPoolStatsStopAndRelease(t *testing.T) {
 func TestPoolStatsClose(t *testing.T) {
 	ctx := context.Background()
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory, vmspool.WithSize(2))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(2))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	waitForStats(t, p, vmspool.Stats{Size: 2, Available: 2})
+	waitForStats(t, p, vmspool.Stats{Available: 2})
 	if _, err := p.Acquire(ctx); err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: 2, Available: 1, Acquired: 1})
+	requireStats(t, p, vmspool.Stats{Available: 1, Acquired: 1})
 
 	if err := p.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: 2})
+	requireStats(t, p, vmspool.Stats{})
 	// Idempotent, like Close.
-	requireStats(t, p, vmspool.Stats{Size: 2})
+	requireStats(t, p, vmspool.Stats{})
 }
 
 // TestPoolStatsDoesNotBlock verifies that Stats can be read while an Acquire is
@@ -223,7 +224,7 @@ func TestPoolStatsDoesNotBlock(t *testing.T) {
 	factory := vmstestutil.NewMockFactory(true)
 	factory.Inject(blocked)
 	// A staged-stopped VM must be started by Acquire, which is what blocks.
-	p := vmspool.New(factory, vmspool.WithSize(1),
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(1),
 		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourStopped))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -234,7 +235,7 @@ func TestPoolStatsDoesNotBlock(t *testing.T) {
 	var release sync.Once
 	releaseStart := func() { release.Do(func() { close(startBlock) }) }
 	t.Cleanup(releaseStart)
-	waitForStats(t, p, vmspool.Stats{Size: 1, Available: 1})
+	waitForStats(t, p, vmspool.Stats{Available: 1})
 
 	acquired := make(chan error, 1)
 	go func() {
@@ -256,7 +257,7 @@ func TestPoolStatsDoesNotBlock(t *testing.T) {
 	}
 
 	// Wait until Acquire has taken the VM from the pool and is starting it.
-	want := vmspool.Stats{Size: 1, Pending: 1}
+	want := vmspool.Stats{Pending: 1}
 	deadline := time.Now().Add(timeout)
 	for got := statsWithin(); got != want; got = statsWithin() {
 		if time.Now().After(deadline) {
@@ -269,7 +270,7 @@ func TestPoolStatsDoesNotBlock(t *testing.T) {
 	if err := <-acquired; err != nil {
 		t.Fatal(err)
 	}
-	requireStats(t, p, vmspool.Stats{Size: 1, Acquired: 1})
+	requireStats(t, p, vmspool.Stats{Acquired: 1})
 }
 
 // readStatsUntil reads Stats repeatedly until stop is closed, reporting any
@@ -316,12 +317,12 @@ func TestPoolStatsConcurrent(t *testing.T) {
 	ctx := context.Background()
 	const size, workers, rounds = 4, 4, 15
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory, vmspool.WithSize(size))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(size))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = p.Close(ctx) })
-	waitForStats(t, p, vmspool.Stats{Size: size, Available: size})
+	waitForStats(t, p, vmspool.Stats{Available: size})
 
 	stop := make(chan struct{})
 	var readers, writers sync.WaitGroup
@@ -336,7 +337,7 @@ func TestPoolStatsConcurrent(t *testing.T) {
 	readers.Wait()
 
 	// Every VM was deleted and replaced, so the pool ends up full again.
-	waitForStats(t, p, vmspool.Stats{Size: size, Available: size})
+	waitForStats(t, p, vmspool.Stats{Available: size})
 }
 
 // TestPoolDeleteTwice verifies that deleting a VM more than once, from one
@@ -347,7 +348,7 @@ func TestPoolDeleteTwice(t *testing.T) {
 	ctx := context.Background()
 	const callers = 8
 	factory := vmstestutil.NewMockFactory(true)
-	p := vmspool.New(factory, vmspool.WithSize(1))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(1))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +389,7 @@ func TestPoolStatsDeleteFails(t *testing.T) {
 	bad := vmstestutil.NewMock("")
 	bad.DeleteErr = errors.New("delete failed")
 	factory.Inject(bad)
-	p := vmspool.New(factory, vmspool.WithSize(1))
+	p := vmspool.New(factory, testPoolName, vmspool.WithSize(1))
 	if err := p.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +407,7 @@ func TestPoolStatsDeleteFails(t *testing.T) {
 	if err := p.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	requireEmpty(t, p, 1)
+	requireEmpty(t, p)
 }
 
 // aliveMocks counts the VMs the factory has created that exist and have not
@@ -451,7 +452,7 @@ func TestPoolStatsUnderFailures(t *testing.T) {
 		factory.Inject(bad)
 	}
 
-	p := vmspool.New(factory,
+	p := vmspool.New(factory, testPoolName,
 		vmspool.WithSize(size),
 		vmspool.WithStagingBehaviour(vmspool.StagingBehaviourStopped),
 		vmspool.WithCreateBackoff(fastCreateBackoff()))
@@ -502,7 +503,7 @@ func TestPoolStatsUnderFailures(t *testing.T) {
 	if err := p.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	requireEmpty(t, p, size)
+	requireEmpty(t, p)
 	if got := aliveMocks(factory.Mocks()); got != 0 {
 		t.Errorf("%d VMs left undeleted after Close", got)
 	}
@@ -512,12 +513,11 @@ func TestPoolStatsUnderFailures(t *testing.T) {
 // TestStatsString verifies that Stats formats nicely as a string.
 func TestStatsString(t *testing.T) {
 	s := vmspool.Stats{
-		Size:      3,
 		Available: 2,
 		Acquired:  1,
 		Pending:   0,
 	}
-	wantStr := "size=3 available=2 acquired=1 pending=0"
+	wantStr := "available=2 acquired=1 pending=0"
 	if got := s.String(); got != wantStr {
 		t.Errorf("String(): got %q, want %q", got, wantStr)
 	}

@@ -34,8 +34,30 @@ type Provider struct {
 	constructor  Constructor
 	prefix       string // if set, only containers whose name has this prefix are managed
 	pool         string // optional pool name used to tag VMInfo.Pool
+	image        string // optional image reported by Details; see WithProviderImage
 	logger       *slog.Logger
 	dockerBinary string // optional path to docker binary, defaults to DefaultDockerBinary
+}
+
+// ProviderName is the name reported by Provider.Name.
+const ProviderName = "docker"
+
+// Name implements vmspool.Provider.
+func (p *Provider) Name() string { return ProviderName }
+
+// providerDetails reports the image a Provider's containers are created from.
+type providerDetails struct {
+	image string
+}
+
+func (d providerDetails) Image() string { return d.image }
+
+// Details implements vmspool.Provider, reporting the image set by
+// WithProviderImage. A Provider builds its containers through a
+// caller-supplied Constructor and so cannot discover the image itself; the
+// image is empty when the option was not used.
+func (p *Provider) Details() vmspool.ProviderDetails {
+	return providerDetails{image: p.image}
 }
 
 var _ vmspool.Provider = (*Provider)(nil)
@@ -53,6 +75,14 @@ func WithNamePrefix(prefix string) ProviderOption {
 // WithPoolName sets the pool name reported in VMInfo.Pool for the Provider's VMs.
 func WithPoolName(name string) ProviderOption {
 	return func(p *Provider) { p.pool = name }
+}
+
+// WithProviderImage records the image the Provider's Constructor creates
+// containers from, which Details reports to callers that display what a pool
+// is running. It has no effect on the containers themselves, which the
+// Constructor builds.
+func WithProviderImage(image string) ProviderOption {
+	return func(p *Provider) { p.image = image }
 }
 
 // WithProviderDockerBinary sets the path to the docker binary used by the Provider. If not set, DefaultDockerBinary is used.
