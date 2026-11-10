@@ -6,7 +6,7 @@ require cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
 
 require cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 
-require golang.org/x/sync v0.24.0 // indirect
+require golang.org/x/sync v0.25.0 // indirect
 
 replace cloudeng.io/errors => ../errors
 
