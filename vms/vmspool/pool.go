@@ -423,12 +423,31 @@ func (p *Pool) CompletionQueue() *CompletionQueue {
 	return p.options.completion
 }
 
+// notify reports an event about the pool itself.
 func (p *Pool) notify(kind EventKind, err error) {
+	p.send(Event{Time: time.Now(), Kind: kind, Pool: p.name, Err: err})
+}
+
+// notifyVM reports an event about a single VM, naming it so that a consumer
+// can attribute the event without parsing the text of an error, and so that
+// the events of a pool's VMs can be followed individually.
+func (p *Pool) notifyVM(kind EventKind, inst *vmsInstance, err error) {
+	var id string
+	if inst != nil && inst.Instance != nil {
+		id = inst.ID()
+	}
+	p.send(Event{Time: time.Now(), Kind: kind, Pool: p.name, VM: id, Err: err})
+}
+
+// send delivers an event to the status channel, if one was registered. The
+// send is non-blocking: an event is dropped rather than delaying the pool,
+// see WithStatus.
+func (p *Pool) send(e Event) {
 	if p.options.statusCh == nil {
 		return
 	}
 	select {
-	case p.options.statusCh <- Event{Time: time.Now(), Kind: kind, Err: err}:
+	case p.options.statusCh <- e:
 	default:
 	}
 }
@@ -575,7 +594,7 @@ func (p *Pool) createVMAndNotify(ctx context.Context) (*vmsInstance, error) {
 		p.notify(EventVMCreateFailed, err)
 		return nil, err
 	}
-	p.notify(EventVMCreated, nil)
+	p.notifyVM(EventVMCreated, inst, nil)
 	return inst, nil
 }
 
@@ -716,11 +735,11 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 			errs.Append(p.cleanupVM(context.Background(), inst, p.options.cleanupTimeout))
 			err := fmt.Errorf("vmspool: pool is closed")
 			errs.Append(err)
-			p.notify(EventAttemptToUseClosedPool, err)
+			p.notifyVM(EventAttemptToUseClosedPool, inst, err)
 			return nil, errs.Err()
 		}
 	}
-	p.notify(EventVMDequeued, nil)
+	p.notifyVM(EventVMDequeued, inst, nil)
 
 	p.opMutex.Lock()
 	defer p.opMutex.Unlock()
@@ -730,7 +749,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 			p.cleanupVMOnError(inst, p.options.cleanupTimeout)
 			p.requestReplenish()
 			err = fmt.Errorf("vmspool: acquire: %w", err)
-			p.notify(EventAcquireFailed, err)
+			p.notifyVM(EventAcquireFailed, inst, err)
 			return nil, err
 		}
 		// The VM is running again, so it is the caller's StopAndRelease or Delete that
@@ -738,7 +757,7 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 		inst.setStopped(false)
 	}
 	inst.acquired.Store(true)
-	p.notify(EventAcquired, nil)
+	p.notifyVM(EventAcquired, inst, nil)
 	return &VM{inst: inst, pool: p}, nil
 }
 
@@ -812,7 +831,7 @@ func (p *Pool) deleteAllInstances(instances []*vmsInstance) {
 				p.requestReplenish()
 			}
 			if err != nil {
-				p.notify(EventRefreshFailed, fmt.Errorf("vmspool: refresh: delete %v: %w", inst.ID(), err))
+				p.notifyVM(EventRefreshFailed, inst, fmt.Errorf("vmspool: refresh: delete %v: %w", inst.ID(), err))
 			}
 		})
 	}
@@ -865,7 +884,7 @@ drained:
 	var g errgroup.T
 	for _, inst := range p.tracked() {
 		if inst.acquired.Load() && !p.options.deleteAcquiredOnClose {
-			p.notify(EventAcquiredVMRetained, nil)
+			p.notifyVM(EventAcquiredVMRetained, inst, nil)
 			continue
 		}
 		g.Go(func() error {
@@ -883,7 +902,7 @@ drained:
 				p.track(inst)
 				return err
 			}
-			p.notify(EventOrphanedVMDeleted, nil)
+			p.notifyVM(EventOrphanedVMDeleted, inst, nil)
 			return nil
 		})
 	}
