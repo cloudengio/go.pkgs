@@ -27,10 +27,10 @@ it against a default registry of its own, see Reference.WithDefaultRegistry.
 Reference.Remote says only that a registry was named explicitly, which is
 the question "is there anywhere to pull this from".
 
-Config is the configuration of an image and how it is obtained, for a
-backend to embed in its own configuration so that every backend spells these
-the same way. Pulling itself is left to the backend, which is the only thing
-that knows how: a backend that can pull implements Puller.
+Source is where an image comes from and how it is obtained, for a backend to
+embed in its own configuration so that every backend spells these the same
+way. Pulling itself is left to the backend, which is the only thing that
+knows how: a backend that can pull implements Puller.
 
 Nothing here validates a reference beyond its structure. An empty reference,
 an empty path segment, a tag or digest that is not one at all: these are
@@ -62,54 +62,6 @@ store that is expected to hold it already, see Reference.Remote.
 
 
 ## Types
-### Type Config
-```go
-type Config struct {
-	Image           string `yaml:"image" doc:"the OCI image reference to create VMs from, such as 'linux-ci', 'linux-ci:latest' or 'ghcr.io/cirruslabs/ubuntu:latest'."`
-	PullRemoteOnRun bool   `yaml:"pull_remote_on_run" doc:"pull the image from its registry before creating each VM, so that a moving tag such as :latest is picked up without restarting. Ignored for a reference that names no registry, which has nothing to pull from."`
-	Insecure        bool   `yaml:"pull_insecure" doc:"allow pulling the image from a registry without verifying its certificate."`
-	Concurrency     int    `yaml:"pull_concurrency" doc:"the concurrency to pull the image with; 0 leaves it to the tool that pulls it."`
-}
-```
-Config configures the image a backend creates its VMs or containers from,
-and how that image is obtained. It carries serialisation tags so that
-a backend can embed it directly in its own configuration, rather than
-restating these, and so that every backend spells them the same way.
-
-### Methods
-
-```go
-func (c Config) PullOptions() PullOptions
-```
-PullOptions returns the configured options for a pull.
-
-
-```go
-func (c Config) Reference() (Reference, error)
-```
-Reference parses the configured image.
-
-
-```go
-func (c Config) ShouldPull(ref Reference) bool
-```
-ShouldPull reports whether ref should be pulled before it is used: the
-configuration asks for it and the reference names a registry to pull from. A
-local reference has nothing to pull from, so asking for it is not an error,
-it simply does not apply.
-
-
-```go
-func (c Config) Validate() error
-```
-Validate reports a configuration that cannot be used: one that names no
-image, or one whose image is not a reference. It is for a backend to call
-when its own configuration is read, so that a mistake in a configuration
-file is reported then rather than when the first VM fails to be created.
-
-
-
-
 ### Type PullOptions
 ```go
 type PullOptions struct {
@@ -255,6 +207,61 @@ func (r Reference) WithTag(tag string) Reference
 WithTag returns the reference with its tag replaced, or removed if tag
 is empty. The digest, if any, is left as it is; it is the digest that
 identifies the image when a reference carries both.
+
+
+
+
+### Type Source
+```go
+type Source struct {
+	Image           string `yaml:"image" doc:"the OCI image reference to create VMs from, such as 'linux-ci', 'linux-ci:latest' or 'ghcr.io/cirruslabs/ubuntu:latest'."`
+	PullRemoteOnRun bool   `yaml:"pull_remote_on_run" doc:"pull the image from its registry before creating each VM, so that a moving tag such as :latest is picked up without restarting. Ignored for a reference that names no registry, which has nothing to pull from."`
+	Insecure        bool   `yaml:"pull_insecure" doc:"allow pulling the image from a registry without verifying its certificate."`
+	Concurrency     int    `yaml:"pull_concurrency" doc:"the concurrency to pull the image with; 0 leaves it to the tool that pulls it."`
+}
+```
+Source is where a backend's image comes from: which image it creates its VMs
+or containers from, and how that image is obtained. It carries serialisation
+tags so that a backend can embed it inline in its own configuration, rather
+than restating these, and so that every backend spells them the same way.
+
+It is named for what it describes rather than being another Config, so that
+it can be embedded alongside the configuration of the tool that uses it:
+a struct cannot embed both tartvm.Config and an ociimage.Config, since the
+two would contribute the same field name.
+
+### Methods
+
+```go
+func (s Source) PullOptions() PullOptions
+```
+PullOptions returns the configured options for a pull.
+
+
+```go
+func (s Source) Reference() (Reference, error)
+```
+Reference parses the configured image.
+
+
+```go
+func (s Source) ShouldPull(ref Reference) bool
+```
+ShouldPull reports whether ref should be pulled before it is used: the
+configuration asks for it and the reference names a registry to pull from. A
+local reference has nothing to pull from, so asking for it is not an error,
+it simply does not apply.
+
+
+```go
+func (s Source) Validate() error
+```
+Validate reports a configuration that cannot be used: one that names no
+image, or one whose image is not a reference. It is for a backend to call
+when its own configuration is read, so that a mistake in a configuration
+file is reported then rather than when the first VM fails to be created.
+A backend that locates its own settings in its messages reports these itself
+instead, see Reference.
 
 
 

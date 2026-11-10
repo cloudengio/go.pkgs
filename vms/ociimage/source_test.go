@@ -11,27 +11,27 @@ import (
 	"cloudeng.io/vms/ociimage"
 )
 
-// TestConfigValidate covers the mistakes a configuration file can make that
+// TestSourceValidate covers the mistakes a configuration file can make that
 // are worth reporting when it is read, rather than when the first VM fails to
 // be created.
-func TestConfigValidate(t *testing.T) {
-	if err := (ociimage.Config{Image: "ghcr.io/cirruslabs/ubuntu:latest"}).Validate(); err != nil {
+func TestSourceValidate(t *testing.T) {
+	if err := (ociimage.Source{Image: "ghcr.io/cirruslabs/ubuntu:latest"}).Validate(); err != nil {
 		t.Errorf("a valid configuration was rejected: %v", err)
 	}
 	// No image at all.
-	err := (ociimage.Config{}).Validate()
+	err := (ociimage.Source{}).Validate()
 	if !errors.Is(err, ociimage.ErrInvalidReference) {
 		t.Errorf("got %v, want ErrInvalidReference", err)
 	}
 	// An image that is not a reference, which Validate reports as such.
-	err = (ociimage.Config{Image: "ghcr.io//ubuntu"}).Validate()
+	err = (ociimage.Source{Image: "ghcr.io//ubuntu"}).Validate()
 	if !errors.Is(err, ociimage.ErrInvalidReference) {
 		t.Errorf("got %v, want ErrInvalidReference", err)
 	}
 }
 
-func TestConfigReference(t *testing.T) {
-	cfg := ociimage.Config{Image: "mm-1:5001/linux-ci:latest"}
+func TestSourceReference(t *testing.T) {
+	cfg := ociimage.Source{Image: "mm-1:5001/linux-ci:latest"}
 	ref, err := cfg.Reference()
 	if err != nil {
 		t.Fatalf("Reference: %v", err)
@@ -42,14 +42,14 @@ func TestConfigReference(t *testing.T) {
 	if got, want := ref.String(), cfg.Image; got != want {
 		t.Errorf("String: got %q, want %q", got, want)
 	}
-	if _, err := (ociimage.Config{Image: "linux-ci:"}).Reference(); !errors.Is(err, ociimage.ErrInvalidReference) {
+	if _, err := (ociimage.Source{Image: "linux-ci:"}).Reference(); !errors.Is(err, ociimage.ErrInvalidReference) {
 		t.Errorf("got %v, want ErrInvalidReference", err)
 	}
 }
 
-// TestConfigShouldPull covers the pull policy: a configuration that asks for
+// TestSourceShouldPull covers the pull policy: a configuration that asks for
 // a pull gets one only for an image that has a registry to be pulled from.
-func TestConfigShouldPull(t *testing.T) {
+func TestSourceShouldPull(t *testing.T) {
 	for _, tc := range []struct {
 		image string
 		ask   bool
@@ -68,7 +68,7 @@ func TestConfigShouldPull(t *testing.T) {
 		{"ghcr.io/cirruslabs/ubuntu:latest", false, false},
 		{"linux-ci", false, false},
 	} {
-		cfg := ociimage.Config{Image: tc.image, PullRemoteOnRun: tc.ask}
+		cfg := ociimage.Source{Image: tc.image, PullRemoteOnRun: tc.ask}
 		ref, err := cfg.Reference()
 		if err != nil {
 			t.Errorf("Reference(%q): %v", tc.image, err)
@@ -80,14 +80,14 @@ func TestConfigShouldPull(t *testing.T) {
 	}
 }
 
-func TestConfigPullOptions(t *testing.T) {
-	cfg := ociimage.Config{Image: "linux-ci", Insecure: true, Concurrency: 4}
+func TestSourcePullOptions(t *testing.T) {
+	cfg := ociimage.Source{Image: "linux-ci", Insecure: true, Concurrency: 4}
 	want := ociimage.PullOptions{Insecure: true, Concurrency: 4}
 	if got := cfg.PullOptions(); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 	// An unconfigured pull leaves both to the tool that performs it.
-	if got, want := (ociimage.Config{}).PullOptions(), (ociimage.PullOptions{}); got != want {
+	if got, want := (ociimage.Source{}).PullOptions(), (ociimage.PullOptions{}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
