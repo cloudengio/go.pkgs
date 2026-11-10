@@ -20,8 +20,8 @@ func TestConfigValidate(t *testing.T) {
 	}
 	// No image at all.
 	err := (ociimage.Config{}).Validate()
-	if err == nil {
-		t.Error("a configuration naming no image was accepted")
+	if !errors.Is(err, ociimage.ErrInvalidReference) {
+		t.Errorf("got %v, want ErrInvalidReference", err)
 	}
 	// An image that is not a reference, which Validate reports as such.
 	err = (ociimage.Config{Image: "ghcr.io//ubuntu"}).Validate()

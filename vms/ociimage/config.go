@@ -28,7 +28,7 @@ func (c Config) Reference() (Reference, error) {
 // file is reported then rather than when the first VM fails to be created.
 func (c Config) Validate() error {
 	if c.Image == "" {
-		return fmt.Errorf("image is required")
+		return fmt.Errorf("%w: image is required", ErrInvalidReference)
 	}
 	if _, err := c.Reference(); err != nil {
 		return err
