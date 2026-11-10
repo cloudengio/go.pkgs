@@ -1,0 +1,11 @@
+--- Overview
+Renames ociimage.Config to ociimage.Source. A backend can then embed it alongside its own tool's Config (e.g. tartvm.Config) without the two embedded fields clashing on the name Config.
+
+--- Key Changes
+vms/ociimage
+  * Renamed the Config type to Source. Its fields, YAML tags and methods (Reference, Validate, ShouldPull, PullOptions) stay the same.
+  * Renamed config.go and config_test.go to source.go and source_test.go, and renamed the tests to match (TestSource*).
+  * Updated the doc comments in doc.go and README.md. They now explain the new name and note that a backend which finds its settings in its own messages reports errors itself rather than calling Validate.
+
+--- Breaking Changes
+  * ociimage.Config is now ociimage.Source. Callers need to update the type name. The YAML field names are unchanged, so existing configuration files still work.
