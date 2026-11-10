@@ -1,0 +1,14 @@
+--- Overview
+vmspool.Event now records the name of the pool that sent it and, for events about a single VM, that VM's ID. This lets one channel shared by several pools tell their events apart, and lets callers follow a single VM without parsing error text.
+
+--- Key Changes
+vms/vmspool
+  * New Event.Pool field: the emitting pool's name. It is always set.
+  * New Event.VM field: the VM's ID. It is empty for pool-level events, for creation that failed before a VM existed, and for replenishment events.
+  * Pool.notify now only reports pool-level events. A new Pool.notifyVM reports per-VM events, and both send through a shared non-blocking Pool.send.
+  * These events now use notifyVM: EventVMCreated, EventVMDequeued, EventAcquired, EventAcquireFailed, EventAttemptToUseClosedPool, EventRefreshFailed, EventAcquiredVMRetained, EventOrphanedVMDeleted, and EventRelease/EventReleased (from VM.Delete).
+  * Updated the EventRefreshFailed docs and the README to describe the new fields.
+  * Added TestEventAttribution. It checks that every event has the pool name, that events about the acquired VM have its ID, and that pool-level events have no VM ID.
+
+--- Breaking Changes
+None. The new fields are additive, though any unkeyed Event{...} struct literals will need updating.
