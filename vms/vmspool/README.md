@@ -231,7 +231,17 @@ WithStatus or WithStdoutStderr, which require non-serialisable values
 type Event struct {
 	Time time.Time
 	Kind EventKind
-	Err  error // non-nil for *Failed events
+	// Pool is the name of the pool that emitted the event, see Pool.Name. It
+	// is always set, so that a consumer of a channel shared by several pools
+	// can attribute what it receives without a channel per pool.
+	Pool string
+	// VM is the ID of the VM the event concerns, empty for an event about the
+	// pool itself rather than one of its VMs. It is also empty for the events
+	// of a VM that does not exist yet or no longer exists: creation that
+	// failed before there was anything to name, and the restoration of a
+	// pool's capacity, which EventVMCreated has already named the new VM for.
+	VM  string
+	Err error // non-nil for *Failed events
 }
 ```
 Event describes a single pool lifecycle event.
@@ -313,7 +323,8 @@ const (
 	EventAcquiredVMRetained
 
 	// EventRefreshFailed is emitted by Refresh for each VM it took out of the
-	// pool but could not delete. Err is set and names the VM. The pool is
+	// pool but could not delete. VM is set, and Err, which names it too so
+	// that the error is self-contained wherever it is reported. The pool is
 	// replenished for that VM regardless, so it keeps its size, but the VM
 	// itself may be left behind for an external sweep to find.
 	EventRefreshFailed
