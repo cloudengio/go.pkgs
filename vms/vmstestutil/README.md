@@ -13,8 +13,10 @@ const (
 	// where a real provider names its infrastructure ("tart", "docker").
 	MockProviderName = "mock"
 
-	// DefaultMockImage is the image a MockFactory reports through Details when
-	// it was not given one with SetImage.
+	// DefaultMockImage is the name of the image a MockFactory reports through
+	// Details when it was not given one with SetImage. A mock VM is created
+	// from nothing at all, so it names no registry and carries no tag, see
+	// DefaultMockReference.
 	DefaultMockImage = "mock-image"
 )
 ```
@@ -29,6 +31,14 @@ PoolTestConfig.PoolName is empty.
 
 
 ## Variables
+### DefaultMockReference
+```go
+DefaultMockReference = ociimage.Reference{Name: DefaultMockImage}
+
+```
+DefaultMockReference is the reference a MockFactory reports through Details
+when it was not given one with SetImage.
+
 ### DefaultMockResources
 ```go
 DefaultMockResources = vmspool.VMResources{NumCores: 2, MemGiB: 4, DiskGiB: 20}
@@ -316,7 +326,7 @@ resources, so there is nothing to reclaim.
 func (f *MockFactory) Details() vmspool.ProviderDetails
 ```
 Details implements vmspool.Provider, reporting the image set by SetImage,
-or DefaultMockImage if none was.
+or DefaultMockReference if none was.
 
 
 ```go
@@ -358,7 +368,7 @@ func (f *MockFactory) New(context.Context) (vms.Instance, error)
 
 
 ```go
-func (f *MockFactory) SetImage(image string)
+func (f *MockFactory) SetImage(ref ociimage.Reference)
 ```
 SetImage sets the image reported by Details.
 

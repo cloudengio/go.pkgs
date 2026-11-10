@@ -312,7 +312,7 @@ func (p *Provider) Details() vmspool.ProviderDetails
 Details implements vmspool.Provider, reporting the image set by
 WithProviderImage. A Provider builds its containers through a
 caller-supplied Constructor and so cannot discover the image itself;
-the image is empty when the option was not used.
+the image is the zero Reference when the option was not used.
 
 
 ```go
@@ -373,12 +373,15 @@ Provider. If not set, DefaultDockerBinary is used.
 
 
 ```go
-func WithProviderImage(image string) ProviderOption
+func WithProviderImage(ref ociimage.Reference) ProviderOption
 ```
 WithProviderImage records the image the Provider's Constructor creates
-containers from, which Details reports to callers that display what a
-pool is running. It has no effect on the containers themselves, which the
-Constructor builds.
+containers from, which Details reports to callers that display what
+a pool is running. It has no effect on the containers themselves,
+which the Constructor builds. The reference is parsed, see ociimage.Parse,
+so that a caller reporting on the pool need not take it apart again;
+docker resolves one that names no registry against a registry of its own,
+see ociimage.Reference.WithDefaultRegistry.
 
 
 ```go
