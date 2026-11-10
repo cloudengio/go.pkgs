@@ -46,6 +46,12 @@ func (c *dockerAPIConstructor) Details() vmspool.ProviderDetails {
 	return apiDetails{image: c.image}
 }
 
+// DefaultResources satisfies vmspool.Provider: this constructor asks for no
+// particular resources, so its containers get whatever the daemon gives them.
+func (c *dockerAPIConstructor) DefaultResources() vmspool.VMResources {
+	return vmspool.VMResources{}
+}
+
 // List, Get and Delete satisfy vmspool.Provider. The pool/instance test harness
 // does not exercise them, so they are minimal stubs.
 func (c *dockerAPIConstructor) List(context.Context) ([]vmspool.VMInfo, error) { return nil, nil }

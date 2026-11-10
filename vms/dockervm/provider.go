@@ -32,9 +32,10 @@ type Constructor = func(ctx context.Context) (vms.Instance, error)
 // requires supplying the construction function.
 type Provider struct {
 	constructor  Constructor
-	prefix       string // if set, only containers whose name has this prefix are managed
-	pool         string // optional pool name used to tag VMInfo.Pool
-	image        string // optional image reported by Details; see WithProviderImage
+	prefix       string              // if set, only containers whose name has this prefix are managed
+	pool         string              // optional pool name used to tag VMInfo.Pool
+	image        string              // optional image reported by Details; see WithProviderImage
+	resources    vmspool.VMResources // optional defaults reported by DefaultResources; see WithProviderResources
 	logger       *slog.Logger
 	dockerBinary string // optional path to docker binary, defaults to DefaultDockerBinary
 }
@@ -44,6 +45,13 @@ const ProviderName = "docker"
 
 // Name implements vmspool.Provider.
 func (p *Provider) Name() string { return ProviderName }
+
+// DefaultResources implements vmspool.Provider, reporting the resources set by
+// WithProviderResources. Like the image, a Provider cannot discover them for
+// itself: its containers come from a caller-supplied Constructor. A zero figure
+// means unknown, which is what an application displaying a pool shows for a
+// container that has not been created yet.
+func (p *Provider) DefaultResources() vmspool.VMResources { return p.resources }
 
 // providerDetails reports the image a Provider's containers are created from.
 type providerDetails struct {
@@ -83,6 +91,13 @@ func WithPoolName(name string) ProviderOption {
 // Constructor builds.
 func WithProviderImage(image string) ProviderOption {
 	return func(p *Provider) { p.image = image }
+}
+
+// WithProviderResources records the resources the Provider's Constructor
+// creates containers with, which DefaultResources reports. Like
+// WithProviderImage it has no effect on the containers themselves.
+func WithProviderResources(resources vmspool.VMResources) ProviderOption {
+	return func(p *Provider) { p.resources = resources }
 }
 
 // WithProviderDockerBinary sets the path to the docker binary used by the Provider. If not set, DefaultDockerBinary is used.
@@ -205,9 +220,11 @@ func (p *Provider) Get(ctx context.Context, vmName string) (vmspool.VMDetail, er
 			State:   d.State.Status,
 			Running: d.State.Status == "running",
 		},
-		DiskGiB:  bytesToGiB(d.SizeRootFs),
-		NumCores: int(d.HostConfig.NanoCpus / 1_000_000_000),
-		MemGiB:   bytesToGiB(d.HostConfig.Memory),
+		VMResources: vmspool.VMResources{
+			DiskGiB:  bytesToGiB(d.SizeRootFs),
+			NumCores: int(d.HostConfig.NanoCpus / 1_000_000_000),
+			MemGiB:   bytesToGiB(d.HostConfig.Memory),
+		},
 	}, nil
 }
 
