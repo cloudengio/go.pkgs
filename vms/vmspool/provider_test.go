@@ -8,6 +8,7 @@ import (
 	"context"
 	"testing"
 
+	"cloudeng.io/vms/ociimage"
 	"cloudeng.io/vms/vmspool"
 	"cloudeng.io/vms/vmstestutil"
 )
@@ -31,6 +32,13 @@ func TestPoolIdentity(t *testing.T) {
 	if got, want := d.Size(), vmspool.DefaultPoolSize; got != want {
 		t.Errorf("Size: got %v, want %v", got, want)
 	}
+
+	// The pool reports the provider it was created with, so an application
+	// wrapping a pool reaches it through the pool rather than keeping a second
+	// reference to it. It is answerable before the pool has created anything.
+	if got, want := p.Provider(), vmspool.Provider(factory); got != want {
+		t.Errorf("Provider: got %v, want %v", got, want)
+	}
 }
 
 // TestVMProvenance covers what an acquired VM reports about where it came from:
@@ -40,7 +48,11 @@ func TestPoolIdentity(t *testing.T) {
 func TestVMProvenance(t *testing.T) {
 	ctx := context.Background()
 	factory := vmstestutil.NewMockFactory(true)
-	factory.SetImage("ci-image")
+	image, err := ociimage.Parse("ghcr.io/cloudengio/ci-image:latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory.SetImage(image)
 	p := newPool(t, 1, vmspool.StagingBehaviourSuspended, factory)
 
 	vm, err := p.Acquire(ctx)
@@ -61,8 +73,13 @@ func TestVMProvenance(t *testing.T) {
 	if details == nil {
 		t.Fatal("Provider.Details: got nil, want the provider's details")
 	}
-	if got, want := details.Image(), "ci-image"; got != want {
-		t.Errorf("Provider.Details().Image: got %q, want %q", got, want)
+	// The provider reports the image parsed, so a caller naming something
+	// after it, or deciding whether it can be pulled, has the parts to hand.
+	if got, want := details.Image(), image; got != want {
+		t.Errorf("Provider.Details().Image: got %v, want %v", got, want)
+	}
+	if got, want := details.Image().Name, "ci-image"; got != want {
+		t.Errorf("Provider.Details().Image().Name: got %q, want %q", got, want)
 	}
 
 	if err := vm.Delete(ctx); err != nil {

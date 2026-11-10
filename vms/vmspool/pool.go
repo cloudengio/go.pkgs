@@ -416,6 +416,15 @@ func (p *Pool) Name() string {
 	return p.name
 }
 
+// Provider returns the provider the pool creates its VMs with, see New. It is
+// fixed when the pool is created, and is exposed so that an application
+// wrapping a Pool can reach the provider it supplied - to report what the VMs
+// were created from, or to list and inspect them - without having to keep a
+// second reference to it alongside the pool.
+func (p *Pool) Provider() Provider {
+	return p.provider
+}
+
 // CompletionQueue returns the queue that finished work from this pool is parked
 // in, or nil if the pool has none, see WithCompletionQueue. All VMs from this
 // pool return this value via their CompletionQueue method.

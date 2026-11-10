@@ -47,6 +47,69 @@ minutes, which is also the timeout allowed for a single creation attempt.
 
 
 ## Types
+### Type CachingProvider
+```go
+type CachingProvider struct {
+	Provider
+	// contains filtered or unexported fields
+}
+```
+CachingProvider wraps a Provider and caches the per-VM details that are
+expensive to obtain, which for a provider backed by a command line tool
+means one invocation of it per VM. What it caches is the part of a VMDetail
+that does not change whilst a VM exists: the resources it was created with.
+The state of a VM does change, so GetAll never serves that from the cache,
+see the VMInfo rule there.
+
+A zero CachingProvider wrapping a Provider is ready to use, and it is safe
+for concurrent use. It is a Provider itself, so a pool can be created with
+one, and it caches nothing a pool itself asks for: a pool creates VMs and
+leaves reporting on them to its application.
+
+### Methods
+
+```go
+func (c *CachingProvider) Get(ctx context.Context, vmName string) (VMDetail, error)
+```
+Get implements Provider, returning the full details of a single VM from the
+cache if they are held there and reading them from the wrapped Provider if
+they are not. Missing resources are filled in from the provider's defaults,
+see Provider.DefaultResources, and nothing is cached for a VM that cannot be
+read.
+
+A cached VM is served entirely from the cache, its VMInfo included, which
+may be as old as the entry: use GetAll where the state has to be current.
+Nothing is dropped from the cache here either, since one VM says nothing
+about which others still exist; it is GetAll that prunes it.
+
+
+```go
+func (c *CachingProvider) GetAll(ctx context.Context) ([]VMDetail, []string, error)
+```
+GetAll returns the full details of every VM the wrapped Provider lists,
+reading the details of each VM it has not seen before and serving the rest
+from the cache. VMs the listing no longer reports are dropped from it, so it
+holds the VMs that exist rather than every VM the provider has ever had.
+
+The listing is fresher than anything cached, so each VMDetail carries the
+VMInfo the listing gave it: a cached VM reports the state it is in now,
+not the state it was in when its details were read.
+
+A VM whose details cannot be read is still returned, carrying what the
+listing said about it and the provider's default resources: a VM that exists
+and cannot be inspected is of more use reported than omitted, not least
+because the count of VMs would otherwise disagree with the pool's own.
+Its name is returned in failed, and nothing is cached for it, so the next
+call reads it again rather than leaving it reporting defaults for as long as
+it exists. The error accumulates those failures and is returned alongside
+results that are usable whether or not it is nil; only a listing that fails
+returns no results at all.
+
+The details are returned ordered by VM name, whatever order List reports.
+
+
+
+
 ### Type CompletedVM
 ```go
 type CompletedVM interface {
@@ -502,6 +565,16 @@ return this value via their PoolName method.
 
 
 ```go
+func (p *Pool) Provider() Provider
+```
+Provider returns the provider the pool creates its VMs with, see New.
+It is fixed when the pool is created, and is exposed so that an application
+wrapping a Pool can reach the provider it supplied - to report what the VMs
+were created from, or to list and inspect them - without having to keep a
+second reference to it alongside the pool.
+
+
+```go
 func (p *Pool) Refresh(ctx context.Context) int
 ```
 Refresh takes the VMs that are currently available out of the pool and
@@ -598,9 +671,12 @@ orphaned VMs.
 ### Type ProviderDetails
 ```go
 type ProviderDetails interface {
-	// Image returns the image the provider's VMs are created from, or an empty
-	// string if the provider has no single image or does not know it.
-	Image() string
+	// Image returns the reference the provider's VMs are created from, or the
+	// zero Reference if the provider has no single image or does not know it,
+	// see ociimage.Reference.IsZero. It is parsed rather than a string so that
+	// a caller naming something after the image, or deciding whether it can be
+	// pulled, does not have to take the reference apart again.
+	Image() ociimage.Reference
 }
 ```
 ProviderDetails defines an interface for provider-specific details about the
