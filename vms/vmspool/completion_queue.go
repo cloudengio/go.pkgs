@@ -109,7 +109,7 @@ func NewCompletionQueue(ctx context.Context, opts ...CompletionOutcomeOption) *C
 	q := &CompletionQueue{
 		ctx:           ctx,
 		logger:        ctxlog.Logger(ctx),
-		pubsub:        patterns.New[struct{}](),
+		pubsub:        patterns.NewPubSub[struct{}](),
 		vmIDs:         make(map[string]bool),
 		vmIDsByPool:   map[string][]string{},
 		outcomeQueues: make(map[string]*outcomeQueue),
