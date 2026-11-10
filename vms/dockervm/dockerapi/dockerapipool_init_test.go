@@ -17,6 +17,7 @@ import (
 	"cloudeng.io/cicd"
 	"cloudeng.io/vms"
 	"cloudeng.io/vms/dockervm/dockerapi"
+	"cloudeng.io/vms/ociimage"
 	"cloudeng.io/vms/vmspool"
 	"cloudeng.io/vms/vmstestutil"
 )
@@ -37,13 +38,20 @@ func (c *dockerAPIConstructor) New(ctx context.Context) (vms.Instance, error) {
 func (c *dockerAPIConstructor) Name() string { return "dockerapi" }
 
 type apiDetails struct {
-	image string
+	image ociimage.Reference
 }
 
-func (d apiDetails) Image() string { return d.image }
+func (d apiDetails) Image() ociimage.Reference { return d.image }
 
 func (c *dockerAPIConstructor) Details() vmspool.ProviderDetails {
-	return apiDetails{image: c.image}
+	ref, err := ociimage.Parse(c.image)
+	if err != nil {
+		// The image is this harness's own, see newDockerAPIConstructor; a
+		// reference it cannot parse is a mistake in the test, not a condition
+		// Details can report.
+		panic(err)
+	}
+	return apiDetails{image: ref}
 }
 
 // DefaultResources satisfies vmspool.Provider: this constructor asks for no

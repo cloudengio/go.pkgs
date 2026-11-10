@@ -10,14 +10,18 @@ import (
 	"time"
 
 	"cloudeng.io/vms"
+	"cloudeng.io/vms/ociimage"
 )
 
 // ProviderDetails defines an interface for provider-specific details about the
 // infrastructure implementing the VM provider.
 type ProviderDetails interface {
-	// Image returns the image the provider's VMs are created from, or an empty
-	// string if the provider has no single image or does not know it.
-	Image() string
+	// Image returns the reference the provider's VMs are created from, or the
+	// zero Reference if the provider has no single image or does not know it,
+	// see ociimage.Reference.IsZero. It is parsed rather than a string so that
+	// a caller naming something after the image, or deciding whether it can be
+	// pulled, does not have to take the reference apart again.
+	Image() ociimage.Reference
 }
 
 // VMInfo is a backend-neutral summary of a VM managed by a Provider. It holds

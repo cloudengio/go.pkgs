@@ -17,6 +17,7 @@ import (
 
 	"cloudeng.io/errors"
 	"cloudeng.io/vms"
+	"cloudeng.io/vms/ociimage"
 	"cloudeng.io/vms/vmspool"
 )
 
@@ -34,7 +35,7 @@ type Provider struct {
 	constructor  Constructor
 	prefix       string              // if set, only containers whose name has this prefix are managed
 	pool         string              // optional pool name used to tag VMInfo.Pool
-	image        string              // optional image reported by Details; see WithProviderImage
+	image        ociimage.Reference  // optional image reported by Details; see WithProviderImage
 	resources    vmspool.VMResources // optional defaults reported by DefaultResources; see WithProviderResources
 	logger       *slog.Logger
 	dockerBinary string // optional path to docker binary, defaults to DefaultDockerBinary
@@ -55,15 +56,15 @@ func (p *Provider) DefaultResources() vmspool.VMResources { return p.resources }
 
 // providerDetails reports the image a Provider's containers are created from.
 type providerDetails struct {
-	image string
+	image ociimage.Reference
 }
 
-func (d providerDetails) Image() string { return d.image }
+func (d providerDetails) Image() ociimage.Reference { return d.image }
 
 // Details implements vmspool.Provider, reporting the image set by
 // WithProviderImage. A Provider builds its containers through a
 // caller-supplied Constructor and so cannot discover the image itself; the
-// image is empty when the option was not used.
+// image is the zero Reference when the option was not used.
 func (p *Provider) Details() vmspool.ProviderDetails {
 	return providerDetails{image: p.image}
 }
@@ -88,9 +89,12 @@ func WithPoolName(name string) ProviderOption {
 // WithProviderImage records the image the Provider's Constructor creates
 // containers from, which Details reports to callers that display what a pool
 // is running. It has no effect on the containers themselves, which the
-// Constructor builds.
-func WithProviderImage(image string) ProviderOption {
-	return func(p *Provider) { p.image = image }
+// Constructor builds. The reference is parsed, see ociimage.Parse, so that a
+// caller reporting on the pool need not take it apart again; docker resolves
+// one that names no registry against a registry of its own, see
+// ociimage.Reference.WithDefaultRegistry.
+func WithProviderImage(ref ociimage.Reference) ProviderOption {
+	return func(p *Provider) { p.image = ref }
 }
 
 // WithProviderResources records the resources the Provider's Constructor

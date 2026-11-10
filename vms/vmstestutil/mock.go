@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloudeng.io/vms"
+	"cloudeng.io/vms/ociimage"
 	"cloudeng.io/vms/vmspool"
 )
 
@@ -252,10 +253,16 @@ const (
 	// where a real provider names its infrastructure ("tart", "docker").
 	MockProviderName = "mock"
 
-	// DefaultMockImage is the image a MockFactory reports through Details when
-	// it was not given one with SetImage.
+	// DefaultMockImage is the name of the image a MockFactory reports through
+	// Details when it was not given one with SetImage. A mock VM is created
+	// from nothing at all, so it names no registry and carries no tag, see
+	// DefaultMockReference.
 	DefaultMockImage = "mock-image"
 )
+
+// DefaultMockReference is the reference a MockFactory reports through Details
+// when it was not given one with SetImage.
+var DefaultMockReference = ociimage.Reference{Name: DefaultMockImage}
 
 // DefaultMockResources are the resources a MockFactory reports through
 // DefaultResources, and for each of its VMs, when it was not given others with
@@ -270,7 +277,7 @@ var DefaultMockResources = vmspool.VMResources{NumCores: 2, MemGiB: 4, DiskGiB: 
 type MockFactory struct {
 	suspendable bool
 	mu          sync.Mutex
-	image       string
+	image       ociimage.Reference
 	resources   vmspool.VMResources
 	mocks       []*Mock
 	pending     []*Mock // pre-configured mocks to hand out first
@@ -280,7 +287,7 @@ type MockFactory struct {
 func NewMockFactory(suspendable bool) *MockFactory {
 	return &MockFactory{
 		suspendable: suspendable,
-		image:       DefaultMockImage,
+		image:       DefaultMockReference,
 		resources:   DefaultMockResources,
 	}
 }
@@ -307,20 +314,20 @@ func (f *MockFactory) DefaultResources() vmspool.VMResources {
 // mockDetails reports the image a MockFactory was configured with, standing for
 // the provider-specific detail a real provider exposes about its VMs.
 type mockDetails struct {
-	image string
+	image ociimage.Reference
 }
 
-func (d mockDetails) Image() string { return d.image }
+func (d mockDetails) Image() ociimage.Reference { return d.image }
 
 // SetImage sets the image reported by Details.
-func (f *MockFactory) SetImage(image string) {
+func (f *MockFactory) SetImage(ref ociimage.Reference) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.image = image
+	f.image = ref
 }
 
 // Details implements vmspool.Provider, reporting the image set by SetImage, or
-// DefaultMockImage if none was.
+// DefaultMockReference if none was.
 func (f *MockFactory) Details() vmspool.ProviderDetails {
 	f.mu.Lock()
 	defer f.mu.Unlock()

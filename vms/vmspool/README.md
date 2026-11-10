@@ -502,6 +502,16 @@ return this value via their PoolName method.
 
 
 ```go
+func (p *Pool) Provider() Provider
+```
+Provider returns the provider the pool creates its VMs with, see New.
+It is fixed when the pool is created, and is exposed so that an application
+wrapping a Pool can reach the provider it supplied - to report what the VMs
+were created from, or to list and inspect them - without having to keep a
+second reference to it alongside the pool.
+
+
+```go
 func (p *Pool) Refresh(ctx context.Context) int
 ```
 Refresh takes the VMs that are currently available out of the pool and
@@ -598,9 +608,12 @@ orphaned VMs.
 ### Type ProviderDetails
 ```go
 type ProviderDetails interface {
-	// Image returns the image the provider's VMs are created from, or an empty
-	// string if the provider has no single image or does not know it.
-	Image() string
+	// Image returns the reference the provider's VMs are created from, or the
+	// zero Reference if the provider has no single image or does not know it,
+	// see ociimage.Reference.IsZero. It is parsed rather than a string so that
+	// a caller naming something after the image, or deciding whether it can be
+	// pulled, does not have to take the reference apart again.
+	Image() ociimage.Reference
 }
 ```
 ProviderDetails defines an interface for provider-specific details about the
