@@ -1,0 +1,20 @@
+--- Overview
+Adds the new vms/ociimage package. It parses OCI image references and gives VM and container backends one shared image and pull configuration.
+
+--- Key Changes
+vms/ociimage (new package)
+  * Reference: a comparable struct holding Registry, Repository, Name, Tag and Digest.
+    * Parse only checks structure, and String returns the original input unchanged.
+    * The leading segment counts as a registry only if it contains . or :, or is localhost. So myorg/linux-ci is a local reference.
+    * Parse rejects empty references, whitespace, empty path segments, empty or doubled tags, and malformed or non-hex digests, all with ErrInvalidReference.
+    * Predicates: Remote (true if the reference names a registry or has a digest), Immutable (true if it has a digest), IsZero and Path.
+    * Copy-returning builders: WithRegistry, WithDefaultRegistry (for docker-like resolution), WithTag and WithDigest.
+  * Config: a YAML-tagged struct for backends to embed, with the fields image, pull_remote_on_run, pull_insecure and pull_concurrency.
+    * Methods: Reference, Validate, ShouldPull (true only if a pull is requested and the reference is remote) and PullOptions.
+  * Puller interface and PullOptions (Insecure, Concurrency).
+    * Pull does nothing for local references, returns an error if a remote reference has no puller, and passes the puller's own errors back to the caller.
+  * Tests cover parsing, round-tripping, rejected inputs, predicates, builders, use as a map key, the zero value and pull behaviour.
+  * Adds the package doc and README.
+
+--- Breaking Changes
+None
