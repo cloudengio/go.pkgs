@@ -98,7 +98,7 @@ func (v *VM) StopAndRelease(ctx context.Context, timeout time.Duration) (runErr,
 // same reason only the first call to Delete replenishes the pool: any further
 // call finds the VM already deleted and does nothing.
 func (v *VM) Delete(ctx context.Context) error {
-	v.pool.notify(EventRelease, nil)
+	v.pool.notifyVM(EventRelease, v.inst, nil)
 	claimed, cleanupErr := v.pool.claimAndCleanupVM(ctx, v.inst, v.pool.options.stopTimeout)
 	if cleanupErr != nil {
 		cleanupErr = fmt.Errorf("vmspool: delete: %w", cleanupErr)
@@ -109,7 +109,7 @@ func (v *VM) Delete(ctx context.Context) error {
 	if claimed && v.inst != nil && v.inst.setStopped(true) {
 		v.pool.requestReplenish()
 	}
-	v.pool.notify(EventReleased, nil)
+	v.pool.notifyVM(EventReleased, v.inst, nil)
 	return cleanupErr
 }
 
