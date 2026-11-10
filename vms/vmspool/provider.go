@@ -5,8 +5,9 @@
 package vmspool
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -163,7 +164,7 @@ func (c *CachingProvider) GetAll(ctx context.Context) ([]VMDetail, []string, err
 		out = append(out, detail)
 	}
 	c.details = cache
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b VMDetail) int { return cmp.Compare(a.Name, b.Name) })
 	return out, failed, errs.Err()
 }
 
