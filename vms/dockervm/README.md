@@ -289,6 +289,16 @@ and implements the remaining vmspool.Provider methods via the docker CLI.
 ### Methods
 
 ```go
+func (p *Provider) DefaultResources() vmspool.VMResources
+```
+DefaultResources implements vmspool.Provider, reporting the resources
+set by WithProviderResources. Like the image, a Provider cannot discover
+them for itself: its containers come from a caller-supplied Constructor.
+A zero figure means unknown, which is what an application displaying a pool
+shows for a container that has not been created yet.
+
+
+```go
 func (p *Provider) Delete(ctx context.Context, stopTimeout time.Duration) ([]string, error)
 ```
 Delete implements vmspool.Provider, stopping (if running) and removing
@@ -369,6 +379,14 @@ WithProviderImage records the image the Provider's Constructor creates
 containers from, which Details reports to callers that display what a
 pool is running. It has no effect on the containers themselves, which the
 Constructor builds.
+
+
+```go
+func WithProviderResources(resources vmspool.VMResources) ProviderOption
+```
+WithProviderResources records the resources the Provider's Constructor
+creates containers with, which DefaultResources reports. Like
+WithProviderImage it has no effect on the containers themselves.
 
 
 

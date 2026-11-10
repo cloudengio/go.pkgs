@@ -861,6 +861,10 @@ func (c *nilConstructor) Name() string { return c.factory.Name() }
 
 func (c *nilConstructor) Details() vmspool.ProviderDetails { return c.factory.Details() }
 
+func (c *nilConstructor) DefaultResources() vmspool.VMResources {
+	return c.factory.DefaultResources()
+}
+
 func (c *nilConstructor) List(ctx context.Context) ([]vmspool.VMInfo, error) {
 	return c.factory.List(ctx)
 }

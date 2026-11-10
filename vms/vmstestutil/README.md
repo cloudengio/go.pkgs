@@ -28,6 +28,20 @@ PoolTestConfig.PoolName is empty.
 
 
 
+## Variables
+### DefaultMockResources
+```go
+DefaultMockResources = vmspool.VMResources{NumCores: 2, MemGiB: 4, DiskGiB: 20}
+
+```
+DefaultMockResources are the resources a MockFactory reports through
+DefaultResources, and for each of its VMs, when it was not given others with
+SetResources. A mock VM has no resources of its own, so these stand in for
+them: unremarkable figures that look like a plausible small VM, so that an
+application displaying a mock pool has something to show.
+
+
+
 ## Functions
 ### Func TestInstanceCloneStartStopDelete
 ```go
@@ -285,6 +299,13 @@ NewMockFactory returns an empty MockFactory.
 ### Methods
 
 ```go
+func (f *MockFactory) DefaultResources() vmspool.VMResources
+```
+DefaultResources implements vmspool.Provider, reporting the resources set by
+SetResources, or DefaultMockResources if none were.
+
+
+```go
 func (f *MockFactory) Delete(context.Context, time.Duration) ([]string, error)
 ```
 Delete implements vmspool.Provider; the mock factory manages no external
@@ -340,6 +361,13 @@ func (f *MockFactory) New(context.Context) (vms.Instance, error)
 func (f *MockFactory) SetImage(image string)
 ```
 SetImage sets the image reported by Details.
+
+
+```go
+func (f *MockFactory) SetResources(resources vmspool.VMResources)
+```
+SetResources sets the resources reported by DefaultResources and by Get for
+each of the factory's VMs.
 
 
 

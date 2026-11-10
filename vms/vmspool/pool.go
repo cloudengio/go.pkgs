@@ -742,6 +742,83 @@ func (p *Pool) Acquire(ctx context.Context) (*VM, error) {
 	return &VM{inst: inst, pool: p}, nil
 }
 
+// Refresh takes the VMs that are currently available out of the pool and
+// deletes them, leaving the pool to create replacements, which is how a pool
+// picks up a new base image without being restarted. It returns the number of
+// VMs removed.
+//
+// VMs that are held by a caller are left alone: they are in use, and the work
+// using them did not ask for a different image. Nor does Refresh wait for the
+// replacements, which take as long as creating any VM does, or for the
+// deletions themselves: it returns as soon as the VMs it is replacing can no
+// longer be handed out. A VM that cannot be deleted is reported through the
+// status channel as EventRefreshFailed.
+//
+// Refresh returns 0 for a pool with nothing available to replace, including a
+// closed one.
+func (p *Pool) Refresh(ctx context.Context) int {
+	if ctx.Err() != nil || p.isClosed() {
+		return 0
+	}
+	stats := p.Stats()
+	if stats.Available == 0 {
+		return 0
+	}
+	// Draining available VMs directly from ready takes them out of circulation
+	// without starting stopped or suspended VMs, and without competing with
+	// other callers waiting on ready.
+	toRefresh := make([]*vmsInstance, 0, stats.Available)
+drained:
+	for range stats.Available {
+		select {
+		case inst := <-p.ready:
+			toRefresh = append(toRefresh, inst)
+		default:
+			break drained
+		}
+	}
+	if len(toRefresh) == 0 {
+		return 0
+	}
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		for _, inst := range toRefresh {
+			_ = p.cleanupVM(context.Background(), inst, p.options.stopTimeout)
+		}
+		return 0
+	}
+	p.wg.Go(func() {
+		p.deleteAllInstances(toRefresh)
+	})
+	p.mu.Unlock()
+	return len(toRefresh)
+}
+
+// deleteAllInstances deletes the VMs taken out of the pool by Refresh, which
+// also replenishes the pool for each of them. Deletion is detached from the
+// context that asked for the refresh: the VMs have already been taken out of
+// circulation, and leaving one that has been undeleted would strand it.
+// Deletions run with cleanupTimeout to prevent a hung provider from leaking
+// goroutines indefinitely.
+func (p *Pool) deleteAllInstances(instances []*vmsInstance) {
+	var wg sync.WaitGroup
+	for _, inst := range instances {
+		wg.Go(func() {
+			delCtx, cancel := context.WithTimeout(context.Background(), p.options.cleanupTimeout)
+			defer cancel()
+			claimed, err := p.claimAndCleanupVM(delCtx, inst, p.options.stopTimeout)
+			if claimed {
+				p.requestReplenish()
+			}
+			if err != nil {
+				p.notify(EventRefreshFailed, fmt.Errorf("vmspool: refresh: delete %v: %w", inst.ID(), err))
+			}
+		})
+	}
+	wg.Wait()
+}
+
 // Close stops accepting new acquires, waits for all replenishment goroutines
 // to finish, then deletes every VM the pool created whose deletion has not
 // already been performed, or claimed, by another path (such as a concurrent

@@ -74,6 +74,12 @@ const (
 	// leaves in place because WithDeleteAcquiredOnClose(false) was set. The
 	// caller that holds the VM is responsible for deleting it.
 	EventAcquiredVMRetained
+
+	// EventRefreshFailed is emitted by Refresh for each VM it took out of the
+	// pool but could not delete. Err is set and names the VM. The pool is
+	// replenished for that VM regardless, so it keeps its size, but the VM
+	// itself may be left behind for an external sweep to find.
+	EventRefreshFailed
 )
 
 // eventKindNames maps each EventKind to its name. It is indexed by the
@@ -95,6 +101,7 @@ var eventKindNames = [...]string{
 	EventStartPoolFull:          "StartPoolFull",
 	EventOrphanedVMDeleted:      "OrphanedVMDeleted",
 	EventAcquiredVMRetained:     "AcquiredVMRetained",
+	EventRefreshFailed:          "RefreshFailed",
 }
 
 func (e EventKind) String() string {

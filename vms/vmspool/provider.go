@@ -31,13 +31,22 @@ type VMInfo struct {
 	Accessed time.Time // best-effort last activity time; may be creation time if last access is unavailable
 }
 
+// VMResources describes the resources allocated to a VM. It carries
+// serialisation tags so that an application can embed it directly in the
+// configuration of a provider, rather than restating the same three figures;
+// a zero figure means unspecified, which a provider reports as unknown and
+// leaves to the image it creates VMs from.
+type VMResources struct {
+	DiskGiB  int `yaml:"disk_gib" doc:"size of the VM's disk in GiB; 0 leaves the image's own size"`
+	NumCores int `yaml:"num_cores" doc:"number of CPU cores allocated to the VM; 0 leaves the image's own number"`
+	MemGiB   int `yaml:"mem_gib" doc:"amount of RAM allocated to the VM in GiB; 0 leaves the image's own amount"`
+}
+
 // VMDetail extends VMInfo with the fuller, potentially more expensive per-VM
 // details returned by Provider.Get, such as the resources allocated to the VM.
 type VMDetail struct {
 	VMInfo
-	DiskGiB  int // size of the VM's disk in GiB
-	NumCores int // number of CPU cores allocated to the VM
-	MemGiB   int // amount of RAM allocated to the VM in GiB
+	VMResources
 }
 
 // Provider creates and manages the VMs for a Pool. In addition to constructing
@@ -48,6 +57,11 @@ type Provider interface {
 	// Name returns the name of the provider, typically the infrastructure
 	// used to implement the pool such as 'tart' or 'docker'.
 	Name() string
+
+	// DefaultResources returns the default resource allocation for new VMs
+	// created by this provider, these may be overridden when creating individual
+	// VMs.
+	DefaultResources() VMResources
 
 	// Details returns provider-specific details about the infrastructure.
 	Details() ProviderDetails
