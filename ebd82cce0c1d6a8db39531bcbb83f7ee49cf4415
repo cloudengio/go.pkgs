@@ -1,0 +1,19 @@
+--- Overview
+Adds PubSub.Forward to feed a PubSub from a receive channel and Subscriber.Done to detect the end of a subscription, and renames the New constructor to NewPubSub. Also documents the package's lifecycle and ordering semantics.
+
+--- Key Changes
+sync/patterns
+  * Rename New to NewPubSub.
+  * Add PubSub.Forward(ctx, ch), which blocks and publishes items from ch in order until ch is closed, ctx is cancelled or the PubSub is closed. Closing ch does not close the PubSub.
+  * PubSub.Close now also ends any Forward in progress.
+  * Add Subscriber.Done(), which is closed once nothing further will be delivered to C, including on context cancellation, where C is left open.
+  * Document subscription lifetime and draining requirements, C close behavior, idempotent Close/Unsubscribe, and Publish ordering under concurrency.
+
+Tests
+  * Add coverage for Done on unsubscribe and context cancellation, and for Forward source close, PubSub close, context cancellation and per-subscriber ordering.
+  * Rename TestPubSubPublishDeadlocksAfterSubscriberContextCancel to TestPubSubPublishAfterSubscriberContextCancel.
+
+--- Breaking Changes
+  * patterns.New[T]() is renamed to patterns.NewPubSub[T](); callers must update.
+
+ Generated with Claude Code (https://claude.com/claude-code)
