@@ -14,7 +14,7 @@ require (
 
 require (
 	cloudeng.io/sys v0.0.0-20261026191912-bcd1dece5d6c // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 )
 
 replace cloudeng.io/algo => ../algo

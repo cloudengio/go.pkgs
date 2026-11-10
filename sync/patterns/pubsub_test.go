@@ -26,7 +26,7 @@ func drainSub[T any](sub *patterns.Subscriber[T]) []T {
 
 func TestPubSubSingleSubscriber(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
 	ps.Publish(1)
@@ -42,7 +42,7 @@ func TestPubSubSingleSubscriber(t *testing.T) {
 
 func TestPubSubMultipleSubscribers(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	subs := make([]*patterns.Subscriber[int], 4)
 	for i := range subs {
@@ -63,7 +63,7 @@ func TestPubSubMultipleSubscribers(t *testing.T) {
 
 func TestPubSubUnsubscribe(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
 	ps.Publish(1)
@@ -79,7 +79,7 @@ func TestPubSubUnsubscribe(t *testing.T) {
 
 func TestPubSubUnsubscribeIdempotent(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
 	ps.Unsubscribe(sub)
@@ -91,7 +91,7 @@ func TestPubSubUnsubscribeIdempotent(t *testing.T) {
 
 func TestPubSubUnsubscribePartial(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub1 := ps.Subscribe(context.Background(), 10)
 	sub2 := ps.Subscribe(context.Background(), 10)
@@ -111,7 +111,7 @@ func TestPubSubUnsubscribePartial(t *testing.T) {
 
 func TestPubSubCloseIdempotent(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
 	ps.Close()
@@ -122,7 +122,7 @@ func TestPubSubCloseIdempotent(t *testing.T) {
 
 func TestPubSubSubscribeAfterClose(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 	ps.Close()
 
 	// Subscribe on a closed PubSub immediately closes the subscriber channel.
@@ -135,7 +135,7 @@ func TestPubSubSubscribeAfterClose(t *testing.T) {
 
 func TestPubSubPublishAfterClose(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), 10)
 	ps.Close()
@@ -146,21 +146,20 @@ func TestPubSubPublishAfterClose(t *testing.T) {
 	}
 }
 
-// TestPubSubPublishDeadlocksAfterSubscriberContextCancel demonstrates the
-// deadlock that arises when a subscriber's context is cancelled.
+// TestPubSubPublishAfterSubscriberContextCancel verifies that Publish does not
+// block when a subscriber's context has been cancelled.
 //
-// When sub's context is cancelled, its FIFO run goroutine exits via
-// ctx.Done(). The subscriber remains in ps.subscribers. The next Publish call
-// sends to sub.ch.In() (unbuffered b.in) — but nobody reads from it, so
-// Publish blocks forever while holding ps.mu.RLock. That in turn prevents
-// Close/Unsubscribe from acquiring ps.mu.Lock, making the deadlock total.
-//
-// TestPubSubPublishDeadlocksAfterSubscriberContextCancel verifies that Publish
-// does not deadlock when a subscriber's context is cancelled.
-func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
+// Cancelling sub's context exits its FIFO run goroutine via ctx.Done() whilst
+// the subscriber is still in ps.subscribers. A Publish that only sent to
+// sub.ch.In() (unbuffered b.in) would then block forever, since nothing reads
+// it any more, and would do so holding ps.mu.RLock, which in turn would
+// prevent Close and Unsubscribe from ever acquiring ps.mu.Lock: a total
+// deadlock. Publish instead selects on the subscriber's Done channel and
+// prunes it, see Subscriber.Done.
+func TestPubSubPublishAfterSubscriberContextCancel(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, 2*time.Second)()
 
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	// Use a short-lived context so the run goroutine exits almost immediately.
 	subCtx, cancelSub := context.WithTimeout(context.Background(), time.Millisecond)
@@ -170,7 +169,7 @@ func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
 	// Wait long enough that the run goroutine has seen ctx.Done() and returned.
 	time.Sleep(50 * time.Millisecond)
 
-	// Publish must not block. Without a fix it deadlocks here.
+	// Publish must not block.
 	done := make(chan struct{})
 	go func() {
 		ps.Publish(1)
@@ -183,14 +182,215 @@ func TestPubSubPublishDeadlocksAfterSubscriberContextCancel(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 		t.Error("Publish deadlocked: blocked forever after subscriber context was cancelled")
 		// ps.Close() would also deadlock here — Publish holds ps.mu.RLock
-		// and Close needs ps.mu.Lock. The goroutine leak is expected while
-		// the bug is unfixed.
+		// and Close needs ps.mu.Lock — so there is nothing to clean up with,
+		// and the goroutine leak the deferred check reports is a consequence
+		// of the failure above rather than a second fault.
+	}
+}
+
+// TestPubSubSubscriberDoneOnUnsubscribe covers the Done channel of a
+// subscription that is released by its owner: it is closed only once the items
+// the subscriber had buffered have been received, so a consumer selecting on
+// both C and Done sees every one of them.
+func TestPubSubSubscriberDoneOnUnsubscribe(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	ps := patterns.NewPubSub[int]()
+
+	sub := ps.Subscribe(context.Background(), 10)
+	ps.Publish(1)
+	ps.Publish(2)
+
+	select {
+	case <-sub.Done():
+		t.Fatal("Done closed whilst the subscription was still live")
+	default:
+	}
+
+	ps.Unsubscribe(sub)
+
+	// The consumer loop a cancellable subscription requires: both arms, with
+	// Done only reached once C has been closed and drained.
+	var got []int
+done:
+	for {
+		select {
+		case v, ok := <-sub.C():
+			if !ok {
+				break done
+			}
+			got = append(got, v)
+		case <-sub.Done():
+			t.Fatal("Done closed before the buffered items were received")
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for the subscriber's items")
+		}
+	}
+	if !slices.Equal(got, []int{1, 2}) {
+		t.Errorf("got %v, want [1 2]", got)
+	}
+
+	select {
+	case <-sub.Done():
+	case <-time.After(time.Second):
+		t.Error("Done was not closed after the subscription ended")
+	}
+}
+
+// TestPubSubSubscriberDoneOnContextCancel covers the Done channel of a
+// subscription ended by cancelling the context it was created with, which is
+// the case a consumer cannot detect any other way: C is abandoned rather than
+// closed, so ranging over it alone would wait forever.
+func TestPubSubSubscriberDoneOnContextCancel(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	ps := patterns.NewPubSub[int]()
+	defer ps.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sub := ps.Subscribe(ctx, 10)
+	cancel()
+
+	select {
+	case <-sub.Done():
+	case <-time.After(time.Second):
+		t.Fatal("Done was not closed when the subscription's context was cancelled")
+	}
+
+	// C is left open: a receive from it yields nothing rather than ok=false.
+	select {
+	case _, ok := <-sub.C():
+		if !ok {
+			t.Error("C was closed by cancellation; expected it to be abandoned")
+		} else {
+			t.Error("C delivered an item after cancellation")
+		}
+	default:
+	}
+}
+
+// TestPubSubForward covers feeding a PubSub from a channel, which is how a
+// producer that hands out a receive channel is connected to one. Closing the
+// producer's channel ends the forwarding and nothing else: the PubSub is still
+// open, since it may have other sources and only its owner closes it.
+func TestPubSubForward(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	ps := patterns.NewPubSub[int]()
+
+	sub := ps.Subscribe(context.Background(), 10)
+	src := make(chan int)
+	forwarded := make(chan struct{})
+	go func() {
+		defer close(forwarded)
+		ps.Forward(context.Background(), src)
+	}()
+
+	for i := 1; i <= 3; i++ {
+		src <- i
+	}
+	close(src)
+
+	select {
+	case <-forwarded:
+	case <-time.After(time.Second):
+		t.Fatal("Forward did not return when its source channel was closed")
+	}
+
+	// The PubSub outlives the source, so it is still publishing.
+	ps.Publish(4)
+	ps.Close()
+
+	if got := drainSub(sub); !slices.Equal(got, []int{1, 2, 3, 4}) {
+		t.Errorf("got %v, want [1 2 3 4]", got)
+	}
+}
+
+// TestPubSubForwardReturnsOnClose covers a Forward whose PubSub is closed
+// underneath it: it returns rather than waiting for a source that nothing is
+// listening to any more.
+func TestPubSubForwardReturnsOnClose(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	ps := patterns.NewPubSub[int]()
+	sub := ps.Subscribe(context.Background(), 10)
+
+	// Never closed, and never written to again: only the Close can end this.
+	src := make(chan int, 1)
+	src <- 1
+	forwarded := make(chan struct{})
+	go func() {
+		defer close(forwarded)
+		ps.Forward(context.Background(), src)
+	}()
+
+	ps.Close()
+	select {
+	case <-forwarded:
+	case <-time.After(time.Second):
+		t.Fatal("Forward did not return when the PubSub was closed")
+	}
+	drainSub(sub)
+}
+
+// TestPubSubForwardReturnsOnContextCancel covers the other way a Forward is
+// ended, by the context of whoever started it, leaving the PubSub to carry on
+// with its remaining sources.
+func TestPubSubForwardReturnsOnContextCancel(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	ps := patterns.NewPubSub[int]()
+	defer ps.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	src := make(chan int)
+	forwarded := make(chan struct{})
+	go func() {
+		defer close(forwarded)
+		ps.Forward(ctx, src)
+	}()
+
+	cancel()
+	select {
+	case <-forwarded:
+	case <-time.After(time.Second):
+		t.Fatal("Forward did not return when its context was cancelled")
+	}
+}
+
+// TestPubSubForwardOrder covers the ordering a single forwarding channel
+// imposes: every subscriber observes the forwarded items in the order they
+// were received, which concurrent Publish calls do not guarantee.
+func TestPubSubForwardOrder(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	const count = 50
+	ps := patterns.NewPubSub[int]()
+
+	subs := []*patterns.Subscriber[int]{
+		ps.Subscribe(context.Background(), count),
+		ps.Subscribe(context.Background(), count),
+	}
+	src := make(chan int)
+	forwarded := make(chan struct{})
+	go func() {
+		defer close(forwarded)
+		ps.Forward(context.Background(), src)
+	}()
+
+	want := make([]int, 0, count)
+	for i := range count {
+		src <- i
+		want = append(want, i)
+	}
+	close(src)
+	<-forwarded
+	ps.Close()
+
+	for i, sub := range subs {
+		if got := drainSub(sub); !slices.Equal(got, want) {
+			t.Errorf("sub[%d]: got %v, want %v", i, got, want)
+		}
 	}
 }
 
 func TestPubSubDropOldest(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), 3)
 	// Sequential Publish calls are safe: each blocks until the FIFO's run
@@ -219,7 +419,7 @@ func TestPubSubDropOldestPerSubscriber(t *testing.T) {
 		capacity  = 2
 		publishes = 8
 	)
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub1 := ps.Subscribe(context.Background(), capacity)
 	sub2 := ps.Subscribe(context.Background(), capacity)
@@ -244,7 +444,7 @@ func TestPubSubConcurrentPublish(t *testing.T) {
 		perPub     = 20
 		capacity   = publishers * perPub
 	)
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	sub := ps.Subscribe(context.Background(), capacity)
 
@@ -290,7 +490,7 @@ func TestPubSubPublishNotBlockedBySlowSubscriber(t *testing.T) {
 		capacity = 2
 		count    = 1000
 	)
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	// Subscribe but deliberately do not read — simulates a completely stalled
 	// consumer.
@@ -320,7 +520,7 @@ func TestPubSubPublishNotBlockedBySlowSubscriber(t *testing.T) {
 
 func TestPubSubConcurrentSubscribeUnsubscribe(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ps := patterns.New[int]()
+	ps := patterns.NewPubSub[int]()
 
 	var (
 		wg   sync.WaitGroup
