@@ -25,7 +25,7 @@
 // Reference.Remote says only that a registry was named explicitly, which is
 // the question "is there anywhere to pull this from".
 //
-// Config is the configuration of an image and how it is obtained, for a
+// Source is where an image comes from and how it is obtained, for a
 // backend to embed in its own configuration so that every backend spells
 // these the same way. Pulling itself is left to the backend, which is the
 // only thing that knows how: a backend that can pull implements Puller.
