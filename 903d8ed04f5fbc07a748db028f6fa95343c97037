@@ -1,0 +1,27 @@
+--- Overview
+Adds Pool.Refresh so a pool can pick up a new base image without a restart, and introduces a shared VMResources type with a new Provider.DefaultResources method for reporting default VM allocations.
+
+--- Key Changes
+vms/vmspool
+  * Add Pool.Refresh(ctx) int, which removes currently available VMs, deletes them asynchronously and lets the pool replenish; VMs held by callers are left alone.
+  * Add EventRefreshFailed, emitted for each VM that Refresh could not delete.
+  * Add VMResources (DiskGiB, NumCores, MemGiB) with yaml and doc tags so it can be embedded in provider configuration.
+  * Embed VMResources in VMDetail, replacing its individual resource fields.
+  * Add DefaultResources() VMResources to the Provider interface.
+
+vms/dockervm
+  * Implement Provider.DefaultResources, with values set through the new WithProviderResources option.
+  * Populate VMDetail.VMResources in Provider.Get.
+
+vms/vmstestutil
+  * Add DefaultMockResources and MockFactory.SetResources.
+  * Implement MockFactory.DefaultResources and report the factory's resources from MockFactory.Get.
+
+Tests
+  * Cover refreshing a full pool, leaving acquired VMs alone, pools with nothing available, closed pools and delete failures.
+
+--- Breaking Changes
+  * vmspool.Provider now requires DefaultResources() VMResources, so external implementations must add it.
+  * VMDetail.DiskGiB, NumCores and MemGiB are now promoted from the embedded VMResources. Field access is unchanged, but composite literals that set them must be updated.
+
+ Generated with Claude Code (https://claude.com/claude-code)
