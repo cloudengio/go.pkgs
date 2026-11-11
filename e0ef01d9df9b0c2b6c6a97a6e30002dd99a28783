@@ -1,0 +1,21 @@
+--- Overview
+Adds vmspool.Set, which holds a group of named pools together with the completion queue and status tracker they share and closes them as one. Also adds pool-independent helpers that list or delete VMs across several providers.
+
+--- Key Changes
+  * vms/vmspool: Set (pool_set.go)
+    * NewSet(cq, tracker, pools...) keys pools by name, with the last pool of a given name winning. The set owns the queue and the tracker, and either may be nil.
+    * Lookups: Pool, All, Len, Names (sorted), CompletionQueue, StatusTracker.
+    * Per-pool operations by name: Acquire and Refresh. They return ErrNoSuchPool or ErrPoolsClosed, wrapped with the pool name.
+    * Subscribe passes through to the tracker. With no tracker it returns a nil channel and a no-op release.
+    * AvailableAndPending reports, across all pools, whether a VM can be acquired now and whether one is being created.
+    * Close closes pools concurrently, then the completion queue, then the tracker, and accumulates their errors. Calling it again returns the first call's result.
+  * vms/vmspool: provider helpers
+    * New ProviderNew interface (Name, New(ctx) (Provider, error)) builds a provider from configuration.
+    * ListVMs and DeleteVMs run against several ProviderNews at once. Results are sorted, errors from all providers are accumulated, and results from providers that succeeded are still returned.
+    * The Provider.Name doc now says it matches ProviderNew.Name.
+  * vms/vmspool: StatusTracker: shorter doc comments only, with no change in behaviour.
+  * Tests (pool_set_test.go): cover naming, closed-set behaviour, availability and pending states (using a blocking provider), subscription, shutdown of the shared queue and tracker with goroutine-leak checks, and success and failure cases for ListVMs and DeleteVMs.
+  * README: regenerated for the new API.
+
+--- Breaking Changes
+None
