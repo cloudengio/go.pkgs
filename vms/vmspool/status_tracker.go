@@ -153,7 +153,8 @@ func (t *StatusTracker) count(ctx context.Context, sub *patterns.Subscriber[Even
 // asynchronous - a replenishment, or a refresh that could not delete a VM -
 // so this is the only place they are ever reported.
 func (t *StatusTracker) log(ctx context.Context, e Event) {
-	args := []any{"pool", e.Pool, "event", e.Kind}
+	args := make([]any, 0, 8)
+	args = append(args, "pool", e.Pool, "event", e.Kind)
 	if e.VM != "" {
 		args = append(args, "vm", e.VM)
 	}
