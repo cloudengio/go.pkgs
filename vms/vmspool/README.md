@@ -64,10 +64,10 @@ minutes, which is also the timeout allowed for a single creation attempt.
 ```go
 func DeleteVMs(ctx context.Context, stopTimeout time.Duration, providerNew ...ProviderNew) ([]string, error)
 ```
-DeleteVMs deletes all VMs from the given providers. It returns a slice of
-deleted VM IDs and any error encountered. Errors are accumulated from all
-providers. Note, that this functions is intentionally independent of any
-pool and operates directly on the providers.
+DeleteVMs deletes all VMs from the given providers, sorted by VM name.
+It returns a slice of deleted VM IDs and any error encountered. Errors are
+accumulated from all providers. Note, that this function is intentionally
+independent of any pool and operates directly on the providers.
 
 
 
@@ -659,7 +659,7 @@ VMs are created.
 type Provider interface {
 	// Name returns the name of the provider, typically the infrastructure
 	// used to implement the pool such as 'tart' or 'docker'. This will be
-	// the same as ProviderNew.Name() if an instance of NewProvider was used
+	// the same as ProviderNew.Name() if an instance of ProviderNew was used
 	// to create this provider.
 	Name() string
 
@@ -713,7 +713,7 @@ infrastructure implementing the VM provider.
 ### Type ProviderNew
 ```go
 type ProviderNew interface {
-	// Name is the name of the VM technology used will be the value of
+	// Name is the name of the VM technology used and will be the value of
 	// Name returned by the created provider.
 	Name() string
 	// New builds a provider from the underlying state or configuration.
@@ -761,6 +761,15 @@ A closed set returns its pools too: a closed pool still reports what it is.
 
 
 ```go
+func (s *Set) AvailableAndPending() (available, pending bool)
+```
+AvailableAndPending reports whether any pool has a VM that Acquire can
+return without waiting for one to be created, and whether any pool has
+one being created and so acquirable shortly, see Pool.Stats. The two are
+independent: a set filling itself is both. A closed set is neither.
+
+
+```go
 func (s *Set) Close(ctx context.Context) error
 ```
 Close closes every pool concurrently, then the completion queue and the
@@ -778,14 +787,6 @@ func (s *Set) CompletionQueue() *CompletionQueue
 CompletionQueue returns the queue the pools' finished VMs are parked in,
 or nil if the set has none. The set owns it: fill and drain it, do not close
 it.
-
-
-```go
-func (s *Set) HasAvailable() bool
-```
-HasAvailable reports whether any pool has a VM that Acquire can return
-without waiting for one to be created; a closed set has none. VMs being
-created are not counted, see Pool.Stats.
 
 
 ```go
@@ -819,6 +820,18 @@ func (s *Set) StatusTracker() *StatusTracker
 ```
 StatusTracker returns the tracker counting the pools' events, or nil if the
 set has none. The set owns it.
+
+
+```go
+func (s *Set) Subscribe(ctx context.Context) (<-chan struct{}, func())
+```
+Subscribe returns a channel signalled whenever any pool's counters
+change and a function that must be called to release the subscription,
+see StatusTracker.Subscribe.
+
+A set with no tracker has no signal: the channel is nil, which blocks
+forever rather than reporting changes that are not being counted, and
+releasing it does nothing.
 
 
 
@@ -1109,10 +1122,10 @@ Provider.List.
 ```go
 func ListVMs(ctx context.Context, providerNew ...ProviderNew) ([]VMInfo, error)
 ```
-ListVMs lists all VMs from the given providers. It returns a slice of VMInfo
-and any error encountered. Errors are accumulated from all providers. Note,
-that this functions is intentionally independent of any pool and operates
-directly on the providers.
+ListVMs lists all VMs from the given providers, sorted by VM name. It
+returns a slice of VMInfo and any error encountered. Errors are accumulated
+from all providers. Note, that this function is intentionally independent of
+any pool and operates directly on the providers.
 
 
 

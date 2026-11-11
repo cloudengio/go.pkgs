@@ -5,6 +5,7 @@
 package vmspool
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -109,6 +110,20 @@ func (s *Set) StatusTracker() *StatusTracker {
 	return s.tracker
 }
 
+// Subscribe returns a channel signalled whenever any pool's counters change
+// and a function that must be called to release the subscription, see
+// StatusTracker.Subscribe.
+//
+// A set with no tracker has no signal: the channel is nil, which blocks
+// forever rather than reporting changes that are not being counted, and
+// releasing it does nothing.
+func (s *Set) Subscribe(ctx context.Context) (<-chan struct{}, func()) {
+	if s.tracker == nil {
+		return nil, func() {}
+	}
+	return s.tracker.Subscribe(ctx)
+}
+
 // Acquire returns a VM from the named pool, see Pool.Acquire.
 func (s *Set) Acquire(ctx context.Context, poolName string) (*VM, error) {
 	pool, err := s.Pool(poolName)
@@ -159,25 +174,36 @@ func (s *Set) Close(ctx context.Context) error {
 	return s.closeErr
 }
 
-// HasAvailable reports whether any pool has a VM that Acquire can return
-// without waiting for one to be created; a closed set has none. VMs being
-// created are not counted, see Pool.Stats.
-func (s *Set) HasAvailable() bool {
+// AvailableAndPending reports whether any pool has a VM that Acquire can
+// return without waiting for one to be created, and whether any pool has one
+// being created and so acquirable shortly, see Pool.Stats. The two are
+// independent: a set filling itself is both. A closed set is neither.
+func (s *Set) AvailableAndPending() (available, pending bool) {
 	if s.isClosed() {
-		return false
+		return false, false
 	}
 	for _, pool := range s.pools {
 		stats := pool.Stats()
 		if stats.Available > 0 {
-			return true
+			available = true
+			if pending {
+				return
+			}
+		}
+		if stats.Pending > 0 {
+			pending = true
+			if available {
+				return
+			}
 		}
 	}
-	return false
+	return available, pending
 }
 
-// ListVMs lists all VMs from the given providers. It returns a slice of VMInfo and any
-// error encountered. Errors are accumulated from all providers.
-// Note, that this functions is intentionally independent of any pool and
+// ListVMs lists all VMs from the given providers, sorted by VM name. It returns
+// a slice of VMInfo and any error encountered. Errors are accumulated from all
+// providers.
+// Note, that this function is intentionally independent of any pool and
 // operates directly on the providers.
 func ListVMs(ctx context.Context, providerNew ...ProviderNew) ([]VMInfo, error) {
 	var g errgroup.T
@@ -199,12 +225,17 @@ func ListVMs(ctx context.Context, providerNew ...ProviderNew) ([]VMInfo, error) 
 			return nil
 		})
 	}
-	return vms, g.Wait()
+	err := g.Wait()
+	slices.SortFunc(vms, func(a, b VMInfo) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return vms, err
 }
 
-// DeleteVMs deletes all VMs from the given providers. It returns a slice of deleted VM
-// IDs and any error encountered. Errors are accumulated from all providers.
-// Note, that this functions is intentionally independent of any pool and
+// DeleteVMs deletes all VMs from the given providers, sorted by VM name. It
+// returns a slice of deleted VM IDs and any error encountered. Errors are
+// accumulated from all providers.
+// Note, that this function is intentionally independent of any pool and
 // operates directly on the providers.
 func DeleteVMs(ctx context.Context, stopTimeout time.Duration, providerNew ...ProviderNew) ([]string, error) {
 	var g errgroup.T
@@ -226,5 +257,7 @@ func DeleteVMs(ctx context.Context, stopTimeout time.Duration, providerNew ...Pr
 			return nil
 		})
 	}
-	return vms, g.Wait()
+	err := g.Wait()
+	slices.Sort(vms)
+	return vms, err
 }

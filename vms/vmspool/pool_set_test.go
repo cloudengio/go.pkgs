@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -146,8 +147,8 @@ func TestSetClosed(t *testing.T) {
 	if len(set.All()) != 1 {
 		t.Errorf("All: got %v set, want 1", len(set.All()))
 	}
-	if set.HasAvailable() {
-		t.Error("a closed set reports an available VM")
+	if available, pending := set.AvailableAndPending(); available || pending {
+		t.Errorf("a closed set reports available %v, pending %v", available, pending)
 	}
 
 	// Closing twice returns the result of the first close rather than an error
@@ -167,16 +168,34 @@ func setCloseErr(set *vmspool.Set, name string) string {
 	return err.Error()
 }
 
-// TestSetHasAvailable covers the one thing a set reports about its set
-// without being asked about a particular one: whether any of them can hand out
-// a VM now.
-func TestSetHasAvailable(t *testing.T) {
+// availabilityWithin polls until the set reports an availability that want
+// accepts, which is not immediate: a pool fills itself in the background. desc
+// says what was being waited for, for the failure.
+func availabilityWithin(t *testing.T, set *vmspool.Set, want func(available, pending bool) bool, desc string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		available, pending := set.AvailableAndPending()
+		if want(available, pending) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %v: available %v, pending %v", desc, available, pending)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestSetAvailableAndPending covers what a set reports about its pools without
+// being asked about a particular one: whether any of them can hand out a VM
+// now, and whether any has one on the way.
+func TestSetAvailableAndPending(t *testing.T) {
 	ctx := context.Background()
 	set := vmspool.NewSet(nil, nil, startedPool(ctx, t, "one"))
 	defer set.Close(ctx) //nolint:errcheck // the test has already reported anything that matters.
 
 	// Start has waited for the first VM, so there is one to be had.
-	if !set.HasAvailable() {
+	if available, _ := set.AvailableAndPending(); !available {
 		t.Error("a filled set reports nothing available")
 	}
 	vm, err := set.Acquire(ctx, "one")
@@ -184,21 +203,121 @@ func TestSetHasAvailable(t *testing.T) {
 		t.Fatalf("Acquire: %v", err)
 	}
 	defer vm.Delete(context.Background()) //nolint:errcheck // best effort cleanup.
-	// The pool holds one VM and it has been acquired, so what is left is the
-	// replacement being created, which is not available.
+	// The pool holds one VM and it is now held by a caller, so the set has
+	// nothing to hand out and nothing on the way either: the replacement is
+	// not created until the caller releases it.
+	availabilityWithin(t, set, func(available, pending bool) bool { return !available && !pending },
+		"a fully acquired set to report neither")
+
+	// An empty set has neither, rather than panicking on a set with no pools
+	// at all.
+	if available, pending := vmspool.NewSet(nil, nil).AvailableAndPending(); available || pending {
+		t.Errorf("a set with no pools reports available %v, pending %v", available, pending)
+	}
+}
+
+// blockingProvider creates VMs through a mock, holding each one up part way
+// through its creation once blocking is set: the VM exists, and so is pending,
+// but is not ready to be acquired, see Pool.Stats.
+type blockingProvider struct {
+	*vmstestutil.MockFactory
+	blocking atomic.Bool
+	release  chan struct{}
+}
+
+func (p *blockingProvider) New(ctx context.Context) (vms.Instance, error) {
+	inst, err := p.MockFactory.New(ctx)
+	if err != nil || !p.blocking.Load() {
+		return inst, err
+	}
+	return blockingInstance{Instance: inst, release: p.release}, nil
+}
+
+type blockingInstance struct {
+	vms.Instance
+	release chan struct{}
+}
+
+func (i blockingInstance) Clone(ctx context.Context) error {
+	select {
+	case <-i.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return i.Instance.Clone(ctx)
+}
+
+// TestSetAvailableAndPendingTogether covers a set that is both at once, which
+// is what keeping the two answers apart is for: a caller gating on capacity
+// counts the pending VM, one waiting for the set to be full does not.
+func TestSetAvailableAndPendingTogether(t *testing.T) {
+	ctx := context.Background()
+	provider := &blockingProvider{
+		MockFactory: vmstestutil.NewMockFactory(true),
+		release:     make(chan struct{}),
+	}
+	pool := vmspool.New(provider, "two",
+		vmspool.WithSize(2), vmspool.WithCreateBackoff(fastCreateBackoff()))
+	if err := pool.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	set := vmspool.NewSet(nil, nil, pool)
+	// Start waits for the first VM only, so wait for the pool to be full
+	// before holding anything up.
 	deadline := time.Now().Add(5 * time.Second)
-	for set.HasAvailable() {
+	for pool.Stats().Available < 2 {
 		if time.Now().After(deadline) {
-			t.Fatal("a fully acquired set still reports an available VM")
+			t.Fatalf("timed out waiting for the pool to fill: %v", pool.Stats())
 		}
 		time.Sleep(time.Millisecond)
 	}
 
-	// An empty set has nothing available either, rather than panicking on a
-	// set with no set at all.
-	if vmspool.NewSet(nil, nil).HasAvailable() {
-		t.Error("a set with no set reports an available VM")
+	// Deleting an acquired VM has the pool replace it, and that replacement is
+	// held up in its creation, so the set has one VM to hand out and one on
+	// the way.
+	provider.blocking.Store(true)
+	vm, err := set.Acquire(ctx, "two")
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
 	}
+	if err := vm.Delete(ctx); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	availabilityWithin(t, set, func(available, pending bool) bool { return available && pending },
+		"a replenishing set to report a VM available and another pending")
+
+	close(provider.release)
+	if err := set.Close(ctx); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+}
+
+// TestSetSubscribe covers the set's change signal, which is its tracker's, so
+// that a reader watches the set rather than reaching for what counts for it.
+func TestSetSubscribe(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, 5*time.Second)()
+	// Cancelled before the leak assertion runs, see
+	// TestSetCloseSharedComponents.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tracker := vmspool.NewStatusTracker(ctx, 10)
+	set := vmspool.NewSet(nil, tracker, startedPool(ctx, t, "one", tracker.Track(ctx)))
+	defer func() { _ = set.Close(ctx) }()
+
+	ch, release := set.Subscribe(ctx)
+	defer release()
+	// Acquiring a VM has the pool replace it, which is counted and so
+	// signalled.
+	if _, err := set.Acquire(ctx, "one"); err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the set reported no change after a VM was acquired")
+	}
+	// Releasing twice is harmless.
+	release()
 }
 
 // TestSetCloseSharedComponents covers the set closing what its set share:
@@ -224,7 +343,7 @@ func TestSetCloseSharedComponents(t *testing.T) {
 	if got := set.StatusTracker(); got != tracker {
 		t.Error("StatusTracker returned a tracker other than the set's")
 	}
-	// The pool has filled, so the tracker has counted it: the set's set
+	// The pool has filled, so the tracker has counted it: the set's pools
 	// report to the set's tracker.
 	countersWithin(t, tracker, "one", vmspool.EventVMCreated, 1)
 
@@ -271,6 +390,13 @@ func TestSetWithoutSharedComponents(t *testing.T) {
 	if got := set.StatusTracker(); got != nil {
 		t.Error("a set created without a tracker reports one")
 	}
+	// Nothing is counting, so there is no change signal rather than a channel
+	// that is never signalled.
+	ch, release := set.Subscribe(ctx)
+	if ch != nil {
+		t.Error("a set created without a tracker reports a change signal")
+	}
+	release()
 	if err := set.Close(ctx); err != nil {
 		t.Errorf("Close: %v", err)
 	}
@@ -350,14 +476,13 @@ func (pn providerNew) New(context.Context) (vmspool.Provider, error) {
 	return pn.provider, nil
 }
 
-// vmNames is the names of the listed VMs, sorted, since the providers are
-// visited concurrently.
+// vmNames is the names of the listed VMs, in the order they were returned.
 func vmNames(infos []vmspool.VMInfo) []string {
 	out := make([]string, 0, len(infos))
 	for _, info := range infos {
 		out = append(out, info.Name)
 	}
-	return slices.Sorted(slices.Values(out))
+	return out
 }
 
 // TestListVMs covers enumerating the VMs of several backends at once, which is
@@ -421,7 +546,7 @@ func TestDeleteVMs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteVMs: %v", err)
 	}
-	if got, want := slices.Sorted(slices.Values(deleted)), []string{"one-a", "one-b", "two-a"}; !slices.Equal(got, want) {
+	if got, want := deleted, []string{"one-a", "one-b", "two-a"}; !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	// Each backend is given the timeout it is to stop a running VM within.

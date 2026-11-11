@@ -19,7 +19,7 @@ import (
 // ProviderNew is used to construct a provider from some underlying
 // state or configuration.
 type ProviderNew interface {
-	// Name is the name of the VM technology used will be the value of
+	// Name is the name of the VM technology used and will be the value of
 	// Name returned by the created provider.
 	Name() string
 	// New builds a provider from the underlying state or configuration.
@@ -73,7 +73,7 @@ type VMDetail struct {
 type Provider interface {
 	// Name returns the name of the provider, typically the infrastructure
 	// used to implement the pool such as 'tart' or 'docker'. This will be
-	// the same as ProviderNew.Name() if an instance of NewProvider was used
+	// the same as ProviderNew.Name() if an instance of ProviderNew was used
 	// to create this provider.
 	Name() string
 
