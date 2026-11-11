@@ -16,6 +16,16 @@ import (
 	"cloudeng.io/vms/ociimage"
 )
 
+// ProviderNew is used to construct a provider from some underlying
+// state or configuration.
+type ProviderNew interface {
+	// Name is the name of the VM technology used will be the value of
+	// Name returned by the created provider.
+	Name() string
+	// New builds a provider from the underlying state or configuration.
+	New(context.Context) (Provider, error)
+}
+
 // ProviderDetails defines an interface for provider-specific details about the
 // infrastructure implementing the VM provider.
 type ProviderDetails interface {
@@ -62,7 +72,9 @@ type VMDetail struct {
 // orphaned VMs.
 type Provider interface {
 	// Name returns the name of the provider, typically the infrastructure
-	// used to implement the pool such as 'tart' or 'docker'.
+	// used to implement the pool such as 'tart' or 'docker'. This will be
+	// the same as ProviderNew.Name() if an instance of NewProvider was used
+	// to create this provider.
 	Name() string
 
 	// DefaultResources returns the default resource allocation for new VMs

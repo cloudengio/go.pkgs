@@ -32,6 +32,15 @@ pool whilst they are waiting to be counted, see NewStatusTracker.
 
 
 ## Variables
+### ErrNoSuchPool, ErrPoolsClosed
+```go
+// ErrNoSuchPool is returned for a name the set holds no pool for.
+ErrNoSuchPool = errors.New("no such pool")
+// ErrPoolsClosed is returned by the operations of a closed set.
+ErrPoolsClosed = errors.New("pools is closed")
+
+```
+
 ### ErrNoProvider
 ```go
 ErrNoProvider = errors.New("no VM provider configured")
@@ -50,6 +59,15 @@ func DefaultCreateBackoff() ratecontrol.ExponentialBackoffConfig
 DefaultCreateBackoff returns the default backoff used when creating VMs: a
 500ms initial delay doubling over 10 steps, for a total delay budget of ~8.5
 minutes, which is also the timeout allowed for a single creation attempt.
+
+### Func DeleteVMs
+```go
+func DeleteVMs(ctx context.Context, stopTimeout time.Duration, providerNew ...ProviderNew) ([]string, error)
+```
+DeleteVMs deletes all VMs from the given providers. It returns a slice of
+deleted VM IDs and any error encountered. Errors are accumulated from all
+providers. Note, that this functions is intentionally independent of any
+pool and operates directly on the providers.
 
 
 
@@ -640,7 +658,9 @@ VMs are created.
 ```go
 type Provider interface {
 	// Name returns the name of the provider, typically the infrastructure
-	// used to implement the pool such as 'tart' or 'docker'.
+	// used to implement the pool such as 'tart' or 'docker'. This will be
+	// the same as ProviderNew.Name() if an instance of NewProvider was used
+	// to create this provider.
 	Name() string
 
 	// DefaultResources returns the default resource allocation for new VMs
@@ -688,6 +708,119 @@ type ProviderDetails interface {
 ```
 ProviderDetails defines an interface for provider-specific details about the
 infrastructure implementing the VM provider.
+
+
+### Type ProviderNew
+```go
+type ProviderNew interface {
+	// Name is the name of the VM technology used will be the value of
+	// Name returned by the created provider.
+	Name() string
+	// New builds a provider from the underlying state or configuration.
+	New(context.Context) (Provider, error)
+}
+```
+ProviderNew is used to construct a provider from some underlying state or
+configuration.
+
+
+### Type Set
+```go
+type Set struct {
+	// contains filtered or unexported fields
+}
+```
+Set is a set of named pools that are held and closed together, along with
+the completion queue and the status tracker they share.
+
+### Functions
+
+```go
+func NewSet(cq *CompletionQueue, tracker *StatusTracker, pools ...*Pool) *Set
+```
+NewSet returns a set holding pools, keyed by the name each was created with,
+and already started, see Pool.Start. cq and tracker are what the pools share
+and either may be nil; the set owns both and closes them after the pools,
+see Close. Two pools of one name are one pool, the last winning.
+
+
+
+### Methods
+
+```go
+func (s *Set) Acquire(ctx context.Context, poolName string) (*VM, error)
+```
+Acquire returns a VM from the named pool, see Pool.Acquire.
+
+
+```go
+func (s *Set) All() map[string]*Pool
+```
+All returns every pool, keyed by name, as a map of the caller's own.
+A closed set returns its pools too: a closed pool still reports what it is.
+
+
+```go
+func (s *Set) Close(ctx context.Context) error
+```
+Close closes every pool concurrently, then the completion queue and the
+status tracker, accumulating their errors. The set is out of service from
+the moment it is called.
+
+The queue goes after the pools, since closing it deletes the VMs it holds,
+and the tracker last, since a pool reports to it until it has stopped.
+It is idempotent: a later call returns the first one's result.
+
+
+```go
+func (s *Set) CompletionQueue() *CompletionQueue
+```
+CompletionQueue returns the queue the pools' finished VMs are parked in,
+or nil if the set has none. The set owns it: fill and drain it, do not close
+it.
+
+
+```go
+func (s *Set) HasAvailable() bool
+```
+HasAvailable reports whether any pool has a VM that Acquire can return
+without waiting for one to be created; a closed set has none. VMs being
+created are not counted, see Pool.Stats.
+
+
+```go
+func (s *Set) Len() int
+```
+Len returns the number of pools in the set.
+
+
+```go
+func (s *Set) Names() []string
+```
+Names returns the names of the pools, sorted, so that listings are stable.
+
+
+```go
+func (s *Set) Pool(name string) (*Pool, error)
+```
+Pool returns the named pool, ErrNoSuchPool if the set holds none of that
+name, or ErrPoolsClosed if the set has been closed.
+
+
+```go
+func (s *Set) Refresh(ctx context.Context, poolName string) (int, error)
+```
+Refresh replaces the VMs the named pool has available and returns how many
+were replaced, see Pool.Refresh.
+
+
+```go
+func (s *Set) StatusTracker() *StatusTracker
+```
+StatusTracker returns the tracker counting the pools' events, or nil if the
+set has none. The set owns it.
+
+
 
 
 ### Type StagingBehaviour
@@ -783,39 +916,26 @@ StatusTracker counts the lifecycle events of one or more pools by kind,
 logs them, and notifies its subscribers whenever those counts change.
 It is safe for concurrent use.
 
-It is an entity of its own rather than part of a Pool, and it uses nothing
-of a pool but its public API: a pool reports its events to a channel, see
-WithStatus, and the tracker counts what arrives there. A pool can therefore
-be created with a tracker, without one, or with a status channel of the
-caller's own, and one tracker can count pools that are created and closed at
-different times.
-
-Every event names the pool that emitted it, see Event.Pool, so a single
-tracker serves a whole set of pools: it keeps the counters per pool and its
-change signal covers all of them, which is what a user interface watching
-every pool at once wants, and what one pool gets as a set of one.
+It uses nothing of a pool but its public API: a pool reports to a channel,
+see WithStatus, and the tracker counts what arrives there. Every event names
+the pool it came from, see Event.Pool, so one tracker serves a whole set of
+pools and its change signal covers all of them.
 
 ### Functions
 
 ```go
 func NewStatusTracker(ctx context.Context, buffer int) *StatusTracker
 ```
-NewStatusTracker returns a tracker and starts the goroutine that counts and
-logs what the pools report, which Close ends. buffer is how many of a pool's
-events may be waiting to be counted before the oldest of them are dropped,
-and is the capacity of each channel Track creates; DefaultStatusBuffer is
-used if it is 0 or negative.
+NewStatusTracker returns a tracker and starts the goroutine that counts
+and logs what the pools report, which Close ends. buffer is how many of a
+pool's events may be waiting to be counted before the oldest are dropped,
+and is the capacity of each channel Track creates; 0 or less is
+DefaultStatusBuffer.
 
-Events are logged as they are counted, through the logger carried by ctx,
-see cloudeng.io/logging/ctxlog: at Info, or at Error for an event that
-carries one. That is the only report some of a pool's failures ever get: a
-replenishment that could not create a VM, or a refresh that could not delete
-one, happens with no call of the caller's for an error to be returned from.
-
-The counting belongs to the pools rather than to whoever created them, so it
-is not tied to ctx: a tracker whose context has been cancelled still counts
-for the pools that are still running, and ctx is used for its logger alone.
-Close is what ends it.
+Events are logged as they are counted, through the logger carried by ctx
+at Info, or Error for an event carrying one: that is the only report a
+pool's asynchronous failures ever get. ctx is used for its logger alone,
+so cancelling it does not stop the counting; Close does.
 
 
 
@@ -824,49 +944,34 @@ Close is what ends it.
 ```go
 func (t *StatusTracker) Close()
 ```
-Close ends the counting, every subscription to the change signal, and the
-forwarding of every channel the tracker was given, whether or not the pools
-that report on them are closed; events that arrive afterwards are discarded.
-It is idempotent, so a pool that failed to start and a set of pools that is
-closed twice both end the counting exactly once.
-
-The counters are left as they are: a tracker that has stopped counting still
-reports what it counted.
+Close ends the counting, every subscription and the forwarding of every
+channel the tracker was given; later events are discarded. It is idempotent,
+and the counters it accumulated stand.
 
 
 ```go
 func (t *StatusTracker) Counters(pool string) (map[EventKind]int, time.Time)
 ```
-Counters returns a copy of the named pool's counts by event kind, so that a
-caller cannot reach the accounting itself, and the time of the most recent
-event counted for that pool. A pool that has reported nothing, including one
-that was never tracked, has no counters and the zero time.
-
-The counts are those of the events counted so far: a pool reports
-asynchronously, so an event of an operation that has just returned may not
-have been counted yet.
+Counters returns a copy of the named pool's counts by event kind and the
+time of the last event counted for it; a pool that has reported nothing has
+neither. A pool reports asynchronously, so an event of an operation that has
+just returned may not have been counted yet.
 
 
 ```go
 func (t *StatusTracker) Pools() []string
 ```
 Pools returns the names of the pools the tracker has counted an event for,
-sorted, which is not every pool it was given: a pool that has reported
-nothing yet is not among them.
+sorted. A pool that has reported nothing yet is not among them.
 
 
 ```go
 func (t *StatusTracker) Subscribe(ctx context.Context) (<-chan struct{}, func())
 ```
-Subscribe returns a channel that is signalled whenever the counters of
-any pool the tracker counts change, and a function that must be called to
-release the subscription; the subscription is also released when ctx is
-cancelled. Releasing it more than once is harmless.
-
-Signals carry no information and are coalesced, a subscriber's buffer being
-one, so a reader takes a fresh set of Counters rather than counting them.
-It is one subscription covering every pool the tracker counts rather than
-one per pool merged together.
+Subscribe returns a channel signalled whenever any tracked pool's counters
+change, and a function that must be called to release the subscription;
+cancelling ctx releases it too, and releasing it twice is harmless. Signals
+carry nothing and are coalesced, so a reader takes a fresh set of Counters.
 
 
 ```go
@@ -877,38 +982,22 @@ to New alongside the pool's other options:
 
     pool := vmspool.New(provider, "builders", tracker.Track(ctx), vmspool.WithSize(4))
 
-Each call creates a channel of its own for the pool to report on, so that
-a burst of events from one pool cannot displace another's before they are
-counted; a pool drops its events rather than blocking when that channel is
-full, which is what the tracker's buffer bounds, see NewStatusTracker.
+Each call creates a channel of its own, counted from here rather than from
+when the pool is created, so nothing a pool reports as it fills is missed;
+Close releases a channel whose option never reached a pool.
 
-The channel is counted from the moment Track is called rather than from
-the moment the pool is created, so nothing a pool reports as it fills goes
-uncounted. An option that is never passed to a pool therefore leaves behind
-a channel that nothing ever sends on, which Close releases.
-
-Note that WithStatus registers a single channel, so a pool created with
-this option and WithStatus reports to whichever of them was applied last.
-A caller that wants both has one channel of its own, forwards what it reads
-to the tracker with Watch, and passes WithStatus rather than this option.
+It registers that channel with WithStatus, which holds one, so a pool given
+both reports to whichever was applied last. A caller that wants both keeps
+its own channel and feeds the tracker with Watch.
 
 
 ```go
 func (t *StatusTracker) Watch(ctx context.Context, ch <-chan Event)
 ```
-Watch counts the events that arrive on ch until Close ends the tracker.
-It is for a caller that has a status channel already, such as one that
-reports a pool's events elsewhere as well; Track is the usual way to connect
-a pool and creates the channel itself.
-
-Closing ch ends the forwarding of that one channel and not the tracker:
-a tracker counts any number of pools, each with a channel of its own,
-and nothing is taken out of the counters when one of them goes, since a pool
-that has been closed still reported what it reported.
-
-ctx is used for the forwarding goroutine's logger alone, as in
-NewStatusTracker: cancelling it does not stop the events of a pool that is
-still running from being counted.
+Watch counts the events arriving on ch until Close ends the tracker,
+for a caller that has a status channel already; Track is the usual way to
+connect a pool. Closing ch ends the forwarding of that channel alone and
+takes nothing out of the counters.
 
 
 
@@ -1014,6 +1103,18 @@ type VMInfo struct {
 VMInfo is a backend-neutral summary of a VM managed by a Provider.
 It holds only the lightweight fields that are cheap to obtain in bulk via
 Provider.List.
+
+### Functions
+
+```go
+func ListVMs(ctx context.Context, providerNew ...ProviderNew) ([]VMInfo, error)
+```
+ListVMs lists all VMs from the given providers. It returns a slice of VMInfo
+and any error encountered. Errors are accumulated from all providers. Note,
+that this functions is intentionally independent of any pool and operates
+directly on the providers.
+
+
 
 
 ### Type VMResources
