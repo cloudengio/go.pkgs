@@ -1,0 +1,38 @@
+--- Overview
+Adds a StatusTracker to vmspool that counts, logs, and broadcasts pool lifecycle events, plus a CachingProvider for per-VM details. Provider image details become a parsed ociimage.Reference instead of a string.
+
+--- Key Changes
+vms/vmspool
+  * StatusTracker (NewStatusTracker, Track, Watch, Counters, Pools, Subscribe, Close):
+    * Counts events per pool and by kind, and records when each pool last reported.
+    * Logs events through ctxlog, at Error level for events that carry an error.
+    * Sends coalesced change signals to subscribers.
+    * Track gives each pool its own buffered channel. Counting runs until Close, not until the context is cancelled.
+    * Adds the DefaultStatusBuffer constant (100).
+  * CachingProvider: wraps a Provider and caches the details that don't change for a VM's lifetime.
+    * GetAll takes VM state from a fresh listing each time and drops VMs that no longer exist.
+    * VMs whose details can't be read are still returned, filled in with the provider's defaults; their names come back in failed and their errors are combined into the returned error.
+    * Results are sorted by VM name.
+  * Pool.Provider(): returns the provider the pool was created with.
+  * ProviderDetails.Image() now returns ociimage.Reference.
+  * errors import changed to cloudeng.io/errors.
+
+vms/dockervm
+  * WithProviderImage now takes an ociimage.Reference. Details returns the zero Reference when no image was set.
+  * The dockerapi test harness parses its image into a Reference.
+
+vms/vmstestutil
+  * MockFactory.SetImage now takes an ociimage.Reference.
+  * Adds DefaultMockReference.
+
+Tests / docs
+  * New tests for StatusTracker and CachingProvider.
+  * Updated provenance and identity tests.
+  * Regenerated READMEs.
+
+--- Breaking Changes
+  * vmspool.ProviderDetails.Image() returns ociimage.Reference instead of string, so every Provider implementation must be updated.
+  * dockervm.WithProviderImage(string) is now WithProviderImage(ociimage.Reference).
+  * vmstestutil.MockFactory.SetImage(string) is now SetImage(ociimage.Reference).
+
+ Generated with Claude Code (https://claude.com/claude-code)
