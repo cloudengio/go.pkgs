@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -866,6 +867,37 @@ name: $APP_NAME
 	}
 	if got, want := cfg.Name, "myapp"; got != want {
 		t.Errorf("Name: got %q, want %q", got, want)
+	}
+}
+
+// TestWithExpandMappingComments verifies that variables in YAML comments are
+// not expanded and do not trigger calls to the mapping function.
+func TestWithExpandMappingComments(t *testing.T) {
+	type config struct {
+		Addr string `yaml:"addr"`
+	}
+	spec := []byte(`
+# ${COMMENT_VAR_1} at beginning of line
+addr: ${HOST} # inline comment ${COMMENT_VAR_2}
+  # ${COMMENT_VAR_3} indented comment
+`)
+	called := map[string]int{}
+	envFn := func(key string) string {
+		called[key]++
+		if key == "HOST" {
+			return "localhost"
+		}
+		return ""
+	}
+	var cfg config
+	if err := cmdyaml.NewParser(cmdyaml.WithExpandMapping(envFn)).Parse(&cfg, spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := cfg.Addr, "localhost"; got != want {
+		t.Errorf("Addr: got %q, want %q", got, want)
+	}
+	if want := map[string]int{"HOST": 1}; !maps.Equal(called, want) {
+		t.Errorf("called: got %v, want %v", called, want)
 	}
 }
 

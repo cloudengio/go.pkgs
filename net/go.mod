@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	cloudeng.io/sys v0.0.0-20261026191912-bcd1dece5d6c // indirect
+	cloudeng.io/sys v0.0.0-20261111225710-e0ef01d9df9b // indirect
 	golang.org/x/sync v0.25.0 // indirect
 )
 

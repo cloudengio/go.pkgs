@@ -8,16 +8,19 @@ import cloudeng.io/cmdutil/cmdyaml
 ## Constants
 ### Byte, KB, MB, GB, TB, KiB, MiB, GiB, TiB
 ```go
-Byte = cmdtypes.Byte
-KB = cmdtypes.KB
-MB = cmdtypes.MB
-GB = cmdtypes.GB
-TB = cmdtypes.TB
-KiB = cmdtypes.KiB
-MiB = cmdtypes.MiB
-GiB = cmdtypes.GiB
-TiB = cmdtypes.TiB
+const (
+	Byte = cmdtypes.Byte
 
+	KB = cmdtypes.KB
+	MB = cmdtypes.MB
+	GB = cmdtypes.GB
+	TB = cmdtypes.TB
+
+	KiB = cmdtypes.KiB
+	MiB = cmdtypes.MiB
+	GiB = cmdtypes.GiB
+	TiB = cmdtypes.TiB
+)
 ```
 The byte size units, as per cmdtypes.
 

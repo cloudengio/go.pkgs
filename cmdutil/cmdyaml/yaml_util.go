@@ -123,9 +123,15 @@ func NewParser(opts ...Option) *Parser {
 }
 
 // expand expands the references in spec using the mapping, if there is one.
+// References in YAML comments are left untouched.
 func (p *Parser) expand(spec []byte) []byte {
-	if p.expandEnv != nil && p.unresolvedEmpty {
-		return []byte(os.Expand(string(spec), p.expandEnv))
+	if p.expandEnv == nil {
+		return spec
+	}
+	if p.unresolvedEmpty {
+		return expandYAMLText(spec, func(s string) string {
+			return os.Expand(s, p.expandEnv)
+		})
 	}
 	return expandEnvPreserving(spec, p.expandEnv)
 }
@@ -134,13 +140,92 @@ func expandEnvPreserving(spec []byte, mapping func(string) string) []byte {
 	if mapping == nil {
 		return spec
 	}
-	return []byte(os.Expand(string(spec), func(s string) string {
-		rs := mapping(s)
-		if len(rs) == 0 {
-			return "${" + s + "}"
+	return expandYAMLText(spec, func(s string) string {
+		return os.Expand(s, func(name string) string {
+			rs := mapping(name)
+			if len(rs) == 0 {
+				return "${" + name + "}"
+			}
+			return rs
+		})
+	})
+}
+
+type yamlQuoteState struct {
+	inSingleQuote bool
+	inDoubleQuote bool
+}
+
+func (s *yamlQuoteState) findComment(line []byte) int {
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if s.inSingleQuote {
+			if c == '\'' {
+				if i+1 < len(line) && line[i+1] == '\'' {
+					i++ // escaped single quote ''
+				} else {
+					s.inSingleQuote = false
+				}
+			}
+			continue
 		}
-		return rs
-	}))
+		if s.inDoubleQuote {
+			switch c {
+			case '\\':
+				i++ // escaped character in double quotes
+			case '"':
+				s.inDoubleQuote = false
+			}
+			continue
+		}
+		switch c {
+		case '\'':
+			s.inSingleQuote = true
+		case '"':
+			s.inDoubleQuote = true
+		case '#':
+			if i == 0 || line[i-1] == ' ' || line[i-1] == '\t' {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// expandYAMLText expands references in spec using expandFn on non-comment parts
+// of each line, leaving comments untouched so that variable references in
+// comments are neither expanded nor looked up.
+func expandYAMLText(spec []byte, expandFn func(string) string) []byte {
+	if len(spec) == 0 {
+		return spec
+	}
+	var buf bytes.Buffer
+	buf.Grow(len(spec))
+
+	var state yamlQuoteState
+	start := 0
+	for start < len(spec) {
+		end := bytes.IndexByte(spec[start:], '\n')
+		var line []byte
+		if end == -1 {
+			line = spec[start:]
+			start = len(spec)
+		} else {
+			line = spec[start : start+end+1]
+			start += end + 1
+		}
+
+		commentIdx := state.findComment(line)
+		if commentIdx == -1 {
+			buf.WriteString(expandFn(string(line)))
+		} else {
+			if commentIdx > 0 {
+				buf.WriteString(expandFn(string(line[:commentIdx])))
+			}
+			buf.Write(line[commentIdx:])
+		}
+	}
+	return buf.Bytes()
 }
 
 // Parse merges the YAML content of each spec into cfg. Specs are processed in
