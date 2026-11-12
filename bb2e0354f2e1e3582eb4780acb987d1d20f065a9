@@ -1,0 +1,24 @@
+--- Overview
+Adds toolkit-agnostic image signature verification to vms/ociimage. A Verifier interface lets callers plug in cosign or another toolkit without this package importing it. Verification fails closed and pins the image to a digest, so the image that gets pulled or used is the one that was verified.
+
+--- Key Changes
+  * vms/ociimage/verify.go (new)
+    * Signer: trusts either a public key or a keyless OIDC identity. A keyless identity needs both an issuer and a subject, each given as an exact string or a regexp. Validate rejects a signer that sets both a key and an identity, or neither.
+    * Policy: trusted signers, an optional transparency-log requirement and required annotations. Validate rejects a policy with no signers.
+    * Verifier interface, plus the Verified and Signature result types.
+    * ErrNotVerified and ErrUnsigned sentinel errors.
+    * Verify: checks the request and the verifier's answer.
+      * Rejects a nil verifier, an invalid policy or a local reference.
+      * Requires the result to be pinned to a digest, to match the requested path, registry and digest, and to carry at least one signature.
+    * PullVerified: verifies the image, then pulls the verified digest rather than the tag.
+    * Pin: returns the verified repo@digest reference without its tag. If the policy is nil, it returns the source unchanged.
+  * vms/ociimage/source.go
+    * New optional Verify *Policy field (yaml:"verify").
+    * Validate checks the policy and rejects verification of an image that names no registry.
+  * Docs: doc.go and README.md describe the verification model and the new API.
+  * Tests: verify_test.go covers policy validation, the checks on verifier results, fail-closed paths, PullVerified, YAML config parsing and Pin.
+
+--- Breaking Changes
+None. The new Source.Verify field is optional, and Source.Validate only rejects new cases when it is set.
+
+ Generated with Claude Code (https://claude.com/claude-code)
