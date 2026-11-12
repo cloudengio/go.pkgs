@@ -22,6 +22,7 @@ import (
 
 	"cloudeng.io/os/executil"
 	"cloudeng.io/vms"
+	"cloudeng.io/vms/ociimage"
 )
 
 // Instance implements vms.Instance backed by the Docker Go API.
@@ -51,6 +52,8 @@ type options struct {
 	createEnv        []string // extra args interpreted as env vars (KEY=VAL) or labels
 	containerCmd     []string
 	logger           *slog.Logger
+	verifier         ociimage.Verifier
+	policy           *ociimage.Policy
 }
 
 const (
@@ -70,6 +73,19 @@ func WithPollingInterval(interval time.Duration) Option {
 func WithForceStopTimeout(d time.Duration) Option {
 	return func(o *options) {
 		o.forceStopTimeout = d
+	}
+}
+
+// WithVerification requires that the image that containers are created from
+// has a signature that satisfies policy, as verified by v, and creates them
+// from the verified digest rather than the reference that was given: a tag
+// could be moved between verifying it and creating the container. An image
+// that is not signed, or not signed as the policy requires, is an error, as is
+// a local image, which has no registry to hold a signature. Without this
+// option nothing is verified.
+func WithVerification(v ociimage.Verifier, policy ociimage.Policy) Option {
+	return func(o *options) {
+		o.verifier, o.policy = v, &policy
 	}
 }
 
@@ -181,12 +197,16 @@ func (inst *Instance) Clone(ctx context.Context) error {
 	if s, allowed := inst.isActionAllowed(vms.ActionClone); !allowed {
 		return fmt.Errorf("action %s not allowed in state %s", vms.ActionClone, s)
 	}
+	image, err := ociimage.Pin(ctx, inst.opts.verifier, inst.opts.policy, inst.image)
+	if err != nil {
+		return fmt.Errorf("docker %s: verifying %s: %w", inst.name, inst.image, err)
+	}
 	prev := inst.setState(vms.StateCloning)
 
 	trueVal := true
 	createOpts := mobyclient.ContainerCreateOptions{
 		Name:  inst.name,
-		Image: inst.image,
+		Image: image,
 		Config: &mobycontainer.Config{
 			Cmd: inst.opts.containerCmd,
 			Env: inst.opts.createEnv,
@@ -196,7 +216,7 @@ func (inst *Instance) Clone(ctx context.Context) error {
 		},
 	}
 
-	inst.logger.Info("docker API: creating container", "name", inst.name, "image", inst.image)
+	inst.logger.Info("docker API: creating container", "name", inst.name, "image", image)
 	result, err := inst.cli.ContainerCreate(ctx, createOpts)
 	if err != nil {
 		inst.logger.Info("docker API: container create failed", "name", inst.name, "error", err)

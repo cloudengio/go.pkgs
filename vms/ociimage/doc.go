@@ -30,6 +30,17 @@
 // these the same way. Pulling itself is left to the backend, which is the
 // only thing that knows how: a backend that can pull implements Puller.
 //
+// Verifier verifies the signatures of an image, as cosign and others store
+// them in its registry, without this package depending on any of their
+// libraries: the program that does supplies the implementation. A Policy
+// says which Signers are trusted, a key or a keyless identity. Verify checks
+// what does not depend on the toolkit and fails closed: a local image, which
+// has no registry to hold a signature, is never verified, and the verified
+// result must be pinned to a digest. PullVerified pulls that digest rather
+// than the tag, which can be moved between being verified and being pulled.
+// A backend that creates VMs from the pulled image should use the returned
+// reference, and from a local store only if it was pulled that way.
+//
 // Nothing here validates a reference beyond its structure. An empty
 // reference, an empty path segment, a tag or digest that is not one at all:
 // these are rejected, since they are mistakes worth catching when the
