@@ -32,6 +32,17 @@ embed in its own configuration so that every backend spells these the same
 way. Pulling itself is left to the backend, which is the only thing that
 knows how: a backend that can pull implements Puller.
 
+Verifier verifies the signatures of an image, as cosign and others store
+them in its registry, without this package depending on any of their
+libraries: the program that does supplies the implementation. A Policy says
+which Signers are trusted, a key or a keyless identity. Verify checks what
+does not depend on the toolkit and fails closed: a local image, which has
+no registry to hold a signature, is never verified, and the verified result
+must be pinned to a digest. PullVerified pulls that digest rather than the
+tag, which can be moved between being verified and being pulled. A backend
+that creates VMs from the pulled image should use the returned reference,
+and from a local store only if it was pulled that way.
+
 Nothing here validates a reference beyond its structure. An empty reference,
 an empty path segment, a tag or digest that is not one at all: these are
 rejected, since they are mistakes worth catching when the configuration
@@ -39,6 +50,19 @@ naming them is read. Whether the image exists, and whether its name obeys
 the full grammar of the specification, is left to the tool that resolves it.
 
 ## Variables
+### ErrNotVerified, ErrUnsigned
+```go
+// ErrNotVerified is returned, or wrapped, by a Verifier for an image that
+// does not satisfy the policy, and by Verify for one that cannot be
+// verified at all.
+ErrNotVerified = errors.New("image signature not verified")
+// ErrUnsigned is returned, or wrapped, along with ErrNotVerified for an
+// image that has no signatures, as opposed to one whose signatures are
+// not acceptable.
+ErrUnsigned = errors.New("image is not signed")
+
+```
+
 ### ErrInvalidReference
 ```go
 ErrInvalidReference = errors.New("invalid OCI image reference")
@@ -51,6 +75,18 @@ reference was rejected and why.
 
 
 ## Functions
+### Func Pin
+```go
+func Pin(ctx context.Context, v Verifier, policy *Policy, source string) (string, error)
+```
+Pin returns the reference to create a VM or container from when it is
+created from the image named source, for the backends that do so. If policy
+is nil, no verification was asked for and source is returned as it is.
+Otherwise the image is verified, see Verify, and the verified digest is
+returned as a reference to it alone, without its tag, so that what is
+created is exactly what was verified: an image that is unsigned, or not
+signed as the policy requires, is an error and not to be used.
+
 ### Func Pull
 ```go
 func Pull(ctx context.Context, p Puller, ref Reference, opts PullOptions) error
@@ -62,6 +98,33 @@ store that is expected to hold it already, see Reference.Remote.
 
 
 ## Types
+### Type Policy
+```go
+type Policy struct {
+	Signers []Signer `yaml:"signers" doc:"the signers that are trusted: an image is accepted if it carries a valid signature from any one of them."`
+	// TransparencyLog requires that the signature is recorded in a
+	// transparency log, such as Rekor.
+	TransparencyLog bool `yaml:"require_transparency_log" doc:"require that the signature is recorded in a transparency log."`
+	// Annotations must all be present, with these values, in the signature.
+	Annotations map[string]string `yaml:"annotations" doc:"annotations that the signature must carry, with these values."`
+}
+```
+Policy is what an image must satisfy to be accepted: it carries a valid
+signature from at least one of the Signers, and the signature meets the
+other requirements. It holds no more than a Verifier needs to decide,
+so that it can be read from a configuration file, see Source.
+
+### Methods
+
+```go
+func (p Policy) Validate() error
+```
+Validate reports a policy that cannot accept anything meaningful, which is
+one that trusts no signer: a policy is never to be silently permissive.
+
+
+
+
 ### Type PullOptions
 ```go
 type PullOptions struct {
@@ -130,6 +193,15 @@ Parse parses an OCI image reference.
 The leading segment is taken to be a registry if it looks like a host:
 it contains a "." or a ":", or is exactly "localhost". Anything else is part
 of the repository path, so "myorg/linux-ci" names no registry, see Remote.
+
+
+```go
+func PullVerified(ctx context.Context, p Puller, v Verifier, ref Reference, policy Policy, opts PullOptions) (Reference, error)
+```
+PullVerified verifies ref and, only if it is accepted, pulls the verified
+reference, which is returned for the caller to create VMs or containers
+from, see Verified.Reference. Like Pull it needs a Puller, but not one that
+does nothing for a local reference: that is an error, see Verify.
 
 
 
@@ -211,6 +283,62 @@ identifies the image when a reference carries both.
 
 
 
+### Type Signature
+```go
+type Signature struct {
+	// Key is the key that verified the signature, empty for a keyless one.
+	Key string
+	// Issuer and Subject are the certified identity of a keyless signature.
+	Issuer, Subject string
+	// Annotations are those the signature carries.
+	Annotations map[string]string
+	// Logged is true if the signature is recorded in a transparency log.
+	Logged bool
+}
+```
+Signature describes a signature that satisfied a policy.
+
+
+### Type Signer
+```go
+type Signer struct {
+	// Key identifies a public key. How it is spelled, such as a file, a URL
+	// or a KMS URI, is for the Verifier to say.
+	Key string `yaml:"key" doc:"the public key that signed the image, as a file, URL or KMS reference understood by the verifier."`
+	// Issuer and IssuerRegexp are the OIDC issuer of a keyless identity, as an exact
+	// string or a regular expression.
+	Issuer       string `yaml:"issuer" doc:"the OIDC issuer of the identity that signed the image."`
+	IssuerRegexp string `yaml:"issuer_regexp" doc:"a regular expression that the OIDC issuer must match, instead of issuer."`
+	// Subject and SubjectRegexp are the subject of a keyless identity, such as an
+	// email address or a workflow URL.
+	Subject       string `yaml:"subject" doc:"the subject of the identity that signed the image, such as an email address or workflow URL."`
+	SubjectRegexp string `yaml:"subject_regexp" doc:"a regular expression that the subject must match, instead of subject."`
+}
+```
+Signer is a signer that a Policy trusts: either a public key or, for keyless
+signing, the identity that was certified to sign. Exactly one of Key,
+or the Issuer and Subject, is set.
+
+### Methods
+
+```go
+func (s Signer) Keyless() bool
+```
+Keyless reports whether s is an identity rather than a key.
+
+
+```go
+func (s Signer) Validate() error
+```
+Validate reports a Signer that does not say who is trusted: both a key
+and an identity, neither, an identity that lacks its issuer or subject,
+or a regular expression that does not compile. Requiring both an issuer and
+a subject, and not merely one, ensures that a signer is never "anyone that
+the issuer certifies".
+
+
+
+
 ### Type Source
 ```go
 type Source struct {
@@ -218,6 +346,9 @@ type Source struct {
 	PullRemoteOnRun bool   `yaml:"pull_remote_on_run" doc:"pull the image from its registry before creating each VM, so that a moving tag such as :latest is picked up without restarting. Ignored for a reference that names no registry, which has nothing to pull from."`
 	Insecure        bool   `yaml:"pull_insecure" doc:"allow pulling the image from a registry without verifying its certificate."`
 	Concurrency     int    `yaml:"pull_concurrency" doc:"the concurrency to pull the image with; 0 leaves it to the tool that pulls it."`
+	// Verify, if set, is the policy that the image's signature must satisfy,
+	// see Verify and PullVerified.
+	Verify *Policy `yaml:"verify" doc:"require the image to carry a signature that satisfies this policy before it is used."`
 }
 ```
 Source is where a backend's image comes from: which image it creates its VMs
@@ -264,6 +395,52 @@ A backend that locates its own settings in its messages reports these itself
 instead, see Reference.
 
 
+
+
+### Type Verified
+```go
+type Verified struct {
+	// Reference is the image that was verified, pinned to its digest. It is
+	// what is to be pulled and used, rather than the reference that was
+	// asked about: a tag can be moved between verifying it and using it, but
+	// the digest that carries the signature cannot.
+	Reference Reference
+	// Signatures are those that satisfied the policy.
+	Signatures []Signature
+}
+```
+Verified is the result of a successful verification.
+
+### Functions
+
+```go
+func Verify(ctx context.Context, v Verifier, ref Reference, policy Policy) (Verified, error)
+```
+Verify verifies ref with v against policy, after checking everything about
+the request and the answer that does not depend on the toolkit: that there
+is a verifier and a valid policy, that the image is remote since a local
+one has no registry to hold a signature and so can never satisfy a policy,
+and that the verified reference is the one asked about, pinned to a digest.
+
+
+
+
+### Type Verifier
+```go
+type Verifier interface {
+	Verify(ctx context.Context, ref Reference, policy Policy) (Verified, error)
+}
+```
+Verifier verifies the signatures of images, in the form that cosign and
+others store them in the registry that holds the image. It is implemented by
+whatever depends on a signing toolkit, so that this package does not.
+
+An implementation resolves the reference to a digest if it does not have
+one, and verifies the signatures of that digest and no other. It returns an
+error that satisfies errors.Is(err, ErrNotVerified) if the image does not
+satisfy the policy, and may return any other error for a failure to carry
+out the verification, such as a registry that cannot be reached. Either way
+the image is not to be used.
 
 
 
