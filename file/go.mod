@@ -6,11 +6,11 @@ require (
 	cloudeng.io/algo v0.0.0-20261111225710-e0ef01d9df9b
 	cloudeng.io/cmdutil v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/errors v0.0.14-0.20260312171538-61fcde6ce278
-	cloudeng.io/logging v0.0.0-20260923165344-0acebac4c1e9
-	cloudeng.io/os v0.0.0-20260923165344-0acebac4c1e9
+	cloudeng.io/logging v0.0.0-20261111225710-e0ef01d9df9b
+	cloudeng.io/os v0.0.0-20261111225710-e0ef01d9df9b
 	cloudeng.io/path v0.0.10-0.20260312171538-61fcde6ce278
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
-	cloudeng.io/sys v0.0.0-20261026191912-bcd1dece5d6c
+	cloudeng.io/sys v0.0.0-20261111225710-e0ef01d9df9b
 	cloudeng.io/text v0.0.16-0.20260624171915-da98fe9dec2b
 	cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e
 	golang.org/x/net v0.62.0

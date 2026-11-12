@@ -9,6 +9,7 @@ require (
 	cloudeng.io/logging v0.0.0-20261027225206-401592c3d504
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
