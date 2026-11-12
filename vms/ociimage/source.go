@@ -21,6 +21,9 @@ type Source struct {
 	PullRemoteOnRun bool   `yaml:"pull_remote_on_run" doc:"pull the image from its registry before creating each VM, so that a moving tag such as :latest is picked up without restarting. Ignored for a reference that names no registry, which has nothing to pull from."`
 	Insecure        bool   `yaml:"pull_insecure" doc:"allow pulling the image from a registry without verifying its certificate."`
 	Concurrency     int    `yaml:"pull_concurrency" doc:"the concurrency to pull the image with; 0 leaves it to the tool that pulls it."`
+	// Verify, if set, is the policy that the image's signature must satisfy,
+	// see Verify and PullVerified.
+	Verify *Policy `yaml:"verify" doc:"require the image to carry a signature that satisfies this policy before it is used."`
 }
 
 // Reference parses the configured image.
@@ -38,8 +41,17 @@ func (s Source) Validate() error {
 	if s.Image == "" {
 		return fmt.Errorf("%w: image is required", ErrInvalidReference)
 	}
-	if _, err := s.Reference(); err != nil {
+	ref, err := s.Reference()
+	if err != nil {
 		return err
+	}
+	if s.Verify != nil {
+		if err := s.Verify.Validate(); err != nil {
+			return fmt.Errorf("verify: %w", err)
+		}
+		if !ref.Remote() {
+			return fmt.Errorf("verify: %v names no registry, so it has no signature to verify", ref)
+		}
 	}
 	return nil
 }
