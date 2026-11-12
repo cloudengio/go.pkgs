@@ -1,14 +1,14 @@
 module cloudeng.io/vms/dockervm/dockerapi
 
-go 1.26.2
+go 1.27.0
 
 require (
-	cloudeng.io/algo v0.0.0-20261027225206-401592c3d504
+	cloudeng.io/algo v0.0.0-20261111225710-e0ef01d9df9b
 	cloudeng.io/cicd v0.0.0-20261026191912-bcd1dece5d6c
 	cloudeng.io/os v0.0.0-20260527194618-4cb6d4558850
 	cloudeng.io/vms v0.0.0-20260527194618-4cb6d4558850
 	github.com/containerd/errdefs v1.0.0
-	github.com/docker/go-sdk/client v0.1.0-alpha013
+	github.com/docker/go-sdk/client v0.1.0-alpha014
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
 )
@@ -18,13 +18,13 @@ require (
 	cloudeng.io/logging v0.0.0-20261027225206-401592c3d504 // indirect
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
-	github.com/caarlos0/env/v11 v11.4.1 // indirect
+	github.com/caarlos0/env/v11 v11.4.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.8.2 // indirect
-	github.com/docker/go-sdk/config v0.1.0-alpha013 // indirect
-	github.com/docker/go-sdk/context v0.1.0-alpha013 // indirect
+	github.com/docker/go-sdk/config v0.1.0-alpha014 // indirect
+	github.com/docker/go-sdk/context v0.1.0-alpha014 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -39,7 +39,7 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 )
