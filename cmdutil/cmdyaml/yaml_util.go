@@ -123,9 +123,15 @@ func NewParser(opts ...Option) *Parser {
 }
 
 // expand expands the references in spec using the mapping, if there is one.
+// References in YAML comments are left untouched.
 func (p *Parser) expand(spec []byte) []byte {
-	if p.expandEnv != nil && p.unresolvedEmpty {
-		return []byte(os.Expand(string(spec), p.expandEnv))
+	if p.expandEnv == nil {
+		return spec
+	}
+	if p.unresolvedEmpty {
+		return expandYAMLText(spec, func(s string) string {
+			return os.Expand(s, p.expandEnv)
+		})
 	}
 	return expandEnvPreserving(spec, p.expandEnv)
 }
@@ -134,13 +140,86 @@ func expandEnvPreserving(spec []byte, mapping func(string) string) []byte {
 	if mapping == nil {
 		return spec
 	}
-	return []byte(os.Expand(string(spec), func(s string) string {
-		rs := mapping(s)
-		if len(rs) == 0 {
-			return "${" + s + "}"
+	return expandYAMLText(spec, func(s string) string {
+		return os.Expand(s, func(name string) string {
+			rs := mapping(name)
+			if len(rs) == 0 {
+				return "${" + name + "}"
+			}
+			return rs
+		})
+	})
+}
+
+// expandYAMLText expands references in spec using expandFn on non-comment parts
+// of each line, leaving comments untouched so that variable references in
+// comments are neither expanded nor looked up.
+func expandYAMLText(spec []byte, expandFn func(string) string) []byte {
+	if len(spec) == 0 {
+		return spec
+	}
+	var buf bytes.Buffer
+	buf.Grow(len(spec))
+
+	var inSingleQuote, inDoubleQuote bool
+	start := 0
+	for start < len(spec) {
+		end := bytes.IndexByte(spec[start:], '\n')
+		var line []byte
+		if end == -1 {
+			line = spec[start:]
+			start = len(spec)
+		} else {
+			line = spec[start : start+end+1]
+			start += end + 1
 		}
-		return rs
-	}))
+
+		commentIdx := -1
+		for i := 0; i < len(line); i++ {
+			c := line[i]
+			if inSingleQuote {
+				if c == '\'' {
+					if i+1 < len(line) && line[i+1] == '\'' {
+						i++ // escaped single quote ''
+					} else {
+						inSingleQuote = false
+					}
+				}
+				continue
+			}
+			if inDoubleQuote {
+				if c == '\\' {
+					i++ // escaped character in double quotes
+				} else if c == '"' {
+					inDoubleQuote = false
+				}
+				continue
+			}
+			switch c {
+			case '\'':
+				inSingleQuote = true
+			case '"':
+				inDoubleQuote = true
+			case '#':
+				if i == 0 || line[i-1] == ' ' || line[i-1] == '\t' {
+					commentIdx = i
+				}
+			}
+			if commentIdx >= 0 {
+				break
+			}
+		}
+
+		if commentIdx == -1 {
+			buf.WriteString(expandFn(string(line)))
+		} else {
+			if commentIdx > 0 {
+				buf.WriteString(expandFn(string(line[:commentIdx])))
+			}
+			buf.Write(line[commentIdx:])
+		}
+	}
+	return buf.Bytes()
 }
 
 // Parse merges the YAML content of each spec into cfg. Specs are processed in
