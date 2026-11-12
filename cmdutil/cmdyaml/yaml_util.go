@@ -151,6 +151,47 @@ func expandEnvPreserving(spec []byte, mapping func(string) string) []byte {
 	})
 }
 
+type yamlQuoteState struct {
+	inSingleQuote bool
+	inDoubleQuote bool
+}
+
+func (s *yamlQuoteState) findComment(line []byte) int {
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if s.inSingleQuote {
+			if c == '\'' {
+				if i+1 < len(line) && line[i+1] == '\'' {
+					i++ // escaped single quote ''
+				} else {
+					s.inSingleQuote = false
+				}
+			}
+			continue
+		}
+		if s.inDoubleQuote {
+			switch c {
+			case '\\':
+				i++ // escaped character in double quotes
+			case '"':
+				s.inDoubleQuote = false
+			}
+			continue
+		}
+		switch c {
+		case '\'':
+			s.inSingleQuote = true
+		case '"':
+			s.inDoubleQuote = true
+		case '#':
+			if i == 0 || line[i-1] == ' ' || line[i-1] == '\t' {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
 // expandYAMLText expands references in spec using expandFn on non-comment parts
 // of each line, leaving comments untouched so that variable references in
 // comments are neither expanded nor looked up.
@@ -161,7 +202,7 @@ func expandYAMLText(spec []byte, expandFn func(string) string) []byte {
 	var buf bytes.Buffer
 	buf.Grow(len(spec))
 
-	var inSingleQuote, inDoubleQuote bool
+	var state yamlQuoteState
 	start := 0
 	for start < len(spec) {
 		end := bytes.IndexByte(spec[start:], '\n')
@@ -174,42 +215,7 @@ func expandYAMLText(spec []byte, expandFn func(string) string) []byte {
 			start += end + 1
 		}
 
-		commentIdx := -1
-		for i := 0; i < len(line); i++ {
-			c := line[i]
-			if inSingleQuote {
-				if c == '\'' {
-					if i+1 < len(line) && line[i+1] == '\'' {
-						i++ // escaped single quote ''
-					} else {
-						inSingleQuote = false
-					}
-				}
-				continue
-			}
-			if inDoubleQuote {
-				if c == '\\' {
-					i++ // escaped character in double quotes
-				} else if c == '"' {
-					inDoubleQuote = false
-				}
-				continue
-			}
-			switch c {
-			case '\'':
-				inSingleQuote = true
-			case '"':
-				inDoubleQuote = true
-			case '#':
-				if i == 0 || line[i-1] == ' ' || line[i-1] == '\t' {
-					commentIdx = i
-				}
-			}
-			if commentIdx >= 0 {
-				break
-			}
-		}
-
+		commentIdx := state.findComment(line)
 		if commentIdx == -1 {
 			buf.WriteString(expandFn(string(line)))
 		} else {

@@ -2,6 +2,8 @@ cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850 h1:gUar3YNqSdi+uvszdB44uBuu
 cloudeng.io/debug v0.0.0-20260527194618-4cb6d4558850/go.mod h1:MECwal0eFhXI3wixLVjNGnXohW4qGQRg+J68yQWmi9k=
 cloudeng.io/types v0.0.0-20261111225710-e0ef01d9df9b h1:w569WmPLZPoK5zg14C5lkzY3vpdc9wAeOeFyx4Z3slU=
 cloudeng.io/types v0.0.0-20261111225710-e0ef01d9df9b/go.mod h1:PWKCmFQwXGQKSeH6AlXwHfxUK227rTJs4FZKkMEACKE=
+cloudeng.io/types v0.0.0-20261112002641-3f0b5fb85a24 h1:cpGj69qHePakX9o93DbJK76rxPadKbp9hwwj9x6EU6M=
+cloudeng.io/types v0.0.0-20261112002641-3f0b5fb85a24/go.mod h1:PWKCmFQwXGQKSeH6AlXwHfxUK227rTJs4FZKkMEACKE=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e h1:88FLgbskFkcsZSgh3jncYqYBg1J2eLHGzmdp74APrCQ=
 cloudeng.io/windows v0.0.0-20251203211350-c30caae1cc5e/go.mod h1:tUOArMXLISe8OY+lHimWwdHMev5N7MwQGczQgTYZb3Y=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
