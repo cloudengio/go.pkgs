@@ -1,0 +1,25 @@
+--- Overview
+Routine dependency refresh across the go.pkgs modules, bringing internal cloudeng.io/* modules up to the latest commits and updating third-party modules to their latest versions.
+
+--- Key Changes
+  * aws
+    * AWS SDK v2 moved to v1.48.0; service clients updated: ec2 v1.345.0, s3 v1.114.10, sts v1.52.0, kms, dsql, secretsmanager, sesv2, ssm and others.
+    * smithy-go updated to v1.28.9, pgx/v5 to v5.13.0, grpc to v1.85.0, otlp to v1.11.0.
+    * grpc-gateway/v2 is no longer listed as an indirect dependency; pion/transport/v5 is now an indirect dependency.
+  * google
+    * google.golang.org/api updated to v0.313.0, golang.org/x/oauth2 to v0.38.0, cloud.google.com/go/auth to v0.24.4, grpc to v1.85.0.
+    * go.yaml.in/yaml/v3 is now an explicit indirect dependency.
+  * vms/dockervm/dockerapi
+    * docker/go-sdk modules (client, config, context) updated to v0.1.0-alpha014; caarlos0/env/v11 updated to v11.4.2.
+    * go directive raised from 1.26.2 to 1.27.0.
+  * debug: google/pprof updated to the latest commit.
+  * path: golang.org/x/mod updated to v0.43.0.
+  * os: cloudeng.io/sync is no longer an indirect dependency; golang.org/x/sync in go.sum updated to v0.25.0.
+  * Across modules (aws, cmdutil, file, google, io, net, os, security, sys, vms):
+    * golang.org/x/sys updated to v0.50.0; x/crypto, x/term and x/text updated where used.
+    * cloudeng.io/algo, logging, os and types updated to 20261111225710-e0ef01d9df9b.
+
+--- Breaking Changes
+  * cloudeng.io/vms/dockervm/dockerapi now requires Go 1.27.0 or newer.
+
+ Generated with Claude Code (https://claude.com/claude-code)
