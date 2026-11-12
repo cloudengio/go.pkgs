@@ -89,14 +89,22 @@ func TestVerify(t *testing.T) {
 	other.Reference = mustParse(t, "ghcr.io/cloudengio/other:latest").WithDigest(sum)
 	otherRegistry := good
 	otherRegistry.Reference = ref.WithRegistry("evil.io").WithDigest(sum)
+	otherTag := good
+	otherTag.Reference = ref.WithTag("evil").WithDigest(sum)
 	unsigned := good
 	unsigned.Signatures = nil
 	for name, bad := range map[string]ociimage.Verified{
-		"unpinned": unpinned, "other image": other, "other registry": otherRegistry, "no signatures": unsigned,
+		"unpinned": unpinned, "other image": other, "other registry": otherRegistry, "other tag": otherTag, "no signatures": unsigned,
 	} {
 		if _, err := ociimage.Verify(ctx, &fakeVerifier{res: bad}, ref, policy); !errors.Is(err, ociimage.ErrNotVerified) {
 			t.Errorf("%v: got %v, want ErrNotVerified", name, err)
 		}
+	}
+	// A verifier may strip the tag when returning a digest-pinned reference.
+	stripped := good
+	stripped.Reference = good.Reference.WithTag("")
+	if res, err := ociimage.Verify(ctx, &fakeVerifier{res: stripped}, ref, policy); err != nil || res.Reference.Digest != sum {
+		t.Errorf("a digest-pinned reference without tag was rejected: %v, %v", res, err)
 	}
 	// A digest in the request must be the one that was verified.
 	pinned := ref.WithDigest("sha256:ffff")

@@ -65,8 +65,10 @@ func (s Signer) Validate() error {
 		if (f.exact == "") == (f.expr == "") {
 			return fmt.Errorf("a signer needs a key, or an identity with exactly one of %[1]s and %[1]s_regexp", f.name)
 		}
-		if _, err := regexp.Compile(f.expr); err != nil {
-			return fmt.Errorf("%s_regexp: %w", f.name, err)
+		if f.expr != "" {
+			if _, err := regexp.Compile(f.expr); err != nil {
+				return fmt.Errorf("%s_regexp: %w", f.name, err)
+			}
 		}
 	}
 	return nil
@@ -160,7 +162,8 @@ func Verify(ctx context.Context, v Verifier, ref Reference, policy Policy) (Veri
 	}
 	if ref.Digest != "" && ref.Digest != res.Reference.Digest ||
 		ref.Path() != res.Reference.Path() ||
-		ref.Registry != "" && ref.Registry != res.Reference.Registry {
+		ref.Registry != "" && ref.Registry != res.Reference.Registry ||
+		ref.Tag != "" && res.Reference.Tag != "" && ref.Tag != res.Reference.Tag {
 		return Verified{}, fmt.Errorf("%w: %v: the verifier verified %v instead", ErrNotVerified, ref, res.Reference)
 	}
 	if len(res.Signatures) == 0 {
