@@ -175,3 +175,26 @@ verify:
 		}
 	}
 }
+
+func TestPin(t *testing.T) {
+	ctx := t.Context()
+	policy := ociimage.Policy{Signers: []ociimage.Signer{keyless}}
+	ref := mustParse(t, "ghcr.io/cloudengio/ci:latest")
+	good := ociimage.Verified{Reference: ref.WithDigest(sum), Signatures: []ociimage.Signature{{}}}
+
+	// Without a policy nothing is verified, or even parsed.
+	fv := &fakeVerifier{}
+	if got, err := ociimage.Pin(ctx, fv, nil, "not a reference"); err != nil || got != "not a reference" || fv.calls != 0 {
+		t.Errorf("got %q, %v", got, err)
+	}
+	got, err := ociimage.Pin(ctx, &fakeVerifier{res: good}, &policy, ref.String())
+	if want := "ghcr.io/cloudengio/ci@" + sum; err != nil || got != want {
+		t.Errorf("got %q, %v, want %q", got, err, want)
+	}
+	if _, err := ociimage.Pin(ctx, &fakeVerifier{err: ociimage.ErrUnsigned}, &policy, ref.String()); !errors.Is(err, ociimage.ErrUnsigned) {
+		t.Errorf("got %v", err)
+	}
+	if _, err := ociimage.Pin(ctx, &fakeVerifier{res: good}, &policy, "ghcr.io//x"); !errors.Is(err, ociimage.ErrInvalidReference) {
+		t.Errorf("got %v", err)
+	}
+}

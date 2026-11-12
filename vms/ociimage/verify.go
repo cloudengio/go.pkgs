@@ -183,3 +183,25 @@ func PullVerified(ctx context.Context, p Puller, v Verifier, ref Reference, poli
 	}
 	return res.Reference, nil
 }
+
+// Pin returns the reference to create a VM or container from when it is
+// created from the image named source, for the backends that do so. If policy
+// is nil, no verification was asked for and source is returned as it is.
+// Otherwise the image is verified, see Verify, and the verified digest is
+// returned as a reference to it alone, without its tag, so that what is
+// created is exactly what was verified: an image that is unsigned, or not
+// signed as the policy requires, is an error and not to be used.
+func Pin(ctx context.Context, v Verifier, policy *Policy, source string) (string, error) {
+	if policy == nil {
+		return source, nil
+	}
+	ref, err := Parse(source)
+	if err != nil {
+		return "", err
+	}
+	res, err := Verify(ctx, v, ref, *policy)
+	if err != nil {
+		return "", err
+	}
+	return res.Reference.WithTag("").String(), nil
+}

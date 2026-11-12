@@ -263,6 +263,18 @@ WithPollingInterval sets the interval used when polling for state
 transitions.
 
 
+```go
+func WithVerification(v ociimage.Verifier, policy ociimage.Policy) Option
+```
+WithVerification requires that the image that containers are created from
+has a signature that satisfies policy, as verified by v, and creates
+them from the verified digest rather than the reference that was given:
+a tag could be moved between verifying it and creating the container. An
+image that is not signed, or not signed as the policy requires, is an error,
+as is a local image, which has no registry to hold a signature. Without this
+option nothing is verified.
+
+
 
 
 ### Type Provider

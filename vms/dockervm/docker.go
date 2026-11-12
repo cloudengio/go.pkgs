@@ -19,6 +19,7 @@ import (
 
 	"cloudeng.io/os/executil"
 	"cloudeng.io/vms"
+	"cloudeng.io/vms/ociimage"
 )
 
 // Instance implements vms.Instance backed by the Docker CLI.
@@ -48,6 +49,8 @@ type options struct {
 	containerCmd     []string      // the command run inside the container
 	logger           *slog.Logger
 	dockerBinary     string // the docker binary to use; defaults to "docker"
+	verifier         ociimage.Verifier
+	policy           *ociimage.Policy
 }
 
 const (
@@ -90,6 +93,19 @@ func WithContainerCmd(cmd ...string) Option {
 func WithLogger(logger *slog.Logger) Option {
 	return func(o *options) {
 		o.logger = logger
+	}
+}
+
+// WithVerification requires that the image that containers are created from
+// has a signature that satisfies policy, as verified by v, and creates them
+// from the verified digest rather than the reference that was given: a tag
+// could be moved between verifying it and creating the container. An image
+// that is not signed, or not signed as the policy requires, is an error, as is
+// a local image, which has no registry to hold a signature. Without this
+// option nothing is verified.
+func WithVerification(v ociimage.Verifier, policy ociimage.Policy) Option {
+	return func(o *options) {
+		o.verifier, o.policy = v, &policy
 	}
 }
 
@@ -183,12 +199,16 @@ func (inst *Instance) Clone(ctx context.Context) error {
 	if s, allowed := inst.isActionAllowed(vms.ActionClone); !allowed {
 		return fmt.Errorf("action %s not allowed in state %s", vms.ActionClone, s)
 	}
+	image, err := ociimage.Pin(ctx, inst.opts.verifier, inst.opts.policy, inst.image)
+	if err != nil {
+		return fmt.Errorf("docker %s: verifying %s: %w", inst.name, inst.image, err)
+	}
 	prev := inst.setState(vms.StateCloning)
 
 	// --init adds tini as PID 1 to ensure proper signal forwarding to the container process.
 	args := []string{"create", "--init", "--name", inst.name}
 	args = append(args, inst.opts.createArgs...)
-	args = append(args, inst.image)
+	args = append(args, image)
 	args = append(args, inst.opts.containerCmd...)
 
 	inst.logger.Info("docker command issued", "args", args)
