@@ -61,15 +61,19 @@ func TestPull(t *testing.T) {
 // the tool by default, and the last value given for an option is the one that
 // applies, so that a caller can override what it was handed.
 func TestPullOptions(t *testing.T) {
-	if got, want := ociimage.ResolvePullOptions(), (ociimage.PullSettings{}); got != want {
+	if got, want := ociimage.ResolvePullOptions(nil), (ociimage.PullSettings{}); got != want {
 		t.Errorf("by default: got %+v, want %+v", got, want)
 	}
 	got := ociimage.ResolvePullOptions(
 		ociimage.WithPullInsecure(true),
 		ociimage.WithPullConcurrency(4),
+		nil,
 		ociimage.WithPullConcurrency(8))
 	if want := (ociimage.PullSettings{Insecure: true, Concurrency: 8}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
+	}
+	if got, want := ociimage.ResolvePullOptions(ociimage.WithPullConcurrency(4), ociimage.WithPullConcurrency(-1)), (ociimage.PullSettings{}); got != want {
+		t.Errorf("negative concurrency: got %+v, want %+v", got, want)
 	}
 }
 

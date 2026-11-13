@@ -29,6 +29,9 @@ func WithPullInsecure(insecure bool) PullOption {
 // WithPullConcurrency sets the concurrency to pull with, leaving it to the
 // tool for anything less than one.
 func WithPullConcurrency(concurrency int) PullOption {
+	if concurrency < 1 {
+		concurrency = 0
+	}
 	return func(o *pullOptions) { o.settings.Concurrency = concurrency }
 }
 
@@ -51,7 +54,9 @@ type PullSettings struct {
 func ResolvePullOptions(opts ...PullOption) PullSettings {
 	var o pullOptions
 	for _, fn := range opts {
-		fn(&o)
+		if fn != nil {
+			fn(&o)
+		}
 	}
 	return o.settings
 }
