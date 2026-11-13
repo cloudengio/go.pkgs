@@ -53,10 +53,13 @@ type VMInfo struct {
 // configuration of a provider, rather than restating the same three figures;
 // a zero figure means unspecified, which a provider reports as unknown and
 // leaves to the image it creates VMs from.
+//
+// The two sizes name the unit they are in, so that a figure in another unit
+// can be added as a field of its own rather than by changing what these mean.
 type VMResources struct {
-	DiskGiB  int `yaml:"disk_gib" doc:"size of the VM's disk in GiB; 0 leaves the image's own size"`
-	NumCores int `yaml:"num_cores" doc:"number of CPU cores allocated to the VM; 0 leaves the image's own number"`
-	MemGiB   int `yaml:"mem_gib" doc:"amount of RAM allocated to the VM in GiB; 0 leaves the image's own amount"`
+	DiskGiB int `yaml:"disk_gib" doc:"size of the VM's disk in GiB; 0 leaves the image's own size"`
+	Cores   int `yaml:"cores" doc:"number of CPU cores allocated to the VM; 0 leaves the image's own number"`
+	MemGiB  int `yaml:"mem_gib" doc:"amount of RAM allocated to the VM in GiB; 0 leaves the image's own amount"`
 }
 
 // VMDetail extends VMInfo with the fuller, potentially more expensive per-VM
@@ -195,8 +198,8 @@ func (c *CachingProvider) getLocked(ctx context.Context, vmName string) (VMDetai
 // less use than showing what it will be created with.
 func (c *CachingProvider) withDefaults(detail VMDetail) VMDetail {
 	defaults := c.DefaultResources()
-	if detail.NumCores == 0 {
-		detail.NumCores = defaults.NumCores
+	if detail.Cores == 0 {
+		detail.Cores = defaults.Cores
 	}
 	if detail.MemGiB == 0 {
 		detail.MemGiB = defaults.MemGiB
