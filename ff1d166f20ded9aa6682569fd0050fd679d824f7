@@ -1,0 +1,16 @@
+--- Overview
+This PR renames VMResources.NumCores to Cores and changes its YAML key from num_cores to cores. It also documents why the size fields carry their unit in the name.
+
+--- Key Changes
+  * vms/vmspool
+    * VMResources.NumCores -> Cores (YAML num_cores -> cores).
+    * Doc comment explains that the size fields (DiskGiB, MemGiB) name their unit, so a figure in another unit can be added as a separate field.
+    * CachingProvider.withDefaults updated to use Cores.
+    * Tests updated for the rename.
+  * vms/dockervm: Provider.Get fills in Cores.
+  * vms/vmstestutil: DefaultMockResources uses Cores.
+  * READMEs regenerated.
+
+--- Breaking Changes
+  * Go API: vmspool.VMResources.NumCores is renamed to Cores.
+  * Config: the YAML key num_cores is now cores, so existing configs must be updated.
