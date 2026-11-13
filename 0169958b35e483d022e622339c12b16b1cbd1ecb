@@ -1,0 +1,27 @@
+--- Overview
+Replaces the PullOptions struct in vms/ociimage with functional PullOption values. PullVerified now pulls and returns a reference that names only the verified digest, with the tag dropped.
+
+--- Key Changes
+  * vms/ociimage/pull.go
+    * New PullOption type, built with WithPullInsecure and WithPullConcurrency and applied to a private pullOptions.
+    * PullOptions is renamed to PullSettings, which a Puller gets from ResolvePullOptions(opts...). If an option is given more than once, the last value applies.
+    * Pull and Puller.Pull now take opts ...PullOption.
+  * vms/ociimage/source.go
+    * Source.PullOptions() now returns []PullOption, which can be passed straight to Pull or PullVerified.
+  * vms/ociimage/verify.go
+    * PullVerified takes opts ...PullOption.
+    * It pulls and returns res.Reference.WithTag(""), the same digest-only reference Pin gives, because some tools won't accept a reference that has both a tag and a digest.
+  * Tests
+    * Updated for the variadic options.
+    * Added TestPullOptions for default and override behaviour.
+    * TestPullVerified now checks the digest-only reference.
+  * Docs
+    * doc.go and README.md updated to match the new API.
+
+--- Breaking Changes
+  * PullOptions struct is renamed to PullSettings. Callers now ask for a pull with PullOption values such as WithPullInsecure and WithPullConcurrency.
+  * Puller.Pull, Pull and PullVerified signatures change from opts PullOptions to opts ...PullOption. Every Puller implementation must be updated.
+  * Source.PullOptions() now returns []PullOption instead of a struct.
+  * PullVerified returns a reference without a tag (digest only), where before it kept the tag alongside the digest.
+
+ Generated with Claude Code (https://claude.com/claude-code)
