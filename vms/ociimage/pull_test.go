@@ -16,13 +16,13 @@ import (
 // recording what it was asked to pull.
 type recordingPuller struct {
 	refs []ociimage.Reference
-	opts []ociimage.PullOptions
+	opts []ociimage.PullSettings
 	err  error
 }
 
-func (p *recordingPuller) Pull(_ context.Context, ref ociimage.Reference, opts ociimage.PullOptions) error {
+func (p *recordingPuller) Pull(_ context.Context, ref ociimage.Reference, opts ...ociimage.PullOption) error {
 	p.refs = append(p.refs, ref)
-	p.opts = append(p.opts, opts)
+	p.opts = append(p.opts, ociimage.ResolvePullOptions(opts...))
 	return p.err
 }
 
@@ -43,15 +43,37 @@ func TestPull(t *testing.T) {
 	ctx := context.Background()
 	p := &recordingPuller{}
 	ref := mustParse(t, "ghcr.io/cirruslabs/ubuntu:latest")
-	opts := ociimage.PullOptions{Insecure: true, Concurrency: 4}
-	if err := ociimage.Pull(ctx, p, ref, opts); err != nil {
+	err := ociimage.Pull(ctx, p, ref,
+		ociimage.WithPullInsecure(true), ociimage.WithPullConcurrency(4))
+	if err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
 	if len(p.refs) != 1 || p.refs[0] != ref {
 		t.Errorf("pulled %v, want [%v]", p.refs, ref)
 	}
-	if len(p.opts) != 1 || p.opts[0] != opts {
-		t.Errorf("pulled with %+v, want [%+v]", p.opts, opts)
+	want := ociimage.PullSettings{Insecure: true, Concurrency: 4}
+	if len(p.opts) != 1 || p.opts[0] != want {
+		t.Errorf("pulled with %+v, want [%+v]", p.opts, want)
+	}
+}
+
+// TestPullOptions covers resolving the options of a pull: nothing is asked of
+// the tool by default, and the last value given for an option is the one that
+// applies, so that a caller can override what it was handed.
+func TestPullOptions(t *testing.T) {
+	if got, want := ociimage.ResolvePullOptions(nil), (ociimage.PullSettings{}); got != want {
+		t.Errorf("by default: got %+v, want %+v", got, want)
+	}
+	got := ociimage.ResolvePullOptions(
+		ociimage.WithPullInsecure(true),
+		ociimage.WithPullConcurrency(4),
+		nil,
+		ociimage.WithPullConcurrency(8))
+	if want := (ociimage.PullSettings{Insecure: true, Concurrency: 8}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	if got, want := ociimage.ResolvePullOptions(ociimage.WithPullConcurrency(4), ociimage.WithPullConcurrency(-1)), (ociimage.PullSettings{}); got != want {
+		t.Errorf("negative concurrency: got %+v, want %+v", got, want)
 	}
 }
 
@@ -61,7 +83,7 @@ func TestPullLocalImage(t *testing.T) {
 	ctx := context.Background()
 	for _, image := range []string{"linux-ci", "linux-ci:latest", "myorg/linux-ci"} {
 		p := &recordingPuller{err: errors.New("the puller must not be called")}
-		if err := ociimage.Pull(ctx, p, mustParse(t, image), ociimage.PullOptions{}); err != nil {
+		if err := ociimage.Pull(ctx, p, mustParse(t, image)); err != nil {
 			t.Errorf("Pull(%q): %v", image, err)
 		}
 		if len(p.refs) != 0 {
@@ -70,7 +92,7 @@ func TestPullLocalImage(t *testing.T) {
 	}
 	// A local image is not pulled whether there is a puller or not, so the
 	// absence of one does not matter.
-	if err := ociimage.Pull(ctx, nil, mustParse(t, "linux-ci"), ociimage.PullOptions{}); err != nil {
+	if err := ociimage.Pull(ctx, nil, mustParse(t, "linux-ci")); err != nil {
 		t.Errorf("Pull with no puller: %v", err)
 	}
 }
@@ -81,7 +103,7 @@ func TestPullLocalImage(t *testing.T) {
 func TestPullError(t *testing.T) {
 	failed := errors.New("the registry is unreachable")
 	p := &recordingPuller{err: failed}
-	err := ociimage.Pull(context.Background(), p, mustParse(t, "ghcr.io/cirruslabs/ubuntu"), ociimage.PullOptions{})
+	err := ociimage.Pull(context.Background(), p, mustParse(t, "ghcr.io/cirruslabs/ubuntu"))
 	if !errors.Is(err, failed) {
 		t.Errorf("got %v, want %v", err, failed)
 	}
@@ -91,7 +113,7 @@ func TestPullError(t *testing.T) {
 // it, which is reported rather than passed over: the image would otherwise
 // be used stale, or not be there at all.
 func TestPullNoPuller(t *testing.T) {
-	err := ociimage.Pull(context.Background(), nil, mustParse(t, "ghcr.io/cirruslabs/ubuntu"), ociimage.PullOptions{})
+	err := ociimage.Pull(context.Background(), nil, mustParse(t, "ghcr.io/cirruslabs/ubuntu"))
 	if err == nil {
 		t.Error("pulling a remote image with no puller was accepted")
 	}

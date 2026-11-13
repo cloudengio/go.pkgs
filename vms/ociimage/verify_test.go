@@ -29,13 +29,6 @@ func (f *fakeVerifier) Verify(_ context.Context, _ ociimage.Reference, _ ociimag
 	return f.res, f.err
 }
 
-type verifyPuller struct{ pulled []ociimage.Reference }
-
-func (r *verifyPuller) Pull(_ context.Context, ref ociimage.Reference, _ ociimage.PullOptions) error {
-	r.pulled = append(r.pulled, ref)
-	return nil
-}
-
 func TestPolicyValidate(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -139,19 +132,27 @@ func TestPullVerified(t *testing.T) {
 	ref := mustParse(t, "ghcr.io/cloudengio/ci:latest")
 	good := ociimage.Verified{Reference: ref.WithDigest(sum), Signatures: []ociimage.Signature{{}}}
 
-	p := &verifyPuller{}
-	got, err := ociimage.PullVerified(ctx, p, &fakeVerifier{res: good}, ref, policy, ociimage.PullOptions{})
-	if err != nil || got != good.Reference {
-		t.Fatalf("got %v, %v", got, err)
+	// The tag is dropped, so that the digest that was verified is all that
+	// the reference names.
+	pinned := good.Reference.WithTag("")
+	p := &recordingPuller{}
+	got, err := ociimage.PullVerified(ctx, p, &fakeVerifier{res: good}, ref, policy,
+		ociimage.WithPullInsecure(true), ociimage.WithPullConcurrency(4))
+	if err != nil || got != pinned {
+		t.Fatalf("got %v, %v, want %v", got, err, pinned)
 	}
 	// What is pulled is the digest that was verified, not the moving tag.
-	if len(p.pulled) != 1 || p.pulled[0] != good.Reference {
-		t.Errorf("pulled %v", p.pulled)
+	if len(p.refs) != 1 || p.refs[0] != pinned {
+		t.Errorf("pulled %v, want %v", p.refs, pinned)
+	}
+	wantOpts := ociimage.PullSettings{Insecure: true, Concurrency: 4}
+	if len(p.opts) != 1 || p.opts[0] != wantOpts {
+		t.Errorf("pulled with %+v, want [%+v]", p.opts, wantOpts)
 	}
 
-	p = &verifyPuller{}
-	if _, err := ociimage.PullVerified(ctx, p, &fakeVerifier{err: ociimage.ErrNotVerified}, ref, policy, ociimage.PullOptions{}); err == nil || len(p.pulled) != 0 {
-		t.Errorf("an image that failed verification was pulled: %v, %v", err, p.pulled)
+	p = &recordingPuller{}
+	if _, err := ociimage.PullVerified(ctx, p, &fakeVerifier{err: ociimage.ErrNotVerified}, ref, policy); err == nil || len(p.refs) != 0 {
+		t.Errorf("an image that failed verification was pulled: %v, %v", err, p.refs)
 	}
 }
 
