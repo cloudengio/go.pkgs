@@ -225,9 +225,9 @@ func (p *Provider) Get(ctx context.Context, vmName string) (vmspool.VMDetail, er
 			Running: d.State.Status == "running",
 		},
 		VMResources: vmspool.VMResources{
-			DiskGiB:  bytesToGiB(d.SizeRootFs),
-			NumCores: int(d.HostConfig.NanoCpus / 1_000_000_000),
-			MemGiB:   bytesToGiB(d.HostConfig.Memory),
+			DiskGiB: bytesToGiB(d.SizeRootFs),
+			Cores:   int(d.HostConfig.NanoCpus / 1_000_000_000),
+			MemGiB:  bytesToGiB(d.HostConfig.Memory),
 		},
 	}, nil
 }
