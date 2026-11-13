@@ -43,14 +43,14 @@ func vmInfo(name, state string, running bool) vmspool.VMInfo {
 }
 
 // add gives the provider a VM with the listing entry info and the resources
-// cores/mem, which is what Get reports for it.
-func (p *countingProvider) add(info vmspool.VMInfo, cores, mem int) {
+// cores/memGiB, which is what Get reports for it.
+func (p *countingProvider) add(info vmspool.VMInfo, cores, memGiB int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.infos = append(p.infos, info)
 	p.details[info.Name] = vmspool.VMDetail{
 		VMInfo:      info,
-		VMResources: vmspool.VMResources{NumCores: cores, MemGiB: mem},
+		VMResources: vmspool.VMResources{Cores: cores, MemGiB: memGiB},
 	}
 }
 
@@ -81,7 +81,7 @@ func (p *countingProvider) getCount(name string) int {
 func (p *countingProvider) Name() string { return "counting" }
 
 func (p *countingProvider) DefaultResources() vmspool.VMResources {
-	return vmspool.VMResources{NumCores: 1, MemGiB: 2, DiskGiB: 3}
+	return vmspool.VMResources{Cores: 1, MemGiB: 2, DiskGiB: 3}
 }
 
 func (p *countingProvider) Details() vmspool.ProviderDetails { return countingDetails{} }
@@ -157,7 +157,7 @@ func TestCachingProviderCaches(t *testing.T) {
 		if got[0].Name != "vm-a" || got[1].Name != "vm-b" {
 			t.Errorf("call %v: got %q, %q, want them ordered by name", i, got[0].Name, got[1].Name)
 		}
-		if got, want := got[1].NumCores, 8; got != want {
+		if got, want := got[1].Cores, 8; got != want {
 			t.Errorf("cores: got %v, want %v", got, want)
 		}
 	}
@@ -203,7 +203,7 @@ func TestCachingProviderStateIsNotCached(t *testing.T) {
 			got[0].State, got[0].Running)
 	}
 	// Its resources still came from the cache.
-	if got, want := got[0].NumCores, 4; got != want {
+	if got, want := got[0].Cores, 4; got != want {
 		t.Errorf("cores: got %v, want %v", got, want)
 	}
 	if got := p.getCount("vm-a"); got != 1 {
@@ -242,7 +242,7 @@ func TestCachingProviderEvicts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAll: %v", err)
 	}
-	if got, want := byName(t, got)["vm-a"].NumCores, 16; got != want {
+	if got, want := byName(t, got)["vm-a"].Cores, 16; got != want {
 		t.Errorf("cores: got %v, want %v", got, want)
 	}
 	if got := p.getCount("vm-a"); got != 2 {
@@ -293,7 +293,7 @@ func TestCachingProviderGetFails(t *testing.T) {
 	if err != nil || len(failed) != 0 {
 		t.Fatalf("GetAll: got %v, %v, want no failures", failed, err)
 	}
-	if got, want := byName(t, got)["vm-b"].NumCores, 6; got != want {
+	if got, want := byName(t, got)["vm-b"].Cores, 6; got != want {
 		t.Errorf("cores: got %v, want %v", got, want)
 	}
 
@@ -338,7 +338,7 @@ func TestCachingProviderZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got, want := got.NumCores, 4; got != want {
+	if got, want := got.Cores, 4; got != want {
 		t.Errorf("cores: got %v, want %v", got, want)
 	}
 	// It was cached, so a second call reads nothing.

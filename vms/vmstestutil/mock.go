@@ -269,7 +269,7 @@ var DefaultMockReference = ociimage.Reference{Name: DefaultMockImage}
 // SetResources. A mock VM has no resources of its own, so these stand in for
 // them: unremarkable figures that look like a plausible small VM, so that an
 // application displaying a mock pool has something to show.
-var DefaultMockResources = vmspool.VMResources{NumCores: 2, MemGiB: 4, DiskGiB: 20}
+var DefaultMockResources = vmspool.VMResources{Cores: 2, MemGiB: 4, DiskGiB: 20}
 
 // MockFactory creates and tracks Mock instances for pool and integration tests.
 // Use Inject to pre-supply configured mocks; otherwise MockFactory.New creates

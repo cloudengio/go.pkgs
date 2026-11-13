@@ -41,7 +41,7 @@ when it was not given one with SetImage.
 
 ### DefaultMockResources
 ```go
-DefaultMockResources = vmspool.VMResources{NumCores: 2, MemGiB: 4, DiskGiB: 20}
+DefaultMockResources = vmspool.VMResources{Cores: 2, MemGiB: 4, DiskGiB: 20}
 
 ```
 DefaultMockResources are the resources a MockFactory reports through
