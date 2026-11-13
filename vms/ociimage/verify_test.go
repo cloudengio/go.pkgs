@@ -31,7 +31,7 @@ func (f *fakeVerifier) Verify(_ context.Context, _ ociimage.Reference, _ ociimag
 
 type verifyPuller struct{ pulled []ociimage.Reference }
 
-func (r *verifyPuller) Pull(_ context.Context, ref ociimage.Reference, _ ociimage.PullOptions) error {
+func (r *verifyPuller) Pull(_ context.Context, ref ociimage.Reference, _ ...ociimage.PullOption) error {
 	r.pulled = append(r.pulled, ref)
 	return nil
 }
@@ -139,18 +139,21 @@ func TestPullVerified(t *testing.T) {
 	ref := mustParse(t, "ghcr.io/cloudengio/ci:latest")
 	good := ociimage.Verified{Reference: ref.WithDigest(sum), Signatures: []ociimage.Signature{{}}}
 
+	// The tag is dropped, so that the digest that was verified is all that
+	// the reference names.
+	pinned := good.Reference.WithTag("")
 	p := &verifyPuller{}
-	got, err := ociimage.PullVerified(ctx, p, &fakeVerifier{res: good}, ref, policy, ociimage.PullOptions{})
-	if err != nil || got != good.Reference {
-		t.Fatalf("got %v, %v", got, err)
+	got, err := ociimage.PullVerified(ctx, p, &fakeVerifier{res: good}, ref, policy)
+	if err != nil || got != pinned {
+		t.Fatalf("got %v, %v, want %v", got, err, pinned)
 	}
 	// What is pulled is the digest that was verified, not the moving tag.
-	if len(p.pulled) != 1 || p.pulled[0] != good.Reference {
-		t.Errorf("pulled %v", p.pulled)
+	if len(p.pulled) != 1 || p.pulled[0] != pinned {
+		t.Errorf("pulled %v, want %v", p.pulled, pinned)
 	}
 
 	p = &verifyPuller{}
-	if _, err := ociimage.PullVerified(ctx, p, &fakeVerifier{err: ociimage.ErrNotVerified}, ref, policy, ociimage.PullOptions{}); err == nil || len(p.pulled) != 0 {
+	if _, err := ociimage.PullVerified(ctx, p, &fakeVerifier{err: ociimage.ErrNotVerified}, ref, policy); err == nil || len(p.pulled) != 0 {
 		t.Errorf("an image that failed verification was pulled: %v, %v", err, p.pulled)
 	}
 }
