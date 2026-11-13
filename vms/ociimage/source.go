@@ -64,7 +64,11 @@ func (s Source) ShouldPull(ref Reference) bool {
 	return s.PullRemoteOnRun && ref.Remote()
 }
 
-// PullOptions returns the configured options for a pull.
-func (s Source) PullOptions() PullOptions {
-	return PullOptions{Insecure: s.Insecure, Concurrency: s.Concurrency}
+// PullOptions returns the configured options for a pull, to be passed to Pull
+// or PullVerified.
+func (s Source) PullOptions() []PullOption {
+	return []PullOption{
+		WithPullInsecure(s.Insecure),
+		WithPullConcurrency(s.Concurrency),
+	}
 }

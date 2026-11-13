@@ -27,10 +27,11 @@ it against a default registry of its own, see Reference.WithDefaultRegistry.
 Reference.Remote says only that a registry was named explicitly, which is
 the question "is there anywhere to pull this from".
 
-Source is where an image comes from and how it is obtained, for a backend to
-embed in its own configuration so that every backend spells these the same
-way. Pulling itself is left to the backend, which is the only thing that
-knows how: a backend that can pull implements Puller.
+Source is where an image comes from and how it is obtained, for a backend
+to embed in its own configuration so that every backend spells these the
+same way. Pulling itself is left to the backend, which is the only thing
+that knows how: a backend that can pull implements Puller, and reads the
+PullOption values it is given with ResolvePullOptions.
 
 Verifier verifies the signatures of an image, as cosign and others store
 them in its registry, without this package depending on any of their
@@ -89,7 +90,7 @@ signed as the policy requires, is an error and not to be used.
 
 ### Func Pull
 ```go
-func Pull(ctx context.Context, p Puller, ref Reference, opts PullOptions) error
+func Pull(ctx context.Context, p Puller, ref Reference, opts ...PullOption) error
 ```
 Pull pulls ref with p, and does nothing at all for a reference that names no
 registry: there is nowhere to pull such an image from, and it is the local
@@ -125,9 +126,34 @@ one that trusts no signer: a policy is never to be silently permissive.
 
 
 
-### Type PullOptions
+### Type PullOption
 ```go
-type PullOptions struct {
+type PullOption func(*pullOptions)
+```
+PullOption sets one of the options for a pull, see Pull and Puller.
+
+### Functions
+
+```go
+func WithPullConcurrency(concurrency int) PullOption
+```
+WithPullConcurrency sets the concurrency to pull with, leaving it to the
+tool for anything less than one.
+
+
+```go
+func WithPullInsecure(insecure bool) PullOption
+```
+WithPullInsecure allows the image to be pulled from a registry without
+verifying its certificate, which is for a private registry whose certificate
+cannot be verified, or which serves plain HTTP.
+
+
+
+
+### Type PullSettings
+```go
+type PullSettings struct {
 	// Insecure allows the image to be pulled from a registry without
 	// verifying its certificate.
 	Insecure bool
@@ -136,19 +162,33 @@ type PullOptions struct {
 	Concurrency int
 }
 ```
-PullOptions are the options for a pull that every tool that can pull
-understands. A tool that understands neither ignores both.
+PullSettings is what a pull was asked for: the options that every tool
+which can pull understands, and a tool that understands none of them
+ignores them all. It is how a Puller reads the options it is given,
+see ResolvePullOptions, and is only ever read: a pull is asked for with
+PullOption values.
+
+### Functions
+
+```go
+func ResolvePullOptions(opts ...PullOption) PullSettings
+```
+ResolvePullOptions resolves opts, which is how a Puller reads what the pull
+it is carrying out was asked for.
+
+
 
 
 ### Type Puller
 ```go
 type Puller interface {
-	Pull(ctx context.Context, ref Reference, opts PullOptions) error
+	Pull(ctx context.Context, ref Reference, opts ...PullOption) error
 }
 ```
 Puller is implemented by something that can fetch an image into the local
 store of whatever creates VMs or containers from it, such as a provider
-backed by a tool with a pull command of its own.
+backed by a tool with a pull command of its own. An implementation reads the
+options it is given with ResolvePullOptions.
 
 
 ### Type Reference
@@ -196,12 +236,15 @@ of the repository path, so "myorg/linux-ci" names no registry, see Remote.
 
 
 ```go
-func PullVerified(ctx context.Context, p Puller, v Verifier, ref Reference, policy Policy, opts PullOptions) (Reference, error)
+func PullVerified(ctx context.Context, p Puller, v Verifier, ref Reference, policy Policy, opts ...PullOption) (Reference, error)
 ```
-PullVerified verifies ref and, only if it is accepted, pulls the verified
-reference, which is returned for the caller to create VMs or containers
-from, see Verified.Reference. Like Pull it needs a Puller, but not one that
-does nothing for a local reference: that is an error, see Verify.
+PullVerified verifies ref and, only if it is accepted, pulls the digest that
+was verified, which is returned for the caller to create VMs or containers
+from, see Verified.Reference. The tag is dropped from it, as Pin does, so
+that the reference names the verified digest alone: not every tool accepts
+one that carries both, and the digest is what identifies the image when it
+does. Like Pull it needs a Puller, but not one that does nothing for a local
+reference: that is an error, see Verify.
 
 
 
@@ -364,9 +407,10 @@ two would contribute the same field name.
 ### Methods
 
 ```go
-func (s Source) PullOptions() PullOptions
+func (s Source) PullOptions() []PullOption
 ```
-PullOptions returns the configured options for a pull.
+PullOptions returns the configured options for a pull, to be passed to Pull
+or PullVerified.
 
 
 ```go

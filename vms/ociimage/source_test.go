@@ -82,12 +82,13 @@ func TestSourceShouldPull(t *testing.T) {
 
 func TestSourcePullOptions(t *testing.T) {
 	cfg := ociimage.Source{Image: "linux-ci", Insecure: true, Concurrency: 4}
-	want := ociimage.PullOptions{Insecure: true, Concurrency: 4}
-	if got := cfg.PullOptions(); got != want {
+	got := ociimage.ResolvePullOptions(cfg.PullOptions()...)
+	if want := (ociimage.PullSettings{Insecure: true, Concurrency: 4}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 	// An unconfigured pull leaves both to the tool that performs it.
-	if got, want := (ociimage.Source{}).PullOptions(), (ociimage.PullOptions{}); got != want {
+	got = ociimage.ResolvePullOptions((ociimage.Source{}).PullOptions()...)
+	if want := (ociimage.PullSettings{}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }

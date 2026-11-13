@@ -172,19 +172,23 @@ func Verify(ctx context.Context, v Verifier, ref Reference, policy Policy) (Veri
 	return res, nil
 }
 
-// PullVerified verifies ref and, only if it is accepted, pulls the verified
-// reference, which is returned for the caller to create VMs or containers
-// from, see Verified.Reference. Like Pull it needs a Puller, but not one that
-// does nothing for a local reference: that is an error, see Verify.
-func PullVerified(ctx context.Context, p Puller, v Verifier, ref Reference, policy Policy, opts PullOptions) (Reference, error) {
+// PullVerified verifies ref and, only if it is accepted, pulls the digest that
+// was verified, which is returned for the caller to create VMs or containers
+// from, see Verified.Reference. The tag is dropped from it, as Pin does, so
+// that the reference names the verified digest alone: not every tool accepts
+// one that carries both, and the digest is what identifies the image when it
+// does. Like Pull it needs a Puller, but not one that does nothing for a local
+// reference: that is an error, see Verify.
+func PullVerified(ctx context.Context, p Puller, v Verifier, ref Reference, policy Policy, opts ...PullOption) (Reference, error) {
 	res, err := Verify(ctx, v, ref, policy)
 	if err != nil {
 		return Reference{}, err
 	}
-	if err := Pull(ctx, p, res.Reference, opts); err != nil {
+	pinned := res.Reference.WithTag("")
+	if err := Pull(ctx, p, pinned, opts...); err != nil {
 		return Reference{}, err
 	}
-	return res.Reference, nil
+	return pinned, nil
 }
 
 // Pin returns the reference to create a VM or container from when it is

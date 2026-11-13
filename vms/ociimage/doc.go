@@ -28,7 +28,8 @@
 // Source is where an image comes from and how it is obtained, for a
 // backend to embed in its own configuration so that every backend spells
 // these the same way. Pulling itself is left to the backend, which is the
-// only thing that knows how: a backend that can pull implements Puller.
+// only thing that knows how: a backend that can pull implements Puller, and
+// reads the PullOption values it is given with ResolvePullOptions.
 //
 // Verifier verifies the signatures of an image, as cosign and others store
 // them in its registry, without this package depending on any of their
