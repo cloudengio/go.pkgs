@@ -1,0 +1,13 @@
+--- Overview
+Replaces the syncsort sequencer in asyncstat with a preallocated slice indexed by entry position. Results keep their order, and the code no longer needs a buffered channel and sequencer.
+
+--- Key Changes
+  * file/filewalk/asyncstat
+    * Removed the dependency on cloudeng.io/sync/syncsort.
+    * async now has each goroutine write its result into results[i], which keeps the original entry order without a channel.
+    * is.done() is now deferred, so it always runs when a stat goroutine finishes.
+    * If is.wait fails partway through issuing goroutines, async waits for the ones already started (g.Wait()) before returning, so no goroutine is still running after it returns.
+    * The per-item ctx.Done() check while collecting results is gone; the final error now comes from ctx.Err() instead of seq.Err().
+
+--- Breaking Changes
+None
