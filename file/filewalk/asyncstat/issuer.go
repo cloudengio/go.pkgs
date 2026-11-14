@@ -202,13 +202,18 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 	// can be returned.
 	ch := make(chan syncsort.Item[lstatResult], len(entries))
 	seq := syncsort.NewSequencer(ctx, ch)
+	defer seq.Stop()
 	for _, entry := range entries {
 		name := entry.Name
-		item := seq.NextItem(lstatResult{})
-		filename := is.fs.Join(prefix, name)
 		if err = is.wait(ctx); err != nil {
 			return
 		}
+		var item syncsort.Item[lstatResult]
+		item, err = seq.NextItem(ctx, lstatResult{})
+		if err != nil {
+			return
+		}
+		filename := is.fs.Join(prefix, name)
 		g.Go(func() error {
 			info, err := is.callStat(ctx, filename)
 			item.V = lstatResult{info, err}
@@ -222,12 +227,6 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 	}
 	close(ch)
 	for seq.Scan() {
-		select {
-		case <-ctx.Done():
-			err = ctx.Err()
-			return
-		default:
-		}
 		res := seq.Item()
 		if res.err != nil {
 			continue
