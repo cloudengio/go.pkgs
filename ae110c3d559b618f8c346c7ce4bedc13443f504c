@@ -1,0 +1,29 @@
+--- Overview
+Reworks sync/syncsort.Sequencer so it supports bounded buffering and early termination, and so its internal goroutine can no longer block or leak when the consumer stops or the input stream ends with a gap.
+
+--- Key Changes
+sync/syncsort
+  * Added WithMaxBuffered(n), an option that limits how many items can be issued by NextItem but not yet read via Scan. A token channel provides the backpressure, and n <= 0 keeps buffering unbounded.
+  * Added Stop(), which can be called more than once and ends the ordering goroutine without cancelling the context.
+  * Added Done(), a channel that closes when the ordering goroutine exits. Producers can select on it so their sends don't block.
+  * Added the ErrStopped sentinel, which NextItem returns after Stop or after the goroutine has exited.
+  * NextItem now takes a ctx and returns (Item[T], error). With a buffer limit set, it blocks until a slot frees up, either context is cancelled, or Stop is called.
+  * Scan no longer returns a zero item on cancel, stop or end of stream. It returns false, and callers check Err() for the cause.
+  * The ordering goroutine checks for cancel and stop before every send to scanCh, so it can't block forever on a consumer that has stopped reading. It closes scanCh and doneCh when it exits.
+  * If the input channel closes while a sequence number is still missing, Err() now reports the expected sequence number and how many items were left, where before the goroutine hung.
+  * With a buffer limit set, the initial heap capacity is min(maxBuffered, 100).
+  * Fixed typos in doc comments and updated the README.
+
+Tests
+  * Updated the existing tests to the new NextItem signature and added goroutine-leak checks with synctestutil.AssertNoGoroutinesRacy.
+  * Added tests for:
+    * cancelling without draining
+    * stopping early
+    * bounded backpressure
+    * worst-case out-of-order arrival, both bounded and unbounded
+    * odd items arriving late and asynchronously
+    * the input channel closing before all items arrive
+
+--- Breaking Changes
+  * NextItem(item T) Item[T] is now NextItem(ctx context.Context, item T) (Item[T], error), so every caller has to change.
+  * When the context is cancelled, Scan now returns false without yielding an item. Code that relied on one last Scan() == true carrying the error needs to call Err() after the loop instead.
