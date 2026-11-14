@@ -14,8 +14,9 @@ import (
 	"sync/atomic"
 )
 
-// ErrStopped is returned by NextItem when the sequencer has been stopped
-// via Stop or its ordering goroutine has exited.
+// ErrStopped is returned by NextItem once the sequencer has been stopped
+// via Stop or its ordering goroutine has exited, including at the end of
+// the input stream.
 var ErrStopped = errors.New("sequencer stopped")
 
 type options struct {
@@ -48,12 +49,14 @@ func WithMaxBuffered(n int) Option {
 // NextItem and the order of calls to NextItem determines the order of
 // items returned by the scanner.
 type Sequencer[T any] struct {
-	next     atomic.Uint64
+	next atomic.Uint64
+	// ctx bounds the lifetime of the sequencer and is retained so that
+	// Scan and NextItem can observe its cancellation.
 	ctx      context.Context
 	stopCh   chan struct{}
 	doneCh   chan struct{}
 	stopOnce sync.Once
-	tokens   chan struct{}
+	inFlight chan struct{} // nil when buffering is unbounded.
 	inputCh  <-chan Item[T]
 	scanCh   chan T
 	heap     streamingHeap[T]
@@ -78,25 +81,22 @@ func NewSequencer[T any](ctx context.Context, inputCh <-chan Item[T], opts ...Op
 		fn(&o)
 	}
 	heapCap := 100
-	var tokens chan struct{}
+	var inFlight chan struct{}
 	if o.maxBuffered > 0 {
-		tokens = make(chan struct{}, o.maxBuffered)
-		for range o.maxBuffered {
-			tokens <- struct{}{}
-		}
+		inFlight = make(chan struct{}, o.maxBuffered)
 		heapCap = min(o.maxBuffered, 100)
 	}
 	seq := &Sequencer[T]{
-		ctx:     ctx,
-		stopCh:  make(chan struct{}),
-		doneCh:  make(chan struct{}),
-		tokens:  tokens,
-		inputCh: inputCh,
-		heap:    make(streamingHeap[T], 0, heapCap),
-		scanCh:  make(chan T, 1),
+		ctx:      ctx,
+		stopCh:   make(chan struct{}),
+		doneCh:   make(chan struct{}),
+		inFlight: inFlight,
+		inputCh:  inputCh,
+		heap:     make(streamingHeap[T], 0, heapCap),
+		scanCh:   make(chan T, 1),
 	}
 	heap.Init(&seq.heap)
-	go seq.order(ctx)
+	go seq.order()
 	return seq
 }
 
@@ -119,7 +119,9 @@ func (s *Sequencer[T]) Done() <-chan struct{} {
 	return s.doneCh
 }
 
-func (s *Sequencer[T]) stopReason(ctx context.Context) error {
+// stopErr returns the reason NextItem cannot proceed, or nil if it can.
+// Stop takes precedence over context cancellation.
+func (s *Sequencer[T]) stopErr(ctx context.Context) error {
 	select {
 	case <-s.stopCh:
 		return ErrStopped
@@ -128,45 +130,50 @@ func (s *Sequencer[T]) stopReason(ctx context.Context) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return ErrStopped
+	select {
+	case <-s.doneCh:
+		return ErrStopped
+	default:
+	}
+	return nil
+}
+
+// stopped reports whether the ordering goroutine should exit, recording
+// any context error in asyncErr.
+func (s *Sequencer[T]) stopped() bool {
+	select {
+	case <-s.stopCh:
+		return true
+	default:
+	}
+	if err := s.ctx.Err(); err != nil {
+		s.asyncErr = err
+		return true
+	}
+	return false
 }
 
 // NextItem returns a new Item to be used with Sequencer. The order of calls
 // made to NextItem determines the order that they are returned by the scanner.
 // When WithMaxBuffered is configured, NextItem blocks until a buffer slot is
 // available, ctx or the sequencer's context is cancelled, or Stop is called.
+// ctx must not be nil.
 func (s *Sequencer[T]) NextItem(ctx context.Context, item T) (Item[T], error) {
-	var ctxDone <-chan struct{}
-	if ctx != nil {
-		ctxDone = ctx.Done()
+	if err := s.stopErr(ctx); err != nil {
+		return Item[T]{}, err
 	}
-	select {
-	case <-s.stopCh:
-		return Item[T]{}, ErrStopped
-	case <-s.ctx.Done():
-		return Item[T]{}, s.ctx.Err()
-	case <-s.doneCh:
-		return Item[T]{}, s.stopReason(ctx)
-	case <-ctxDone:
-		return Item[T]{}, ctx.Err()
-	default:
-	}
-	if s.tokens != nil {
+	if s.inFlight != nil {
+		// Stop and cancellation of the sequencer's context both cause
+		// doneCh to be closed.
 		select {
-		case <-s.tokens:
-		case <-s.stopCh:
-			return Item[T]{}, ErrStopped
-		case <-s.ctx.Done():
-			return Item[T]{}, s.ctx.Err()
+		case s.inFlight <- struct{}{}:
 		case <-s.doneCh:
-			return Item[T]{}, s.stopReason(ctx)
-		case <-ctxDone:
-			return Item[T]{}, ctx.Err()
+			return Item[T]{}, s.stopErr(ctx)
+		case <-ctx.Done():
+			return Item[T]{}, s.stopErr(ctx)
 		}
 	}
 	return Item[T]{
@@ -202,8 +209,8 @@ func (s *Sequencer[T]) Scan() bool {
 			s.err = s.asyncErr
 			return false
 		}
-		if s.tokens != nil {
-			s.tokens <- struct{}{}
+		if s.inFlight != nil {
+			<-s.inFlight
 		}
 		s.v = v
 		return true
@@ -220,25 +227,17 @@ func (s *Sequencer[T]) Err() error {
 	return s.err
 }
 
-func (s *Sequencer[T]) flushHeap(ctx context.Context, expected *uint64) bool {
-	for len(s.heap) > 0 {
-		if s.heap[0].s != *expected {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			s.asyncErr = ctx.Err()
+func (s *Sequencer[T]) flushHeap(expected *uint64) bool {
+	for len(s.heap) > 0 && s.heap[0].s == *expected {
+		if s.stopped() {
 			return false
-		case <-s.stopCh:
-			return false
-		default:
 		}
 		item := heap.Remove(&s.heap, 0).(Item[T])
 		*expected++
 		select {
 		case s.scanCh <- item.V:
-		case <-ctx.Done():
-			s.asyncErr = ctx.Err()
+		case <-s.ctx.Done():
+			s.asyncErr = s.ctx.Err()
 			return false
 		case <-s.stopCh:
 			return false
@@ -247,22 +246,17 @@ func (s *Sequencer[T]) flushHeap(ctx context.Context, expected *uint64) bool {
 	return true
 }
 
-func (s *Sequencer[T]) order(ctx context.Context) {
+func (s *Sequencer[T]) order() {
 	defer close(s.doneCh)
 	defer close(s.scanCh)
 	expected := uint64(1)
 	for {
-		select {
-		case <-ctx.Done():
-			s.asyncErr = ctx.Err()
+		if s.stopped() {
 			return
-		case <-s.stopCh:
-			return
-		default:
 		}
 		select {
-		case <-ctx.Done():
-			s.asyncErr = ctx.Err()
+		case <-s.ctx.Done():
+			s.asyncErr = s.ctx.Err()
 			return
 		case <-s.stopCh:
 			return
@@ -270,7 +264,7 @@ func (s *Sequencer[T]) order(ctx context.Context) {
 			if ok {
 				heap.Push(&s.heap, item)
 			}
-			if !s.flushHeap(ctx, &expected) {
+			if !s.flushHeap(&expected) {
 				return
 			}
 			if !ok {

@@ -12,8 +12,9 @@ Package syncsort provides support for synchronised sorting.
 ErrStopped = errors.New("sequencer stopped")
 
 ```
-ErrStopped is returned by NextItem when the sequencer has been stopped via
-Stop or its ordering goroutine has exited.
+ErrStopped is returned by NextItem once the sequencer has been stopped via
+Stop or its ordering goroutine has exited, including at the end of the input
+stream.
 
 
 
@@ -108,6 +109,7 @@ NextItem returns a new Item to be used with Sequencer. The order of calls
 made to NextItem determines the order that they are returned by the scanner.
 When WithMaxBuffered is configured, NextItem blocks until a buffer slot is
 available, ctx or the sequencer's context is cancelled, or Stop is called.
+ctx must not be nil.
 
 
 ```go

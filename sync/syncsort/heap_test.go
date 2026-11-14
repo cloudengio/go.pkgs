@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"cloudeng.io/sync/syncsort"
@@ -346,52 +347,50 @@ func verifySequentialInts(t *testing.T, seq *syncsort.Sequencer[int], total int)
 }
 
 func TestStreamingBoundedBackpressure(t *testing.T) {
-	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
-	ctx := context.Background()
-	const limit = 4
-	const total = 20
+	synctest.Test(t, func(t *testing.T) {
+		ctx := context.Background()
+		const limit = 4
+		const total = 20
 
-	ich := make(chan syncsort.Item[int])
-	seq := syncsort.NewSequencer(ctx, ich, syncsort.WithMaxBuffered(limit))
-	defer seq.Stop()
+		ich := make(chan syncsort.Item[int])
+		seq := syncsort.NewSequencer(ctx, ich, syncsort.WithMaxBuffered(limit))
+		defer seq.Stop()
 
-	var issued atomic.Int64
-	allReady := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		defer close(ich)
-		batch := make([]syncsort.Item[int], 0, limit)
-		for i := range total {
-			if i == limit {
-				if !sendReversed(ich, seq.Done(), batch) {
+		var issued atomic.Int64
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			defer close(ich)
+			batch := make([]syncsort.Item[int], 0, limit)
+			for i := range total {
+				if i == limit {
+					if !sendReversed(ich, seq.Done(), batch) {
+						return
+					}
+				}
+				item, err := seq.NextItem(ctx, i+1)
+				if err != nil {
 					return
 				}
-				close(allReady)
+				issued.Add(1)
+				if i < limit {
+					batch = append(batch, item)
+					continue
+				}
+				if !sendItem(ich, seq.Done(), item) {
+					return
+				}
 			}
-			item, err := seq.NextItem(ctx, i+1)
-			if err != nil {
-				return
-			}
-			issued.Add(1)
-			if i < limit {
-				batch = append(batch, item)
-				continue
-			}
-			if !sendItem(ich, seq.Done(), item) {
-				return
-			}
+		})
+
+		// Wait until the producer is blocked trying to issue item limit+1.
+		synctest.Wait()
+		if got := issued.Load(); got != limit {
+			t.Fatalf("issued %d items while consumer hadn't scanned, want %d", got, limit)
 		}
+
+		verifySequentialInts(t, seq, total)
+		wg.Wait()
 	})
-
-	<-allReady
-	// Give the producer goroutine a chance to attempt issuing item limit+1.
-	time.Sleep(20 * time.Millisecond)
-	if got := issued.Load(); got != limit {
-		t.Fatalf("issued %d items while consumer hadn't scanned, want <= %d", got, limit)
-	}
-
-	verifySequentialInts(t, seq, total)
-	wg.Wait()
 }
 
 func produceWorstCaseBatches(ctx context.Context, seq *syncsort.Sequencer[int], ich chan<- syncsort.Item[int], total, limit int) {

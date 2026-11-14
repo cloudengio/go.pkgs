@@ -11,7 +11,6 @@ import (
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/sync/errgroup"
-	"cloudeng.io/sync/syncsort"
 )
 
 // T provides support for issuing asynchronous stat or lstat calls.
@@ -198,36 +197,25 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 	g, _ := errgroup.WithContext(ctx)
 	g = errgroup.WithConcurrency(g, concurrency)
 
-	// The channel must be large enough to hold all of the items that
-	// can be returned.
-	ch := make(chan syncsort.Item[lstatResult], len(entries))
-	seq := syncsort.NewSequencer(ctx, ch)
-	defer seq.Stop()
-	for _, entry := range entries {
-		name := entry.Name
+	// Each goroutine writes to its own index, preserving the order of entries.
+	results := make([]lstatResult, len(entries))
+	for i, entry := range entries {
 		if err = is.wait(ctx); err != nil {
+			_ = g.Wait()
 			return
 		}
-		var item syncsort.Item[lstatResult]
-		item, err = seq.NextItem(ctx, lstatResult{})
-		if err != nil {
-			return
-		}
-		filename := is.fs.Join(prefix, name)
+		filename := is.fs.Join(prefix, entry.Name)
 		g.Go(func() error {
+			defer is.done()
 			info, err := is.callStat(ctx, filename)
-			item.V = lstatResult{info, err}
-			ch <- item
-			is.done()
+			results[i] = lstatResult{info, err}
 			return nil
 		})
 	}
 	if err = g.Wait(); err != nil {
 		return
 	}
-	close(ch)
-	for seq.Scan() {
-		res := seq.Item()
+	for _, res := range results {
 		if res.err != nil {
 			continue
 		}
@@ -236,7 +224,7 @@ func (is *T) async(ctx context.Context, prefix string, entries []filewalk.Entry)
 		}
 		all = all.AppendInfo(res.info)
 	}
-	err = seq.Err()
+	err = ctx.Err()
 	return
 }
 
