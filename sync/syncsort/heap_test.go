@@ -430,6 +430,78 @@ func TestStreamingBoundedWorstCaseOrdering(t *testing.T) {
 	}
 }
 
+func TestStreamingUnboundedEvensThenOddsReversed(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	ctx := context.Background()
+	const total = 256
+
+	ich := make(chan syncsort.Item[int])
+	seq := syncsort.NewSequencer(ctx, ich, syncsort.WithMaxBuffered(0))
+	defer seq.Stop()
+
+	items := make([]syncsort.Item[int], total)
+	for i := range total {
+		item, err := seq.NextItem(ctx, i+1)
+		if err != nil {
+			t.Fatalf("NextItem failed: %v", err)
+		}
+		items[i] = item
+	}
+
+	go func() {
+		defer close(ich)
+		sendOddEvenWorstCase(ich, seq.Done(), items)
+	}()
+
+	verifySequentialInts(t, seq, total)
+}
+
+func TestStreamingBoundedAsyncEvensBeforeReversedOdds(t *testing.T) {
+	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
+	for _, limit := range []int{1, 2, 8, 16} {
+		t.Run(fmt.Sprintf("limit=%d", limit), func(t *testing.T) {
+			ctx := context.Background()
+			const total = 128
+
+			ich := make(chan syncsort.Item[int])
+			seq := syncsort.NewSequencer(ctx, ich, syncsort.WithMaxBuffered(limit))
+			defer seq.Stop()
+
+			go func() {
+				defer close(ich)
+				var wg sync.WaitGroup
+				for i := range total {
+					item, err := seq.NextItem(ctx, i+1)
+					if err != nil {
+						return
+					}
+					if (i+1)%2 == 0 {
+						if !sendItem(ich, seq.Done(), item) {
+							return
+						}
+						continue
+					}
+					// Delay in-flight odds in reverse order within the active window so
+					// evens race ahead and odds arrive out of order across limit boundaries.
+					delay := time.Duration(limit-(i%limit)) * 50 * time.Microsecond
+					wg.Go(func() {
+						timer := time.NewTimer(delay)
+						defer timer.Stop()
+						select {
+						case <-timer.C:
+							sendItem(ich, seq.Done(), item)
+						case <-seq.Done():
+						}
+					})
+				}
+				wg.Wait()
+			}()
+
+			verifySequentialInts(t, seq, total)
+		})
+	}
+}
+
 func TestStreamingIncompleteInputClosed(t *testing.T) {
 	defer synctestutil.AssertNoGoroutinesRacy(t, time.Second)()
 	ctx := context.Background()
