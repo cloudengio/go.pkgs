@@ -7,6 +7,7 @@
 package userid
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -23,7 +24,7 @@ func runIDCommand(uid string) (string, error) {
 (glu | where name -eq $env:username).sid.value`
 	}
 	ps := powershell.New()
-	stdout, _, err := ps.Run(script)
+	stdout, _, err := ps.Run(context.Background(), script)
 	if err != nil {
 		return "", err
 	}
