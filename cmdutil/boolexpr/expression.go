@@ -27,7 +27,6 @@ const (
 	notOp
 	leftBracket
 	rightBracket
-	subExpression
 	operand
 )
 
@@ -45,29 +44,16 @@ func (it itemType) String() string {
 		return "!"
 	case operand:
 		return "operand"
-	case subExpression:
-		return "(...)"
 	default:
 		return fmt.Sprintf("unknown item type: %d", it)
 	}
 }
 
 // Item represents an operator or operand in an expression. It is exposed
-// to allow clients packages to create their own parsers.
+// to allow client packages to create their own parsers.
 type Item struct {
 	typ itemType
-	sub expression
 	op  Operand
-}
-
-type expression []Item
-
-func (e expression) String() string {
-	var res strings.Builder
-	for _, i := range e {
-		res.WriteString(i.String())
-	}
-	return res.String()
 }
 
 func (it Item) String() string {
@@ -82,21 +68,14 @@ func (it Item) String() string {
 		return ")"
 	case notOp:
 		return "!"
-	case subExpression:
-		return "(" + it.sub.String() + ")"
 	case operand:
+		if it.op == nil {
+			return "<nil>"
+		}
 		return it.op.String()
 	default:
 		return fmt.Sprintf("unknown item type: %v", it.typ)
 	}
-}
-
-func (it Item) isOperator() bool {
-	return it.typ == andOp || it.typ == orOp
-}
-
-func (it Item) isOperand() bool {
-	return it.typ == operand || it.typ == subExpression
 }
 
 // OR returns an OR item.
@@ -104,7 +83,7 @@ func OR() Item {
 	return Item{typ: orOp}
 }
 
-// And returns an AND item.
+// AND returns an AND item.
 func AND() Item {
 	return Item{typ: andOp}
 }
@@ -124,253 +103,232 @@ func RightBracket() Item {
 	return Item{typ: rightBracket}
 }
 
-// T represents a boolean expression of regular expressions,
-// file type and mod time comparisons. It is evaluated against a single
-// input value.
+type evalNode interface {
+	eval(v any) bool
+	format(out *strings.Builder)
+}
+
+type leafNode struct {
+	op Operand
+}
+
+func (n *leafNode) eval(v any) bool             { return n.op.Eval(v) }
+func (n *leafNode) format(out *strings.Builder) { out.WriteString(n.op.String()) }
+
+type notNode struct {
+	child evalNode
+}
+
+func (n *notNode) eval(v any) bool { return !n.child.eval(v) }
+func (n *notNode) format(out *strings.Builder) {
+	out.WriteByte('!')
+	n.child.format(out)
+}
+
+type parenNode struct {
+	inner evalNode
+}
+
+func (n *parenNode) eval(v any) bool { return n.inner.eval(v) }
+func (n *parenNode) format(out *strings.Builder) {
+	out.WriteByte('(')
+	n.inner.format(out)
+	out.WriteByte(')')
+}
+
+type andNode struct {
+	lhs, rhs evalNode
+}
+
+func (n *andNode) eval(v any) bool { return n.lhs.eval(v) && n.rhs.eval(v) }
+func (n *andNode) format(out *strings.Builder) {
+	n.lhs.format(out)
+	out.WriteString(" && ")
+	n.rhs.format(out)
+}
+
+type orNode struct {
+	lhs, rhs evalNode
+}
+
+func (n *orNode) eval(v any) bool { return n.lhs.eval(v) || n.rhs.eval(v) }
+func (n *orNode) format(out *strings.Builder) {
+	n.lhs.format(out)
+	out.WriteString(" || ")
+	n.rhs.format(out)
+}
+
+// T represents a compiled boolean expression of Operand predicates evaluated
+// against a single input value using standard precedence (! > && > ||) and
+// short-circuit evaluation.
 type T struct {
-	items []Item
+	root evalNode
+	ops  []Operand
 }
 
-// HasOperand returns true if the matcher's expression contains an instance
-// of the specified operand.
+// IsEmpty returns true if the expression contains no operands or operators.
+func (m T) IsEmpty() bool {
+	return m.root == nil
+}
+
+// Needs returns true if any operand in the expression needs the type of typ.
 func (m T) Needs(typ any) bool {
-	return needs(reflect.TypeOf(typ), m.items)
+	if typ == nil {
+		return false
+	}
+	return m.NeedsType(reflect.TypeOf(typ))
 }
 
-func needs(want reflect.Type, items []Item) bool {
-	for _, it := range items {
-		switch it.typ {
-		case operand:
-			if it.op.Needs(want) {
-				return true
-			}
-		case subExpression:
-			if needs(want, it.sub) {
-				return true
-			}
+// NeedsType returns true if any operand in the expression needs t.
+func (m T) NeedsType(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	for _, op := range m.ops {
+		if op.Needs(t) {
+			return true
 		}
 	}
 	return false
 }
 
-func (e expression) newOperand(op Operand) (expression, error) {
-	op, err := op.Prepare()
+// NeedsFor returns true if any operand in the expression needs type V.
+func (m T) NeedsFor[V any]() bool {
+	return m.NeedsType(reflect.TypeFor[V]())
+}
+
+type itemParser struct {
+	items []Item
+	pos   int
+	ops   []Operand
+}
+
+func (p *itemParser) parseOr() (evalNode, error) {
+	lhs, err := p.parseAnd()
 	if err != nil {
 		return nil, err
 	}
-	return append(e, NewOperandItem(op)), nil
-}
-
-func (e expression) newBinaryOp(cur Item) (expression, error) {
-	if len(e) == 0 {
-		return nil, fmt.Errorf("missing left operand for %v", cur.typ)
-	}
-	if !e[len(e)-1].isOperand() {
-		return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
-	}
-	return append(e, cur), nil
-}
-
-func (e expression) newUnaryOp(cur Item) (expression, error) {
-	if len(e) > 0 {
-		l := e[len(e)-1]
-		if !l.isOperator() {
-			return nil, fmt.Errorf("misplaced negation after %v", l.typ)
-		}
-	}
-	return append(e, cur), nil
-}
-
-func (e expression) newSubExpression(input <-chan Item, cur Item) (expression, error) {
-	if len(e) > 0 {
-		l := e[len(e)-1]
-		if !l.isOperator() && l.typ != notOp {
-			return nil, fmt.Errorf("missing operator preceding %v", cur.typ)
-		}
-	}
-	sub, err := newExpression(input)
-	if err != nil {
-		return nil, err
-	}
-	return append(e, Item{typ: subExpression, sub: sub}), nil
-}
-
-func (e expression) endSubExpression(cur Item) (expression, error) {
-	if len(e) == 0 {
-		return nil, fmt.Errorf("missing left operand for %v", cur.typ)
-	}
-	if !e[len(e)-1].isOperand() {
-		return nil, fmt.Errorf("missing operand preceding %v", cur.typ)
-	}
-	return e, nil
-}
-
-func newExpression(input <-chan Item) (expr expression, err error) {
-	for cur := range input {
-		switch cur.typ {
-		case operand:
-			expr, err = expr.newOperand(cur.op)
-		case andOp, orOp:
-			expr, err = expr.newBinaryOp(cur)
-		case notOp:
-			expr, err = expr.newUnaryOp(cur)
-		case leftBracket:
-			expr, err = expr.newSubExpression(input, cur)
-		case rightBracket:
-			return expr.endSubExpression(cur)
-		}
+	for p.pos < len(p.items) && p.items[p.pos].typ == orOp {
+		p.pos++
+		rhs, err := p.parseAnd()
 		if err != nil {
 			return nil, err
 		}
+		lhs = &orNode{lhs: lhs, rhs: rhs}
 	}
-	return expr, nil
+	return lhs, nil
 }
 
-func itemChan(items []Item) <-chan Item {
-	itemCh := make(chan Item, len(items))
-	for _, it := range items {
-		itemCh <- it
+func (p *itemParser) parseAnd() (evalNode, error) {
+	lhs, err := p.parseUnary()
+	if err != nil {
+		return nil, err
 	}
-	close(itemCh)
-	return itemCh
+	for p.pos < len(p.items) && p.items[p.pos].typ == andOp {
+		p.pos++
+		rhs, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		lhs = &andNode{lhs: lhs, rhs: rhs}
+	}
+	return lhs, nil
 }
 
-// New returns a new matcher.T built from the supplied items.
+func (p *itemParser) parseUnary() (evalNode, error) {
+	if p.pos < len(p.items) && p.items[p.pos].typ == notOp {
+		p.pos++
+		child, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &notNode{child: child}, nil
+	}
+	return p.parsePrimary()
+}
+
+func (p *itemParser) parsePrimary() (evalNode, error) {
+	if p.pos >= len(p.items) {
+		return nil, fmt.Errorf("incomplete expression: expected operand or '(' at end of expression")
+	}
+	cur := p.items[p.pos]
+	switch cur.typ {
+	case operand:
+		if cur.op == nil {
+			return nil, fmt.Errorf("nil operand at item %d", p.pos)
+		}
+		op, err := cur.op.Prepare()
+		if err != nil {
+			return nil, err
+		}
+		p.pos++
+		p.ops = append(p.ops, op)
+		return &leafNode{op: op}, nil
+	case leftBracket:
+		openPos := p.pos
+		p.pos++
+		if p.pos >= len(p.items) {
+			return nil, fmt.Errorf("unbalanced brackets: missing ')'")
+		}
+		if p.items[p.pos].typ == rightBracket {
+			return nil, fmt.Errorf("empty subexpression '()' at item %d", openPos)
+		}
+		inner, err := p.parseOr()
+		if err != nil {
+			return nil, err
+		}
+		if p.pos >= len(p.items) {
+			return nil, fmt.Errorf("unbalanced brackets: missing ')'")
+		}
+		if p.items[p.pos].typ != rightBracket {
+			return nil, fmt.Errorf("missing operator before %v at item %d", p.items[p.pos].typ, p.pos)
+		}
+		p.pos++
+		return &parenNode{inner: inner}, nil
+	case rightBracket:
+		return nil, fmt.Errorf("unbalanced brackets: unexpected ')' at item %d", p.pos)
+	case andOp, orOp:
+		return nil, fmt.Errorf("missing operand before %v at item %d", cur.typ, p.pos)
+	default:
+		return nil, fmt.Errorf("unexpected item %v at item %d", cur.typ, p.pos)
+	}
+}
+
+// New returns a compiled T built from the supplied items. Operator precedence
+// is ! (highest), then &&, then ||, with () for explicit grouping.
 func New(items ...Item) (T, error) {
 	if len(items) == 0 {
 		return T{}, nil
 	}
-	// check for balanced ('s here since it's easy to do so.
-	balanced := 0
-	for _, it := range items {
-		if it.typ == leftBracket {
-			balanced++
-		}
-		if it.typ == rightBracket {
-			if balanced == 0 {
-				return T{}, fmt.Errorf("unbalanced brackets")
-			}
-			balanced--
-		}
-	}
-	if balanced != 0 {
-		return T{}, fmt.Errorf("unbalanced brackets")
-	}
-	tree, err := newExpression(itemChan(items))
+	p := itemParser{items: items}
+	root, err := p.parseOr()
 	if err != nil {
 		return T{}, err
 	}
-	if incompleteExpression(tree) {
-		return T{}, fmt.Errorf("incomplete expression: %v", items)
-	}
-	return T{items: tree}, nil
-}
-
-func incompleteExpression(items []Item) bool {
-	switch len(items) {
-	case 0:
-		return false
-	case 1:
-		switch items[0].typ {
-		case operand:
-			return false
-		case subExpression:
-			return incompleteExpression(items[0].sub)
+	if p.pos < len(p.items) {
+		cur := p.items[p.pos]
+		if cur.typ == rightBracket {
+			return T{}, fmt.Errorf("unbalanced brackets: unexpected ')' at item %d", p.pos)
 		}
-		return true
-	case 2:
-		return items[0].typ != notOp
-	case 3:
-		return false
+		return T{}, fmt.Errorf("missing operator before %v at item %d", cur.typ, p.pos)
 	}
-	return false
+	return T{root: root, ops: p.ops}, nil
 }
 
 func (m T) String() string {
-	var out strings.Builder
-	for _, it := range m.items {
-		if it.typ == subExpression {
-			se := T{items: it.sub}
-			out.WriteString("(" + se.String() + ") ")
-			continue
-		}
-		out.WriteString(it.String())
-		if it.typ != notOp {
-			out.WriteRune(' ')
-		}
+	if m.root == nil {
+		return ""
 	}
-	return strings.TrimSpace(out.String())
+	var out strings.Builder
+	m.root.format(&out)
+	return out.String()
 }
 
-// Eval evaluates the matcher against the supplied value. An empty, default
-// matcher will always return false.
+// Eval evaluates the expression against v using short-circuit evaluation.
+// An empty, default T always returns false.
 func (m T) Eval(v any) bool {
-	if len(m.items) == 0 {
+	if m.root == nil {
 		return false
 	}
-	ev := evaluator{}
-	return ev.run(itemChan(m.items), v)
-}
-
-type evaluator struct {
-	values    []bool
-	operators []itemType
-}
-
-func (e *evaluator) pushVal(v bool) {
-	e.values = append(e.values, v)
-}
-
-func (e *evaluator) pushOp(it itemType) {
-	e.operators = append(e.operators, it)
-}
-
-func (e *evaluator) eval() bool {
-	// left to right evaluation
-	if len(e.values) == 1 && len(e.operators) == 1 && e.operators[0] == notOp {
-		// handle negation of single value
-		e.operators = e.operators[1:]
-		e.values[len(e.values)-1] = !e.values[len(e.values)-1]
-	}
-
-	if len(e.values) == 2 && len(e.operators) >= 1 {
-		if len(e.operators) >= 2 && e.operators[len(e.operators)-1] == notOp {
-			// handle negation in the right hand side of an expression.
-			e.values[1] = !e.values[1]
-			e.operators = e.operators[:len(e.operators)-1]
-		}
-
-		switch e.operators[0] {
-		case andOp:
-			e.values = []bool{e.values[0] && e.values[1]}
-		case orOp:
-			e.values = []bool{e.values[0] || e.values[1]}
-			if e.values[0] {
-				// short circuit evaluation of OR
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (e *evaluator) run(exprs <-chan Item, v any) bool {
-	for cur := range exprs {
-		switch cur.typ {
-		case operand:
-			e.pushVal(cur.op.Eval(v))
-		case orOp, andOp, notOp:
-			e.pushOp(cur.typ)
-		case subExpression:
-			sub := &evaluator{}
-			e.pushVal(sub.run(itemChan(cur.sub), v))
-		}
-		if e.eval() {
-			return true
-		}
-	}
-	if len(e.values) > 1 {
-		panic(fmt.Sprintf("invalid expression: %v", e.values))
-	}
-	return e.values[0]
+	return m.root.eval(v)
 }

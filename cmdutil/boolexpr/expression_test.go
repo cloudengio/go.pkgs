@@ -215,32 +215,37 @@ func TestErrors(t *testing.T) {
 		in  string
 		err string
 	}{
-		{`(`, "unbalanced brackets"},
-		{`()`, "missing left operand for )"},
-		{`!`, "incomplete expression: [!]"},
-		{`!&&`, "missing operand preceding &&"},
-		{`&&!`, "missing left operand for &&"},
-		{`&&&&`, "missing left operand for &&"},
-		{`!!`, "misplaced negation after !"},
-		{`(foo || bar`, "unbalanced brackets"},
-		{`(foo || bar)!`, "misplaced negation after (...)"},
-		{`(foo !|| bar)`, "misplaced negation after operand"},
-		{`foo || bar)`, "unbalanced brackets"},
-		{`)(`, "unbalanced brackets"},
-		{`||`, "missing left operand for ||"},
-		{`|| a`, "missing left operand for ||"},
-		{`a ||`, "incomplete expression: [re=a ||]"},
-		{`&&`, "missing left operand for &&"},
-		{`&& a`, "missing left operand for &&"},
-		{`a &&`, "incomplete expression: [re=a &&]"},
-		{`a || b || ()`, "missing left operand for )"},
-		{`( a || )`, "missing operand preceding )"},
-		{`( a () )`, "missing operator preceding ("},
-		{`|| ||`, "missing left operand for ||"},
-		{`a || ||`, "missing operand preceding ||"},
-		{`&& &&`, "missing left operand for &&"},
-		{`a && &&`, "missing operand preceding &&"},
-		{`a (a)`, "missing operator preceding ("},
+		{`(`, "unbalanced brackets: missing ')'"},
+		{`()`, "empty subexpression '()' at item 0"},
+		{`!`, "incomplete expression: expected operand or '(' at end of expression"},
+		{`!!`, "incomplete expression: expected operand or '(' at end of expression"},
+		{`!&&`, "missing operand before && at item 1"},
+		{`&&!`, "missing operand before && at item 0"},
+		{`&&&&`, "missing operand before && at item 0"},
+		{`(foo || bar`, "unbalanced brackets: missing ')'"},
+		{`(foo || bar)!`, "missing operator before ! at item 5"},
+		{`(foo !|| bar)`, "missing operator before ! at item 2"},
+		{`foo || bar)`, "unbalanced brackets: unexpected ')' at item 3"},
+		{`)(`, "unbalanced brackets: unexpected ')' at item 0"},
+		{`||`, "missing operand before || at item 0"},
+		{`|| a`, "missing operand before || at item 0"},
+		{`a ||`, "incomplete expression: expected operand or '(' at end of expression"},
+		{`a && b &&`, "incomplete expression: expected operand or '(' at end of expression"},
+		{`a && !`, "incomplete expression: expected operand or '(' at end of expression"},
+		{`&&`, "missing operand before && at item 0"},
+		{`&& a`, "missing operand before && at item 0"},
+		{`a &&`, "incomplete expression: expected operand or '(' at end of expression"},
+		{`a || b || ()`, "empty subexpression '()' at item 4"},
+		{`( a || )`, "unbalanced brackets: unexpected ')' at item 3"},
+		{`( a () )`, "missing operator before ( at item 2"},
+		{`|| ||`, "missing operand before || at item 0"},
+		{`a || ||`, "missing operand before || at item 2"},
+		{`&& &&`, "missing operand before && at item 0"},
+		{`a && &&`, "missing operand before && at item 2"},
+		{`a (a)`, "missing operator before ( at item 1"},
+		{`a b c`, "missing operator before operand at item 1"},
+		{`a || b c`, "missing operator before operand at item 3"},
+		{`(a) b`, "missing operator before operand at item 3"},
 		{`[a-z+`, "error parsing regexp: missing closing ]: `[a-z+`"},
 	} {
 		m, err := boolexpr.New(parse(tc.in)...)
@@ -249,6 +254,116 @@ func TestErrors(t *testing.T) {
 		}
 		if got, want := m.Eval("foo"), false; got != want {
 			t.Errorf("%v: got %v, want %v", tc.in, got, want)
+		}
+	}
+
+	if _, err := boolexpr.New(boolexpr.NewOperandItem(nil)); err == nil {
+		t.Errorf("expected error for nil operand")
+	}
+}
+
+func TestPrecedenceAndMixedOperators(t *testing.T) {
+	for _, tc := range []struct {
+		in  string
+		val any
+		out bool
+	}{
+		// && binds tighter than ||
+		{"a || b && c", "a", true},
+		{"a || b && c", "b", false},
+		{"a || b && c", "bc", true},
+		{"a && b || c", "c", true},
+		{"a && b || c", "ab", true},
+		{"a && b || c", "a", false},
+		{"(a || b) && c", "a", false},
+		{"(a || b) && c", "ac", true},
+		{"!!foo", "foo", true},
+		{"!!foo", "bar", false},
+	} {
+		evalTestCase(t, parse(tc.in), tc.val, tc.out)
+	}
+}
+
+type countOp struct {
+	result bool
+	calls  *int
+}
+
+func (c countOp) Prepare() (boolexpr.Operand, error) { return c, nil }
+func (c countOp) Eval(_ any) bool                    { *c.calls++; return c.result }
+func (c countOp) Needs(reflect.Type) bool            { return false }
+func (c countOp) Document() string                   { return "count" }
+func (c countOp) String() string                     { return "count" }
+
+func TestShortCircuit(t *testing.T) {
+	var rhsCalls int
+	rhs := boolexpr.NewOperandItem(countOp{result: true, calls: &rhsCalls})
+	falseOp := boolexpr.NewOperandItem(countOp{result: false, calls: new(int)})
+	trueOp := boolexpr.NewOperandItem(countOp{result: true, calls: new(int)})
+
+	// false && rhs skips rhs
+	expr, err := boolexpr.New(falseOp, boolexpr.AND(), rhs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expr.Eval("x") {
+		t.Fatalf("expected false")
+	}
+	if rhsCalls != 0 {
+		t.Fatalf("expected short-circuit on &&, got %d rhs calls", rhsCalls)
+	}
+
+	// true || (false && rhs) skips both false and rhs
+	rhsCalls = 0
+	expr, err = boolexpr.New(trueOp, boolexpr.OR(), boolexpr.LeftBracket(), falseOp, boolexpr.AND(), rhs, boolexpr.RightBracket())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !expr.Eval("x") {
+		t.Fatalf("expected true")
+	}
+	if rhsCalls != 0 {
+		t.Fatalf("expected short-circuit on ||, got %d rhs calls", rhsCalls)
+	}
+}
+
+type staticOp struct{}
+
+func (staticOp) Prepare() (boolexpr.Operand, error) { return staticOp{}, nil }
+func (staticOp) Eval(v any) bool                    { s, ok := v.(string); return ok && s == "match" }
+func (staticOp) Needs(reflect.Type) bool            { return false }
+func (staticOp) Document() string                   { return "static" }
+func (staticOp) String() string                     { return "static=match" }
+
+func TestEvalZeroAllocs(t *testing.T) {
+	op := boolexpr.NewOperandItem(staticOp{})
+	expr, err := boolexpr.New(
+		op, boolexpr.AND(), boolexpr.LeftBracket(), op, boolexpr.OR(), boolexpr.NOT(), op, boolexpr.RightBracket(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var val any = "match"
+	allocs := testing.AllocsPerRun(100, func() {
+		if !expr.Eval(val) {
+			t.Fatal("expected match")
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("expected 0 allocations per Eval, got %v", allocs)
+	}
+}
+
+func BenchmarkEval(b *testing.B) {
+	expr, err := boolexpr.New(parse(`(foo && (bar || !baz)) || else`)...)
+	if err != nil {
+		b.Fatal(err)
+	}
+	var val any = "foobar"
+	b.ReportAllocs()
+	for b.Loop() {
+		if !expr.Eval(val) {
+			b.Fatal("expected match")
 		}
 	}
 }
@@ -306,9 +421,27 @@ func TestNeeds(t *testing.T) {
 	}
 	expr, err = boolexpr.New()
 	assert(false, false, false)
+	if !expr.IsEmpty() {
+		t.Errorf("expected IsEmpty() == true for empty expression")
+	}
+	if expr.Needs(nil) {
+		t.Errorf("expected Needs(nil) == false")
+	}
+	if expr.NeedsType(nil) {
+		t.Errorf("expected NeedsType(nil) == false")
+	}
 
 	expr, _ = boolexpr.New(boolexpr.NewOperandItem(regexOp{}))
 	assert(true, false, false)
+	if expr.IsEmpty() {
+		t.Errorf("expected IsEmpty() == false for non-empty expression")
+	}
+	if !expr.NeedsFor[string]() {
+		t.Errorf("expected NeedsFor[string] == true")
+	}
+	if expr.NeedsFor[nameIfc]() {
+		t.Errorf("expected NeedsFor[nameIfc] == false")
+	}
 
 	expr, err = boolexpr.New(
 		boolexpr.NewOperandItem(&regexOp{}),
@@ -316,6 +449,9 @@ func TestNeeds(t *testing.T) {
 		boolexpr.NewOperandItem(&regexNameOp{}))
 
 	assert(true, true, true)
+	if !expr.NeedsFor[nameIfc]() {
+		t.Errorf("expected NeedsFor[nameIfc] == true")
+	}
 
 	expr, err = boolexpr.New(boolexpr.NewOperandItem(&regexNameOp{}))
 	assert(false, true, true)

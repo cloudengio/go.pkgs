@@ -26,6 +26,10 @@ func TestTokenizer(t *testing.T) {
 		{"anything", "anything="},
 		{"name=foo", "name='foo'"},
 		{"name=''", "name=''"},
+		{`name=""`, "name=''"},
+		{`name="it's \"quoted\"\\ok"`, `name='it's "quoted"\ok'`},
+		{`re='foo\.bar'`, `re='foo\.bar'`},
+		{"_name=foo", "_name='foo'"},
 		{"name=foo || name=bar", "name='foo' || name='bar'"},
 		{"name=foo && iname=bar", "name='foo' && iname='bar'"},
 		{"name=foo&&iname=bar", "name='foo' && iname='bar'"},
@@ -47,24 +51,29 @@ func TestTokenizerErros(t *testing.T) {
 		input string
 		err   string
 	}{
-		{"name=foo |", "incomplete operator: |"},
-		{"name=foo &", "incomplete operator: &"},
-		{"name=foo & name=", "& is not a valid operator, should be &&"},
-		{"name=foo | name=", "| is not a valid operator, should be ||"},
-		{"=", "unexpected character: ="},
-		{"'", "unexpected character: '"},
-		{"\\", "unexpected character: \\"},
-		{"name='foo", "missing close quote: foo"},
-		{"name='foo''", "unexpected character: '"},
-		{"name='foo'=", "unexpected character: ="},
-		{"name='foo'\\", "unexpected character: \\"},
-		{`name=\`, "missing escaped rune"},
-		{"foo bar", "\"foo\": expected =, got ' '"},
+		{"name=foo |", "incomplete operator '|' at position 9"},
+		{"name=foo &", "incomplete operator '&' at position 9"},
+		{"name=foo & name=", "'&' is not a valid operator at position 9, should be '&&'"},
+		{"name=foo | name=", "'|' is not a valid operator at position 9, should be '||'"},
+		{"=", "unexpected character '=' at position 0"},
+		{"'", `unexpected character '\'' at position 0`},
+		{`"`, `unexpected character '"' at position 0`},
+		{"\\", `unexpected character '\\' at position 0`},
+		{"name='foo", `missing close quote ' for value "foo" at position 5`},
+		{`name="foo`, `missing close quote " for value "foo" at position 5`},
+		{`name="foo\`, `missing close quote " for value "foo" at position 5`},
+		{"name='foo''", `unexpected character '\'' at position 10`},
+		{"name='foo'=", "unexpected character '=' at position 10"},
+		{"name='foo'\\", `unexpected character '\\' at position 10`},
+		{`name=\`, "missing escaped rune at position 6"},
+		{"foo bar", `"foo": expected '=', got ' ' at position 3`},
+		{"name=", "missing operand value at position 5"},
+		{"name= && name=b", "missing operand value at position 5"},
 	} {
 		tok := tokenizer{}
 		_, err := tok.run(tc.input)
 		if err == nil || err.Error() != tc.err {
-			t.Errorf("%q: missing or wrong error: %v", tc.input, err)
+			t.Errorf("%q: missing or wrong error: got %v, want %v", tc.input, err, tc.err)
 		}
 	}
 }
