@@ -22,14 +22,14 @@ type Item struct {
 }
 ```
 Item represents an operator or operand in an expression. It is exposed to
-allow clients packages to create their own parsers.
+allow client packages to create their own parsers.
 
 ### Functions
 
 ```go
 func AND() Item
 ```
-And returns an AND item.
+AND returns an AND item.
 
 
 ```go
@@ -103,16 +103,24 @@ type Parser struct {
 	// contains filtered or unexported fields
 }
 ```
+Parser parses text boolean expressions using registered Operand factories.
 
 ### Functions
 
 ```go
 func NewParser() *Parser
 ```
+NewParser returns a new Parser with no registered operands.
 
 
 
 ### Methods
+
+```go
+func (p *Parser) HasOperand(name string) bool
+```
+HasOperand returns true if an operand factory is registered under name.
+
 
 ```go
 func (p *Parser) ListOperands() []Operand
@@ -123,22 +131,27 @@ ListOperands returns the list of registered operands in alphanumeric order.
 ```go
 func (p *Parser) Parse(input string) (T, error)
 ```
-Parse parses the supplied input into a boolexpr.T. The supported syntax
-is a boolean expression with and (&&), or (||) and grouping, via ().
-Operands are represented as <operand>=<value> where the value is interpreted
-by the operand. The <value> may be quoted using single-quotes or contain
-escaped runes via \. The set of available operands is those registered with
-the parser before Parse is called.
+Parse parses the supplied input into a boolexpr.T. The supported operators
+are ! (negation), && (and), || (or), with standard precedence (! > && > ||)
+and grouping via (). Operands are represented as <operand>=<value> where the
+value is interpreted by the operand. The <value> may be raw single-quoted
+('...'), double-quoted ("..." with \ escapes), or unquoted with \-escaped
+runes. An empty or whitespace-only input returns an empty T whose Eval
+returns false. The set of available operands is those registered with the
+parser before Parse is called.
 
 
 ```go
 func (p *Parser) RegisterOperand(name string, factory func(name, value string) Operand)
 ```
+RegisterOperand registers an operand factory under name. The factory must
+tolerate an empty value when called by ListOperands for documentation.
 
 
 ```go
 func (p *Parser) RemoveOperand(name string)
 ```
+RemoveOperand removes any operand factory registered under name.
 
 
 
@@ -149,15 +162,17 @@ type T struct {
 	// contains filtered or unexported fields
 }
 ```
-T represents a boolean expression of regular expressions, file type and mod
-time comparisons. It is evaluated against a single input value.
+T represents a compiled boolean expression of Operand predicates evaluated
+against a single input value using standard precedence (! > && > ||) and
+short-circuit evaluation.
 
 ### Functions
 
 ```go
 func New(items ...Item) (T, error)
 ```
-New returns a new matcher.T built from the supplied items.
+New returns a compiled T built from the supplied items. Operator precedence
+is ! (highest), then &&, then ||, with () for explicit grouping.
 
 
 
@@ -166,15 +181,32 @@ New returns a new matcher.T built from the supplied items.
 ```go
 func (m T) Eval(v any) bool
 ```
-Eval evaluates the matcher against the supplied value. An empty, default
-matcher will always return false.
+Eval evaluates the expression against v using short-circuit evaluation.
+An empty, default T always returns false.
+
+
+```go
+func (m T) IsEmpty() bool
+```
+IsEmpty returns true if the expression contains no operands or operators.
 
 
 ```go
 func (m T) Needs(typ any) bool
 ```
-HasOperand returns true if the matcher's expression contains an instance of
-the specified operand.
+Needs returns true if any operand in the expression needs the type of typ.
+
+
+```go
+func (m T) NeedsFor[V any]() bool
+```
+NeedsFor returns true if any operand in the expression needs type V.
+
+
+```go
+func (m T) NeedsType(t reflect.Type) bool
+```
+NeedsType returns true if any operand in the expression needs t.
 
 
 ```go
