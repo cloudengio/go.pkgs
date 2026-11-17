@@ -18,7 +18,26 @@ structures.
 ```go
 const IntervalSeparator = ".."
 ```
-IntervalSeparator separates the two ends of an Interval.
+IntervalSeparator is the default separator between the two ends of an
+Interval, see Interval.SetSeparator.
+
+### ListSeparator
+```go
+const ListSeparator = ","
+```
+ListSeparator separates the intervals of an Intervals.
+
+
+
+## Variables
+### ErrInvalidValue
+```go
+ErrInvalidValue = errors.New("invalid value")
+
+```
+ErrInvalidValue is wrapped by the error returned for any value that cannot
+be parsed by Bound, Interval or Intervals, use errors.Is to test for it.
+The error also wraps the underlying cause, if there is one.
 
 
 
@@ -333,6 +352,13 @@ type ByteSizeInterval = Interval[cmdtypes.ByteSize, ByteSizeCodec]
 ByteSizeInterval is an Interval of numbers of bytes.
 
 
+### Type ByteSizeIntervals
+```go
+type ByteSizeIntervals = Intervals[cmdtypes.ByteSize, ByteSizeCodec]
+```
+ByteSizeIntervals is an Intervals of numbers of bytes.
+
+
 ### Type Codec
 ```go
 type Codec[T any] interface {
@@ -347,52 +373,6 @@ It is a type parameter, rather than a value, so that a Bound or Interval
 has a usable zero value and so can be a field of a struct whose flags are
 registered by RegisterFlagsInStruct. Implementations are therefore empty
 struct types, such as TimeCodec.
-
-
-### Type ColonRangeSpec
-```go
-type ColonRangeSpec struct {
-	RangeSpec
-}
-```
-ColonRangeSpec is like RangeSpec except that : is the separator.
-
-### Methods
-
-```go
-func (crs *ColonRangeSpec) Set(v string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (crs *ColonRangeSpec) String() string
-```
-String implements flag.Value.
-
-
-
-
-### Type ColonRangeSpecs
-```go
-type ColonRangeSpecs []ColonRangeSpec
-```
-ColonRangeSpecs represents comma separated list of ColonRangeSpec's.
-
-### Methods
-
-```go
-func (crs *ColonRangeSpecs) Set(val string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (crs *ColonRangeSpecs) String() string
-```
-String implements flag.Value.
-
-
 
 
 ### Type Commas
@@ -456,6 +436,13 @@ Parse implements Codec.
 type DurationInterval = Interval[time.Duration, DurationCodec]
 ```
 DurationInterval is an Interval of durations.
+
+
+### Type DurationIntervals
+```go
+type DurationIntervals = Intervals[time.Duration, DurationCodec]
+```
+DurationIntervals is an Intervals of durations.
 
 
 ### Type Edge
@@ -544,31 +531,6 @@ type EnumValues[T any] interface {
 EnumValues must be implemented by any type that is to be used with Enum.
 
 
-### Type ErrInvalidRange
-```go
-type ErrInvalidRange struct {
-	// contains filtered or unexported fields
-}
-```
-ErrInvalidRange represents the error generated for an invalid range.
-Use errors.Is to test for it.
-
-### Methods
-
-```go
-func (ire *ErrInvalidRange) Error() string
-```
-Error implements error.
-
-
-```go
-func (ire ErrInvalidRange) Is(target error) bool
-```
-Is implements errors.Is.
-
-
-
-
 ### Type IntBound
 ```go
 type IntBound = Bound[int, IntCodec]
@@ -580,7 +542,8 @@ IntBound is a Bound of an int.
 ```go
 type IntCodec struct{}
 ```
-IntCodec is the Codec for int.
+IntCodec is the Codec for int. It also supports values relative to the end
+of an Interval, see Interval.Resolve.
 
 ### Methods
 
@@ -605,52 +568,11 @@ type IntInterval = Interval[int, IntCodec]
 IntInterval is an Interval of ints.
 
 
-### Type IntRangeSpec
+### Type IntIntervals
 ```go
-type IntRangeSpec struct {
-	From, To      int
-	RelativeToEnd bool
-	ExtendsToEnd  bool
-}
+type IntIntervals = Intervals[int, IntCodec]
 ```
-IntRangeSpec represents ranges whose values must be integers.
-
-### Methods
-
-```go
-func (ir *IntRangeSpec) Set(val string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (ir *IntRangeSpec) String() string
-```
-String implements flag.Value.
-
-
-
-
-### Type IntRangeSpecs
-```go
-type IntRangeSpecs []IntRangeSpec
-```
-IntRangeSpecs represents a comma separated list of IntRangeSpec's.
-
-### Methods
-
-```go
-func (irs *IntRangeSpecs) Set(val string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (irs *IntRangeSpecs) String() string
-```
-String implements flag.Value.
-
-
+IntIntervals is an Intervals of ints.
 
 
 ### Type Interval
@@ -669,9 +591,15 @@ It is written <from>..<to>, <from>.. or ..<to>, or as a single value:
     ..b   : up to the end of b
     a     : all of a, so 2024-03 is the month of March and 5 is exactly 5
 
-The separator is not one that any of the values that it is used with
-contain, unlike the '-' of RangeSpec which dates and negative numbers do.
-An Interval that is empty or ends before it starts is an error.
+For types that are positions, such as IntInterval, a value may be counted
+back from the end with a ^ prefix, where ^1 is the last item, eg. ^3..^1 is
+the last three items, 2..^2 is all but the first two and last, and ^1 alone
+is the last. Such an interval must be resolved, see Resolve, before use.
+
+The default separator is not one that any of the values that it is used with
+contain, unlike '-' which dates and negative numbers do. Use SetSeparator to
+use another. An Interval that is empty or ends before it starts is an error,
+wrapping ErrInvalidValue.
 
 An Interval is encoded to and from text, such as for JSON and YAML, as the
 text it was set from.
@@ -682,7 +610,7 @@ text it was set from.
 func (iv *Interval[T, C]) Contains(v T) bool
 ```
 Contains returns true if v is within the interval. It is false if the
-interval is not set.
+interval is not set or is unresolved.
 
 
 ```go
@@ -713,13 +641,44 @@ MarshalText implements encoding.TextMarshaler.
 func (iv *Interval[T, C]) Overlaps(other *Interval[T, C]) bool
 ```
 Overlaps returns true if the intervals have any value in common. It is false
-if either is nil or not set.
+if either is nil, not set or unresolved.
+
+
+```go
+func (iv *Interval[T, C]) Relative() bool
+```
+Relative returns true if either end is relative to the end of the interval's
+items, see Resolve. From and To return the offset for such an end and
+Contains and Overlaps are false until the interval is resolved.
+
+
+```go
+func (iv *Interval[T, C]) Resolve(end T) (Interval[T, C], error)
+```
+Resolve returns the interval with any values that are relative to the end
+replaced by absolute ones, where end is the exclusive end, such as the
+number of items. It is an error if the result is empty, ends before it
+starts or lies before the first item. An interval with no such values is
+returned unchanged.
 
 
 ```go
 func (iv *Interval[T, C]) Set(s string) error
 ```
 Set implements flag.Value.
+
+
+```go
+func (iv *Interval[T, C]) SetSeparator(sep string)
+```
+SetSeparator sets the separator used by Set and UnmarshalText, which
+defaults to IntervalSeparator if sep is empty. It must not appear within the
+values being parsed, so '-' is a poor choice for times and negative numbers.
+It is kept when the interval is later set, and should be called before the
+interval is set, eg. after RegisterFlagsInStruct and before parsing the
+flags. A text value is always read with the separator currently in effect. A
+default value given in a struct tag is parsed when the flags are registered,
+so must use the default separator.
 
 
 ```go
@@ -737,6 +696,87 @@ is open.
 
 ```go
 func (iv *Interval[T, C]) UnmarshalText(text []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler.
+
+
+
+
+### Type Intervals
+```go
+type Intervals[T any, C Codec[T]] struct {
+	// contains filtered or unexported fields
+}
+```
+Intervals is a flag.Value for a comma separated list of Interval, such
+as 1..3,7,^2.., that are all-or-nothing to set. The zero value is unset.
+Setting it replaces rather than adds to any previous value.
+
+### Methods
+
+```go
+func (l *Intervals[T, C]) Contains(v T) bool
+```
+Contains returns true if v is within any of the intervals.
+
+
+```go
+func (l *Intervals[T, C]) Get() any
+```
+Get implements flag.Getter, returning the list itself.
+
+
+```go
+func (l *Intervals[T, C]) IsDefault() bool
+```
+IsDefault returns true if the value has not been set.
+
+
+```go
+func (l *Intervals[T, C]) Items() []Interval[T, C]
+```
+Items returns the intervals, which must not be modified.
+
+
+```go
+func (l Intervals[T, C]) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler.
+
+
+```go
+func (l *Intervals[T, C]) Overlaps(other *Interval[T, C]) bool
+```
+Overlaps returns true if any of the intervals overlap other.
+
+
+```go
+func (l *Intervals[T, C]) Resolve(end T) (Intervals[T, C], error)
+```
+Resolve resolves each of the intervals, see Interval.Resolve.
+
+
+```go
+func (l *Intervals[T, C]) Set(s string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (l *Intervals[T, C]) SetSeparator(sep string)
+```
+SetSeparator sets the separator used within each Interval, see
+Interval.SetSeparator. It must not be ListSeparator.
+
+
+```go
+func (l *Intervals[T, C]) String() string
+```
+String implements flag.Value, returning the list as it was set.
+
+
+```go
+func (l *Intervals[T, C]) UnmarshalText(text []byte) error
 ```
 UnmarshalText implements encoding.TextUnmarshaler.
 
@@ -824,82 +864,6 @@ so that a default retains the notation it was written in.
 
 
 
-### Type RangeSpec
-```go
-type RangeSpec struct {
-	From, To      string
-	RelativeToEnd bool
-	ExtendsToEnd  bool
-}
-```
-RangeSpec represents a specification for a 'range' such as that used to
-specify pages to be printed or table columns to be accessed. It implements
-flag.Value.
-
-Each range is of the general form:
-
-    <from>[-<to>] | -<from>[-<to>|-] | <from>-
-
-which allows for the following:
-
-    <from>        : a single item
-    <from>-<to>   : a range of one or more items
-    -<from>       : a single item, relative to the end
-    -<from>-<to>  : a range, whose start and end are indexed relative the end
-    -<from>-      : a range, relative to the end that extends to the end
-    <from>-       : a range that extends to the end
-
-Note that the interpretation of these ranges is left to users of this type.
-For example, intepreting these values as pages in a document could lead to
-the following:
-
-     3      : page 3
-    2-4     : pages 2 through 4
-    4-2     : pages 4 through 2
-     -2     : second to last page
-    -4-2    : fourth from last to second from last
-    -2-4    : second from last to fourth from last
-    -2-     : second to last and all following pages
-    2-      : page 2 and all following pages.
-
-### Methods
-
-```go
-func (rs *RangeSpec) Set(v string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (rs RangeSpec) String() string
-```
-String implements flag.Value.
-
-
-
-
-### Type RangeSpecs
-```go
-type RangeSpecs []RangeSpec
-```
-RangeSpecs represents comma separated list of RangeSpec's.
-
-### Methods
-
-```go
-func (rs *RangeSpecs) Set(val string) error
-```
-Set implements flag.Value.
-
-
-```go
-func (rs *RangeSpecs) String() string
-```
-String implements flag.Value.
-
-
-
-
 ### Type Repeating
 ```go
 type Repeating struct {
@@ -963,6 +927,50 @@ either via a string literal in the struct or via the valueDefaults argument
 to RegisterFlagsInStructWithSetMap.
 
 
+
+
+### Type StringBound
+```go
+type StringBound = Bound[string, StringCodec]
+```
+StringBound is a Bound of a string.
+
+
+### Type StringCodec
+```go
+type StringCodec struct{}
+```
+StringCodec is the Codec for strings, which are ordered lexically. The span
+of a string s ends just after it, at s followed by a NUL.
+
+### Methods
+
+```go
+func (StringCodec) Compare(a, b string) int
+```
+Compare implements Codec.
+
+
+```go
+func (StringCodec) Parse(s string, edge Edge) (string, error)
+```
+Parse implements Codec.
+
+
+
+
+### Type StringInterval
+```go
+type StringInterval = Interval[string, StringCodec]
+```
+StringInterval is an Interval of strings.
+
+
+### Type StringIntervals
+```go
+type StringIntervals = Intervals[string, StringCodec]
+```
+StringIntervals is an Intervals of strings.
 
 
 ### Type Time
@@ -1055,6 +1063,13 @@ type TimeInterval = Interval[time.Time, TimeCodec]
 TimeInterval is an Interval of times, see TimeCodec.
 
 
+### Type TimeIntervals
+```go
+type TimeIntervals = Intervals[time.Time, TimeCodec]
+```
+TimeIntervals is an Intervals of times.
+
+
 
 
 ## Examples
@@ -1071,8 +1086,6 @@ TimeInterval is an Interval of times, see TimeCodec.
 ### [ExampleEnum](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-Enum)
 
 ### [ExampleEnum_string](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-Enum_string)
-
-### [ExampleRangeSpecs](https://pkg.go.dev/cloudeng.io/cmdutil/flags?tab=doc#example-RangeSpecs)
 
 
 

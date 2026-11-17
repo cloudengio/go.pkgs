@@ -6,6 +6,7 @@ package flags_test
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"math"
 	"strconv"
@@ -386,5 +387,325 @@ func TestBoundTextReset(t *testing.T) {
 	}
 	if err := yaml.Unmarshal([]byte("max: ''\n"), &c); err != nil || !c.Max.IsDefault() {
 		t.Fatalf("expected reset bound on empty text: %+v %v", c, err)
+	}
+}
+
+func TestIntervalSeparator(t *testing.T) {
+	var iv flags.IntInterval
+	iv.SetSeparator(":")
+	for in, want := range map[string][2]int{"3:5": {3, 6}, "-5:-3": {-5, -2}, "7": {7, 8}} {
+		if err := iv.Set(in); err != nil {
+			t.Fatalf("%q: %v", in, err)
+		}
+		from, _ := iv.From()
+		to, _ := iv.To()
+		if from != want[0] || to != want[1] || iv.String() != in {
+			t.Errorf("%q: got [%v, %v) %q", in, from, to, iv.String())
+		}
+	}
+	if err := iv.Set(":4"); err != nil {
+		t.Fatal(err)
+	}
+	if from, ok := iv.From(); ok {
+		t.Errorf("From should be open, got %v", from)
+	}
+	// The default separator is no longer special, and a failed Set keeps the
+	// previous value and the separator.
+	if err := iv.Set("3..5"); err == nil {
+		t.Error("expected an error")
+	}
+	if iv.String() != ":4" {
+		t.Errorf("got %q", iv.String())
+	}
+	if err := iv.UnmarshalText(nil); err != nil || !iv.IsDefault() {
+		t.Fatal(err)
+	}
+	if err := iv.UnmarshalText([]byte("1:2")); err != nil {
+		t.Errorf("separator lost on reset: %v", err)
+	}
+	// Empty restores the default.
+	iv.SetSeparator("")
+	if err := iv.Set("1..2"); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestIntervalSeparatorFlag(t *testing.T) {
+	// Works as a struct field flag, set before parsing, with times.
+	var cfg struct {
+		When flags.TimeInterval `cmd:"when,,'when'"`
+	}
+	fs := flag.NewFlagSet("x", flag.ContinueOnError)
+	if err := flags.RegisterFlagsInStruct(fs, "cmd", &cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	cfg.When.SetSeparator(" to ")
+	if err := fs.Parse([]string{"-when", "2024-03-01 to 2024-03-05"}); err != nil {
+		t.Fatal(err)
+	}
+	if to, ok := cfg.When.To(); !ok || to.Day() != 6 {
+		t.Errorf("got %v", to)
+	}
+}
+
+func TestErrInvalidValue(t *testing.T) {
+	var b flags.IntBound
+	if err := b.Set("x"); !errors.Is(err, flags.ErrInvalidValue) {
+		t.Errorf("bound: %v", err)
+	}
+	var tb flags.TimeBound
+	if err := tb.Set("not a time"); !errors.Is(err, flags.ErrInvalidValue) {
+		t.Errorf("time bound: %v", err)
+	}
+	var num *strconv.NumError
+	var iv flags.IntInterval
+	err := iv.Set("1..x")
+	if !errors.Is(err, flags.ErrInvalidValue) || !errors.As(err, &num) {
+		t.Errorf("the cause should be wrapped too: %v", err)
+	}
+	for _, in := range []string{"", "..", "5..3", "1..x", "x", "^0", "^x", "^1..^2", "1...3"} {
+		if err := iv.Set(in); !errors.Is(err, flags.ErrInvalidValue) {
+			t.Errorf("%q: %v", in, err)
+		}
+	}
+	var ts flags.TimeInterval
+	if err := ts.Set("^1"); !errors.Is(err, flags.ErrInvalidValue) {
+		t.Errorf("^ on a time: %v", err)
+	}
+	var l flags.IntIntervals
+	for _, in := range []string{"", "1..2,", "1..2,x", ",", "1..2,5..3"} {
+		if err := l.Set(in); !errors.Is(err, flags.ErrInvalidValue) {
+			t.Errorf("%q: %v", in, err)
+		}
+	}
+	if err := iv.UnmarshalText([]byte("bad")); !errors.Is(err, flags.ErrInvalidValue) {
+		t.Errorf("unmarshal: %v", err)
+	}
+	if errors.Is(errors.New("other"), flags.ErrInvalidValue) {
+		t.Error("unexpected match")
+	}
+}
+
+func span(iv flags.IntInterval) string {
+	var from, to string
+	if v, ok := iv.From(); ok {
+		from = strconv.Itoa(v)
+	}
+	if v, ok := iv.To(); ok {
+		to = strconv.Itoa(v)
+	}
+	return "[" + from + "," + to + ")"
+}
+
+func TestIntervalRelativeToEnd(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		end  int
+		want string
+	}{
+		{"^1", 10, "[9,10)"},     // the last item
+		{"^3", 10, "[7,8)"},      // the third from last
+		{"^10", 10, "[0,1)"},     // the first of ten
+		{"^3..^1", 10, "[7,10)"}, // the last three
+		{"^3..^3", 10, "[7,8)"},  // just one
+		{"2..^2", 10, "[2,9)"},   // all but the first two and the last
+		{"^4..8", 10, "[6,9)"},   // mixed
+		{"^2..", 10, "[8,)"},     // open ended
+		{"..^2", 10, "[,9)"},     // open start
+		{"3..5", 10, "[3,6)"},    // nothing relative
+		{"5", 10, "[5,6)"},       // nothing relative
+		{"^1..^1", 1, "[0,1)"},   // single item
+		{"-3..^1", 10, "[-3,10)"},
+	} {
+		var iv flags.IntInterval
+		if err := iv.Set(tc.in); err != nil {
+			t.Errorf("%q: %v", tc.in, err)
+			continue
+		}
+		r, err := iv.Resolve(tc.end)
+		if err != nil {
+			t.Errorf("%q: %v", tc.in, err)
+			continue
+		}
+		if r.Relative() || r.String() != tc.in || iv.String() != tc.in {
+			t.Errorf("%q: resolved is relative or lost its text: %v %q", tc.in, r.Relative(), r.String())
+		}
+		if got := span(r); got != tc.want {
+			t.Errorf("%q: got %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestIntervalUnresolved(t *testing.T) {
+	var iv flags.IntInterval
+	if err := iv.Set("^3..^1"); err != nil {
+		t.Fatal(err)
+	}
+	if !iv.Relative() {
+		t.Error("expected a relative interval")
+	}
+	if iv.Contains(8) || iv.Overlaps(&iv) {
+		t.Error("an unresolved interval must not match anything")
+	}
+	r, err := iv.Resolve(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Contains(7) || !r.Contains(9) || r.Contains(6) || r.Contains(10) {
+		t.Errorf("bad resolved interval %v", r.String())
+	}
+	if !iv.Relative() {
+		t.Error("original was modified")
+	}
+	var unset flags.IntInterval
+	if r, err := unset.Resolve(3); err != nil || !r.IsDefault() {
+		t.Errorf("%v %v", r, err)
+	}
+}
+
+func TestIntervalResolveErrors(t *testing.T) {
+	for _, tc := range []struct {
+		in  string
+		end int
+	}{
+		{"^11", 10},   // before the first item
+		{"8..^5", 10}, // ends before it starts: [8, 6)
+		{"^2..3", 10}, // starts after it ends: [8, 4)
+	} {
+		var iv flags.IntInterval
+		if err := iv.Set(tc.in); err != nil {
+			t.Fatalf("%q: %v", tc.in, err)
+		}
+		if _, err := iv.Resolve(tc.end); !errors.Is(err, flags.ErrInvalidValue) {
+			t.Errorf("%q: %v", tc.in, err)
+		}
+	}
+}
+
+func TestStringCodec(t *testing.T) {
+	var iv flags.StringInterval
+	if err := iv.Set("b..d"); err != nil {
+		t.Fatal(err)
+	}
+	for v, want := range map[string]bool{"a": false, "b": true, "bz": true, "d": true, "d\x00": false, "da": false, "e": false} {
+		if got := iv.Contains(v); got != want {
+			t.Errorf("%q: got %v, want %v", v, got, want)
+		}
+	}
+	if err := iv.Set("d..b"); !errors.Is(err, flags.ErrInvalidValue) {
+		t.Errorf("reversed: %v", err)
+	}
+	if err := iv.Set("name"); err != nil || !iv.Contains("name") || iv.Contains("names") {
+		t.Errorf("single value: %v", err)
+	}
+	// Strings have no end to count back from: "^1" is a literal string.
+	if err := iv.Set("^1"); err != nil || iv.Relative() || !iv.Contains("^1") {
+		t.Errorf("literal ^: %v", err)
+	}
+}
+
+func TestStringBound(t *testing.T) {
+	var b flags.StringBound
+	if err := b.Set("m"); err != nil || !b.Contains("m") || !b.Before("n") || !b.After("l") {
+		t.Errorf("bound: %v", err)
+	}
+	if err := b.Set(""); !errors.Is(err, flags.ErrInvalidValue) {
+		t.Errorf("empty: %v", err)
+	}
+}
+
+func TestIntervals(t *testing.T) {
+	var l flags.IntIntervals
+	if !l.IsDefault() {
+		t.Error("expected unset")
+	}
+	if err := l.Set("1..3, 7 ,10..,^2"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := l.String(), "1..3,7,10..,^2"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := len(l.Items()), 4; got != want {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	if l.Contains(5) || !l.Contains(2) || !l.Contains(7) || l.Contains(8) || !l.Contains(10) || !l.Contains(1000) {
+		t.Error("wrong membership before resolving")
+	}
+}
+
+func TestIntervalsOverlapsResolve(t *testing.T) {
+	var l flags.IntIntervals
+	if err := l.Set("1..3,7,10..,^2"); err != nil {
+		t.Fatal(err)
+	}
+	var probe flags.IntInterval
+	_ = probe.Set("3..4")
+	if !l.Overlaps(&probe) {
+		t.Error("expected overlap")
+	}
+	_ = probe.Set("4..6")
+	if l.Overlaps(&probe) {
+		t.Error("unexpected overlap")
+	}
+	r, err := l.Resolve(8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Contains(6) || r.Contains(5) || !r.Contains(7) {
+		t.Error("resolved list does not contain 6 (^2 of 8)")
+	}
+	if _, err := l.Resolve(1); err == nil {
+		t.Error("expected an error resolving ^2 of 1 item")
+	}
+}
+
+func TestIntervalsSet(t *testing.T) {
+	var l flags.IntIntervals
+	if err := l.Set("5..6"); err != nil || l.String() != "5..6" {
+		t.Errorf("got %q: %v", l.String(), err)
+	}
+	// All-or-nothing.
+	if err := l.Set("1..2,bad"); err == nil || l.String() != "5..6" {
+		t.Errorf("failed Set changed the value: %q: %v", l.String(), err)
+	}
+	// Replaces rather than adds.
+	if err := l.Set("8"); err != nil || l.Contains(5) {
+		t.Errorf("Set should replace: %v", err)
+	}
+	l.SetSeparator(":")
+	if err := l.Set("1:3,5:6"); err != nil || l.Contains(4) || !l.Contains(3) {
+		t.Errorf("%v", err)
+	}
+	if err := l.UnmarshalText(nil); err != nil || !l.IsDefault() {
+		t.Errorf("reset: %v", err)
+	}
+	if err := l.UnmarshalText([]byte("2:4")); err != nil {
+		t.Errorf("separator lost: %v", err)
+	}
+}
+
+func TestIntervalsFlagAndYAML(t *testing.T) {
+	var cfg struct {
+		Pages flags.IntIntervals `yaml:"pages" cmd:"pages,,pages"`
+	}
+	fs := flag.NewFlagSet("x", flag.ContinueOnError)
+	if err := flags.RegisterFlagsInStruct(fs, "cmd", &cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.Parse([]string{"-pages", "1..2,^1"}); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Pages.String() != "1..2,^1" {
+		t.Errorf("got %q", cfg.Pages.String())
+	}
+	var y struct {
+		Pages flags.IntIntervals `yaml:"pages"`
+	}
+	if err := yaml.Unmarshal([]byte("pages: 1..3,9\n"), &y); err != nil || !y.Pages.Contains(9) {
+		t.Errorf("yaml: %v", err)
+	}
+	out, err := yaml.Marshal(&y)
+	if err != nil || !strings.Contains(string(out), "pages: 1..3,9") {
+		t.Errorf("yaml: %q %v", out, err)
 	}
 }
