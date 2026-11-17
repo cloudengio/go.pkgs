@@ -89,6 +89,9 @@ func (l *Logger) Close() error {
 // LoggingConfig.TempFile. It is empty if logging to stderr, stdout or a
 // writer specified via WithWriteCloser.
 func (l *Logger) Path() string {
+	if l == nil {
+		return ""
+	}
 	return l.path
 }
 
@@ -149,22 +152,28 @@ func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) Logg
 	if fs == nil {
 		return c
 	}
+	var sawFile, sawTempFile bool
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "log-level":
 			c.Level = lf.Level
 		case "log-file":
+			sawFile = true
 			c.File = lf.File
-			c.TempFile = ""
 		case "log-tempfile":
+			sawTempFile = true
 			c.TempFile = lf.TempFile
-			c.File = ""
 		case "log-format":
 			c.Format = lf.Format
 		case "log-source-code":
 			c.SourceCode = lf.SourceCode
 		}
 	})
+	if sawFile && !sawTempFile {
+		c.TempFile = ""
+	} else if sawTempFile && !sawFile {
+		c.File = ""
+	}
 	return c
 }
 
@@ -185,6 +194,9 @@ func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (
 		switch {
 		case c.TempFile != "":
 			dir, pattern := filepath.Split(c.TempFile)
+			if pattern == "" {
+				return nil, fmt.Errorf("invalid temporary log file pattern %q: missing filename pattern", c.TempFile)
+			}
 			if dir != "" {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					return nil, fmt.Errorf("failed to create directory for temporary log file %q: %w", c.TempFile, err)

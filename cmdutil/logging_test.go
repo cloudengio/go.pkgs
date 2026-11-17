@@ -208,6 +208,9 @@ func TestLoggingToStdout(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte("testing stdout logging")) {
 		t.Errorf("stdout logging failed, got: %q", output)
 	}
+	if p := logger.Path(); p != "" {
+		t.Errorf("expected empty path for stdout logger, got %q", p)
+	}
 }
 
 func TestWithFlagOverrides(t *testing.T) {
@@ -299,6 +302,17 @@ func TestWithFlagOverrides(t *testing.T) {
 		want := cmdutil.LoggingConfig{Level: 3, File: "all.log", Format: "json", SourceCode: true}
 		if got := base.WithFlagOverrides(fs, lf); got != want {
 			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("setting both file and tempfile preserves both for validation", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-file=a.log", "-log-tempfile=b-*.log"})
+		got := base.WithFlagOverrides(fs, lf)
+		if got.File != "a.log" || got.TempFile != "b-*.log" {
+			t.Fatalf("got %+v, want both File and TempFile set", got)
+		}
+		if _, err := got.NewLogger(); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Errorf("expected mutually exclusive error, got %v", err)
 		}
 	})
 }
@@ -414,6 +428,9 @@ func TestWithWriteCloserOverridesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating logger: %v", err)
 	}
+	if p := logger.Path(); p != "" {
+		t.Errorf("expected empty path when using WithWriteCloser, got %q", p)
+	}
 	logger.Info("to the writer")
 
 	if got := wc.String(); !strings.Contains(got, "to the writer") {
@@ -483,6 +500,9 @@ func TestNoUnderlyingWriteCloser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating logger: %v", err)
 	}
+	if p := logger.Path(); p != logFile {
+		t.Errorf("Path(): got %q, want %q", p, logFile)
+	}
 	logger.Info("to the file")
 	if err := logger.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -500,6 +520,9 @@ func TestNoUnderlyingWriteCloser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating logger: %v", err)
 	}
+	if p := stderrLogger.Path(); p != "" {
+		t.Errorf("expected empty path for stderr logger, got %q", p)
+	}
 	if err := stderrLogger.Close(); err != nil {
 		t.Errorf("Close on a stderr logger: %v", err)
 	}
@@ -507,7 +530,9 @@ func TestNoUnderlyingWriteCloser(t *testing.T) {
 
 func TestLoggingTempFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMPDIR", dir) // used by os.TempDir on unix.
+	t.Setenv("TMPDIR", dir) // unix
+	t.Setenv("TMP", dir)    // windows
+	t.Setenv("TEMP", dir)   // windows
 
 	for _, pattern := range []string{"app-*.log", filepath.Join(dir, "sub-*.log")} {
 		cfg := cmdutil.LoggingConfig{Level: 2, Format: "text", TempFile: pattern}
@@ -531,7 +556,9 @@ func TestLoggingTempFile(t *testing.T) {
 		if err := l1.Close(); err != nil {
 			t.Fatal(err)
 		}
-		l2.Close()
+		if err := l2.Close(); err != nil {
+			t.Fatal(err)
+		}
 		data, err := os.ReadFile(l1.Path())
 		if err != nil || !strings.Contains(string(data), "hello temp") {
 			t.Errorf("%v: %q: %v", pattern, data, err)
@@ -544,13 +571,19 @@ func TestLoggingTempFileErrors(t *testing.T) {
 	if _, err := cfg.NewLogger(); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
 		t.Errorf("unexpected error: %v", err)
 	}
+	cfg = cmdutil.LoggingConfig{TempFile: t.TempDir() + string(filepath.Separator)}
+	if _, err := cfg.NewLogger(); err == nil || !strings.Contains(err.Error(), "missing filename pattern") {
+		t.Errorf("expected error for trailing separator pattern, got: %v", err)
+	}
 	// A missing directory is created.
 	cfg = cmdutil.LoggingConfig{TempFile: filepath.Join(t.TempDir(), "missing", "b-*.log")}
 	l, err := cfg.NewLogger()
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Close()
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(l.Path()); err != nil {
 		t.Error(err)
 	}
@@ -575,6 +608,9 @@ func TestLoggingTempFileErrors(t *testing.T) {
 	var nl *cmdutil.Logger
 	if err := nl.Close(); err != nil {
 		t.Error(err)
+	}
+	if p := nl.Path(); p != "" {
+		t.Errorf("got %q", p)
 	}
 	if p := (&cmdutil.Logger{}).Path(); p != "" {
 		t.Errorf("got %q", p)
