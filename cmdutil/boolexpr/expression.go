@@ -22,7 +22,8 @@ import (
 type itemType int
 
 const (
-	orOp itemType = iota
+	invalidOp itemType = iota
+	orOp
 	andOp
 	notOp
 	leftBracket
@@ -32,6 +33,8 @@ const (
 
 func (it itemType) String() string {
 	switch it {
+	case invalidOp:
+		return "invalid"
 	case andOp:
 		return "&&"
 	case orOp:
@@ -203,36 +206,32 @@ type itemParser struct {
 	ops   []Operand
 }
 
-func (p *itemParser) parseOr() (evalNode, error) {
-	lhs, err := p.parseAnd()
+func (p *itemParser) parseBinary(op itemType, next func() (evalNode, error), combine func(evalNode, evalNode) evalNode) (evalNode, error) {
+	lhs, err := next()
 	if err != nil {
 		return nil, err
 	}
-	for p.pos < len(p.items) && p.items[p.pos].typ == orOp {
+	for p.pos < len(p.items) && p.items[p.pos].typ == op {
 		p.pos++
-		rhs, err := p.parseAnd()
+		rhs, err := next()
 		if err != nil {
 			return nil, err
 		}
-		lhs = &orNode{lhs: lhs, rhs: rhs}
+		lhs = combine(lhs, rhs)
 	}
 	return lhs, nil
 }
 
+func (p *itemParser) parseOr() (evalNode, error) {
+	return p.parseBinary(orOp, p.parseAnd, func(lhs, rhs evalNode) evalNode {
+		return &orNode{lhs: lhs, rhs: rhs}
+	})
+}
+
 func (p *itemParser) parseAnd() (evalNode, error) {
-	lhs, err := p.parseUnary()
-	if err != nil {
-		return nil, err
-	}
-	for p.pos < len(p.items) && p.items[p.pos].typ == andOp {
-		p.pos++
-		rhs, err := p.parseUnary()
-		if err != nil {
-			return nil, err
-		}
-		lhs = &andNode{lhs: lhs, rhs: rhs}
-	}
-	return lhs, nil
+	return p.parseBinary(andOp, p.parseUnary, func(lhs, rhs evalNode) evalNode {
+		return &andNode{lhs: lhs, rhs: rhs}
+	})
 }
 
 func (p *itemParser) parseUnary() (evalNode, error) {

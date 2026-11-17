@@ -260,6 +260,13 @@ func TestErrors(t *testing.T) {
 	if _, err := boolexpr.New(boolexpr.NewOperandItem(nil)); err == nil {
 		t.Errorf("expected error for nil operand")
 	}
+	var zeroItem boolexpr.Item
+	if _, err := boolexpr.New(zeroItem); err == nil {
+		t.Errorf("expected error for zero-value Item")
+	}
+	if zeroItem.String() == "||" {
+		t.Errorf("zero-value Item should not format as ||")
+	}
 }
 
 func TestPrecedenceAndMixedOperators(t *testing.T) {
