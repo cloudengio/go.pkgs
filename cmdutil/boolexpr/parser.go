@@ -18,8 +18,10 @@ type Parser struct {
 	ops map[string]func(name, value string) Operand
 }
 
-// RegisterOperand registers an operand factory under name. The factory must
-// tolerate an empty value when called by ListOperands for documentation.
+// RegisterOperand registers an operand factory under name. To be usable via
+// Parse, name should start with a letter or '_' and contain only letters,
+// digits, '-', or '_'. The factory must tolerate an empty value when called by
+// ListOperands for documentation.
 func (p *Parser) RegisterOperand(name string, factory func(name, value string) Operand) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -46,21 +48,35 @@ func NewParser() *Parser {
 	return &Parser{ops: make(map[string]func(name, value string) Operand)}
 }
 
-// ListOperands returns the list of registered operands in alphanumeric order.
-func (p *Parser) ListOperands() []Operand {
+type registeredOperand struct {
+	name string
+	fn   func(name, value string) Operand
+}
+
+func (p *Parser) snapshotOperands() []registeredOperand {
 	p.mu.RLock()
+	defer p.mu.RUnlock()
 	keys := make([]string, 0, len(p.ops))
 	for k := range p.ops {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	ops := make([]Operand, 0, len(keys))
+	registered := make([]registeredOperand, 0, len(keys))
 	for _, k := range keys {
 		if fn := p.ops[k]; fn != nil {
-			ops = append(ops, fn(k, ""))
+			registered = append(registered, registeredOperand{name: k, fn: fn})
 		}
 	}
-	p.mu.RUnlock()
+	return registered
+}
+
+// ListOperands returns the list of registered operands in alphanumeric order.
+func (p *Parser) ListOperands() []Operand {
+	registered := p.snapshotOperands()
+	ops := make([]Operand, 0, len(registered))
+	for _, entry := range registered {
+		ops = append(ops, entry.fn(entry.name, ""))
+	}
 	return ops
 }
 
@@ -120,15 +136,19 @@ func (tl tokenList) String() string {
 	var sb strings.Builder
 	for _, t := range tl {
 		if t.operator {
-			sb.WriteString(t.text + " ")
+			sb.WriteString(t.text)
+			sb.WriteByte(' ')
 			continue
 		}
 		if t.operandName {
-			sb.WriteString(t.text + "=")
+			sb.WriteString(t.text)
+			sb.WriteByte('=')
 			continue
 		}
 		if t.operandValue {
-			fmt.Fprintf(&sb, "'%v' ", t.text)
+			sb.WriteByte('\'')
+			sb.WriteString(t.text)
+			sb.WriteString("' ")
 		}
 	}
 	return strings.TrimSpace(sb.String())
@@ -137,7 +157,7 @@ func (tl tokenList) String() string {
 func (p *Parser) mergeOperandsAndValues(tl []token) ([]Item, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	var merged []Item
+	merged := make([]Item, 0, len(tl))
 	for i := 0; i < len(tl); i++ {
 		tok := tl[i]
 		if tok.operator {
@@ -185,9 +205,9 @@ func (t *tokenizer) runStateMachine(input string) (state, error) {
 		case start:
 			state, err = t.start(pos, r)
 		case operatorAnd:
-			state, err = t.operatorAnd(r)
+			state, err = t.matchOperator('&', "&&", r)
 		case operatorOr:
-			state, err = t.operatorOr(r)
+			state, err = t.matchOperator('|', "||", r)
 		case operandName:
 			state, err = t.operandName(pos, r)
 		case operandValue:
@@ -291,22 +311,12 @@ func (t *tokenizer) start(pos int, r rune) (state, error) {
 	return start, fmt.Errorf("unexpected character %q at position %d", r, pos)
 }
 
-func (t *tokenizer) operatorAnd(r rune) (state, error) {
-	if r == '&' {
-		t.appendOperator("&&", t.tokStart)
-		t.seen.Reset()
+func (t *tokenizer) matchOperator(want rune, op string, r rune) (state, error) {
+	if r == want {
+		t.appendOperator(op, t.tokStart)
 		return start, nil
 	}
-	return start, fmt.Errorf("'&' is not a valid operator at position %d, should be '&&'", t.tokStart)
-}
-
-func (t *tokenizer) operatorOr(r rune) (state, error) {
-	if r == '|' {
-		t.appendOperator("||", t.tokStart)
-		t.seen.Reset()
-		return start, nil
-	}
-	return start, fmt.Errorf("'|' is not a valid operator at position %d, should be '||'", t.tokStart)
+	return start, fmt.Errorf("%q is not a valid operator at position %d, should be '%s'", want, t.tokStart, op)
 }
 
 func (t *tokenizer) operandName(pos int, r rune) (state, error) {

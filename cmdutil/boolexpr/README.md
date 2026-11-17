@@ -144,8 +144,10 @@ parser before Parse is called.
 ```go
 func (p *Parser) RegisterOperand(name string, factory func(name, value string) Operand)
 ```
-RegisterOperand registers an operand factory under name. The factory must
-tolerate an empty value when called by ListOperands for documentation.
+RegisterOperand registers an operand factory under name. To be usable via
+Parse, name should start with a letter or '_' and contain only letters,
+digits, '-', or '_'. The factory must tolerate an empty value when called by
+ListOperands for documentation.
 
 
 ```go
