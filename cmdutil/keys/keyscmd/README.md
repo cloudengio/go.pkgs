@@ -283,13 +283,14 @@ such as raw bytes, hexadecimal, or base64 encoding.
 ### Constants
 ### SecretFormatRaw, SecretFormatHex, SecretFormatBase64
 ```go
-// SecretFormatRaw indicates that the secret is stored in raw byte format.
-SecretFormatRaw SecretFormat = iota
-// SecretFormatHex indicates that the secret is stored in hexadecimal format.
-SecretFormatHex
-// SecretFormatBase64 indicates that the secret is stored in base64.StdEncoding format.
-SecretFormatBase64
-
+const (
+	// SecretFormatRaw indicates that the secret is stored in raw byte format.
+	SecretFormatRaw SecretFormat = iota
+	// SecretFormatHex indicates that the secret is stored in hexadecimal format.
+	SecretFormatHex
+	// SecretFormatBase64 indicates that the secret is stored in base64.StdEncoding format.
+	SecretFormatBase64
+)
 ```
 
 

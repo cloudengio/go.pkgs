@@ -11,17 +11,28 @@ text without those packages depending on each other.
 ## Constants
 ### Byte, KB, MB, GB, TB, KiB, MiB, GiB, TiB
 ```go
-Byte ByteSize = 1
-KB ByteSize = 1_000
-MB = 1_000 * KB
-GB = 1_000 * MB
-TB = 1_000 * GB
-KiB ByteSize = 1_024
-MiB = 1_024 * KiB
-GiB = 1_024 * MiB
-TiB = 1_024 * GiB
+const (
+	Byte ByteSize = 1
 
+	KB ByteSize = 1_000
+	MB          = 1_000 * KB
+	GB          = 1_000 * MB
+	TB          = 1_000 * GB
+
+	KiB ByteSize = 1_024
+	MiB          = 1_024 * KiB
+	GiB          = 1_024 * MiB
+	TiB          = 1_024 * GiB
+)
 ```
+
+### TimeSpanFormats
+```go
+const TimeSpanFormats = `a date and time such as 2024-03-05T10:30:00Z, "2024-03-05 10:30" or 10:30 (today), ` +
+	`a date, month or year such as 2024-03-05, 2024-03 or 2024, ` +
+	`or a time relative to now such as now, today, yesterday, -7d, now-1h or "2w ago" (units: ns us ms s m h d w)`
+```
+TimeSpanFormats describes what Span accepts, for use in usage messages.
 
 
 
@@ -39,6 +50,16 @@ FlexTimeFormats = []string{
 FlexTimeFormats are the layouts that a FlexTime is decoded from, tried
 in this order. They are time.RFC3339, time.DateTime, time.TimeOnly and
 time.DateOnly.
+
+
+
+## Functions
+### Func ParseDuration
+```go
+func ParseDuration(s string) (time.Duration, error)
+```
+ParseDuration is like time.ParseDuration, with the addition of the units d
+(24 hours) and w (7 days). It does not accept a sign.
 
 
 
@@ -216,6 +237,63 @@ func (p *Permissions) UnmarshalText(text []byte) error
 ```
 UnmarshalText implements encoding.TextUnmarshaler, and with it the decoding
 used for both JSON strings and YAML scalars.
+
+
+
+
+### Type TimeParser
+```go
+type TimeParser struct {
+	// Location is the time zone of a value that does not give one, and the
+	// zone that days, months and years begin in. It defaults to time.Local.
+	Location *time.Location
+	// Now returns the current time, which relative values are relative to.
+	// It defaults to time.Now.
+	Now func() time.Time
+}
+```
+TimeParser parses the times and dates that a person writes on a command
+line. Unlike FlexTime, which is read from and written to configuration
+files and so is exact and unambiguous, it favours convenience: a value
+may be coarse, "2024-03" for a month, or relative, "-7d" for a week ago,
+and a value that gives no time zone is in Location rather than UTC.
+
+The zero value uses time.Local and time.Now.
+
+### Variables
+### DefaultTimeParser
+```go
+DefaultTimeParser TimeParser
+
+```
+DefaultTimeParser is used by the flags that parse times. Tests may replace
+it sequentially during setup to make relative values and zones repeatable;
+it must not be modified concurrently with flag parsing.
+
+
+
+### Methods
+
+```go
+func (p TimeParser) Parse(s string) (time.Time, error)
+```
+Parse returns the start of the span that s names, see Span.
+
+
+```go
+func (p TimeParser) Span(s string) (start, end time.Time, err error)
+```
+Span returns the span of time that s names, [start, end): a value names all
+of the time to its precision, so that the date 2024-03-05 is the whole of
+that day and the month 2024-03 the whole of that month, and a value to the
+second is that second. start is the lower edge and end the upper, exclusive,
+edge; a range of times uses the first of its beginning and the second of its
+end, so that "2024-03-01..2024-03-05" includes all of the fifth.
+
+A relative value is relative to the current time and is truncated to the
+second, except expressions anchored at today, yesterday or tomorrow, which
+preserve day-length spans (so "today+9h" spans 24 hours starting at 09:00).
+A day is 24 hours and a week seven of them, whatever the clock does.
 
 
 
