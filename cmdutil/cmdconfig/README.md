@@ -8,8 +8,7 @@ import cloudeng.io/cmdutil/cmdconfig
 ## Constants
 ### ConfigExtensionName
 ```go
-ConfigExtensionName = "config"
-
+const ConfigExtensionName = "config"
 ```
 ConfigExtensionName is the name of the extension returned by
 ConfigExtension, for use in the YAML template of a command tree:
@@ -234,10 +233,11 @@ FileType represents the type of configuration file: YAML, .env, or JSON.
 ### Constants
 ### FileTypeYAML, FileTypeEnv, FileTypeJSON
 ```go
-FileTypeYAML FileType = iota
-FileTypeEnv
-FileTypeJSON
-
+const (
+	FileTypeYAML FileType = iota
+	FileTypeEnv
+	FileTypeJSON
+)
 ```
 
 

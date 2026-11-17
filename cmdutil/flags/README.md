@@ -13,6 +13,15 @@ colocate flags with related data structures and to avoid large numbers of
 global variables as are often encountered with complex, multi-level command
 structures.
 
+## Constants
+### IntervalSeparator
+```go
+const IntervalSeparator = ".."
+```
+IntervalSeparator separates the two ends of an Interval.
+
+
+
 ## Functions
 ### Func AllSet
 ```go
@@ -145,6 +154,93 @@ where a default value should be used if the user does not provide one.
 
 
 ## Types
+### Type Bound
+```go
+type Bound[T any, C Codec[T]] struct {
+	// contains filtered or unexported fields
+}
+```
+Bound is a flag.Value for a single value of type T that is compared with
+others, such as --since or --max-size. It names a span, see Edge, and so a
+time or date can be asked about as a whole. The zero value is unset.
+
+A Bound is encoded to and from text, such as for JSON and YAML, as the text
+it was set from.
+
+### Methods
+
+```go
+func (b *Bound[T, C]) After(v T) bool
+```
+After returns true if the whole of the span that the bound names is after v,
+ie. if v is before its Lower edge. It is false if the bound is not set.
+
+
+```go
+func (b *Bound[T, C]) Before(v T) bool
+```
+Before returns true if the whole of the span that the bound names is before
+v, ie. if v is at or after its Upper edge. It is false if the bound is not
+set.
+
+
+```go
+func (b *Bound[T, C]) Contains(v T) bool
+```
+Contains returns true if v is within the span that the bound names. It is
+false if the bound is not set.
+
+
+```go
+func (b *Bound[T, C]) Get() any
+```
+Get implements flag.Getter, returning the lower edge.
+
+
+```go
+func (b *Bound[T, C]) IsDefault() bool
+```
+IsDefault returns true if the value has not been set.
+
+
+```go
+func (b *Bound[T, C]) Lower() T
+```
+Lower returns the first value that the bound names.
+
+
+```go
+func (b Bound[T, C]) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler.
+
+
+```go
+func (b *Bound[T, C]) Set(s string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (b *Bound[T, C]) String() string
+```
+String implements flag.Value, returning the value as it was set.
+
+
+```go
+func (b *Bound[T, C]) UnmarshalText(text []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler.
+
+
+```go
+func (b *Bound[T, C]) Upper() T
+```
+Upper returns the value just after the last that the bound names.
+
+
+
+
 ### Type ByteSize
 ```go
 type ByteSize struct {
@@ -198,6 +294,59 @@ String implements flag.Value. It returns the size as supplied, so that a
 default retains the units it was written in.
 
 
+
+
+### Type ByteSizeBound
+```go
+type ByteSizeBound = Bound[cmdtypes.ByteSize, ByteSizeCodec]
+```
+ByteSizeBound is a Bound of a number of bytes.
+
+
+### Type ByteSizeCodec
+```go
+type ByteSizeCodec struct{}
+```
+ByteSizeCodec is the Codec for cmdtypes.ByteSize, accepting the same
+notations as it.
+
+### Methods
+
+```go
+func (ByteSizeCodec) Compare(a, b cmdtypes.ByteSize) int
+```
+Compare implements Codec.
+
+
+```go
+func (ByteSizeCodec) Parse(s string, edge Edge) (cmdtypes.ByteSize, error)
+```
+Parse implements Codec.
+
+
+
+
+### Type ByteSizeInterval
+```go
+type ByteSizeInterval = Interval[cmdtypes.ByteSize, ByteSizeCodec]
+```
+ByteSizeInterval is an Interval of numbers of bytes.
+
+
+### Type Codec
+```go
+type Codec[T any] interface {
+	// Parse parses s, returning the edge of the span that it names.
+	Parse(s string, edge Edge) (T, error)
+	// Compare returns -1, 0 or +1 as a is before, equal to or after b.
+	Compare(a, b T) int
+}
+```
+Codec defines how a type is parsed and compared by Bound and Interval.
+It is a type parameter, rather than a value, so that a Bound or Interval
+has a usable zero value and so can be a field of a struct whose flags are
+registered by RegisterFlagsInStruct. Implementations are therefore empty
+struct types, such as TimeCodec.
 
 
 ### Type ColonRangeSpec
@@ -268,6 +417,65 @@ Set implements flag.Value.
 func (c *Commas) String() string
 ```
 String inplements flag.Value.
+
+
+
+
+### Type DurationBound
+```go
+type DurationBound = Bound[time.Duration, DurationCodec]
+```
+DurationBound is a Bound of a duration.
+
+
+### Type DurationCodec
+```go
+type DurationCodec struct{}
+```
+DurationCodec is the Codec for time.Duration, accepting the notations of
+cmdtypes.ParseDuration, with a leading '+' or '-' allowed.
+
+### Methods
+
+```go
+func (DurationCodec) Compare(a, b time.Duration) int
+```
+Compare implements Codec.
+
+
+```go
+func (DurationCodec) Parse(s string, edge Edge) (time.Duration, error)
+```
+Parse implements Codec.
+
+
+
+
+### Type DurationInterval
+```go
+type DurationInterval = Interval[time.Duration, DurationCodec]
+```
+DurationInterval is an Interval of durations.
+
+
+### Type Edge
+```go
+type Edge int
+```
+Edge says which end of the span that a value names is wanted. A value names
+all of the span to its precision, so the date 2024-03-05 is the whole
+of that day: its Lower edge is the start of the day and its Upper edge
+the start of the next. Values with no coarser precision, such as an int,
+have a span of one, so the Upper edge of 5 is 6.
+
+### Constants
+### Lower, Upper
+```go
+const (
+	Lower Edge = iota
+	Upper
+)
+```
 
 
 
@@ -361,6 +569,42 @@ Is implements errors.Is.
 
 
 
+### Type IntBound
+```go
+type IntBound = Bound[int, IntCodec]
+```
+IntBound is a Bound of an int.
+
+
+### Type IntCodec
+```go
+type IntCodec struct{}
+```
+IntCodec is the Codec for int.
+
+### Methods
+
+```go
+func (IntCodec) Compare(a, b int) int
+```
+Compare implements Codec.
+
+
+```go
+func (IntCodec) Parse(s string, edge Edge) (int, error)
+```
+Parse implements Codec.
+
+
+
+
+### Type IntInterval
+```go
+type IntInterval = Interval[int, IntCodec]
+```
+IntInterval is an Interval of ints.
+
+
 ### Type IntRangeSpec
 ```go
 type IntRangeSpec struct {
@@ -405,6 +649,96 @@ Set implements flag.Value.
 func (irs *IntRangeSpecs) String() string
 ```
 String implements flag.Value.
+
+
+
+
+### Type Interval
+```go
+type Interval[T any, C Codec[T]] struct {
+	// contains filtered or unexported fields
+}
+```
+Interval is a flag.Value for a range of values of type T, [From, To),
+that either end of which may be left open. The zero value is unset.
+
+It is written <from>..<to>, <from>.. or ..<to>, or as a single value:
+
+    a..b  : from the start of a to the end of b, so 2024-03-01..2024-03-05 includes all of the fifth
+    a..   : from the start of a onwards
+    ..b   : up to the end of b
+    a     : all of a, so 2024-03 is the month of March and 5 is exactly 5
+
+The separator is not one that any of the values that it is used with
+contain, unlike the '-' of RangeSpec which dates and negative numbers do.
+An Interval that is empty or ends before it starts is an error.
+
+An Interval is encoded to and from text, such as for JSON and YAML, as the
+text it was set from.
+
+### Methods
+
+```go
+func (iv *Interval[T, C]) Contains(v T) bool
+```
+Contains returns true if v is within the interval. It is false if the
+interval is not set.
+
+
+```go
+func (iv *Interval[T, C]) From() (T, bool)
+```
+From returns the start of the interval, and false if it is open.
+
+
+```go
+func (iv *Interval[T, C]) Get() any
+```
+Get implements flag.Getter, returning the interval itself.
+
+
+```go
+func (iv *Interval[T, C]) IsDefault() bool
+```
+IsDefault returns true if the value has not been set.
+
+
+```go
+func (iv Interval[T, C]) MarshalText() ([]byte, error)
+```
+MarshalText implements encoding.TextMarshaler.
+
+
+```go
+func (iv *Interval[T, C]) Overlaps(other *Interval[T, C]) bool
+```
+Overlaps returns true if the intervals have any value in common. It is false
+if either is not set.
+
+
+```go
+func (iv *Interval[T, C]) Set(s string) error
+```
+Set implements flag.Value.
+
+
+```go
+func (iv *Interval[T, C]) String() string
+```
+String implements flag.Value, returning the interval as it was set.
+
+
+```go
+func (iv *Interval[T, C]) To() (T, bool)
+```
+To returns the end of the interval, which is not within it, and false if it
+is open.
+
+
+```go
+func (iv *Interval[T, C]) UnmarshalText(text []byte) error
+```
+UnmarshalText implements encoding.TextUnmarshaler.
 
 
 
@@ -681,6 +1015,44 @@ func (tf *Time) Time() time.Time
 Time returns the time.Time represented by the flag.
 
 
+
+
+### Type TimeBound
+```go
+type TimeBound = Bound[time.Time, TimeCodec]
+```
+TimeBound is a Bound of a time, see TimeCodec.
+
+
+### Type TimeCodec
+```go
+type TimeCodec struct{}
+```
+TimeCodec is the Codec for time.Time, using cmdtypes.DefaultTimeParser: a
+date and time, a date, month or year, or a time relative to now such as -7d,
+see cmdtypes.TimeSpanFormats.
+
+### Methods
+
+```go
+func (TimeCodec) Compare(a, b time.Time) int
+```
+Compare implements Codec.
+
+
+```go
+func (TimeCodec) Parse(s string, edge Edge) (time.Time, error)
+```
+Parse implements Codec.
+
+
+
+
+### Type TimeInterval
+```go
+type TimeInterval = Interval[time.Time, TimeCodec]
+```
+TimeInterval is an Interval of times, see TimeCodec.
 
 
 

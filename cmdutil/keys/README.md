@@ -13,8 +13,7 @@ stores across API boundaries.
 ## Constants
 ### DefaultRedactionLimit
 ```go
-DefaultRedactionLimit = 6
-
+const DefaultRedactionLimit = 6
 ```
 
 ### DefaultRefreshInterval
@@ -23,8 +22,7 @@ DefaultRedactionLimit = 6
 // KeyStoreUpdater will refresh keys from the underlying KeyStore if
 // no interval is specified when calling ScheduleRefreshYAML or
 // ScheduleRefreshJSON.
-DefaultRefreshInterval = time.Minute
-
+const DefaultRefreshInterval = time.Minute
 ```
 
 

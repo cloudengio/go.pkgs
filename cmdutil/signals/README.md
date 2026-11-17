@@ -12,8 +12,7 @@ and contexts.
 ```go
 // ExitCode is the exit code passed to os.Exit when a subsequent signal is
 // received.
-ExitCode = 1
-
+const ExitCode = 1
 ```
 
 
