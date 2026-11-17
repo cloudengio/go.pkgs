@@ -5,7 +5,9 @@
 package flags
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -49,14 +51,33 @@ type Bound[T any, C Codec[T]] struct {
 	set          bool
 }
 
+type spanParser[T any] interface {
+	parseSpan(s string) (lower, upper T, err error)
+}
+
+type rangeParser[T any] interface {
+	parseRange(lhs, rhs string) (from, to T, err error)
+}
+
+func parseBound[T any, C Codec[T]](c C, s string) (T, T, error) {
+	if sp, ok := any(c).(spanParser[T]); ok {
+		return sp.parseSpan(s)
+	}
+	lower, err := c.Parse(s, Lower)
+	if err != nil {
+		return lower, lower, err
+	}
+	upper, err := c.Parse(s, Upper)
+	if err != nil {
+		return lower, lower, err
+	}
+	return lower, upper, nil
+}
+
 // Set implements flag.Value.
 func (b *Bound[T, C]) Set(s string) error {
 	var c C
-	lower, err := c.Parse(s, Lower)
-	if err != nil {
-		return err
-	}
-	upper, err := c.Parse(s, Upper)
+	lower, upper, err := parseBound(c, s)
 	if err != nil {
 		return err
 	}
@@ -144,29 +165,49 @@ type Interval[T any, C Codec[T]] struct {
 	set            bool
 }
 
-// Set implements flag.Value.
-func (iv *Interval[T, C]) Set(s string) error {
-	var c C
-	next := Interval[T, C]{text: s, set: true}
-	lhs, rhs, ranged := strings.Cut(s, IntervalSeparator)
-	if !ranged {
-		rhs = lhs
+func parseIntervalEndpoints[T any, C Codec[T]](c C, s, lhs, rhs string) (next Interval[T, C], err error) {
+	next = Interval[T, C]{text: s, set: true}
+	if rp, ok := any(c).(rangeParser[T]); ok && lhs != "" && rhs != "" {
+		next.from, next.to, err = rp.parseRange(lhs, rhs)
+		next.hasFrom, next.hasTo = true, true
+		return next, err
 	}
-	if lhs == "" && rhs == "" {
-		return fmt.Errorf("invalid interval %q: it has no values", s)
-	}
-	var err error
 	if lhs != "" {
 		if next.from, err = c.Parse(lhs, Lower); err != nil {
-			return fmt.Errorf("invalid interval %q: %w", s, err)
+			return next, err
 		}
 		next.hasFrom = true
 	}
 	if rhs != "" {
 		if next.to, err = c.Parse(rhs, Upper); err != nil {
-			return fmt.Errorf("invalid interval %q: %w", s, err)
+			return next, err
 		}
 		next.hasTo = true
+	}
+	return next, nil
+}
+
+// Set implements flag.Value.
+func (iv *Interval[T, C]) Set(s string) error {
+	var c C
+	lhs, rhs, ranged := strings.Cut(s, IntervalSeparator)
+	if !ranged {
+		if lhs == "" {
+			return fmt.Errorf("invalid interval %q: it has no values", s)
+		}
+		from, to, err := parseBound(c, lhs)
+		if err != nil {
+			return fmt.Errorf("invalid interval %q: %w", s, err)
+		}
+		*iv = Interval[T, C]{text: s, from: from, to: to, hasFrom: true, hasTo: true, set: true}
+		return nil
+	}
+	if lhs == "" && rhs == "" {
+		return fmt.Errorf("invalid interval %q: it has no values", s)
+	}
+	next, err := parseIntervalEndpoints(c, s, lhs, rhs)
+	if err != nil {
+		return fmt.Errorf("invalid interval %q: %w", s, err)
 	}
 	if next.hasFrom && next.hasTo && c.Compare(next.to, next.from) <= 0 {
 		return fmt.Errorf("invalid interval %q: it is empty or ends before it starts", s)
@@ -207,16 +248,16 @@ func (iv *Interval[T, C]) Contains(v T) bool {
 }
 
 // Overlaps returns true if the intervals have any value in common. It is
-// false if either is not set.
+// false if either is nil or not set.
 func (iv *Interval[T, C]) Overlaps(other *Interval[T, C]) bool {
 	var c C
-	if !iv.set || !other.set {
+	if iv == nil || other == nil || !iv.set || !other.set {
 		return false
 	}
-	before := func(a Interval[T, C], b *Interval[T, C]) bool { // a lies entirely before b
+	before := func(a, b *Interval[T, C]) bool { // a lies entirely before b
 		return a.hasTo && b.hasFrom && c.Compare(a.to, b.from) <= 0
 	}
-	return !before(*iv, other) && !before(*other, iv)
+	return !before(iv, other) && !before(other, iv)
 }
 
 // MarshalText implements encoding.TextMarshaler.
@@ -245,26 +286,88 @@ func (TimeCodec) Parse(s string, edge Edge) (time.Time, error) {
 	return start, err
 }
 
+func (TimeCodec) parseSpan(s string) (time.Time, time.Time, error) {
+	return cmdtypes.DefaultTimeParser.Span(s)
+}
+
+func (TimeCodec) parseRange(lhs, rhs string) (time.Time, time.Time, error) {
+	tp := cmdtypes.DefaultTimeParser
+	now := tp.Now
+	var fixed time.Time
+	var snapped bool
+	tp.Now = func() time.Time {
+		if !snapped {
+			if now != nil {
+				fixed = now()
+			} else {
+				fixed = time.Now()
+			}
+			snapped = true
+		}
+		return fixed
+	}
+	from, _, err := tp.Span(lhs)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	_, to, err := tp.Span(rhs)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return from, to, nil
+}
+
 // Compare implements Codec.
 func (TimeCodec) Compare(a, b time.Time) int { return a.Compare(b) }
+
+func nextEdge[T ~int | ~int64](v, maxVal T, edge Edge) (T, error) {
+	if edge == Upper {
+		if v == maxVal {
+			return 0, fmt.Errorf("value %v overflows upper bound", v)
+		}
+		return v + 1, nil
+	}
+	return v, nil
+}
+
+func spanFromPoint[T ~int | ~int64](v, maxVal T, err error) (T, T, error) {
+	if err != nil {
+		return 0, 0, err
+	}
+	upper, err := nextEdge(v, maxVal, Upper)
+	if err != nil {
+		return 0, 0, err
+	}
+	return v, upper, nil
+}
 
 // IntCodec is the Codec for int.
 type IntCodec struct{}
 
-// Parse implements Codec.
-func (IntCodec) Parse(s string, edge Edge) (int, error) {
+func parseIntValue(s string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil {
-		return 0, fmt.Errorf("invalid int %q", s)
-	}
-	if edge == Upper {
-		n++
+		return 0, fmt.Errorf("invalid int %q: %w", s, err)
 	}
 	return n, nil
 }
 
+// Parse implements Codec.
+func (IntCodec) Parse(s string, edge Edge) (int, error) {
+	n, err := parseIntValue(s)
+	if err != nil {
+		return 0, err
+	}
+	return nextEdge(n, math.MaxInt, edge)
+}
+
+func (IntCodec) parseSpan(s string) (int, int, error) {
+	n, err := parseIntValue(s)
+	return spanFromPoint(n, math.MaxInt, err)
+}
+
 // Compare implements Codec.
-func (IntCodec) Compare(a, b int) int { return cmpInt(int64(a), int64(b)) }
+func (IntCodec) Compare(a, b int) int { return cmp.Compare(a, b) }
 
 // ByteSizeCodec is the Codec for cmdtypes.ByteSize, accepting the same
 // notations as it.
@@ -273,48 +376,59 @@ type ByteSizeCodec struct{}
 // Parse implements Codec.
 func (ByteSizeCodec) Parse(s string, edge Edge) (cmdtypes.ByteSize, error) {
 	n, err := cmdtypes.ParseByteSize(s)
-	if edge == Upper {
-		n++
+	if err != nil {
+		return 0, err
 	}
-	return n, err
+	return nextEdge(n, cmdtypes.ByteSize(math.MaxInt64), edge)
+}
+
+func (ByteSizeCodec) parseSpan(s string) (cmdtypes.ByteSize, cmdtypes.ByteSize, error) {
+	n, err := cmdtypes.ParseByteSize(s)
+	return spanFromPoint(n, cmdtypes.ByteSize(math.MaxInt64), err)
 }
 
 // Compare implements Codec.
-func (ByteSizeCodec) Compare(a, b cmdtypes.ByteSize) int { return cmpInt(int64(a), int64(b)) }
+func (ByteSizeCodec) Compare(a, b cmdtypes.ByteSize) int { return cmp.Compare(a, b) }
 
 // DurationCodec is the Codec for time.Duration, accepting the notations of
 // cmdtypes.ParseDuration, with a leading '+' or '-' allowed.
 type DurationCodec struct{}
 
-// Parse implements Codec.
-func (DurationCodec) Parse(s string, edge Edge) (time.Duration, error) {
+func parseSignedDuration(s string) (time.Duration, error) {
 	t := strings.TrimSpace(s)
-	neg := strings.HasPrefix(t, "-")
-	d, err := cmdtypes.ParseDuration(strings.TrimLeft(t, "+-"))
+	neg := false
+	if rest, ok := strings.CutPrefix(t, "-"); ok {
+		neg = true
+		t = rest
+	} else if rest, ok := strings.CutPrefix(t, "+"); ok {
+		t = rest
+	}
+	d, err := cmdtypes.ParseDuration(t)
 	if err != nil {
 		return 0, err
 	}
 	if neg {
 		d = -d
 	}
-	if edge == Upper {
-		d++
-	}
 	return d, nil
 }
 
-// Compare implements Codec.
-func (DurationCodec) Compare(a, b time.Duration) int { return cmpInt(int64(a), int64(b)) }
-
-func cmpInt(a, b int64) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
+// Parse implements Codec.
+func (DurationCodec) Parse(s string, edge Edge) (time.Duration, error) {
+	d, err := parseSignedDuration(s)
+	if err != nil {
+		return 0, err
 	}
-	return 0
+	return nextEdge(d, time.Duration(math.MaxInt64), edge)
 }
+
+func (DurationCodec) parseSpan(s string) (time.Duration, time.Duration, error) {
+	d, err := parseSignedDuration(s)
+	return spanFromPoint(d, time.Duration(math.MaxInt64), err)
+}
+
+// Compare implements Codec.
+func (DurationCodec) Compare(a, b time.Duration) int { return cmp.Compare(a, b) }
 
 type (
 	// TimeBound is a Bound of a time, see TimeCodec.

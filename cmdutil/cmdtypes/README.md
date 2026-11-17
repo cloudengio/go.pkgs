@@ -267,7 +267,8 @@ DefaultTimeParser TimeParser
 
 ```
 DefaultTimeParser is used by the flags that parse times. Tests may replace
-it to make relative values and zones repeatable.
+it sequentially during setup to make relative values and zones repeatable;
+it must not be modified concurrently with flag parsing.
 
 
 
@@ -290,8 +291,9 @@ edge; a range of times uses the first of its beginning and the second of its
 end, so that "2024-03-01..2024-03-05" includes all of the fifth.
 
 A relative value is relative to the current time and is truncated to the
-second, except for today, yesterday and tomorrow which are days. A day is 24
-hours and a week seven of them, whatever the clock does.
+second, except expressions anchored at today, yesterday or tomorrow, which
+preserve day-length spans (so "today+9h" spans 24 hours starting at 09:00).
+A day is 24 hours and a week seven of them, whatever the clock does.
 
 
 

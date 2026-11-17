@@ -5,6 +5,7 @@
 package cmdtypes_test
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -76,12 +77,16 @@ func TestParseDuration(t *testing.T) {
 	for in, want := range map[string]time.Duration{
 		"90s": 90 * time.Second, "1h30m": 90 * time.Minute, "2d": 48 * time.Hour,
 		"1w": 7 * 24 * time.Hour, "1w2d3h": (9*24 + 3) * time.Hour, "1.5h": 90 * time.Minute, "10ms": 10 * time.Millisecond,
+		"100µs":                 100 * time.Microsecond,
+		"100μs":                 100 * time.Microsecond,
+		"105d1ns":               105*24*time.Hour + time.Nanosecond,
+		"9223372036854775807ns": time.Duration(math.MaxInt64),
 	} {
 		if got, err := cmdtypes.ParseDuration(in); err != nil || got != want {
 			t.Errorf("%q: got %v, %v, want %v", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "5", "h", "-1h", "1h 30m", "1y"} {
+	for _, in := range []string{"", "5", "h", "-1h", "1h 30m", "1y", ".5h", "1.", "1.h", "1h-2m", "20000w", "9223372036854775808ns", "99999999999999999999ns"} {
 		if _, err := cmdtypes.ParseDuration(in); err == nil {
 			t.Errorf("%q: expected an error", in)
 		}

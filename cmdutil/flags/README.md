@@ -713,7 +713,7 @@ MarshalText implements encoding.TextMarshaler.
 func (iv *Interval[T, C]) Overlaps(other *Interval[T, C]) bool
 ```
 Overlaps returns true if the intervals have any value in common. It is false
-if either is not set.
+if either is nil or not set.
 
 
 ```go

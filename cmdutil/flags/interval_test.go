@@ -7,6 +7,8 @@ package flags_test
 import (
 	"encoding/json"
 	"flag"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -147,7 +149,7 @@ func TestIntInterval(t *testing.T) {
 	}
 }
 
-func TestSizeAndDurationIntervals(t *testing.T) {
+func TestSizeIntervals(t *testing.T) {
 	var sz flags.ByteSizeInterval
 	if err := sz.Set("1KiB..1MiB"); err != nil {
 		t.Fatal(err)
@@ -155,12 +157,57 @@ func TestSizeAndDurationIntervals(t *testing.T) {
 	if !sz.Contains(cmdtypes.ByteSize(1024)) || !sz.Contains(cmdtypes.ByteSize(1<<20)) || sz.Contains(cmdtypes.ByteSize(1<<20+1)) || sz.Contains(1023) {
 		t.Error("unexpected size membership")
 	}
+}
+
+func TestDurationIntervals(t *testing.T) {
 	var du flags.DurationInterval
 	if err := du.Set("1h..2d"); err != nil {
 		t.Fatal(err)
 	}
 	if !du.Contains(90*time.Minute) || !du.Contains(48*time.Hour) || du.Contains(49*time.Hour) {
 		t.Error("unexpected duration membership")
+	}
+	if err := du.Set("-2h..-1h"); err != nil {
+		t.Fatal(err)
+	}
+	if !du.Contains(-90*time.Minute) || !du.Contains(-time.Hour) || du.Contains(0) {
+		t.Error("unexpected signed duration membership")
+	}
+	var db flags.DurationBound
+	if err := db.Set("+1.5h"); err != nil {
+		t.Fatal(err)
+	}
+	if !db.Contains(90*time.Minute) || db.Lower() != 90*time.Minute {
+		t.Error("unexpected duration bound")
+	}
+}
+
+func TestIntervalOverflowAndSigns(t *testing.T) {
+	for _, bad := range []string{"--1h", "+-1h", "---5m", "9223372036854775807ns"} {
+		var badDu flags.DurationInterval
+		if err := badDu.Set(bad); err == nil {
+			t.Errorf("%q: expected error", bad)
+		}
+		var badDB flags.DurationBound
+		if err := badDB.Set(bad); err == nil {
+			t.Errorf("%q: expected error for DurationBound", bad)
+		}
+	}
+	maxIntStr := strconv.Itoa(math.MaxInt)
+	for _, bad := range []string{maxIntStr, ".." + maxIntStr} {
+		var ii flags.IntInterval
+		if err := ii.Set(bad); err == nil {
+			t.Errorf("IntInterval.Set(%q): expected overflow error", bad)
+		}
+		var ib flags.IntBound
+		if err := ib.Set(maxIntStr); err == nil {
+			t.Errorf("IntBound.Set(%q): expected overflow error", maxIntStr)
+		}
+	}
+	maxInt64Str := strconv.FormatInt(math.MaxInt64, 10)
+	var sb flags.ByteSizeBound
+	if err := sb.Set(maxInt64Str); err == nil {
+		t.Errorf("ByteSizeBound.Set(%q): expected overflow error", maxInt64Str)
 	}
 }
 
@@ -217,6 +264,48 @@ func TestOverlaps(t *testing.T) {
 	}
 	if (&flags.IntInterval{}).Overlaps(parse("1..2")) || parse("1..2").Overlaps(&flags.IntInterval{}) {
 		t.Error("an unset interval overlaps nothing")
+	}
+	var nilIv *flags.IntInterval
+	if nilIv.Overlaps(parse("1..2")) || parse("1..2").Overlaps(nilIv) || nilIv.Overlaps(nil) {
+		t.Error("a nil interval overlaps nothing")
+	}
+}
+
+func TestAtomicRelativeClock(t *testing.T) {
+	loc := time.FixedZone("test", -7*3600)
+	orig := cmdtypes.DefaultTimeParser
+	t.Cleanup(func() { cmdtypes.DefaultTimeParser = orig })
+
+	calls := 0
+	// Advance across midnight between consecutive Now() calls.
+	cmdtypes.DefaultTimeParser = cmdtypes.TimeParser{
+		Location: loc,
+		Now: func() time.Time {
+			calls++
+			if calls == 1 {
+				return time.Date(2024, 3, 5, 23, 59, 59, 0, loc)
+			}
+			return time.Date(2024, 3, 6, 0, 0, 0, 0, loc)
+		},
+	}
+
+	var b flags.TimeBound
+	if err := b.Set("today"); err != nil {
+		t.Fatal(err)
+	}
+	if b.Upper().Sub(b.Lower()) != 24*time.Hour {
+		t.Fatalf("today bound spanned %v instead of 24h", b.Upper().Sub(b.Lower()))
+	}
+
+	calls = 0
+	var iv flags.TimeInterval
+	if err := iv.Set("now-1h..now"); err != nil {
+		t.Fatal(err)
+	}
+	from, _ := iv.From()
+	to, _ := iv.To()
+	if got := to.Sub(from); got != time.Hour+time.Second {
+		t.Fatalf("now-1h..now spanned %v, want %v", got, time.Hour+time.Second)
 	}
 }
 
@@ -284,5 +373,18 @@ func TestIntervalText(t *testing.T) {
 	var empty cfg
 	if err := yaml.Unmarshal([]byte("window: ''"), &empty); err != nil || !empty.Window.IsDefault() {
 		t.Errorf("%+v %v", empty, err)
+	}
+}
+
+func TestBoundTextReset(t *testing.T) {
+	type cfg struct {
+		Max flags.IntBound `yaml:"max" json:"max"`
+	}
+	var c cfg
+	if err := yaml.Unmarshal([]byte("max: 12\n"), &c); err != nil || c.Max.IsDefault() {
+		t.Fatalf("unexpected: %+v %v", c, err)
+	}
+	if err := yaml.Unmarshal([]byte("max: ''\n"), &c); err != nil || !c.Max.IsDefault() {
+		t.Fatalf("expected reset bound on empty text: %+v %v", c, err)
 	}
 }

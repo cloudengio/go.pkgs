@@ -6,8 +6,9 @@ package cmdtypes
 
 import (
 	"fmt"
+	"math"
+	"math/bits"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -29,7 +30,8 @@ type TimeParser struct {
 }
 
 // DefaultTimeParser is used by the flags that parse times. Tests may replace
-// it to make relative values and zones repeatable.
+// it sequentially during setup to make relative values and zones repeatable;
+// it must not be modified concurrently with flag parsing.
 var DefaultTimeParser TimeParser
 
 func (p TimeParser) location() *time.Location {
@@ -109,7 +111,8 @@ const TimeSpanFormats = `a date and time such as 2024-03-05T10:30:00Z, "2024-03-
 // so that "2024-03-01..2024-03-05" includes all of the fifth.
 //
 // A relative value is relative to the current time and is truncated to the
-// second, except for today, yesterday and tomorrow which are days.
+// second, except expressions anchored at today, yesterday or tomorrow, which
+// preserve day-length spans (so "today+9h" spans 24 hours starting at 09:00).
 // A day is 24 hours and a week seven of them, whatever the clock does.
 func (p TimeParser) Span(s string) (start, end time.Time, err error) {
 	s = strings.TrimSpace(s)
@@ -140,31 +143,95 @@ func (p TimeParser) Parse(s string) (time.Time, error) {
 	return start, err
 }
 
-var (
-	durationRE   = regexp.MustCompile(`^(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h|d|w))+$`)
-	durationPart = regexp.MustCompile(`(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h|d|w)`)
-	agoRE        = regexp.MustCompile(`^(\S+)\s+ago$`)
-)
+var agoRE = regexp.MustCompile(`^(\S+)\s+ago$`)
 
 var durationUnits = map[string]time.Duration{
-	"ns": time.Nanosecond, "us": time.Microsecond, "µs": time.Microsecond,
+	"ns": time.Nanosecond, "us": time.Microsecond, "µs": time.Microsecond, "μs": time.Microsecond,
 	"ms": time.Millisecond, "s": time.Second, "m": time.Minute, "h": time.Hour,
 	"d": 24 * time.Hour, "w": 7 * 24 * time.Hour,
+}
+
+func scanDigits(s string, i int, v, scale uint64, isFrac bool) (next int, nv, nscale uint64, count int) {
+	const maxVal = uint64(math.MaxInt64)
+	for ; i < len(s) && s[i] >= '0' && s[i] <= '9'; i++ {
+		count++
+		d := uint64(s[i] - '0')
+		if isFrac {
+			if scale <= maxVal/10 && v <= maxVal/10 {
+				v = v*10 + d
+				scale *= 10
+			}
+			continue
+		}
+		if v > (maxVal-d)/10 {
+			return i, 0, 0, -1
+		}
+		v = v*10 + d
+	}
+	return i, v, scale, count
+}
+
+func parseDurationComponent(s string, i int) (part uint64, next int, err error) {
+	const maxVal = uint64(math.MaxInt64)
+	i, intPart, _, nInt := scanDigits(s, i, 0, 1, false)
+	if nInt < 0 {
+		return 0, 0, fmt.Errorf("invalid duration %q: overflow", s)
+	}
+	if nInt == 0 {
+		return 0, 0, fmt.Errorf("invalid duration %q: use numbers with the units ns us ms s m h d w, such as 1h30m or 2w", s)
+	}
+	var fracPart uint64
+	scale := uint64(1)
+	if i < len(s) && s[i] == '.' {
+		i++
+		var nFrac int
+		i, fracPart, scale, nFrac = scanDigits(s, i, 0, 1, true)
+		if nFrac <= 0 {
+			return 0, 0, fmt.Errorf("invalid duration %q: use numbers with the units ns us ms s m h d w, such as 1h30m or 2w", s)
+		}
+	}
+	uStart := i
+	for i < len(s) && (s[i] < '0' || s[i] > '9') {
+		i++
+	}
+	unitDur, ok := durationUnits[s[uStart:i]]
+	if !ok {
+		return 0, 0, fmt.Errorf("invalid duration %q: use numbers with the units ns us ms s m h d w, such as 1h30m or 2w", s)
+	}
+	u := uint64(unitDur)
+	if intPart > maxVal/u {
+		return 0, 0, fmt.Errorf("invalid duration %q: overflow", s)
+	}
+	part = intPart * u
+	if fracPart > 0 {
+		hi, lo := bits.Mul64(fracPart, u)
+		q, _ := bits.Div64(hi, lo, scale)
+		if q > maxVal-part {
+			return 0, 0, fmt.Errorf("invalid duration %q: overflow", s)
+		}
+		part += q
+	}
+	return part, i, nil
 }
 
 // ParseDuration is like time.ParseDuration, with the addition of the units d
 // (24 hours) and w (7 days). It does not accept a sign.
 func ParseDuration(s string) (time.Duration, error) {
-	if !durationRE.MatchString(s) {
+	if s == "" {
 		return 0, fmt.Errorf("invalid duration %q: use numbers with the units ns us ms s m h d w, such as 1h30m or 2w", s)
 	}
-	var total float64
-	for _, m := range durationPart.FindAllStringSubmatch(s, -1) {
-		n, err := strconv.ParseFloat(m[1], 64)
+	const maxVal = uint64(math.MaxInt64)
+	var total uint64
+	for i := 0; i < len(s); {
+		part, next, err := parseDurationComponent(s, i)
 		if err != nil {
-			return 0, fmt.Errorf("invalid duration %q: %w", s, err)
+			return 0, err
 		}
-		total += n * float64(durationUnits[m[2]])
+		if part > maxVal-total {
+			return 0, fmt.Errorf("invalid duration %q: overflow", s)
+		}
+		total += part
+		i = next
 	}
 	return time.Duration(total), nil
 }
