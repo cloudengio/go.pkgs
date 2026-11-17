@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 )
 
 // IsExplicitlySet returns true if the named flag was explicitly provided on
@@ -32,6 +33,7 @@ func IsExplicitlySet(fs *flag.FlagSet, name string) bool {
 type LoggingFlags struct {
 	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
 	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr, if set to - logs are written to stdout'"`
+	TempFile   string `subcmd:"log-tempfile,,'create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with log-file'"`
 	Format     string `subcmd:"log-format,json,'log format: text or json'"`
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }
@@ -39,7 +41,8 @@ type LoggingFlags struct {
 // LoggingConfig represents a logging configuration.
 type LoggingConfig struct {
 	Level      int    `yaml:"level" doc:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
-	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr."`
+	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr, if set to - logs are written to stdout."`
+	TempFile   string `yaml:"temp_file" doc:"create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with file."`
 	Format     string `yaml:"format" doc:"log format: text or json"`
 	SourceCode bool   `yaml:"source_code" doc:"include source code file and line number in logs"`
 }
@@ -70,11 +73,23 @@ func (l leveler) Level() slog.Level {
 // if one is specified.
 type Logger struct {
 	*slog.Logger
-	f io.Closer
+	f    io.Closer
+	path string
 }
 
+// Close closes the log file, if any.
 func (l *Logger) Close() error {
+	if l == nil || l.f == nil {
+		return nil
+	}
 	return l.f.Close()
+}
+
+// Path returns the name of the log file, including the generated name for
+// LoggingConfig.TempFile. It is empty if logging to stderr, stdout or a
+// writer specified via WithWriteCloser.
+func (l *Logger) Path() string {
+	return l.path
 }
 
 // LogBuildInfo logs build information using the logger.
@@ -88,10 +103,12 @@ func (noopCloser) Close() error {
 	return nil
 }
 
+// Leveler returns the slog.Leveler for the configured level.
 func (c LoggingConfig) Leveler() slog.Leveler {
 	return leveler{level: c.Level}
 }
 
+// Options returns the slog.HandlerOptions for the configuration.
 func (c LoggingConfig) Options() *slog.HandlerOptions {
 	return &slog.HandlerOptions{
 		AddSource: c.SourceCode,
@@ -105,8 +122,8 @@ type LoggingOption func(*loggingOptions)
 
 // WithWriteCloser sets the io.Writer for the slog.Logger to use and the Closer
 // to return. It is intended to allow for setting a writer that supports log
-// rotation or other logging destinations. If set, the File field of the
-// LoggingConfig is ignored and the WriteCloser passed here is used instead.
+// rotation or other logging destinations. If set, the File and TempFile fields of the
+// LoggingConfig are ignored and the WriteCloser passed here is used instead.
 func WithWriteCloser(wr io.WriteCloser) LoggingOption {
 	return func(o *loggingOptions) {
 		o.wr = wr
@@ -138,6 +155,10 @@ func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) Logg
 			c.Level = lf.Level
 		case "log-file":
 			c.File = lf.File
+			c.TempFile = ""
+		case "log-tempfile":
+			c.TempFile = lf.TempFile
+			c.File = ""
 		case "log-format":
 			c.Format = lf.Format
 		case "log-source-code":
@@ -151,12 +172,33 @@ func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (
 	var handler slog.Handler
 	var closer io.Closer
 	var out io.Writer
+	var path string
+	switch c.Format {
+	case "json", "text", "":
+	default:
+		return nil, fmt.Errorf("unknown log format %q", c.Format)
+	}
 	if lo.wr == nil {
-		switch c.File {
-		case "":
+		if c.File != "" && c.TempFile != "" {
+			return nil, fmt.Errorf("log file %q and temporary log file %q are mutually exclusive", c.File, c.TempFile)
+		}
+		switch {
+		case c.TempFile != "":
+			dir, pattern := filepath.Split(c.TempFile)
+			if dir != "" {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return nil, fmt.Errorf("failed to create directory for temporary log file %q: %w", c.TempFile, err)
+				}
+			}
+			f, err := os.CreateTemp(dir, pattern)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create temporary log file %q: %w", c.TempFile, err)
+			}
+			closer, out, path = f, f, f.Name()
+		case c.File == "":
 			out = os.Stderr
 			closer = &noopCloser{}
-		case "-":
+		case c.File == "-":
 			out = os.Stdout
 			closer = &noopCloser{}
 		default:
@@ -164,8 +206,7 @@ func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (
 			if err != nil {
 				return nil, fmt.Errorf("failed to open log file %q: %w", c.File, err)
 			}
-			closer = f
-			out = f
+			closer, out, path = f, f, c.File
 		}
 	} else {
 		out = lo.wr
@@ -176,10 +217,8 @@ func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (
 		handler = slog.NewJSONHandler(out, opts)
 	case "text", "":
 		handler = slog.NewTextHandler(out, opts)
-	default:
-		return nil, fmt.Errorf("unknown log format %q", c.Format)
 	}
-	return &Logger{Logger: slog.New(handler), f: closer}, nil
+	return &Logger{Logger: slog.New(handler), f: closer, path: path}, nil
 }
 
 // NewLoggerOpts creates a new logger based on the configuration and custom

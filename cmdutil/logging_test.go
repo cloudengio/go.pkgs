@@ -224,6 +224,7 @@ func TestWithFlagOverrides(t *testing.T) {
 		var lf cmdutil.LoggingFlags
 		fs.IntVar(&lf.Level, "log-level", 0, "")
 		fs.StringVar(&lf.File, "log-file", "", "")
+		fs.StringVar(&lf.TempFile, "log-tempfile", "", "")
 		fs.StringVar(&lf.Format, "log-format", "json", "")
 		fs.BoolVar(&lf.SourceCode, "log-source-code", false, "")
 		if err := fs.Parse(args); err != nil {
@@ -253,6 +254,24 @@ func TestWithFlagOverrides(t *testing.T) {
 		want := base
 		want.File = "override.log"
 		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("tempfile replaces file", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-tempfile=x-*.log"})
+		want := base
+		want.File, want.TempFile = "", "x-*.log"
+		if got := base.WithFlagOverrides(fs, lf); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("file replaces tempfile", func(t *testing.T) {
+		fs, lf := newFS(t, []string{"-log-file=f.log"})
+		cfg := cmdutil.LoggingConfig{TempFile: "x-*.log"}
+		want := cmdutil.LoggingConfig{File: "f.log"}
+		if got := cfg.WithFlagOverrides(fs, lf); got != want {
 			t.Errorf("got %+v, want %+v", got, want)
 		}
 	})
@@ -483,5 +502,81 @@ func TestNoUnderlyingWriteCloser(t *testing.T) {
 	}
 	if err := stderrLogger.Close(); err != nil {
 		t.Errorf("Close on a stderr logger: %v", err)
+	}
+}
+
+func TestLoggingTempFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir) // used by os.TempDir on unix.
+
+	for _, pattern := range []string{"app-*.log", filepath.Join(dir, "sub-*.log")} {
+		cfg := cmdutil.LoggingConfig{Level: 2, Format: "text", TempFile: pattern}
+		l1, err := cfg.NewLogger()
+		if err != nil {
+			t.Fatal(err)
+		}
+		l2, err := cfg.NewLogger()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l1.Path() == "" || l1.Path() == l2.Path() {
+			t.Errorf("%v: paths not unique: %q %q", pattern, l1.Path(), l2.Path())
+		}
+		got, _ := filepath.EvalSymlinks(filepath.Dir(l1.Path()))
+		want, _ := filepath.EvalSymlinks(dir)
+		if got != want {
+			t.Errorf("%v: got %v, want %v", pattern, got, want)
+		}
+		l1.Info("hello temp")
+		if err := l1.Close(); err != nil {
+			t.Fatal(err)
+		}
+		l2.Close()
+		data, err := os.ReadFile(l1.Path())
+		if err != nil || !strings.Contains(string(data), "hello temp") {
+			t.Errorf("%v: %q: %v", pattern, data, err)
+		}
+	}
+}
+
+func TestLoggingTempFileErrors(t *testing.T) {
+	cfg := cmdutil.LoggingConfig{File: "a.log", TempFile: "b-*.log"}
+	if _, err := cfg.NewLogger(); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("unexpected error: %v", err)
+	}
+	// A missing directory is created.
+	cfg = cmdutil.LoggingConfig{TempFile: filepath.Join(t.TempDir(), "missing", "b-*.log")}
+	l, err := cfg.NewLogger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	if _, err := os.Stat(l.Path()); err != nil {
+		t.Error(err)
+	}
+	// But not if it can't be, eg. its parent is a file.
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg = cmdutil.LoggingConfig{TempFile: filepath.Join(file, "sub", "b-*.log")}
+	if _, err := cfg.NewLogger(); err == nil {
+		t.Error("expected an error when the directory cannot be created")
+	}
+	// A failed logger must not leave a temp file behind.
+	dir := t.TempDir()
+	cfg = cmdutil.LoggingConfig{TempFile: filepath.Join(dir, "b-*.log"), Format: "bad"}
+	if _, err := cfg.NewLogger(); err == nil {
+		t.Error("expected an error for a bad format")
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("bad format left %d file(s)", len(entries))
+	}
+	var nl *cmdutil.Logger
+	if err := nl.Close(); err != nil {
+		t.Error(err)
+	}
+	if p := (&cmdutil.Logger{}).Path(); p != "" {
+		t.Errorf("got %q", p)
 	}
 }
