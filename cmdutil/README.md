@@ -224,6 +224,7 @@ is specified.
 ```go
 func (l *Logger) Close() error
 ```
+Close closes the log file, if any.
 
 
 ```go
@@ -232,13 +233,22 @@ func (l *Logger) LogBuildInfo()
 LogBuildInfo logs build information using the logger.
 
 
+```go
+func (l *Logger) Path() string
+```
+Path returns the name of the log file, including the generated name for
+LoggingConfig.TempFile. It is empty if logging to stderr, stdout or a writer
+specified via WithWriteCloser.
+
+
 
 
 ### Type LoggingConfig
 ```go
 type LoggingConfig struct {
 	Level      int    `yaml:"level" doc:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
-	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr."`
+	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr, if set to - logs are written to stdout."`
+	TempFile   string `yaml:"temp_file" doc:"create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with file."`
 	Format     string `yaml:"format" doc:"log format: text or json"`
 	SourceCode bool   `yaml:"source_code" doc:"include source code file and line number in logs"`
 }
@@ -250,6 +260,7 @@ LoggingConfig represents a logging configuration.
 ```go
 func (c LoggingConfig) Leveler() slog.Leveler
 ```
+Leveler returns the slog.Leveler for the configured level.
 
 
 ```go
@@ -274,6 +285,7 @@ handler options.
 ```go
 func (c LoggingConfig) Options() *slog.HandlerOptions
 ```
+Options returns the slog.HandlerOptions for the configuration.
 
 
 ```go
@@ -290,6 +302,7 @@ explicitly set flags in the provided FlagSet.
 type LoggingFlags struct {
 	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
 	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr, if set to - logs are written to stdout'"`
+	TempFile   string `subcmd:"log-tempfile,,'create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with log-file'"`
 	Format     string `subcmd:"log-format,json,'log format: text or json'"`
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }
@@ -319,9 +332,10 @@ slog.HandlerOptions provided by the LoggingConfig.
 func WithWriteCloser(wr io.WriteCloser) LoggingOption
 ```
 WithWriteCloser sets the io.Writer for the slog.Logger to use and the Closer
-to return. It is intended to allow for setting a writer that supports
-log rotation or other logging destinations. If set, the File field of the
-LoggingConfig is ignored and the WriteCloser passed here is used instead.
+to return. It is intended to allow for setting a writer that supports log
+rotation or other logging destinations. If set, the File and TempFile fields
+of the LoggingConfig are ignored and the WriteCloser passed here is used
+instead.
 
 
 
