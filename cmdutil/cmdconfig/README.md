@@ -23,9 +23,10 @@ ConfigExtension, for use in the YAML template of a command tree:
 ```go
 func ConfigExtension[T any](cc ConfigCommands[T]) subcmd.Extension
 ```
-ConfigExtension returns an Extension that adds the 'config show' and 'config
-describe' commands, implemented by cc, to a command tree. It is used with
-ConfigHook, which makes the configuration available to Show.
+ConfigExtension returns an Extension that adds the 'config show',
+'config describe', and (when cc.Editor is non-nil) 'config edit' commands,
+implemented by cc, to a command tree. It is used with ConfigHook, which
+makes the configuration available to Show.
 
 ### Func LoadFiles
 ```go
@@ -152,11 +153,17 @@ type ConfigCommands[T any] struct {
 	Describers []func(io.Writer) error
 	// Output is where the output is written, os.Stdout if nil.
 	Output io.Writer
+	// Editor optionally implements the Edit command. When non-nil,
+	// ConfigExtension exposes a 'config edit' subcommand wired to Edit.
+	Editor subcmd.Runner
+	// EditFlags optionally provides the flag struct for the 'config edit'
+	// subcommand; defaults to &struct{}{} when nil.
+	EditFlags any
 }
 ```
-ConfigCommands implements commands to show, and to document, the YAML
-configuration of type T. The methods are subcmd.Runners; see ConfigExtension
-for adding them to a command set.
+ConfigCommands implements commands to show, document, and optionally
+edit the YAML configuration of type T. The methods are subcmd.Runners;
+see ConfigExtension for adding them to a command set.
 
 ### Methods
 
@@ -166,6 +173,13 @@ func (c ConfigCommands[T]) Describe(_ context.Context, _ any, _ []string) error
 Describe writes the documentation for the configuration type T, from its
 'doc' struct tags, see structdoc.Describe, followed by whatever Describers
 write.
+
+
+```go
+func (c ConfigCommands[T]) Edit(ctx context.Context, flagValues any, args []string) error
+```
+Edit invokes Editor with ctx, flagValues, and args. It returns an error if
+Editor is nil.
 
 
 ```go

@@ -23,14 +23,43 @@ const configExtensionYAML = `
       summary: describe the configuration options.
 `
 
-// ConfigExtension returns an Extension that adds the 'config show' and
-// 'config describe' commands, implemented by cc, to a command tree. It is
-// used with ConfigHook, which makes the configuration available to Show.
+const configExtensionEditYAML = `
+- name: config
+  summary: show, document, or edit the configuration.
+  commands:
+    - name: show
+      summary: show the configuration, and the files it was read from.
+    - name: describe
+      summary: describe the configuration options.
+    - name: edit
+      summary: edit the configuration.
+      arguments:
+        - ...
+`
+
+// ConfigExtension returns an Extension that adds the 'config show',
+// 'config describe', and (when cc.Editor is non-nil) 'config edit' commands,
+// implemented by cc, to a command tree. It is used with ConfigHook, which makes
+// the configuration available to Show.
 func ConfigExtension[T any](cc ConfigCommands[T]) subcmd.Extension {
-	return subcmd.NewExtension(ConfigExtensionName, configExtensionYAML, func(cmdSet *subcmd.CommandSetYAML) error {
+	spec := configExtensionYAML
+	if cc.Editor != nil {
+		spec = configExtensionEditYAML
+	}
+	return subcmd.NewExtension(ConfigExtensionName, spec, func(cmdSet *subcmd.CommandSetYAML) error {
 		if err := cmdSet.Set("config", "show").Runner(cc.Show, &struct{}{}); err != nil {
 			return err
 		}
-		return cmdSet.Set("config", "describe").Runner(cc.Describe, &struct{}{})
+		if err := cmdSet.Set("config", "describe").Runner(cc.Describe, &struct{}{}); err != nil {
+			return err
+		}
+		if cc.Editor == nil {
+			return nil
+		}
+		editFlags := cc.EditFlags
+		if editFlags == nil {
+			editFlags = &struct{}{}
+		}
+		return cmdSet.Set("config", "edit").Runner(cc.Edit, editFlags)
 	})
 }

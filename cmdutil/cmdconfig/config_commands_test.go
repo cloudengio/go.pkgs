@@ -75,3 +75,24 @@ func TestConfigCommandsDescribe(t *testing.T) {
 		t.Errorf("the extra documentation should follow: %q", got)
 	}
 }
+
+func TestConfigCommandsEdit(t *testing.T) {
+	var cc cmdconfig.ConfigCommands[showConfig]
+	if err := cc.Edit(context.Background(), nil, nil); err == nil {
+		t.Error("expected an error when Editor is nil")
+	}
+
+	var gotArgs []string
+	var gotFlag any
+	cc.Editor = func(_ context.Context, flagValues any, args []string) error {
+		gotFlag = flagValues
+		gotArgs = args
+		return nil
+	}
+	if err := cc.Edit(context.Background(), "flag", []string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotFlag != "flag" || len(gotArgs) != 2 || gotArgs[0] != "a" || gotArgs[1] != "b" {
+		t.Errorf("unexpected forwarding: flag=%v args=%v", gotFlag, gotArgs)
+	}
+}
