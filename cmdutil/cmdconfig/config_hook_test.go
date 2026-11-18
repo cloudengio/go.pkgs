@@ -211,4 +211,60 @@ commands:
 	if !strings.Contains(out.String(), "tool options") {
 		t.Errorf("got %q", out.String())
 	}
+	if err := cmdSet.DispatchWithArgs(ctx, "tool", "config", "edit"); err == nil {
+		t.Errorf("expected config edit to be omitted when Editor is nil")
+	}
+}
+
+func TestConfigExtensionEdit(t *testing.T) {
+	const spec = `name: tool
+summary: a tool
+commands:
+  {{range subcmdExtension "config"}}{{.}}
+  {{end}}
+`
+	type editFlags struct {
+		Force bool `subcmd:"force,false,force edit"`
+	}
+
+	t.Run("default flags", func(t *testing.T) {
+		var gotArgs []string
+		cc := cmdconfig.ConfigCommands[hookConfig]{
+			Editor: func(_ context.Context, _ any, args []string) error {
+				gotArgs = args
+				return nil
+			},
+		}
+		cmdSet := subcmd.MustFromYAMLTemplate(spec, cmdconfig.ConfigExtension(cc))
+		cmdSet.MustAddExtensions()
+
+		if err := cmdSet.DispatchWithArgs(context.Background(), "tool", "config", "edit", "a.yaml", "b.yaml"); err != nil {
+			t.Fatal(err)
+		}
+		if len(gotArgs) != 2 || gotArgs[0] != "a.yaml" || gotArgs[1] != "b.yaml" {
+			t.Errorf("got args %v, want [a.yaml b.yaml]", gotArgs)
+		}
+	})
+
+	t.Run("custom flags", func(t *testing.T) {
+		var gotForce bool
+		var gotArgs []string
+		cc := cmdconfig.ConfigCommands[hookConfig]{
+			EditFlags: &editFlags{},
+			Editor: func(_ context.Context, fv any, args []string) error {
+				gotForce = fv.(*editFlags).Force
+				gotArgs = args
+				return nil
+			},
+		}
+		cmdSet := subcmd.MustFromYAMLTemplate(spec, cmdconfig.ConfigExtension(cc))
+		cmdSet.MustAddExtensions()
+
+		if err := cmdSet.DispatchWithArgs(context.Background(), "tool", "config", "edit", "--force", "cfg.yaml"); err != nil {
+			t.Fatal(err)
+		}
+		if !gotForce || len(gotArgs) != 1 || gotArgs[0] != "cfg.yaml" {
+			t.Errorf("got force=%v args=%v, want force=true args=[cfg.yaml]", gotForce, gotArgs)
+		}
+	})
 }

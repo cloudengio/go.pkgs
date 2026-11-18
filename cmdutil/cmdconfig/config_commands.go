@@ -12,11 +12,12 @@ import (
 
 	"cloudeng.io/cmdutil"
 	"cloudeng.io/cmdutil/structdoc"
+	"cloudeng.io/cmdutil/subcmd"
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigCommands implements commands to show, and to document, the YAML
-// configuration of type T. The methods are subcmd.Runners; see
+// ConfigCommands implements commands to show, document, and optionally edit the
+// YAML configuration of type T. The methods are subcmd.Runners; see
 // ConfigExtension for adding them to a command set.
 type ConfigCommands[T any] struct {
 	// Summary is written at the top of the output of Describe.
@@ -26,6 +27,12 @@ type ConfigCommands[T any] struct {
 	Describers []func(io.Writer) error
 	// Output is where the output is written, os.Stdout if nil.
 	Output io.Writer
+	// Editor optionally implements the Edit command. When non-nil,
+	// ConfigExtension exposes a 'config edit' subcommand wired to Edit.
+	Editor subcmd.Runner
+	// EditFlags optionally provides the flag struct for the 'config edit'
+	// subcommand; defaults to &struct{}{} when nil.
+	EditFlags any
 }
 
 func (c ConfigCommands[T]) output() io.Writer {
@@ -81,4 +88,13 @@ func (c ConfigCommands[T]) Describe(_ context.Context, _ any, _ []string) error 
 		}
 	}
 	return nil
+}
+
+// Edit invokes Editor with ctx, flagValues, and args. It returns an error if
+// Editor is nil.
+func (c ConfigCommands[T]) Edit(ctx context.Context, flagValues any, args []string) error {
+	if c.Editor == nil {
+		return fmt.Errorf("config edit is not configured")
+	}
+	return c.Editor(ctx, flagValues, args)
 }
