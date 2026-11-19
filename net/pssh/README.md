@@ -12,8 +12,7 @@ recreated if the connection is lost.
 ```go
 // DefaultDialTimeout is the default timeout for establishing a connection to
 // the server. It is used if WithDialTimeout is not specified.
-DefaultDialTimeout = 30 * time.Second
-
+const DefaultDialTimeout = 30 * time.Second
 ```
 
 
@@ -61,11 +60,15 @@ Not retryable:
   - Algorithm negotiation failure. The two ends do not have a cipher, MAC,
     key exchange or host key type in common, and will not acquire one.
   - Malformed networks and addresses, which are in the configuration.
-  - A hostname that does not exist. Note that this is distinguished from a
-    DNS server that could not be reached, which is retryable.
   - A local forward whose port is already bound, which needs the port to be
     freed or the configuration changed.
   - Being refused permission by the local system.
+
+DNS lookup failures (including "no such host", i.e. net.DNSError with
+IsNotFound set) are treated as retryable: when a machine loses network or
+VPN connectivity, OS resolvers routinely report EAI_NONAME ("no such host")
+with IsTemporary and IsTimeout both false. Finite retry limits remain the
+caller's bound for hostnames that genuinely do not exist.
 
 Cancellation is not retryable either, but it is not a failed attempt:
 err is context.Canceled or ErrClientClosed because the caller asked to stop.

@@ -169,7 +169,9 @@ func TestRetryableClassification(t *testing.T) {
 		// host key handshakes above.
 		{"revoked host key", &knownhosts.RevokedError{}, false},
 		{"revoked host key, wrapped", fmt.Errorf("ssh: handshake failed: %w", &knownhosts.RevokedError{}), false},
-		{"host that does not exist", &net.DNSError{Err: "no such host", IsNotFound: true}, false},
+		{"dns no such host", &net.DNSError{Err: "no such host", IsNotFound: true}, true},
+		{"dns no such host, wrapped", fmt.Errorf("dial tcp: %w", &net.DNSError{Err: "no such host", IsNotFound: true}), true},
+		{"dns no such host, op error", &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", IsNotFound: true}}, true},
 		{"dns server did not answer", &net.DNSError{Err: "server misbehaving", IsTemporary: true, IsNotFound: true}, true},
 		{"dns lookup timed out", &net.DNSError{Err: "i/o timeout", IsTimeout: true}, true},
 		{"permission denied", &net.OpError{Op: "dial", Err: syscall.EACCES}, false},

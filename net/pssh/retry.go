@@ -48,11 +48,15 @@ var (
 //   - Algorithm negotiation failure. The two ends do not have a cipher, MAC,
 //     key exchange or host key type in common, and will not acquire one.
 //   - Malformed networks and addresses, which are in the configuration.
-//   - A hostname that does not exist. Note that this is distinguished from a
-//     DNS server that could not be reached, which is retryable.
 //   - A local forward whose port is already bound, which needs the port to be
 //     freed or the configuration changed.
 //   - Being refused permission by the local system.
+//
+// DNS lookup failures (including "no such host", i.e. net.DNSError with
+// IsNotFound set) are treated as retryable: when a machine loses network or VPN
+// connectivity, OS resolvers routinely report EAI_NONAME ("no such host") with
+// IsTemporary and IsTimeout both false. Finite retry limits remain the caller's
+// bound for hostnames that genuinely do not exist.
 //
 // Cancellation is not retryable either, but it is not a failed attempt: err is
 // context.Canceled or ErrClientClosed because the caller asked to stop. The
@@ -78,8 +82,6 @@ func Retryable(err error) bool {
 		return false
 	case isAddrError(err):
 		return false
-	case isDNSNotFound(err):
-		return false
 	case errors.Is(err, syscall.EADDRINUSE):
 		return false
 	case errors.Is(err, syscall.EACCES), errors.Is(err, syscall.EPERM):
@@ -87,8 +89,9 @@ func Retryable(err error) bool {
 	}
 	// Everything else, notably: connections refused, reset or timed out, a
 	// host or network that is unreachable, an EOF part way through the
-	// handshake, an agent that is momentarily unreachable, a DNS server that
-	// did not answer, and exhaustion of file descriptors or ports.
+	// handshake, an agent that is momentarily unreachable, DNS lookup failures
+	// (including offline "no such host"), and exhaustion of file descriptors or
+	// ports.
 	return true
 }
 
@@ -146,19 +149,4 @@ func isAddrError(err error) bool {
 		return true
 	}
 	return errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EPROTONOSUPPORT)
-}
-
-// isDNSNotFound reports whether err is a name that does not exist, as opposed
-// to a name that could not be looked up.
-func isDNSNotFound(err error) bool {
-	var dnsErr *net.DNSError
-	if !errors.As(err, &dnsErr) {
-		return false
-	}
-	// A temporary failure or a timeout means the answer is unknown rather
-	// than negative, whatever IsNotFound may say.
-	if dnsErr.IsTemporary || dnsErr.IsTimeout {
-		return false
-	}
-	return dnsErr.IsNotFound
 }
