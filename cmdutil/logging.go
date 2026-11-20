@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 // IsExplicitlySet returns true if the named flag was explicitly provided on
@@ -33,7 +35,7 @@ func IsExplicitlySet(fs *flag.FlagSet, name string) bool {
 type LoggingFlags struct {
 	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
 	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr, if set to - logs are written to stdout'"`
-	TempFile   string `subcmd:"log-tempfile,,'create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with log-file'"`
+	TempFile   string `subcmd:"log-tempfile,,'create a unique log file from this mktemp pattern, eg. myapp-XXXXXX.log, in the temporary directory unless the pattern includes a directory, which is created if needed. Mutually exclusive with log-file'"`
 	Format     string `subcmd:"log-format,json,'log format: text or json'"`
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }
@@ -42,7 +44,7 @@ type LoggingFlags struct {
 type LoggingConfig struct {
 	Level      int    `yaml:"level" doc:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
 	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr, if set to - logs are written to stdout."`
-	TempFile   string `yaml:"temp_file" doc:"create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with file."`
+	TempFile   string `yaml:"temp_file" doc:"create a unique log file from this mktemp pattern, eg. myapp-XXXXXX.log, in the temporary directory unless the pattern includes a directory, which is created if needed. Mutually exclusive with file."`
 	Format     string `yaml:"format" doc:"log format: text or json"`
 	SourceCode bool   `yaml:"source_code" doc:"include source code file and line number in logs"`
 }
@@ -177,6 +179,24 @@ func (c LoggingConfig) WithFlagOverrides(fs *flag.FlagSet, lf LoggingFlags) Logg
 	return c
 }
 
+var mktempRun = regexp.MustCompile(`X{3,}`)
+
+// mktempPattern converts a mktemp pattern, such as myapp-XXXXXX.log, to an
+// os.CreateTemp one by replacing its last run of three or more Xs with a *.
+// The number of Xs is not significant. A pattern that already contains a *
+// is returned as is.
+func mktempPattern(p string) string {
+	if strings.Contains(p, "*") {
+		return p
+	}
+	runs := mktempRun.FindAllStringIndex(p, -1)
+	if len(runs) == 0 {
+		return p
+	}
+	last := runs[len(runs)-1]
+	return p[:last[0]] + "*" + p[last[1]:]
+}
+
 func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (*Logger, error) {
 	var handler slog.Handler
 	var closer io.Closer
@@ -202,7 +222,7 @@ func (c LoggingConfig) newLogger(lo loggingOptions, opts *slog.HandlerOptions) (
 					return nil, fmt.Errorf("failed to create directory for temporary log file %q: %w", c.TempFile, err)
 				}
 			}
-			f, err := os.CreateTemp(dir, pattern)
+			f, err := os.CreateTemp(dir, mktempPattern(pattern))
 			if err != nil {
 				return nil, fmt.Errorf("failed to create temporary log file %q: %w", c.TempFile, err)
 			}

@@ -248,7 +248,7 @@ specified via WithWriteCloser.
 type LoggingConfig struct {
 	Level      int    `yaml:"level" doc:"logging level: 0=error, 1=warn, 2=info, 3=debug"`
 	File       string `yaml:"file" doc:"log file path. If not specified logs are written to stderr, if set to - logs are written to stdout."`
-	TempFile   string `yaml:"temp_file" doc:"create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with file."`
+	TempFile   string `yaml:"temp_file" doc:"create a unique log file from this mktemp pattern, eg. myapp-XXXXXX.log, in the temporary directory unless the pattern includes a directory, which is created if needed. Mutually exclusive with file."`
 	Format     string `yaml:"format" doc:"log format: text or json"`
 	SourceCode bool   `yaml:"source_code" doc:"include source code file and line number in logs"`
 }
@@ -302,7 +302,7 @@ explicitly set flags in the provided FlagSet.
 type LoggingFlags struct {
 	Level      int    `subcmd:"log-level,0,'logging level: 0=error, 1=warn, 2=info, 3=debug'"`
 	File       string `subcmd:"log-file,,'log file path. If not specified logs are written to stderr, if set to - logs are written to stdout'"`
-	TempFile   string `subcmd:"log-tempfile,,'create a unique log file from this os.CreateTemp pattern, eg. myapp-*.log, in os.TempDir unless the pattern includes a directory, which is created if needed. Mutually exclusive with log-file'"`
+	TempFile   string `subcmd:"log-tempfile,,'create a unique log file from this mktemp pattern, eg. myapp-XXXXXX.log, in the temporary directory unless the pattern includes a directory, which is created if needed. Mutually exclusive with log-file'"`
 	Format     string `subcmd:"log-format,json,'log format: text or json'"`
 	SourceCode bool   `subcmd:"log-source-code,false,'include source code file and line number in logs'"`
 }

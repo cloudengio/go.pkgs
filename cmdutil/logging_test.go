@@ -616,3 +616,36 @@ func TestLoggingTempFileErrors(t *testing.T) {
 		t.Errorf("got %q", p)
 	}
 }
+
+func TestLoggingTempFileMktemp(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		pattern, prefix, suffix string
+	}{
+		{"app-XXXXXX.log", "app-", ".log"},
+		{"app-XXXXXX", "app-", ""},
+		{"app-*.log", "app-", ".log"},
+		{"app-.log", "app-.log", ""},           // no pattern: appended as for os.CreateTemp.
+		{"aXXb-XXXX.log", "aXXb-", ".log"},     // only runs of three or more are special.
+		{"XXXX-XXXXXXXX.log", "XXXX-", ".log"}, // only the last run is replaced.
+		{"app-XXXXXX-*.log", "app-XXXXXX-", ".log"},
+	} {
+		cfg := cmdutil.LoggingConfig{TempFile: filepath.Join(dir, "XXXXXX", tc.pattern)}
+		l, err := cfg.NewLogger()
+		if err != nil {
+			t.Fatalf("%v: %v", tc.pattern, err)
+		}
+		l.Close()
+		if got, want := filepath.Base(filepath.Dir(l.Path())), "XXXXXX"; got != want {
+			t.Errorf("%v: the directory is not literal: got %v, want %v", tc.pattern, got, want)
+		}
+		name := filepath.Base(l.Path())
+		if !strings.HasPrefix(name, tc.prefix) || !strings.HasSuffix(name, tc.suffix) {
+			t.Errorf("%v: unexpected name %v", tc.pattern, name)
+		}
+		random := strings.TrimSuffix(strings.TrimPrefix(name, tc.prefix), tc.suffix)
+		if tc.pattern != "app-.log" && (random == "" || strings.Contains(random, "X")) {
+			t.Errorf("%v: %v: not replaced by a random string", tc.pattern, name)
+		}
+	}
+}
