@@ -10,7 +10,6 @@ require (
 	cloudeng.io/sync v0.0.12-0.20260804222138-e9281ed260ba
 	golang.org/x/crypto v0.59.0
 	golang.org/x/sys v0.50.0
-	golang.org/x/term v0.48.0
 )
 
 require (

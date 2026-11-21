@@ -64,9 +64,10 @@ type runOptions struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
 	login          bool
-	// resizes, if set, supplies window size changes to RunInteractive in
-	// place of the local terminal's, for testing.
-	resizes <-chan windowSize
+	// The terminal that RunInteractive requests.
+	termType      string
+	size          WindowSize
+	windowChanges <-chan WindowSize
 }
 
 // RunOption represents an option for Run.

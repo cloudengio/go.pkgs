@@ -17,8 +17,3 @@ func pumpStdin(f *os.File, w io.WriteCloser, _ <-chan struct{}) {
 	_, _ = io.Copy(w, f)
 	_ = w.Close()
 }
-
-// watchResize is not supported on this platform.
-func watchResize(*os.File, <-chan struct{}) <-chan windowSize {
-	return nil
-}

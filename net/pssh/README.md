@@ -177,17 +177,6 @@ connection that the server imposes.
 ```go
 func (c *Client) RunInteractive(ctx context.Context, cmd string, opts ...RunOption) error
 ```
-RunInteractive is like Run but runs cmd on a pseudo terminal that is
-connected to the local terminal: standard input and output are those of
-the process unless overridden by WithStdin and WithStdout, and WithStderr
-is ignored since a terminal has a single output stream. It is intended for
-commands that need a terminal, such as 'tmux -CC new -A -s main'.
-
-If standard input is a terminal it is put into raw mode for the duration and
-restored afterwards, and changes to the size of the terminal are passed on
-to the remote one. The pseudo terminal is requested with the value of $TERM,
-or xterm-256color if that is unset.
-
 Unlike Run, a standard input that is an *os.File is never read after
 RunInteractive returns, so that no input is lost to a command that has
 finished; any other reader behaves as described for WithStdin.
@@ -375,6 +364,30 @@ WithStdout specifies where the standard output of the command is written,
 it is discarded if not specified.
 
 
+```go
+func WithTerminal(termType string, size WindowSize) RunOption
+```
+WithTerminal specifies the terminal type, eg. the value of $TERM, and the
+initial size of the pseudo terminal that RunInteractive requests. The
+defaults are xterm-256color and 80x24. A zero Width or Height is replaced by
+its default.
+
+
+```go
+func WithWindowChanges(ch <-chan WindowSize) RunOption
+```
+WithWindowChanges specifies a channel of new sizes for the pseudo terminal
+that RunInteractive requests, typically of the local terminal in response to
+SIGWINCH.
+
+
+
+
+### Type WindowSize
+```go
+type WindowSize struct{ Width, Height int }
+```
+WindowSize is the size of a terminal in characters.
 
 
 

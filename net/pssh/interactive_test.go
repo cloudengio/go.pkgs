@@ -84,12 +84,11 @@ func nextPTYRequest(t *testing.T, ch <-chan ptyRequest) ptyRequest {
 }
 
 func TestRunInteractive(t *testing.T) {
-	t.Setenv("TERM", "test-term")
 	requests := observePTYRequests(t)
 	c, _, _ := runFixture(t)
 	p := newPipes(t)
 
-	done := runAsync(timeoutCtx(t), c, "cat", p.options()...)
+	done := runAsync(timeoutCtx(t), c, "cat", p.options(WithTerminal("test-term", WindowSize{132, 43}))...)
 	if _, err := p.inW.WriteString("hello\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -103,21 +102,21 @@ func TestRunInteractive(t *testing.T) {
 	}
 
 	got := nextPTYRequest(t, requests)
-	if got.Type != "pty-req" || got.Term != "test-term" || got.Cols != 80 || got.Rows != 24 {
-		t.Errorf("got %+v, want a pty-req for test-term of 80x24", got)
+	if got.Type != "pty-req" || got.Term != "test-term" || got.Cols != 132 || got.Rows != 43 {
+		t.Errorf("got %+v, want a pty-req for test-term of 132x43", got)
 	}
 }
 
 func TestRunInteractiveDefaultTerm(t *testing.T) {
-	t.Setenv("TERM", "")
 	requests := observePTYRequests(t)
 	c, _, _ := runFixture(t)
 	p := newPipes(t)
 	if err := c.RunInteractive(timeoutCtx(t), "true", p.options()...); err != nil {
 		t.Fatal(err)
 	}
-	if got := nextPTYRequest(t, requests); got.Term != defaultTerm {
-		t.Errorf("got %q, want %q", got.Term, defaultTerm)
+	got := nextPTYRequest(t, requests)
+	if got.Term != defaultTerm || got.Cols != defaultWidth || got.Rows != defaultHeight {
+		t.Errorf("got %+v, want %s at %dx%d", got, defaultTerm, defaultWidth, defaultHeight)
 	}
 }
 
@@ -158,16 +157,16 @@ func TestRunInteractiveResize(t *testing.T) {
 	requests := observePTYRequests(t)
 	c, _, _ := runFixture(t)
 	p := newPipes(t)
-	resizes := make(chan windowSize)
+	changes := make(chan WindowSize)
 
-	done := runAsync(timeoutCtx(t), c, "cat", p.options(withResizes(resizes))...)
+	done := runAsync(timeoutCtx(t), c, "cat", p.options(WithWindowChanges(changes))...)
 	if got := nextPTYRequest(t, requests); got.Type != "pty-req" {
 		t.Fatalf("got %+v, want a pty-req", got)
 	}
-	for _, sz := range []windowSize{{100, 40}, {132, 50}} {
-		resizes <- sz
+	for _, sz := range []WindowSize{{100, 40}, {132, 50}} {
+		changes <- sz
 		got := nextPTYRequest(t, requests)
-		if got.Type != "window-change" || int(got.Cols) != sz.width || int(got.Rows) != sz.height {
+		if got.Type != "window-change" || int(got.Cols) != sz.Width || int(got.Rows) != sz.Height {
 			t.Errorf("got %+v, want a window-change to %v", got, sz)
 		}
 	}

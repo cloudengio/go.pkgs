@@ -10,11 +10,8 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"golang.org/x/sys/unix"
-	"golang.org/x/term"
 )
 
 // pollInterval is how often pumpStdin looks to see if it has been stopped.
@@ -51,34 +48,4 @@ func pumpStdin(f *os.File, w io.WriteCloser, stop <-chan struct{}) {
 			return
 		}
 	}
-}
-
-// watchResize returns the sizes of f as it changes, until stop is closed.
-func watchResize(f *os.File, stop <-chan struct{}) <-chan windowSize {
-	if f == nil {
-		return nil
-	}
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGWINCH)
-	sizes := make(chan windowSize)
-	go func() {
-		defer signal.Stop(sigs)
-		for {
-			select {
-			case <-stop:
-				return
-			case <-sigs:
-			}
-			w, h, err := term.GetSize(int(f.Fd())) //nolint:gosec
-			if err != nil {
-				continue
-			}
-			select {
-			case sizes <- windowSize{w, h}:
-			case <-stop:
-				return
-			}
-		}
-	}()
-	return sizes
 }
