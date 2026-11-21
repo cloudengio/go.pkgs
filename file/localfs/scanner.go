@@ -6,6 +6,7 @@ package localfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -28,6 +29,13 @@ func (s *scanner) Contents() []filewalk.Entry {
 	return newContents(s.entries)
 }
 
+func (s *scanner) close() {
+	if s.file != nil {
+		_ = s.file.Close()
+		s.file = nil
+	}
+}
+
 func (s *scanner) Scan(ctx context.Context, n int) bool {
 	if n == 0 {
 		return false
@@ -37,6 +45,7 @@ func (s *scanner) Scan(ctx context.Context, n int) bool {
 	select {
 	case <-ctx.Done():
 		s.err = ctx.Err()
+		s.close()
 		return false
 	default:
 	}
@@ -48,11 +57,10 @@ func (s *scanner) Scan(ctx context.Context, n int) bool {
 	dirEntries, err := s.file.ReadDir(n)
 	if err != nil {
 		s.entries = nil
-		s.file.Close()
-		if err = io.EOF; err != nil {
-			return false
+		s.close()
+		if !errors.Is(err, io.EOF) {
+			s.err = err
 		}
-		s.err = err
 		return false
 	}
 	s.entries = dirEntries
