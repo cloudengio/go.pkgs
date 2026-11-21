@@ -201,8 +201,12 @@ type directTCPIP struct {
 // forward can be exercised end to end.
 func serveChannels(chans <-chan ssh.NewChannel) {
 	for nc := range chans {
+		if nc.ChannelType() == "session" {
+			go serveSession(nc)
+			continue
+		}
 		if nc.ChannelType() != "direct-tcpip" {
-			nc.Reject(ssh.UnknownChannelType, "only direct-tcpip is served") //nolint:errcheck
+			nc.Reject(ssh.UnknownChannelType, "only direct-tcpip and session are served") //nolint:errcheck
 			continue
 		}
 		var req directTCPIP

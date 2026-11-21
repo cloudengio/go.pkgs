@@ -4,8 +4,9 @@
 import cloudeng.io/net/pssh
 ```
 
-Package pssh provides a persistent ssh connection, namely, one that will be
-recreated if the connection is lost.
+Package pssh provides a persistent ssh connection, namely, one that will
+be recreated if the connection is lost, over which commands can be run,
+see Client.Run.
 
 ## Constants
 ### DefaultDialTimeout
@@ -136,6 +137,36 @@ bounds how long a connection is retried for, and ConnectAndWait then returns
 the error from the last attempt.
 
 
+```go
+func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error
+```
+Run runs cmd on the server, waiting first for the client to be connected.
+The server runs cmd using the user's shell, as per ssh(1), and so it is
+subject to that shell's quoting and expansion, and does not run in a login
+shell.
+
+Run returns nil if the command exits with status 0, and an *ssh.ExitError,
+which carries the status, if it does not; use errors.As to retrieve it.
+If the connection is lost whilst the command is running the command
+is not retried and the error is not an *ssh.ExitError, typically an
+*ssh.ExitMissingError, since the command may have had some effect.
+ErrClientClosed is returned if the client is closed.
+
+If ctx is done the command is sent SIGTERM, which not all servers honour,
+the session is closed and ctx.Err() is returned.
+
+Many commands may be run concurrently, subject to the limit on sessions per
+connection that the server imposes.
+
+
+```go
+func (c *Client) WaitConnected(ctx context.Context) error
+```
+WaitConnected waits until the client is connected, which is when
+ConnectAndWait has established a connection. It returns ctx.Err() if ctx is
+done first and ErrClientClosed if the client is closed.
+
+
 
 
 ### Type Option
@@ -251,6 +282,38 @@ func WithUser(user string) Option
 ```
 WithUser specifies the user name used to authenticate to the server.
 If it is not specified, the value of the USER environment variable is used.
+
+
+
+
+### Type RunOption
+```go
+type RunOption func(*runOptions)
+```
+RunOption represents an option for Run.
+
+### Functions
+
+```go
+func WithStderr(w io.Writer) RunOption
+```
+WithStderr specifies where the standard error of the command is written,
+it is discarded if not specified.
+
+
+```go
+func WithStdin(r io.Reader) RunOption
+```
+WithStdin specifies the standard input of the command. It is discarded if
+not specified. The reader must return, eg. when the context is cancelled,
+for Run to do so.
+
+
+```go
+func WithStdout(w io.Writer) RunOption
+```
+WithStdout specifies where the standard output of the command is written,
+it is discarded if not specified.
 
 
 

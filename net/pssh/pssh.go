@@ -3,7 +3,8 @@
 // license that can be found in the LICENSE file.
 
 // Package pssh provides a persistent ssh connection, namely, one that
-// will be recreated if the connection is lost.
+// will be recreated if the connection is lost, over which commands can be run,
+// see Client.Run.
 package pssh
 
 import (
@@ -41,6 +42,11 @@ type Client struct {
 	mu          sync.Mutex
 	authKey     ssh.PublicKey
 	authComment string
+	// conn is the current connection, nil whilst there is none. ready is
+	// closed whilst conn is set and replaced when it is cleared, so that
+	// callers can wait for the next connection.
+	conn  *ssh.Client
+	ready chan struct{}
 }
 
 type forward struct {
@@ -214,6 +220,7 @@ func NewClient(ctx context.Context, network, addr string, opts ...Option) *Clien
 		network: network,
 		addr:    addr,
 		doneCh:  make(chan struct{}),
+		ready:   make(chan struct{}),
 	}
 	for _, fn := range opts {
 		fn(&c.opts)
@@ -581,6 +588,7 @@ func (c *Client) wait(ctx context.Context, client *ssh.Client, pf *forwarder) er
 	}()
 	waitErr := client.Wait()
 	close(waitDone)
+	c.clearConn(client)
 	if waitErr != nil {
 		c.opts.logger.Debug("ssh connection closed", "err", waitErr)
 	}
@@ -628,6 +636,8 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 		client.Close()
 		return nil, nil, err
 	}
+	// Set before the callback so that it may use the connection.
+	c.setConn(client)
 	if c.opts.onConnect != nil {
 		c.opts.onConnect(c)
 	}
