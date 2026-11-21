@@ -6,8 +6,10 @@ package localfs_test
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -111,4 +113,28 @@ func TestLocalFilesystem(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
+}
+
+func TestScanCancelClosesFile(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a", "b"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ds := localfs.New().LevelScanner(dir)
+	if !ds.Scan(ctx, 1) {
+		t.Fatalf("first Scan failed: %v", ds.Err())
+	}
+	cancel()
+	if ds.Scan(ctx, 1) {
+		t.Fatal("expected Scan to return false after context cancel")
+	}
+	if !errors.Is(ds.Err(), context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", ds.Err())
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("RemoveAll(%q): %v", dir, err)
+	}
 }
