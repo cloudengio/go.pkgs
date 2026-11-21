@@ -6,7 +6,7 @@ import cloudeng.io/net/pssh
 
 Package pssh provides a persistent ssh connection, namely, one that will
 be recreated if the connection is lost, over which commands can be run,
-see Client.Run.
+see Client.Run and Client.RunInteractive.
 
 ## Constants
 ### DefaultDialTimeout
@@ -175,6 +175,29 @@ connection that the server imposes.
 
 
 ```go
+func (c *Client) RunInteractive(ctx context.Context, cmd string, opts ...RunOption) error
+```
+RunInteractive is like Run but runs cmd on a pseudo terminal that is
+connected to the local terminal: standard input and output are those of
+the process unless overridden by WithStdin and WithStdout, and WithStderr
+is ignored since a terminal has a single output stream. It is intended for
+commands that need a terminal, such as 'tmux -CC new -A -s main'.
+
+If standard input is a terminal it is put into raw mode for the duration and
+restored afterwards, and changes to the size of the terminal are passed on
+to the remote one. The pseudo terminal is requested with the value of $TERM,
+or xterm-256color if that is unset.
+
+Unlike Run, a standard input that is an *os.File is never read after
+RunInteractive returns, so that no input is lost to a command that has
+finished; any other reader behaves as described for WithStdin.
+
+When ctx is done, or the connection is lost, the pseudo terminal is
+closed and so the command is sent SIGHUP rather than SIGTERM, which is the
+appropriate signal for one that is detached from its terminal.
+
+
+```go
 func (c *Client) WaitConnected(ctx context.Context) error
 ```
 WaitConnected waits until the client is connected, which is when
@@ -233,6 +256,18 @@ this system is attached to more than once, such as a machine on the same
 LAN over both wired ethernet and wi-fi. Anywhere else a host that cannot be
 reached is simply not reachable, and trying every interface only delays the
 error that says so.
+
+
+```go
+func WithKeepAlive(interval time.Duration) Option
+```
+WithKeepAlive sends a request to the server every interval to detect a
+connection that has silently stopped working, such as when a laptop sleeps
+or a network changes, which would otherwise not be noticed until the
+operating system gave up on it. A connection for which a request is not
+answered within interval is closed, and so is recreated as for any other
+loss, which means that it is noticed in between one and two intervals.
+The default is not to send any.
 
 
 ```go

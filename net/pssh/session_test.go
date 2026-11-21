@@ -5,11 +5,70 @@
 package pssh
 
 import (
+	"io"
 	"os/exec"
+	"sync"
 	"syscall"
+	"testing"
 
 	"golang.org/x/crypto/ssh"
 )
+
+// ptyRequest is what the server was asked for by a pty-req or a window-change
+// request.
+type ptyRequest struct {
+	Type       string
+	Term       string
+	Cols, Rows uint32
+}
+
+var (
+	ptyHookMu sync.Mutex
+	ptyHook   chan<- ptyRequest
+)
+
+// observePTYRequests returns the pty-req and window-change requests that
+// sessions subsequently receive, until the test ends.
+func observePTYRequests(t *testing.T) <-chan ptyRequest {
+	t.Helper()
+	ch := make(chan ptyRequest, 16)
+	ptyHookMu.Lock()
+	ptyHook = ch
+	ptyHookMu.Unlock()
+	t.Cleanup(func() {
+		ptyHookMu.Lock()
+		ptyHook = nil
+		ptyHookMu.Unlock()
+	})
+	return ch
+}
+
+func reportPTYRequest(req *ssh.Request) {
+	var r ptyRequest
+	r.Type = req.Type
+	switch req.Type {
+	case "pty-req":
+		var p struct {
+			Term          string
+			Cols, Rows    uint32
+			Width, Height uint32
+			Modes         string
+		}
+		if ssh.Unmarshal(req.Payload, &p) == nil {
+			r.Term, r.Cols, r.Rows = p.Term, p.Cols, p.Rows
+		}
+	case "window-change":
+		var p struct{ Cols, Rows, Width, Height uint32 }
+		if ssh.Unmarshal(req.Payload, &p) == nil {
+			r.Cols, r.Rows = p.Cols, p.Rows
+		}
+	}
+	ptyHookMu.Lock()
+	defer ptyHookMu.Unlock()
+	if ptyHook != nil {
+		ptyHook <- r
+	}
+}
 
 // serveSession implements the server side of a session channel for exec
 // requests, as sshd does: the command is run by /bin/sh -c, its standard
@@ -29,6 +88,9 @@ func serveSession(nc ssh.NewChannel) {
 				continue
 			}
 			cmd = startExec(ch, req)
+		case "pty-req", "window-change":
+			reportPTYRequest(req)
+			req.Reply(true, nil) //nolint:errcheck
 		case "signal":
 			var payload struct{ Signal string }
 			if cmd != nil && ssh.Unmarshal(req.Payload, &payload) == nil && payload.Signal == "TERM" {
@@ -50,7 +112,18 @@ func startExec(ch ssh.Channel, req *ssh.Request) *exec.Cmd {
 		return nil
 	}
 	cmd := exec.Command("/bin/sh", "-c", payload.Command) //nolint:gosec
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = ch, ch, ch.Stderr()
+	cmd.Stdout, cmd.Stderr = ch, ch.Stderr()
+	// As sshd does, do not wait for input that a finished command will never
+	// read: the copy is not waited for.
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		req.Reply(false, nil) //nolint:errcheck
+		return nil
+	}
+	go func() {
+		io.Copy(stdin, ch) //nolint:errcheck
+		stdin.Close()
+	}()
 	if err := cmd.Start(); err != nil {
 		req.Reply(false, nil) //nolint:errcheck
 		ch.Close()

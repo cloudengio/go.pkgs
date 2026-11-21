@@ -4,7 +4,7 @@
 
 // Package pssh provides a persistent ssh connection, namely, one that
 // will be recreated if the connection is lost, over which commands can be run,
-// see Client.Run.
+// see Client.Run and Client.RunInteractive.
 package pssh
 
 import (
@@ -56,6 +56,7 @@ type forward struct {
 
 type options struct {
 	dialTimeout    time.Duration
+	keepAlive      time.Duration
 	user           string
 	hostKey        ssh.PublicKey
 	knownHosts     []string
@@ -82,6 +83,19 @@ const (
 	// the server. It is used if WithDialTimeout is not specified.
 	DefaultDialTimeout = 30 * time.Second
 )
+
+// WithKeepAlive sends a request to the server every interval to detect a
+// connection that has silently stopped working, such as when a laptop sleeps or
+// a network changes, which would otherwise not be noticed until the operating
+// system gave up on it. A connection for which a request is not answered
+// within interval is closed, and so is recreated as for any other loss, which
+// means that it is noticed in between one and two intervals. The default is
+// not to send any.
+func WithKeepAlive(interval time.Duration) Option {
+	return func(o *options) {
+		o.keepAlive = interval
+	}
+}
 
 // WithDialTimeout specifies the timeout for establishing a connection to the
 // server. The default is DefaultDialTimeout.
@@ -586,6 +600,9 @@ func (c *Client) wait(ctx context.Context, client *ssh.Client, pf *forwarder) er
 		case <-waitDone:
 		}
 	}()
+	if c.opts.keepAlive > 0 {
+		go keepAlive(client, c.opts.keepAlive, waitDone)
+	}
 	waitErr := client.Wait()
 	close(waitDone)
 	c.clearConn(client)
@@ -595,6 +612,37 @@ func (c *Client) wait(ctx context.Context, client *ssh.Client, pf *forwarder) er
 	pf.stopAll(context.WithoutCancel(ctx))
 	_ = client.Close()
 	return c.stoppingErr(ctx)
+}
+
+// keepAlive closes client if a keepalive request is not answered within
+// interval, until stop is closed. The server's answer is not significant, only
+// that there is one: many reply that the request is unknown.
+func keepAlive(client *ssh.Client, interval time.Duration, stop <-chan struct{}) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+		}
+		answered := make(chan struct{})
+		go func() {
+			_, _, _ = client.SendRequest("keepalive@openssh.com", true, nil)
+			close(answered)
+		}()
+		timeout := time.NewTimer(interval)
+		select {
+		case <-answered:
+			timeout.Stop()
+		case <-timeout.C:
+			_ = client.Close()
+			return
+		case <-stop:
+			timeout.Stop()
+			return
+		}
+	}
 }
 
 func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client, *forwarder, error) {

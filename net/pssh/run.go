@@ -64,6 +64,9 @@ type runOptions struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
 	login          bool
+	// resizes, if set, supplies window size changes to RunInteractive in
+	// place of the local terminal's, for testing.
+	resizes <-chan windowSize
 }
 
 // RunOption represents an option for Run.
@@ -115,10 +118,21 @@ func WithLoginShell() RunOption {
 // Many commands may be run concurrently, subject to the limit on sessions per
 // connection that the server imposes.
 func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error {
+	return c.run(ctx, cmd, newRunOptions(opts), nil)
+}
+
+func newRunOptions(opts []RunOption) runOptions {
 	var ro runOptions
 	for _, fn := range opts {
 		fn(&ro)
 	}
+	return ro
+}
+
+// run runs cmd. If prepare is not nil it is called with the new session and is
+// responsible for configuring its streams, instead of the options doing so; the
+// function that it returns is called once the command is done.
+func (c *Client) run(ctx context.Context, cmd string, ro runOptions, prepare func(*ssh.Session) (func(), error)) error {
 	if ro.login {
 		cmd = loginShellCommand(cmd)
 	}
@@ -127,7 +141,15 @@ func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error {
 		return err
 	}
 	defer session.Close()
-	session.Stdin, session.Stdout, session.Stderr = ro.stdin, ro.stdout, ro.stderr
+	if prepare == nil {
+		session.Stdin, session.Stdout, session.Stderr = ro.stdin, ro.stdout, ro.stderr
+	} else {
+		cleanup, err := prepare(session)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+	}
 
 	done := make(chan error, 1)
 	go func() { done <- session.Run(cmd) }()
