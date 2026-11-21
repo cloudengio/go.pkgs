@@ -63,6 +63,7 @@ func (c *Client) WaitConnected(ctx context.Context) error {
 type runOptions struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
+	login          bool
 }
 
 // RunOption represents an option for Run.
@@ -87,10 +88,19 @@ func WithStderr(w io.Writer) RunOption {
 	return func(o *runOptions) { o.stderr = w }
 }
 
+// WithLoginShell runs the command in the user's login shell, so that it sees
+// the environment, notably PATH, that the profile files set up. It is the
+// equivalent of running 'exec "$SHELL" -l -c cmd', which for some shells, eg.
+// zsh, reads the login but not the interactive startup files.
+func WithLoginShell() RunOption {
+	return func(o *runOptions) { o.login = true }
+}
+
 // Run runs cmd on the server, waiting first for the client to be connected.
 // The server runs cmd using the user's shell, as per ssh(1), and so it is
 // subject to that shell's quoting and expansion, and does not run in a login
-// shell.
+// shell unless WithLoginShell is used. Use ShellQuote and ShellJoin to
+// construct commands from arbitrary strings.
 //
 // Run returns nil if the command exits with status 0, and an *ssh.ExitError,
 // which carries the status, if it does not; use errors.As to retrieve it. If
@@ -108,6 +118,9 @@ func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error {
 	var ro runOptions
 	for _, fn := range opts {
 		fn(&ro)
+	}
+	if ro.login {
+		cmd = loginShellCommand(cmd)
 	}
 	session, err := c.newSession(ctx)
 	if err != nil {

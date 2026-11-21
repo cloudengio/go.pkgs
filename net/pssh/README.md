@@ -78,6 +78,20 @@ do so to distinguish a context whose deadline has expired -- reported here
 as retryable, since a dial timeout is otherwise indistinguishable from it --
 from one that is still live.
 
+### Func ShellJoin
+```go
+func ShellJoin(args ...string) string
+```
+ShellJoin quotes each of args with ShellQuote and joins them with spaces,
+to form a command line that runs args[0] with the remaining arguments.
+
+### Func ShellQuote
+```go
+func ShellQuote(s string) string
+```
+ShellQuote quotes s so that a POSIX shell treats it as a single literal
+word, with no expansion of any kind.
+
 
 
 ## Types
@@ -142,8 +156,9 @@ func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error
 ```
 Run runs cmd on the server, waiting first for the client to be connected.
 The server runs cmd using the user's shell, as per ssh(1), and so it is
-subject to that shell's quoting and expansion, and does not run in a login
-shell.
+subject to that shell's quoting and expansion, and does not run in a
+login shell unless WithLoginShell is used. Use ShellQuote and ShellJoin to
+construct commands from arbitrary strings.
 
 Run returns nil if the command exits with status 0, and an *ssh.ExitError,
 which carries the status, if it does not; use errors.As to retrieve it.
@@ -293,6 +308,15 @@ type RunOption func(*runOptions)
 RunOption represents an option for Run.
 
 ### Functions
+
+```go
+func WithLoginShell() RunOption
+```
+WithLoginShell runs the command in the user's login shell, so that it sees
+the environment, notably PATH, that the profile files set up. It is the
+equivalent of running 'exec "$SHELL" -l -c cmd', which for some shells, eg.
+zsh, reads the login but not the interactive startup files.
+
 
 ```go
 func WithStderr(w io.Writer) RunOption
