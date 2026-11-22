@@ -4,8 +4,9 @@
 import cloudeng.io/net/pssh
 ```
 
-Package pssh provides a persistent ssh connection, namely, one that will be
-recreated if the connection is lost.
+Package pssh provides a persistent ssh connection, namely, one that will
+be recreated if the connection is lost, over which commands can be run,
+see Client.Run and Client.RunInteractive.
 
 ## Constants
 ### DefaultDialTimeout
@@ -77,6 +78,20 @@ do so to distinguish a context whose deadline has expired -- reported here
 as retryable, since a dial timeout is otherwise indistinguishable from it --
 from one that is still live.
 
+### Func ShellJoin
+```go
+func ShellJoin(args ...string) string
+```
+ShellJoin quotes each of args with ShellQuote and joins them with spaces,
+to form a command line that runs args[0] with the remaining arguments.
+
+### Func ShellQuote
+```go
+func ShellQuote(s string) string
+```
+ShellQuote quotes s so that a POSIX shell treats it as a single literal
+word, with no expansion of any kind.
+
 
 
 ## Types
@@ -136,6 +151,49 @@ bounds how long a connection is retried for, and ConnectAndWait then returns
 the error from the last attempt.
 
 
+```go
+func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error
+```
+Run runs cmd on the server, waiting first for the client to be connected.
+The server runs cmd using the user's shell, as per ssh(1), and so it is
+subject to that shell's quoting and expansion, and does not run in a
+login shell unless WithLoginShell is used. Use ShellQuote and ShellJoin to
+construct commands from arbitrary strings.
+
+Run returns nil if the command exits with status 0, and an *ssh.ExitError,
+which carries the status, if it does not; use errors.As to retrieve it.
+If the connection is lost whilst the command is running the command
+is not retried and the error is not an *ssh.ExitError, typically an
+*ssh.ExitMissingError, since the command may have had some effect.
+ErrClientClosed is returned if the client is closed.
+
+If ctx is done the command is sent SIGTERM, which not all servers honour,
+the session is closed and ctx.Err() is returned.
+
+Many commands may be run concurrently, subject to the limit on sessions per
+connection that the server imposes.
+
+
+```go
+func (c *Client) RunInteractive(ctx context.Context, cmd string, opts ...RunOption) error
+```
+Unlike Run, a standard input that is an *os.File is never read after
+RunInteractive returns, so that no input is lost to a command that has
+finished; any other reader behaves as described for WithStdin.
+
+When ctx is done, or the connection is lost, the pseudo terminal is
+closed and so the command is sent SIGHUP rather than SIGTERM, which is the
+appropriate signal for one that is detached from its terminal.
+
+
+```go
+func (c *Client) WaitConnected(ctx context.Context) error
+```
+WaitConnected waits until the client is connected, which is when
+ConnectAndWait has established a connection. It returns ctx.Err() if ctx is
+done first and ErrClientClosed if the client is closed.
+
+
 
 
 ### Type Option
@@ -187,6 +245,18 @@ this system is attached to more than once, such as a machine on the same
 LAN over both wired ethernet and wi-fi. Anywhere else a host that cannot be
 reached is simply not reachable, and trying every interface only delays the
 error that says so.
+
+
+```go
+func WithKeepAlive(interval time.Duration) Option
+```
+WithKeepAlive sends a request to the server every interval to detect a
+connection that has silently stopped working, such as when a laptop sleeps
+or a network changes, which would otherwise not be noticed until the
+operating system gave up on it. A connection for which a request is not
+answered within interval is closed, and so is recreated as for any other
+loss, which means that it is noticed in between one and two intervals.
+The default is not to send any.
 
 
 ```go
@@ -253,6 +323,71 @@ WithUser specifies the user name used to authenticate to the server.
 If it is not specified, the value of the USER environment variable is used.
 
 
+
+
+### Type RunOption
+```go
+type RunOption func(*runOptions)
+```
+RunOption represents an option for Run.
+
+### Functions
+
+```go
+func WithLoginShell() RunOption
+```
+WithLoginShell runs the command in the user's login shell, so that it sees
+the environment, notably PATH, that the profile files set up. It is the
+equivalent of running 'exec "$SHELL" -l -c cmd', which for some shells, eg.
+zsh, reads the login but not the interactive startup files.
+
+
+```go
+func WithStderr(w io.Writer) RunOption
+```
+WithStderr specifies where the standard error of the command is written,
+it is discarded if not specified.
+
+
+```go
+func WithStdin(r io.Reader) RunOption
+```
+WithStdin specifies the standard input of the command. It is discarded if
+not specified. The reader must return, eg. when the context is cancelled,
+for Run to do so.
+
+
+```go
+func WithStdout(w io.Writer) RunOption
+```
+WithStdout specifies where the standard output of the command is written,
+it is discarded if not specified.
+
+
+```go
+func WithTerminal(termType string, size WindowSize) RunOption
+```
+WithTerminal specifies the terminal type, eg. the value of $TERM, and the
+initial size of the pseudo terminal that RunInteractive requests. The
+defaults are xterm-256color and 80x24. A zero Width or Height is replaced by
+its default.
+
+
+```go
+func WithWindowChanges(ch <-chan WindowSize) RunOption
+```
+WithWindowChanges specifies a channel of new sizes for the pseudo terminal
+that RunInteractive requests, typically of the local terminal in response to
+SIGWINCH.
+
+
+
+
+### Type WindowSize
+```go
+type WindowSize struct{ Width, Height int }
+```
+WindowSize is the size of a terminal in characters.
 
 
 

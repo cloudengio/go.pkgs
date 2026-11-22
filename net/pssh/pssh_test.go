@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -137,7 +138,7 @@ func serveSSH(conn net.Conn, hostKey, userKey ssh.Signer, user string) <-chan er
 		// successful handshake is not the end of it, and closing it here
 		// would stop any channel from being opened on it. connPair closes
 		// the sockets underneath it when the test ends.
-		go ssh.DiscardRequests(reqs)
+		go serveGlobalRequests(reqs)
 		go serveChannels(chans)
 		ch <- nil
 	}()
@@ -196,13 +197,30 @@ type directTCPIP struct {
 	OrigPort uint32
 }
 
+// silentServer makes servers stop answering global requests, such as
+// keepalives, as one whose network has silently gone away does.
+var silentServer atomic.Bool
+
+func serveGlobalRequests(reqs <-chan *ssh.Request) {
+	if silentServer.Load() {
+		for range reqs { //nolint:revive // Deliberately never replies.
+		}
+		return
+	}
+	ssh.DiscardRequests(reqs)
+}
+
 // serveChannels implements the server side of local port forwarding: each
 // direct-tcpip channel is connected to the address it names, so that a
 // forward can be exercised end to end.
 func serveChannels(chans <-chan ssh.NewChannel) {
 	for nc := range chans {
+		if nc.ChannelType() == "session" {
+			go serveSession(nc)
+			continue
+		}
 		if nc.ChannelType() != "direct-tcpip" {
-			nc.Reject(ssh.UnknownChannelType, "only direct-tcpip is served") //nolint:errcheck
+			nc.Reject(ssh.UnknownChannelType, "only direct-tcpip and session are served") //nolint:errcheck
 			continue
 		}
 		var req directTCPIP
