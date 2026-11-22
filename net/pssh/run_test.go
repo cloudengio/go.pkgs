@@ -20,14 +20,14 @@ import (
 
 // runFixture starts a client connected to an in-process server that runs
 // commands.
-func runFixture(t *testing.T) (*Client, *sshServer, <-chan error) {
+func runFixture(t *testing.T, opts ...Option) (*Client, *sshServer, <-chan error) {
 	t.Helper()
 	userPriv, userSigner := newKey(t)
 	_, hostSigner := newKey(t)
 	serveAgent(t, userPriv)
 	srv := newSSHServer(t, hostSigner, userSigner, "auser")
 	c := NewClient(t.Context(), "tcp", srv.addr(),
-		WithUser("auser"), WithHostKey(hostSigner.PublicKey()))
+		append([]Option{WithUser("auser"), WithHostKey(hostSigner.PublicKey())}, opts...)...)
 	done := connectInBackground(t.Context(), c, fastBackoff)
 	t.Cleanup(c.Close)
 	return c, srv, done

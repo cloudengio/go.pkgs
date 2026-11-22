@@ -57,6 +57,7 @@ type forward struct {
 type options struct {
 	dialTimeout    time.Duration
 	keepAlive      time.Duration
+	forwardAgent   bool
 	user           string
 	hostKey        ssh.PublicKey
 	knownHosts     []string
@@ -83,6 +84,22 @@ const (
 	// the server. It is used if WithDialTimeout is not specified.
 	DefaultDialTimeout = 30 * time.Second
 )
+
+// WithAgentForwarding makes the local ssh agent, located via the SSH_AUTH_SOCK
+// environment variable, available to the commands run using Run and
+// RunInteractive, as ssh -A does: they are given an SSH_AUTH_SOCK of their own
+// that is connected to it. The agent is dialled afresh for every use, so one
+// that is restarted is picked up.
+//
+// Anyone able to act as the user, or as root, on the server can use the agent
+// to authenticate as the user for as long as the command runs, and so it should
+// be enabled only for servers that are trusted. If the server refuses a request
+// for forwarding the command is run without it and a warning is logged.
+func WithAgentForwarding(enable bool) Option {
+	return func(o *options) {
+		o.forwardAgent = enable
+	}
+}
 
 // WithKeepAlive sends a request to the server every interval to detect a
 // connection that has silently stopped working, such as when a laptop sleeps or
@@ -675,6 +692,14 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 		return nil, nil, err
 	}
 	client := ssh.NewClient(sshConn, chans, reqs)
+	if c.opts.forwardAgent {
+		// The path is the one that authentication has just used.
+		if err := agent.ForwardToRemote(client, os.Getenv("SSH_AUTH_SOCK")); err != nil {
+			conn.Close()
+			client.Close()
+			return nil, nil, fmt.Errorf("enabling ssh agent forwarding: %w", err)
+		}
+	}
 	pf := &forwarder{
 		client:   client,
 		forwards: c.opts.localForwards,

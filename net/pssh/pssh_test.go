@@ -129,7 +129,7 @@ func serveSSH(conn net.Conn, hostKey, userKey ssh.Signer, user string) <-chan er
 	cfg.AddHostKey(hostKey)
 	go func() {
 		defer close(ch)
-		_, chans, reqs, err := ssh.NewServerConn(conn, cfg)
+		sconn, chans, reqs, err := ssh.NewServerConn(conn, cfg)
 		if err != nil {
 			ch <- fmt.Errorf("server handshake: %w", err)
 			return
@@ -139,7 +139,7 @@ func serveSSH(conn net.Conn, hostKey, userKey ssh.Signer, user string) <-chan er
 		// would stop any channel from being opened on it. connPair closes
 		// the sockets underneath it when the test ends.
 		go serveGlobalRequests(reqs)
-		go serveChannels(chans)
+		go serveChannelsOn(sconn, chans)
 		ch <- nil
 	}()
 	return ch
@@ -214,9 +214,15 @@ func serveGlobalRequests(reqs <-chan *ssh.Request) {
 // direct-tcpip channel is connected to the address it names, so that a
 // forward can be exercised end to end.
 func serveChannels(chans <-chan ssh.NewChannel) {
+	serveChannelsOn(nil, chans)
+}
+
+// serveChannelsOn is serveChannels for a server that can open channels to the
+// client using conn.
+func serveChannelsOn(conn ssh.Conn, chans <-chan ssh.NewChannel) {
 	for nc := range chans {
 		if nc.ChannelType() == "session" {
-			go serveSession(nc)
+			go serveSession(nc, conn)
 			continue
 		}
 		if nc.ChannelType() != "direct-tcpip" {
