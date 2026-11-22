@@ -109,14 +109,19 @@ func prepareInteractive(s *ssh.Session, in io.Reader, out io.Writer, ro runOptio
 	} else {
 		s.Stdin = in
 	}
-	go forwardWindowChanges(s, ro.windowChanges, stop)
+	if ro.windowChanges != nil {
+		go forwardWindowChanges(s, ro.windowChanges, stop)
+	}
 	return cleanup, nil
 }
 
 func forwardWindowChanges(s *ssh.Session, changes <-chan WindowSize, stop <-chan struct{}) {
 	for {
 		select {
-		case sz := <-changes:
+		case sz, ok := <-changes:
+			if !ok {
+				return
+			}
 			_ = s.WindowChange(sz.Height, sz.Width)
 		case <-stop:
 			return

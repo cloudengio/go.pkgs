@@ -217,3 +217,29 @@ func TestRunInteractiveClientClosed(t *testing.T) {
 		t.Fatalf("got %v, want %v", err, ErrClientClosed)
 	}
 }
+
+func TestRunInteractiveClosedWindowChanges(t *testing.T) {
+	requests := observePTYRequests(t)
+	c, _, _ := runFixture(t)
+	p := newPipes(t)
+	changes := make(chan WindowSize, 1)
+	done := runAsync(timeoutCtx(t), c, "cat", p.options(WithWindowChanges(changes))...)
+	_ = nextPTYRequest(t, requests)
+
+	changes <- WindowSize{Width: 100, Height: 40}
+	if got := nextPTYRequest(t, requests); got.Type != "window-change" || got.Cols != 100 || got.Rows != 40 {
+		t.Fatalf("got %+v, want window-change 100x40", got)
+	}
+	close(changes)
+	time.Sleep(20 * time.Millisecond)
+
+	p.inW.Close()
+	if err := waitRun(t, done); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case r := <-requests:
+		t.Fatalf("unexpected request after closing window changes: %+v", r)
+	default:
+	}
+}

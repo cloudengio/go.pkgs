@@ -620,6 +620,9 @@ func (c *Client) wait(ctx context.Context, client *ssh.Client, pf *forwarder) er
 func keepAlive(client *ssh.Client, interval time.Duration, stop <-chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	timeout := time.NewTimer(interval)
+	timeout.Stop()
+	defer timeout.Stop()
 	for {
 		select {
 		case <-stop:
@@ -631,7 +634,7 @@ func keepAlive(client *ssh.Client, interval time.Duration, stop <-chan struct{})
 			_, _, _ = client.SendRequest("keepalive@openssh.com", true, nil)
 			close(answered)
 		}()
-		timeout := time.NewTimer(interval)
+		timeout.Reset(interval)
 		select {
 		case <-answered:
 			timeout.Stop()
@@ -639,7 +642,6 @@ func keepAlive(client *ssh.Client, interval time.Duration, stop <-chan struct{})
 			_ = client.Close()
 			return
 		case <-stop:
-			timeout.Stop()
 			return
 		}
 	}
