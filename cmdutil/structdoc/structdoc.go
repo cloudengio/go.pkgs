@@ -29,6 +29,15 @@ type Field struct {
 	Fields []Field `json:",omitempty" yaml:",omitempty"`
 }
 
+// indirect returns the type that typ points to, following any number of
+// pointers, or typ itself if it is not a pointer.
+func indirect(typ reflect.Type) reflect.Type {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ
+}
+
 func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Type) []Field {
 	if _, ok := seen[typ]; ok {
 		return nil
@@ -55,16 +64,17 @@ func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Ty
 		}
 		var subFields []Field
 		var slice bool
-		if field.Type.Kind() == reflect.Struct {
-			subFields = describeTags(seen, tagName, field.Type)
+		ftype := indirect(field.Type)
+		if ftype.Kind() == reflect.Struct {
+			subFields = describeTags(seen, tagName, ftype)
 			if field.Anonymous {
 				fields = append(fields, subFields...)
 				subFields = nil
 			}
 		}
-		if field.Type.Kind() == reflect.Slice {
+		if ftype.Kind() == reflect.Slice {
 			slice = true
-			subFields = describeTags(seen, tagName, field.Type.Elem())
+			subFields = describeTags(seen, tagName, indirect(ftype.Elem()))
 		}
 		if !ok && (len(subFields) == 0) {
 			continue
