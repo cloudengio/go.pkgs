@@ -219,6 +219,22 @@ that is the case this option is not intended to relax.
 
 
 ```go
+func WithAgentForwarding(enable bool) Option
+```
+WithAgentForwarding makes the local ssh agent, located via the SSH_AUTH_SOCK
+environment variable, available to the commands run using Run and
+RunInteractive, as ssh -A does: they are given an SSH_AUTH_SOCK of their
+own that is connected to it. The agent is dialled afresh for every use,
+so one that is restarted is picked up.
+
+Anyone able to act as the user, or as root, on the server can use the agent
+to authenticate as the user for as long as the command runs, and so it
+should be enabled only for servers that are trusted. If the server refuses
+a request for forwarding the command is run without it and a warning is
+logged.
+
+
+```go
 func WithDialTimeout(timeout time.Duration) Option
 ```
 WithDialTimeout specifies the timeout for establishing a connection to the

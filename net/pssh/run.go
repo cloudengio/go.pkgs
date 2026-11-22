@@ -12,6 +12,7 @@ import (
 	"net"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 func (c *Client) setConn(client *ssh.Client) {
@@ -142,6 +143,12 @@ func (c *Client) run(ctx context.Context, cmd string, ro runOptions, prepare fun
 		return err
 	}
 	defer session.Close()
+	if c.opts.forwardAgent {
+		// As ssh does, carry on without forwarding if it is refused.
+		if err := agent.RequestAgentForwarding(session); err != nil {
+			c.opts.logger.Warn("ssh agent forwarding was refused", "err", err)
+		}
+	}
 	if prepare == nil {
 		session.Stdin, session.Stdout, session.Stderr = ro.stdin, ro.stdout, ro.stderr
 	} else {

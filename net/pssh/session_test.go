@@ -8,10 +8,12 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 // ptyRequest is what the server was asked for by a pty-req or a window-change
@@ -70,11 +72,64 @@ func reportPTYRequest(req *ssh.Request) {
 	}
 }
 
+// agentForwarding records what servers see of agent forwarding.
+type agentForwarding struct {
+	requests atomic.Int32
+	deny     atomic.Bool
+	listed   chan agentListing
+}
+
+// agentListing is what the client's agent, reached through the forwarded
+// channel, listed.
+type agentListing struct {
+	keys []*agent.Key
+	err  error
+}
+
+var forwardingHook atomic.Pointer[agentForwarding]
+
+// observeAgentForwarding returns what subsequent sessions' requests for agent
+// forwarding result in, until the test ends.
+func observeAgentForwarding(t *testing.T) *agentForwarding {
+	t.Helper()
+	af := &agentForwarding{listed: make(chan agentListing, 16)}
+	forwardingHook.Store(af)
+	t.Cleanup(func() { forwardingHook.Store(nil) })
+	return af
+}
+
+// serveAgentRequest answers a request for agent forwarding as sshd does,
+// by opening an agent channel to the client for the session's use. Here the
+// server uses it itself, to show that it reaches the client's agent.
+func serveAgentRequest(req *ssh.Request, conn ssh.Conn) {
+	af := forwardingHook.Load()
+	if af == nil || conn == nil || af.deny.Load() {
+		if af != nil {
+			af.requests.Add(1)
+		}
+		req.Reply(false, nil) //nolint:errcheck
+		return
+	}
+	af.requests.Add(1)
+	req.Reply(true, nil) //nolint:errcheck
+	go func() {
+		ch, reqs, err := conn.OpenChannel("auth-agent@openssh.com", nil)
+		if err != nil {
+			af.listed <- agentListing{err: err}
+			return
+		}
+		go ssh.DiscardRequests(reqs)
+		defer ch.Close()
+		keys, err := agent.NewClient(ch).List()
+		af.listed <- agentListing{keys: keys, err: err}
+	}()
+}
+
 // serveSession implements the server side of a session channel for exec
 // requests, as sshd does: the command is run by /bin/sh -c, its standard
 // streams are the channel's and its exit status is sent when it completes. A
 // SIGTERM signal request is delivered to the command.
-func serveSession(nc ssh.NewChannel) {
+func serveSession(nc ssh.NewChannel, conn ssh.Conn) {
 	ch, reqs, err := nc.Accept()
 	if err != nil {
 		return
@@ -91,6 +146,8 @@ func serveSession(nc ssh.NewChannel) {
 		case "pty-req", "window-change":
 			reportPTYRequest(req)
 			req.Reply(true, nil) //nolint:errcheck
+		case "auth-agent-req@openssh.com":
+			serveAgentRequest(req, conn)
 		case "signal":
 			var payload struct{ Signal string }
 			if cmd != nil && ssh.Unmarshal(req.Payload, &payload) == nil && payload.Signal == "TERM" {
