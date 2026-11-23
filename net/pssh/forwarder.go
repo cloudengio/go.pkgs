@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strconv"
 	"sync"
 
 	"cloudeng.io/sync/ctxsync"
@@ -53,6 +54,17 @@ func (f *forwarder) forwardAll(ctx context.Context) error {
 	return nil
 }
 
+// remoteAddr is the address that the server connects to for each connection
+// the forward carries: the host named by WithLocalPortForwardTo, or the
+// server's own loopback when it names none.
+func (f forward) remoteAddr() string {
+	host := f.remoteHost
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(f.remotePort))
+}
+
 // forward accepts connections on l and forwards each of them over the ssh
 // connection, returning when l is closed by stopAll. A connection that cannot
 // be forwarded is abandoned rather than ending the forward, leaving the local
@@ -60,7 +72,7 @@ func (f *forwarder) forwardAll(ctx context.Context) error {
 // time the next connection arrives, and if it is the ssh connection that has
 // failed then stopAll ends this loop in any case.
 func (f *forwarder) forward(ctx context.Context, l net.Listener, spec forward) {
-	remoteAddr := fmt.Sprintf("127.0.0.1:%d", spec.remotePort)
+	remoteAddr := spec.remoteAddr()
 	for {
 		local, err := l.Accept()
 		if err != nil {
@@ -71,7 +83,7 @@ func (f *forwarder) forward(ctx context.Context, l net.Listener, spec forward) {
 		remote, err := f.client.DialContext(ctx, "tcp", remoteAddr)
 		if err != nil {
 			f.logger.Warn("pssh: could not forward connection",
-				"local.port", spec.localPort, "remote.port", spec.remotePort, "err", err)
+				"local.port", spec.localPort, "remote.addr", remoteAddr, "err", err)
 			local.Close()
 			continue
 		}
