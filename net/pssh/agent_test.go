@@ -72,15 +72,27 @@ func TestAgentForwardingRefused(t *testing.T) {
 
 func TestAgentForwardingAfterReconnect(t *testing.T) {
 	af := observeAgentForwarding(t)
-	c, srv, _ := runFixture(t, WithAgentForwarding(true))
+	connected := make(chan struct{}, 8)
+	c, srv, _ := runFixture(t, WithAgentForwarding(true), WithOnConnect(func(*Client) {
+		connected <- struct{}{}
+	}))
 	ctx := timeoutCtx(t)
 	if err := c.Run(ctx, "true"); err != nil {
 		t.Fatal(err)
 	}
 	wantListing(t, af, srv)
+	select {
+	case <-connected:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
 
 	srv.drop()
-	srv.waitForConnection(t)
+	select {
+	case <-connected:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
 	if err := c.Run(ctx, "true"); err != nil {
 		t.Fatal(err)
 	}

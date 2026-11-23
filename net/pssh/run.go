@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -185,11 +186,18 @@ func (c *Client) newSession(ctx context.Context) (*ssh.Session, error) {
 		if err == nil {
 			return session, nil
 		}
-		if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+		if !isConnLost(err) {
 			return nil, c.sessionError(fmt.Errorf("opening ssh session: %w", err))
 		}
 		c.clearConn(conn)
 	}
+}
+
+func isConnLost(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE)
 }
 
 // sessionError returns ErrClientClosed in place of the error caused by
