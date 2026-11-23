@@ -23,7 +23,6 @@ import (
 
 	"cloudeng.io/algo/ratecontrol"
 	"cloudeng.io/logging/ctxlog"
-	"cloudeng.io/net/netutil"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -67,6 +66,12 @@ type options struct {
 	onConnect      func(*Client)
 	onAttempt      func(error, bool)
 	recoverNoRoute bool
+	// dialer makes the connection that the handshake runs over, in place of a
+	// direct connection to the server, see WithDialer and WithProxyHost.
+	dialer func(ctx context.Context, network, addr string) (net.Conn, error)
+	// proxyAddr is the proxy host that dialer reaches the server through, for
+	// logging; it is empty for a dialer that is not a proxy host.
+	proxyAddr string
 }
 
 type Option func(*options)
@@ -115,7 +120,9 @@ func WithKeepAlive(interval time.Duration) Option {
 }
 
 // WithDialTimeout specifies the timeout for establishing a connection to the
-// server. The default is DefaultDialTimeout.
+// server. The default is DefaultDialTimeout. It bounds a dialer supplied by
+// WithDialer or WithProxyHost too, as the deadline of the context that dialer
+// is given.
 func WithDialTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.dialTimeout = timeout
@@ -193,6 +200,10 @@ func WithOnConnect(fn func(*Client)) Option {
 // same LAN over both wired ethernet and wi-fi. Anywhere else a host that
 // cannot be reached is simply not reachable, and trying every interface only
 // delays the error that says so.
+//
+// It applies only to the dialer this package provides, and so has no effect
+// when WithDialer or WithProxyHost replaces it: the local interfaces are not
+// what such a dialer reaches the server by.
 func WithInterfaceRecovery(enable bool) Option {
 	return func(o *options) {
 		o.recoverNoRoute = enable
@@ -266,6 +277,9 @@ func NewClient(ctx context.Context, network, addr string, opts ...Option) *Clien
 		c.opts.logger = ctxlog.Logger(ctx)
 	}
 	c.opts.logger = c.opts.logger.With("ssh.network", network, "ssh.addr", addr)
+	if c.opts.proxyAddr != "" {
+		c.opts.logger = c.opts.logger.With("ssh.proxy", c.opts.proxyAddr)
+	}
 	return c
 }
 
@@ -673,15 +687,7 @@ func (c *Client) createConnectionAndForwarding(ctx context.Context) (*ssh.Client
 	// redialled on every reconnection so that a restarted agent is picked up.
 	defer closeAgent()
 
-	// netutil.Dialer dials identically to a net.Dialer unless the recovery
-	// is asked for, in which case a host on a subnet this system is attached
-	// to more than once is still reached when the route the kernel picks for
-	// it cannot: see WithInterfaceRecovery and netutil.Dialer.
-	dialer := netutil.Dialer{
-		Dialer:               net.Dialer{Timeout: c.opts.dialTimeout},
-		RecoverNoRouteToHost: c.opts.recoverNoRoute,
-	}
-	conn, err := dialer.DialContext(ctx, c.network, c.addr)
+	conn, err := c.dial(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

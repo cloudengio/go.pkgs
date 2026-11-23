@@ -152,6 +152,18 @@ the error from the last attempt.
 
 
 ```go
+func (c *Client) DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+```
+DialContext connects to addr from the server, over the connection to it,
+as the far end of a local port forward does. It waits for the client to
+be connected, as Run does, returning ctx.Err() if ctx is done first and
+ErrClientClosed if the client is closed.
+
+The connection it returns is carried by the connection to the server and so
+does not outlive it: when that is lost this one is closed too.
+
+
+```go
 func (c *Client) Run(ctx context.Context, cmd string, opts ...RunOption) error
 ```
 Run runs cmd on the server, waiting first for the client to be connected.
@@ -238,7 +250,28 @@ logged.
 func WithDialTimeout(timeout time.Duration) Option
 ```
 WithDialTimeout specifies the timeout for establishing a connection to the
-server. The default is DefaultDialTimeout.
+server. The default is DefaultDialTimeout. It bounds a dialer supplied by
+WithDialer or WithProxyHost too, as the deadline of the context that dialer
+is given.
+
+
+```go
+func WithDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) Option
+```
+WithDialer replaces the dialer used to reach the server, so that the ssh
+connection can be carried by something other than a direct connection from
+this host, such as another ssh connection (see WithProxyHost) or a SOCKS
+proxy. Only the transport changes: the server is still verified by its own
+host key, under the address that NewClient was given.
+
+The dialer is called once per attempt to establish the connection,
+and the context it is given bounds that attempt alone, as it does for
+net.Dialer.DialContext: the connection it returns must not be closed when
+that context is done.
+
+It replaces the dialer this package would otherwise use, so
+WithInterfaceRecovery no longer has anything to apply to. WithDialTimeout
+still applies, as the deadline of the context the dialer is given.
 
 
 ```go
@@ -261,6 +294,10 @@ this system is attached to more than once, such as a machine on the same
 LAN over both wired ethernet and wi-fi. Anywhere else a host that cannot be
 reached is simply not reachable, and trying every interface only delays the
 error that says so.
+
+It applies only to the dialer this package provides, and so has no effect
+when WithDialer or WithProxyHost replaces it: the local interfaces are not
+what such a dialer reaches the server by.
 
 
 ```go
@@ -330,6 +367,30 @@ func WithOnConnect(fn func(*Client)) Option
 ```
 WithOnConnect registers a callback that is invoked each time an ssh
 connection and its configured port forwards have been established.
+
+
+```go
+func WithProxyHost(proxy *Client) Option
+```
+WithProxyHost reaches the server over the connection that proxy maintains,
+rather than by connecting to it directly, as ssh's ProxyJump ('ssh -J')
+does, for a server behind a bastion or in a private network: each attempt
+asks proxy to open a connection to this client's address, so the server need
+not be reachable from this host at all. The server is verified by its own
+host key under its own name, since only the transport changes.
+
+proxy is an ordinary client, which the caller establishes and maintains with
+its own ConnectAndWait; an attempt to connect to the server waits for it to
+be connected, bounded by WithDialTimeout. The two then recover together:
+the connection to the server is carried by proxy's connection, so losing
+that loses this one too, and this one is established again once proxy has
+reconnected.
+
+The caller must Close proxy once its ConnectAndWait has returned, which
+is what ends this client as well: an attempt through a closed proxy host
+fails with ErrClientClosed, which is not retryable and so is returned by
+ConnectAndWait. Without that close a client would retry indefinitely through
+a proxy host that has itself given up.
 
 
 ```go
