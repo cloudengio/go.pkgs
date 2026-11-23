@@ -49,7 +49,10 @@ type Client struct {
 }
 
 type forward struct {
-	localPort  int
+	localPort int
+	// remoteHost is the host the server connects to, empty for itself, see
+	// WithLocalPortForwardTo.
+	remoteHost string
 	remotePort int
 }
 
@@ -76,11 +79,33 @@ type options struct {
 
 type Option func(*options)
 
-// WithLocalPortForward specifies a port forward from localPort to remotePort. It
-// can be used multiple times to specify multiple forwards.
+// WithLocalPortForward specifies a port forward from localPort to remotePort
+// on the server itself, as 'ssh -L localPort:localhost:remotePort' does. It can
+// be used multiple times to specify multiple forwards.
 func WithLocalPortForward(localPort, remotePort int) Option {
 	return func(o *options) {
 		o.localForwards = append(o.localForwards, forward{localPort: localPort, remotePort: remotePort})
+	}
+}
+
+// WithLocalPortForwardTo specifies a port forward from localPort to remotePort
+// on host, which the server resolves and connects to rather than this one, as
+// 'ssh -L localPort:host:remotePort' does. An empty host is the server itself,
+// as for WithLocalPortForward. The host need not be reachable from here, and
+// an IPv6 address needs no brackets since the port is separate.
+//
+// It reaches a service on a host that only the server can reach and that has
+// no ssh server of its own, such as a managed database endpoint. Where the host
+// does have one, a client for it configured WithProxyHost is preferable: the
+// traffic is then encrypted the whole way rather than only as far as this
+// server, and the host is verified by its own key.
+func WithLocalPortForwardTo(localPort int, host string, remotePort int) Option {
+	return func(o *options) {
+		o.localForwards = append(o.localForwards, forward{
+			localPort:  localPort,
+			remoteHost: host,
+			remotePort: remotePort,
+		})
 	}
 }
 

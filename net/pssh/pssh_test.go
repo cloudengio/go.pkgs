@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -201,6 +202,12 @@ type directTCPIP struct {
 // keepalives, as one whose network has silently gone away does.
 var silentServer atomic.Bool
 
+// lastForwardDest records the destination of the most recent direct-tcpip
+// channel, so that a forward can be shown to have asked the server for the
+// address it was configured with rather than merely to have carried traffic.
+// The tests in this package do not run in parallel.
+var lastForwardDest atomic.Value // string
+
 func serveGlobalRequests(reqs <-chan *ssh.Request) {
 	if silentServer.Load() {
 		for range reqs { //nolint:revive // Deliberately never replies.
@@ -234,7 +241,9 @@ func serveChannelsOn(conn ssh.Conn, chans <-chan ssh.NewChannel) {
 			nc.Reject(ssh.ConnectionFailed, err.Error()) //nolint:errcheck
 			continue
 		}
-		target, err := net.Dial("tcp", fmt.Sprintf("%v:%v", req.DestAddr, req.DestPort))
+		dest := net.JoinHostPort(req.DestAddr, strconv.Itoa(int(req.DestPort)))
+		lastForwardDest.Store(dest)
+		target, err := net.Dial("tcp", dest)
 		if err != nil {
 			nc.Reject(ssh.ConnectionFailed, err.Error()) //nolint:errcheck
 			continue

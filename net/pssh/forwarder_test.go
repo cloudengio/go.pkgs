@@ -276,3 +276,45 @@ func TestForwarderConnectionsPruned(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// TestForwarderToHost verifies a forward whose far end is a host other than
+// the server itself: the server is asked to connect to the host named, which
+// is what reaches a service that only the server can reach.
+func TestForwarderToHost(t *testing.T) {
+	echo := echoServer(t)
+	local := freePort(t)
+	// localhost rather than 127.0.0.1, so that a host which was dropped and
+	// replaced by the loopback default would not look the same.
+	f := newForwarder(t, forward{localPort: local, remoteHost: "localhost", remotePort: echo})
+	if err := f.forwardAll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer f.stopAll(t.Context())
+
+	if got, want := echoThrough(t, local, "to-host"), "to-host"; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	got, _ := lastForwardDest.Load().(string)
+	if want := fmt.Sprintf("localhost:%d", echo); got != want {
+		t.Errorf("the server was asked to connect to %v, want %v", got, want)
+	}
+}
+
+// TestForwardRemoteAddr covers the address that each form of forward names.
+func TestForwardRemoteAddr(t *testing.T) {
+	for _, tc := range []struct {
+		spec forward
+		want string
+	}{
+		// No host is the server's own loopback, as ssh -L with none is.
+		{forward{localPort: 1, remotePort: 80}, "127.0.0.1:80"},
+		{forward{localPort: 1, remoteHost: "db.internal", remotePort: 5432}, "db.internal:5432"},
+		// The port is separate, so an address is given without brackets and
+		// bracketed only where it has to be.
+		{forward{localPort: 1, remoteHost: "2001:db8::1", remotePort: 5432}, "[2001:db8::1]:5432"},
+	} {
+		if got := tc.spec.remoteAddr(); got != tc.want {
+			t.Errorf("got %v, want %v", got, tc.want)
+		}
+	}
+}
