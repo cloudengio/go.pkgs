@@ -141,3 +141,63 @@ A: I1
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+type P2 struct {
+	B string `tag:"P2"`
+}
+
+type P3 struct {
+	B string `tag:"P3"`
+}
+
+type P4 struct {
+	B string `tag:"P4"`
+}
+
+type P5 struct {
+	B string `tag:"P5"`
+}
+
+type P1 struct {
+	A *P2   `tag:"pointer"`
+	C []*P3 `tag:"slice of pointers"`
+	D **P4  `tag:"pointer to pointer"`
+	E *bool `tag:"a pointer to a non-struct"`
+	*P5
+}
+
+type Node struct {
+	Next *Node `tag:"a self referential pointer"`
+	V    int   `tag:"value"`
+}
+
+func TestPointers(t *testing.T) {
+	desc, err := structdoc.Describe(&P1{}, "tag", "detail:\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := desc.String(), `detail:
+A: pointer
+  B: P2
+C: []slice of pointers
+  B: P3
+D: pointer to pointer
+  B: P4
+E: a pointer to a non-struct
+B: P5
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// A type that refers to itself via a pointer terminates.
+	desc, err = structdoc.Describe(&Node{}, "tag", "detail:\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := desc.String(), `detail:
+Next: a self referential pointer
+V:    value
+`; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

@@ -29,6 +29,15 @@ type Field struct {
 	Fields []Field `json:",omitempty" yaml:",omitempty"`
 }
 
+// indirect returns the type that typ points to, following any number of
+// pointers, or typ itself if it is not a pointer.
+func indirect(typ reflect.Type) reflect.Type {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ
+}
+
 func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Type) []Field {
 	if _, ok := seen[typ]; ok {
 		return nil
@@ -55,16 +64,17 @@ func describeTags(seen map[reflect.Type]struct{}, tagName string, typ reflect.Ty
 		}
 		var subFields []Field
 		var slice bool
-		if field.Type.Kind() == reflect.Struct {
-			subFields = describeTags(seen, tagName, field.Type)
+		ftype := indirect(field.Type)
+		switch ftype.Kind() {
+		case reflect.Struct:
+			subFields = describeTags(seen, tagName, ftype)
 			if field.Anonymous {
 				fields = append(fields, subFields...)
 				subFields = nil
 			}
-		}
-		if field.Type.Kind() == reflect.Slice {
+		case reflect.Slice:
 			slice = true
-			subFields = describeTags(seen, tagName, field.Type.Elem())
+			subFields = describeTags(seen, tagName, indirect(ftype.Elem()))
 		}
 		if !ok && (len(subFields) == 0) {
 			continue
@@ -129,9 +139,9 @@ func (d *Description) String() string {
 // TypeName returns the fully qualified name of the supplied type or
 // the string representation of an anonymous type.
 func TypeName(t any) string {
-	typ := reflect.TypeOf(t)
-	if typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
+	typ := indirect(reflect.TypeOf(t))
+	if typ == nil {
+		return ""
 	}
 	if name := typ.Name(); len(name) > 0 {
 		return typ.PkgPath() + "." + name
@@ -143,11 +153,8 @@ func TypeName(t any) string {
 // struct tags. Detail can be used to provide a top level of detail,
 // such as the type name and a summary.
 func Describe(t any, tag, detail string) (*Description, error) {
-	typ := reflect.TypeOf(t)
-	if typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if typ.Kind() != reflect.Struct {
+	typ := indirect(reflect.TypeOf(t))
+	if typ == nil || typ.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("%T is not a struct", t)
 	}
 	seen := map[reflect.Type]struct{}{}
