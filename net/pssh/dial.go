@@ -29,6 +29,7 @@ import (
 func WithDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) Option {
 	return func(o *options) {
 		o.dialer = dialer
+		o.proxyAddr = ""
 	}
 }
 
