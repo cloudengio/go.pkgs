@@ -198,10 +198,42 @@ AppendPreHooks appends the supplied pre-hooks to the command's pre-hooks.
 
 
 ```go
+func (cmd *Command) Arguments() []string
+```
+Arguments returns a copy of the positional argument names for the command.
+
+
+```go
+func (cmd *Command) Description() string
+```
+Description returns the description of the command.
+
+
+```go
 func (cmd *Command) Document(description string, arguments ...string)
 ```
 Document adds a description of the command and optionally descriptions of
 its arguments.
+
+
+```go
+func (cmd *Command) Flags() *FlagSet
+```
+Flags returns the FlagSet associated with the command, or nil if none is
+set.
+
+
+```go
+func (cmd *Command) Name() string
+```
+Name returns the name of the command.
+
+
+```go
+func (cmd *Command) Subcommands() *CommandSet
+```
+Subcommands returns the nested CommandSet for this command, or nil if it is
+a leaf command.
 
 
 ```go
@@ -317,6 +349,13 @@ Document adds a description for the command set.
 
 
 ```go
+func (cmds *CommandSet) GlobalFlags() *FlagSet
+```
+GlobalFlags returns the global FlagSet for the command set, or nil if none
+is set.
+
+
+```go
 func (cmds *CommandSet) MustDispatch(ctx context.Context)
 ```
 MustDispatch will dispatch the appropriate sub command or exit.
@@ -342,6 +381,12 @@ for all sub-commands.
 
 
 ```go
+func (cmds *CommandSet) Subcommands() []*Command
+```
+Subcommands returns a copy of the commands in the command set.
+
+
+```go
 func (cmds *CommandSet) Summary() string
 ```
 Summary returns a summary of the command set that includes its top level
@@ -351,6 +396,13 @@ documentation and a list of its sub-commands.
 ```go
 func (cmds *CommandSet) TopLevel(cmd *Command)
 ```
+
+
+```go
+func (cmds *CommandSet) TopLevelCommand() *Command
+```
+TopLevelCommand returns the single top-level Command if configured via
+TopLevel, or nil otherwise.
 
 
 ```go

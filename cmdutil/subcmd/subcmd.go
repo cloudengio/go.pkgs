@@ -405,6 +405,32 @@ func (cmd *Command) summary() (name, desc string) {
 	return cmd.name, cmd.description
 }
 
+// Name returns the name of the command.
+func (cmd *Command) Name() string {
+	return cmd.name
+}
+
+// Description returns the description of the command.
+func (cmd *Command) Description() string {
+	return cmd.description
+}
+
+// Arguments returns a copy of the positional argument names for the command.
+func (cmd *Command) Arguments() []string {
+	return slices.Clone(cmd.arguments)
+}
+
+// Flags returns the FlagSet associated with the command, or nil if none is set.
+func (cmd *Command) Flags() *FlagSet {
+	return cmd.flags
+}
+
+// Subcommands returns the nested CommandSet for this command, or nil if it is a
+// leaf command.
+func (cmd *Command) Subcommands() *CommandSet {
+	return cmd.opts.subcmds
+}
+
 // CommandSet represents a set of commands that are peers to each other,
 // that is, the command line must specificy one of them.
 type CommandSet struct {
@@ -567,6 +593,23 @@ func (cmds *CommandSet) Commands() []string {
 		out[i] = cmd.name
 	}
 	return out
+}
+
+// GlobalFlags returns the global FlagSet for the command set, or nil if none
+// is set.
+func (cmds *CommandSet) GlobalFlags() *FlagSet {
+	return cmds.global
+}
+
+// TopLevelCommand returns the single top-level Command if configured via
+// TopLevel, or nil otherwise.
+func (cmds *CommandSet) TopLevelCommand() *Command {
+	return cmds.cmd
+}
+
+// Subcommands returns a copy of the commands in the command set.
+func (cmds *CommandSet) Subcommands() []*Command {
+	return slices.Clone(cmds.cmds)
 }
 
 // Document adds a description for the command set.
