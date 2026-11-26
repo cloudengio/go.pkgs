@@ -163,4 +163,11 @@ exhausted or because of an error, which Err returns.
 
 
 
+## Examples
+### [ExampleIter](https://pkg.go.dev/cloudeng.io/algo/container/stream?tab=doc#example-Iter)
+
+### [ExampleScanner](https://pkg.go.dev/cloudeng.io/algo/container/stream?tab=doc#example-Scanner)
+
+
+
 
