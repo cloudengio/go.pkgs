@@ -78,19 +78,6 @@ func (lf *LargeFile) Digest() digests.Hash {
 }
 
 // GetReader implements largefile.Reader.
-func (lf *LargeFile) GetReader(_ context.Context, from, _ int64) (io.ReadCloser, largefile.RetryResponse, error) {
-	return reader{f: lf.f, at: from}, noRetry{}, nil
-}
-
-type reader struct {
-	f  *os.File
-	at int64
-}
-
-func (r reader) Read(p []byte) (int, error) {
-	return r.f.ReadAt(p, r.at)
-}
-
-func (r reader) Close() error {
-	return nil
+func (lf *LargeFile) GetReader(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error) {
+	return io.NopCloser(io.NewSectionReader(lf.f, from, to-from+1)), noRetry{}, nil
 }
