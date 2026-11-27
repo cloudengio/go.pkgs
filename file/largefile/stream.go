@@ -12,11 +12,18 @@ import (
 
 // Stream downloads src to w using a StreamingDownloader configured with opts.
 // It returns the number of bytes written to w and the status of the download.
-// The download is stopped if writing to w fails or ctx is cancelled.
+// The download is stopped if writing to w fails or ctx is cancelled. If src
+// has a digest (see Reader.Digest) and WithDownloadDigest is not used then
+// the downloaded data is validated against it, returning ErrDigestMismatch
+// if it does not match.
 func Stream(ctx context.Context, src Reader, w io.Writer, opts ...DownloadOption) (int64, StreamingStatus, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	if d := src.Digest(); d.IsSet() {
+		d.Reset()
+		opts = append([]DownloadOption{WithDownloadDigest(d)}, opts...)
+	}
 	dl := NewStreamingDownloader(src, opts...)
 	type result struct {
 		status StreamingStatus
@@ -42,6 +49,8 @@ func Stream(ctx context.Context, src Reader, w io.Writer, opts ...DownloadOption
 		return n, res.status, res.err
 	case n != res.status.DownloadSize:
 		return n, res.status, fmt.Errorf("%v: downloaded %d bytes, expected %d", src.Name(), n, res.status.DownloadSize)
+	case dl.hash.IsSet() && !dl.hash.Validate():
+		return n, res.status, fmt.Errorf("%v: %w", src.Name(), ErrDigestMismatch)
 	}
 	return n, res.status, nil
 }

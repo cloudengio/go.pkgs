@@ -6,11 +6,12 @@ import cloudeng.io/file/largefile
 
 
 ## Variables
-### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrInternalError
+### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrDigestMismatch, ErrInternalError
 ```go
 ErrCacheInvalidBlockSize = errors.New("invalid block size")
 ErrCacheInvalidOffset = errors.New("invalid offset")
 ErrCacheUncachedRange = errors.New("uncached range")
+ErrDigestMismatch = errors.New("digest mismatch")
 ErrInternalError = &internalError{}
 
 ```
@@ -590,6 +591,25 @@ DownloadStatus holds the status for a completed download operation,
 including the progress made, whether the download is resumable, completed
 and the total duration of operation.
 
+### Functions
+
+```go
+func Download(ctx context.Context, src Reader, dest string, opts ...DownloadOption) (DownloadStatus, error)
+```
+Download downloads src to the file dest, resuming an earlier, incomplete,
+download of the same file if there is one. The download is made to
+dest+".partial", with its progress tracked in dest+".index", which are
+replaced by dest once the download is complete and, if src has a digest
+(see Reader.Digest), validated. If the download fails or is interrupted
+the partial files are retained and DownloadStatus.Resumable reports whether
+calling Download again will resume it. A previous partial download that is
+for a file of a different size or block size is discarded.
+
+The options accepted by NewCachingDownloader may be used, with the exception
+of WithDownloadDigest, which is derived from src.
+
+
+
 
 ### Type LocalDownloadCache
 ```go
@@ -778,6 +798,20 @@ type StreamingStatus struct {
 }
 ```
 StreamingStatus holds status for a streaming download.
+
+### Functions
+
+```go
+func Stream(ctx context.Context, src Reader, w io.Writer, opts ...DownloadOption) (int64, StreamingStatus, error)
+```
+Stream downloads src to w using a StreamingDownloader configured with opts.
+It returns the number of bytes written to w and the status of the download.
+The download is stopped if writing to w fails or ctx is cancelled. If src
+has a digest (see Reader.Digest) and WithDownloadDigest is not used then the
+downloaded data is validated against it, returning ErrDigestMismatch if it
+does not match.
+
+
 
 
 
