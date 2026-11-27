@@ -5,7 +5,6 @@
 package httpfs_test
 
 import (
-	"cloudeng.io/file/largefile"
 	"context"
 	"fmt"
 	"net/http"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"cloudeng.io/file/largefile"
 
 	"cloudeng.io/net/http/httpfs"
 )

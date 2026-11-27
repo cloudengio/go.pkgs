@@ -25,7 +25,7 @@ type downloaderOptions struct {
 type downloadOptions struct {
 	downloaderOptions
 	hash digests.Hash // Optional hash for computing the downloaded data as it is streamed.
-	dir  string      // Directory for the partial download files used by Download.
+	dir  string       // Directory for the partial download files used by Download.
 }
 
 type DownloadOption func(*downloadOptions)
