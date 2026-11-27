@@ -141,3 +141,32 @@ func TestDownloadDigestMismatch(t *testing.T) {
 		t.Errorf("Stream: %v", err)
 	}
 }
+
+func TestDownloadDir(t *testing.T) {
+	data := testData(100*5 + 3)
+	root := t.TempDir()
+	dest, dir := filepath.Join(root, "file"), filepath.Join(root, "work")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Interrupt via a cancelled context so that partial files are left behind.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	st, err := largefile.Download(ctx, &sliceReader{data: data, blockSize: 100}, dest, largefile.WithDownloadDir(dir))
+	if err == nil && st.Complete {
+		t.Fatal("expected an incomplete download")
+	}
+	if exists(dest+".partial") || exists(dest+".index") {
+		t.Error("partial files created next to dest, not in dir")
+	}
+	if _, err := largefile.Download(t.Context(), &sliceReader{data: data, blockSize: 100}, dest, largefile.WithDownloadDir(dir)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil || !bytes.Equal(got, data) {
+		t.Errorf("got %v bytes, %v", len(got), err)
+	}
+	if ents, _ := os.ReadDir(dir); len(ents) != 0 {
+		t.Errorf("dir not cleaned up: %v", ents)
+	}
+}

@@ -25,6 +25,7 @@ type downloaderOptions struct {
 type downloadOptions struct {
 	downloaderOptions
 	hash digests.Hash // Optional hash for computing the downloaded data as it is streamed.
+	dir  string      // Directory for the partial download files used by Download.
 }
 
 type DownloadOption func(*downloadOptions)
@@ -96,5 +97,16 @@ func WithDownloadWaitForCompletion(wait bool) DownloadOption {
 func WithDownloadDigest(h digests.Hash) DownloadOption {
 	return func(o *downloadOptions) {
 		o.hash = h
+	}
+}
+
+// WithDownloadDir sets the directory in which Download creates its partial
+// download and index files. It defaults to the directory of the destination
+// file. The directory must be on the same filesystem as the destination
+// since the completed download is renamed into place. It is ignored by
+// other downloaders.
+func WithDownloadDir(dir string) DownloadOption {
+	return func(o *downloadOptions) {
+		o.dir = dir
 	}
 }

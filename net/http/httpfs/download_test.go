@@ -5,13 +5,16 @@
 package httpfs_test
 
 import (
+	"cloudeng.io/file/largefile"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"cloudeng.io/net/http/httpfs"
@@ -86,5 +89,57 @@ func TestDownloadFile(t *testing.T) {
 
 	if string(data) != fileContent {
 		t.Errorf("Downloaded content = %q, want %q", string(data), fileContent)
+	}
+}
+
+func TestDownloadFileResume(t *testing.T) {
+	const content = "abcdefghijklmnopqrstuvwxyz0123456789"
+	var failing atomic.Bool
+	failing.Store(true)
+	var gets atomic.Int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "HEAD" {
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+			return
+		}
+		var from, to int
+		if _, err := fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-%d", &from, &to); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if failing.Load() && from >= 20 {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		gets.Add(1)
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", from, to, len(content)))
+		w.Write([]byte(content[from : to+1])) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	dest := filepath.Join(t.TempDir(), "file")
+	dl := httpfs.NewDownloader().
+		WithResume().
+		WithReaderOptions(httpfs.WithLargeFileBlockSize(10)).
+		WithDownloaderOptions(largefile.WithDownloadConcurrency(1))
+	if _, err := dl.DownloadFile(t.Context(), ts.URL, dest); err == nil {
+		t.Fatal("expected a failure")
+	}
+	if _, err := os.Stat(dest + ".partial"); err != nil {
+		t.Fatalf("partial download was not retained: %v", err)
+	}
+	failing.Store(false)
+	gets.Store(0)
+	n, err := dl.DownloadFile(t.Context(), ts.URL, dest)
+	if err != nil || n != int64(len(content)) {
+		t.Fatalf("n=%v: %v", n, err)
+	}
+	if got := gets.Load(); got != 2 {
+		t.Errorf("resumed with %d requests, want 2", got)
+	}
+	data, _ := os.ReadFile(dest)
+	if string(data) != content {
+		t.Errorf("got %q", data)
 	}
 }
