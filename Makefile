@@ -11,6 +11,9 @@ test:
 lint:
 	multimod lint
 
+govuln:
+	multimod govuln
+
 deps:
 	multimod update
 	go work sync
