@@ -20,11 +20,12 @@ const (
 // Download downloads src to the file dest, resuming an earlier, incomplete,
 // download of the same file if there is one. The download is made to
 // dest+".partial", with its progress tracked in dest+".index" (both in the
-// directory set by WithDownloadDir, if any), which are replaced by dest once the download is complete and, if src has a digest
-// (see Reader.Digest), validated. If the download fails or is interrupted
-// the partial files are retained and DownloadStatus.Resumable reports
-// whether calling Download again will resume it. A previous partial download
-// that is for a file of a different size or block size is discarded.
+// directory set by WithDownloadDir, if any), which are replaced by dest once
+// the download is complete and, if src has a digest (see Reader.Digest),
+// validated. If the download fails or is interrupted the partial files are
+// retained and DownloadStatus.Resumable reports whether calling Download again
+// will resume it. A previous partial download that is for a file of a different
+// size or block size is discarded.
 //
 // The options accepted by NewCachingDownloader may be used, with the exception
 // of WithDownloadDigest, which is derived from src.
