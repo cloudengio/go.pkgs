@@ -157,7 +157,7 @@ func NumBlocks(contentSize int64, blockSize int) int {
 func Ranges(from, to int64, blockSize int) iter.Seq[ByteRange] {
 	size := to - from + 1
 	return func(yield func(ByteRange) bool) {
-		if blockSize <= 0 {
+		if blockSize <= 0 || from < 0 {
 			return
 		}
 		nb := NumBlocks(size, blockSize)
