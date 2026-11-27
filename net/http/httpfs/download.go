@@ -7,7 +7,6 @@ package httpfs
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 
@@ -63,25 +62,9 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 	}
 	defer wr.Close() //nolint:errcheck
 
-	dl := largefile.NewStreamingDownloader(rd, d.downloaderOptions...)
-
-	errCh := make(chan error, 1)
-	var status largefile.StreamingStatus
-	go func() {
-		var err error
-		status, err = dl.Run(ctx)
-		errCh <- err
-	}()
-
-	n, err := io.Copy(wr, dl.Reader())
+	n, _, err := largefile.Stream(ctx, rd, wr, d.downloaderOptions...)
 	if err != nil {
 		return 0, fmt.Errorf("downloading %q to %q: %w", u, dest, err)
-	}
-	if err := <-errCh; err != nil {
-		return 0, fmt.Errorf("downloading %q to %q: %w", u, dest, err)
-	}
-	if status.DownloadSize != n {
-		return 0, fmt.Errorf("downloaded size mismatch for %q: expected %d, got %d", u, status.DownloadSize, n)
 	}
 	if err := wr.Close(); err != nil {
 		// Need to close it for windows before renaming.

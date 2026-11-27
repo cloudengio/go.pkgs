@@ -7,6 +7,7 @@ package largefile_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -215,5 +216,44 @@ func TestStreamingFailure(t *testing.T) {
 		largefile.WithDownloadConcurrency(2), largefile.WithDownloadWindow(1))
 	if _, _, err := streamAll(t, dl); err == nil {
 		t.Error("expected an error")
+	}
+}
+
+type failWriter struct{ after int }
+
+func (w *failWriter) Write(p []byte) (int, error) {
+	if w.after -= len(p); w.after < 0 {
+		return 0, io.ErrClosedPipe
+	}
+	return len(p), nil
+}
+
+func TestStream(t *testing.T) {
+	data := testData(100*50 + 3)
+	var out bytes.Buffer
+	n, st, err := largefile.Stream(t.Context(), &sliceReader{data: data, blockSize: 100}, &out)
+	if err != nil || n != int64(len(data)) || !bytes.Equal(out.Bytes(), data) {
+		t.Fatalf("got %v bytes, %v", n, err)
+	}
+	if st.DownloadSize != int64(len(data)) {
+		t.Errorf("got %v, want %v", st.DownloadSize, len(data))
+	}
+}
+
+func TestStreamWriteError(t *testing.T) {
+	data := testData(100 * 500)
+	r := &sliceReader{data: data, blockSize: 100}
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := largefile.Stream(t.Context(), r, &failWriter{after: 1000})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, io.ErrClosedPipe) {
+			t.Errorf("got %v, want %v", err, io.ErrClosedPipe)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stream did not return after the write failed")
 	}
 }
