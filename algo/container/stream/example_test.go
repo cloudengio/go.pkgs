@@ -34,9 +34,9 @@ func ExampleScanner() {
 
 	// Batches of two names are requested, and the next batches fetched
 	// whilst the names of the current one are being used.
-	sc := stream.NewScanner(ctx, l.popn, stream.WithBatchSize(2), stream.WithPrefetch(1))
+	sc := stream.NewScanner(l.popn, stream.WithBatchSize(2), stream.WithPrefetch(1))
 	defer sc.Close()
-	for sc.Scan() {
+	for sc.Scan(ctx) {
 		fmt.Println(sc.Data())
 	}
 	if err := sc.Err(); err != nil {
@@ -84,9 +84,9 @@ func ExamplePopNFrom() {
 		next++
 		return names[next-1], false, nil
 	}
-	sc := stream.NewScanner(ctx, stream.PopNFrom(pop))
+	sc := stream.NewScanner(stream.PopNFrom(pop))
 	defer sc.Close()
-	for sc.Scan() {
+	for sc.Scan(ctx) {
 		fmt.Println(sc.Data())
 	}
 	// Output:

@@ -104,9 +104,9 @@ type Scanner[T any] struct {
 ```
 Scanner iterates over the items of a stream, in the manner of bufio.Scanner:
 
-    sc := stream.NewScanner(ctx, popn)
+    sc := stream.NewScanner(popn)
     defer sc.Close()
-    for sc.Scan() {
+    for sc.Scan(ctx) {
         item := sc.Data()
     }
     if err := sc.Err(); err != nil {
@@ -118,12 +118,12 @@ A Scanner is not safe for concurrent use.
 ### Functions
 
 ```go
-func NewScanner[T any](ctx context.Context, popn PopN[T], opts ...Option) *Scanner[T]
+func NewScanner[T any](popn PopN[T], opts ...Option) *Scanner[T]
 ```
-NewScanner returns a Scanner for the stream implemented by popn. The
-Scanner, and the goroutine that it uses for prefetching, which is started
-by the first call to Scan, run until the stream is exhausted, ctx is done or
-Close is called. Close must be called if the Scanner is not used to the end.
+NewScanner returns a Scanner for the stream implemented by popn.
+The goroutine that the Scanner uses for prefetching is started by the first
+call to Scan, and runs until the stream is exhausted or Close is called.
+Close must be called if the Scanner is not used to the end.
 
 
 
@@ -152,11 +152,16 @@ was exhausted, or the Scanner closed.
 
 
 ```go
-func (s *Scanner[T]) Scan() bool
+func (s *Scanner[T]) Scan(ctx context.Context) bool
 ```
 Scan advances to the next item, which is then available via Data. It returns
 false when there are no more items, either because the stream has been
 exhausted or because of an error, which Err returns.
+
+ctx is passed to each call to the PopN that this call to Scan initiates,
+which, when prefetching, is a call for a batch that will be consumed by a
+later Scan. It must therefore remain valid for as long as the Scanner is
+used; if it is done the scan ends with its error.
 
 
 

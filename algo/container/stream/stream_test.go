@@ -55,9 +55,9 @@ func seq(n int) []int {
 	return s
 }
 
-func scanAll(sc *stream.Scanner[int]) []int {
+func scanAll(ctx context.Context, sc *stream.Scanner[int]) []int {
 	var got []int
-	for sc.Scan() {
+	for sc.Scan(ctx) {
 		got = append(got, sc.Data())
 	}
 	return got
@@ -69,15 +69,15 @@ func TestScanner(t *testing.T) {
 		for _, prefetch := range []int{0, 1, 2, 5} {
 			for _, batch := range []int{1, 3, 64} {
 				c := &counting{total: total}
-				sc := stream.NewScanner(ctx, c.popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(batch))
-				got := scanAll(sc)
+				sc := stream.NewScanner(c.popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(batch))
+				got := scanAll(ctx, sc)
 				if err := sc.Err(); err != nil {
 					t.Errorf("total %v, prefetch %v, batch %v: %v", total, prefetch, batch, err)
 				}
 				if !slices.Equal(got, seq(total)) {
 					t.Errorf("total %v, prefetch %v, batch %v: got %v items, want %v", total, prefetch, batch, len(got), total)
 				}
-				if sc.Scan() {
+				if sc.Scan(ctx) {
 					t.Errorf("Scan returned true after the end")
 				}
 				sc.Close()
@@ -90,10 +90,11 @@ func TestScanner(t *testing.T) {
 }
 
 func TestScannerDefaults(t *testing.T) {
+	ctx := t.Context()
 	c := &counting{total: 1000}
-	sc := stream.NewScanner(t.Context(), c.popn, stream.WithBatchSize(0))
+	sc := stream.NewScanner(c.popn, stream.WithBatchSize(0))
 	defer sc.Close()
-	if got := scanAll(sc); !slices.Equal(got, seq(1000)) {
+	if got := scanAll(ctx, sc); !slices.Equal(got, seq(1000)) {
 		t.Errorf("got %v items", len(got))
 	}
 	if got, want := int(c.maxRequest.Load()), stream.DefaultBatchSize; got != want {
@@ -104,11 +105,12 @@ func TestScannerDefaults(t *testing.T) {
 // TestScannerError checks that the items that came before an error are
 // delivered, and then the error is reported.
 func TestScannerError(t *testing.T) {
+	ctx := t.Context()
 	errFail := errors.New("failed")
 	for _, prefetch := range []int{0, 2} {
 		c := &counting{total: 100, failAt: 10, failWith: errFail}
-		sc := stream.NewScanner(t.Context(), c.popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(4))
-		got := scanAll(sc)
+		sc := stream.NewScanner(c.popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(4))
+		got := scanAll(ctx, sc)
 		if !slices.Equal(got, seq(10)) {
 			t.Errorf("prefetch %v: got %v, want the ten items before the error", prefetch, got)
 		}
@@ -123,10 +125,11 @@ func TestScannerError(t *testing.T) {
 }
 
 func TestScannerInvalidCount(t *testing.T) {
+	ctx := t.Context()
 	for _, n := range []int{-1, 0, 5} {
 		popn := func(context.Context, []int) (int, bool, error) { return n, false, nil }
-		sc := stream.NewScanner(t.Context(), popn, stream.WithBatchSize(4))
-		if sc.Scan() {
+		sc := stream.NewScanner(popn, stream.WithBatchSize(4))
+		if sc.Scan(ctx) {
 			t.Errorf("n %v: unexpected item", n)
 		}
 		if sc.Err() == nil {
@@ -140,15 +143,15 @@ func TestScannerContext(t *testing.T) {
 	for _, prefetch := range []int{0, 2} {
 		ctx, cancel := context.WithCancel(t.Context())
 		c := &counting{total: 1000000}
-		sc := stream.NewScanner(ctx, c.popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(8))
+		sc := stream.NewScanner(c.popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(8))
 		for range 20 {
-			if !sc.Scan() {
+			if !sc.Scan(ctx) {
 				t.Fatalf("prefetch %v: scan failed: %v", prefetch, sc.Err())
 			}
 		}
 		cancel()
 		// Whatever was fetched may still be delivered, but the scan ends.
-		for sc.Scan() {
+		for sc.Scan(ctx) {
 		}
 		if err := sc.Err(); !errors.Is(err, context.Canceled) {
 			t.Errorf("prefetch %v: got %v, want %v", prefetch, err, context.Canceled)
@@ -160,6 +163,7 @@ func TestScannerContext(t *testing.T) {
 // TestScannerClose checks that Close stops a prefetch that is blocked, and
 // that it is not an error.
 func TestScannerClose(t *testing.T) {
+	ctx := t.Context()
 	started := make(chan struct{})
 	exited := make(chan struct{})
 	var once atomic.Bool
@@ -173,8 +177,8 @@ func TestScannerClose(t *testing.T) {
 		close(exited)
 		return 0, false, ctx.Err()
 	}
-	sc := stream.NewScanner(t.Context(), popn, stream.WithPrefetch(1), stream.WithBatchSize(2))
-	if !sc.Scan() || sc.Data() != 1 {
+	sc := stream.NewScanner(popn, stream.WithPrefetch(1), stream.WithBatchSize(2))
+	if !sc.Scan(ctx) || sc.Data() != 1 {
 		t.Fatalf("expected the first item")
 	}
 	<-started
@@ -186,7 +190,7 @@ func TestScannerClose(t *testing.T) {
 	default:
 		t.Errorf("Close returned before the prefetch goroutine exited")
 	}
-	if sc.Scan() {
+	if sc.Scan(ctx) {
 		t.Errorf("Scan returned true after Close")
 	}
 	if err := sc.Err(); err != nil {
@@ -196,10 +200,11 @@ func TestScannerClose(t *testing.T) {
 }
 
 func TestScannerCloseUnused(t *testing.T) {
+	ctx := t.Context()
 	c := &counting{total: 10}
-	sc := stream.NewScanner(t.Context(), c.popn)
+	sc := stream.NewScanner(c.popn)
 	sc.Close()
-	if sc.Scan() {
+	if sc.Scan(ctx) {
 		t.Errorf("Scan returned true after Close")
 	}
 	if got := c.calls.Load(); got != 0 {
@@ -209,10 +214,11 @@ func TestScannerCloseUnused(t *testing.T) {
 
 // TestPrefetch checks that batches are fetched ahead of being consumed.
 func TestPrefetch(t *testing.T) {
+	ctx := t.Context()
 	c := &counting{total: 1000}
-	sc := stream.NewScanner(t.Context(), c.popn, stream.WithPrefetch(3), stream.WithBatchSize(10))
+	sc := stream.NewScanner(c.popn, stream.WithPrefetch(3), stream.WithBatchSize(10))
 	defer sc.Close()
-	if !sc.Scan() {
+	if !sc.Scan(ctx) {
 		t.Fatal(sc.Err())
 	}
 	// One batch is being consumed, and up to three more, and another that is
@@ -233,23 +239,25 @@ func TestPrefetch(t *testing.T) {
 // TestNoPrefetch checks that without prefetching the PopN is only called when
 // more items are needed.
 func TestNoPrefetch(t *testing.T) {
+	ctx := t.Context()
 	c := &counting{total: 1000}
-	sc := stream.NewScanner(t.Context(), c.popn, stream.WithPrefetch(0), stream.WithBatchSize(10))
+	sc := stream.NewScanner(c.popn, stream.WithPrefetch(0), stream.WithBatchSize(10))
 	defer sc.Close()
 	for range 10 {
-		sc.Scan()
+		sc.Scan(ctx)
 	}
 	time.Sleep(20 * time.Millisecond)
 	if got := c.calls.Load(); got != 1 {
 		t.Errorf("got %v calls, want 1", got)
 	}
-	sc.Scan()
+	sc.Scan(ctx)
 	if got := c.calls.Load(); got != 2 {
 		t.Errorf("got %v calls, want 2", got)
 	}
 }
 
 func TestPopNFrom(t *testing.T) {
+	ctx := t.Context()
 	next := 0
 	errFail := errors.New("failed")
 	pop := func(context.Context) (int, bool, error) {
@@ -285,9 +293,9 @@ func TestPopNFrom(t *testing.T) {
 
 	// A scanner over a Pop.
 	next = 0
-	sc := stream.NewScanner(t.Context(), popn)
+	sc := stream.NewScanner(popn)
 	defer sc.Close()
-	if got := scanAll(sc); !slices.Equal(got, seq(7)) {
+	if got := scanAll(ctx, sc); !slices.Equal(got, seq(7)) {
 		t.Errorf("got %v", got)
 	}
 }
@@ -352,5 +360,56 @@ func TestIterBreak(t *testing.T) {
 	case <-exited:
 	default:
 		t.Errorf("the iteration returned before the prefetching stopped")
+	}
+}
+
+// TestScannerPerCallContext checks that each batch is fetched using the
+// context of the Scan that requested it.
+func TestScannerPerCallContext(t *testing.T) {
+	type key struct{}
+	var got []int
+	popn := func(ctx context.Context, items []int) (int, bool, error) {
+		got = append(got, ctx.Value(key{}).(int))
+		if len(got) > 6 {
+			return 0, true, nil
+		}
+		items[0] = len(got)
+		return 1, false, nil
+	}
+	sc := stream.NewScanner(popn, stream.WithPrefetch(1), stream.WithBatchSize(1))
+	for i := 1; ; i++ {
+		if !sc.Scan(context.WithValue(t.Context(), key{}, i)) {
+			break
+		}
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatal(err)
+	}
+	sc.Close()
+	// Fetches 0 and 1 are requested by the first Scan, and fetch n, n>1,
+	// by Scan n.
+	if want := []int{1, 1, 2, 3, 4, 5, 6}[:len(got)]; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if len(got) < 7 {
+		t.Errorf("only %v fetches", len(got))
+	}
+}
+
+// TestScannerContextChange checks that a Scan with a done context ends the scan,
+// even if an earlier one is still valid.
+func TestScannerContextChange(t *testing.T) {
+	c := &counting{total: 1000}
+	sc := stream.NewScanner(c.popn, stream.WithBatchSize(4))
+	defer sc.Close()
+	if !sc.Scan(t.Context()) {
+		t.Fatal(sc.Err())
+	}
+	done, cancel := context.WithCancel(t.Context())
+	cancel()
+	for sc.Scan(done) {
+	}
+	if err := sc.Err(); !errors.Is(err, context.Canceled) {
+		t.Errorf("got %v", err)
 	}
 }
