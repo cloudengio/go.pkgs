@@ -12,6 +12,7 @@ package filewalk
 
 import (
 	"context"
+	"io"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -107,6 +108,9 @@ func New[T any](fs FS, handler Handler[T], opts ...Option) *Walker[T] {
 	return w
 }
 
+// LevelScanner is used to scan a single level of a filesystem hierarchy.
+// If it also implements io.Closer, Close is called when the scan is
+// complete or abandoned.
 type LevelScanner interface {
 	Scan(ctx context.Context, n int) bool
 	Contents() []Entry
@@ -155,6 +159,9 @@ func (e *Error) As(target any) bool {
 func (w *Walker[T]) processLevel(ctx context.Context, state *T, path string) ([]file.Info, error) {
 	var nextLevel []file.Info
 	sc := w.fs.LevelScanner(path)
+	if c, ok := sc.(io.Closer); ok {
+		defer c.Close()
+	}
 	for sc.Scan(ctx, w.opts.scanSize) {
 		children, err := w.handler.Contents(ctx, state, path, sc.Contents())
 		if err != nil {

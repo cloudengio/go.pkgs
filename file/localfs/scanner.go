@@ -14,30 +14,44 @@ import (
 	"path/filepath"
 	"time"
 
+	"cloudeng.io/algo/container/stream"
 	"cloudeng.io/file/filewalk"
 )
 
 type scanner struct {
 	path     string
 	openWait time.Duration
+	prefetch int // see WithPrefetch.
+	read     int // entries read so far.
 	err      error
 	file     *os.File
+	done     bool
 	entries  []fs.DirEntry
+	pf       *stream.Scanner[fs.DirEntry] // non-nil once prefetching.
 }
 
 func (s *scanner) Contents() []filewalk.Entry {
 	return newContents(s.entries)
 }
 
-func (s *scanner) close() {
+// Close releases the file and stops any prefetching. It is called
+// automatically once the scan completes or fails.
+func (s *scanner) Close() error {
+	s.done = true
+	if s.pf != nil {
+		// Wait for the prefetcher to stop using the file.
+		_ = s.pf.Close()
+		s.pf = nil
+	}
 	if s.file != nil {
 		_ = s.file.Close()
 		s.file = nil
 	}
+	return nil
 }
 
 func (s *scanner) Scan(ctx context.Context, n int) bool {
-	if n == 0 {
+	if n == 0 || s.done {
 		return false
 	}
 	// Check for ctx.Done() before performing any IO since
@@ -45,26 +59,61 @@ func (s *scanner) Scan(ctx context.Context, n int) bool {
 	select {
 	case <-ctx.Done():
 		s.err = ctx.Err()
-		s.close()
+		s.Close()
 		return false
 	default:
 	}
 	if s.file == nil {
 		if !s.open(ctx, s.path, s.openWait) {
+			s.done = true
 			return false
 		}
+	}
+	if s.pf != nil {
+		return s.scanPrefetched(n)
 	}
 	dirEntries, err := s.file.ReadDir(n)
 	if err != nil {
 		s.entries = nil
-		s.close()
+		s.Close()
 		if !errors.Is(err, io.EOF) {
 			s.err = err
 		}
 		return false
 	}
 	s.entries = dirEntries
+	s.read += len(dirEntries)
+	if s.prefetch > 0 && s.read >= s.prefetch && len(dirEntries) == n {
+		s.startPrefetch(ctx, n)
+	}
 	return true
+}
+
+// startPrefetch reads the remainder of the directory in the background.
+func (s *scanner) startPrefetch(ctx context.Context, n int) {
+	f := s.file
+	popn := func(_ context.Context, items []fs.DirEntry) (int, bool, error) {
+		entries, err := f.ReadDir(len(items))
+		c := copy(items, entries)
+		if errors.Is(err, io.EOF) {
+			return c, true, nil
+		}
+		return c, false, err
+	}
+	s.pf = stream.NewScanner(ctx, popn, stream.WithBatchSize(n))
+}
+
+func (s *scanner) scanPrefetched(n int) bool {
+	s.entries = s.entries[:0]
+	for len(s.entries) < n && s.pf.Scan() {
+		s.entries = append(s.entries, s.pf.Data())
+	}
+	if len(s.entries) > 0 {
+		return true
+	}
+	s.err = s.pf.Err()
+	s.Close()
+	return false
 }
 
 func (s *scanner) Err() error {
@@ -116,7 +165,7 @@ func NewLevelScanner(path string, openwait time.Duration) filewalk.LevelScanner 
 }
 
 func (f *T) LevelScanner(prefix string) filewalk.LevelScanner {
-	return NewLevelScanner(prefix, f.opts.scannerOpenWait)
+	return &scanner{path: prefix, openWait: f.opts.scannerOpenWait, prefetch: f.opts.scannerPrefetch}
 }
 
 func (f *R) LevelScanner(prefix string) filewalk.LevelScanner {

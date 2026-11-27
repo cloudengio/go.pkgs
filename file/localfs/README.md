@@ -11,6 +11,13 @@ import cloudeng.io/file/localfs
 const DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
 ```
 
+### DefaultPrefetch
+```go
+const DefaultPrefetch = 2000
+```
+DefaultPrefetch is the default number of entries that must be read from a
+directory before the remainder is prefetched.
+
 
 
 ## Functions
@@ -127,6 +134,16 @@ type Option func(o *options)
 ```
 
 ### Functions
+
+```go
+func WithPrefetch(minEntries int) Option
+```
+WithPrefetch configures scanners to read the remainder of a directory in the
+background, overlapping IO with the processing of each batch of entries,
+once at least minEntries entries have been read from it and more remain.
+Small directories are thus read synchronously. The default is
+DefaultPrefetch, a value of zero or less disables prefetching.
+
 
 ```go
 func WithScannerOpenWait(d time.Duration) Option

@@ -214,6 +214,9 @@ type LevelScanner interface {
 	Err() error
 }
 ```
+LevelScanner is used to scan a single level of a filesystem hierarchy.
+If it also implements io.Closer, Close is called when the scan is complete
+or abandoned.
 
 
 ### Type Option
