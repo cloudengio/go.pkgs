@@ -5,7 +5,6 @@
 package largefile
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -51,12 +50,16 @@ func (ds DownloadStats) updateAfterIteration(nds DownloadStats) DownloadStats {
 	}
 }
 
+// progressTracker accumulates download statistics, all of which are
+// updated atomically apart from the download size and number of blocks,
+// which are fixed.
 type progressTracker struct {
 	DownloadStats
-	mu sync.Mutex // Mutex to protect concurrent access to the stats.
+	mu sync.Mutex // Serializes send so that updates are delivered in order.
 	ch chan<- DownloadStats
 }
 
+// send reports the current statistics on a best-effort basis.
 func (pt *progressTracker) send() {
 	if pt.ch == nil {
 		return
@@ -114,7 +117,7 @@ type downloader struct {
 	file      Reader           // The large file to download.
 	size      int64            // Total size of the file in bytes.
 	blockSize int              // Size of each block in bytes.
-	bufPool   sync.Pool        // Pool for byte slices to reduce allocations.
+	bufPool   sync.Pool        // Pool of *[]byte, each blockSize long, to reduce allocations.
 }
 
 func newDownloader(file Reader, opts downloadOptions) *downloader {
@@ -139,7 +142,8 @@ func newDownloader(file Reader, opts downloadOptions) *downloader {
 	}
 	dl.bufPool = sync.Pool{
 		New: func() any {
-			return bytes.NewBuffer(make([]byte, dl.blockSize))
+			b := make([]byte, dl.blockSize)
+			return &b
 		},
 	}
 	dl.progress = &progressTracker{
@@ -151,8 +155,9 @@ func newDownloader(file Reader, opts downloadOptions) *downloader {
 }
 
 type response struct {
-	data      *bytes.Buffer
-	ByteRange // The byte range that was fetched.
+	data      []byte  // The data fetched, which is backed by buf.
+	buf       *[]byte // The pooled storage for data, see release.
+	ByteRange         // The byte range that was fetched.
 	duration  time.Duration
 }
 
@@ -186,6 +191,32 @@ func (dl *downloader) get(ctx context.Context, req request) (io.ReadCloser, erro
 type retryErrorHandler func(ctx context.Context, req request, err error) error
 type responseHandler func(ctx context.Context, resp response) error
 
+// release returns the storage used by resp to the pool.
+func (dl *downloader) release(resp response) {
+	dl.bufPool.Put(resp.buf)
+}
+
+// read reads exactly the bytes of req from rd into a pooled buffer.
+func (dl *downloader) read(rd io.Reader, req request) (response, error) {
+	buf := dl.bufPool.Get().(*[]byte)
+	data := (*buf)[:req.Size()]
+	n, err := io.ReadFull(rd, data)
+	dl.rateController.BytesTransferred(n)
+	dl.progress.incrementDownload(1, int64(n))
+	if err == nil {
+		// There must be nothing more to read.
+		var extra [1]byte
+		if m, _ := io.ReadFull(rd, extra[:]); m != 0 {
+			err = fmt.Errorf("more than the expected %d bytes", req.Size())
+		}
+	}
+	if err != nil {
+		dl.bufPool.Put(buf)
+		return response{}, fmt.Errorf("failed to read byte range %v, read %d of %d bytes: %w", req.ByteRange, n, req.Size(), err)
+	}
+	return response{data: data, buf: buf, ByteRange: req.ByteRange}, nil
+}
+
 func (dl *downloader) handleGet(ctx context.Context, req request, handler responseHandler) error {
 	if err := dl.rateController.Wait(ctx); err != nil {
 		return err // Context was canceled or deadline exceeded, return immediately.
@@ -195,25 +226,13 @@ func (dl *downloader) handleGet(ctx context.Context, req request, handler respon
 	if err != nil {
 		return err
 	}
-	buf := dl.bufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	copied, err := io.Copy(buf, rd)
-	dl.rateController.BytesTransferred(int(copied))
-	dl.progress.incrementDownload(1, copied)
+	defer rd.Close()
+	resp, err := dl.read(rd, req)
 	if err != nil {
-		return fmt.Errorf("failed to copy data for byte range %v: %w", req.ByteRange, err)
-	}
-	if copied != req.Size() {
-		return fmt.Errorf("copied %d bytes for byte range %v, expected %d bytes", copied, req.ByteRange, req.Size())
-	}
-	var resp response
-	resp.ByteRange = req.ByteRange
-	resp.duration = time.Since(start)
-	resp.data = buf
-	if err := handler(ctx, resp); err != nil {
 		return err
 	}
-	return nil
+	resp.duration = time.Since(start)
+	return handler(ctx, resp)
 }
 
 func (dl *downloader) fetcher(ctx context.Context, in <-chan request, retryHandler retryErrorHandler, handler responseHandler) error {

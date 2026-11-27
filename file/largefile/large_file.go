@@ -126,8 +126,9 @@ func (br ByteRange) String() string {
 	return "[" + strconv.FormatInt(br.From, 10) + ":" + strconv.FormatInt(br.To, 10) + "]"
 }
 
+// Size returns the number of bytes in the range, which is zero for an
+// invalid range.
 func (br ByteRange) Size() int64 {
-	// Size returns the size of the byte range.
 	if br.From < 0 || br.To < br.From {
 		return 0
 	}
@@ -139,6 +140,9 @@ func (br ByteRange) Size() int64 {
 // If the content size is not a multiple of the block size, it adds an additional
 // block to cover the remaining bytes.
 func NumBlocks(contentSize int64, blockSize int) int {
+	if blockSize <= 0 || contentSize <= 0 {
+		return 0
+	}
 	nb := contentSize / int64(blockSize)
 	if contentSize%int64(blockSize) != 0 {
 		nb++
@@ -158,7 +162,7 @@ func Ranges(from, to int64, blockSize int) iter.Seq[ByteRange] {
 		}
 		nb := NumBlocks(size, blockSize)
 		for i := range nb {
-			start := from + int64(i*blockSize)
+			start := from + int64(i)*int64(blockSize)
 			end := min(start+int64(blockSize), to+1) - 1
 			if !yield(ByteRange{From: start, To: end}) {
 				return
@@ -173,11 +177,13 @@ func Ranges(from, to int64, blockSize int) iter.Seq[ByteRange] {
 // If the index is out of bounds, it returns an invalid range with From and To set
 // to -1.
 func RangeForIndex(index int, contentSize int64, blockSize int) ByteRange {
-	// rangeForIndex returns the byte range for the specified block index.
 	if index < 0 || contentSize <= 0 || blockSize <= 0 {
 		return ByteRange{From: -1, To: -1} // Invalid index or sizes.
 	}
-	from := int64(index * blockSize)
+	from := int64(index) * int64(blockSize)
+	if from >= contentSize {
+		return ByteRange{From: -1, To: -1}
+	}
 	to := min(from+int64(blockSize), contentSize) - 1
 	return ByteRange{From: from, To: to}
 }
