@@ -123,7 +123,7 @@ func TestScannerError(t *testing.T) {
 }
 
 func TestScannerInvalidCount(t *testing.T) {
-	for _, n := range []int{-1, 5} {
+	for _, n := range []int{-1, 0, 5} {
 		popn := func(context.Context, []int) (int, bool, error) { return n, false, nil }
 		sc := stream.NewScanner(t.Context(), popn, stream.WithBatchSize(4))
 		if sc.Scan() {

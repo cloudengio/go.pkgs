@@ -183,9 +183,7 @@ func (s *Scanner[T]) fetch() (batch[T], bool) {
 		if err := s.ctx.Err(); err != nil {
 			return batch[T]{err: err, last: true}, true
 		}
-		b := s.call(s.buf)
-		s.cur = nil // the storage is reused, not recycled.
-		return b, true
+		return s.call(s.buf), true
 	}
 	if !s.started {
 		s.start()
@@ -199,6 +197,9 @@ func (s *Scanner[T]) call(buf []T) batch[T] {
 	n, empty, err := s.popn(s.ctx, buf)
 	if n < 0 || n > len(buf) {
 		return batch[T]{err: fmt.Errorf("stream: PopN returned %d items for a request for %d", n, len(buf)), last: true}
+	}
+	if n == 0 && !empty && err == nil {
+		return batch[T]{err: fmt.Errorf("stream: PopN returned 0 items without empty or error"), last: true}
 	}
 	return batch[T]{items: buf[:n], err: err, last: empty || err != nil}
 }
