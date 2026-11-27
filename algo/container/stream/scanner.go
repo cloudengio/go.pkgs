@@ -48,11 +48,17 @@ type batch[T any] struct {
 	last  bool // no batch follows this one.
 }
 
+// request asks the prefetching goroutine to fill buf, using ctx.
+type request[T any] struct {
+	ctx context.Context
+	buf []T
+}
+
 // Scanner iterates over the items of a stream, in the manner of bufio.Scanner:
 //
-//	sc := stream.NewScanner(ctx, popn)
+//	sc := stream.NewScanner(popn)
 //	defer sc.Close()
-//	for sc.Scan() {
+//	for sc.Scan(ctx) {
 //	    item := sc.Data()
 //	}
 //	if err := sc.Err(); err != nil {
@@ -63,13 +69,13 @@ type batch[T any] struct {
 type Scanner[T any] struct {
 	popn PopN[T]
 	opts options
-	ctx  context.Context
 
 	// Used when prefetching.
+	quit    context.Context
 	cancel  context.CancelFunc
 	started bool
+	reqs    chan request[T]
 	out     chan batch[T]
-	free    chan []T
 	wg      sync.WaitGroup
 
 	// The batch being consumed, which is cur[pos:], and its backing storage.
@@ -85,10 +91,10 @@ type Scanner[T any] struct {
 }
 
 // NewScanner returns a Scanner for the stream implemented by popn. The
-// Scanner, and the goroutine that it uses for prefetching, which is started
-// by the first call to Scan, run until the stream is exhausted, ctx is done or
-// Close is called. Close must be called if the Scanner is not used to the end.
-func NewScanner[T any](ctx context.Context, popn PopN[T], opts ...Option) *Scanner[T] {
+// goroutine that the Scanner uses for prefetching is started by the first
+// call to Scan, and runs until the stream is exhausted or Close is called.
+// Close must be called if the Scanner is not used to the end.
+func NewScanner[T any](popn PopN[T], opts ...Option) *Scanner[T] {
 	s := &Scanner[T]{popn: popn, opts: options{batchSize: DefaultBatchSize, prefetch: DefaultPrefetch}}
 	for _, fn := range opts {
 		fn(&s.opts)
@@ -96,14 +102,19 @@ func NewScanner[T any](ctx context.Context, popn PopN[T], opts ...Option) *Scann
 	if s.opts.batchSize < 1 {
 		s.opts.batchSize = DefaultBatchSize
 	}
-	s.ctx, s.cancel = context.WithCancel(ctx) //nolint:gosec // cancel is called by finish and Close.
+	s.quit, s.cancel = context.WithCancel(context.Background()) //nolint:gosec // cancel is called by finish and Close.
 	return s
 }
 
 // Scan advances to the next item, which is then available via Data. It returns
 // false when there are no more items, either because the stream has been
 // exhausted or because of an error, which Err returns.
-func (s *Scanner[T]) Scan() bool {
+//
+// ctx is passed to each call to the PopN that this call to Scan initiates,
+// which, when prefetching, is a call for a batch that will be consumed by a
+// later Scan. It must therefore remain valid for as long as the Scanner is
+// used; if it is done the scan ends with its error.
+func (s *Scanner[T]) Scan(ctx context.Context) bool {
 	if s.closed {
 		s.done = true
 	}
@@ -111,15 +122,15 @@ func (s *Scanner[T]) Scan() bool {
 		if s.done {
 			return false
 		}
-		s.recycle()
+		s.recycle(ctx)
 		if s.last {
 			s.finish(s.pending)
 			return false
 		}
-		b, ok := s.fetch()
+		b, ok := s.fetch(ctx)
 		if !ok {
-			// Prefetching ended early, because the context is done.
-			s.finish(s.ctx.Err())
+			// The context is done.
+			s.finish(ctx.Err())
 			return false
 		}
 		s.cur, s.pos, s.pending, s.last = b.items, 0, b.err, b.last
@@ -161,40 +172,45 @@ func (s *Scanner[T]) finish(err error) {
 	s.cancel()
 }
 
-// recycle returns the storage of the batch that has been consumed.
-func (s *Scanner[T]) recycle() {
+// recycle takes the storage of the batch that has been consumed and, when
+// prefetching, uses it to request another batch unless that was the last.
+func (s *Scanner[T]) recycle(ctx context.Context) {
 	if s.cur == nil {
 		return
 	}
 	clear(s.cur)
-	if s.opts.prefetch > 0 {
+	if s.opts.prefetch > 0 && !s.last {
 		// There is always room: the number of buffers is fixed.
-		s.free <- s.cur[:cap(s.cur)]
+		s.reqs <- request[T]{ctx, s.cur[:cap(s.cur)]}
 	}
 	s.cur = nil
 }
 
 // fetch returns the next batch, calling the PopN directly if not prefetching.
-func (s *Scanner[T]) fetch() (batch[T], bool) {
+func (s *Scanner[T]) fetch(ctx context.Context) (batch[T], bool) {
 	if s.opts.prefetch == 0 {
 		if s.buf == nil {
 			s.buf = make([]T, s.opts.batchSize)
 		}
-		if err := s.ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return batch[T]{err: err, last: true}, true
 		}
-		return s.call(s.buf), true
+		return s.call(ctx, s.buf), true
 	}
 	if !s.started {
-		s.start()
+		s.start(ctx)
 	}
-	b, ok := <-s.out
-	return b, ok
+	select {
+	case b, ok := <-s.out:
+		return b, ok
+	case <-ctx.Done():
+		return batch[T]{}, false
+	}
 }
 
 // call calls the PopN, validating what it returns.
-func (s *Scanner[T]) call(buf []T) batch[T] {
-	n, empty, err := s.popn(s.ctx, buf)
+func (s *Scanner[T]) call(ctx context.Context, buf []T) batch[T] {
+	n, empty, err := s.popn(ctx, buf)
 	if n < 0 || n > len(buf) {
 		return batch[T]{err: fmt.Errorf("stream: PopN returned %d items for a request for %d", n, len(buf)), last: true}
 	}
@@ -204,15 +220,17 @@ func (s *Scanner[T]) call(buf []T) batch[T] {
 	return batch[T]{items: buf[:n], err: err, last: empty || err != nil}
 }
 
-// start starts the goroutine that prefetches batches. The number of
-// buffers allows for one being consumed, one being filled and one for each of
-// the batches that are queued.
-func (s *Scanner[T]) start() {
+// start starts the goroutine that prefetches batches and requests the
+// first of them. The number of buffers allows for one being consumed and
+// prefetch+1 that are queued, being filled or filled, so that the goroutine
+// never blocks sending the results.
+func (s *Scanner[T]) start(ctx context.Context) {
 	s.started = true
-	s.out = make(chan batch[T], s.opts.prefetch)
-	s.free = make(chan []T, s.opts.prefetch+2)
-	for range s.opts.prefetch + 2 {
-		s.free <- make([]T, s.opts.batchSize)
+	buffers := s.opts.prefetch + 2
+	s.reqs = make(chan request[T], buffers)
+	s.out = make(chan batch[T], buffers)
+	for range buffers - 1 {
+		s.reqs <- request[T]{ctx, make([]T, s.opts.batchSize)}
 	}
 	s.wg.Add(1)
 	go s.prefetch()
@@ -222,18 +240,19 @@ func (s *Scanner[T]) prefetch() {
 	defer s.wg.Done()
 	defer close(s.out)
 	for {
-		var buf []T
+		var r request[T]
 		select {
-		case buf = <-s.free:
-		case <-s.ctx.Done():
+		case r = <-s.reqs:
+		case <-s.quit.Done():
 			return
 		}
-		b := s.call(buf)
-		select {
-		case s.out <- b:
-		case <-s.ctx.Done():
-			return
-		}
+		// The PopN is stopped by either the context of the request or Close.
+		ctx, cancel := context.WithCancel(r.ctx)
+		stop := context.AfterFunc(s.quit, cancel)
+		b := s.call(ctx, r.buf)
+		stop()
+		cancel()
+		s.out <- b
 		if b.last {
 			return
 		}
@@ -247,9 +266,9 @@ func (s *Scanner[T]) prefetch() {
 // or not it was run to the end.
 func Iter[T any](ctx context.Context, popn PopN[T], opts ...Option) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
-		sc := NewScanner(ctx, popn, opts...)
+		sc := NewScanner(popn, opts...)
 		defer sc.Close()
-		for sc.Scan() {
+		for sc.Scan(ctx) {
 			if !yield(sc.Data(), nil) {
 				return
 			}
