@@ -127,6 +127,8 @@ bounds, it returns an invalid range with From and To set to -1.
 ```go
 func (br ByteRange) Size() int64
 ```
+Size returns the number of bytes in the range, which is zero for an invalid
+range.
 
 
 ```go
@@ -425,8 +427,10 @@ NewCachingDownloader creates a new CachingDownloader instance.
 ```go
 func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error)
 ```
-Run executes the downloaded process. If the downloader encounters any errors
-it will return an
+Run downloads the outstanding byte ranges into the cache. If it is not
+complete, as reported by DownloadStatus.Complete, and the error is not an
+internal error, the download can be resumed by running a new downloader over
+the same cache. See WithDownloadWaitForCompletion.
 
 
 
@@ -518,7 +522,7 @@ WithDownloadProgress sets the channel to report download progress.
 ```go
 func WithDownloadProgressTimeout(timeout time.Duration) DownloadOption
 ```
-WithDownloadProgressDelay sets a timeout for certain progress updates,
+WithDownloadProgressTimeout sets a timeout for certain progress updates,
 such as those sent when a download is completed to allow for the caller to
 process any pending updates. Routine updates, such as those sent whenever a
 new byte range is downloaded are sent on a best-effort basis.
@@ -539,6 +543,17 @@ An iteration represents a single pass through the download process whereby
 every outstsanding byte range is attempted to be downloaded once with
 retries. A download will either complete after any specified retries or be
 left outstanding for the next iteration.
+
+
+```go
+func WithDownloadWindow(blocks int) DownloadOption
+```
+WithDownloadWindow sets the maximum number of blocks that a
+StreamingDownloader will fetch ahead of the first block that has yet to
+be written to the stream. Blocks that arrive out of order are buffered in
+memory, so this bounds the memory used to window times the block size, plus
+that of the blocks being fetched. It defaults to four times the concurrency
+and is ignored by other downloaders.
 
 
 
@@ -763,12 +778,6 @@ type StreamingStatus struct {
 }
 ```
 StreamingStatus holds status for a streaming download.
-
-
-### Type Uploader
-```go
-type Uploader struct{}
-```
 
 
 

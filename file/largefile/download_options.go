@@ -19,6 +19,7 @@ type downloaderOptions struct {
 	progressTimeout   time.Duration        // Delay between progress updates.
 	logger            *slog.Logger
 	waitForCompletion bool
+	window            int
 }
 
 type downloadOptions struct {
@@ -32,6 +33,18 @@ type DownloadOption func(*downloadOptions)
 func WithDownloadConcurrency(n int) DownloadOption {
 	return func(o *downloadOptions) {
 		o.concurrency = n
+	}
+}
+
+// WithDownloadWindow sets the maximum number of blocks that a
+// StreamingDownloader will fetch ahead of the first block that has yet to
+// be written to the stream. Blocks that arrive out of order are buffered in memory,
+// so this bounds the memory used to window times the block size, plus
+// that of the blocks being fetched. It defaults to four times the
+// concurrency and is ignored by other downloaders.
+func WithDownloadWindow(blocks int) DownloadOption {
+	return func(o *downloadOptions) {
+		o.window = blocks
 	}
 }
 
@@ -56,7 +69,7 @@ func WithDownloadProgress(progress chan<- DownloadStats) DownloadOption {
 	}
 }
 
-// WithDownloadProgressDelay sets a timeout for certain progress updates,
+// WithDownloadProgressTimeout sets a timeout for certain progress updates,
 // such as those sent when a download is completed to allow for the caller
 // to process any pending updates. Routine updates, such as those sent
 // whenever a new byte range is downloaded are sent on a best-effort basis.
