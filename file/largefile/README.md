@@ -6,11 +6,12 @@ import cloudeng.io/file/largefile
 
 
 ## Variables
-### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrInternalError
+### ErrCacheInvalidBlockSize, ErrCacheInvalidOffset, ErrCacheUncachedRange, ErrDigestMismatch, ErrInternalError
 ```go
 ErrCacheInvalidBlockSize = errors.New("invalid block size")
 ErrCacheInvalidOffset = errors.New("invalid offset")
 ErrCacheUncachedRange = errors.New("uncached range")
+ErrDigestMismatch = errors.New("digest mismatch")
 ErrInternalError = &internalError{}
 
 ```
@@ -127,6 +128,8 @@ bounds, it returns an invalid range with From and To set to -1.
 ```go
 func (br ByteRange) Size() int64
 ```
+Size returns the number of bytes in the range, which is zero for an invalid
+range.
 
 
 ```go
@@ -425,8 +428,10 @@ NewCachingDownloader creates a new CachingDownloader instance.
 ```go
 func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error)
 ```
-Run executes the downloaded process. If the downloader encounters any errors
-it will return an
+Run downloads the outstanding byte ranges into the cache. If it is not
+complete, as reported by DownloadStatus.Complete, and the error is not an
+internal error, the download can be resumed by running a new downloader over
+the same cache. See WithDownloadWaitForCompletion.
 
 
 
@@ -504,6 +509,16 @@ digest of the downloaded data as it is streamed.
 
 
 ```go
+func WithDownloadDir(dir string) DownloadOption
+```
+WithDownloadDir sets the directory in which Download creates its partial
+download and index files. It defaults to the directory of the destination
+file. The directory must be on the same filesystem as the destination
+since the completed download is renamed into place. It is ignored by other
+downloaders.
+
+
+```go
 func WithDownloadLogger(logger *slog.Logger) DownloadOption
 ```
 WithDownloadLogger sets the logger for the download.
@@ -518,7 +533,7 @@ WithDownloadProgress sets the channel to report download progress.
 ```go
 func WithDownloadProgressTimeout(timeout time.Duration) DownloadOption
 ```
-WithDownloadProgressDelay sets a timeout for certain progress updates,
+WithDownloadProgressTimeout sets a timeout for certain progress updates,
 such as those sent when a download is completed to allow for the caller to
 process any pending updates. Routine updates, such as those sent whenever a
 new byte range is downloaded are sent on a best-effort basis.
@@ -539,6 +554,17 @@ An iteration represents a single pass through the download process whereby
 every outstsanding byte range is attempted to be downloaded once with
 retries. A download will either complete after any specified retries or be
 left outstanding for the next iteration.
+
+
+```go
+func WithDownloadWindow(blocks int) DownloadOption
+```
+WithDownloadWindow sets the maximum number of blocks that a
+StreamingDownloader will fetch ahead of the first block that has yet to
+be written to the stream. Blocks that arrive out of order are buffered in
+memory, so this bounds the memory used to window times the block size, plus
+that of the blocks being fetched. It defaults to four times the concurrency
+and is ignored by other downloaders.
 
 
 
@@ -574,6 +600,26 @@ type DownloadStatus struct {
 DownloadStatus holds the status for a completed download operation,
 including the progress made, whether the download is resumable, completed
 and the total duration of operation.
+
+### Functions
+
+```go
+func Download(ctx context.Context, src Reader, dest string, opts ...DownloadOption) (DownloadStatus, error)
+```
+Download downloads src to the file dest, resuming an earlier, incomplete,
+download of the same file if there is one. The download is made to
+dest+".partial", with its progress tracked in dest+".index" (both in the
+directory set by WithDownloadDir, if any), which are replaced by dest once
+the download is complete and, if src has a digest (see Reader.Digest),
+validated. If the download fails or is interrupted the partial files are
+retained and DownloadStatus.Resumable reports whether calling Download
+again will resume it. A previous partial download that is for a file of a
+different size or block size is discarded.
+
+The options accepted by NewCachingDownloader may be used, with the exception
+of WithDownloadDigest, which is derived from src.
+
+
 
 
 ### Type LocalDownloadCache
@@ -764,11 +810,19 @@ type StreamingStatus struct {
 ```
 StreamingStatus holds status for a streaming download.
 
+### Functions
 
-### Type Uploader
 ```go
-type Uploader struct{}
+func Stream(ctx context.Context, src Reader, w io.Writer, opts ...DownloadOption) (int64, StreamingStatus, error)
 ```
+Stream downloads src to w using a StreamingDownloader configured with opts.
+It returns the number of bytes written to w and the status of the download.
+The download is stopped if writing to w fails or ctx is cancelled. If src
+has a digest (see Reader.Digest) and WithDownloadDigest is not used then the
+downloaded data is validated against it, returning ErrDigestMismatch if it
+does not match.
+
+
 
 
 

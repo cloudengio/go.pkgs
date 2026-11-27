@@ -5,6 +5,7 @@
 package localfs_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"cloudeng.io/algo/digests"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
+	"cloudeng.io/file/largefile"
 	"cloudeng.io/file/localfs"
 )
 
@@ -139,8 +141,8 @@ func TestLargeFile(t *testing.T) {
 		t.Errorf("expected not to be retryable")
 	}
 
-	// The returned reader is not limited by 'to', so use a LimitReader.
-	readContent, err := io.ReadAll(io.LimitReader(rd, to-from+1))
+	// The returned reader is limited to the requested range.
+	readContent, err := io.ReadAll(rd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +153,39 @@ func TestLargeFile(t *testing.T) {
 
 	if err := rd.Close(); err != nil {
 		t.Errorf("close failed: %v", err)
+	}
+}
+
+func TestLargeFileStreaming(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "largefile")
+	content := bytes.Repeat([]byte("0123456789abcdefghijklmnopqrstuvwxyz"), 1000)
+	if err := os.WriteFile(name, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lf, err := localfs.NewLargeFile(f, 1000, digests.Hash{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	dl := largefile.NewStreamingDownloader(lf, largefile.WithDownloadConcurrency(4))
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := dl.Run(context.Background())
+		errCh <- err
+	}()
+	got, err := io.ReadAll(dl.Reader())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("downloaded content differs: got %v bytes, want %v", len(got), len(content))
 	}
 }
 

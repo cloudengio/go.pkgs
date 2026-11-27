@@ -19,11 +19,13 @@ type downloaderOptions struct {
 	progressTimeout   time.Duration        // Delay between progress updates.
 	logger            *slog.Logger
 	waitForCompletion bool
+	window            int
 }
 
 type downloadOptions struct {
 	downloaderOptions
 	hash digests.Hash // Optional hash for computing the downloaded data as it is streamed.
+	dir  string       // Directory for the partial download files used by Download.
 }
 
 type DownloadOption func(*downloadOptions)
@@ -32,6 +34,18 @@ type DownloadOption func(*downloadOptions)
 func WithDownloadConcurrency(n int) DownloadOption {
 	return func(o *downloadOptions) {
 		o.concurrency = n
+	}
+}
+
+// WithDownloadWindow sets the maximum number of blocks that a
+// StreamingDownloader will fetch ahead of the first block that has yet to
+// be written to the stream. Blocks that arrive out of order are buffered in memory,
+// so this bounds the memory used to window times the block size, plus
+// that of the blocks being fetched. It defaults to four times the
+// concurrency and is ignored by other downloaders.
+func WithDownloadWindow(blocks int) DownloadOption {
+	return func(o *downloadOptions) {
+		o.window = blocks
 	}
 }
 
@@ -56,7 +70,7 @@ func WithDownloadProgress(progress chan<- DownloadStats) DownloadOption {
 	}
 }
 
-// WithDownloadProgressDelay sets a timeout for certain progress updates,
+// WithDownloadProgressTimeout sets a timeout for certain progress updates,
 // such as those sent when a download is completed to allow for the caller
 // to process any pending updates. Routine updates, such as those sent
 // whenever a new byte range is downloaded are sent on a best-effort basis.
@@ -83,5 +97,16 @@ func WithDownloadWaitForCompletion(wait bool) DownloadOption {
 func WithDownloadDigest(h digests.Hash) DownloadOption {
 	return func(o *downloadOptions) {
 		o.hash = h
+	}
+}
+
+// WithDownloadDir sets the directory in which Download creates its partial
+// download and index files. It defaults to the directory of the destination
+// file. The directory must be on the same filesystem as the destination
+// since the completed download is renamed into place. It is ignored by
+// other downloaders.
+func WithDownloadDir(dir string) DownloadOption {
+	return func(o *downloadOptions) {
+		o.dir = dir
 	}
 }
