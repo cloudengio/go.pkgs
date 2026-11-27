@@ -38,11 +38,15 @@ func WithScannerOpenWait(d time.Duration) Option {
 	}
 }
 
+// DefaultPrefetch is the default number of entries that must be read from a
+// directory before the remainder is prefetched.
+const DefaultPrefetch = 2000
+
 // WithPrefetch configures scanners to read the remainder of a directory in the
 // background, overlapping IO with the processing of each batch of entries,
 // once at least minEntries entries have been read from it and more remain.
-// Small directories are thus read synchronously. A value of zero, the
-// default, disables prefetching.
+// Small directories are thus read synchronously. The default is
+// DefaultPrefetch, a value of zero or less disables prefetching.
 func WithPrefetch(minEntries int) Option {
 	return func(o *options) {
 		o.scannerPrefetch = minEntries
@@ -52,7 +56,7 @@ func WithPrefetch(minEntries int) Option {
 // New returns an instance of file.FS that provides access to the
 // local filesystem.
 func New(opts ...Option) *T {
-	t := &T{}
+	t := &T{opts: options{scannerPrefetch: DefaultPrefetch}}
 	for _, fn := range opts {
 		fn(&t.opts)
 	}

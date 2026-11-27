@@ -167,7 +167,7 @@ func scanNames(ctx context.Context, ds filewalk.LevelScanner, n int) ([]string, 
 func TestScanPrefetch(t *testing.T) {
 	ctx := context.Background()
 	dir := manyFiles(t, 105)
-	want, err := scanNames(ctx, localfs.New().LevelScanner(dir), 10)
+	want, err := scanNames(ctx, localfs.New(localfs.WithPrefetch(0)).LevelScanner(dir), 10)
 	if err != nil || len(want) != 105 {
 		t.Fatalf("got %v, %v", len(want), err)
 	}
@@ -229,7 +229,7 @@ func BenchmarkScan(b *testing.B) {
 	dir := manyFiles(b, 100000)
 	ctx := context.Background()
 	for _, work := range []time.Duration{0, 100 * time.Microsecond, 500 * time.Microsecond} {
-		for _, min := range []int{0, 1000} {
+		for _, min := range []int{0, localfs.DefaultPrefetch} {
 			b.Run(fmt.Sprintf("work=%v/prefetch=%v", work, min), func(b *testing.B) {
 				for b.Loop() {
 					ds := localfs.New(localfs.WithPrefetch(min)).LevelScanner(dir)
