@@ -13,6 +13,7 @@ var (
 	ErrCacheInvalidBlockSize = errors.New("invalid block size")
 	ErrCacheInvalidOffset    = errors.New("invalid offset")
 	ErrCacheUncachedRange    = errors.New("uncached range")
+	ErrDigestMismatch        = errors.New("digest mismatch")
 	ErrInternalError         = &internalError{}
 )
 

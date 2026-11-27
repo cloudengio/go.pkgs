@@ -35,7 +35,6 @@ type StreamingDownloader struct {
 	*downloader
 	pipeRd       *io.PipeReader // Reader for streaming data.
 	pipeWr       *io.PipeWriter // Writer for streaming data.
-	responseCh   chan response  // Channel for responses from fetchers.
 	requestCh    chan request   // Channel for inflight requests.
 	outstanding  *ByteRanges    // Byte ranges to be downloaded.
 	retryTracker retryTracker
@@ -43,7 +42,9 @@ type StreamingDownloader struct {
 	heap         heap.Heap[response]
 	tracking     ByteRange
 	outOfOrder   int64
-	maxHeapSize  int64 // Maximum size of the heap during the download.
+	maxHeapSize  int64         // Maximum size of the heap during the download.
+	failed       chan struct{} // Closed on the first failed block if not waiting for completion.
+	failOnce     sync.Once
 }
 
 // NewStreamingDownloader creates a new StreamingDownloader instance.
@@ -54,11 +55,14 @@ func NewStreamingDownloader(file Reader, opts ...DownloadOption) *StreamingDownl
 		opt(&options)
 	}
 	dl.downloader = newDownloader(file, options)
-	dl.responseCh = make(chan response, dl.concurrency)   // Buffered channel for responses from fetchers.
 	dl.requestCh = make(chan request, dl.concurrency)     // Buffered channel for requests to fetch.
 	dl.pipeRd, dl.pipeWr = io.Pipe()                      // Create a pipe for streaming data.
 	dl.outstanding = NewByteRanges(dl.size, dl.blockSize) // Create byte ranges for downloading.
 
+	dl.failed = make(chan struct{})
+	if dl.window <= 0 {
+		dl.window = 4 * dl.concurrency
+	}
 	dl.tracking = ByteRange{From: -1, To: -1} // Initialize tracking range to an invalid state.
 
 	if dl.waitForCompletion {
@@ -113,58 +117,74 @@ func (dl *StreamingDownloader) ContentLength() int64 {
 	return dl.size
 }
 
-func (dl *StreamingDownloader) reissue(ctx context.Context, from int64) {
-	// Reissue the requests for the byte ranges that have been successfully downloaded.
-	// This is useful for retrying failed requests or re-issuing requests that were
-	// not completed.
+// reissue requests the byte ranges that failed to download.
+func (dl *StreamingDownloader) reissue(ctx context.Context) error {
+	dl.mu.Lock()
+	from := max(dl.tracking.From, 0)
+	dl.mu.Unlock()
 	var br ByteRange
 	idx := dl.retryTracker.Block(from)
 	for n := dl.retryTracker.nextSetAndClear(idx, &br); n != -1; n = dl.retryTracker.nextSetAndClear(n, &br) {
 		select {
 		case dl.requestCh <- request{ByteRange: br}:
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		}
 	}
+	return nil
 }
 
-func (dl *StreamingDownloader) generator(ctx context.Context) error {
-	// Prime the request channel with the initial byte ranges to download.
-	var br ByteRange
-	for n := dl.outstanding.NextClear(0, &br); n != -1; n = dl.outstanding.NextClear(n, &br) {
+// issue requests blocks from, up to but not including, to.
+func (dl *StreamingDownloader) issue(ctx context.Context, from, to int) (int, error) {
+	for ; from < to; from++ {
 		select {
-		case dl.requestCh <- request{ByteRange: br}:
+		case dl.requestCh <- request{ByteRange: RangeForIndex(from, dl.size, dl.blockSize)}:
 		case <-ctx.Done():
-			return ctx.Err()
+			return from, ctx.Err()
 		}
 	}
-	if !dl.waitForCompletion {
-		// If we are not waiting for completion, we can return early.
-		return nil
-	}
-	// Wait for requests that need to be re-issued.
-	for {
+	return from, nil
+}
+
+// generator issues requests for each block in order, but never more than
+// window blocks beyond the first block that has yet to be written, which
+// bounds the number of blocks that can be buffered awaiting an earlier one.
+// Failed blocks are reissued without regard to the window since they
+// are already counted by it.
+func (dl *StreamingDownloader) generator(ctx context.Context) error {
+	nblocks := dl.outstanding.NumBlocks()
+	for next := 0; ; {
+		// Obtain the notification channels before examining the state they
+		// signal changes to, so that no change can be missed.
+		written := dl.outstanding.Notify()
+		var retry <-chan struct{}
+		if dl.waitForCompletion {
+			retry = dl.retryTracker.notify()
+		}
+		head := 0
+		if tail, ok := dl.outstanding.Tail(); ok {
+			head = NumBlocks(tail.To+1, dl.blockSize)
+		}
+		var err error
+		if next, err = dl.issue(ctx, next, min(nblocks, head+dl.window)); err != nil {
+			return err
+		}
+		if head >= nblocks || (next >= nblocks && !dl.waitForCompletion) {
+			return nil
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-dl.outstanding.Notify():
-			if tail, ok := dl.outstanding.Tail(); ok && tail.To+1 == dl.size {
-				// All ranges have been requested, so we can stop generating requests.
-				return nil
-			}
-		case <-dl.retryTracker.notify():
+		case <-dl.failed:
+			return nil
+		case <-written:
+		case <-retry:
 			// Acknowledge the notification now that this case has actually
-			// been chosen, not merely offered: notify is evaluated on every
-			// entry to this select regardless of which case is chosen (see
-			// notify), so consuming it there, rather than here, could
-			// discard a pending retry whenever this case lost the race to
-			// another one that was also ready, such as the outstanding
-			// case above during a burst of writes.
+			// been chosen, not merely offered: see retryTracker.notify.
 			dl.retryTracker.ack()
-			dl.mu.Lock()
-			from := max(dl.tracking.From, 0)
-			dl.mu.Unlock()
-			dl.reissue(ctx, from)
+			if err := dl.reissue(ctx); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -177,7 +197,9 @@ func (dl *StreamingDownloader) writeToPipeLocked(resp response) error {
 		return newInternalStreamingError(fmt.Errorf("out of order response: expected %d, got %d", dl.tracking.To+1, resp.From))
 	}
 	dl.tracking = resp.ByteRange // Update the tracking range to the current response.
-	data := resp.data.Bytes()
+	// The pipe consumes data before Write returns, so resp can be released.
+	defer dl.release(resp)
+	data := resp.data
 	n, err := dl.pipeWr.Write(data)
 	if err != nil {
 		return err
@@ -203,6 +225,8 @@ func (dl *StreamingDownloader) pushLocked(resp response) {
 
 func (dl *StreamingDownloader) retryError(_ context.Context, req request, err error) error {
 	if !dl.waitForCompletion {
+		// The stream cannot progress past the failed block.
+		dl.failOnce.Do(func() { close(dl.failed) })
 		return err
 	}
 	if err == nil {
