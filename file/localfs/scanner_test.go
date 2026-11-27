@@ -7,13 +7,17 @@ package localfs_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -136,5 +140,116 @@ func TestScanCancelClosesFile(t *testing.T) {
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("RemoveAll(%q): %v", dir, err)
+	}
+}
+
+func manyFiles(t testing.TB, n int) string {
+	t.Helper()
+	dir := t.TempDir()
+	for i := range n {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%06d", i)), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func scanNames(ctx context.Context, ds filewalk.LevelScanner, n int) ([]string, error) {
+	var names []string
+	for ds.Scan(ctx, n) {
+		for _, e := range ds.Contents() {
+			names = append(names, e.Name)
+		}
+	}
+	return names, ds.Err()
+}
+
+func TestScanPrefetch(t *testing.T) {
+	ctx := context.Background()
+	dir := manyFiles(t, 105)
+	want, err := scanNames(ctx, localfs.New().LevelScanner(dir), 10)
+	if err != nil || len(want) != 105 {
+		t.Fatalf("got %v, %v", len(want), err)
+	}
+	sort.Strings(want)
+	// Thresholds below, at and above the batch size, the directory size,
+	// and a batch size that does not divide the directory.
+	for _, min := range []int{1, 10, 20, 95, 105, 1000} {
+		for _, n := range []int{1, 10, 50, 200} {
+			ds := localfs.New(localfs.WithPrefetch(min)).LevelScanner(dir)
+			got, err := scanNames(ctx, ds, n)
+			if err != nil {
+				t.Fatalf("min %v n %v: %v", min, n, err)
+			}
+			sort.Strings(got)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("min %v n %v: got %v entries, want %v", min, n, len(got), len(want))
+			}
+		}
+	}
+}
+
+func TestScanPrefetchCancel(t *testing.T) {
+	dir := manyFiles(t, 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	ds := localfs.New(localfs.WithPrefetch(5)).LevelScanner(dir)
+	for range 2 {
+		if !ds.Scan(ctx, 5) {
+			t.Fatalf("scan failed: %v", ds.Err())
+		}
+	}
+	cancel()
+	if ds.Scan(ctx, 5) {
+		t.Fatal("expected Scan to return false after context cancel")
+	}
+	if !errors.Is(ds.Err(), context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", ds.Err())
+	}
+}
+
+func TestScanPrefetchClose(t *testing.T) {
+	dir := manyFiles(t, 100)
+	ds := localfs.New(localfs.WithPrefetch(5)).LevelScanner(dir)
+	for range 2 {
+		if !ds.Scan(context.Background(), 5) {
+			t.Fatalf("scan failed: %v", ds.Err())
+		}
+	}
+	if err := ds.(io.Closer).Close(); err != nil {
+		t.Fatal(err)
+	}
+	if ds.Scan(context.Background(), 5) {
+		t.Fatal("expected Scan to return false after Close")
+	}
+}
+
+// BenchmarkScan reads a large directory, spending work on each batch as a
+// walker handler would.
+func BenchmarkScan(b *testing.B) {
+	dir := manyFiles(b, 100000)
+	ctx := context.Background()
+	for _, work := range []time.Duration{0, 100 * time.Microsecond, 500 * time.Microsecond} {
+		for _, min := range []int{0, 1000} {
+			b.Run(fmt.Sprintf("work=%v/prefetch=%v", work, min), func(b *testing.B) {
+				for b.Loop() {
+					ds := localfs.New(localfs.WithPrefetch(min)).LevelScanner(dir)
+					for ds.Scan(ctx, 1000) {
+						_ = ds.Contents()
+						if work > 0 {
+							spin(work)
+						}
+					}
+					if err := ds.Err(); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func spin(d time.Duration) {
+	for end := time.Now().Add(d); time.Now().Before(end); {
+		runtime.Gosched()
 	}
 }

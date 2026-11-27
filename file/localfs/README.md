@@ -8,9 +8,7 @@ import cloudeng.io/file/localfs
 ## Constants
 ### DefaultLargeFileBlockSize
 ```go
-DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
-
-
+const DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
 ```
 
 
@@ -129,6 +127,16 @@ type Option func(o *options)
 ```
 
 ### Functions
+
+```go
+func WithPrefetch(minEntries int) Option
+```
+WithPrefetch configures scanners to read the remainder of a directory in the
+background, overlapping IO with the processing of each batch of entries,
+once at least minEntries entries have been read from it and more remain.
+Small directories are thus read synchronously. A value of zero, the default,
+disables prefetching.
+
 
 ```go
 func WithScannerOpenWait(d time.Duration) Option

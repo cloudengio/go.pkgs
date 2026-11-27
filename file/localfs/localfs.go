@@ -26,6 +26,7 @@ type Option func(o *options)
 
 type options struct {
 	scannerOpenWait time.Duration
+	scannerPrefetch int
 }
 
 // WithScannerOpenWait configures the amount of time to wait for the scanner
@@ -34,6 +35,17 @@ type options struct {
 func WithScannerOpenWait(d time.Duration) Option {
 	return func(o *options) {
 		o.scannerOpenWait = d
+	}
+}
+
+// WithPrefetch configures scanners to read the remainder of a directory in the
+// background, overlapping IO with the processing of each batch of entries,
+// once at least minEntries entries have been read from it and more remain.
+// Small directories are thus read synchronously. A value of zero, the
+// default, disables prefetching.
+func WithPrefetch(minEntries int) Option {
+	return func(o *options) {
+		o.scannerPrefetch = minEntries
 	}
 }
 
