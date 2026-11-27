@@ -8,9 +8,7 @@ import cloudeng.io/file/localfs
 ## Constants
 ### DefaultLargeFileBlockSize
 ```go
-DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
-
-
+const DefaultLargeFileBlockSize = 1024 * 1024 * 16 // Default block size is 16 MiB.
 ```
 
 
@@ -110,7 +108,7 @@ Digest implements largefile.Reader.
 
 
 ```go
-func (lf *LargeFile) GetReader(_ context.Context, from, _ int64) (io.ReadCloser, largefile.RetryResponse, error)
+func (lf *LargeFile) GetReader(_ context.Context, from, to int64) (io.ReadCloser, largefile.RetryResponse, error)
 ```
 GetReader implements largefile.Reader.
 

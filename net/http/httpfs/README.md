@@ -8,9 +8,7 @@ import cloudeng.io/net/http/httpfs
 ## Constants
 ### DefaultLargeFileBlockSize
 ```go
-DefaultLargeFileBlockSize = 1024 * 16 // Default block size is 16 KiB.
-
-
+const DefaultLargeFileBlockSize = 1024 * 16 // Default block size is 16 KiB.
 ```
 
 
@@ -61,7 +59,7 @@ func (d *Downloader) DownloadFile(ctx context.Context, u, dest string) (int64, e
 DownloadFile downloads the file from the specified URL to the destination
 path using a temporary file for the download process that is renamed to the
 destination path on successful completion. The partial download file has a
-suffix of ".partialdownload".
+suffix of ".partialdownload". See WithResume for checkpointed downloads.
 
 
 ```go
@@ -75,6 +73,16 @@ Downloader.
 func (d *Downloader) WithReaderOptions(opts ...LargeFileOption) *Downloader
 ```
 WithReaderOptions appends the specified LargeFileOptions to the Downloader.
+
+
+```go
+func (d *Downloader) WithResume() *Downloader
+```
+WithResume enables checkpointed downloads: DownloadFile then uses
+largefile.Download, so that an interrupted download leaves its partial
+state (dest+".partial" and dest+".index", or in the directory set by
+largefile.WithDownloadDir) and a subsequent call for the same file fetches
+only the missing blocks. Without it, any partial download is discarded.
 
 
 

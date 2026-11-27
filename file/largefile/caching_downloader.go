@@ -53,10 +53,11 @@ type DownloadStatus struct {
 	Duration  time.Duration // Total duration of the download.
 }
 
-// Run executes the downloaded process. If the downloader encounters any errors
-// it will return an
+// Run downloads the outstanding byte ranges into the cache. If it is not
+// complete, as reported by DownloadStatus.Complete, and the error is not
+// an internal error, the download can be resumed by running a new downloader
+// over the same cache. See WithDownloadWaitForCompletion.
 func (dl *CachingDownloader) Run(ctx context.Context) (DownloadStatus, error) {
-
 	cachedBytes, cachedBlocks := dl.cache.CachedBytesAndBlocks()
 	dl.progress.incrementCacheOrStream(cachedBytes, cachedBlocks)
 
@@ -135,8 +136,8 @@ func (dl *CachingDownloader) runOnce(ctx context.Context) (DownloadStatus, error
 }
 
 func (dl *CachingDownloader) handleResponse(_ context.Context, resp response) error {
-	defer dl.bufPool.Put(resp.data) // Return the buffer to the pool after use.
-	n, err := dl.cache.WriteAt(resp.data.Bytes(), resp.From)
+	defer dl.release(resp)
+	n, err := dl.cache.WriteAt(resp.data, resp.From)
 	if err != nil {
 		dl.progress.incrementCacheErrors()
 		dl.logger.Info("handleResponse: cache write failed", "byteRange", resp.ByteRange, "error", err)
