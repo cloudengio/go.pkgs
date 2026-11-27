@@ -70,7 +70,7 @@ func (s *scanner) Scan(ctx context.Context, n int) bool {
 		}
 	}
 	if s.pf != nil {
-		return s.scanPrefetched(n)
+		return s.scanPrefetched(ctx, n)
 	}
 	dirEntries, err := s.file.ReadDir(n)
 	if err != nil {
@@ -84,13 +84,13 @@ func (s *scanner) Scan(ctx context.Context, n int) bool {
 	s.entries = dirEntries
 	s.read += len(dirEntries)
 	if s.prefetch > 0 && s.read >= s.prefetch && len(dirEntries) == n {
-		s.startPrefetch(ctx, n)
+		s.startPrefetch(n)
 	}
 	return true
 }
 
 // startPrefetch reads the remainder of the directory in the background.
-func (s *scanner) startPrefetch(ctx context.Context, n int) {
+func (s *scanner) startPrefetch(n int) {
 	f := s.file
 	popn := func(_ context.Context, items []fs.DirEntry) (int, bool, error) {
 		entries, err := f.ReadDir(len(items))
@@ -100,12 +100,12 @@ func (s *scanner) startPrefetch(ctx context.Context, n int) {
 		}
 		return c, false, err
 	}
-	s.pf = stream.NewScanner(ctx, popn, stream.WithBatchSize(n))
+	s.pf = stream.NewScanner(popn, stream.WithBatchSize(n))
 }
 
-func (s *scanner) scanPrefetched(n int) bool {
+func (s *scanner) scanPrefetched(ctx context.Context, n int) bool {
 	s.entries = s.entries[:0]
-	for len(s.entries) < n && s.pf.Scan() {
+	for len(s.entries) < n && s.pf.Scan(ctx) {
 		s.entries = append(s.entries, s.pf.Data())
 	}
 	if len(s.entries) > 0 {
