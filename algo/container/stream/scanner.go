@@ -33,10 +33,10 @@ func WithBatchSize(n int) Option {
 }
 
 // WithPrefetch sets the number of batches that are fetched, by a goroutine,
-// ahead of the items being consumed so that fetching overlaps with
-// consuming. Zero disables prefetching, so that the PopN is only called, from
-// the caller's goroutine, when more items are needed. The default is
-// DefaultPrefetch.
+// ahead of the batch being consumed, including one that is being fetched, so
+// that fetching overlaps with consuming. Zero disables prefetching, so that
+// the PopN is only called, from the caller's goroutine, when more items are
+// needed. The default is DefaultPrefetch.
 func WithPrefetch(n int) Option {
 	return func(o *options) { o.prefetch = max(n, 0) }
 }
@@ -222,14 +222,15 @@ func (s *Scanner[T]) call(ctx context.Context, buf []T) batch[T] {
 
 // start starts the goroutine that prefetches batches and requests the
 // first of them. The number of buffers allows for one being consumed and
-// prefetch+1 that are queued, being filled or filled, so that the goroutine
-// never blocks sending the results.
+// prefetch that are queued, being filled or filled, so that the goroutine
+// never blocks sending the results. All are requested at once: the first is
+// for the batch about to be consumed and the rest are the prefetch.
 func (s *Scanner[T]) start(ctx context.Context) {
 	s.started = true
-	buffers := s.opts.prefetch + 2
+	buffers := s.opts.prefetch + 1
 	s.reqs = make(chan request[T], buffers)
 	s.out = make(chan batch[T], buffers)
-	for range buffers - 1 {
+	for range buffers {
 		s.reqs <- request[T]{ctx, make([]T, s.opts.batchSize)}
 	}
 	s.wg.Add(1)
