@@ -57,10 +57,10 @@ DefaultBatchSize if n is less than one.
 func WithPrefetch(n int) Option
 ```
 WithPrefetch sets the number of batches that are fetched, by a goroutine,
-ahead of the items being consumed so that fetching overlaps with
-consuming. Zero disables prefetching, so that the PopN is only called,
-from the caller's goroutine, when more items are needed. The default is
-DefaultPrefetch.
+ahead of the batch being consumed, including one that is being fetched,
+so that fetching overlaps with consuming. Zero disables prefetching, so that
+the PopN is only called, from the caller's goroutine, when more items are
+needed. The default is DefaultPrefetch.
 
 
 

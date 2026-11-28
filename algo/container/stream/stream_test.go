@@ -413,3 +413,28 @@ func TestScannerContextChange(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+// TestScannerPrefetchDepth checks that no more than prefetch batches are
+// requested ahead of the one being consumed.
+func TestScannerPrefetchDepth(t *testing.T) {
+	ctx := t.Context()
+	for _, prefetch := range []int{1, 2, 4} {
+		var calls atomic.Int64
+		popn := func(_ context.Context, items []int) (int, bool, error) {
+			items[0] = int(calls.Add(1))
+			return 1, false, nil
+		}
+		sc := stream.NewScanner(popn, stream.WithPrefetch(prefetch), stream.WithBatchSize(1))
+		for i := 1; i <= 10; i++ {
+			if !sc.Scan(ctx) {
+				t.Fatal(sc.Err())
+			}
+			// Let the goroutine run as far as it is allowed to.
+			time.Sleep(5 * time.Millisecond)
+			if got, max := int(calls.Load()), i+prefetch; got > max {
+				t.Fatalf("prefetch %v: %v fetches when consuming batch %v, want at most %v", prefetch, got, i, max)
+			}
+		}
+		sc.Close()
+	}
+}
