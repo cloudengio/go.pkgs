@@ -34,9 +34,9 @@ func WithBatchSize(n int) Option {
 
 // WithPrefetch sets the number of batches that are fetched, by a goroutine,
 // ahead of the batch being consumed, including one that is being fetched, so
-// that fetching overlaps with consuming. Zero disables prefetching, so that the PopN is only called, from
-// the caller's goroutine, when more items are needed. The default is
-// DefaultPrefetch.
+// that fetching overlaps with consuming. Zero disables prefetching, so that
+// the PopN is only called, from the caller's goroutine, when more items are
+// needed. The default is DefaultPrefetch.
 func WithPrefetch(n int) Option {
 	return func(o *options) { o.prefetch = max(n, 0) }
 }
