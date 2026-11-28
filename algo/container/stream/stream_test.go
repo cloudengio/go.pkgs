@@ -431,8 +431,8 @@ func TestScannerPrefetchDepth(t *testing.T) {
 			}
 			// Let the goroutine run as far as it is allowed to.
 			time.Sleep(5 * time.Millisecond)
-			if got, max := int(calls.Load()), i+prefetch; got > max {
-				t.Fatalf("prefetch %v: %v fetches when consuming batch %v, want at most %v", prefetch, got, i, max)
+			if got, limit := int(calls.Load()), i+prefetch; got > limit {
+				t.Fatalf("prefetch %v: %v fetches when consuming batch %v, want at most %v", prefetch, got, i, limit)
 			}
 		}
 		sc.Close()
